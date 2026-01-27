@@ -2,9 +2,9 @@ export type TradeFlow = 'IMPORT' | 'EXPORT'
 
 export type ConsignmentState = 'IN_PROGRESS' | 'REQUIRES_REWORK' | 'FINISHED'
 
-export type StepStatus = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED'
+export type StepStatus = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
 
-export type StepType = 'TRADER_FORM' | 'OGA_FORM' | 'WAIT_FOR_EVENT'
+export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT'
 
 export interface ConsignmentStep {
   stepId: string

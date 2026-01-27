@@ -52,13 +52,13 @@ export function ConsignmentDetailScreen() {
     if (state?.justSubmitted) {
       // Clear the navigation state to prevent re-triggering on refresh
       navigate(location.pathname, { replace: true, state: {} })
-      
+
       // Show loading state and wait 5 seconds before fetching
       setLoading(true)
       const timer = setTimeout(() => {
         fetchConsignment()
-      }, 3000)
-      
+      }, 5000)
+
       return () => clearTimeout(timer)
     } else {
       // Normal fetch without delay

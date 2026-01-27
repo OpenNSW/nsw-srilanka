@@ -27,7 +27,7 @@ export function FormScreen() {
       try {
         setLoading(true)
         // Execute task with FETCH_FORM action to get the form schema
-        const response = await executeTask(consignmentId, taskId, 'TRADER_FORM')
+        const response = await executeTask(consignmentId, taskId, 'SIMPLE_FORM')
 
         if (response.success && response.result.data) {
           setFormData(response.result.data)

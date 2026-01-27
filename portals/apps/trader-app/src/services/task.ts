@@ -5,15 +5,6 @@ import type {TaskDetails} from "./types/taskData.ts";
 
 export type TaskAction = 'FETCH_FORM' | 'SUBMIT_FORM' | 'DRAFT'
 
-export interface ExecuteTaskRequest {
-  task_id: string
-  consignment_id: string
-  payload: {
-    action: TaskAction
-    data?: Record<string, unknown>
-  }
-}
-
 export interface TaskFormData {
   title: string
   schema: JsonSchema
@@ -52,8 +43,7 @@ const TASKS_API_URL = 'http://localhost:8080/api/tasks'
 
 function getActionForStepType(stepType: StepType): TaskAction {
   switch (stepType) {
-    case 'TRADER_FORM':
-    case 'OGA_FORM':
+    case 'SIMPLE_FORM':
       return 'FETCH_FORM'
     default:
       return 'FETCH_FORM'
