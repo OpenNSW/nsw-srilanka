@@ -161,7 +161,7 @@ function renderElement({
   switch (element.type) {
     case 'VerticalLayout':
     case 'HorizontalLayout':
-      return renderLayout(element as Layout, {
+      return renderLayout(element, {
         schema,
         values,
         errors,
@@ -171,7 +171,7 @@ function renderElement({
       });
 
     case 'Group':
-      return renderGroup(element as Layout, {
+      return renderGroup(element, {
         schema,
         values,
         errors,
@@ -181,7 +181,7 @@ function renderElement({
       });
 
     case 'Categorization':
-      return renderCategorization(element as Categorization, {
+      return renderCategorization(element, {
         schema,
         values,
         errors,
@@ -191,7 +191,7 @@ function renderElement({
       });
 
     case 'Control':
-      return renderControl(element as ControlElement, {
+      return renderControl(element, {
         schema,
         values,
         errors,
@@ -201,7 +201,7 @@ function renderElement({
       });
 
     case 'Label':
-      return renderLabel(element as LabelElement);
+      return renderLabel(element);
 
     default:
       console.log("Unknown element type:", element);

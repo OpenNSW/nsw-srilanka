@@ -3,7 +3,7 @@ import {
   DashboardIcon,
   ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon,
 } from '@radix-ui/react-icons'
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 interface NavItem {
   name: string
@@ -36,22 +36,27 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
   const location = useLocation();
   const [isHovered, setIsHovered] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const previousPathRef = useRef<string>(location.pathname);
 
   // Determine if sidebar should show expanded content
   const showExpanded = isExpanded || (!isExpanded && isHovered);
 
   // Auto-expand groups that contain the active page
   useEffect(() => {
-    const groupsToExpand = new Set<string>();
-    navStructure.forEach((item) => {
-      if (isNavGroup(item)) {
-        const hasActivePath = item.items.some((child) => child.path === location.pathname);
-        if (hasActivePath) {
-          groupsToExpand.add(item.name);
+    if (previousPathRef.current !== location.pathname) {
+      previousPathRef.current = location.pathname;
+      const groupsToExpand = new Set<string>();
+      navStructure.forEach((item) => {
+        if (isNavGroup(item)) {
+          const hasActivePath = item.items.some((child) => child.path === location.pathname);
+          if (hasActivePath) {
+            groupsToExpand.add(item.name);
+          }
         }
-      }
-    });
-    setExpandedGroups(groupsToExpand);
+      });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExpandedGroups(groupsToExpand);
+    }
   }, [location.pathname]);
 
   const toggleGroup = (groupName: string) => {
@@ -189,7 +194,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
           if (isNavGroup(item)) {
             return renderNavGroup(item);
           }
-          return renderNavItem(item as NavItem);
+          return renderNavItem(item);
         })}
       </nav>
 

@@ -187,7 +187,7 @@ export function useJsonForm({
               (property.type === 'number' || property.type === 'integer') &&
               typeof processedValues[name] === 'string'
             ) {
-              const numValue = parseFloat(processedValues[name] as string);
+              const numValue = parseFloat(processedValues[name]);
               if (!isNaN(numValue)) {
                 processedValues[name] = numValue;
               }
