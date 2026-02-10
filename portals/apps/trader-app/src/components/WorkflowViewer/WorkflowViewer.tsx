@@ -11,12 +11,12 @@ import type { Edge, NodeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button } from '@radix-ui/themes'
 import { ReloadIcon } from '@radix-ui/react-icons'
-import type { ConsignmentStep } from '../../services/types/consignment'
+import type { WorkflowNode as WorkflowNodeData } from '../../services/types/consignment'
 import { WorkflowNode } from './WorkflowNode'
 import type { WorkflowNodeType } from './WorkflowNode'
 
 interface WorkflowViewerProps {
-  steps: ConsignmentStep[]
+  steps: WorkflowNodeData[]
   className?: string
   onRefresh?: () => void
   refreshing?: boolean
@@ -27,8 +27,8 @@ const nodeTypes: NodeTypes = {
 }
 
 function getNodePosition(
-  step: ConsignmentStep,
-  allSteps: ConsignmentStep[]
+  step: WorkflowNodeData,
+  allSteps: WorkflowNodeData[]
 ): { x: number; y: number } {
   // Calculate depth based on dependencies (topological layer)
   const depths = new Map<string, number>()
@@ -36,14 +36,14 @@ function getNodePosition(
   function calculateDepth(stepId: string): number {
     if (depths.has(stepId)) return depths.get(stepId)!
 
-    const s = allSteps.find((st) => st.stepId === stepId)
-    if (!s || s.dependsOn.length === 0) {
+    const s = allSteps.find((st) => st.id === stepId)
+    if (!s || s.depends_on.length === 0) {
       depths.set(stepId, 0)
       return 0
     }
 
     const maxParentDepth = Math.max(
-      ...s.dependsOn.map((depId) => calculateDepth(depId))
+      ...s.depends_on.map((depId) => calculateDepth(depId))
     )
     const depth = maxParentDepth + 1
     depths.set(stepId, depth)
@@ -51,15 +51,15 @@ function getNodePosition(
   }
 
   // Calculate depths for all steps
-  allSteps.forEach((s) => calculateDepth(s.stepId))
+  allSteps.forEach((s) => calculateDepth(s.id))
 
-  const depth = depths.get(step.stepId) || 0
+  const depth = depths.get(step.id) || 0
 
   // Group steps by depth to calculate horizontal position
   const stepsAtSameDepth = allSteps.filter(
-    (s) => depths.get(s.stepId) === depth
+    (s) => depths.get(s.id) === depth
   )
-  const indexAtDepth = stepsAtSameDepth.findIndex((s) => s.stepId === step.stepId)
+  const indexAtDepth = stepsAtSameDepth.findIndex((s) => s.id === step.id)
   const totalAtDepth = stepsAtSameDepth.length
 
   // Center nodes vertically within their depth layer (horizontal flow)
@@ -73,12 +73,12 @@ function getNodePosition(
   }
 }
 
-function convertToReactFlow(steps: ConsignmentStep[]): {
+function convertToReactFlow(steps: WorkflowNodeData[]): {
   nodes: WorkflowNodeType[]
   edges: Edge[]
 } {
   const nodes: WorkflowNodeType[] = steps.map((step) => ({
-    id: step.stepId,
+    id: step.id,
     type: 'workflowStep' as const,
     position: getNodePosition(step, steps),
     data: {
@@ -88,14 +88,14 @@ function convertToReactFlow(steps: ConsignmentStep[]): {
 
   const edges: Edge[] = []
   steps.forEach((step) => {
-    step.dependsOn.forEach((depId) => {
-      const sourceStep = steps.find(s => s.stepId === depId)
-      const isCompleted = sourceStep?.status === 'COMPLETED'
+    step.depends_on.forEach((depId) => {
+      const sourceStep = steps.find(s => s.id === depId)
+      const isCompleted = sourceStep?.state === 'COMPLETED'
 
       edges.push({
-        id: `${depId}-${step.stepId}`,
+        id: `${depId}-${step.id}`,
         source: depId,
-        target: step.stepId,
+        target: step.id,
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 20,

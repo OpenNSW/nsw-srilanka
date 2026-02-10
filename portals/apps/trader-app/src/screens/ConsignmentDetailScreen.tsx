@@ -96,9 +96,9 @@ export function ConsignmentDetailScreen() {
   }
 
   const item = consignment.items[0]
-  const steps = item?.steps || []
-  const completedSteps = steps.filter(s => s.status === 'COMPLETED').length
-  const totalSteps = steps.length
+  const workflowNodes = consignment.workflowNodes || []
+  const completedSteps = workflowNodes.filter(n => n.state === 'COMPLETED').length
+  const totalSteps = workflowNodes.length
 
   return (
     <div className="p-6">
@@ -138,8 +138,8 @@ export function ConsignmentDetailScreen() {
               <Badge size="2" color={getStateColor(consignment.state)}>
                 {formatState(consignment.state)}
               </Badge>
-              <Badge size="1" color={consignment.tradeFlow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                {consignment.tradeFlow}
+              <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
+                {consignment.flow}
               </Badge>
             </div>
           </div>
@@ -148,14 +148,16 @@ export function ConsignmentDetailScreen() {
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">HS Code</h3>
-              {item?.hsCode ? (
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Item Details</h3>
+              {item?.itemMetadata ? (
                 <div>
-                  <p className="text-lg font-medium text-gray-900">{item.hsCode}</p>
-                  <p className="text-sm text-gray-600">{item.hsCodeDescription}</p>
+                  <p className="text-lg font-medium text-gray-900">{item.itemMetadata.description}</p>
+                  <p className="text-sm text-gray-600">
+                    {item.itemMetadata.quantity} {item.itemMetadata.unit} ({item.itemMetadata.packageType})
+                  </p>
                 </div>
               ) : (
-                <p className="text-lg font-medium text-gray-900">{item?.hsCodeID || '-'}</p>
+                <p className="text-lg font-medium text-gray-900">{item?.hsCode?.hsCode || '-'}</p>
               )}
             </div>
             <div>
@@ -165,20 +167,20 @@ export function ConsignmentDetailScreen() {
           </div>
         </div>
 
-        {steps.length > 0 && (
+        {workflowNodes.length > 0 && (
           <div className="p-6 border-t border-gray-200">
             <h3 className="text-sm font-medium text-gray-500 mb-4">Workflow Process</h3>
-            <WorkflowViewer steps={steps} onRefresh={handleRefresh} refreshing={refreshing} />
+            <WorkflowViewer steps={workflowNodes} onRefresh={handleRefresh} refreshing={refreshing} />
           </div>
         )}
 
         <div className="p-6 border-t border-gray-200 bg-gray-50">
           <h3 className="text-sm font-medium text-gray-500 mb-2">Next Steps</h3>
-          {steps.some(s => s.status === 'READY') ? (
+          {workflowNodes.some(n => n.state === 'READY') ? (
             <p className="text-sm text-gray-600">
               Click the play button on steps marked as "Ready" to proceed with your consignment.
             </p>
-          ) : steps.every(s => s.status === 'COMPLETED') ? (
+          ) : workflowNodes.every(n => n.state === 'COMPLETED') ? (
             <p className="text-sm text-green-600">
               All steps have been completed. Your consignment is ready.
             </p>

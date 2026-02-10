@@ -4,8 +4,7 @@ import { Button, Text, TextField, Spinner, Select, Badge } from '@radix-ui/theme
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { HSCodePicker } from '../components/HSCodePicker'
 import type { HSCode } from "../services/types/hsCode.ts"
-import type { Workflow } from "../services/types/workflow.ts"
-import type { Consignment, TradeFlow } from "../services/types/consignment.ts"
+import type { Consignment, TradeFlow, ItemMetadata } from "../services/types/consignment.ts"
 import { createConsignment, getAllConsignments } from "../services/consignment.ts"
 import { getStateColor, formatState, formatDate } from '../utils/consignmentUtils'
 
@@ -27,7 +26,7 @@ export function DashboardScreen() {
     async function fetchConsignments() {
       try {
         const data = await getAllConsignments()
-        setConsignments(data.items)
+        setConsignments(data)
       } catch (error) {
         console.error('Failed to fetch consignments:', error)
       } finally {
@@ -38,18 +37,16 @@ export function DashboardScreen() {
     fetchConsignments()
   }, [])
 
-  const handleSelect = async (hsCode: HSCode, workflow: Workflow) => {
+  const handleSelect = async (hsCode: HSCode, tradeFlow: TradeFlow, itemMetadata: ItemMetadata) => {
     setCreating(true)
 
     try {
       const response = await createConsignment({
-        tradeFlow: workflow.type.toUpperCase() as TradeFlow,
-        traderId: 'trader-123', // TODO: Get from auth context
+        flow: tradeFlow,
         items: [
           {
             hsCodeId: hsCode.id,
-            metadata: {},
-            workflowTemplateId: workflow.id,
+            itemMetadata,
           },
         ],
       })
@@ -65,16 +62,16 @@ export function DashboardScreen() {
 
   const filteredConsignments = consignments.filter((c) => {
     const item = c.items[0]
-    const hsCodeId = item?.hsCodeID || ''
-    const hsCode = item?.hsCode || ''
+    const hsCode = item?.hsCode?.hsCode || ''
+    const description = item?.itemMetadata?.description || ''
     const matchesSearch =
       searchQuery === '' ||
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hsCodeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hsCode.toLowerCase().includes(searchQuery.toLowerCase())
+      hsCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      description.toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesState = stateFilter === 'all' || c.state === stateFilter
-    const matchesTradeFlow = tradeFlowFilter === 'all' || c.tradeFlow === tradeFlowFilter
+    const matchesTradeFlow = tradeFlowFilter === 'all' || c.flow === tradeFlowFilter
 
     return matchesSearch && matchesState && matchesTradeFlow
   })
@@ -192,9 +189,8 @@ export function DashboardScreen() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredConsignments.map((consignment) => {
-                  const item = consignment.items[0]
-                  const completedSteps = item?.steps.filter(s => s.status === 'COMPLETED').length || 0
-                  const totalSteps = item?.steps.length || 0
+                  const completedSteps = consignment.workflowNodes?.filter(n => n.state === 'COMPLETED').length || 0
+                  const totalSteps = consignment.workflowNodes?.length || 0
 
                   return (
                     <tr
@@ -210,10 +206,10 @@ export function DashboardScreen() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge
                           size="1"
-                          color={consignment.tradeFlow === 'IMPORT' ? 'blue' : 'green'}
+                          color={consignment.flow === 'IMPORT' ? 'blue' : 'green'}
                           variant="soft"
                         >
-                          {consignment.tradeFlow}
+                          {consignment.flow}
                         </Badge>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

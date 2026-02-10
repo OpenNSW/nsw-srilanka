@@ -1,7 +1,7 @@
 import type {PaginatedResponse} from './api'
 import type { HSCode, HSCodeQueryParams } from './types/hsCode'
 
-const HS_CODES_API_URL = 'http://localhost:8080/api/hscodes'
+const HS_CODES_API_URL = 'http://localhost:8080/api/v1/hscodes'
 
 export async function getHSCodes(
   params: HSCodeQueryParams = {}

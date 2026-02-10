@@ -6,7 +6,7 @@ export interface WorkflowResponse {
   export: Workflow[]
 }
 
-const WORKFLOW_API_URL = 'http://localhost:8080/api/workflows/templates'
+const WORKFLOW_TEMPLATES_ENDPOINT = '/workflows/templates'
 
 export async function getWorkflowsByHSCode(
   params: WorkflowQueryParams
@@ -28,28 +28,24 @@ async function fetchWorkflowByType(
   hsCode: string,
   tradeFlow: 'IMPORT' | 'EXPORT'
 ): Promise<Workflow | null> {
-  const url = `${WORKFLOW_API_URL}?hsCode=${encodeURIComponent(hsCode)}&tradeFlow=${tradeFlow}`
-  const response = await fetch(url)
+  try {
+    const template = await apiGet<WorkflowTemplate>(WORKFLOW_TEMPLATES_ENDPOINT, {
+      hsCode,
+      tradeFlow,
+    })
 
-  if (!response.ok) {
-    if (response.status === 404) {
+    // Transform WorkflowTemplate to Workflow
+    return {
+      id: template.id,
+      name: template.version,
+      type: tradeFlow.toLowerCase() as 'import' | 'export',
+      steps: template.steps,
+    }
+  } catch (error) {
+    // Return null for 404 errors (workflow not found)
+    if (error instanceof Error && error.message.includes('404')) {
       return null
     }
-    throw new Error(`API error: ${response.status} ${response.statusText}`)
+    throw error
   }
-
-  const template: WorkflowTemplate = await response.json()
-
-  // Transform WorkflowTemplate to Workflow
-  return {
-    id: template.id,
-    name: template.version,
-    type: tradeFlow.toLowerCase() as 'import' | 'export',
-    steps: template.steps,
-  }
-}
-
-export async function getWorkflowById(id: string): Promise<Workflow | undefined> {
-
-  return apiGet<Workflow>(`/workflows/${id}`)
 }

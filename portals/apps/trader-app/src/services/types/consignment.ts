@@ -2,44 +2,72 @@ export type TradeFlow = 'IMPORT' | 'EXPORT'
 
 export type ConsignmentState = 'IN_PROGRESS' | 'REQUIRES_REWORK' | 'FINISHED'
 
-export type StepStatus = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
+export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
 
 export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT'
 
-export interface ConsignmentStep {
-  stepId: string
+export interface ItemMetadata {
+  description: string
+  packageType: string
+  quantity: number
+  unit: string
+}
+
+export interface GlobalContext {
+  consigneeAddress: string
+  consigneeName: string
+  countryOfDestination: string
+  countryOfOrigin: string
+  invoiceDate: string
+  invoiceNumber: string
+}
+
+export interface HSCodeDetails {
+  hsCodeId: string
+  hsCode: string
+  description: string
+  category: string
+}
+
+export interface WorkflowNodeTemplate {
+  name: string
+  description: string
   type: StepType
-  taskId: string
-  status: StepStatus
-  dependsOn: string[]
+}
+
+export interface WorkflowNode {
+  id: string
+  createdAt: string
+  updatedAt: string
+  workflowNodeTemplate: WorkflowNodeTemplate
+  state: WorkflowNodeState
+  depends_on: string[]
 }
 
 export interface ConsignmentItem {
-  hsCodeID: string
-  hsCode?: string
-  hsCodeDescription?: string
-  steps: ConsignmentStep[]
+  hsCode: HSCodeDetails
+  itemMetadata: ItemMetadata
 }
 
 export interface Consignment {
   id: string
-  tradeFlow: TradeFlow
+  flow: TradeFlow
   traderId: string
   state: ConsignmentState
   items: ConsignmentItem[]
+  globalContext: GlobalContext
   createdAt: string
   updatedAt: string
+  workflowNodes: WorkflowNode[] | null
 }
 
 export interface CreateConsignmentItemRequest {
   hsCodeId: string
-  metadata: Record<string, unknown>
-  workflowTemplateId: string
+  itemMetadata: ItemMetadata
 }
 
 export interface CreateConsignmentRequest {
-  tradeFlow: TradeFlow
-  traderId: string
+  flow: TradeFlow
   items: CreateConsignmentItemRequest[]
 }
 

@@ -29,10 +29,10 @@ export function FormScreen() {
         // Execute task with FETCH_FORM action to get the form schema
         const response = await executeTask(consignmentId, taskId, 'SIMPLE_FORM')
 
-        if (response.success && response.result.data) {
-          setFormData(response.result.data)
+        if (response.success && response.data) {
+          setFormData(response.data)
         } else {
-          setError(response.result?.message || 'Failed to fetch form.')
+          setError('Failed to fetch form.')
         }
       } catch (err) {
         setError('Failed to fetch form details.')

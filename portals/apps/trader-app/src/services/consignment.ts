@@ -3,11 +3,10 @@ import type {
   CreateConsignmentRequest,
   CreateConsignmentResponse,
 } from './types/consignment'
-import type { PaginatedResponse } from './api'
 import { apiGet, apiPost } from './api'
 
 // TODO: Get from auth context
-const DEFAULT_TRADER_ID = 'trader-123'
+const DEFAULT_TRADER_ID = 'TRADER-001'
 
 export async function createConsignment(
   request: CreateConsignmentRequest
@@ -32,8 +31,8 @@ export async function getConsignment(id: string): Promise<Consignment | null> {
 
 export async function getAllConsignments(
   traderId: string = DEFAULT_TRADER_ID
-): Promise<PaginatedResponse<Consignment>> {
-  return apiGet<PaginatedResponse<Consignment>>('/consignments', {
+): Promise<Consignment[]> {
+  return apiGet<Consignment[]>('/consignments', {
     traderId,
   })
 }
