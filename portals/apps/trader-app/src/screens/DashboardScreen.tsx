@@ -4,7 +4,7 @@ import { Button, Text, TextField, Spinner, Select, Badge } from '@radix-ui/theme
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { HSCodePicker } from '../components/HSCodePicker'
 import type { HSCode } from "../services/types/hsCode.ts"
-import type { Consignment, TradeFlow, ItemMetadata } from "../services/types/consignment.ts"
+import type { Consignment, TradeFlow } from "../services/types/consignment.ts"
 import { createConsignment, getAllConsignments } from "../services/consignment.ts"
 import { getStateColor, formatState, formatDate } from '../utils/consignmentUtils'
 
@@ -37,7 +37,7 @@ export function DashboardScreen() {
     fetchConsignments()
   }, [])
 
-  const handleSelect = async (hsCode: HSCode, tradeFlow: TradeFlow, itemMetadata: ItemMetadata) => {
+  const handleSelect = async (hsCode: HSCode, tradeFlow: TradeFlow) => {
     setCreating(true)
 
     try {
@@ -46,7 +46,6 @@ export function DashboardScreen() {
         items: [
           {
             hsCodeId: hsCode.id,
-            itemMetadata,
           },
         ],
       })
@@ -63,7 +62,7 @@ export function DashboardScreen() {
   const filteredConsignments = consignments.filter((c) => {
     const item = c.items[0]
     const hsCode = item?.hsCode?.hsCode || ''
-    const description = item?.itemMetadata?.description || ''
+    const description = item?.hsCode?.description || ''
     const matchesSearch =
       searchQuery === '' ||
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||

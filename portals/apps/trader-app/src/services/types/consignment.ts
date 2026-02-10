@@ -6,13 +6,6 @@ export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED'
 
 export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT'
 
-export interface ItemMetadata {
-  description: string
-  packageType: string
-  quantity: number
-  unit: string
-}
-
 export interface GlobalContext {
   consigneeAddress: string
   consigneeName: string
@@ -46,7 +39,6 @@ export interface WorkflowNode {
 
 export interface ConsignmentItem {
   hsCode: HSCodeDetails
-  itemMetadata: ItemMetadata
 }
 
 export interface Consignment {
@@ -63,7 +55,6 @@ export interface Consignment {
 
 export interface CreateConsignmentItemRequest {
   hsCodeId: string
-  itemMetadata: ItemMetadata
 }
 
 export interface CreateConsignmentRequest {

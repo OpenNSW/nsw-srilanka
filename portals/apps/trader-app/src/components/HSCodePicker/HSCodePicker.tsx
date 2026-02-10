@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { Dialog, Button, Box, Flex, Text, IconButton, Badge, TextField, TextArea } from '@radix-ui/themes'
+import { Dialog, Button, Box, Flex, Text, IconButton, Badge } from '@radix-ui/themes'
 import { Cross2Icon, ArrowRightIcon } from '@radix-ui/react-icons'
 import { HSCodeSearch } from './HSCodeSearch'
 import type { HSCode } from "../../services/types/hsCode.ts"
-import type { TradeFlow, ItemMetadata } from "../../services/types/consignment.ts"
+import type { TradeFlow } from "../../services/types/consignment.ts"
 
 interface HSCodePickerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSelect: (hsCode: HSCode, tradeFlow: TradeFlow, itemMetadata: ItemMetadata) => void
+  onSelect: (hsCode: HSCode, tradeFlow: TradeFlow) => void
   /** Whether a consignment is being created */
   isCreating?: boolean
   /** Dialog title */
@@ -28,33 +28,15 @@ export function HSCodePicker({
   confirmText = 'Start Consignment',
   cancelText = 'Cancel',
 }: HSCodePickerProps) {
-  const [step, setStep] = useState<'trade-flow' | 'hs-code' | 'item-details'>('trade-flow')
+  const [step, setStep] = useState<'trade-flow' | 'hs-code'>('trade-flow')
   const [tradeFlow, setTradeFlow] = useState<TradeFlow | null>(null)
   const [selectedHSCode, setSelectedHSCode] = useState<HSCode | null>(null)
 
-  // Item metadata fields
-  const [quantity, setQuantity] = useState<string>('')
-  const [unit, setUnit] = useState<string>('')
-  const [description, setDescription] = useState<string>('')
-  const [packageType, setPackageType] = useState<string>('')
-
   const handleConfirm = () => {
     if (selectedHSCode && tradeFlow) {
-      const itemMetadata: ItemMetadata = {
-        quantity: parseFloat(quantity),
-        unit,
-        description,
-        packageType,
-      }
-      onSelect(selectedHSCode, tradeFlow, itemMetadata)
+      onSelect(selectedHSCode, tradeFlow)
       onOpenChange(false)
       resetState()
-    }
-  }
-
-  const handleNext = () => {
-    if (step === 'hs-code' && selectedHSCode) {
-      setStep('item-details')
     }
   }
 
@@ -64,9 +46,7 @@ export function HSCodePicker({
   }
 
   const handleBack = () => {
-    if (step === 'item-details') {
-      setStep('hs-code')
-    } else if (step === 'hs-code') {
+    if (step === 'hs-code') {
       setStep('trade-flow')
       setSelectedHSCode(null)
     }
@@ -76,10 +56,6 @@ export function HSCodePicker({
     setStep('trade-flow')
     setTradeFlow(null)
     setSelectedHSCode(null)
-    setQuantity('')
-    setUnit('')
-    setDescription('')
-    setPackageType('')
   }
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -102,9 +78,7 @@ export function HSCodePicker({
             <Dialog.Description size="2" color="gray">
               {step === 'trade-flow'
                 ? 'Select whether this is an import or export consignment.'
-                : step === 'hs-code'
-                ? `Search and select an HS code for your ${tradeFlow?.toLowerCase()} consignment.`
-                : 'Enter the item details for your consignment.'}
+                : `Search and select an HS code for your ${tradeFlow?.toLowerCase()} consignment.`}
             </Dialog.Description>
           </Box>
           <Dialog.Close>
@@ -155,7 +129,7 @@ export function HSCodePicker({
                 </button>
               </Flex>
             </Flex>
-          ) : step === 'hs-code' ? (
+          ) : (
             <>
               {/* Step indicator */}
               <Flex align="center" gap="2" mb="4">
@@ -195,73 +169,11 @@ export function HSCodePicker({
                 </Box>
               )}
             </>
-          ) : (
-            <>
-              {/* Step indicator */}
-              <Flex align="center" gap="2" mb="4">
-                <Badge color={tradeFlow === 'IMPORT' ? 'blue' : 'green'} size="2">
-                  {tradeFlow}
-                </Badge>
-                <Text size="1" color="gray">•</Text>
-                <Badge color="blue" size="2" variant="soft">
-                  {selectedHSCode?.hsCode}
-                </Badge>
-              </Flex>
-
-              {/* Item Details Form */}
-              <Flex direction="column" gap="4">
-                <Box>
-                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
-                    Description <Text color="red">*</Text>
-                  </Text>
-                  <TextArea
-                    placeholder="e.g., Desiccated Coconut (DC)"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                  />
-                </Box>
-
-                <Box>
-                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
-                    Quantity <Text color="red">*</Text>
-                  </Text>
-                  <TextField.Root
-                    type="number"
-                    placeholder="e.g., 1000"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                  />
-                </Box>
-
-                <Box>
-                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
-                    Unit <Text color="red">*</Text>
-                  </Text>
-                  <TextField.Root
-                    placeholder="e.g., kg"
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value)}
-                  />
-                </Box>
-
-                <Box>
-                  <Text as="label" size="2" weight="medium" mb="1" style={{ display: 'block' }}>
-                    Package Type <Text color="red">*</Text>
-                  </Text>
-                  <TextField.Root
-                    placeholder="e.g., bags"
-                    value={packageType}
-                    onChange={(e) => setPackageType(e.target.value)}
-                  />
-                </Box>
-              </Flex>
-            </>
           )}
         </Box>
 
         <Flex gap="3" justify="end" mt="4">
-          {(step === 'hs-code' || step === 'item-details') && (
+          {step === 'hs-code' && (
             <Button variant="soft" color="gray" onClick={handleBack} disabled={isCreating}>
               Back
             </Button>
@@ -273,16 +185,8 @@ export function HSCodePicker({
           </Dialog.Close>
           {step === 'hs-code' && (
             <Button
-              onClick={handleNext}
-              disabled={!selectedHSCode}
-            >
-              Next
-            </Button>
-          )}
-          {step === 'item-details' && (
-            <Button
               onClick={handleConfirm}
-              disabled={!quantity || !unit || !description || !packageType || isCreating || isNaN(Number(quantity))}
+              disabled={!selectedHSCode || isCreating}
               loading={isCreating}
             >
               {isCreating ? 'Creating...' : confirmText}
