@@ -7,6 +7,18 @@ export interface PaginatedResponse<T> {
   offset: number
 }
 
+export type ErrorResponse = {
+  code : string
+  message: string
+  details: unknown
+}
+
+export type ApiResponse<T> = {
+  success: boolean
+  data: T
+  error?: ErrorResponse
+}
+
 export interface QueryParams {
   [key:string]: string | number | undefined
 }

@@ -4,7 +4,7 @@ import type {Node, NodeProps} from '@xyflow/react'
 import {Text, Tooltip} from '@radix-ui/themes'
 import {useParams, useNavigate} from 'react-router-dom'
 import type {WorkflowNode as WorkflowNodeDataType, WorkflowNodeState} from '../../services/types/consignment'
-import {executeTask} from '../../services/task'
+
 import {
   CheckCircledIcon,
   LockClosedIcon,
@@ -85,6 +85,20 @@ export function WorkflowNode({data}: NodeProps<WorkflowNodeType>) {
   }
 
   const isExecutable = step.state === 'READY'
+  const isViewable = step.state !== 'LOCKED' && !isExecutable
+
+  const getViewButtonColors = () => {
+    switch (step.state) {
+      case 'COMPLETED':
+        return 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700'
+      case 'IN_PROGRESS':
+        return 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700'
+      case 'REJECTED':
+        return 'bg-red-500 hover:bg-red-600 active:bg-red-700'
+      default:
+        return 'bg-slate-500 hover:bg-slate-600 active:bg-slate-700'
+    }
+  }
 
   const getStepLabel = () => {
     // Use workflow node template name if available, otherwise use node ID
@@ -100,14 +114,14 @@ export function WorkflowNode({data}: NodeProps<WorkflowNodeType>) {
   const getTooltipContent = () => {
     const label = getStepLabel()
     const description = step.workflowNodeTemplate.description
-    
+
     if (description && description.trim()) {
       return `${label} - ${description}`
     }
     return label
   }
 
-  const handleExecute = async (e: React.MouseEvent) => {
+  const handleOpen = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!consignmentId) {
       console.error('No consignment ID found in URL')
@@ -116,8 +130,6 @@ export function WorkflowNode({data}: NodeProps<WorkflowNodeType>) {
 
     setIsLoading(true)
     try {
-      // Use the workflow node id directly
-      await executeTask(consignmentId, step.id, step.workflowNodeTemplate.type)
       navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
     } catch (error) {
       console.error('Failed to execute task:', error)
@@ -161,7 +173,7 @@ export function WorkflowNode({data}: NodeProps<WorkflowNodeType>) {
 
         {isExecutable && (
           <button
-            onClick={handleExecute}
+            onClick={handleOpen}
             disabled={isLoading}
             className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white shadow-md hover:cursor-pointer hover:shadow-lg transition-all duration-150 shrink-0 disabled:bg-slate-400 disabled:cursor-not-allowed"
             title="Execute task"
@@ -170,6 +182,21 @@ export function WorkflowNode({data}: NodeProps<WorkflowNodeType>) {
               <UpdateIcon className="w-4 h-4 animate-spin"/>
             ) : (
               <PlayIcon className="w-4 h-4 ml-0.5"/>
+            )}
+          </button>
+        )}
+
+        {isViewable && (
+          <button
+            onClick={handleOpen}
+            disabled={isLoading}
+            className={`flex items-center justify-center w-8 h-8 rounded-full ${getViewButtonColors()} text-white shadow-md hover:cursor-pointer hover:shadow-lg transition-all duration-150 shrink-0 disabled:bg-slate-400 disabled:cursor-not-allowed`}
+            title="View task"
+          >
+            {isLoading ? (
+              <UpdateIcon className="w-4 h-4 animate-spin"/>
+            ) : (
+              <ReaderIcon className="w-4 h-4"/>
             )}
           </button>
         )}

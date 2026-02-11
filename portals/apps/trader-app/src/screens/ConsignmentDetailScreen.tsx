@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import {useCallback, useEffect, useState} from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { WorkflowViewer } from '../components/WorkflowViewer'
@@ -10,13 +10,12 @@ import { getStateColor, formatState } from '../utils/consignmentUtils'
 export function ConsignmentDetailScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
-  const location = useLocation()
   const [consignment, setConsignment] = useState<Consignment | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchConsignment = async () => {
+  const fetchConsignment = useCallback(async () => {
     if (!consignmentId) {
       setError('Consignment ID is required')
       setLoading(false)
@@ -39,7 +38,7 @@ export function ConsignmentDetailScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [consignmentId])
 
   const handleRefresh = () => {
     setRefreshing(true)
@@ -47,20 +46,7 @@ export function ConsignmentDetailScreen() {
   }
 
   useEffect(() => {
-    // Check if we just submitted a form
-    const state = location.state as { justSubmitted?: boolean } | null
-    if (state?.justSubmitted) {
-      // Clear the navigation state to prevent re-triggering on refresh
-      navigate(location.pathname, { replace: true, state: {} })
-
-      // Show loading state and fetch immediately
-      setLoading(true)
-      fetchConsignment()
-    } else {
-      // Normal fetch without delay
-      fetchConsignment()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchConsignment()
   }, [consignmentId])
 
   if (loading) {

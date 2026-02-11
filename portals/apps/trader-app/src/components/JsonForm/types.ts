@@ -110,13 +110,10 @@ export interface FieldProps {
 export interface JsonFormProps {
   schema: JsonSchema;
   uiSchema?: UISchemaElement;
-  data?: FormValues;
-  onSubmit: (values: FormValues) => void | Promise<void>;
-  onSaveDraft?: (values: FormValues) => void | Promise<void>;
-  submitLabel?: string;
-  draftLabel?: string;
-  showDraftButton?: boolean;
-  showAutoFillButton?: boolean;
-  autoFillLabel?: string;
+  values: FormValues;
+  errors: FormErrors;
+  touched: FormTouched;
+  setValue: (name: string, value: unknown) => void;
+  setTouched: (name: string) => void;
   className?: string;
 }

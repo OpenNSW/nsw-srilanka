@@ -3,7 +3,7 @@ import './App.css'
 import { Layout } from './components/Layout'
 import { DashboardScreen } from "./screens/DashboardScreen.tsx"
 import { ConsignmentDetailScreen } from "./screens/ConsignmentDetailScreen.tsx"
-import { FormScreen } from "./screens/FormScreen.tsx"
+import {TaskDetailScreen} from "./screens/TaskDetailScreen.tsx";
 
 function App() {
   return (
@@ -12,7 +12,7 @@ function App() {
         <Route path="/" element={<DashboardScreen />} />
         <Route path="/consignments" element={<DashboardScreen />} />
         <Route path="/consignments/:consignmentId" element={<ConsignmentDetailScreen />} />
-        <Route path="/consignments/:consignmentId/tasks/:taskId" element={<FormScreen />} />
+        <Route path="/consignments/:consignmentId/tasks/:taskId" element={<TaskDetailScreen />} />
       </Route>
     </Routes>
   )

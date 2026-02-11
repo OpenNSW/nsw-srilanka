@@ -10,7 +10,6 @@ import type {
   Categorization,
   ResolvedControl,
 } from './types';
-import { useJsonForm } from './useJsonForm';
 import {
   TextField,
   NumberField,
@@ -353,34 +352,15 @@ function renderLabel(label: LabelElement): React.ReactNode {
 export function JsonForm({
   schema,
   uiSchema,
-  data,
-  onSubmit,
-  onSaveDraft,
-  submitLabel = 'Submit',
-  draftLabel = 'Save Draft',
-  showDraftButton = false,
-  showAutoFillButton = false,
-  autoFillLabel = 'Auto-Fill',
+  values,
+  errors,
+  touched,
+  setValue,
+  setTouched,
   className = '',
 }: JsonFormProps) {
-  const form = useJsonForm({ schema, data, onSubmit });
-
-  const handleSaveDraft = () => {
-    if (onSaveDraft) {
-      onSaveDraft(form.values);
-    }
-  };
-
-  const handleAutoFill = () => {
-    form.autoFillForm();
-  };
-
   return (
-    <form
-      onSubmit={form.handleSubmit}
-      className={className}
-      noValidate
-    >
+    <div className={className}>
       {schema.title && (
         <h2 className="text-xl font-semibold mb-4 text-gray-900">
           {schema.title}
@@ -390,64 +370,12 @@ export function JsonForm({
       {uiSchema && renderElement({
         element: uiSchema,
         schema,
-        values: form.values,
-        errors: form.errors,
-        touched: form.touched,
-        setValue: form.setValue,
-        setTouched: form.setTouched,
+        values,
+        errors,
+        touched,
+        setValue,
+        setTouched,
       })}
-
-      <div className={`mt-4 flex gap-3 ${showDraftButton || showAutoFillButton ? 'justify-between' : ''}`}>
-        <div className="flex gap-3">
-          {showAutoFillButton && (
-            <button
-              type="button"
-              onClick={handleAutoFill}
-              disabled={form.isSubmitting}
-              className={`
-                px-4 py-2 font-medium rounded-md
-                border border-purple-300 text-purple-700 bg-purple-50
-                hover:bg-purple-100
-                focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-                disabled:bg-gray-100 disabled:cursor-not-allowed
-                transition-colors
-              `}
-            >
-              {autoFillLabel}
-            </button>
-          )}
-          {showDraftButton && onSaveDraft && (
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              disabled={form.isSubmitting}
-              className={`
-                px-4 py-2 font-medium rounded-md
-                border border-gray-300 text-gray-700 bg-white
-                hover:bg-gray-50
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                disabled:bg-gray-100 disabled:cursor-not-allowed
-                transition-colors
-              `}
-            >
-              {draftLabel}
-            </button>
-          )}
-        </div>
-        <button
-          type="submit"
-          disabled={form.isSubmitting}
-          className={`
-            ${showDraftButton || showAutoFillButton ? 'flex-1' : 'w-full'} px-4 py-2 text-white font-medium rounded-md
-            bg-blue-600 hover:bg-blue-700
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-            disabled:bg-blue-400 disabled:cursor-not-allowed
-            transition-colors
-          `}
-        >
-          {form.isSubmitting ? 'Submitting...' : submitLabel}
-        </button>
-      </div>
-    </form>
+    </div>
   );
 }
