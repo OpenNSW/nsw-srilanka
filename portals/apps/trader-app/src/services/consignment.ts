@@ -5,9 +5,6 @@ import type {
 } from './types/consignment'
 import { apiGet, apiPost } from './api'
 
-// TODO: Get from auth context
-const DEFAULT_TRADER_ID = 'TRADER-001'
-
 export async function createConsignment(
   request: CreateConsignmentRequest
 ): Promise<CreateConsignmentResponse> {
@@ -29,10 +26,6 @@ export async function getConsignment(id: string): Promise<Consignment | null> {
   }
 }
 
-export async function getAllConsignments(
-  traderId: string = DEFAULT_TRADER_ID
-): Promise<Consignment[]> {
-  return apiGet<Consignment[]>('/consignments', {
-    traderId,
-  })
+export async function getAllConsignments(): Promise<Consignment[]> {
+  return apiGet<Consignment[]>('/consignments')
 }

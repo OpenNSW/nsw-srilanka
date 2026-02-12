@@ -63,7 +63,6 @@ export interface TraderPreConsignmentsResponse {
 type PreConsignmentListApiResponse = PreConsignmentInstance[] | TraderPreConsignmentsResponse
 
 export interface CreatePreConsignmentRequest {
-    traderId: string
     preConsignmentTemplateId: string
 }
 
@@ -80,17 +79,10 @@ export interface TaskCommandResponse {
     data?: unknown
 }
 
-// TODO: Get from auth context
-const DEFAULT_TRADER_ID = 'TRADER-001'
-
 // --- API Methods ---
 
-export async function getTraderPreConsignments(
-    traderId: string = DEFAULT_TRADER_ID
-): Promise<TraderPreConsignmentsResponse> {
-    const response = await apiGet<PreConsignmentListApiResponse>('/pre-consignments', {
-        traderId,
-    })
+export async function getTraderPreConsignments(): Promise<TraderPreConsignmentsResponse> {
+    const response = await apiGet<PreConsignmentListApiResponse>('/pre-consignments')
 
     if (Array.isArray(response)) {
         const items: TraderPreConsignmentItem[] = response.map((instance) => ({
@@ -121,11 +113,9 @@ export async function getPreConsignment(
 }
 
 export async function createPreConsignment(
-    templateId: string,
-    traderId: string = DEFAULT_TRADER_ID
+    templateId: string
 ): Promise<PreConsignmentInstance> {
     const payload: CreatePreConsignmentRequest = {
-        traderId,
         preConsignmentTemplateId: templateId,
     }
     return apiPost<CreatePreConsignmentRequest, PreConsignmentInstance>(

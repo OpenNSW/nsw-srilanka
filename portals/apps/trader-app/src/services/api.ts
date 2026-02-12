@@ -1,5 +1,8 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1'
 
+// TODO: Should remove this after implementing proper authentication, and use the auth token instead of a hardcoded trader ID
+const TRADER_ID = 'TRADER-001'
+
 export interface PaginatedResponse<T> {
   items: T[]
   totalCount: number
@@ -40,7 +43,12 @@ export async function apiGet<T>(
   const queryString = buildQueryString(params)
   const url = `${API_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ''}`
 
-  const response = await fetch(url)
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': TRADER_ID,
+      'Content-Type': 'application/json',
+    },
+  })
   if (!response.ok) {
     throw new Error(`API error: ${response.status} ${response.statusText}`)
   }
@@ -56,6 +64,7 @@ export async function apiPost<T, R>(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
+      'Authorization': TRADER_ID,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
