@@ -8,7 +8,7 @@ import type { Consignment, TradeFlow } from "../services/types/consignment.ts"
 import { createConsignment, getAllConsignments } from "../services/consignment.ts"
 import { getStateColor, formatState, formatDate } from '../utils/consignmentUtils'
 
-export function DashboardScreen() {
+export function ConsignmentScreen() {
   const navigate = useNavigate()
   const [consignments, setConsignments] = useState<Consignment[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +86,7 @@ export function DashboardScreen() {
         <div className="flex items-center justify-center py-12">
           <Spinner size="3" />
           <Text size="3" color="gray" className="ml-3">
-            Loading dashboard...
+            Loading Consignments...
           </Text>
         </div>
       </div>
@@ -96,7 +96,7 @@ export function DashboardScreen() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Consignment</h1>
         <div className="flex gap-2">
 
           <Button onClick={() => setPickerOpen(true)} disabled={creating}>

@@ -1,9 +1,9 @@
-import { JsonForm, useJsonForm, type JsonSchema, type UISchemaElement } from "../components/JsonForm";
-import { sendTaskCommand } from "../services/task.ts";
-import { uploadFile } from "../services/upload";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { useState } from "react";
-import { Button } from "@radix-ui/themes";
+import {JsonForm, type JsonSchema, type UISchemaElement, useJsonForm} from "../components/JsonForm";
+import {sendTaskCommand} from "../services/task.ts";
+import {uploadFile} from "../services/upload";
+import {useLocation, useNavigate, useParams} from "react-router-dom";
+import {useState} from "react";
+import {Button} from "@radix-ui/themes";
 
 
 export interface TaskFormData {
@@ -41,8 +41,7 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
     }
 
     if (Array.isArray(value)) {
-      const mapped = await Promise.all(value.map(replaceFilesWithKeys))
-      return mapped
+      return await Promise.all(value.map(replaceFilesWithKeys))
     }
 
     if (value && typeof value === 'object') {
@@ -128,7 +127,7 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
                   onClick={form.autoFillForm}
                   disabled={form.isSubmitting}
                 >
-                  Auto-Fill Form
+                  Demo - Auto Fill
                 </Button>
               )}
               <Button
