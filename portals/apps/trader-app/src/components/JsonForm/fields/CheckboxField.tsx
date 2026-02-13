@@ -1,8 +1,8 @@
 import type { FieldProps } from '../types';
 
-export function CheckboxField({ control, value, error, touched, onChange, onBlur }: FieldProps) {
+export function CheckboxField({ control, value, error, touched, onChange, onBlur, readOnly }: FieldProps) {
   const showError = touched && error;
-  const isReadonly = control.options?.readonly;
+  const isReadonly = readOnly ?? control.options?.readonly;
 
   return (
     <div className="mb-4">

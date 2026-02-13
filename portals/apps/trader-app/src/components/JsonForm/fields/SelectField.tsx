@@ -1,8 +1,8 @@
 import type { FieldProps } from '../types';
 import { FieldWrapper } from './FieldWrapper';
 
-export function SelectField({ control, value, error, touched, onChange, onBlur }: FieldProps) {
-  const isReadonly = control.options?.readonly;
+export function SelectField({ control, value, error, touched, onChange, onBlur, readOnly }: FieldProps) {
+  const isReadonly = readOnly ?? control.options?.readonly;
 
   // Get options from enum or oneOf
   const options: { value: string | number; label: string }[] = [];

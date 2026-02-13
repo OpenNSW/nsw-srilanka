@@ -285,6 +285,9 @@ export function useJsonForm({
         if (property.format === 'date-time') {
           return new Date().toISOString();
         }
+        if (property.format === 'file') {
+          return new File(['(sample file content)'], 'sample-attachment.pdf', { type: 'application/pdf' });
+        }
         if (property.enum) {
           return property.enum[0];
         }

@@ -1,8 +1,8 @@
 import type { FieldProps } from '../types';
 import { FieldWrapper } from './FieldWrapper';
 
-export function TextareaField({ control, value, error, touched, onChange, onBlur }: FieldProps) {
-  const isReadonly = control.options?.readonly;
+export function TextareaField({ control, value, error, touched, onChange, onBlur, readOnly }: FieldProps) {
+  const isReadonly = readOnly ?? control.options?.readonly;
   const rows = control.options?.rows ?? 3;
 
   return (

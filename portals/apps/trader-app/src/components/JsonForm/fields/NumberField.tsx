@@ -1,8 +1,8 @@
 import type { FieldProps } from '../types';
 import { FieldWrapper } from './FieldWrapper';
 
-export function NumberField({ control, value, error, touched, onChange, onBlur }: FieldProps) {
-  const isReadonly = control.options?.readonly;
+export function NumberField({ control, value, error, touched, onChange, onBlur, readOnly }: FieldProps) {
+  const isReadonly = readOnly ?? control.options?.readonly;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;

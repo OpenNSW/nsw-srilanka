@@ -153,6 +153,7 @@ interface RenderElementProps {
   touched: Record<string, boolean>;
   setValue: (name: string, value: unknown) => void;
   setTouched: (name: string) => void;
+  readOnly?: boolean;
 }
 
 function renderElement({
@@ -163,6 +164,7 @@ function renderElement({
   touched,
   setValue,
   setTouched,
+  readOnly,
 }: RenderElementProps): React.ReactNode {
   switch (element.type) {
     case 'VerticalLayout':
@@ -174,6 +176,7 @@ function renderElement({
         touched,
         setValue,
         setTouched,
+        readOnly,
       });
 
     case 'Group':
@@ -184,6 +187,7 @@ function renderElement({
         touched,
         setValue,
         setTouched,
+        readOnly,
       });
 
     case 'Categorization':
@@ -194,6 +198,7 @@ function renderElement({
         touched,
         setValue,
         setTouched,
+        readOnly,
       });
 
     case 'Control':
@@ -204,6 +209,7 @@ function renderElement({
         touched,
         setValue,
         setTouched,
+        readOnly,
       });
 
     case 'Label':
@@ -318,7 +324,7 @@ function renderControl(
   control: ControlElement,
   props: Omit<RenderElementProps, 'element'>
 ): React.ReactNode {
-  const { schema, values, errors, touched, setValue, setTouched } = props;
+  const { schema, values, errors, touched, setValue, setTouched, readOnly } = props;
   const resolved = resolveControl(control, schema);
 
   if (!resolved) return null;
@@ -331,6 +337,7 @@ function renderControl(
     touched: touched[resolved.name] ?? false,
     onChange: (value: unknown) => setValue(resolved.name, value),
     onBlur: () => setTouched(resolved.name),
+    readOnly: readOnly || resolved.options?.readonly,
   };
 
   switch (fieldType) {
@@ -367,6 +374,7 @@ export function JsonForm({
   setValue,
   setTouched,
   className = '',
+  readOnly = false,
 }: JsonFormProps) {
   return (
     <div className={className}>
@@ -384,6 +392,7 @@ export function JsonForm({
         touched,
         setValue,
         setTouched,
+        readOnly,
       })}
     </div>
   );

@@ -1,9 +1,9 @@
 import type { FieldProps } from '../types';
 import { FieldWrapper } from './FieldWrapper';
 
-export function TextField({ control, value, error, touched, onChange, onBlur }: FieldProps) {
+export function TextField({ control, value, error, touched, onChange, onBlur, readOnly }: FieldProps) {
   const inputType = control.property.format === 'email' ? 'email' : 'text';
-  const isReadonly = control.options?.readonly;
+  const isReadonly = readOnly ?? control.options?.readonly;
 
   return (
     <FieldWrapper control={control} error={error} touched={touched}>

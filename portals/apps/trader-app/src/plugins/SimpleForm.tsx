@@ -104,17 +104,16 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
 
       <div className="bg-white rounded-lg shadow-md p-6">
         <form onSubmit={form.handleSubmit} noValidate>
-          <fieldset disabled={isReadOnly}>
-            <JsonForm
-              schema={props.formInfo.schema}
-              uiSchema={props.formInfo.uiSchema}
-              values={form.values}
-              errors={form.errors}
-              touched={form.touched}
-              setValue={form.setValue}
-              setTouched={form.setTouched}
-            />
-          </fieldset>
+          <JsonForm
+            schema={props.formInfo.schema}
+            uiSchema={props.formInfo.uiSchema}
+            values={form.values}
+            errors={form.errors}
+            touched={form.touched}
+            setValue={form.setValue}
+            setTouched={form.setTouched}
+            readOnly={isReadOnly}
+          />
           {!isReadOnly && (
             <div className={`mt-4 flex gap-3 ${showAutoFillButton ? 'justify-between' : ''}`}>
               {showAutoFillButton && (
@@ -166,17 +165,16 @@ function OgaReviewForm(props: { formInfo: TaskFormData }) {
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg shadow-md p-6">
-        <fieldset disabled>
-          <JsonForm
-            schema={props.formInfo.schema}
-            uiSchema={props.formInfo.uiSchema}
-            values={form.values}
-            errors={form.errors}
-            touched={form.touched}
-            setValue={form.setValue}
-            setTouched={form.setTouched}
-          />
-        </fieldset>
+        <JsonForm
+          schema={props.formInfo.schema}
+          uiSchema={props.formInfo.uiSchema}
+          values={form.values}
+          errors={form.errors}
+          touched={form.touched}
+          setValue={form.setValue}
+          setTouched={form.setTouched}
+          readOnly={true}
+        />
       </div>
     </>
   )
