@@ -42,7 +42,20 @@ export interface ConsignmentItem {
   hsCode: HSCodeDetails
 }
 
-export interface Consignment {
+
+export interface ConsignmentSummary {
+  id: string
+  flow: TradeFlow
+  traderId: string
+  state: ConsignmentState
+  items: ConsignmentItem[]
+  createdAt: string
+  updatedAt: string
+  workflowNodeCount: number
+  completedWorkflowNodeCount: number
+}
+
+export interface ConsignmentDetail {
   id: string
   flow: TradeFlow
   traderId: string
@@ -51,8 +64,11 @@ export interface Consignment {
   globalContext: GlobalContext
   createdAt: string
   updatedAt: string
-  workflowNodes: WorkflowNode[] | null
+  workflowNodes: WorkflowNode[]
 }
+
+// Deprecated: Use ConsignmentDetail or ConsignmentSummary
+export type Consignment = ConsignmentDetail
 
 export interface CreateConsignmentItemRequest {
   hsCodeId: string
@@ -63,8 +79,8 @@ export interface CreateConsignmentRequest {
   items: CreateConsignmentItemRequest[]
 }
 
-export type CreateConsignmentResponse = Consignment
+export type CreateConsignmentResponse = ConsignmentDetail
 
 import type { PaginatedResponse } from './common'
 
-export type ConsignmentListResult = PaginatedResponse<Consignment>
+export type ConsignmentListResult = PaginatedResponse<ConsignmentSummary>

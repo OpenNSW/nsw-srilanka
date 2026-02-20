@@ -3,14 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Badge, Spinner, Text, Progress } from '@radix-ui/themes'
 import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { WorkflowViewer } from '../components/WorkflowViewer'
-import type { Consignment } from "../services/types/consignment.ts"
+import type { ConsignmentDetail } from "../services/types/consignment.ts"
 import { getConsignment } from "../services/consignment.ts"
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
 
 export function ConsignmentDetailScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
-  const [consignment, setConsignment] = useState<Consignment | null>(null)
+  const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +77,7 @@ export function ConsignmentDetailScreen() {
             {error || 'Consignment not found'}
           </Text>
           <Text size="2" color="gray" className="block mb-6">
-            {error === 'Failed to load consignment' 
+            {error === 'Failed to load consignment'
               ? 'There was a problem loading the consignment details. Please try again.'
               : 'The consignment you\'re looking for doesn\'t exist or you don\'t have access to it.'}
           </Text>
@@ -155,9 +155,9 @@ export function ConsignmentDetailScreen() {
             <div>
               <h3 className="text-xs font-medium text-gray-500 mb-1">Workflow Progress</h3>
               <div className="flex items-center gap-2 mb-1">
-                <Progress 
-                  value={progressPercentage} 
-                  className="flex-1" 
+                <Progress
+                  value={progressPercentage}
+                  className="flex-1"
                   size="2"
                   color={progressPercentage === 100 ? 'green' : progressPercentage > 0 ? 'blue' : 'gray'}
                 />
@@ -166,8 +166,8 @@ export function ConsignmentDetailScreen() {
                 </Text>
               </div>
               <Text size="1" color="gray">
-                {progressPercentage === 100 
-                  ? 'All steps completed' 
+                {progressPercentage === 100
+                  ? 'All steps completed'
                   : `${Math.round(progressPercentage)}% complete`}
               </Text>
             </div>

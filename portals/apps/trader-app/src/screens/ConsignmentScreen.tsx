@@ -4,14 +4,14 @@ import { Button, Text, TextField, Spinner, Select, Badge } from '@radix-ui/theme
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { HSCodePicker } from '../components/HSCodePicker'
 import type { HSCode } from "../services/types/hsCode.ts"
-import type { Consignment, TradeFlow, ConsignmentState } from "../services/types/consignment.ts"
+import type { ConsignmentSummary, TradeFlow, ConsignmentState } from "../services/types/consignment.ts"
 import { createConsignment, getAllConsignments } from "../services/consignment.ts"
 import { getStateColor, formatState, formatDate } from '../utils/consignmentUtils'
 import { PaginationControl } from '../components/common/PaginationControl'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
-  const [consignments, setConsignments] = useState<Consignment[]>([])
+  const [consignments, setConsignments] = useState<ConsignmentSummary[]>([])
 
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -201,8 +201,8 @@ export function ConsignmentScreen() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredConsignments.map((consignment) => {
-                  const completedSteps = consignment.workflowNodes?.filter(n => n.state === 'COMPLETED').length || 0
-                  const totalSteps = consignment.workflowNodes?.length || 0
+                  const completedSteps = consignment.completedWorkflowNodeCount || 0
+                  const totalSteps = consignment.workflowNodeCount || 0
 
                   return (
                     <tr
