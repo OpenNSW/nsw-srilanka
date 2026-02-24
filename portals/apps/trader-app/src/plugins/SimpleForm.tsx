@@ -1,5 +1,5 @@
 import { JsonForms } from '@jsonforms/react';
-import { radixRenderers } from '@lsf/ui';
+import { radixRenderers } from '@opennsw/jsonforms-renderers';
 import { sendTaskCommand } from "../services/task.ts";
 
 import { useLocation, useNavigate, useParams } from "react-router-dom";
