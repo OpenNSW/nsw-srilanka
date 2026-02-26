@@ -1,9 +1,9 @@
 import { apiGet, apiPost, type ApiResponse } from './api'
 import type { RenderInfo } from "../plugins";
 
-export type TaskAction = 'FETCH_FORM' | 'SUBMIT_FORM' | 'DRAFT'
+export type TaskAction = 'FETCH_FORM' | 'SUBMIT_FORM' | 'SAVE_AS_DRAFT'
 
-export type TaskCommand = 'SUBMISSION' | 'DRAFT'
+export type TaskCommand = 'SUBMISSION' | 'SAVE_AS_DRAFT'
 
 export interface TaskFormData {
   title: string
@@ -46,7 +46,7 @@ export async function sendTaskCommand(
   console.log(`Sending ${request.command} command for task: ${request.taskId}`, request)
 
   // Use POST /api/tasks with action type and submission data
-  const action: TaskAction = request.command === 'DRAFT' ? 'DRAFT' : 'SUBMIT_FORM'
+  const action: TaskAction = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
 
   return apiPost<SendTaskCommandRequest, TaskCommandResponse>(TASKS_API_URL, {
     task_id: request.taskId,

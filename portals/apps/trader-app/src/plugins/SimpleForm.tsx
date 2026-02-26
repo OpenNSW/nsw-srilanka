@@ -24,7 +24,7 @@ export type SimpleFormConfig = {
 }
 
 function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
-  const {consignmentId, preConsignmentId, taskId} = useParams<{
+  const { consignmentId, preConsignmentId, taskId } = useParams<{
     consignmentId?: string
     preConsignmentId?: string
     taskId?: string
@@ -44,14 +44,13 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
 
 
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFormAction = async (command: 'SUBMISSION' | 'SAVE_AS_DRAFT') => {
     if (!workflowId || !taskId) {
-      setSubmitError('Workflow ID or Task ID is missing.')
-      return
+      setSubmitError('Workflow ID or Task ID is missing.');
+      return;
     }
 
-    if (errors.length > 0) {
+    if (command === 'SUBMISSION' && errors.length > 0) {
       setSubmitError('Please fix validation errors before submitting.');
       return;
     }
@@ -59,30 +58,39 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
     setIsSubmitting(true);
     setSubmitError(null);
 
-    try {
-      // Send form submission
-      const preparedData = data
+    const isDraft = command === 'SAVE_AS_DRAFT';
+    const actionText = isDraft ? 'save draft' : 'submit form';
+    const consoleActionText = isDraft ? 'saving draft' : 'submitting form';
 
+    try {
       const response = await sendTaskCommand({
-        command: 'SUBMISSION',
+        command,
         taskId,
         workflowId,
-        data: preparedData,
-      })
+        data,
+      });
 
       if (response.success) {
-        // Navigate back to appropriate workflow list
-        navigate(isPreConsignment ? '/pre-consignments' : `/consignments/${workflowId}`)
+        navigate(isPreConsignment ? '/pre-consignments' : `/consignments/${workflowId}`);
       } else {
-        setSubmitError(response.error?.message || 'Failed to submit form.')
+        setSubmitError(response.error?.message || `Failed to ${actionText}.`);
       }
     } catch (err) {
-      console.error('Error submitting form:', err)
-      setSubmitError('Failed to submit form. Please try again.')
+      console.error(`Error ${consoleActionText}:`, err);
+      setSubmitError(`Failed to ${actionText}. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
-  }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleFormAction('SUBMISSION');
+  };
+
+  const handleSaveAsDraft = () => {
+    handleFormAction('SAVE_AS_DRAFT');
+  };
 
   const handleAutoFill = useCallback(() => {
     const filledData = autoFillForm(props.formInfo.schema, data);
@@ -140,6 +148,16 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
                 </Button>
               )}
               <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                className={'flex-1!'}
+                size={"3"}
+                onClick={handleSaveAsDraft}
+              >
+                Save as Draft
+              </Button>
+              <Button
                 type="submit"
                 disabled={isSubmitting}
                 className={'flex-1!'}
@@ -168,7 +186,7 @@ function SubmissionResponseForm(props: { formInfo: TaskFormData }) {
       <div className="bg-emerald-50 px-6 py-4 flex items-center gap-3">
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
           </svg>
         </span>
         <div>
@@ -198,8 +216,8 @@ function OgaReviewForm(props: { formInfo: TaskFormData }) {
       <div className="bg-indigo-700 px-6 py-4 flex items-center gap-3">
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-indigo-100 shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-            <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+            <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
           </svg>
         </span>
         <div>
@@ -224,14 +242,14 @@ function OgaReviewForm(props: { formInfo: TaskFormData }) {
 export default function SimpleForm(props: { configs: SimpleFormConfig, pluginState: string }) {
   return (
     <div>
-      <TraderForm formInfo={props.configs.traderFormInfo} pluginState={props.pluginState}/>
+      <TraderForm formInfo={props.configs.traderFormInfo} pluginState={props.pluginState} />
 
       {props.configs.submissionResponseForm && (
-        <SubmissionResponseForm formInfo={props.configs.submissionResponseForm}/>
+        <SubmissionResponseForm formInfo={props.configs.submissionResponseForm} />
       )}
 
       {props.configs.ogaReviewForm && (
-        <OgaReviewForm formInfo={props.configs.ogaReviewForm}/>
+        <OgaReviewForm formInfo={props.configs.ogaReviewForm} />
       )}
     </div>
   )

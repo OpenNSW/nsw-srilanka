@@ -65,7 +65,7 @@ export interface CreatePreConsignmentRequest {
 }
 
 export interface TaskCommandRequest {
-    command: 'SUBMISSION' | 'SAVE_DRAFT'
+    command: 'SUBMISSION' | 'SAVE_AS_DRAFT'
     taskId: string
     workflowId: string
     data?: Record<string, unknown>
@@ -148,7 +148,7 @@ export async function submitPreConsignmentTask(
     request: TaskCommandRequest
 ): Promise<TaskCommandResponse> {
     return sendTaskCommand({
-        command: request.command === 'SAVE_DRAFT' ? 'DRAFT' : 'SUBMISSION',
+        command: request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMISSION',
         taskId: request.taskId,
         workflowId: request.workflowId,
         data: request.data || {}
