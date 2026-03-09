@@ -8,6 +8,7 @@ import { useState, useCallback } from "react";
 import { Button } from "@radix-ui/themes";
 import type { JsonSchema, UISchemaElement } from '@jsonforms/core';
 import { autoFillForm } from "../utils/formUtils";
+import { getBooleanEnv } from '../runtimeConfig';
 
 
 
@@ -106,7 +107,7 @@ function TraderForm(props: { formInfo: TaskFormData, pluginState: string }) {
     setData(filledData);
   }, [props.formInfo.schema, data]);
 
-  const showAutoFillButton = import.meta.env.VITE_SHOW_AUTOFILL_BUTTON === 'true'
+  const showAutoFillButton = getBooleanEnv('VITE_SHOW_AUTOFILL_BUTTON', false)
 
   const isSubmissionFailed = props.pluginState === 'SUBMISSION_FAILED';
 
