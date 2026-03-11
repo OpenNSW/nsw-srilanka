@@ -1,0 +1,41 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: nsw-trader-portal
+
+endpoints:
+  - name: web
+    port: 80
+    type: HTTP
+    basePath: /
+    visibility:
+      - external
+
+configurations:
+  env:
+    - name: VITE_API_BASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: nsw-trader-portal-secrets
+          key: api-base-url
+    - name: VITE_IDP_BASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: nsw-trader-portal-secrets
+          key: idp-base-url
+    - name: VITE_IDP_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: nsw-trader-portal-secrets
+          key: idp-client-id
+    - name: VITE_APP_URL
+      valueFrom:
+        secretKeyRef:
+          name: nsw-trader-portal-secrets
+          key: app-url
+    - name: VITE_IDP_SCOPES
+      value: openid,profile,email
+    - name: VITE_IDP_PLATFORM
+      value: AsgardeoV2
+    - name: VITE_SHOW_AUTOFILL_BUTTON
+      value: "false"
