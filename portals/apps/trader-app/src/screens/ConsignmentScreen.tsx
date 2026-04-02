@@ -31,9 +31,6 @@ export function ConsignmentScreen() {
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
   const { role } = useRole()
-  const [chaId, setChaId] = useState<string>(() => {
-    return window.localStorage.getItem('consignments.chaId') || ''
-  })
 
   // New consignment state
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -49,9 +46,6 @@ export function ConsignmentScreen() {
         const data = await getCHAs(api)
         const options: CHAOption[] = data.map((c: CHA) => ({ id: c.id, name: c.name }))
         setChaOptions(options)
-        if (!chaId && options.length > 0) {
-          setChaId(options[0].id)
-        }
         if (!newChaId && options.length > 0) {
           setNewChaId(options[0].id)
         }
@@ -73,7 +67,6 @@ export function ConsignmentScreen() {
           stateFilter as ConsignmentState | 'all',
           tradeFlowFilter as TradeFlow | 'all',
           role,
-          role === 'cha' ? chaId : undefined,
           api
         )
         if (requestId !== listRequestIdRef.current) {
@@ -94,7 +87,7 @@ export function ConsignmentScreen() {
     }
 
     fetchConsignments()
-  }, [api, page, stateFilter, tradeFlowFilter, role, chaId])
+  }, [api, page, stateFilter, tradeFlowFilter, role])
 
   const resetNewConsignment = () => {
     setNewStep('trade-flow')
@@ -118,9 +111,6 @@ export function ConsignmentScreen() {
         },
         api
       )
-      // After creating, make CHA view filter match the new consignment's chaId
-      setChaId(newChaId)
-      window.localStorage.setItem('consignments.chaId', newChaId)
       handleNewOpenChange(false)
       // ensure list refreshes (user will see it in both views)
       navigate(`/consignments/${response.id}`)
@@ -315,25 +305,6 @@ export function ConsignmentScreen() {
               </TextField.Root>
             </div>
             <div className="flex gap-3">
-              {role === 'cha' ? (
-                <Select.Root
-                  value={chaId}
-                  onValueChange={(val: string) => {
-                    setChaId(val)
-                    window.localStorage.setItem('consignments.chaId', val)
-                    setPage(0)
-                  }}
-                >
-                  <Select.Trigger placeholder="CHA" />
-                  <Select.Content>
-                    {chaOptions.map((c) => (
-                      <Select.Item key={c.id} value={c.id}>
-                        {c.name}
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Root>
-              ) : null}
               <Select.Root
                 value={stateFilter}
                 onValueChange={(val: string) => {

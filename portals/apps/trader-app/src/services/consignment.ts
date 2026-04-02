@@ -57,14 +57,12 @@ export async function getAllConsignments(
   state?: ConsignmentState | 'all',
   flow?: TradeFlow | 'all',
   role: 'trader' | 'cha' = 'trader',
-  chaId?: string,
   apiClient: ApiClient = defaultApiClient
 ): Promise<ConsignmentListResult> {
   const params: Record<string, string | number> = { offset, limit }
   if (state && state !== 'all') params.state = state
   if (flow && flow !== 'all') params.flow = flow
   params.role = role
-  if (role === 'cha' && chaId) params.cha_id = chaId
 
   const response = await apiClient.get<ConsignmentListResult>(
     '/consignments',
