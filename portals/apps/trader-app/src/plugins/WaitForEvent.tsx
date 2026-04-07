@@ -2,6 +2,9 @@ import { useState } from "react"
 import { useParams } from "react-router-dom"
 import { Button } from "@radix-ui/themes"
 import { sendTaskAction } from "../services/task.ts"
+import { JsonForms } from "@jsonforms/react"
+import { radixRenderers } from "@opennsw/jsonforms-renderers"
+import type {TaskFormData} from "./SimpleForm.tsx";
 
 type WaitForEventDisplay = {
   title?: string
@@ -10,6 +13,7 @@ type WaitForEventDisplay = {
 
 export type WaitForEventConfigs = {
   display?: WaitForEventDisplay
+  eventReviewForm?: TaskFormData
 }
 
 // Shared radar/sonar animation used in both NOTIFIED_SERVICE and post-retry state.
@@ -125,27 +129,54 @@ function FailedState({ title, description, onRetry, isRetrying, retryError }: {
   )
 }
 
-// RECEIVED_CALLBACK — external service has responded
-function CompletedState({ title, description }: { title: string; description?: string }) {
+function ReviewResponseForm({ formInfo }: { formInfo: TaskFormData }) {
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden animate-fade-in-up">
-      <div className="h-1 bg-emerald-500" />
+    <div className="bg-white rounded-xl shadow-md overflow-hidden mt-6 animate-fade-in-up">
+      <div className="bg-gray-50 border-b border-gray-100 px-6 py-4">
+        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">{formInfo.title}</h3>
+      </div>
+      <div className="p-6 pointer-events-none opacity-80 bg-gray-50/30">
+        <JsonForms
+          schema={formInfo.schema}
+          uischema={formInfo.uiSchema}
+          data={formInfo.formData}
+          renderers={radixRenderers}
+          readonly={true}
+        />
+      </div>
+    </div>
+  )
+}
 
-      <div className="px-8 py-12 flex flex-col items-center text-center gap-4">
-        <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 animate-scale-pulse">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-          </svg>
-        </div>
+// RECEIVED_CALLBACK — external service has responded
+function CompletedState({ title, description, formInfo }: { 
+  title: string; 
+  description?: string;
+  formInfo?: TaskFormData
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden animate-fade-in-up">
+        <div className="h-1 bg-emerald-500" />
 
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600">Complete</p>
-          <h2 className="text-xl font-bold text-gray-800">{title}</h2>
-          {description && (
-            <p className="text-sm text-gray-500 max-w-sm">{description}</p>
-          )}
+        <div className="px-8 py-12 flex flex-col items-center text-center gap-4">
+          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 animate-scale-pulse">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600">Complete</p>
+            <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+            {description && (
+              <p className="text-sm text-gray-500 max-w-sm">{description}</p>
+            )}
+          </div>
         </div>
       </div>
+
+      {formInfo && <ReviewResponseForm formInfo={formInfo} />}
     </div>
   )
 }
@@ -185,7 +216,7 @@ export default function WaitForEvent(props: { configs: WaitForEventConfigs; plug
   }
 
   if (props.pluginState === "RECEIVED_CALLBACK") {
-    return <CompletedState title={title} description={description} />
+    return <CompletedState title={title} description={description} formInfo={props.configs.eventReviewForm} />
   }
 
   if (props.pluginState === "NOTIFY_FAILED" && !retried) {
