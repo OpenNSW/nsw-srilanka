@@ -182,7 +182,7 @@ function WorkflowViewerContent({ steps, className = '', onRefresh, refreshing = 
         <div className="absolute top-3 right-3 z-10">
           <Button
             variant="soft"
-            color="gray"
+            color="blue"
             size="2"
             onClick={onRefresh}
             disabled={refreshing}

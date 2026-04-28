@@ -315,9 +315,10 @@ export function ConsignmentScreen() {
                 <Select.Trigger placeholder="State" />
                 <Select.Content>
                   <Select.Item value="all">All States</Select.Item>
+                  <Select.Item value="INITIALIZED">Initialized</Select.Item>
                   <Select.Item value="IN_PROGRESS">In Progress</Select.Item>
                   <Select.Item value="FINISHED">Finished</Select.Item>
-                  <Select.Item value="REQUIRES_REWORK">Requires Rework</Select.Item>
+                  <Select.Item value="FAILED">Failed</Select.Item>
                 </Select.Content>
               </Select.Root>
               <Select.Root

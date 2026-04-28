@@ -12,7 +12,7 @@ export function getStateColor(
       return 'orange'
     case 'FINISHED':
       return 'green'
-    case 'REQUIRES_REWORK':
+    case 'FAILED':
       return 'red'
     default:
       return 'gray'

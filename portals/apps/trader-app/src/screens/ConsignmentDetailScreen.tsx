@@ -244,6 +244,7 @@ export function ConsignmentDetailScreen() {
                   consignmentId={consignmentId!} 
                   onRefresh={handleRefresh} 
                   refreshing={refreshing} 
+                  consignmentState={consignment.state}
                 />
               ) : (
                 <WorkflowViewer 

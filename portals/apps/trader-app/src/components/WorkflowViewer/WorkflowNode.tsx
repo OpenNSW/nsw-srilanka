@@ -13,6 +13,7 @@ import {
   FileTextIcon,
   ClockIcon,
   ReaderIcon,
+  CrossCircledIcon,
 } from '@radix-ui/react-icons'
 
 export interface WorkflowNodeData extends Record<string, unknown> {
@@ -64,11 +65,12 @@ const statusConfig: Record<
     iconColor: 'text-slate-400',
     statusIcon: <LockClosedIcon className="w-3 h-3 text-slate-400" />,
   },
-  REJECTED: {
+  FAILED: {
     bgColor: 'bg-red-50',
     borderColor: 'border-red-400',
     textColor: 'text-red-700',
     iconColor: 'text-red-600',
+    statusIcon: <CrossCircledIcon className="w-4 h-4 text-red-600" />,
   },
 }
 
@@ -94,7 +96,7 @@ export function WorkflowNode({ data }: NodeProps<WorkflowNodeType>) {
         return 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700'
       case 'IN_PROGRESS':
         return 'bg-orange-500 hover:bg-orange-600 active:bg-orange-700'
-      case 'REJECTED':
+      case 'FAILED':
         return 'bg-red-500 hover:bg-red-600 active:bg-red-700'
       default:
         return 'bg-slate-500 hover:bg-slate-600 active:bg-slate-700'

@@ -10,13 +10,19 @@ export type TradeFlow = 'IMPORT' | 'EXPORT'
 export type ConsignmentState =
   | 'INITIALIZED'
   | 'IN_PROGRESS'
-  | 'REQUIRES_REWORK'
+  | 'FAILED'
   | 'FINISHED'
-  | 'COMPLETED'
 
-export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
+export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
 
-export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT' | 'PAYMENT'
+export type StepType =
+  | 'SIMPLE_FORM'
+  | 'WAIT_FOR_EVENT'
+  | 'PAYMENT'
+  | 'START'
+  | 'END'
+  | 'GATEWAY'
+  | 'END_NODE'
 
 export interface GlobalContext {
   consigneeAddress: string
