@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Box, Button, Dialog, Flex, IconButton, Select, Spinner, Text, TextField } from '@radix-ui/themes'
-import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
+import { MagnifyingGlassIcon, PlusIcon, ArrowRightIcon, Cross2Icon } from '@radix-ui/react-icons'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState, CHA } from '../services/types/consignment.ts'
 import { createConsignment, getAllConsignments, getCHAs } from '../services/consignment.ts'
 import { useApi } from '../services/ApiContext'
 import { useRole } from '../services/RoleContext'
 import { getStateColor, formatState, formatDate } from '../utils/consignmentUtils'
 import { PaginationControl } from '../components/common/PaginationControl'
-import { Cross2Icon, ArrowRightIcon } from '@radix-ui/react-icons'
+
 import { CHASearch, type CHAOption } from '../components/CHAPicker/CHASearch'
 
 // Local alias (avoid a second themes import just for Text-as)
@@ -37,8 +37,10 @@ export function ConsignmentScreen() {
   const [creating, setCreating] = useState(false)
   const listRequestIdRef = useRef(0)
   const [newStep, setNewStep] = useState<'trade-flow' | 'cha'>('trade-flow')
-  const [newFlow, setNewFlow] = useState<TradeFlow | null>(null)
-  const [newChaId, setNewChaId] = useState<string>('')
+  const [newConsignmentData, setNewConsignmentData] = useState({
+    flow: null as TradeFlow | null,
+    chaId: '',
+  })
 
   useEffect(() => {
     async function fetchCHAs() {
@@ -46,9 +48,6 @@ export function ConsignmentScreen() {
         const data = await getCHAs(api)
         const options: CHAOption[] = data.map((c: CHA) => ({ id: c.id, name: c.name }))
         setChaOptions(options)
-        if (!newChaId && options.length > 0) {
-          setNewChaId(options[0].id)
-        }
       } catch (error) {
         console.error('Failed to fetch CHAs:', error)
       }
@@ -91,8 +90,10 @@ export function ConsignmentScreen() {
 
   const resetNewConsignment = () => {
     setNewStep('trade-flow')
-    setNewFlow(null)
-    setNewChaId(chaOptions.length > 0 ? chaOptions[0].id : '')
+    setNewConsignmentData({
+      flow: null,
+      chaId: '',
+    })
   }
 
   const handleNewOpenChange = (open: boolean) => {
@@ -101,13 +102,13 @@ export function ConsignmentScreen() {
   }
 
   const handleCreateShell = async () => {
-    if (!newFlow) return
+    if (!newConsignmentData.flow) return
     setCreating(true)
     try {
       const response = await createConsignment(
         {
-          flow: newFlow,
-          chaId: newChaId,
+          flow: newConsignmentData.flow,
+          chaId: newConsignmentData.chaId,
         },
         api,
       )
@@ -195,7 +196,7 @@ export function ConsignmentScreen() {
                 <Flex direction="column" gap="3">
                   <button
                     onClick={() => {
-                      setNewFlow('IMPORT')
+                      setNewConsignmentData((prev) => ({ ...prev, flow: 'IMPORT' }))
                       setNewStep('cha')
                     }}
                     className="p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left group cursor-pointer"
@@ -214,7 +215,7 @@ export function ConsignmentScreen() {
                   </button>
                   <button
                     onClick={() => {
-                      setNewFlow('EXPORT')
+                      setNewConsignmentData((prev) => ({ ...prev, flow: 'EXPORT' }))
                       setNewStep('cha')
                     }}
                     className="p-6 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all text-left group cursor-pointer"
@@ -240,13 +241,13 @@ export function ConsignmentScreen() {
                 </RadixText>
                 <CHASearch
                   options={chaOptions}
-                  value={chaOptions.find((c) => c.id === newChaId) ?? null}
+                  value={chaOptions.find((c) => c.id === newConsignmentData.chaId) ?? null}
                   onChange={(cha) => {
-                    if (cha) setNewChaId(cha.id)
+                    if (cha) setNewConsignmentData((prev) => ({ ...prev, chaId: cha.id }))
                   }}
                 />
                 <RadixText size="1" color="gray">
-                  Flow: {newFlow}
+                  Flow: {newConsignmentData.flow}
                 </RadixText>
               </Flex>
             )}
@@ -259,7 +260,7 @@ export function ConsignmentScreen() {
                 color="gray"
                 onClick={() => {
                   setNewStep('trade-flow')
-                  setNewFlow(null)
+                  setNewConsignmentData((prev) => ({ ...prev, flow: null }))
                 }}
                 disabled={creating}
               >
@@ -272,7 +273,11 @@ export function ConsignmentScreen() {
               </Button>
             </Dialog.Close>
             {newStep === 'cha' ? (
-              <Button onClick={handleCreateShell} disabled={!newFlow || creating} loading={creating}>
+              <Button
+                onClick={handleCreateShell}
+                disabled={!newConsignmentData.flow || !newConsignmentData.chaId || creating}
+                loading={creating}
+              >
                 {creating ? 'Creating...' : 'Create Consignment'}
               </Button>
             ) : null}
