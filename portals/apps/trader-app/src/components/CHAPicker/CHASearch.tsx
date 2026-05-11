@@ -11,10 +11,11 @@ interface CHASearchProps {
   value: CHAOption | null
   onChange: (cha: CHAOption | null) => void
   options: readonly CHAOption[]
+  searchQuery: string
+  onSearchQueryChange: (query: string) => void
 }
 
-export function CHASearch({ value, onChange, options }: CHASearchProps) {
-  const [searchQuery, setSearchQuery] = useState('')
+export function CHASearch({ value, onChange, options, searchQuery, onSearchQueryChange }: CHASearchProps) {
   const [isFocused, setIsFocused] = useState(false)
 
   const filtered = useMemo(() => {
@@ -24,13 +25,13 @@ export function CHASearch({ value, onChange, options }: CHASearchProps) {
   }, [options, searchQuery])
 
   const handleSelect = (cha: CHAOption) => {
-    setSearchQuery(cha.name)
+    onSearchQueryChange(cha.name)
     onChange(cha)
     setIsFocused(false)
   }
 
   const handleClear = () => {
-    setSearchQuery('')
+    onSearchQueryChange('')
     onChange(null)
   }
 
@@ -43,7 +44,14 @@ export function CHASearch({ value, onChange, options }: CHASearchProps) {
         size="2"
         placeholder="Search by CHA (e.g., Spectra, Advantis)..."
         value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
+        onChange={(e) => {
+          const val = e.target.value
+          onSearchQueryChange(val)
+          setIsFocused(true)
+          if (value && val !== value.name) {
+            onChange(null)
+          }
+        }}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setTimeout(() => setIsFocused(false), 150)}
         onMouseDown={() => setIsFocused(true)}
@@ -118,12 +126,6 @@ export function CHASearch({ value, onChange, options }: CHASearchProps) {
             </ScrollArea>
           )}
         </Box>
-      )}
-
-      {!showDropdown && !searchQuery && (
-        <Text size="2" color="gray" align="center" as="p" mt="3">
-          Start typing to search for CHAs
-        </Text>
       )}
     </Box>
   )

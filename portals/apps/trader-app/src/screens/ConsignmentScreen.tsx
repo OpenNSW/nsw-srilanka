@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Box, Button, Dialog, Flex, IconButton, Select, Spinner, Text, TextField } from '@radix-ui/themes'
-import { MagnifyingGlassIcon, PlusIcon, ArrowRightIcon, Cross2Icon } from '@radix-ui/react-icons'
+import { MagnifyingGlassIcon, PlusIcon, Cross2Icon, InfoCircledIcon } from '@radix-ui/react-icons'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState, CHA } from '../services/types/consignment.ts'
 import { createConsignment, getAllConsignments, getCHAs } from '../services/consignment.ts'
 import { useApi } from '../services/ApiContext'
@@ -13,6 +13,181 @@ import { CHASearch, type CHAOption } from '../components/CHAPicker/CHASearch'
 
 // Local alias (avoid a second themes import just for Text-as)
 const RadixText = Text
+
+type NewConsignmentData = {
+  flow: TradeFlow | null
+  chaId: string
+}
+
+interface NewConsignmentDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  chaOptions: CHAOption[]
+  creating: boolean
+  onCreate: (data: NewConsignmentData) => Promise<void>
+}
+
+function NewConsignmentDialog({ open, onOpenChange, chaOptions, creating, onCreate }: NewConsignmentDialogProps) {
+  const [newConsignmentData, setNewConsignmentData] = useState<NewConsignmentData>({
+    flow: null,
+    chaId: '',
+  })
+  const [currentCHASearchQuery, setCurrentCHASearchQuery] = useState('')
+
+  const handleCreate = () => {
+    if (newConsignmentData.flow && newConsignmentData.chaId) {
+      void onCreate(newConsignmentData)
+    }
+  }
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content
+        maxWidth="450px"
+        style={{ minHeight: '420px', display: 'flex', flexDirection: 'column' }}
+        onInteractOutside={(e: Event) => e.preventDefault()}
+      >
+        <Flex justify="between" align="start">
+          <Box>
+            <Dialog.Title>New Consignment</Dialog.Title>
+          </Box>
+          <Dialog.Close>
+            <IconButton variant="ghost" color="gray" size="1">
+              <Cross2Icon />
+            </IconButton>
+          </Dialog.Close>
+        </Flex>
+
+        <Box mt="4" />
+
+        <Box style={{ flex: 1 }}>
+          <Flex direction="column" gap="5">
+            {/* Section 1: Trade Flow */}
+            <Box>
+              <RadixText size="2" weight="medium" color="gray" as="div" mb="2">
+                Select Trade Flow
+              </RadixText>
+              <Flex gap="3">
+                <button
+                  onClick={() => {
+                    setNewConsignmentData((prev) => ({
+                      ...prev,
+                      flow: 'IMPORT',
+                    }))
+                  }}
+                  aria-pressed={newConsignmentData.flow === 'IMPORT'}
+                  aria-label="Select Import Trade Flow"
+                  className={`flex-1 p-4 border-2 rounded-lg transition-all text-left group cursor-pointer ${
+                    newConsignmentData.flow === 'IMPORT'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                  }`}
+                >
+                  <Flex align="center">
+                    <Box>
+                      <Flex align="center" gap="2" mb="1">
+                        <RadixText
+                          size="3"
+                          weight="bold"
+                          className={`${newConsignmentData.flow === 'IMPORT' ? 'text-blue-700' : 'text-gray-900'} block`}
+                        >
+                          Import
+                        </RadixText>
+                      </Flex>
+                      <RadixText
+                        size="1"
+                        color="gray"
+                        style={{ fontSize: '10px', lineHeight: '1.2' }}
+                        className="truncate block"
+                      >
+                        Bringing goods into the country
+                      </RadixText>
+                    </Box>
+                  </Flex>
+                </button>
+                <button
+                  onClick={() => {
+                    setNewConsignmentData((prev) => ({
+                      ...prev,
+                      flow: 'EXPORT',
+                    }))
+                  }}
+                  aria-pressed={newConsignmentData.flow === 'EXPORT'}
+                  aria-label="Select Export Trade Flow"
+                  className={`flex-1 p-4 border-2 rounded-lg transition-all text-left group cursor-pointer ${
+                    newConsignmentData.flow === 'EXPORT'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50'
+                  }`}
+                >
+                  <Flex align="center">
+                    <Box>
+                      <Flex align="center" gap="2" mb="1">
+                        <RadixText
+                          size="3"
+                          weight="bold"
+                          className={`${newConsignmentData.flow === 'EXPORT' ? 'text-green-700' : 'text-gray-900'} block`}
+                        >
+                          Export
+                        </RadixText>
+                      </Flex>
+                      <RadixText
+                        size="1"
+                        color="gray"
+                        style={{ fontSize: '10px', lineHeight: '1.2' }}
+                        className="truncate block"
+                      >
+                        Sending goods out of the country
+                      </RadixText>
+                    </Box>
+                  </Flex>
+                </button>
+              </Flex>
+            </Box>
+
+            {/* Section 2: CHA Selection */}
+            <Box>
+              <RadixText size="2" weight="medium" color="gray" as="div" mb="2">
+                Select CHA
+              </RadixText>
+              <CHASearch
+                options={chaOptions}
+                value={chaOptions.find((c) => c.id === newConsignmentData.chaId) ?? null}
+                searchQuery={currentCHASearchQuery}
+                onChange={(cha) => {
+                  setNewConsignmentData((prev) => ({ ...prev, chaId: cha?.id ?? '' }))
+                }}
+                onSearchQueryChange={setCurrentCHASearchQuery}
+              />
+              {!newConsignmentData.chaId && currentCHASearchQuery.trim().length > 0 && (
+                <Flex align="center" gap="1" mt="2">
+                  <InfoCircledIcon color="red" />
+                  <Text size="1" color="red">
+                    Please select a CHA from the list.
+                  </Text>
+                </Flex>
+              )}
+            </Box>
+          </Flex>
+        </Box>
+
+        <Flex gap="3" justify="end" mt="4">
+          <Dialog.Close>
+            <Button variant="soft" color="red" disabled={creating}>
+              Cancel
+            </Button>
+          </Dialog.Close>
+          <Button
+            onClick={handleCreate}
+            disabled={!newConsignmentData.flow || !newConsignmentData.chaId || creating}
+            loading={creating}
+          >
+            {creating ? 'Creating...' : 'Create'}
+          </Button>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
+  )
+}
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -35,12 +210,33 @@ export function ConsignmentScreen() {
   // New consignment state
   const [pickerOpen, setPickerOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+
   const listRequestIdRef = useRef(0)
-  const [newStep, setNewStep] = useState<'trade-flow' | 'cha'>('trade-flow')
-  const [newConsignmentData, setNewConsignmentData] = useState({
-    flow: null as TradeFlow | null,
-    chaId: '',
-  })
+
+  const handleNewOpenChange = (open: boolean) => {
+    setPickerOpen(open)
+  }
+
+  const handleCreateShell = async (data: NewConsignmentData) => {
+    if (!data.flow) return
+    setCreating(true)
+    try {
+      const response = await createConsignment(
+        {
+          flow: data.flow,
+          chaId: data.chaId,
+        },
+        api,
+      )
+      setPickerOpen(false)
+      // ensure list refreshes (user will see it in both views)
+      void navigate(`/consignments/${response.id}`)
+    } catch (error) {
+      console.error('Failed to create consignment:', error)
+    } finally {
+      setCreating(false)
+    }
+  }
 
   useEffect(() => {
     async function fetchCHAs() {
@@ -52,7 +248,7 @@ export function ConsignmentScreen() {
         console.error('Failed to fetch CHAs:', error)
       }
     }
-    fetchCHAs()
+    void fetchCHAs()
   }, [api])
 
   useEffect(() => {
@@ -85,42 +281,8 @@ export function ConsignmentScreen() {
       }
     }
 
-    fetchConsignments()
+    void fetchConsignments()
   }, [api, page, stateFilter, tradeFlowFilter, role])
-
-  const resetNewConsignment = () => {
-    setNewStep('trade-flow')
-    setNewConsignmentData({
-      flow: null,
-      chaId: '',
-    })
-  }
-
-  const handleNewOpenChange = (open: boolean) => {
-    setPickerOpen(open)
-    if (!open) resetNewConsignment()
-  }
-
-  const handleCreateShell = async () => {
-    if (!newConsignmentData.flow) return
-    setCreating(true)
-    try {
-      const response = await createConsignment(
-        {
-          flow: newConsignmentData.flow,
-          chaId: newConsignmentData.chaId,
-        },
-        api,
-      )
-      handleNewOpenChange(false)
-      // ensure list refreshes (user will see it in both views)
-      navigate(`/consignments/${response.id}`)
-    } catch (error) {
-      console.error('Failed to create consignment:', error)
-    } finally {
-      setCreating(false)
-    }
-  }
 
   const filteredConsignments = consignments.filter((c) => {
     const item = c.items?.[0]
@@ -162,128 +324,13 @@ export function ConsignmentScreen() {
         </div>
       </div>
 
-      {/* New consignment (two-stage): Flow -> CHA */}
-      <Dialog.Root open={pickerOpen} onOpenChange={handleNewOpenChange}>
-        <Dialog.Content
-          maxWidth="600px"
-          style={{ minHeight: '420px', display: 'flex', flexDirection: 'column' }}
-          onInteractOutside={(e: Event) => e.preventDefault()}
-        >
-          <Flex justify="between" align="start">
-            <Box>
-              <Dialog.Title>New Consignment</Dialog.Title>
-              <Dialog.Description size="2" color="gray">
-                {newStep === 'trade-flow'
-                  ? 'Select whether this is an import or export consignment.'
-                  : 'Select the Customs House Agent (CHA) for this consignment.'}
-              </Dialog.Description>
-            </Box>
-            <Dialog.Close>
-              <IconButton variant="ghost" color="gray" size="1">
-                <Cross2Icon />
-              </IconButton>
-            </Dialog.Close>
-          </Flex>
-
-          <Box mt="4" />
-
-          <Box style={{ flex: 1 }}>
-            {newStep === 'trade-flow' ? (
-              <Flex direction="column" gap="3">
-                <RadixText size="2" weight="medium" color="gray">
-                  Select Trade Flow
-                </RadixText>
-                <Flex direction="column" gap="3">
-                  <button
-                    onClick={() => {
-                      setNewConsignmentData((prev) => ({ ...prev, flow: 'IMPORT' }))
-                      setNewStep('cha')
-                    }}
-                    className="p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left group cursor-pointer"
-                  >
-                    <Flex align="center" justify="between">
-                      <Box>
-                        <RadixText size="4" weight="bold" className="text-gray-900 block mb-1">
-                          Import
-                        </RadixText>
-                        <RadixText size="2" color="gray">
-                          Bringing goods into the country
-                        </RadixText>
-                      </Box>
-                      <ArrowRightIcon className="text-gray-400 group-hover:text-blue-500" width="20" height="20" />
-                    </Flex>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setNewConsignmentData((prev) => ({ ...prev, flow: 'EXPORT' }))
-                      setNewStep('cha')
-                    }}
-                    className="p-6 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all text-left group cursor-pointer"
-                  >
-                    <Flex align="center" justify="between">
-                      <Box>
-                        <RadixText size="4" weight="bold" className="text-gray-900 block mb-1">
-                          Export
-                        </RadixText>
-                        <RadixText size="2" color="gray">
-                          Sending goods out of the country
-                        </RadixText>
-                      </Box>
-                      <ArrowRightIcon className="text-gray-400 group-hover:text-green-500" width="20" height="20" />
-                    </Flex>
-                  </button>
-                </Flex>
-              </Flex>
-            ) : (
-              <Flex direction="column" gap="3">
-                <RadixText size="2" weight="medium" color="gray">
-                  Select CHA
-                </RadixText>
-                <CHASearch
-                  options={chaOptions}
-                  value={chaOptions.find((c) => c.id === newConsignmentData.chaId) ?? null}
-                  onChange={(cha) => {
-                    if (cha) setNewConsignmentData((prev) => ({ ...prev, chaId: cha.id }))
-                  }}
-                />
-                <RadixText size="1" color="gray">
-                  Flow: {newConsignmentData.flow}
-                </RadixText>
-              </Flex>
-            )}
-          </Box>
-
-          <Flex gap="3" justify="end" mt="4">
-            {newStep === 'cha' ? (
-              <Button
-                variant="soft"
-                color="gray"
-                onClick={() => {
-                  setNewStep('trade-flow')
-                  setNewConsignmentData((prev) => ({ ...prev, flow: null }))
-                }}
-                disabled={creating}
-              >
-                Back
-              </Button>
-            ) : null}
-            <Dialog.Close>
-              <Button variant="soft" color="gray" disabled={creating}>
-                Cancel
-              </Button>
-            </Dialog.Close>
-            {newStep === 'cha' ? (
-              <Button
-                onClick={handleCreateShell}
-                disabled={!newConsignmentData.flow || !newConsignmentData.chaId || creating}
-                loading={creating}
-              >
-                {creating ? 'Creating...' : 'Create Consignment'}
-              </Button>
-            ) : null}
-          </Flex>
-        </Dialog.Content>
-      </Dialog.Root>
+      <NewConsignmentDialog
+        open={pickerOpen}
+        onOpenChange={handleNewOpenChange}
+        chaOptions={chaOptions}
+        creating={creating}
+        onCreate={handleCreateShell}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
@@ -383,7 +430,7 @@ export function ConsignmentScreen() {
                   return (
                     <tr
                       key={consignment.id}
-                      onClick={() => navigate(`/consignments/${consignment.id}`)}
+                      onClick={() => void navigate(`/consignments/${consignment.id}`)}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
