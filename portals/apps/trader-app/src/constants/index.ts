@@ -6,6 +6,9 @@ import { getRequiredEnv } from '../runtimeConfig'
 
 export const API_BASE_URL = getRequiredEnv('VITE_API_BASE_URL')
 
+/** Versioned API path prefix — update here when the API version changes. */
+export const API_PATH_PREFIX = '/api/v1'
+
 // API Configuration
 export const API_CONFIG = {
   BASE_URL: API_BASE_URL,

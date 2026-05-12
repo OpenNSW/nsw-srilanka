@@ -24,7 +24,7 @@ RUNTIME_FILE="/usr/share/nginx/html/runtime-env.js"
 
 cat <<EOF > "$RUNTIME_FILE"
 window.__APP_CONFIG__ = {
-  "VITE_API_BASE_URL": "$(escape_js "${VITE_API_BASE_URL:-http://localhost:8080/api/v1}")",
+  "VITE_API_BASE_URL": "$(escape_js "${VITE_API_BASE_URL:-http://localhost:8080}")",
   "VITE_IDP_BASE_URL": "$(escape_js "${VITE_IDP_BASE_URL:-https://localhost:8090}")",
   "VITE_IDP_CLIENT_ID": "$(escape_js "${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}")",
   "VITE_APP_URL": "$(escape_js "${VITE_APP_URL:-http://localhost:5173}")",

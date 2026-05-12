@@ -57,7 +57,7 @@ export async function getDownloadUrl(apiClient: ApiClient, key: string): Promise
 
   // Normalize the URL if it's a relative path (common in local dev)
   const url = response.download_url.startsWith('/')
-    ? new URL(API_BASE_URL).origin + response.download_url
+    ? new URL(response.download_url, API_BASE_URL).toString()
     : response.download_url
 
   return { url, expiresAt: response.expires_at }

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../constants'
+import { API_BASE_URL, API_PATH_PREFIX } from '../constants'
 
 export type QueryParams = Record<string, string | number | undefined>
 export type AccessTokenProvider = () => Promise<string | null | undefined>
@@ -30,7 +30,7 @@ export type PaginatedResponse<T> = {
   totalPages: number
 }
 
-function buildQueryString(params: QueryParams): string {
+function buildQueryParams(params: QueryParams): URLSearchParams {
   const entries = Object.entries(params)
     .filter(([, value]) => value !== undefined)
     .sort(([left], [right]) => left.localeCompare(right))
@@ -40,7 +40,7 @@ function buildQueryString(params: QueryParams): string {
     searchParams.append(key, String(value))
   })
 
-  return searchParams.toString()
+  return searchParams
 }
 
 function buildTokenFingerprint(token: string | null): string {
@@ -51,7 +51,7 @@ function buildTokenFingerprint(token: string | null): string {
 }
 
 function buildRequestKey(endpoint: string, params: QueryParams = {}, token: string | null): string {
-  const queryString = buildQueryString(params)
+  const queryString = buildQueryParams(params).toString()
   const tokenFingerprint = buildTokenFingerprint(token)
   return `GET:${tokenFingerprint}:${endpoint}?${queryString}`
 }
@@ -71,10 +71,13 @@ async function buildHeaders(token?: string | null, includeJsonContentType = true
 }
 
 export async function apiGet<T>(endpoint: string, params: QueryParams = {}, token?: string | null): Promise<T> {
-  const queryString = buildQueryString(params)
-  const url = `${API_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ''}`
-
-  const response = await fetch(url, {
+  const url = new URL(API_PATH_PREFIX + endpoint, API_BASE_URL)
+  const queryParams = buildQueryParams(params)
+  if (queryParams.toString()) {
+    url.search = queryParams.toString()
+  }
+  const finalUrl = url.toString()
+  const response = await fetch(finalUrl, {
     headers: await buildHeaders(token),
   })
   if (!response.ok) {
@@ -84,7 +87,7 @@ export async function apiGet<T>(endpoint: string, params: QueryParams = {}, toke
 }
 
 export async function apiPost<T, R>(endpoint: string, body: T, token?: string | null): Promise<R> {
-  const url = `${API_BASE_URL}${endpoint}`
+  const url = new URL(API_PATH_PREFIX + endpoint, API_BASE_URL).toString()
 
   const response = await fetch(url, {
     method: 'POST',
@@ -112,7 +115,7 @@ export async function apiPost<T, R>(endpoint: string, body: T, token?: string | 
 }
 
 export async function apiPut<T, R>(endpoint: string, body: T, token?: string | null): Promise<R> {
-  const url = `${API_BASE_URL}${endpoint}`
+  const url = new URL(API_PATH_PREFIX + endpoint, API_BASE_URL).toString()
 
   const response = await fetch(url, {
     method: 'PUT',
