@@ -7,14 +7,25 @@ import { useApi } from '../services/ApiContext'
 import PluginRenderer, { type RenderInfo } from '../plugins'
 
 export function TaskDetailScreen() {
-  const { taskId } = useParams<{
+  const { taskId, consignmentId, preConsignmentId } = useParams<{
     taskId: string
+    consignmentId?: string
+    preConsignmentId?: string
   }>()
   const navigate = useNavigate()
   const api = useApi()
   const [renderInfo, setRenderInfo] = useState<RenderInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const parentRoute = consignmentId
+    ? `/consignments/${consignmentId}`
+    : preConsignmentId
+      ? `/pre-consignments/${preConsignmentId}`
+      : '/consignments'
+  const goBack = () => {
+    void navigate(parentRoute)
+  }
 
   const fetchTask = useCallback(async () => {
     if (!taskId) {
@@ -59,7 +70,7 @@ export function TaskDetailScreen() {
             {error}
           </Text>
           <div className="mt-4">
-            <Button variant="soft" onClick={() => navigate(-1)}>
+            <Button variant="soft" onClick={goBack}>
               <ArrowLeftIcon />
               Go Back
             </Button>
@@ -77,7 +88,7 @@ export function TaskDetailScreen() {
             Task not found.
           </Text>
           <div className="mt-4">
-            <Button variant="soft" onClick={() => navigate(-1)}>
+            <Button variant="soft" onClick={goBack}>
               <ArrowLeftIcon />
               Go Back
             </Button>
@@ -91,9 +102,9 @@ export function TaskDetailScreen() {
     <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-full">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <Button variant="ghost" color="gray" onClick={() => navigate(-1)}>
+          <Button variant="ghost" color="gray" onClick={goBack}>
             <ArrowLeftIcon />
-            Back
+            Back to Tasks
           </Button>
         </div>
 
