@@ -14,6 +14,7 @@ import { UploadProvider } from '@opennsw/jsonforms-renderers'
 import { uploadFile, getDownloadUrl } from './services/storage'
 import { useAuthContext } from './hooks/useAuthContext'
 import { UnauthorizedScreen } from './screens/UnauthorizedScreen.tsx'
+import { ZonePreviewScreen } from './screens/ZonePreviewScreen.tsx'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
 
@@ -58,6 +59,7 @@ function App() {
 
   return (
     <Routes>
+      {import.meta.env.DEV && <Route path="/dev/zones" element={<ZonePreviewScreen />} />}
       <Route
         path="/login"
         element={

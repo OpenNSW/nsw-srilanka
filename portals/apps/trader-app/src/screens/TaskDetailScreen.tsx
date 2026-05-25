@@ -5,6 +5,9 @@ import { ArrowLeftIcon } from '@radix-ui/react-icons'
 import { getTaskInfo } from '../services/task'
 import { useApi } from '../services/ApiContext'
 import PluginRenderer, { type RenderInfo } from '../plugins'
+import { getBooleanEnv } from '../runtimeConfig'
+import { TraderZoneLayout } from '../zones/TraderZoneLayout'
+import { SAMPLE_TASK } from '../zones/fixtures'
 
 const POLL_INTERVAL_MS = 3000
 const PAYMENT_TERMINAL_STATES = ['COMPLETED', 'FAILED']
@@ -19,6 +22,7 @@ export function TaskDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const useZoneRenderer = getBooleanEnv('VITE_USE_ZONE_RENDERER', false)
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -68,9 +72,35 @@ export function TaskDetailScreen() {
   )
 
   useEffect(() => {
+    if (useZoneRenderer) return
     void fetchTask()
     return () => stopPolling()
-  }, [fetchTask, stopPolling])
+  }, [fetchTask, stopPolling, useZoneRenderer])
+
+  if (useZoneRenderer) {
+    // Flag-gated preview: backend doesn't emit the ZoneView shape yet, so we
+    // render a fixture inside the real task route. The taskId from the URL is
+    // intentionally ignored.
+    // TODO(zones): swap fixture for fetch once /api/v1/tasks/{id} returns ZoneView,
+    // then delete this branch.
+    return (
+      <div className="bg-gray-50 min-h-full">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <Button
+            variant="ghost"
+            color="gray"
+            onClick={() => {
+              void goBack()
+            }}
+          >
+            <ArrowLeftIcon />
+            Back to Tasks
+          </Button>
+        </div>
+        <TraderZoneLayout task={SAMPLE_TASK} />
+      </div>
+    )
+  }
 
   if (loading) {
     return (
