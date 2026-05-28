@@ -4,7 +4,7 @@ FROM golang:1.25-bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 # Clone the nsw shared library (public repo; Go module lives in backend/)
-ARG NSW_REF=main
+ARG NSW_REF=taskv2
 RUN git clone --depth 1 --branch ${NSW_REF} \
     https://github.com/OpenNSW/nsw.git /deps/nsw
 
@@ -16,7 +16,7 @@ COPY go.mod go.sum ./
 RUN go mod edit -replace github.com/OpenNSW/nsw=/deps/nsw/backend
 
 # Download dependencies
-RUN go mod download
+RUN GOWORK=off go mod download
 
 # Copy the full source tree
 COPY . .
@@ -27,7 +27,7 @@ RUN go mod edit -replace github.com/OpenNSW/nsw=/deps/nsw/backend
 RUN mkdir -p /src/bucket
 
 # Build the binary (adjust path if main package differs)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOWORK=off \
     go build -ldflags="-s -w" -o /out/server ./cmd/server
 
 # -------------------------------------------------------------------
@@ -48,7 +48,7 @@ WORKDIR /app
 
 # Copy binary and required runtime assets
 COPY --from=builder /out/server /app/server
-COPY --from=builder /src/configs /app/configs
+COPY --from=builder /deps/nsw/backend/configs /app/configs
 COPY --from=builder /src/bucket /app/bucket
 
 # Adjust ownership

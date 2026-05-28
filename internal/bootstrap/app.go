@@ -77,7 +77,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	paymentRepo := payments.NewPaymentRepository(db)
-	paymentService := payments.NewPaymentService(paymentRepo)
+	paymentService, err := payments.NewPaymentService(paymentRepo, cfg.Server.PaymentMethodsConfigPath)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to initialize payment service: %w", err)
+	}
 
 	templateService := service.NewTemplateService(db)
 	chaService := cha.NewService(db)
@@ -108,13 +112,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	pluginsRegistry := flowplugins.NewRegistry()
-	if err := taskv2plugins.Register(pluginsRegistry, remoteManager, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
+	if err := taskv2plugins.Register(pluginsRegistry, remoteManager, paymentService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to register taskv2 plugins: %w", err)
 	}
 
-	taskV2, stopTaskV2, err := taskv2.WireTaskV2(db, &temporalClient, pluginsRegistry, onTaskCompleted)
+	taskV2, stopTaskV2, err := taskv2.WireTaskV2(db, temporalClient, pluginsRegistry, paymentService, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
