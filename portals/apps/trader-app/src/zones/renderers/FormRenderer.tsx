@@ -14,10 +14,7 @@ type Props = ZoneRendererProps<'FORM'> & {
   onValidityChange?: (isValid: boolean) => void
 }
 
-export const FormRenderer = forwardRef<FormHandle, Props>(function FormRenderer(
-  { payload, onValidityChange },
-  ref,
-) {
+export const FormRenderer = forwardRef<FormHandle, Props>(function FormRenderer({ payload, onValidityChange }, ref) {
   const [data, setData] = useState<Record<string, unknown>>(payload.data ?? {})
   const dataRef = useRef(data)
   dataRef.current = data

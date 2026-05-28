@@ -11,7 +11,15 @@ export type MarkdownPayload = {
   content: string
 }
 
-export type ZoneComponent = { type: 'FORM'; payload: FormPayload } | { type: 'MARKDOWN'; payload: MarkdownPayload }
+export type RedirectPayload = {
+  checkout_url: string
+  content: string
+}
+
+export type ZoneComponent =
+  | { type: 'FORM'; payload: FormPayload }
+  | { type: 'MARKDOWN'; payload: MarkdownPayload }
+  | { type: 'REDIRECT'; payload: RedirectPayload }
 
 export type AlertVariant = 'info' | 'success' | 'warning' | 'error'
 
