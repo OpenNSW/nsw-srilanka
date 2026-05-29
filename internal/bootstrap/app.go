@@ -9,28 +9,28 @@ import (
 
 	engine "github.com/OpenNSW/go-temporal-workflow"
 	flowplugins "github.com/OpenNSW/nsw-task-flow/plugins"
-	"github.com/OpenNSW/nsw/internal/workflow"
+	"github.com/OpenNSW/nsw/backend/internal/workflow"
 
-	"github.com/OpenNSW/nsw/internal/auth"
-	"github.com/OpenNSW/nsw/internal/config"
-	"github.com/OpenNSW/nsw/internal/consignment"
-	"github.com/OpenNSW/nsw/internal/database"
-	"github.com/OpenNSW/nsw/internal/hscode"
-	"github.com/OpenNSW/nsw/internal/middleware"
-	"github.com/OpenNSW/nsw/internal/payments"
-	"github.com/OpenNSW/nsw/internal/profile/cha"
-	"github.com/OpenNSW/nsw/internal/profile/company"
-	"github.com/OpenNSW/nsw/internal/profile/user"
-	"github.com/OpenNSW/nsw/internal/taskv2"
-	taskv2plugins "github.com/OpenNSW/nsw/internal/taskv2/plugins"
-	"github.com/OpenNSW/nsw/internal/temporal"
-	"github.com/OpenNSW/nsw/internal/workflow/service"
-	"github.com/OpenNSW/nsw/pkg/remote"
-	"github.com/OpenNSW/nsw/pkg/storage"
-	"github.com/OpenNSW/nsw/pkg/storage/drivers"
+	"github.com/OpenNSW/nsw/backend/internal/auth"
+	"github.com/OpenNSW/nsw/backend/internal/config"
+	"github.com/OpenNSW/nsw/backend/internal/consignment"
+	"github.com/OpenNSW/nsw/backend/internal/database"
+	"github.com/OpenNSW/nsw/backend/internal/hscode"
+	"github.com/OpenNSW/nsw/backend/internal/middleware"
+	"github.com/OpenNSW/nsw/backend/internal/payments"
+	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
+	"github.com/OpenNSW/nsw/backend/internal/profile/company"
+	"github.com/OpenNSW/nsw/backend/internal/profile/user"
+	"github.com/OpenNSW/nsw/backend/internal/taskv2"
+	taskv2plugins "github.com/OpenNSW/nsw/backend/internal/taskv2/plugins"
+	"github.com/OpenNSW/nsw/backend/internal/temporal"
+	"github.com/OpenNSW/nsw/backend/internal/workflow/service"
+	"github.com/OpenNSW/nsw/backend/pkg/remote"
+	"github.com/OpenNSW/nsw/backend/pkg/storage"
+	"github.com/OpenNSW/nsw/backend/pkg/storage/drivers"
 
-	"github.com/OpenNSW/nsw/pkg/notification"
-	"github.com/OpenNSW/nsw/pkg/notification/channels"
+	"github.com/OpenNSW/nsw/backend/pkg/notification"
+	"github.com/OpenNSW/nsw/backend/pkg/notification/channels"
 )
 
 // App contains an initialized HTTP server and cleanup hooks.
@@ -125,6 +125,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("failed to wire taskv2: %w", err)
 	}
 	tm := taskV2.Manager
+
+	paymentService.SetTaskCompleter(tm)
 
 	consignmentService := consignment.NewService(db, templateService, chaService, companyService, userProfileService, hsCodeService)
 	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)

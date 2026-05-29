@@ -4,6 +4,8 @@ github.com/OpenNSW/go-temporal-workflow v0.4.0 h1:a8G+XCcDRP+H/vaLS5b3HkU1B6o7s8
 github.com/OpenNSW/go-temporal-workflow v0.4.0/go.mod h1:YryMiRQ9MBkQUpAz8CwYnW56uFEYqb/cmmOd/YaYmao=
 github.com/OpenNSW/nsw-task-flow v0.0.0-20260524054242-b39430bb2b1e h1:eHfmH9rYMRkbHvffsU7diUiWISvqjuGjiBGFHyuZoEk=
 github.com/OpenNSW/nsw-task-flow v0.0.0-20260524054242-b39430bb2b1e/go.mod h1:xrgLSS3AILQiE2QO1MAoKkW5Hwy8u0NqE/9pIiOAr8s=
+github.com/OpenNSW/nsw/backend v0.0.0-20260529063807-c6fd5ac7ab68 h1:yvNei/965vlRXiCvERl79aaB+OgX2EqpqN6o5oVBo40=
+github.com/OpenNSW/nsw/backend v0.0.0-20260529063807-c6fd5ac7ab68/go.mod h1:JDYQHezw72XyCS77iNRzzLtAz8cqqN40bOh+eqc6D6Q=
 github.com/aws/aws-sdk-go-v2 v1.41.7 h1:DWpAJt66FmnnaRIOT/8ASTucrvuDPZASqhhLey6tLY8=
 github.com/aws/aws-sdk-go-v2 v1.41.7/go.mod h1:4LAfZOPHNVNQEckOACQx60Y8pSRjIkNZQz1w92xpMJc=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 h1:gx1AwW1Iyk9Z9dD9F4akX5gnN3QZwUB20GGKH/I+Rho=

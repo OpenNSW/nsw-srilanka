@@ -1,14 +1,12 @@
-module github.com/OpenNSW/nsw/srilanka
+module github.com/OpenNSW/nsw/backend/srilanka
 
 go 1.25.7
 
 require (
 	github.com/OpenNSW/go-temporal-workflow v0.4.0
-	github.com/OpenNSW/nsw v0.0.0-00010101000000-000000000000
 	github.com/OpenNSW/nsw-task-flow v0.0.0-20260524054242-b39430bb2b1e
+	github.com/OpenNSW/nsw/backend v0.0.0-20260529063807-c6fd5ac7ab68
 )
-
-replace github.com/OpenNSW/nsw => ../nsw/backend
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.7 // indirect
