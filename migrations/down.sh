@@ -1,37 +1,67 @@
 #!/bin/bash
 set -euo pipefail
 
-# Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Default: path to backend/.env
-ENV_FILE_PATH="${ENV_FILE:-$SCRIPT_DIR/../../../.env}"
-source "$ENV_FILE_PATH"
+
+# ---------------------------------------------------------------------------
+# Load environment variables (skip if already injected, e.g. via Docker)
+# ---------------------------------------------------------------------------
+ENV_FILE_PATH="${ENV_FILE:-../.env}"
+
+_REQUIRED_VARS_SET=true
+for VAR in DB_HOST DB_PORT DB_USERNAME DB_PASSWORD DB_NAME; do
+  if [ -z "${!VAR:-}" ]; then
+    _REQUIRED_VARS_SET=false
+    break
+  fi
+done
+
+if [[ "$_REQUIRED_VARS_SET" == "false" ]]; then
+  if [ -f "$ENV_FILE_PATH" ]; then
+    set -o allexport
+    source "$ENV_FILE_PATH"
+    set +o allexport
+  else
+    echo "Error: env file not found: $ENV_FILE_PATH"
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Validate required variables
+# ---------------------------------------------------------------------------
+for VAR in DB_HOST DB_PORT DB_USERNAME DB_PASSWORD DB_NAME; do
+  if [ -z "${!VAR:-}" ]; then
+    echo "Error: Required environment variable $VAR is not set."
+    exit 1
+  fi
+done
 
 MIGRATION_DB_HOST="${MIGRATION_DB_HOST:-$DB_HOST}"
 MIGRATION_DB_HOST="${MIGRATION_DB_HOST//host.docker.internal/localhost}"
 
-DOWNS=(
-  "016_create_company_records.down.sql"
-  "015_fcau_workflow_seed.down.sql"
-  "014_fcau_workflow_nodes_seed.down.sql"
-  "013_fcau_forms_seed.down.sql"
-  "012_create_task_workflow_tasks.down.sql"
-  "011_workflow_tem_v2.down.sql"
-  "010_workflow_table.down.sql"
-  "009_insert_cha_entity.down.sql"
-  "008_insert_payment_transactions.down.sql"
-  "007_insert_seed_pre_consignment_template.down.sql"
-  "006_insert_seed_company_records.down.sql"
-  "004_insert_seed_workflow_node_templates.down.sql"
-  "003_insert_seed_form_templates.down.sql"
-  "002_insert_seed_hscodes.down.sql"
-  "001_initial_schema.down.sql"
-)
+# ---------------------------------------------------------------------------
+# Discover and filter migrations in reverse order
+# ---------------------------------------------------------------------------
+mapfile -t ALL_DOWNS < <(find "$SCRIPT_DIR" -maxdepth 1 -name "*.down.sql" | sort -r)
+
+if [[ ${#ALL_DOWNS[@]} -eq 0 ]]; then
+  echo "No rollback files found in $SCRIPT_DIR"
+  exit 0
+fi
+
+echo "Running ${#ALL_DOWNS[@]} rollback(s)..."
 
 # Move to the script's directory so file references work
 cd "$SCRIPT_DIR"
 
-for FILE in "${DOWNS[@]}"; do
+# ---------------------------------------------------------------------------
+# Execute rollbacks
+# ---------------------------------------------------------------------------
+for FILE in "${ALL_DOWNS[@]}"; do
+  echo "Executing: $(basename "$FILE")"
   PGPASSWORD=$DB_PASSWORD psql -v ON_ERROR_STOP=1 \
     -h "$MIGRATION_DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -f "$FILE"
 done
+
+echo "Rollbacks completed successfully."
