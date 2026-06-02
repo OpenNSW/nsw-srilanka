@@ -166,19 +166,19 @@ services:
       # Direct local host application path mapping
       - .:/src
       - go-cache:/go/pkg/mod
-      # Flexible multi-repo developer mapping slots
+      # Flexible multi-repo developer mapping slots (optional, fallback to . if unset)
       - type: bind
-        source: ../nsw
+        source: ${NSW_PATH:-.}
         target: /nsw
         bind:
           create_host_path: false
       - type: bind
-        source: ../nsw-task-flow
+        source: ${NSW_TASK_FLOW_PATH:-.}
         target: /nsw-task-flow
         bind:
           create_host_path: false
       - type: bind
-        source: ../go-temporal-workflow
+        source: ${GO_TEMPORAL_WORKFLOW_PATH:-.}
         target: /go-temporal-workflow
         bind:
           create_host_path: false
@@ -211,8 +211,8 @@ services:
       - NPQS_OGA_SUBMISSION_URL=http://host.docker.internal:8081/api/v1/inject
       - PRECONSIGNMENT_OGA_SUBMISSION_URL=http://host.docker.internal:8083/api/v1/inject
       - CDA_OGA_SUBMISSION_URL=http://host.docker.internal:8084/api/v1/inject
-      # Workspace path linkage variables
-      - GOWORK=/src/go.work
+      # Workspace path linkage variables (defaults to off, set GOWORK=/src/go.work to enable local development)
+      - GOWORK=${GOWORK:-off}
       - SERVICES_CONFIG_PATH=configs/services.docker.json
     command: go run ./cmd/server
     depends_on:
