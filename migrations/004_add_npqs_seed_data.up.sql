@@ -3,16 +3,6 @@
 -- Purpose: Seed NPQS top-level workflow template, HS code, and mapping.
 -- ============================================================================
 
-INSERT INTO workflow_template_v2 (id, name, version, workflow_definition)
-VALUES 
-(
-    'npqs-export-phytosanitary-reg',
-    'NPQS Export Consignment & Phytosanitary Registration',
-    '3',
-    '{}'::jsonb
-)
-ON CONFLICT (id) DO NOTHING;
-
 INSERT INTO hs_codes (id, hs_code, description, category)
 VALUES 
     (
