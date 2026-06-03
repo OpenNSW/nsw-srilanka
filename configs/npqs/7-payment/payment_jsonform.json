@@ -1,0 +1,20 @@
+{
+  "id": "npqs-pay-certificate-fee--payment-form",
+  "title": "Phytosanitary Certificate Fee Details",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "amount": { "type": "string", "title": "Amount Due" },
+      "currency": { "type": "string", "title": "Currency" },
+      "reference_number": { "type": "string", "title": "Reference Number" }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      { "type": "Control", "scope": "#/properties/amount", "options": { "readonly": true } },
+      { "type": "Control", "scope": "#/properties/currency", "options": { "readonly": true } },
+      { "type": "Control", "scope": "#/properties/reference_number", "options": { "readonly": true } }
+    ]
+  }
+}

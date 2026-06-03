@@ -1,0 +1,34 @@
+{
+  "id": "npqs-visual-consignment-flow:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace_trader": {
+      "templateId": "npqs-visual-consignment--trader-schedule-form",
+      "title": "Schedule Consignment Visual Inspection",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Schedule Inspection",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "reference_officer": {
+      "templateId": "npqs-visual-consignment--officer-form",
+      "title": "Consignment Visual Inspection Outcome",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

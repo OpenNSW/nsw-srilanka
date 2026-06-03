@@ -1,0 +1,30 @@
+{
+  "id": "npqs-pay-for-treatment--select-method-form",
+  "title": "Select Payment Gateway",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "selected_method": {
+        "type": "string",
+        "title": "Payment Provider",
+        "oneOf": [
+          { "const": "lankapay", "title": "LankaPay (Credit/Debit Card, Internet Banking)" },
+          { "const": "govpay", "title": "GovPay Sandbox (Mock checkout)" }
+        ],
+        "default": "govpay"
+      }
+    },
+    "required": [
+      "selected_method"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/selected_method"
+      }
+    ]
+  }
+}

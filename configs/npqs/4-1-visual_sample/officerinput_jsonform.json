@@ -1,0 +1,39 @@
+{
+  "id": "npqs-visual-sample-inspection--officer-form",
+  "title": "Visual Sample Inspection Results",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "visual_result": {
+        "type": "string",
+        "title": "Inspection Outcome",
+        "oneOf": [
+          { "const": "pass", "title": "Pass (Sample is free of pests and damage)" },
+          { "const": "fail", "title": "Fail (Infestation or damage detected)" }
+        ],
+        "default": "pass"
+      },
+      "visual_comments": {
+        "type": "string",
+        "title": "Inspection Notes",
+        "example": "Visual and microscopic inspection of sample leaves completed. No sign of scale insects or thrips."
+      }
+    },
+    "required": [
+      "visual_result"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/visual_result"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/visual_comments"
+      }
+    ]
+  }
+}

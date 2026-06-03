@@ -1,0 +1,56 @@
+{
+  "id": "npqs-visual-consignment--trader-schedule-form",
+  "title": "Schedule Consignment Visual Inspection",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "inspection_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Preferred Date of Inspection"
+      },
+      "inspection_time": {
+        "type": "string",
+        "title": "Preferred Time Slot",
+        "example": "10:30 AM"
+      },
+      "contact_name": {
+        "type": "string",
+        "title": "On-Site Contact Person Name",
+        "example": "K. Perera"
+      },
+      "contact_phone": {
+        "type": "string",
+        "title": "On-Site Contact Mobile Number",
+        "example": "+94771234567"
+      }
+    },
+    "required": [
+      "inspection_date",
+      "inspection_time",
+      "contact_name",
+      "contact_phone"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/inspection_date"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/inspection_time"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/contact_name"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/contact_phone"
+      }
+    ]
+  }
+}

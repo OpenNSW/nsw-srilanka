@@ -1,0 +1,49 @@
+{
+  "id": "npqs-visual-system-inspection--officer-form",
+  "title": "System Visual Inspection Verification",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "visual_result": {
+        "type": "string",
+        "title": "Inspection Outcome",
+        "oneOf": [
+          { "const": "pass", "title": "Pass (Verified in separate internal system)" },
+          { "const": "fail", "title": "Fail (System inspection recorded negative outcome)" }
+        ],
+        "default": "pass"
+      },
+      "system_reference_id": {
+        "type": "string",
+        "title": "Internal System Reference ID",
+        "example": "INT-NPQS-SYS-9302"
+      },
+      "comments": {
+        "type": "string",
+        "title": "Verification Comments",
+        "example": "Checked internal system database. Inspection recorded on 2026-06-01 is clean."
+      }
+    },
+    "required": [
+      "visual_result",
+      "system_reference_id"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/visual_result"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/system_reference_id"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/comments"
+      }
+    ]
+  }
+}

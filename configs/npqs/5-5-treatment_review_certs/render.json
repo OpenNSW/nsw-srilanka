@@ -1,0 +1,25 @@
+{
+  "id": "npqs-review-treatment-certs:render",
+  "type": "REVIEW",
+  "sections": {
+    "reference": {
+      "id": "reference",
+      "templateId": "npqs-review-treatment-certs--officer-form",
+      "title": "Review Treatment Certificate Results",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "kind": "submit_form",
+          "label": "Record Review Outcome",
+          "command": "submit",
+          "variant": "primary"
+        }
+      ]
+    }
+  }
+}

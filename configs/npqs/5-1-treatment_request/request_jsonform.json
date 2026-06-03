@@ -1,0 +1,69 @@
+{
+  "id": "npqs-treatment-request--trader-form",
+  "title": "Submit Treatment Request Details",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "treatment_type": {
+        "type": "string",
+        "title": "Treatment Type Requested",
+        "oneOf": [
+          { "const": "fumigation", "title": "Fumigation (Methyl Bromide / Phosphine)" },
+          { "const": "heat_treatment", "title": "Heat Treatment / Kiln Drying" },
+          { "const": "cold_treatment", "title": "Cold Treatment / Refrigeration" },
+          { "const": "other", "title": "Other Prescribed Treatment" }
+        ],
+        "default": "fumigation"
+      },
+      "chemical_used": {
+        "type": "string",
+        "title": "Chemical / Medium Used (If fumigation)",
+        "example": "Methyl Bromide (CH3Br)"
+      },
+      "treatment_duration": {
+        "type": "string",
+        "title": "Treatment Duration",
+        "example": "24 hours"
+      },
+      "treatment_temperature": {
+        "type": "string",
+        "title": "Target Temperature (°C)",
+        "example": "21°C"
+      },
+      "treatment_concentration": {
+        "type": "string",
+        "title": "Chemical Concentration / Dosage",
+        "example": "48 g/m³"
+      }
+    },
+    "required": [
+      "treatment_type",
+      "treatment_duration"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_type"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/chemical_used"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_duration"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_temperature"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_concentration"
+      }
+    ]
+  }
+}

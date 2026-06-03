@@ -1,0 +1,8 @@
+{
+  "id": "npqs-upload-treatment-certs--user-input",
+  "task_type": "USER_INPUT",
+  "output_namespace": "traderinput",
+  "plugin_properties": {
+    "user_jsonforms_id": "npqs-upload-treatment-certs--trader-form"
+  }
+}

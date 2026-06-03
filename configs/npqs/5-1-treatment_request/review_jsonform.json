@@ -1,0 +1,66 @@
+{
+  "id": "npqs-treatment-request--reviewer-form",
+  "title": "Treatment Request Review & Decision",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "treatment_request_outcome": {
+        "type": "string",
+        "title": "Treatment Request Decision",
+        "oneOf": [
+          { "const": "approve", "title": "Approve Treatment Plan" },
+          { "const": "reject", "title": "Reject Treatment Plan (Consignment Rejected)" },
+          { "const": "needs_more_info", "title": "Needs More Info (Send back to trader with feedback)" }
+        ],
+        "default": "approve"
+      },
+      "clarification_comments": {
+        "type": "string",
+        "title": "Clarifications / Feedback / Comments",
+        "example": "Dosage is approved. Please ensure treatment is conducted at a certified facility."
+      },
+      "treatment_provider": {
+        "type": "string",
+        "title": "Treatment Performed By",
+        "oneOf": [
+          { "const": "npqs", "title": "NPQS Treatment Division" },
+          { "const": "external", "title": "Registered Private Treatment Provider" }
+        ],
+        "default": "external"
+      },
+      "treatment_supervision": {
+        "type": "string",
+        "title": "Supervision Required?",
+        "oneOf": [
+          { "const": "with_supervision", "title": "With Supervision (requires supervision report)" },
+          { "const": "without_supervision", "title": "Without Supervision" }
+        ],
+        "default": "without_supervision"
+      }
+    },
+    "required": [
+      "treatment_request_outcome"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_request_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/clarification_comments"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_provider"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_supervision"
+      }
+    ]
+  }
+}

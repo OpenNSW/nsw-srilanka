@@ -1,0 +1,39 @@
+{
+  "id": "npqs-review-docs--officer-form",
+  "title": "Review Consignment Documents",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "docs_review_outcome": {
+        "type": "string",
+        "title": "Review Outcome",
+        "oneOf": [
+          { "const": "approve", "title": "Approve Documents (Proceed to Payment)" },
+          { "const": "needs_more_info", "title": "Needs More Info (Request corrections/re-upload)" }
+        ],
+        "default": "approve"
+      },
+      "review_comments": {
+        "type": "string",
+        "title": "Officer Comments",
+        "example": "Invoice and packing list verified. All details match the application."
+      }
+    },
+    "required": [
+      "docs_review_outcome"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/docs_review_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/review_comments"
+      }
+    ]
+  }
+}

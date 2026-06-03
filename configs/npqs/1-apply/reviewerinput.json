@@ -1,0 +1,10 @@
+{
+  "id": "npqs-apply-phyto-cert--external-review",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "reviewerform",
+  "plugin_properties": {
+    "service_id": "npqs",
+    "path": "/api/v1/inject",
+    "task_code": "npqs_application_review_v1"
+  }
+}

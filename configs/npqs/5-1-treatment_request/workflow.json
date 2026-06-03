@@ -1,0 +1,84 @@
+{
+  "id": "npqs-treatment-request",
+  "name": "Submit & Approve Treatment Request",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "trader_request",
+      "type": "TASK",
+      "task_template_id": "npqs-treatment-request--trader-request",
+      "input_mapping": {},
+      "output_mapping": {
+        "treatment_type": "traderinput.treatment_type",
+        "chemical_used?": "traderinput.chemical_used",
+        "treatment_duration": "traderinput.treatment_duration",
+        "treatment_temperature?": "traderinput.treatment_temperature",
+        "treatment_concentration?": "traderinput.treatment_concentration"
+      }
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "npqs-treatment-request--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform",
+        "traderinput": "traderinput"
+      },
+      "output_mapping": {
+        "treatment_request_outcome": "reviewerform.treatment_request_outcome",
+        "treatment_provider": "reviewerform.treatment_provider",
+        "treatment_supervision": "reviewerform.treatment_supervision",
+        "clarification_comments?": "reviewerform.clarification_comments"
+      }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "trader_request"
+    },
+    {
+      "id": "e2",
+      "source_id": "trader_request",
+      "target_id": "officer_review"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_review",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.treatment_request_outcome == 'approve'"
+    },
+    {
+      "id": "e_reject",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.treatment_request_outcome == 'reject'"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "trader_request",
+      "condition": "reviewerform.treatment_request_outcome == 'needs_more_info'"
+    }
+  ]
+}

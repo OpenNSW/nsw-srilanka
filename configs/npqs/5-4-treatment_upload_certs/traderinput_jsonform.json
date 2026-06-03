@@ -1,0 +1,46 @@
+{
+  "id": "npqs-upload-treatment-certs--trader-form",
+  "title": "Upload Treatment Certificates & Documents",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "treatment_certificate_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Treatment Certificate Document (PDF/Image)",
+        "example": "https://nsw.gov.lk/storage/certs/treatment-cert-1092.pdf"
+      },
+      "supervision_report_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Supervision Report Document (Required if supervision was requested)",
+        "example": "https://nsw.gov.lk/storage/certs/supervision-report-1092.pdf"
+      },
+      "upload_remarks": {
+        "type": "string",
+        "title": "Trader Comments / Remarks",
+        "example": "Uploaded the fumigation certificate from private provider and supervisor check sheet."
+      }
+    },
+    "required": [
+      "treatment_certificate_url"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_certificate_url"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/supervision_report_url"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/upload_remarks"
+      }
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "npqs-review-treatment-certs",
+  "name": "Review Treatment Certificates",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "npqs-review-treatment-certs--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform",
+        "traderinput": "traderinput"
+      },
+      "output_mapping": {
+        "treatment_review_result": "treatment_review_result"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_review"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_review",
+      "target_id": "end"
+    }
+  ]
+}

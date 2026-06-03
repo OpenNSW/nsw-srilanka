@@ -1,0 +1,53 @@
+{
+  "id": "npqs-pay-for-treatment",
+  "name": "Pay for Treatment",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "select_method_task",
+      "type": "TASK",
+      "task_template_id": "npqs-pay-for-treatment--select-method",
+      "input_mapping": {},
+      "output_mapping": {
+        "selected_method": "selected_method"
+      }
+    },
+    {
+      "id": "pay_treatment_task",
+      "type": "TASK",
+      "task_template_id": "npqs-pay-for-treatment--payment",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "selected_method": "selected_method"
+      },
+      "output_mapping": {
+        "payment_status": "payment_status"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "select_method_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "select_method_task",
+      "target_id": "pay_treatment_task"
+    },
+    {
+      "id": "e3",
+      "source_id": "pay_treatment_task",
+      "target_id": "end"
+    }
+  ]
+}

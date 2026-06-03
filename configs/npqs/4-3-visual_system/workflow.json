@@ -1,0 +1,39 @@
+{
+  "id": "npqs-visual-system-inspection",
+  "name": "Visual Inspection Through System",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_system_check",
+      "type": "TASK",
+      "task_template_id": "npqs-visual-system-inspection--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform"
+      },
+      "output_mapping": {
+        "visual_result": "visual_result"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_system_check"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_system_check",
+      "target_id": "end"
+    }
+  ]
+}

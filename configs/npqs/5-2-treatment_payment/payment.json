@@ -1,0 +1,11 @@
+{
+  "id": "npqs-pay-for-treatment--payment",
+  "task_type": "PAYMENT",
+  "output_namespace": "payment",
+  "plugin_properties": {
+    "task_code": "npqs_treatment_payment_v1",
+    "service_name": "Treatment Service Fee",
+    "amount": "4500.00",
+    "currency": "LKR"
+  }
+}

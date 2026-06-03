@@ -1,0 +1,25 @@
+{
+  "id": "npqs-review-docs:render",
+  "type": "REVIEW",
+  "sections": {
+    "reference": {
+      "id": "reference",
+      "templateId": "npqs-review-docs--officer-form",
+      "title": "Review Consignment Documents",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "kind": "submit_form",
+          "label": "Record Review Decision",
+          "command": "submit",
+          "variant": "primary"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "npqs-visual-sample-inspection--officer-review",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "reviewerform",
+  "plugin_properties": {
+    "service_id": "npqs",
+    "path": "/api/v1/inject",
+    "task_code": "npqs_visual_sample_v1"
+  }
+}

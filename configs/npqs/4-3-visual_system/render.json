@@ -1,0 +1,25 @@
+{
+  "id": "npqs-visual-system-inspection:render",
+  "type": "REVIEW",
+  "sections": {
+    "reference": {
+      "id": "reference",
+      "templateId": "npqs-visual-system-inspection--officer-form",
+      "title": "External System Inspection Verification",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "kind": "submit_form",
+          "label": "Confirm System Outcome",
+          "command": "submit",
+          "variant": "primary"
+        }
+      ]
+    }
+  }
+}

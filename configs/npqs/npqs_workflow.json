@@ -1,0 +1,832 @@
+{
+  "id": "npqs-export-phytosanitary-reg",
+  "name": "NPQS Export Consignment & Phytosanitary Registration",
+  "version": 3,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START",
+      "name": "Start"
+    },
+    {
+      "id": "n1_apply",
+      "name": "Apply, Review & Generate Reference Number",
+      "type": "TASK",
+      "task_template_id": "npqs-apply-phyto-cert",
+      "input_mapping": {},
+      "output_mapping": {
+        "reviewerform.reference_number": "npqs.reference_number",
+        "userform": "npqs.userform",
+        "reviewerform.review_outcome": "npqs.review_outcome",
+        "reviewerform.treatment_required?": "npqs.treatment_required",
+        "reviewerform.visual_required?": "npqs.visual_required",
+        "reviewerform.visual_approach?": "npqs.visual_approach",
+        "reviewerform.lab_required?": "npqs.lab_required",
+        "reviewerform.lab_sample_method?": "npqs.lab_sample_method",
+        "reviewerform.ephyto_required?": "npqs.ephyto_required"
+      }
+    },
+    {
+      "id": "apply_outcome_split",
+      "name": "Application Approved?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "inspection_type_split",
+      "name": "NPQS Parallel Fork",
+      "type": "GATEWAY",
+      "gateway_type": "PARALLEL_SPLIT"
+    },
+    {
+      "id": "npqs_gw_check_treatment",
+      "name": "Evaluate Treatment Path",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n3_treatment_request",
+      "name": "Submit & Approve Treatment Request",
+      "type": "TASK",
+      "task_template_id": "npqs-treatment-request",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "reviewerform.treatment_request_outcome": "npqs.treatment_request_outcome",
+        "reviewerform.treatment_provider?": "npqs.treatment_provider",
+        "reviewerform.treatment_supervision?": "npqs.treatment_supervision"
+      }
+    },
+    {
+      "id": "treatment_approve_split",
+      "name": "Treatment Approved?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "treatment_provider_split",
+      "name": "Treatment Performed By?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n3_2_treatment_payment",
+      "name": "Pay for Treatment",
+      "type": "TASK",
+      "task_template_id": "npqs-pay-for-treatment",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "payment_status": "npqs.treatment_payment_status"
+      }
+    },
+    {
+      "id": "n3_3_treatment_cert_issue",
+      "name": "Issue Treatment Certificate (NPQS)",
+      "type": "TASK",
+      "task_template_id": "npqs-issue-treatment-cert",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "treatment_certificate_id": "npqs.treatment_certificate_id"
+      }
+    },
+    {
+      "id": "n3_3_1_supervision_split",
+      "name": "Supervision Required? (NPQS)",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n3_3_2_treatment_supervisor_report",
+      "name": "Issue Supervision Report (NPQS)",
+      "type": "TASK",
+      "task_template_id": "npqs-treatment-supervisor-report",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "supervisor_notes": "npqs.treatment_supervisor_notes"
+      }
+    },
+    {
+      "id": "n3_4_treatment_upload_certs",
+      "name": "Upload Treatment Certificates",
+      "type": "TASK",
+      "task_template_id": "npqs-upload-treatment-certs",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.treatment_provider": "treatment_provider",
+        "npqs.treatment_supervision": "treatment_supervision"
+      },
+      "output_mapping": {
+        "traderinput": "npqs.treatment_traderinput"
+      }
+    },
+    {
+      "id": "n3_5_treatment_review_certs",
+      "name": "Review Treatment Certificates",
+      "type": "TASK",
+      "task_template_id": "npqs-review-treatment-certs",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.treatment_traderinput": "traderinput"
+      },
+      "output_mapping": {
+        "treatment_review_result": "npqs.treatment_review_result"
+      }
+    },
+    {
+      "id": "treatment_review_split",
+      "name": "Treatment Pass or Fail?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "npqs_join_treatment_branch",
+      "name": "Merge Treatment Path",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "npqs_gw_check_sample_flow",
+      "name": "Evaluate Sample Testing Flow Requirement",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n4_0_draw_sample",
+      "name": "Draw/Collect the Sample",
+      "type": "TASK",
+      "task_template_id": "npqs-draw-sample",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.lab_sample_method": "lab_sample_method"
+      },
+      "output_mapping": {
+        "sample_number": "npqs.sample_number"
+      }
+    },
+    {
+      "id": "sample_sub_parallel_split",
+      "name": "Sub-Parallel Testing Fork",
+      "type": "GATEWAY",
+      "gateway_type": "PARALLEL_SPLIT"
+    },
+    {
+      "id": "npqs_gw_check_lab",
+      "name": "Is Lab Test Required?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n2_1_lab_testing",
+      "name": "Perform Lab Test",
+      "type": "TASK",
+      "task_template_id": "npqs-lab-testing",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "sample_test_result": "npqs.sample_test_result"
+      }
+    },
+    {
+      "id": "lab_result_split",
+      "name": "Sample Test Pass or Fail?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "npqs_join_lab_branch",
+      "name": "Merge Lab Branch",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "npqs_gw_check_visual_sample",
+      "name": "Is Visual Sample Inspection Required?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n_visual_sample_inspection",
+      "name": "Conduct Visual Sample Inspection",
+      "type": "TASK",
+      "task_template_id": "npqs-visual-sample-inspection",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "visual_result": "npqs.visual_sample_result"
+      }
+    },
+    {
+      "id": "visual_sample_result_split",
+      "name": "Sample Visual Pass or Fail?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "npqs_join_visual_sample_branch",
+      "name": "Merge Visual Sample Branch",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "sample_sub_parallel_join",
+      "name": "Synchronize Inner Testing Paths",
+      "type": "GATEWAY",
+      "gateway_type": "PARALLEL_JOIN"
+    },
+    {
+      "id": "npqs_join_sample_branch",
+      "name": "Merge Sample Flow Block",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "npqs_gw_check_non_sample_visual",
+      "name": "Evaluate Non-Sample Visual Requirement",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "visual_type_split",
+      "name": "Visual Inspection Approach",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n_visual_consignment_flow",
+      "name": "Schedule & Conduct Consignment Inspection",
+      "type": "TASK",
+      "task_template_id": "npqs-visual-consignment-flow",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "visual_result": "npqs.visual_consignment_result"
+      }
+    },
+    {
+      "id": "visual_consignment_result_split",
+      "name": "Consignment Inspection Pass or Fail?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n5_0_visual_inspection",
+      "name": "Visual Inspection (Through System)",
+      "type": "TASK",
+      "task_template_id": "npqs-visual-system-inspection",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "visual_result": "npqs.visual_system_result"
+      }
+    },
+    {
+      "id": "visual_system_result_split",
+      "name": "System Inspection Pass or Fail?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "npqs_join_consignment_system",
+      "name": "Merge Consignment & System Branches",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "npqs_join_non_sample_visual_branch",
+      "name": "Merge Non-Sample Visual Block",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "inspection_join",
+      "name": "Synchronize All Root Parallel Branches",
+      "type": "GATEWAY",
+      "gateway_type": "PARALLEL_JOIN"
+    },
+    {
+      "id": "n5_1_upload_docs",
+      "name": "Upload Relevant Documents",
+      "type": "TASK",
+      "task_template_id": "npqs-upload-docs",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "traderinput": "npqs.docs_traderinput"
+      }
+    },
+    {
+      "id": "n5_2_review_docs",
+      "name": "Review Relevant Documents",
+      "type": "TASK",
+      "task_template_id": "npqs-review-docs",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.docs_traderinput": "traderinput"
+      },
+      "output_mapping": {
+        "docs_review_outcome": "npqs.docs_review_outcome"
+      }
+    },
+    {
+      "id": "docs_review_gateway",
+      "name": "Documents Review Outcome Split",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n6_0_payment",
+      "name": "Pay for Phytosanitary Certificate",
+      "type": "TASK",
+      "task_template_id": "npqs-pay-certificate-fee",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "payment_status": "npqs.payment_status"
+      }
+    },
+    {
+      "id": "payment_split",
+      "name": "Payment Successful?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n8_0_issue_certificate",
+      "name": "Issue Phytosanitary Certificate",
+      "type": "TASK",
+      "task_template_id": "npqs-issue-certificate",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform"
+      },
+      "output_mapping": {
+        "certificate_id": "npqs.certificate_id"
+      }
+    },
+    {
+      "id": "ephyto_split",
+      "name": "Is ePhyto Requested?",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "n9_0_ephyto_upload",
+      "name": "Upload to IPPC Hub (ePhyto)",
+      "type": "TASK",
+      "task_template_id": "npqs-ephyto-upload",
+      "input_mapping": {
+        "npqs.reference_number": "reference_number",
+        "npqs.userform": "userform",
+        "npqs.certificate_id": "certificate_id"
+      },
+      "output_mapping": {}
+    },
+    {
+      "id": "end_success",
+      "name": "Phyto Certificate Issued",
+      "type": "END"
+    },
+    {
+      "id": "end_application_rejected",
+      "name": "Application Rejected",
+      "type": "END"
+    },
+    {
+      "id": "end_treatment_request_rejected",
+      "name": "Treatment Request Rejected",
+      "type": "END"
+    },
+    {
+      "id": "end_treatment_review_failed",
+      "name": "Consignment Rejected (Treatment Certificate Review Failed)",
+      "type": "END"
+    },
+    {
+      "id": "end_visual_sample_failed",
+      "name": "Consignment Rejected (Visual Sample Inspection Failed)",
+      "type": "END"
+    },
+    {
+      "id": "end_visual_consignment_failed",
+      "name": "Consignment Rejected (Visual Consignment Inspection Failed)",
+      "type": "END"
+    },
+    {
+      "id": "end_visual_system_failed",
+      "name": "Consignment Rejected (Visual System Inspection Failed)",
+      "type": "END"
+    },
+    {
+      "id": "end_lab_failed",
+      "name": "Consignment Rejected (Lab Test Failed)",
+      "type": "END"
+    },
+    {
+      "id": "end_payment_failed",
+      "name": "Payment Failed",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start",
+      "source_id": "start",
+      "target_id": "n1_apply"
+    },
+    {
+      "id": "e_apply_to_outcome",
+      "source_id": "n1_apply",
+      "target_id": "apply_outcome_split"
+    },
+    {
+      "id": "e_apply_rejected",
+      "source_id": "apply_outcome_split",
+      "target_id": "end_application_rejected",
+      "condition": "npqs.review_outcome == 'reject'"
+    },
+    {
+      "id": "e_apply_approved",
+      "source_id": "apply_outcome_split",
+      "target_id": "inspection_type_split",
+      "condition": "npqs.review_outcome == 'approve'"
+    },
+    {
+      "id": "e_split_to_treatment_check",
+      "source_id": "inspection_type_split",
+      "target_id": "npqs_gw_check_treatment"
+    },
+    {
+      "id": "e_treatment_check_true",
+      "source_id": "npqs_gw_check_treatment",
+      "target_id": "n3_treatment_request",
+      "condition": "npqs.treatment_required == true"
+    },
+    {
+      "id": "e_treatment_check_false",
+      "source_id": "npqs_gw_check_treatment",
+      "target_id": "npqs_join_treatment_branch",
+      "condition": "npqs.treatment_required != true"
+    },
+    {
+      "id": "e_treatment_request_to_split",
+      "source_id": "n3_treatment_request",
+      "target_id": "treatment_approve_split"
+    },
+    {
+      "id": "e_treatment_request_rejected",
+      "source_id": "treatment_approve_split",
+      "target_id": "end_treatment_request_rejected",
+      "condition": "npqs.treatment_request_outcome == 'reject'"
+    },
+    {
+      "id": "e_treatment_accepted",
+      "source_id": "treatment_approve_split",
+      "target_id": "treatment_provider_split",
+      "condition": "npqs.treatment_request_outcome == 'approve'"
+    },
+    {
+      "id": "e_treatment_by_npqs",
+      "source_id": "treatment_provider_split",
+      "target_id": "n3_2_treatment_payment",
+      "condition": "npqs.treatment_provider == 'npqs'"
+    },
+    {
+      "id": "e_treatment_by_provider",
+      "source_id": "treatment_provider_split",
+      "target_id": "n3_4_treatment_upload_certs",
+      "condition": "npqs.treatment_provider == 'external'"
+    },
+    {
+      "id": "e_treatment_payment_to_cert",
+      "source_id": "n3_2_treatment_payment",
+      "target_id": "n3_3_treatment_cert_issue"
+    },
+    {
+      "id": "e_treatment_cert_to_supervision_split",
+      "source_id": "n3_3_treatment_cert_issue",
+      "target_id": "n3_3_1_supervision_split"
+    },
+    {
+      "id": "e_supervision_split_true",
+      "source_id": "n3_3_1_supervision_split",
+      "target_id": "n3_3_2_treatment_supervisor_report",
+      "condition": "npqs.treatment_supervision == 'with_supervision'"
+    },
+    {
+      "id": "e_supervision_split_false",
+      "source_id": "n3_3_1_supervision_split",
+      "target_id": "n3_4_treatment_upload_certs",
+      "condition": "npqs.treatment_supervision != 'with_supervision'"
+    },
+    {
+      "id": "e_supervisor_report_to_upload",
+      "source_id": "n3_3_2_treatment_supervisor_report",
+      "target_id": "n3_4_treatment_upload_certs"
+    },
+    {
+      "id": "e_treatment_upload_to_review",
+      "source_id": "n3_4_treatment_upload_certs",
+      "target_id": "n3_5_treatment_review_certs"
+    },
+    {
+      "id": "e_treatment_review_to_split",
+      "source_id": "n3_5_treatment_review_certs",
+      "target_id": "treatment_review_split"
+    },
+    {
+      "id": "e_treatment_fail",
+      "source_id": "treatment_review_split",
+      "target_id": "end_treatment_review_failed",
+      "condition": "npqs.treatment_review_result == 'fail'"
+    },
+    {
+      "id": "e_treatment_pass",
+      "source_id": "treatment_review_split",
+      "target_id": "npqs_join_treatment_branch",
+      "condition": "npqs.treatment_review_result == 'pass'"
+    },
+    {
+      "id": "e_treatment_branch_to_join",
+      "source_id": "npqs_join_treatment_branch",
+      "target_id": "inspection_join"
+    },
+    {
+      "id": "e_split_to_sample_check",
+      "source_id": "inspection_type_split",
+      "target_id": "npqs_gw_check_sample_flow"
+    },
+    {
+      "id": "e_sample_check_true",
+      "source_id": "npqs_gw_check_sample_flow",
+      "target_id": "n4_0_draw_sample",
+      "condition": "npqs.lab_required == true || (npqs.visual_required == true && npqs.visual_approach == 'sample')"
+    },
+    {
+      "id": "e_sample_check_false",
+      "source_id": "npqs_gw_check_sample_flow",
+      "target_id": "npqs_join_sample_branch",
+      "condition": "npqs.lab_required != true && (npqs.visual_required != true || npqs.visual_approach != 'sample')"
+    },
+    {
+      "id": "e_draw_sample_to_sub_fork",
+      "source_id": "n4_0_draw_sample",
+      "target_id": "sample_sub_parallel_split"
+    },
+    {
+      "id": "e_sub_fork_to_lab_check",
+      "source_id": "sample_sub_parallel_split",
+      "target_id": "npqs_gw_check_lab"
+    },
+    {
+      "id": "e_lab_check_true",
+      "source_id": "npqs_gw_check_lab",
+      "target_id": "n2_1_lab_testing",
+      "condition": "npqs.lab_required == true"
+    },
+    {
+      "id": "e_lab_check_false",
+      "source_id": "npqs_gw_check_lab",
+      "target_id": "npqs_join_lab_branch",
+      "condition": "npqs.lab_required != true"
+    },
+    {
+      "id": "e_lab_testing_to_split",
+      "source_id": "n2_1_lab_testing",
+      "target_id": "lab_result_split"
+    },
+    {
+      "id": "e_lab_fail",
+      "source_id": "lab_result_split",
+      "target_id": "end_lab_failed",
+      "condition": "npqs.sample_test_result == 'fail'"
+    },
+    {
+      "id": "e_lab_pass",
+      "source_id": "lab_result_split",
+      "target_id": "npqs_join_lab_branch",
+      "condition": "npqs.sample_test_result == 'pass'"
+    },
+    {
+      "id": "e_lab_branch_to_sub_join",
+      "source_id": "npqs_join_lab_branch",
+      "target_id": "sample_sub_parallel_join"
+    },
+    {
+      "id": "e_sub_fork_to_visual_sample_check",
+      "source_id": "sample_sub_parallel_split",
+      "target_id": "npqs_gw_check_visual_sample"
+    },
+    {
+      "id": "e_visual_sample_check_true",
+      "source_id": "npqs_gw_check_visual_sample",
+      "target_id": "n_visual_sample_inspection",
+      "condition": "npqs.visual_required == true && npqs.visual_approach == 'sample'"
+    },
+    {
+      "id": "e_visual_sample_check_false",
+      "source_id": "npqs_gw_check_visual_sample",
+      "target_id": "npqs_join_visual_sample_branch",
+      "condition": "npqs.visual_required != true || npqs.visual_approach != 'sample'"
+    },
+    {
+      "id": "e_visual_sample_to_split",
+      "source_id": "n_visual_sample_inspection",
+      "target_id": "visual_sample_result_split"
+    },
+    {
+      "id": "e_visual_sample_fail",
+      "source_id": "visual_sample_result_split",
+      "target_id": "end_visual_sample_failed",
+      "condition": "npqs.visual_sample_result == 'fail'"
+    },
+    {
+      "id": "e_visual_sample_pass",
+      "source_id": "visual_sample_result_split",
+      "target_id": "npqs_join_visual_sample_branch",
+      "condition": "npqs.visual_sample_result == 'pass'"
+    },
+    {
+      "id": "e_visual_sample_branch_to_sub_join",
+      "source_id": "npqs_join_visual_sample_branch",
+      "target_id": "sample_sub_parallel_join"
+    },
+    {
+      "id": "e_sub_join_to_sample_join",
+      "source_id": "sample_sub_parallel_join",
+      "target_id": "npqs_join_sample_branch"
+    },
+    {
+      "id": "e_sample_branch_to_main_join",
+      "source_id": "npqs_join_sample_branch",
+      "target_id": "inspection_join"
+    },
+    {
+      "id": "e_split_to_non_sample_visual_check",
+      "source_id": "inspection_type_split",
+      "target_id": "npqs_gw_check_non_sample_visual"
+    },
+    {
+      "id": "e_non_sample_visual_check_true",
+      "source_id": "npqs_gw_check_non_sample_visual",
+      "target_id": "visual_type_split",
+      "condition": "npqs.visual_required == true && npqs.visual_approach != 'sample'"
+    },
+    {
+      "id": "e_non_sample_visual_check_false",
+      "source_id": "npqs_gw_check_non_sample_visual",
+      "target_id": "npqs_join_non_sample_visual_branch",
+      "condition": "npqs.visual_required != true || npqs.visual_approach == 'sample'"
+    },
+    {
+      "id": "e_visual_consignment",
+      "source_id": "visual_type_split",
+      "target_id": "n_visual_consignment_flow",
+      "condition": "npqs.visual_approach == 'consignment'"
+    },
+    {
+      "id": "e_visual_system",
+      "source_id": "visual_type_split",
+      "target_id": "n5_0_visual_inspection",
+      "condition": "npqs.visual_approach == 'system'"
+    },
+    {
+      "id": "e_visual_consignment_to_split",
+      "source_id": "n_visual_consignment_flow",
+      "target_id": "visual_consignment_result_split"
+    },
+    {
+      "id": "e_visual_consignment_fail",
+      "source_id": "visual_consignment_result_split",
+      "target_id": "end_visual_consignment_failed",
+      "condition": "npqs.visual_consignment_result == 'fail'"
+    },
+    {
+      "id": "e_visual_consignment_pass",
+      "source_id": "visual_consignment_result_split",
+      "target_id": "npqs_join_consignment_system",
+      "condition": "npqs.visual_consignment_result == 'pass'"
+    },
+    {
+      "id": "e_visual_system_to_split",
+      "source_id": "n5_0_visual_inspection",
+      "target_id": "visual_system_result_split"
+    },
+    {
+      "id": "e_visual_system_fail",
+      "source_id": "visual_system_result_split",
+      "target_id": "end_visual_system_failed",
+      "condition": "npqs.visual_system_result == 'fail'"
+    },
+    {
+      "id": "e_visual_system_pass",
+      "source_id": "visual_system_result_split",
+      "target_id": "npqs_join_consignment_system",
+      "condition": "npqs.visual_system_result == 'pass'"
+    },
+    {
+      "id": "e_consignment_system_to_non_sample_join",
+      "source_id": "npqs_join_consignment_system",
+      "target_id": "npqs_join_non_sample_visual_branch"
+    },
+    {
+      "id": "e_non_sample_visual_to_main_join",
+      "source_id": "npqs_join_non_sample_visual_branch",
+      "target_id": "inspection_join"
+    },
+    {
+      "id": "e_main_join_to_upload_docs",
+      "source_id": "inspection_join",
+      "target_id": "n5_1_upload_docs"
+    },
+    {
+      "id": "e_upload_docs_to_review",
+      "source_id": "n5_1_upload_docs",
+      "target_id": "n5_2_review_docs"
+    },
+    {
+      "id": "e_review_to_gw",
+      "source_id": "n5_2_review_docs",
+      "target_id": "docs_review_gateway"
+    },
+    {
+      "id": "e_docs_needs_info",
+      "source_id": "docs_review_gateway",
+      "target_id": "n5_1_upload_docs",
+      "condition": "npqs.docs_review_outcome == 'needs_more_info'"
+    },
+    {
+      "id": "e_docs_approved",
+      "source_id": "docs_review_gateway",
+      "target_id": "n6_0_payment",
+      "condition": "npqs.docs_review_outcome == 'approve'"
+    },
+    {
+      "id": "e_payment_to_split",
+      "source_id": "n6_0_payment",
+      "target_id": "payment_split"
+    },
+    {
+      "id": "e_payment_fail",
+      "source_id": "payment_split",
+      "target_id": "end_payment_failed",
+      "condition": "npqs.payment_status == 'fail'"
+    },
+    {
+      "id": "e_payment_success",
+      "source_id": "payment_split",
+      "target_id": "n8_0_issue_certificate",
+      "condition": "npqs.payment_status == 'success'"
+    },
+    {
+      "id": "e_issue_to_ephyto_split",
+      "source_id": "n8_0_issue_certificate",
+      "target_id": "ephyto_split"
+    },
+    {
+      "id": "e_ephyto_true",
+      "source_id": "ephyto_split",
+      "target_id": "n9_0_ephyto_upload",
+      "condition": "npqs.ephyto_required == true"
+    },
+    {
+      "id": "e_ephyto_false",
+      "source_id": "ephyto_split",
+      "target_id": "end_success",
+      "condition": "npqs.ephyto_required != true"
+    },
+    {
+      "id": "e_ephyto_upload_to_end",
+      "source_id": "n9_0_ephyto_upload",
+      "target_id": "end_success"
+    }
+  ]
+}

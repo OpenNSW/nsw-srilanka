@@ -1,0 +1,443 @@
+{
+  "id": "npqs-apply-phyto-cert--user-form",
+  "title": "Phytosanitary Certificate Application Details",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "certificate_type": {
+        "type": "string",
+        "title": "Certificate Type",
+        "oneOf": [
+          { "const": "export", "title": "Export" },
+          { "const": "re-export", "title": "Re-Export" }
+        ],
+        "default": "export"
+      },
+      "shipment_value": {
+        "type": "string",
+        "title": "Shipment Value",
+        "oneOf": [
+          { "const": "commercial", "title": "Commercial" },
+          { "const": "non-commercial", "title": "Non-Commercial" }
+        ],
+        "default": "commercial"
+      },
+      "applicant_name": {
+        "type": "string",
+        "title": "Applicant Name",
+        "example": "abc Company"
+      },
+      "nppo_office_location": {
+        "type": "string",
+        "title": "NPPO Office Location",
+        "oneOf": [
+          { "const": "Office 1", "title": "National Plant Quarantine Service- Katunayake" },
+          { "const": "Office 2", "title": "National Plant Quarantine Service- Head Office (Colombo)" },
+          { "const": "Office 3", "title": "National Plant Quarantine Service- Port of Colombo" },
+          { "const": "Office 4", "title": "National Plant Quarantine Service- Hambantota Port" },
+          { "const": "Office 5", "title": "National Plant Quarantine Service- Mattala Airport" },
+          { "const": "Office 6", "title": "National Plant Quarantine Service- Jaffna Airport" }
+        ],
+        "default": "Office 1"
+      },
+      "importing_country": {
+        "type": "string",
+        "title": "Name of Importing Country",
+        "example": "Andorra - AD"
+      },
+      "transit_countries": {
+        "type": "string",
+        "title": "Transit Countries (if required)",
+        "example": "Angola"
+      },
+      "exporter_name": {
+        "type": "string",
+        "title": "Exporter Name",
+        "example": "abc Company"
+      },
+      "exporter_address": {
+        "type": "string",
+        "title": "Exporter Address",
+        "example": "123, Galle Road, Colombo 03, Sri Lanka"
+      },
+      "exporter_country": {
+        "type": "string",
+        "title": "Country of Exporter",
+        "default": "Sri Lanka"
+      },
+      "consignee_name": {
+        "type": "string",
+        "title": "Consignee Name",
+        "example": "Global Import Corp"
+      },
+      "consignee_address": {
+        "type": "string",
+        "title": "Consignee Address",
+        "example": "456 Main St, Andorra la Vella, Andorra"
+      },
+      "consignee_country": {
+        "type": "string",
+        "title": "Country of Consignee",
+        "example": "Andorra - AD"
+      },
+      "distinguishing_marks": {
+        "type": "string",
+        "title": "Distinguishing Marks",
+        "example": "EXP-NPQS-2026-A"
+      },
+      "point_of_entry_country": {
+        "type": "string",
+        "title": "Declared Point of Entry - Country",
+        "example": "Andorra"
+      },
+      "point_of_entry_port": {
+        "type": "string",
+        "title": "Declared Point of Entry - Ports/Locations",
+        "example": "Andorra la Vella"
+      },
+      "seal_number": {
+        "type": "string",
+        "title": "Seal Number",
+        "example": "SL-CUSTOMS-93820"
+      },
+      "estimated_shipment_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Estimated Shipment Date"
+      },
+      "transport_mode": {
+        "type": "string",
+        "title": "Transport Mode",
+        "oneOf": [
+          { "const": "sea", "title": "Maritime Transport (Sea)" },
+          { "const": "air", "title": "Air Transport" },
+          { "const": "unspecified", "title": "Transport mode not specified" }
+        ],
+        "default": "unspecified"
+      },
+      "commodities": {
+        "type": "array",
+        "title": "Commodities List",
+        "items": {
+          "type": "object",
+          "properties": {
+            "commodity_common_name": {
+              "type": "string",
+              "title": "Commodity Common Name",
+              "example": "Fresh foliage (Monstera leaves)"
+            },
+            "commodity_botanical_name": {
+              "type": "string",
+              "title": "Botanical Name",
+              "example": "Monstera deliciosa"
+            },
+            "commodity_language": {
+              "type": "string",
+              "title": "Language",
+              "example": "English"
+            },
+            "commodity_description": {
+              "type": "string",
+              "title": "Description of the Commodity",
+              "example": "Cut foliage leaves for decorative purposes"
+            },
+            "commodity_plant_part": {
+              "type": "string",
+              "title": "Plant Part",
+              "oneOf": [
+                { "const": "leaves", "title": "Leaves / Foliage" },
+                { "const": "stems", "title": "Stems / Cut flowers" },
+                { "const": "seeds", "title": "Seeds / Grains" },
+                { "const": "whole", "title": "Whole Plant" }
+              ],
+              "default": "leaves"
+            },
+            "commodity_condition": {
+              "type": "string",
+              "title": "Condition",
+              "oneOf": [
+                { "const": "fresh", "title": "Fresh" },
+                { "const": "dried", "title": "Dried" },
+                { "const": "processed", "title": "Processed" }
+              ],
+              "default": "fresh"
+            },
+            "commodity_intended_use": {
+              "type": "string",
+              "title": "Intended Use",
+              "oneOf": [
+                { "const": "consumption", "title": "Human Consumption" },
+                { "const": "propagation", "title": "Propagation / Planting" },
+                { "const": "decorative", "title": "Decorative / Floristry" }
+              ],
+              "default": "decorative"
+            },
+            "quantity_net_weight": {
+              "type": "number",
+              "title": "Net Weight",
+              "example": 500
+            },
+            "quantity_net_weight_unit": {
+              "type": "string",
+              "title": "Net Weight Unit",
+              "default": "kg",
+              "oneOf": [
+                { "const": "kg", "title": "Kilograms (kg)" },
+                { "const": "g", "title": "Grams (g)" },
+                { "const": "t", "title": "Metric Tons (t)" }
+              ]
+            },
+            "quantity_gross_weight": {
+              "type": "number",
+              "title": "Gross Weight",
+              "example": 550
+            },
+            "quantity_gross_weight_unit": {
+              "type": "string",
+              "title": "Gross Weight Unit",
+              "default": "kg",
+              "oneOf": [
+                { "const": "kg", "title": "Kilograms (kg)" },
+                { "const": "g", "title": "Grams (g)" },
+                { "const": "t", "title": "Metric Tons (t)" }
+              ]
+            },
+            "packages_count": {
+              "type": "integer",
+              "title": "Number of Packages",
+              "example": 25
+            },
+            "packages_description": {
+              "type": "string",
+              "title": "Description of Packages",
+              "example": "Cardboard boxes"
+            },
+            "packages_in_bulk": {
+              "type": "boolean",
+              "title": "In Bulk",
+              "default": false
+            },
+            "packages_free_text_enabled": {
+              "type": "boolean",
+              "title": "Free Text Package Details",
+              "default": false
+            },
+            "packages_free_text": {
+              "type": "string",
+              "title": "Free Text Package Description",
+              "example": "Packed in standard wooden crates"
+            },
+            "origin_country": {
+              "type": "string",
+              "title": "Country of Origin",
+              "default": "Sri Lanka"
+            },
+            "origin_area": {
+              "type": "string",
+              "title": "Area of Origin",
+              "example": "Gampaha District"
+            }
+          },
+          "required": [
+            "commodity_common_name",
+            "commodity_botanical_name",
+            "quantity_net_weight",
+            "packages_count"
+          ]
+        }
+      },
+      "import_permit_number": {
+        "type": "string",
+        "title": "Import Permit Number",
+        "example": "IP-ANDORRA-2026-948"
+      },
+      "proposed_inspection_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Proposed Inspection Date"
+      },
+      "proposed_inspection_time": {
+        "type": "string",
+        "format": "time",
+        "title": "Proposed Inspection Time"
+      },
+      "place_of_inspection": {
+        "type": "string",
+        "title": "Place of Inspection",
+        "example": "Bandaranaike International Airport Cargo Terminal"
+      },
+      "additional_declaration": {
+        "type": "string",
+        "title": "Additional Declaration",
+        "example": "CODE: SAD1 - The consignment was inspected and found free from quarantine pests."
+      },
+      "disinfestation_treatment": {
+        "type": "string",
+        "title": "Disinfestation and/or Treatment Details",
+        "example": "Fumigated with Methyl Bromide at 48g/m3 for 24h at 21C."
+      },
+      "attachments": {
+        "type": "array",
+        "title": "Attachments",
+        "items": {
+          "type": "object",
+          "properties": {
+            "attachment_file_url": {
+              "type": "string",
+              "format": "file",
+              "title": "Document Attachment (max. size 12MB)"
+            },
+            "attachment_description": {
+              "type": "string",
+              "title": "Description",
+              "example": "Commercial invoice of foliage export"
+            }
+          },
+          "required": [
+            "attachment_file_url"
+          ]
+        }
+      }
+    },
+    "required": [
+      "certificate_type",
+      "shipment_value",
+      "applicant_name",
+      "nppo_office_location",
+      "importing_country",
+      "exporter_name",
+      "exporter_address",
+      "consignee_name",
+      "consignee_address",
+      "consignee_country"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Group",
+        "label": "1. General Info",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/certificate_type" },
+              { "type": "Control", "scope": "#/properties/shipment_value" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/applicant_name" },
+              { "type": "Control", "scope": "#/properties/nppo_office_location" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/importing_country" },
+              { "type": "Control", "scope": "#/properties/transit_countries" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "2. Consignment Details",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/exporter_name" },
+              { "type": "Control", "scope": "#/properties/consignee_name" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/exporter_address", "options": { "multiLine": true } },
+              { "type": "Control", "scope": "#/properties/consignee_address", "options": { "multiLine": true } }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/exporter_country" },
+              { "type": "Control", "scope": "#/properties/consignee_country" }
+            ]
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/distinguishing_marks",
+            "options": { "multiLine": true }
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/point_of_entry_country" },
+              { "type": "Control", "scope": "#/properties/point_of_entry_port" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/seal_number" },
+              { "type": "Control", "scope": "#/properties/estimated_shipment_date" }
+            ]
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/transport_mode"
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "3. Commodity Details",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/commodities"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/import_permit_number"
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/proposed_inspection_date" },
+              { "type": "Control", "scope": "#/properties/proposed_inspection_time" }
+            ]
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/place_of_inspection",
+            "options": { "multiLine": true }
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/additional_declaration",
+            "options": { "multiLine": true }
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/disinfestation_treatment",
+            "options": { "multiLine": true }
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "4. Attachments",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/attachments"
+          }
+        ]
+      }
+    ]
+  }
+}

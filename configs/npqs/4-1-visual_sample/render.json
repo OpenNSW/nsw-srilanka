@@ -1,0 +1,25 @@
+{
+  "id": "npqs-visual-sample-inspection:render",
+  "type": "REVIEW",
+  "sections": {
+    "reference": {
+      "id": "reference",
+      "templateId": "npqs-visual-sample-inspection--officer-form",
+      "title": "Visual Sample Inspection Results",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "kind": "submit_form",
+          "label": "Record Inspection Outcome",
+          "command": "submit",
+          "variant": "primary"
+        }
+      ]
+    }
+  }
+}

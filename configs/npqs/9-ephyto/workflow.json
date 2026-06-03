@@ -1,0 +1,37 @@
+{
+  "id": "npqs-ephyto-upload",
+  "name": "Upload to IPPC ePhyto Hub",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "ephyto_upload_wait",
+      "type": "TASK",
+      "task_template_id": "npqs-ephyto-upload--wait",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "certificate_id": "certificate_id"
+      },
+      "output_mapping": {}
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "ephyto_upload_wait"
+    },
+    {
+      "id": "e2",
+      "source_id": "ephyto_upload_wait",
+      "target_id": "end"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "npqs-pay-for-treatment--select-method",
+  "task_type": "USER_INPUT",
+  "output_namespace": "payment_method",
+  "plugin_properties": {
+    "user_jsonforms_id": "npqs-pay-for-treatment--select-method-form"
+  }
+}

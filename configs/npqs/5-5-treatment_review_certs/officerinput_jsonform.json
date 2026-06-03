@@ -1,0 +1,39 @@
+{
+  "id": "npqs-review-treatment-certs--officer-form",
+  "title": "Review Treatment Certificate Documents",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "treatment_review_result": {
+        "type": "string",
+        "title": "Verification Result",
+        "oneOf": [
+          { "const": "pass", "title": "Pass (Certificates are valid and correct)" },
+          { "const": "fail", "title": "Fail (Certificates are invalid, incomplete, or incorrect)" }
+        ],
+        "default": "pass"
+      },
+      "review_comments": {
+        "type": "string",
+        "title": "Verification Notes",
+        "example": "Reviewed the uploaded treatment certificate. The chemical, dosage, and duration match standard requirements."
+      }
+    },
+    "required": [
+      "treatment_review_result"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_review_result"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/review_comments"
+      }
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "id": "npqs-draw-sample--trader-submit-form",
+  "title": "Sample Drop-Off Confirmation",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "instructions": {
+        "type": "string",
+        "title": "Instructions",
+        "default": "Please drop off a representative sample of your consignment at the designated NPPO/PQS office. After dropping off, please fill out the details below to notify the officers."
+      },
+      "dropoff_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Date of Drop-Off"
+      },
+      "courier_or_person_name": {
+        "type": "string",
+        "title": "Name of Person / Courier who dropped it off",
+        "example": "M. Perera"
+      }
+    },
+    "required": [
+      "dropoff_date",
+      "courier_or_person_name"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/instructions",
+        "options": {
+          "readonly": true
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/dropoff_date"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/courier_or_person_name"
+      }
+    ]
+  }
+}

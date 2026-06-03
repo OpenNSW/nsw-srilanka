@@ -1,0 +1,35 @@
+{
+  "id": "npqs-draw-sample--officer-receive-form",
+  "title": "Verify & Register Received Sample",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "sample_number": {
+        "type": "string",
+        "title": "Assigned Sample Number",
+        "example": "SMP-NPQS-2026-1092"
+      },
+      "receive_comments": {
+        "type": "string",
+        "title": "Observations on Receipt",
+        "example": "Sample bag intact, sealed correctly."
+      }
+    },
+    "required": [
+      "sample_number"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/sample_number"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/receive_comments"
+      }
+    ]
+  }
+}

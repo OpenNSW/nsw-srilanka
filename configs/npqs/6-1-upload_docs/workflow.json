@@ -1,0 +1,41 @@
+{
+  "id": "npqs-upload-docs",
+  "name": "Upload Relevant Documents",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "trader_upload",
+      "type": "TASK",
+      "task_template_id": "npqs-upload-docs--user-input",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform"
+      },
+      "output_mapping": {
+        "invoice_file_url": "traderinput.invoice_file_url",
+        "packing_list_file_url": "traderinput.packing_list_file_url",
+        "additional_file_url?": "traderinput.additional_file_url"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "trader_upload"
+    },
+    {
+      "id": "e2",
+      "source_id": "trader_upload",
+      "target_id": "end"
+    }
+  ]
+}

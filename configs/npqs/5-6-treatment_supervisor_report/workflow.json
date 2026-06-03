@@ -1,0 +1,39 @@
+{
+  "id": "npqs-treatment-supervisor-report",
+  "name": "Issue Supervision Report",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "supervisor_report",
+      "type": "TASK",
+      "task_template_id": "npqs-treatment-supervisor-report--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform"
+      },
+      "output_mapping": {
+        "supervisor_notes": "supervisor_notes"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "supervisor_report"
+    },
+    {
+      "id": "e2",
+      "source_id": "supervisor_report",
+      "target_id": "end"
+    }
+  ]
+}

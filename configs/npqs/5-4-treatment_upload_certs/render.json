@@ -1,0 +1,28 @@
+{
+  "id": "npqs-upload-treatment-certs:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "npqs-upload-treatment-certs--trader-form",
+      "title": "Upload Treatment Certificate Documents",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Certificates",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

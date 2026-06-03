@@ -1,0 +1,72 @@
+{
+  "id": "npqs-draw-sample:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace_trader": {
+      "templateId": "npqs-draw-sample--trader-submit-form",
+      "title": "Sample Drop-Off Confirmation",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Confirm Sample Dropped Off",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "workspace_trader_submitted": {
+      "templateId": "npqs-draw-sample--trader-submit-form",
+      "title": "Sample Drop-Off Confirmation Details",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
+        ],
+        "requireDataKey": "traderinput"
+      }
+    },
+    "workspace_officer_receive": {
+      "templateId": "npqs-draw-sample--officer-receive-form",
+      "title": "Verify & Number Dropped-Off Sample",
+      "projector": "FORM",
+      "dataKey": "officer_receive",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
+        ],
+        "requireDataKey": "traderinput"
+      }
+    },
+    "workspace_officer_draw": {
+      "templateId": "npqs-draw-sample--officer-draw-form",
+      "title": "Record Sample Drawn At Site",
+      "projector": "FORM",
+      "dataKey": "officer_draw",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
+        ],
+        "requireDataKey": "officer_draw"
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

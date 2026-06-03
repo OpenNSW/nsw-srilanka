@@ -1,0 +1,36 @@
+{
+  "id": "npqs-treatment-supervisor-report--officer-form",
+  "title": "Issue Supervision Report",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "supervisor_notes": {
+        "type": "string",
+        "title": "Supervision Assessment & Notes",
+        "example": "Supervised the fumigation at the site. Verified dosage levels and container sealing."
+      },
+      "supervision_report_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Supervision Report Document URL",
+        "example": "https://nsw.gov.lk/storage/certs/supervision-report-doc-1092.pdf"
+      }
+    },
+    "required": [
+      "supervisor_notes"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/supervisor_notes"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/supervision_report_url"
+      }
+    ]
+  }
+}

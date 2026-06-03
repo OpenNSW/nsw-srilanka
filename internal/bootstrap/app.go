@@ -96,9 +96,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	templateRegistry := registry.NewInMemRegistry()
+	// TODO: remove the hardcoded load commands and move to runtime params.
 	if err := registry.LoadConfigsInto(templateRegistry, "configs/fcau"); err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to load taskv2 configs: %w", err)
+	}
+	if err := registry.LoadConfigsInto(templateRegistry, "configs/npqs"); err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to load taskv2 configs for npqs: %w", err)
 	}
 
 	templateService := service.NewTemplateService(db).WithRegistry(templateRegistry)

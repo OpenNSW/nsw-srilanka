@@ -1,0 +1,48 @@
+{
+  "id": "npqs-upload-docs--trader-form",
+  "title": "Upload Additional Consignment Documents",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "invoice_file_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Commercial Invoice (PDF/Image)",
+        "example": "https://nsw.gov.lk/storage/docs/invoice-1029.pdf"
+      },
+      "packing_list_file_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Packing List (PDF/Image)",
+        "example": "https://nsw.gov.lk/storage/docs/packing-list-1029.pdf"
+      },
+      "additional_file_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Other Supporting Documents (Bill of Lading / Customs declaration)",
+        "example": "https://nsw.gov.lk/storage/docs/customs-declaration-1029.pdf"
+      }
+    },
+    "required": [
+      "invoice_file_url",
+      "packing_list_file_url"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/invoice_file_url"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/packing_list_file_url"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/additional_file_url"
+      }
+    ]
+  }
+}

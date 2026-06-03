@@ -1,0 +1,39 @@
+{
+  "id": "npqs-issue-treatment-cert",
+  "name": "Issue Treatment Certificate",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_issue",
+      "type": "TASK",
+      "task_template_id": "npqs-issue-treatment-cert--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform"
+      },
+      "output_mapping": {
+        "treatment_certificate_id": "treatment_certificate_id"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_issue"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_issue",
+      "target_id": "end"
+    }
+  ]
+}

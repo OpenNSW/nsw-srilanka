@@ -1,0 +1,45 @@
+{
+  "id": "npqs-draw-sample--officer-draw-form",
+  "title": "Record Sample Drawn At Site",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "sample_number": {
+        "type": "string",
+        "title": "Assigned Sample Number",
+        "example": "SMP-NPQS-2026-1092"
+      },
+      "draw_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Date Sample Drawn"
+      },
+      "draw_comments": {
+        "type": "string",
+        "title": "Sample Collection Observations",
+        "example": "Drawn 500g of Monstera leaf samples directly from the cold warehouse containers."
+      }
+    },
+    "required": [
+      "sample_number",
+      "draw_date"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/sample_number"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/draw_date"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/draw_comments"
+      }
+    ]
+  }
+}

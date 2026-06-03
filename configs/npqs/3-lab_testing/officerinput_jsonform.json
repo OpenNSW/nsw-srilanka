@@ -1,0 +1,49 @@
+{
+  "id": "npqs-lab-testing--officer-form",
+  "title": "Laboratory Test Results",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "sample_test_result": {
+        "type": "string",
+        "title": "Laboratory Test Outcome",
+        "oneOf": [
+          { "const": "pass", "title": "Pass (No Quarantine Pests Found)" },
+          { "const": "fail", "title": "Fail (Quarantine Pests Detected)" }
+        ],
+        "default": "pass"
+      },
+      "lab_comments": {
+        "type": "string",
+        "title": "Laboratory Analysis Details",
+        "example": "Entomology and pathology tests completed. Nil pests detected."
+      },
+      "lab_report_attachment_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Uploaded Lab Test Report",
+        "example": "https://nsw.gov.lk/storage/reports/lab-report-2026.pdf"
+      }
+    },
+    "required": [
+      "sample_test_result"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/sample_test_result"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/lab_comments"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/lab_report_attachment_url"
+      }
+    ]
+  }
+}

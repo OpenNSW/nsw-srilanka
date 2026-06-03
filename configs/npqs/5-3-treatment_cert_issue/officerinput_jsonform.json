@@ -1,0 +1,49 @@
+{
+  "id": "npqs-issue-treatment-cert--officer-form",
+  "title": "Record Treatment Details & Issue Certificate",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "treatment_certificate_id": {
+        "type": "string",
+        "title": "Treatment Certificate Number",
+        "example": "TC-NPQS-2026-9042"
+      },
+      "treatment_outcome": {
+        "type": "string",
+        "title": "Treatment Outcome Status",
+        "default": "completed",
+        "oneOf": [
+          { "const": "completed", "title": "Treatment Completed Successfully" },
+          { "const": "failed", "title": "Treatment Failed / Incomplete" }
+        ]
+      },
+      "issue_comments": {
+        "type": "string",
+        "title": "Treatment Observation Notes",
+        "example": "Fumigation executed using Methyl Bromide at 48 g/m³ for 24h at 21.2°C. Target concentration maintained. No leakage observed."
+      }
+    },
+    "required": [
+      "treatment_certificate_id",
+      "treatment_outcome"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_certificate_id"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/issue_comments"
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "npqs-treatment-request:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace_trader": {
+      "templateId": "npqs-treatment-request--trader-form",
+      "title": "Treatment Request Details",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Treatment Request",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "reference_officer": {
+      "templateId": "npqs-treatment-request--reviewer-form",
+      "title": "Treatment Request Assessment",
+      "projector": "FORM",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

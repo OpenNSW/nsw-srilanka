@@ -1,0 +1,40 @@
+{
+  "id": "npqs-lab-testing",
+  "name": "Laboratory Testing",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_test",
+      "type": "TASK",
+      "task_template_id": "npqs-lab-testing--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform",
+        "sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "sample_test_result": "sample_test_result"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_test"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_test",
+      "target_id": "end"
+    }
+  ]
+}

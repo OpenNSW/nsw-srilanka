@@ -1,0 +1,113 @@
+{
+  "id": "npqs-apply-phyto-cert--reviewer-form",
+  "title": "Application Assessment Review",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "reference_number": {
+        "type": "string",
+        "title": "NPQS Reference Number",
+        "example": "NPQS-2026-EXP-1092"
+      },
+      "review_outcome": {
+        "type": "string",
+        "title": "Review Decision",
+        "oneOf": [
+          { "const": "approve", "title": "Accept & Proceed" },
+          { "const": "reject", "title": "Reject Application" },
+          { "const": "needs_more_info", "title": "Request Trader Modifications (Needs More Info)" }
+        ],
+        "default": "approve"
+      },
+      "rejection_reason": {
+        "type": "string",
+        "title": "Rejection/Clarification Reason (If not approved)",
+        "example": "Please specify the exact scientific name of the cut foliage."
+      },
+      "treatment_required": {
+        "type": "boolean",
+        "title": "Quarantine & Pre-shipment Treatment Required",
+        "default": false
+      },
+      "visual_required": {
+        "type": "boolean",
+        "title": "Visual Inspection Required",
+        "default": true
+      },
+      "visual_approach": {
+        "type": "string",
+        "title": "Visual Inspection Type (If required)",
+        "oneOf": [
+          { "const": "sample", "title": "Sample Inspection (requires sample collection)" },
+          { "const": "consignment", "title": "Consignment Inspection (scheduled at site)" },
+          { "const": "system", "title": "Through System Approach (recorded from external system)" }
+        ],
+        "default": "consignment"
+      },
+      "lab_required": {
+        "type": "boolean",
+        "title": "Laboratory Testing Required",
+        "default": false
+      },
+      "lab_sample_method": {
+        "type": "string",
+        "title": "Sample Collection Method (If lab/visual sample needed)",
+        "oneOf": [
+          { "const": "drop_off", "title": "Sample Drop Off (Trader brings sample to PQS)" },
+          { "const": "drawn_at_site", "title": "Sample Drawn by Officer at Site" }
+        ],
+        "default": "drop_off"
+      },
+      "ephyto_required": {
+        "type": "boolean",
+        "title": "IPPC ePhyto Hub Upload Required",
+        "default": false
+      }
+    },
+    "required": [
+      "reference_number",
+      "review_outcome"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/reference_number"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/review_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/rejection_reason"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/treatment_required"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/visual_required"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/visual_approach"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/lab_required"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/lab_sample_method"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/ephyto_required"
+      }
+    ]
+  }
+}

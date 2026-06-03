@@ -1,0 +1,10 @@
+{
+  "id": "npqs-draw-sample--officer-draw",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "officer_draw",
+  "plugin_properties": {
+    "service_id": "npqs",
+    "path": "/api/v1/inject",
+    "task_code": "npqs_sample_draw_v1"
+  }
+}

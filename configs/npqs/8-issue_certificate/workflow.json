@@ -1,0 +1,39 @@
+{
+  "id": "npqs-issue-certificate",
+  "name": "Issue Phytosanitary Certificate",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_issue",
+      "type": "TASK",
+      "task_template_id": "npqs-issue-certificate--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform"
+      },
+      "output_mapping": {
+        "certificate_id": "certificate_id"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_issue"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_issue",
+      "target_id": "end"
+    }
+  ]
+}

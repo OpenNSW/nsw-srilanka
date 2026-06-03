@@ -1,0 +1,28 @@
+{
+  "id": "npqs-upload-docs:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "npqs-upload-docs--trader-form",
+      "title": "Upload Additional Consignment Documents",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Additional Documents",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

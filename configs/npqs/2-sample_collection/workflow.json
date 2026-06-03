@@ -1,0 +1,89 @@
+{
+  "id": "npqs-draw-sample",
+  "name": "Draw or Collect Sample",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "method_split",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "trader_submit",
+      "type": "TASK",
+      "task_template_id": "npqs-draw-sample--trader-submit",
+      "input_mapping": {},
+      "output_mapping": {}
+    },
+    {
+      "id": "officer_receive",
+      "type": "TASK",
+      "task_template_id": "npqs-draw-sample--officer-receive",
+      "input_mapping": {},
+      "output_mapping": {
+        "sample_number": "sample_number"
+      }
+    },
+    {
+      "id": "officer_draw",
+      "type": "TASK",
+      "task_template_id": "npqs-draw-sample--officer-draw",
+      "input_mapping": {},
+      "output_mapping": {
+        "sample_number": "sample_number"
+      }
+    },
+    {
+      "id": "join_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_method_split",
+      "source_id": "start",
+      "target_id": "method_split"
+    },
+    {
+      "id": "e_split_dropoff",
+      "source_id": "method_split",
+      "target_id": "trader_submit",
+      "condition": "lab_sample_method == 'drop_off'"
+    },
+    {
+      "id": "e_split_drawn_site",
+      "source_id": "method_split",
+      "target_id": "officer_draw",
+      "condition": "lab_sample_method == 'drawn_at_site'"
+    },
+    {
+      "id": "e_trader_to_officer",
+      "source_id": "trader_submit",
+      "target_id": "officer_receive"
+    },
+    {
+      "id": "e_officer_receive_to_join",
+      "source_id": "officer_receive",
+      "target_id": "join_gateway"
+    },
+    {
+      "id": "e_officer_draw_to_join",
+      "source_id": "officer_draw",
+      "target_id": "join_gateway"
+    },
+    {
+      "id": "e_join_to_end",
+      "source_id": "join_gateway",
+      "target_id": "end"
+    }
+  ]
+}

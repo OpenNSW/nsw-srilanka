@@ -1,0 +1,8 @@
+{
+  "id": "npqs-visual-consignment--trader-schedule",
+  "task_type": "USER_INPUT",
+  "output_namespace": "traderinput",
+  "plugin_properties": {
+    "user_jsonforms_id": "npqs-visual-consignment--trader-schedule-form"
+  }
+}

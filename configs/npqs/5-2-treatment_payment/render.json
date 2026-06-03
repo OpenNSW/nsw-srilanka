@@ -1,0 +1,69 @@
+{
+  "id": "npqs-pay-for-treatment:render",
+  "type": "PAYMENT",
+  "sections": {
+    "workspace": {
+      "templateId": "npqs-pay-for-treatment--select-method-form",
+      "title": "Select Payment Gateway",
+      "projector": "FORM",
+      "dataKey": "payment_method",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Proceed to Payment",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "payment_instructions": {
+      "templateId": "npqs-pay-for-treatment--instructions-wrapper",
+      "title": "Payment Instructions",
+      "projector": "PAYMENT",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "PENDING_PAYMENT"
+        ]
+      }
+    },
+    "payment_details": {
+      "templateId": "npqs-pay-for-treatment--payment-form",
+      "title": "Treatment Fee Details",
+      "projector": "FORM",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "PENDING_PAYMENT"
+        ]
+      }
+    },
+    "payment_success": {
+      "templateId": "npqs-pay-for-treatment--success-message",
+      "title": "Payment Successful",
+      "projector": "MARKDOWN",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    },
+    "PENDING_PAYMENT": {
+      "actions": []
+    }
+  }
+}

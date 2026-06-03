@@ -1,0 +1,45 @@
+{
+  "id": "npqs-issue-certificate--officer-form",
+  "title": "Issue Phytosanitary Certificate",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "certificate_id": {
+        "type": "string",
+        "title": "Phytosanitary Certificate Number",
+        "example": "PC-NPQS-2026-8092"
+      },
+      "certificate_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Uploaded Phytosanitary Certificate (PDF)",
+        "example": "https://nsw.gov.lk/storage/certs/phytosanitary-certificate-1029.pdf"
+      },
+      "comments": {
+        "type": "string",
+        "title": "Officer Remarks",
+        "example": "Issued phytosanitary certificate after validating treatment and visual inspection records."
+      }
+    },
+    "required": [
+      "certificate_id"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/certificate_id"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/certificate_url"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/comments"
+      }
+    ]
+  }
+}

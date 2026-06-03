@@ -1,0 +1,37 @@
+{
+  "id": "npqs-apply-phyto-cert:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "npqs-apply-phyto-cert--user-form",
+      "title": "Phytosanitary Certificate Application",
+      "projector": "FORM",
+      "dataKey": "userform",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Application",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "reference": {
+      "templateId": "npqs-apply-phyto-cert--reviewer-form",
+      "title": "Application Assessment Review",
+      "projector": "FORM",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

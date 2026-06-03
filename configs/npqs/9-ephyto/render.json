@@ -1,0 +1,28 @@
+{
+  "id": "npqs-ephyto-upload:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "npqs-ephyto-upload--instructions",
+      "title": "IPPC ePhyto Hub Transfer",
+      "projector": "MARKDOWN",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Acknowledge Transfer Complete",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

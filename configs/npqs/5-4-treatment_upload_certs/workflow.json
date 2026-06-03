@@ -1,0 +1,43 @@
+{
+  "id": "npqs-upload-treatment-certs",
+  "name": "Upload Treatment Certificates",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "trader_upload",
+      "type": "TASK",
+      "task_template_id": "npqs-upload-treatment-certs--user-input",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform",
+        "treatment_provider": "treatment_provider",
+        "treatment_supervision": "treatment_supervision"
+      },
+      "output_mapping": {
+        "treatment_certificate_url": "traderinput.treatment_certificate_url",
+        "supervision_report_url?": "traderinput.supervision_report_url",
+        "upload_remarks?": "traderinput.upload_remarks"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "trader_upload"
+    },
+    {
+      "id": "e2",
+      "source_id": "trader_upload",
+      "target_id": "end"
+    }
+  ]
+}

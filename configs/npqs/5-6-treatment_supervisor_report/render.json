@@ -1,0 +1,25 @@
+{
+  "id": "npqs-treatment-supervisor-report:render",
+  "type": "REVIEW",
+  "sections": {
+    "reference": {
+      "id": "reference",
+      "templateId": "npqs-treatment-supervisor-report--officer-form",
+      "title": "Supervision Observation Report",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "kind": "submit_form",
+          "label": "Record Supervision Notes",
+          "command": "submit",
+          "variant": "primary"
+        }
+      ]
+    }
+  }
+}

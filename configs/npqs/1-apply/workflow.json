@@ -1,0 +1,110 @@
+{
+  "id": "npqs-apply-phyto-cert",
+  "name": "Apply for Phytosanitary Certificate",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "applicant_submission",
+      "type": "TASK",
+      "task_template_id": "npqs-apply-phyto-cert--user-input",
+      "input_mapping": {},
+      "output_mapping": {
+        "certificate_type": "userform.certificate_type",
+        "shipment_value": "userform.shipment_value",
+        "applicant_name": "userform.applicant_name",
+        "nppo_office_location": "userform.nppo_office_location",
+        "importing_country": "userform.importing_country",
+        "transit_countries?": "userform.transit_countries",
+        "exporter_name": "userform.exporter_name",
+        "exporter_address": "userform.exporter_address",
+        "exporter_country?": "userform.exporter_country",
+        "consignee_name": "userform.consignee_name",
+        "consignee_address": "userform.consignee_address",
+        "consignee_country": "userform.consignee_country",
+        "distinguishing_marks?": "userform.distinguishing_marks",
+        "point_of_entry_country?": "userform.point_of_entry_country",
+        "point_of_entry_port?": "userform.point_of_entry_port",
+        "seal_number?": "userform.seal_number",
+        "estimated_shipment_date?": "userform.estimated_shipment_date",
+        "transport_mode?": "userform.transport_mode",
+        "commodities?": "userform.commodities",
+        "origin_country?": "userform.origin_country",
+        "origin_area?": "userform.origin_area",
+        "import_permit_number?": "userform.import_permit_number",
+        "proposed_inspection_date?": "userform.proposed_inspection_date",
+        "proposed_inspection_time?": "userform.proposed_inspection_time",
+        "place_of_inspection?": "userform.place_of_inspection",
+        "additional_declaration?": "userform.additional_declaration",
+        "disinfestation_treatment?": "userform.disinfestation_treatment",
+        "attachments?": "userform.attachments"
+      }
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "npqs-apply-phyto-cert--external-review",
+      "input_mapping": {
+        "userform": "submission"
+      },
+      "output_mapping": {
+        "review_outcome": "reviewerform.review_outcome",
+        "treatment_required": "reviewerform.treatment_required",
+        "visual_required": "reviewerform.visual_required",
+        "visual_approach": "reviewerform.visual_approach",
+        "lab_required": "reviewerform.lab_required",
+        "lab_sample_method": "reviewerform.lab_sample_method",
+        "ephyto_required": "reviewerform.ephyto_required",
+        "reference_number": "reviewerform.reference_number",
+        "rejection_reason?": "reviewerform.rejection_reason"
+      }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "applicant_submission"
+    },
+    {
+      "id": "e2",
+      "source_id": "applicant_submission",
+      "target_id": "officer_review"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_review",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.review_outcome == 'approve'"
+    },
+    {
+      "id": "e_reject",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.review_outcome == 'reject'"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "applicant_submission",
+      "condition": "reviewerform.review_outcome == 'needs_more_info'"
+    }
+  ]
+}
