@@ -62,12 +62,15 @@ export interface ActionCardProps {
   consignmentId: string
 }
 
+// Keyed by the Radix semantic color names in statusConfig above, mapped to
+// brand status tokens (green→success, blue→info, orange→warning, red→error,
+// gray→secondary). See the token block in index.css.
 const statusStyles: Record<string, string> = {
-  green: 'bg-green-50 text-green-600 border-green-100',
-  blue: 'bg-blue-50 text-blue-600 border-blue-100',
-  orange: 'bg-orange-50 text-orange-600 border-orange-100',
-  gray: 'bg-gray-50 text-gray-600 border-gray-100',
-  red: 'bg-red-50 text-red-600 border-red-100',
+  green: 'bg-success-subtle text-success-strong border-success-subtle',
+  blue: 'bg-info-subtle text-info-strong border-info-subtle',
+  orange: 'bg-warning-subtle text-warning-strong border-warning-subtle',
+  gray: 'bg-surface text-foreground-muted border-border',
+  red: 'bg-error-subtle text-error-strong border-error-subtle',
 }
 
 export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
@@ -100,8 +103,8 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
       className={`mb-3 transition-all duration-200 border shadow-sm group
         ${
           isClickable
-            ? 'bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-md cursor-pointer active:scale-[0.98] active:shadow-sm'
-            : 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
+            ? 'bg-background border-border hover:border-info/40 hover:bg-info-subtle/40 hover:shadow-md cursor-pointer active:scale-[0.98] active:shadow-sm'
+            : 'bg-surface border-border opacity-50 cursor-not-allowed'
         }`}
     >
       <Flex direction="column" gap="3">
@@ -111,7 +114,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
               {nodeTypeIcons[step.workflowNodeTemplate.type] || <FileTextIcon className="w-5 h-5" />}
             </Box>
             <Box className="flex-1 min-w-0">
-              <Text size="3" weight="bold" className="block truncate text-gray-900">
+              <Text size="3" weight="bold" className="block truncate text-foreground">
                 {label}
               </Text>
               <Flex align="center" gap="2" mt="1">
@@ -126,7 +129,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
           </Flex>
 
           <ChevronRightIcon
-            className={`flex-shrink-0 transition-colors duration-200 ${isClickable ? 'text-gray-300 group-hover:text-blue-400' : 'invisible'}`}
+            className={`flex-shrink-0 transition-colors duration-200 ${isClickable ? 'text-foreground-subtle group-hover:text-info' : 'invisible'}`}
             width="20"
             height="20"
           />
@@ -141,7 +144,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
         )}
 
         {step.extendedState && (
-          <Flex align="center" gap="1" className="text-orange-600">
+          <Flex align="center" gap="1" className="text-warning-strong">
             <InfoCircledIcon className="w-3.5 h-3.5" />
             <Text size="1" weight="medium" className="italic">
               {step.extendedState}

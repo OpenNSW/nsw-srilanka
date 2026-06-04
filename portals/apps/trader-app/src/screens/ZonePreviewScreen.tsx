@@ -3,7 +3,7 @@ import { SAMPLE_TASK } from '../zones/fixtures'
 
 export function ZonePreviewScreen() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface">
       <TraderZoneLayout task={SAMPLE_TASK} />
     </div>
   )

@@ -40,10 +40,10 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+        <div className="min-h-screen flex items-center justify-center bg-surface p-4">
+          <div className="bg-background rounded-lg shadow-lg p-8 max-w-md w-full text-center">
             <div className="mb-4">
-              <Text size="6" weight="bold" className="text-red-600">
+              <Text size="6" weight="bold" className="text-error-strong">
                 Something went wrong
               </Text>
             </div>

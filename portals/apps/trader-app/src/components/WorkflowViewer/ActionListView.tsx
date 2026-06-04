@@ -63,7 +63,7 @@ export function ActionListView({
             <Flex align="center" justify="between" my="4" px="3">
               <Flex align="center" gap="2">
                 <div
-                  className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-green-500' : 'bg-red-500'} rounded-full`}
+                  className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-success' : 'bg-error'} rounded-full`}
                 />
                 <Heading size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
                   Task History
@@ -85,7 +85,7 @@ export function ActionListView({
               <Box mb="6">
                 <Flex align="center" justify="between" my="4" px="3">
                   <Flex align="center" gap="2">
-                    <div className="w-1.5 h-5 bg-blue-500 rounded-full" />
+                    <div className="w-1.5 h-5 bg-info rounded-full" />
                     <Heading size="4" color="blue" weight="bold">
                       Action Required
                     </Heading>
@@ -105,11 +105,11 @@ export function ActionListView({
                 py="10"
                 px="6"
                 mb="6"
-                className="text-center bg-green-50/50 rounded-xl border border-green-100 shadow-sm relative"
+                className="text-center bg-success-subtle/50 rounded-xl border border-success-subtle shadow-sm relative"
               >
                 {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-200">
-                  <CheckCircledIcon className="w-10 h-10 text-green-600" />
+                <div className="w-16 h-16 bg-success-subtle rounded-full flex items-center justify-center mx-auto mb-4 border border-success-subtle">
+                  <CheckCircledIcon className="w-10 h-10 text-success-strong" />
                 </div>
                 <Heading size="4" color="green" mb="2">
                   Process Complete
@@ -123,10 +123,10 @@ export function ActionListView({
                 py="8"
                 px="6"
                 mb="6"
-                className="text-center bg-white rounded-xl border border-gray-200 border-dashed shadow-sm relative"
+                className="text-center bg-background rounded-xl border border-border border-dashed shadow-sm relative"
               >
                 {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
-                <ClockIcon className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                <ClockIcon className="w-12 h-12 text-foreground-subtle mx-auto mb-3" />
                 <Heading size="3" color="gray" mb="1">
                   Waiting for Updates
                 </Heading>
@@ -151,10 +151,10 @@ export function ActionListView({
           inset="0"
           align="center"
           justify="center"
-          className="bg-white/60 backdrop-blur-sm z-10 rounded-lg"
+          className="bg-background/60 backdrop-blur-sm z-10 rounded-lg"
         >
           <Flex direction="column" align="center" gap="3">
-            <UpdateIcon className="animate-spin w-8 h-8 text-blue-600" />
+            <UpdateIcon className="animate-spin w-8 h-8 text-info-strong" />
             <Text weight="medium" color="blue">
               Updating your list...
             </Text>

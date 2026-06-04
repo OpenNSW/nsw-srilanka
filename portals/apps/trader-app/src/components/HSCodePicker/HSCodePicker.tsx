@@ -104,34 +104,34 @@ export function HSCodePicker({
               <Flex direction="column" gap="3">
                 <button
                   onClick={() => handleTradeFlowSelect('IMPORT')}
-                  className="p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left group cursor-pointer"
+                  className="p-6 border-2 border-border rounded-lg hover:border-info hover:bg-info-subtle transition-all text-left group cursor-pointer"
                 >
                   <Flex align="center" justify="between">
                     <Box>
-                      <Text size="4" weight="bold" className="text-gray-900 block mb-1">
+                      <Text size="4" weight="bold" className="text-foreground block mb-1">
                         Import
                       </Text>
                       <Text size="2" color="gray">
                         Bringing goods into the country
                       </Text>
                     </Box>
-                    <ArrowRightIcon className="text-gray-400 group-hover:text-blue-500" width="20" height="20" />
+                    <ArrowRightIcon className="text-foreground-subtle group-hover:text-info" width="20" height="20" />
                   </Flex>
                 </button>
                 <button
                   onClick={() => handleTradeFlowSelect('EXPORT')}
-                  className="p-6 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all text-left group cursor-pointer"
+                  className="p-6 border-2 border-border rounded-lg hover:border-success hover:bg-success-subtle transition-all text-left group cursor-pointer"
                 >
                   <Flex align="center" justify="between">
                     <Box>
-                      <Text size="4" weight="bold" className="text-gray-900 block mb-1">
+                      <Text size="4" weight="bold" className="text-foreground block mb-1">
                         Export
                       </Text>
                       <Text size="2" color="gray">
                         Sending goods out of the country
                       </Text>
                     </Box>
-                    <ArrowRightIcon className="text-gray-400 group-hover:text-green-500" width="20" height="20" />
+                    <ArrowRightIcon className="text-foreground-subtle group-hover:text-success" width="20" height="20" />
                   </Flex>
                 </button>
               </Flex>
@@ -155,8 +155,8 @@ export function HSCodePicker({
 
               {/* HS Code Details */}
               {selectedHSCode && (
-                <Box p="4" className="bg-blue-50 border border-blue-200 rounded-lg">
-                  <Text size="2" weight="bold" className="text-blue-900 block mb-3">
+                <Box p="4" className="bg-info-subtle border border-info-subtle rounded-lg">
+                  <Text size="2" weight="bold" className="text-info-strong block mb-3">
                     Selected HS Code
                   </Text>
                   <Flex direction="column" gap="2">
@@ -172,7 +172,7 @@ export function HSCodePicker({
                       <Text size="2" color="gray" style={{ minWidth: '100px' }}>
                         Description:
                       </Text>
-                      <Text size="2" className="text-gray-700" style={{ flex: 1 }}>
+                      <Text size="2" className="text-foreground-muted" style={{ flex: 1 }}>
                         {selectedHSCode.description}
                       </Text>
                     </Flex>

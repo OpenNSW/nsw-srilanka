@@ -51,9 +51,9 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
 
   if (hasRedirected) {
     return (
-      <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-6 text-sm text-gray-700 shadow-sm transition-all duration-300">
+      <div className="rounded-lg border border-primary-subtle bg-primary-subtle/40 p-6 text-sm text-foreground-muted shadow-sm transition-all duration-300">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-indigo-100 rounded-full text-indigo-700">
+          <div className="p-2 bg-primary-subtle rounded-full text-primary">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="w-5 h-5"
@@ -70,23 +70,23 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
             </svg>
           </div>
           <div>
-            <h4 className="font-semibold text-indigo-900 text-base">Redirected to Payment Gateway</h4>
-            <p className="text-xs text-gray-500">Your session was redirected to the external payment gateway.</p>
+            <h4 className="font-semibold text-primary text-base">Redirected to Payment Gateway</h4>
+            <p className="text-xs text-foreground-muted">Your session was redirected to the external payment gateway.</p>
           </div>
         </div>
 
-        <div className="text-gray-600 mb-6 bg-white/60 p-4 rounded-md border border-gray-100">
+        <div className="text-foreground-muted mb-6 bg-background/60 p-4 rounded-md border border-border">
           <ReactMarkdown
             components={{
               a: ({ children, href }) => (
-                <a href={href} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+                <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                   {children}
                 </a>
               ),
-              p: ({ children }) => <p className="text-gray-700 leading-relaxed mb-2 last:mb-0">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-              em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
-              h3: ({ children }) => <h3 className="text-base font-semibold text-gray-900 mt-2 mb-1">{children}</h3>,
+              p: ({ children }) => <p className="text-foreground-muted leading-relaxed mb-2 last:mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+              em: ({ children }) => <em className="italic text-foreground">{children}</em>,
+              h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-2 mb-1">{children}</h3>,
             }}
           >
             {content}
@@ -119,7 +119,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
             color="gray"
             size="3"
             onClick={handleReset}
-            className="cursor-pointer text-gray-500 hover:text-gray-900 transition-colors"
+            className="cursor-pointer text-foreground-muted hover:text-foreground transition-colors"
           >
             Reset redirection state
           </Button>
@@ -129,19 +129,19 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
   }
 
   return (
-    <div className="rounded border border-indigo-200 bg-indigo-50/40 p-6 text-sm text-gray-700">
-      <p className="mb-3 font-medium text-indigo-700">Redirecting to payment gateway…</p>
+    <div className="rounded border border-primary-subtle bg-primary-subtle/40 p-6 text-sm text-foreground-muted">
+      <p className="mb-3 font-medium text-primary">Redirecting to payment gateway…</p>
       <ReactMarkdown
         components={{
           a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+            <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">
               {children}
             </a>
           ),
-          p: ({ children }) => <p className="text-gray-700">{children}</p>,
-          strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-          em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
-          h3: ({ children }) => <h3 className="text-base font-semibold text-gray-900 mt-2 mb-1">{children}</h3>,
+          p: ({ children }) => <p className="text-foreground-muted">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+          em: ({ children }) => <em className="italic text-foreground">{children}</em>,
+          h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-2 mb-1">{children}</h3>,
         }}
       >
         {content}

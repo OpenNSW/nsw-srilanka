@@ -1,111 +1,53 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Primary - Indigo/Purple (matching logo) */
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
-  --color-primary-950: #1e1b4b;
+  /* =========================================================================
+   * COLOR TOKENS — lean semantic set. Each role has 3 rungs:
+   *   -subtle  → tinted fill / soft border   (was the *-50/100 shades)
+   *   (base)   → solid icon / dot / accent    (was *-500/600)
+   *   -strong  → text / hover / emphasis      (was *-700/800)
+   * Neutrals use contextual names (background / surface / foreground / border).
+   * ========================================================================= */
 
-  /* Secondary - Slate */
-  --color-secondary-50: #f8fafc;
-  --color-secondary-100: #f1f5f9;
-  --color-secondary-200: #e2e8f0;
-  --color-secondary-300: #cbd5e1;
-  --color-secondary-400: #94a3b8;
-  --color-secondary-500: #64748b;
-  --color-secondary-600: #475569;
-  --color-secondary-700: #334155;
-  --color-secondary-800: #1e293b;
-  --color-secondary-900: #0f172a;
-  --color-secondary-950: #020617;
+  /* Brand (primary - indigo). -dark is the deep-navy surface (e.g. sidebar);
+   * the bright base pops on it, and bright-at-opacity gives visible hovers. */
+  --color-primary-subtle: #eef2ff;
+  --color-primary: #4f46e5;
+  --color-primary-dark: #312e81;
 
-  /* Accent - Purple/Violet (matching logo gradient) */
-  --color-accent-50: #faf5ff;
-  --color-accent-100: #f3e8ff;
-  --color-accent-200: #e9d5ff;
-  --color-accent-300: #d8b4fe;
-  --color-accent-400: #c084fc;
-  --color-accent-500: #a855f7;
-  --color-accent-600: #9333ea;
-  --color-accent-700: #7e22ce;
-  --color-accent-800: #6b21a8;
-  --color-accent-900: #581c87;
-  --color-accent-950: #3b0764;
+  /* Status - success (green) */
+  --color-success-subtle: #f0fdf4;
+  --color-success: #16a34a;
+  --color-success-strong: #166534;
 
-  /* Success - Green */
-  --color-success-50: #f0fdf4;
-  --color-success-100: #dcfce7;
-  --color-success-200: #bbf7d0;
-  --color-success-300: #86efac;
-  --color-success-400: #4ade80;
-  --color-success-500: #22c55e;
-  --color-success-600: #16a34a;
-  --color-success-700: #15803d;
-  --color-success-800: #166534;
-  --color-success-900: #14532d;
-  --color-success-950: #052e16;
+  /* Status - warning (amber) */
+  --color-warning-subtle: #fffbeb;
+  --color-warning: #d97706;
+  --color-warning-strong: #92400e;
 
-  /* Warning - Amber */
-  --color-warning-50: #fffbeb;
-  --color-warning-100: #fef3c7;
-  --color-warning-200: #fde68a;
-  --color-warning-300: #fcd34d;
-  --color-warning-400: #fbbf24;
-  --color-warning-500: #f59e0b;
-  --color-warning-600: #d97706;
-  --color-warning-700: #b45309;
-  --color-warning-800: #92400e;
-  --color-warning-900: #78350f;
-  --color-warning-950: #451a03;
+  /* Status - error (red) */
+  --color-error-subtle: #fef2f2;
+  --color-error: #dc2626;
+  --color-error-strong: #991b1b;
 
-  /* Error - Red */
-  --color-error-50: #fef2f2;
-  --color-error-100: #fee2e2;
-  --color-error-200: #fecaca;
-  --color-error-300: #fca5a5;
-  --color-error-400: #f87171;
-  --color-error-500: #ef4444;
-  --color-error-600: #dc2626;
-  --color-error-700: #b91c1c;
-  --color-error-800: #991b1b;
-  --color-error-900: #7f1d1d;
-  --color-error-950: #450a0a;
+  /* Status - info (blue) */
+  --color-info-subtle: #eff6ff;
+  --color-info: #2563eb;
+  --color-info-strong: #1e40af;
 
-  /* Info - Blue */
-  --color-info-50: #eff6ff;
-  --color-info-100: #dbeafe;
-  --color-info-200: #bfdbfe;
-  --color-info-300: #93c5fd;
-  --color-info-400: #60a5fa;
-  --color-info-500: #3b82f6;
-  --color-info-600: #2563eb;
-  --color-info-700: #1d4ed8;
-  --color-info-800: #1e40af;
-  --color-info-900: #1e3a8a;
-  --color-info-950: #172554;
-
-  /* UI Element Colors */
+  /* Neutrals / surfaces */
   --color-background: #ffffff;
-  --color-background-secondary: #f8fafc;
-  --color-background-tertiary: #f1f5f9;
-  --color-background-muted: #e2e8f0;
+  --color-surface: #f8fafc;
+  --color-surface-muted: #f1f5f9;
 
+  /* Neutrals / text */
   --color-foreground: #0f172a;
-  --color-foreground-secondary: #475569;
-  --color-foreground-tertiary: #64748b;
-  --color-foreground-muted: #94a3b8;
+  --color-foreground-muted: #475569;
+  --color-foreground-subtle: #94a3b8;
 
+  /* Neutrals / borders */
   --color-border: #e2e8f0;
-  --color-border-secondary: #cbd5e1;
-  --color-border-focus: #6366f1;
+  --color-border-strong: #cbd5e1;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -143,11 +85,11 @@
     @apply bg-transparent;
   }
   &::-webkit-scrollbar-thumb {
-    @apply bg-secondary-200 rounded-full hover:bg-secondary-300;
+    @apply bg-border rounded-full hover:bg-border-strong;
   }
   /* Standard properties for Firefox/Future-proofing */
   scrollbar-width: thin;
-  scrollbar-color: var(--color-secondary-200) transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 /* Animation Keyframes */

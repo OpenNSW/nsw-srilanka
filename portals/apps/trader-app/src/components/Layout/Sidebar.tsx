@@ -104,8 +104,8 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         className={clsx(
           'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-md font-medium transition-all',
           isActive
-            ? 'bg-primary-500 text-white shadow-md'
-            : 'text-primary-100 hover:bg-primary-800/50 hover:text-white',
+            ? 'bg-primary text-white shadow-md'
+            : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
           !showExpanded && 'justify-center',
           isInGroup && showExpanded && 'ml-4 text-sm',
         )}
@@ -129,7 +129,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
           <div
             className={clsx(
               'flex flex-col gap-1 rounded-md transition-all',
-              isGroupExpanded && 'bg-primary-500/20 p-1',
+              isGroupExpanded && 'bg-primary/20 p-1',
             )}
           >
             {/* Group header */}
@@ -138,10 +138,10 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
               className={clsx(
                 'relative flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-md transition-all border',
                 isGroupExpanded
-                  ? 'text-white hover:bg-primary-500/40 border-primary-400/30'
+                  ? 'text-white hover:bg-primary/40 border-primary/30'
                   : hasActivePath
-                    ? 'bg-primary-500/30 text-white border-primary-400/20'
-                    : 'text-primary-100 hover:bg-primary-800/50 hover:text-white border-transparent hover:border-primary-600/20',
+                    ? 'bg-primary/30 text-white border-primary/20'
+                    : 'text-primary-subtle hover:bg-primary/30 hover:text-white border-transparent hover:border-primary/30',
               )}
               title={group.name}
             >
@@ -166,8 +166,8 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
                     className={clsx(
                       'flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-md transition-all',
                       isActive
-                        ? 'bg-primary-500 text-white shadow-md'
-                        : 'text-primary-100 hover:bg-primary-500/40 hover:text-white',
+                        ? 'bg-primary text-white shadow-md'
+                        : 'text-primary-subtle hover:bg-primary/40 hover:text-white',
                     )}
                     title={item.name}
                   >
@@ -188,8 +188,8 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
           className={clsx(
             'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-md font-medium transition-all w-full',
             hasActivePath && isGroupExpanded
-              ? 'bg-primary-500/20 text-white'
-              : 'text-primary-100 hover:bg-primary-800/50 hover:text-white',
+              ? 'bg-primary/20 text-white'
+              : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
           )}
         >
           <span className="flex items-center text-xl shrink-0">{group.icon}</span>
@@ -209,7 +209,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
     <aside
       className={`${
         showExpanded ? 'w-64' : 'w-20'
-      } h-[calc(100vh-64px)] bg-linear-to-b from-primary-900 to-primary-950 text-white flex flex-col fixed left-0 top-16 border-r border-primary-800/30 shadow-xl transition-all duration-300 z-20`}
+      } h-[calc(100vh-64px)] bg-primary-dark text-white flex flex-col fixed left-0 top-16 border-r border-primary-dark/40 shadow-xl transition-all duration-300 z-20`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => !isExpanded && setIsHovered(false)}
     >
@@ -224,15 +224,15 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
       </nav>
 
       {/* Footer with Software Info and Toggle Button */}
-      <div className="border-t border-primary-800/30">
+      <div className="border-t border-primary-dark/40">
         {/* Software Info */}
         {showExpanded && (
           <div className="p-4">
-            <div className="flex items-center gap-3 px-4 py-3 rounded-md bg-primary-800/30 text-primary-100">
+            <div className="flex items-center gap-3 px-4 py-3 rounded-md bg-primary/15 text-primary-subtle">
               {/*<img src={logoIcon} alt="Textura" className="w-8 h-8 flex-shrink-0" />*/}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">NSW</p>
-                <p className="text-xs text-primary-200 truncate">v0.1.0</p>
+                <p className="text-xs text-primary-subtle truncate">v0.1.0</p>
               </div>
             </div>
           </div>
@@ -249,7 +249,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
             onClick={onToggle}
             className={`${
               showExpanded ? 'w-full' : 'w-10'
-            } h-10 rounded-full bg-primary-500 hover:bg-primary-600 flex items-center ${
+            } h-10 rounded-full bg-primary hover:bg-primary-dark flex items-center ${
               showExpanded ? 'justify-between px-4' : 'justify-center'
             } text-white transition-all shadow-lg`}
             title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}

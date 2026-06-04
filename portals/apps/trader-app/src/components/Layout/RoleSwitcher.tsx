@@ -16,13 +16,13 @@ const ROLE_CONFIG: Record<
     label: 'Trader',
     description: 'Managing consignments',
     dropdownDescription: 'Create and manage consignments',
-    icon: <BackpackIcon className="text-blue-600" />,
+    icon: <BackpackIcon className="text-info-strong" />,
   },
   cha: {
     label: 'CHA',
     description: 'Handling Customs Clearances',
     dropdownDescription: 'Handle customs clearances',
-    icon: <IdCardIcon className="text-orange-600" />,
+    icon: <IdCardIcon className="text-warning-strong" />,
   },
 }
 
@@ -31,7 +31,7 @@ function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel:
 
   return (
     <Flex align="center" gap="3" className="w-60 text-left">
-      <Box className="rounded-md border border-gray-100 bg-white p-1.5 shadow-sm">{icon}</Box>
+      <Box className="rounded-md border border-border bg-background p-1.5 shadow-sm">{icon}</Box>
       <Box className="flex-1">
         <Flex align="center" gap="1">
           <Text size="1" weight="bold" className="block leading-none">
@@ -63,7 +63,7 @@ export function RoleSwitcher() {
           <Select.Root value={role} onValueChange={(val) => setRole(val as Role)} disabled={!showSwitcher}>
             <Select.Trigger
               variant="ghost"
-              className={`h-12 w-full p-4 transition-all ${showSwitcher ? 'cursor-pointer hover:bg-gray-100' : 'cursor-default'}`}
+              className={`h-12 w-full p-4 transition-all ${showSwitcher ? 'cursor-pointer hover:bg-surface-muted' : 'cursor-default'}`}
             >
               <RoleDisplay role={role} showPrimaryLabel={!showSwitcher} />
             </Select.Trigger>
@@ -77,12 +77,12 @@ export function RoleSwitcher() {
                     <Select.Item
                       key={r}
                       value={r}
-                      className="cursor-pointer border-none py-2 transition-colors focus:bg-gray-100 data-highlighted:bg-gray-100! data-highlighted:text-inherit!"
+                      className="cursor-pointer border-none py-2 transition-colors focus:bg-surface-muted data-highlighted:bg-surface-muted! data-highlighted:text-inherit!"
                     >
                       <Flex direction="column" py="1">
                         <Flex align="center" gap="2">
                           {icon}
-                          <Text weight="bold" size="1" className="text-gray-900">
+                          <Text weight="bold" size="1" className="text-foreground">
                             {label}
                           </Text>
                         </Flex>
@@ -98,7 +98,7 @@ export function RoleSwitcher() {
           </Select.Root>
         </Box>
       ) : (
-        <Box className="h-12 w-full animate-pulse rounded-lg border border-gray-100 bg-gray-50" />
+        <Box className="h-12 w-full animate-pulse rounded-lg border border-border bg-surface" />
       )}
     </Box>
   )

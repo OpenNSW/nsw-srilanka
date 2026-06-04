@@ -85,7 +85,7 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-white rounded-lg shadow p-6 text-center">
+        <div className="bg-background rounded-lg shadow p-6 text-center">
           <Text size="4" color="red" weight="medium">
             {error}
           </Text>
@@ -103,7 +103,7 @@ export function TaskDetailScreen() {
   if (!zoneView) {
     return (
       <div className="p-6">
-        <div className="bg-white rounded-lg shadow p-6 text-center">
+        <div className="bg-background rounded-lg shadow p-6 text-center">
           <Text size="4" color="gray" weight="medium">
             Task not found.
           </Text>
@@ -119,7 +119,7 @@ export function TaskDetailScreen() {
   }
 
   return (
-    <div className="bg-gray-50 min-h-full">
+    <div className="bg-surface min-h-full">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         <Button variant="ghost" color="gray" onClick={goBack}>
           <ArrowLeftIcon />

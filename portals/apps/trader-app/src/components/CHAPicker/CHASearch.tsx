@@ -81,7 +81,7 @@ export function CHASearch({
           position="absolute"
           width="100%"
           mt="1"
-          className="bg-white border border-gray-200 rounded-md shadow-lg z-10 overflow-hidden"
+          className="bg-background border border-border rounded-md shadow-lg z-10 overflow-hidden"
         >
           {options.length === 0 ? (
             <Flex align="center" justify="center" py="5" direction="column" gap="1">
@@ -102,7 +102,7 @@ export function CHASearch({
                       gap="3"
                       align="start"
                       className={`cursor-pointer transition-colors ${
-                        isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'
+                        isSelected ? 'bg-info-subtle hover:bg-info/15' : 'hover:bg-surface'
                       }`}
                       onMouseDown={(e) => {
                         e.preventDefault()
@@ -110,7 +110,7 @@ export function CHASearch({
                       }}
                     >
                       <Box pt="1">
-                        <MagnifyingGlassIcon height="14" width="14" className="text-gray-400" />
+                        <MagnifyingGlassIcon height="14" width="14" className="text-foreground-subtle" />
                       </Box>
                       <Box style={{ flex: 1, minWidth: 0 }}>
                         <Flex align="center" gap="2" mb="1">

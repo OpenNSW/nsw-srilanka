@@ -81,7 +81,7 @@ export function ConsignmentDetailScreen() {
             Back
           </Button>
         </div>
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-background rounded-lg shadow p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
             {error || 'Consignment not found'}
           </Text>
@@ -149,7 +149,7 @@ export function ConsignmentDetailScreen() {
 
       {/* Title row */}
       <div className="mb-3 mt-2 flex items-center gap-3">
-        <h1 className="text-xl font-semibold text-gray-900">Consignment View</h1>
+        <h1 className="text-xl font-semibold text-foreground">Consignment View</h1>
         <Badge size="2" color={getStateColor(consignment.state)}>
           {formatState(consignment.state)}
         </Badge>
@@ -161,19 +161,19 @@ export function ConsignmentDetailScreen() {
       {/* ID + date row */}
       <div className="mb-4 md:mb-6 flex items-start gap-10">
         <div>
-          <p className="text-xs font-semibold text-gray-400 mb-0.5">Consignment ID</p>
-          <p className="text-xs font-mono text-gray-700">{consignment.id}</p>
+          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">Consignment ID</p>
+          <p className="text-xs font-mono text-foreground-muted">{consignment.id}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold text-gray-400 mb-0.5">Date Created</p>
-          <p className="text-xs text-gray-700">{formatDateTime(consignment.createdAt)}</p>
+          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">Date Created</p>
+          <p className="text-xs text-foreground-muted">{formatDateTime(consignment.createdAt)}</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow flex flex-col flex-1 min-h-0 relative">
+      <div className="bg-background rounded-lg shadow flex flex-col flex-1 min-h-0 relative">
         {refreshing && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
-            <div className="flex items-center gap-3 bg-white px-6 py-4 rounded-lg shadow-lg">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
+            <div className="flex items-center gap-3 bg-background px-6 py-4 rounded-lg shadow-lg">
               <Spinner size="3" />
               <Text size="3" weight="medium" color="gray">
                 Refreshing...
@@ -196,11 +196,11 @@ export function ConsignmentDetailScreen() {
             </div>
           ) : consignment.state === 'INITIALIZED' ? (
             <div
-              className={`flex-1 flex items-center justify-center bg-gray-50/50 rounded-xl border border-dashed transition-all duration-200 
+              className={`flex-1 flex items-center justify-center bg-surface/50 rounded-xl border border-dashed transition-all duration-200 
                 ${
                   isChaView
-                    ? 'border-blue-300 hover:border-blue-500 hover:bg-blue-50/30 cursor-pointer group shadow-sm hover:shadow-md'
-                    : 'border-gray-300'
+                    ? 'border-info-subtle hover:border-info hover:bg-info-subtle/30 cursor-pointer group shadow-sm hover:shadow-md'
+                    : 'border-border-strong'
                 }`}
               onClick={isChaView && !initializing ? () => setHsPickerOpen(true) : undefined}
             >
@@ -208,14 +208,14 @@ export function ConsignmentDetailScreen() {
                 {isChaView ? (
                   <>
                     <div className="mb-4 flex justify-center group-hover:scale-110 transition-transform duration-200">
-                      <div className="p-3 bg-blue-50 group-hover:bg-blue-100 rounded-full transition-colors">
-                        <InfoCircledIcon width="32" height="32" className="text-blue-500" />
+                      <div className="p-3 bg-info-subtle group-hover:bg-info/15 rounded-full transition-colors">
+                        <InfoCircledIcon width="32" height="32" className="text-info" />
                       </div>
                     </div>
                     <Text
                       size="4"
                       weight="bold"
-                      className="block mb-2 text-gray-700 group-hover:text-blue-600 transition-colors"
+                      className="block mb-2 text-foreground-muted group-hover:text-info-strong transition-colors"
                     >
                       Initialize Workflow
                     </Text>
@@ -227,12 +227,12 @@ export function ConsignmentDetailScreen() {
                       align="center"
                       justify="center"
                       gap="2"
-                      className="text-blue-600 font-semibold group-hover:text-blue-700 transition-colors"
+                      className="text-info font-semibold group-hover:text-info-strong transition-colors"
                     >
                       {initializing ? (
                         <Spinner size="1" />
                       ) : (
-                        <div className="bg-blue-50 text-blue-600 p-1.5 rounded-full group-hover:bg-blue-100 transition-colors shadow-sm">
+                        <div className="bg-info-subtle text-info-strong p-1.5 rounded-full group-hover:bg-info/15 transition-colors shadow-sm">
                           <MagnifyingGlassIcon width="16" height="16" />
                         </div>
                       )}
@@ -244,8 +244,8 @@ export function ConsignmentDetailScreen() {
                 ) : (
                   <>
                     <div className="mb-4 flex justify-center">
-                      <div className="p-3 bg-amber-50 rounded-full">
-                        <ClockIcon width="32" height="32" className="text-amber-500" />
+                      <div className="p-3 bg-warning-subtle rounded-full">
+                        <ClockIcon width="32" height="32" className="text-warning" />
                       </div>
                     </div>
                     <Text size="4" color="gray" weight="bold" className="block mb-2">

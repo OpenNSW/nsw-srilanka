@@ -54,32 +54,32 @@ function alertStyles(variant: AlertVariant) {
   switch (variant) {
     case 'success':
       return {
-        container: 'bg-emerald-50 border-emerald-200',
-        icon: 'text-emerald-500',
-        title: 'text-emerald-800',
-        body: 'text-emerald-900',
+        container: 'bg-success-subtle border-success-subtle',
+        icon: 'text-success',
+        title: 'text-success-strong',
+        body: 'text-success-strong',
       }
     case 'warning':
       return {
-        container: 'bg-amber-50 border-amber-300',
-        icon: 'text-amber-500',
-        title: 'text-amber-800',
-        body: 'text-amber-900',
+        container: 'bg-warning-subtle border-warning-subtle',
+        icon: 'text-warning',
+        title: 'text-warning-strong',
+        body: 'text-warning-strong',
       }
     case 'error':
       return {
-        container: 'bg-red-50 border-red-300',
-        icon: 'text-red-500',
-        title: 'text-red-800',
-        body: 'text-red-900',
+        container: 'bg-error-subtle border-error-subtle',
+        icon: 'text-error',
+        title: 'text-error-strong',
+        body: 'text-error-strong',
       }
     case 'info':
     default:
       return {
-        container: 'bg-sky-50 border-sky-200',
-        icon: 'text-sky-500',
-        title: 'text-sky-800',
-        body: 'text-sky-900',
+        container: 'bg-info-subtle border-info-subtle',
+        icon: 'text-info',
+        title: 'text-info-strong',
+        body: 'text-info-strong',
       }
   }
 }
@@ -110,11 +110,11 @@ function alertIcon(variant: AlertVariant) {
 function AuditLog({ entries }: { entries: AuditEntry[] }) {
   const sorted = [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   return (
-    <details className="group rounded-lg border border-gray-200 bg-white overflow-hidden">
-      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-gray-50">
+    <details className="group rounded-lg border border-border bg-background overflow-hidden">
+      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-surface">
         <span className="flex items-center gap-2">
           <svg
-            className="w-4 h-4 text-gray-400 transition-transform group-open:rotate-90"
+            className="w-4 h-4 text-foreground-subtle transition-transform group-open:rotate-90"
             viewBox="0 0 20 20"
             fill="currentColor"
           >
@@ -124,12 +124,12 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
               clipRule="evenodd"
             />
           </svg>
-          <span className="text-sm font-semibold text-gray-700">Activity</span>
-          <span className="text-xs text-gray-400">· {entries.length} entries</span>
+          <span className="text-sm font-semibold text-foreground-muted">Activity</span>
+          <span className="text-xs text-foreground-subtle">· {entries.length} entries</span>
         </span>
       </summary>
-      <div className="relative border-t border-gray-100 px-4 py-4">
-        <div className="absolute left-[26px] top-6 bottom-6 w-px bg-gray-200" aria-hidden />
+      <div className="relative border-t border-border px-4 py-4">
+        <div className="absolute left-[26px] top-6 bottom-6 w-px bg-surface-muted" aria-hidden />
         <ol className="space-y-4">
           {sorted.map((entry) => (
             <AuditEntryRow key={`${entry.timestamp}:${entry.event}`} entry={entry} />
@@ -150,19 +150,19 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-sm text-gray-800">
-            <span className="font-semibold">{entry.actor}</span> <span className="text-gray-600">{entry.event}</span>
+          <p className="text-sm text-foreground">
+            <span className="font-semibold">{entry.actor}</span> <span className="text-foreground-muted">{entry.event}</span>
             {entry.from_state && entry.to_state && (
-              <span className="ml-2 text-xs text-gray-400 font-mono">
+              <span className="ml-2 text-xs text-foreground-subtle font-mono">
                 {entry.from_state} → {entry.to_state}
               </span>
             )}
           </p>
-          <time className="text-xs text-gray-400 shrink-0" dateTime={entry.timestamp}>
+          <time className="text-xs text-foreground-subtle shrink-0" dateTime={entry.timestamp}>
             {formatRelative(entry.timestamp)}
           </time>
         </div>
-        {entry.details && <p className="mt-1 text-sm text-gray-500 whitespace-pre-wrap">{entry.details}</p>}
+        {entry.details && <p className="mt-1 text-sm text-foreground-muted whitespace-pre-wrap">{entry.details}</p>}
       </div>
     </li>
   )
@@ -170,11 +170,11 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
 
 function auditDotColor(entry: AuditEntry): string {
   const text = entry.event.toLowerCase()
-  if (text.includes('submit')) return 'bg-emerald-500'
-  if (text.includes('reject') || text.includes('fail')) return 'bg-red-500'
-  if (text.includes('feedback') || text.includes('clarif') || text.includes('request')) return 'bg-amber-500'
-  if (text.includes('approv')) return 'bg-emerald-500'
-  return 'bg-gray-400'
+  if (text.includes('submit')) return 'bg-success'
+  if (text.includes('reject') || text.includes('fail')) return 'bg-error'
+  if (text.includes('feedback') || text.includes('clarif') || text.includes('request')) return 'bg-warning'
+  if (text.includes('approv')) return 'bg-success'
+  return 'bg-foreground-subtle'
 }
 
 function formatRelative(iso: string): string {
@@ -193,13 +193,13 @@ function formatRelative(iso: string): string {
 
 function Header({ task }: { task: ZoneView }) {
   return (
-    <div className="border-b border-gray-200 pb-4">
+    <div className="border-b border-border pb-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{task.task_type}</h1>
-          <p className="text-xs text-gray-500 mt-1 font-mono">{task.task_id}</p>
+          <h1 className="text-2xl font-bold text-foreground">{task.task_type}</h1>
+          <p className="text-xs text-foreground-muted mt-1 font-mono">{task.task_id}</p>
         </div>
-        <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 border border-indigo-100">
+        <span className="inline-flex items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary border border-primary-subtle">
           {task.state}
         </span>
       </div>

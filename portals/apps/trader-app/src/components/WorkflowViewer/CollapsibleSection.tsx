@@ -26,7 +26,7 @@ export const CollapsibleSection = ({
       <Flex
         align="center"
         justify="between"
-        className="cursor-pointer py-2 px-3 hover:bg-white rounded-lg transition-colors border-b border-gray-200 mb-3"
+        className="cursor-pointer py-2 px-3 hover:bg-background rounded-lg transition-colors border-b border-border mb-3"
         onClick={() => setIsOpen(!isOpen)}
       >
         <Flex align="center" gap="2">
