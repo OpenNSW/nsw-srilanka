@@ -1,10 +1,15 @@
-# Workflow to build and push the backend image to the existing GHCR package (nsw-backend)
+# Workflow to build and push development images to GHCR (backend + portals).
 name: Build and Push Development Image (nsw-srilanka)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+# Cancel in-progress runs for the same branch when a new commit arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -25,6 +30,10 @@ jobs:
             image_name: nsw-backend
             context: .
             dockerfile: ./Dockerfile
+          - service_name: Trader Portal
+            image_name: trader-app
+            context: ./portals
+            dockerfile: ./portals/apps/trader-app/Dockerfile
 
     steps:
       - name: Checkout repository
@@ -50,7 +59,9 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
+          # Sequential run numbers let Argo CD Image Updater sort/detect the newest dev builds.
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}:dev-${{ github.run_number }}-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scope cache per image so the two matrix builds don't overwrite each other's layers.
+          cache-from: type=gha,scope=${{ matrix.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}

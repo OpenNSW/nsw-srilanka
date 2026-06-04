@@ -1,0 +1,367 @@
+name: Release - Build and Publish Images
+# Builds and publishes the platform Docker images (Trader Portal + Backend API) to GHCR.
+#
+# Triggers:
+#   - Automatic: pushing a SemVer tag (e.g. v1.2.0) triggers a full release.
+#   - Manual:    workflow_dispatch with a version input for hotfixes or re-releases.
+#
+# Release mode vs Dry Run:
+#   Images are only pushed when triggered by a tag push OR a manual dispatch
+#   with a version input. Any other trigger runs in dry-run mode: images are
+#   built but not pushed and no GitHub Release is created.
+#
+# Outputs for gitops.yaml:
+#   The image digest is written to the GitHub Release as a JSON asset
+#   (release-digests.json). gitops.yaml reads this file to verify the image
+#   before updating ArgoCD manifests — no rebuild, no guesswork.
+
+on:
+  # Automatic: pushing a SemVer tag (e.g. v1.2.0) triggers a full release.
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.2.0)'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # STAGE 1: Build, tag, and publish the image. Writes the image digest to a
+  # file so Stage 2 can bundle it into release-digests.json and attach it to
+  # the GitHub Release.
+  # ---------------------------------------------------------------------------
+  build-and-publish:
+    name: Build and Publish - ${{ matrix.service_name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service_name: Trader Portal
+            image_name: trader-app
+            context: ./portals
+            dockerfile: ./portals/apps/trader-app/Dockerfile
+            description: NSW Trader Portal Frontend
+          - service_name: NSW Backend API
+            image_name: nsw-backend
+            context: .
+            dockerfile: ./Dockerfile
+            description: NSW Backend API Service
+    permissions:
+      packages: write          # push images to GHCR
+      security-events: write   # upload Trivy SARIF results to GitHub Security
+      id-token: write          # required for SLSA provenance attestation signing
+
+    env:
+      GIT_COMMIT: ${{ github.sha }}
+
+    outputs:
+      release_enabled: ${{ steps.release-mode.outputs.enabled }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed for accurate git metadata
+
+      - name: Set build time
+        id: build-time
+        run: |
+          # repository.pushed_at is reliably populated on both push and workflow_dispatch.
+          # github.event.head_commit.timestamp is NOT available on workflow_dispatch
+          # so we fall back to the current time if pushed_at is also empty.
+          TIMESTAMP="${{ github.event.repository.pushed_at }}"
+          if [ -z "$TIMESTAMP" ]; then
+            TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          fi
+          echo "build_time=${TIMESTAMP}" >> "$GITHUB_OUTPUT"
+          echo "Build time set to: $TIMESTAMP"
+
+      - name: Determine release mode
+        id: release-mode
+        run: |
+          # Release mode: tag push OR manual dispatch with a version input.
+          # Pure branch pushes without a version input remain a dry run.
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]] || \
+             [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Release mode enabled - image will be pushed"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Dry run mode - image will be built only"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.release-mode.outputs.enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: |
+          # Resolve the version string from whichever trigger fired.
+          # Strip the leading 'v' so downstream steps always get a bare semver (e.g. 1.2.0).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Convert repository owner to lowercase
+        id: repo_owner
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}
+          tags: |
+            # semver tags for tag-push releases: 1.2.3, 1.2, 1
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{major}},enable=${{ github.event_name == 'push' }}
+            # For manual dispatch, raw tag covers the exact version supplied.
+            type=raw,value=${{ steps.version.outputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=semver,pattern={{major}},enable=${{ github.event_name == 'workflow_dispatch' }}
+            # 'latest' is only written in release mode (never on dry runs)
+            type=raw,value=latest,enable=${{ steps.release-mode.outputs.enabled == 'true' }}
+            # Always write a full-length SHA tag for traceability
+            type=sha,format=long
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.version=${{ steps.version.outputs.tag }}
+            org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
+            org.opencontainers.image.created=${{ steps.build-time.outputs.build_time }}
+
+      - name: Build and publish image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ steps.release-mode.outputs.enabled == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # provenance and sbom attach SLSA build attestations to the image in GHCR.
+          provenance: mode=max
+          sbom: true
+          # Scope cache per image so the two matrix builds don't overwrite each other's layers.
+          cache-from: type=gha,scope=${{ matrix.image_name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
+
+      # Write the image digest to a file so the collate job can bundle it
+      # into release-digests.json for gitops.yaml to consume.
+      - name: Save image digest
+        if: steps.release-mode.outputs.enabled == 'true' && steps.build.outputs.digest != ''
+        run: |
+          mkdir -p /tmp/digests
+          echo '${{ steps.build.outputs.digest }}' > /tmp/digests/${{ matrix.image_name }}.txt
+          echo "Saved digest for ${{ matrix.image_name }}: ${{ steps.build.outputs.digest }}"
+
+      - name: Upload digest artifact
+        if: steps.release-mode.outputs.enabled == 'true' && steps.build.outputs.digest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image_name }}
+          path: /tmp/digests/${{ matrix.image_name }}.txt
+          retention-days: 1
+
+      # Trivy scans the pushed image for CRITICAL/HIGH CVEs.
+      - name: Setup Trivy
+        if: steps.release-mode.outputs.enabled == 'true'
+        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+        with:
+          version: v0.69.3
+
+      - name: Run Trivy vulnerability scanner
+        id: trivy-scan
+        if: steps.release-mode.outputs.enabled == 'true'
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format sarif \
+            --output "trivy-${{ matrix.image_name }}.sarif" \
+            --exit-code 1 \
+            "${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
+
+      - name: Upload Trivy results
+        if: always() && steps.trivy-scan.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.image_name }}.sarif
+          # Distinct category per image so the two matrix uploads don't overwrite each other.
+          category: ${{ matrix.image_name }}
+
+      - name: Print Trivy findings (debug)
+        if: always() && steps.trivy-scan.outcome != 'skipped'
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --ignorefile .trivyignore \
+            --format table \
+            ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+
+      - name: Generate service summary
+        if: always()
+        run: |
+          echo "## Service: ${{ matrix.service_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Mode: ${{ steps.release-mode.outputs.enabled == 'true' && 'Release' || 'Dry Run' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: ${{ steps.version.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ matrix.image_name }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ steps.build.outputs.digest }}" ]; then
+            echo "- Digest: ${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # STAGE 2: Collate the digest artifact into one JSON file and attach it to
+  # the GitHub Release so gitops.yaml can fetch it.
+  # Runs only in release mode after the build finishes.
+  # ---------------------------------------------------------------------------
+  collate-digests:
+    name: Collate Image Digests
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: needs.build-and-publish.outputs.release_enabled == 'true'
+    outputs:
+      version: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    steps:
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          if [[ "${VERSION}" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download digest artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Build release-digests.json
+        run: |
+          # Merge the per-service digest file into one JSON object:
+          # { "trader-app": "sha256:abc..." }
+          echo "{" > release-digests.json
+          FIRST=true
+          for FILE in /tmp/digests/*.txt; do
+            IMAGE_NAME=$(basename "$FILE" .txt)
+            DIGEST=$(cat "$FILE")
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              echo "," >> release-digests.json
+            fi
+            echo "  \"${IMAGE_NAME}\": \"${DIGEST}\"" >> release-digests.json
+          done
+          echo "}" >> release-digests.json
+          echo "Generated release-digests.json:"
+          cat release-digests.json
+
+      - name: Upload collated digests
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-digests
+          path: release-digests.json
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # STAGE 3: Create the GitHub Release entry and attach release-digests.json.
+  # ---------------------------------------------------------------------------
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: collate-digests
+    permissions:
+      contents: write   # required to create a GitHub Release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download collated digests
+        uses: actions/download-artifact@v4
+        with:
+          name: release-digests
+          path: .
+
+      - name: Create git tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="v${{ needs.collate-digests.outputs.version }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "Created and pushed tag: $TAG"
+          else
+            echo "Tag $TAG already exists — skipping creation"
+          fi
+
+      - name: Convert repository owner to lowercase
+        id: repo_owner
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', needs.collate-digests.outputs.version) || github.ref }}
+          name: Release ${{ needs.collate-digests.outputs.version }}
+          body: |
+            ## Release ${{ needs.collate-digests.outputs.version }}
+
+            This release publishes the platform Docker images for the NSW Single Window.
+
+            ### Published Image Targets
+            - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/trader-app:${{ needs.collate-digests.outputs.version }}`
+            - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/nsw-backend:${{ needs.collate-digests.outputs.version }}`
+
+            ### Pull Images
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/trader-app:${{ needs.collate-digests.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/nsw-backend:${{ needs.collate-digests.outputs.version }}
+            ```
+
+            ### Image Digests
+            See `release-digests.json` attached to this release for the exact SHA256 digest
+            of each image — used by the GitOps pipeline to verify them before deploying.
+          draft: false
+          prerelease: ${{ needs.collate-digests.outputs.is_prerelease == 'true' }}
+          # Attach the digest manifest so gitops.yaml can fetch it directly
+          # from the release assets without needing to rebuild or re-tag anything.
+          files: release-digests.json

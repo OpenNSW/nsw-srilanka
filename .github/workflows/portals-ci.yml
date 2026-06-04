@@ -1,0 +1,101 @@
+name: Portals CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'portals/**'
+      - '.github/workflows/portals-ci.yml'
+
+jobs:
+  # STAGE 1: Code Quality & Build
+  # Groups Type Check, Lint, and Build.
+  # These all require the exact same 'pnpm install' environment.
+  qa-and-build:
+    name: Quality Check & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./portals
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11.1.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: 'pnpm'
+          cache-dependency-path: './portals/pnpm-lock.yaml'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 1. Type Check (Strict)
+      # We run this first. If types are broken, there is no point linting or building.
+      - name: TypeScript Type Check
+        run: pnpm run type-check
+
+      # 2. Lint (Permissive)
+      # Kept 'continue-on-error: true' as requested for legacy issues.
+      # TODO: We should aim to fix lint issues and eventually remove 'continue-on-error' to enforce linting.
+      - name: Run ESLint
+        run: pnpm run --recursive --parallel lint
+        continue-on-error: true
+
+      # 3. Check Formatting (Prettier)
+      - name: Check Formatting (Prettier)
+        run: pnpm run format:check
+
+      # 4. Build (Final Verification)
+      # Only runs if Type Check passed.
+      - name: Build all workspaces
+        run: pnpm run build
+
+  # STAGE 2: Security
+  # Only runs if the code builds successfully (Fail-Fast).
+  security-scan:
+    name: Security Scan
+    needs: qa-and-build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./portals
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Dependency Review needs the git history to compare base/head
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.pull_request.head.sha }}
+        continue-on-error: true
+
+      # Setup environment for Audit
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11.1.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: 'pnpm'
+          cache-dependency-path: './portals/pnpm-lock.yaml'
+
+      # Audit usually doesn't need a full install, but it needs the lockfile.
+      # Running install ensures the lockfile is valid and synced.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
