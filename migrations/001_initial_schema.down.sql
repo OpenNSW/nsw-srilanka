@@ -11,7 +11,6 @@ DROP TABLE IF EXISTS consignments;
 DROP TABLE IF EXISTS customs_house_agents;
 DROP TABLE IF EXISTS company_records;
 DROP TABLE IF EXISTS workflow_template_map;
-DROP TABLE IF EXISTS workflow_template_v2;
 DROP TABLE IF EXISTS hs_codes;
 DROP TABLE IF EXISTS user_records;
 DROP TABLE IF EXISTS workflows;

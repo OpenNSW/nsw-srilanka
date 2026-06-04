@@ -55,22 +55,13 @@ CREATE TABLE IF NOT EXISTS hs_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_hs_codes_hs_code ON hs_codes (hs_code);
 
-CREATE TABLE IF NOT EXISTS workflow_template_v2 (
-    id text NOT NULL PRIMARY KEY,
-    name text NOT NULL,
-    version text NOT NULL,
-    workflow_definition jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS workflow_template_map (
 	id text NOT NULL PRIMARY KEY,
 	hs_code_id text NOT NULL REFERENCES hs_codes(id) ON UPDATE CASCADE ON DELETE RESTRICT,
 	consignment_flow varchar(50) NOT NULL
 		CONSTRAINT workflow_template_map_consignment_flow_check
 			CHECK ((consignment_flow)::text = ANY ((ARRAY['IMPORT'::character varying, 'EXPORT'::character varying])::text[])),
-	workflow_template_id text NOT NULL REFERENCES workflow_template_v2(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	workflow_template_id text NOT NULL,
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL
 );

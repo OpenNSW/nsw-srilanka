@@ -17,26 +17,7 @@ VALUES
 	('a1b2c3d4-0003-4000-8000-000000000003', 'Naresh', 'User with CHA role at EDWARD PVT LTD',            'naresh@edward-pvt-ltd.private-sector.dev','edward-pvt-ltd')
 ON CONFLICT (id) DO NOTHING;
 
--- 3. Seed top-level workflow template placeholders
--- The actual definition JSON is overridden and loaded from disk at runtime,
--- but the DB row must exist to satisfy the mapping query.
-INSERT INTO workflow_template_v2 (id, name, version, workflow_definition)
-VALUES 
-(
-    'trade-export-v1',
-    'General Information & Certificate Approvals',
-    '1',
-    '{}'::jsonb
-),
-(
-    'fcau-health-certificate-reg',
-    'FCAU Export Consignment & Health Certificate Registration',
-    '1',
-    '{}'::jsonb
-)
-ON CONFLICT (id) DO NOTHING;
-
--- 4. Seed HS code to top-level workflow mapping
+-- 3. Seed HS code to top-level workflow mapping
 -- Maps Fresh Coconut (0801.12.00 / id: 4bdfb1f0-2b71-4ddc-8b99-f31c3d7660bc) to trade-export-v1
 INSERT INTO workflow_template_map (id, hs_code_id, consignment_flow, workflow_template_id)
 VALUES (
