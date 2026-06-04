@@ -131,7 +131,11 @@ export function HSCodePicker({
                         Sending goods out of the country
                       </Text>
                     </Box>
-                    <ArrowRightIcon className="text-foreground-subtle group-hover:text-success" width="20" height="20" />
+                    <ArrowRightIcon
+                      className="text-foreground-subtle group-hover:text-success"
+                      width="20"
+                      height="20"
+                    />
                   </Flex>
                 </button>
               </Flex>

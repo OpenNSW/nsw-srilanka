@@ -104,9 +104,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         to={item.path}
         className={clsx(
           'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-md font-medium transition-all',
-          isActive
-            ? 'bg-primary text-white shadow-md'
-            : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
+          isActive ? 'bg-primary text-white shadow-md' : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
           !showExpanded && 'justify-center',
           isInGroup && showExpanded && 'ml-4 text-sm',
         )}
@@ -128,10 +126,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         <div key={group.name} className="flex flex-col gap-1">
           {/* Wrapper with shaded background if expanded */}
           <div
-            className={clsx(
-              'flex flex-col gap-1 rounded-md transition-all',
-              isGroupExpanded && 'bg-primary/20 p-1',
-            )}
+            className={clsx('flex flex-col gap-1 rounded-md transition-all', isGroupExpanded && 'bg-primary/20 p-1')}
           >
             {/* Group header */}
             <button
