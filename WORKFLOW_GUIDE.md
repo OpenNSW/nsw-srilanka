@@ -56,6 +56,23 @@ The parent workflow coordinates the high-level execution graph across multiple m
      "fcau.userform": "userform"
    }
    ```
+4. **Cross-Subworkflow / Inter-Task Variable Propagation**:
+   - Subworkflows run in completely isolated execution contexts. They ONLY have access to variables mapped into them in the parent workflow's task node `input_mapping`.
+   - If a subworkflow (e.g., `npqs-review-treatment-certs`) needs to access data produced in a previous subworkflow (e.g., `traderinput` from `npqs-upload-treatment-certs`), this data **must** be explicitly propagated:
+     1. The producing subworkflow must return the variable in its outputs (e.g., `"traderinput"`).
+     2. The parent workflow task node must map this output back to a parent global variable:
+        ```json
+        "output_mapping": {
+          "traderinput": "npqs.treatment_traderinput"
+        }
+        ```
+     3. The parent workflow task node invoking the subsequent subworkflow must map that parent variable to the child's input variable:
+        ```json
+        "input_mapping": {
+          "npqs.treatment_traderinput": "traderinput"
+        }
+        ```
+     Without this chain of input/output mappings, the child workflow interpreter will fail with an error like `input mapping error: required global variable 'traderinput' not found in workflow variables`.
 
 ---
 
@@ -178,8 +195,6 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
   }
 }
 ```
-
----
 
 ## 6. Development Workflow & Hot-Reloading
 
