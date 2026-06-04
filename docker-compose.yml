@@ -224,3 +224,38 @@ services:
         condition: service_started
       idp:
         condition: service_started
+
+  # -------------------------------------------------------------------
+  # 6. Trader Portal Frontend (React SPA served via Nginx)
+  # -------------------------------------------------------------------
+  trader-portal:
+    build:
+      # Build context is the portals workspace root; the Dockerfile copies
+      # the root pnpm files and apps/trader-app, then builds with pnpm.
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: nsw-trader-portal
+    networks:
+      - nsw-network
+    ports:
+      # Nginx listens on 8080 inside the container; expose on 5173 to match
+      # VITE_APP_URL and the backend CORS allow-list.
+      - "${TRADER_PORTAL_PORT:-5173}:8080"
+    environment:
+      # Injected into runtime-env.js at container start. These are read by the
+      # browser, so they must target host-exposed ports (localhost), not the
+      # internal service hostnames.
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
+      - VITE_IDP_BASE_URL=${VITE_IDP_BASE_URL:-https://localhost:8090}
+      - VITE_IDP_CLIENT_ID=${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}
+      - VITE_APP_URL=${VITE_APP_URL:-http://localhost:5173}
+      - VITE_IDP_SCOPES=${VITE_IDP_SCOPES:-openid,profile,email,group,ou}
+      - VITE_IDP_PLATFORM=${VITE_IDP_PLATFORM:-AsgardeoV2}
+      - VITE_IDP_TRADER_GROUP_NAME=${VITE_IDP_TRADER_GROUP_NAME:-Traders}
+      - VITE_IDP_CHA_GROUP_NAME=${VITE_IDP_CHA_GROUP_NAME:-CHA}
+      - VITE_SHOW_AUTOFILL_BUTTON=${VITE_SHOW_AUTOFILL_BUTTON:-true}
+    depends_on:
+      api:
+        condition: service_started
+      idp:
+        condition: service_started

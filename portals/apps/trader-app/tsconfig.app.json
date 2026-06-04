@@ -21,11 +21,7 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
-    "paths": {
-      "@opennsw/ui": ["../../packages/ui/src/index.ts"],
-      "@opennsw/jsonforms-renderers": ["../../packages/jsonforms-renderers/src/index.ts"]
-    }
+    "noUncheckedSideEffectImports": true
   },
   "include": ["src"]
 }

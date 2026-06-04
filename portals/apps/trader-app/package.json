@@ -15,7 +15,7 @@
     "@asgardeo/react": "^0.13.0",
     "@jsonforms/core": "^3.7.0",
     "@jsonforms/react": "^3.7.0",
-    "@opennsw/jsonforms-renderers": "workspace:*",
+    "@opennsw/jsonforms-renderers": "^0.2.1",
     "@radix-ui/react-icons": "^1.3.2",
     "@radix-ui/themes": "^3.2.1",
     "react": "^19.2.0",

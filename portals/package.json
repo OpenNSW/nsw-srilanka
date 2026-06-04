@@ -1,0 +1,27 @@
+{
+  "name": "portals-workspace",
+  "version": "1.0.0",
+  "description": "",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=22.18.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "dev-trader": "pnpm --filter trader-app dev",
+    "format:check": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "lint": "pnpm --recursive --parallel run lint",
+    "format": "pnpm format:fix && pnpm --recursive --parallel run format",
+    "type-check": "pnpm --recursive --parallel run type-check",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "private": true,
+  "devDependencies": {
+    "prettier": "^3.8.3"
+  }
+}
