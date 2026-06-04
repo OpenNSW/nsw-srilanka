@@ -1,3 +1,4 @@
+import { Text } from '@radix-ui/themes'
 import { Link, useLocation } from 'react-router-dom'
 import { DashboardIcon, FileTextIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
 import { type ReactNode, useEffect, useRef, useState, useMemo } from 'react'
@@ -112,7 +113,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         title={!showExpanded ? item.name : undefined}
       >
         <span className="flex items-center text-xl shrink-0">{item.icon}</span>
-        {showExpanded && <span className="text-[15px] whitespace-nowrap">{item.name}</span>}
+        {showExpanded && <Text className="text-[15px] whitespace-nowrap">{item.name}</Text>}
       </Link>
     )
   }
@@ -193,7 +194,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
           )}
         >
           <span className="flex items-center text-xl shrink-0">{group.icon}</span>
-          <span className="text-[15px] whitespace-nowrap flex-1 text-left">{group.name}</span>
+          <Text className="text-[15px] whitespace-nowrap flex-1 text-left">{group.name}</Text>
           <ChevronDownIcon
             className={clsx('w-4 h-4 transition-transform', isGroupExpanded ? 'rotate-0' : '-rotate-90')}
           />
@@ -231,8 +232,12 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
             <div className="flex items-center gap-3 px-4 py-3 rounded-md bg-primary/15 text-primary-subtle">
               {/*<img src={logoIcon} alt="Textura" className="w-8 h-8 flex-shrink-0" />*/}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">NSW</p>
-                <p className="text-xs text-primary-subtle truncate">v0.1.0</p>
+                <Text as="p" size="2" weight="medium" className="text-white truncate">
+                  NSW
+                </Text>
+                <Text as="p" size="1" className="text-primary-subtle truncate">
+                  v0.1.0
+                </Text>
               </div>
             </div>
           </div>
@@ -254,7 +259,11 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
             } text-white transition-all shadow-lg`}
             title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
           >
-            {showExpanded && <span className="text-sm font-medium">{isExpanded ? 'Collapse' : 'Expand'}</span>}
+            {showExpanded && (
+              <Text size="2" weight="medium">
+                {isExpanded ? 'Collapse' : 'Expand'}
+              </Text>
+            )}
             {isExpanded ? <ChevronLeftIcon className="w-5 h-5" /> : <ChevronRightIcon className="w-5 h-5" />}
           </button>
         </div>

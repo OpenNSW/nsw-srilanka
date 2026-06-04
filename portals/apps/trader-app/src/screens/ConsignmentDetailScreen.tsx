@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Badge, Spinner, Text, Flex } from '@radix-ui/themes'
+import { Button, Badge, Spinner, Text, Heading, Flex } from '@radix-ui/themes'
 import { ArrowLeftIcon, InfoCircledIcon, ClockIcon, MagnifyingGlassIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { ActionListView } from '../components/WorkflowViewer'
 import type { ConsignmentDetail } from '../services/types/consignment.ts'
@@ -149,7 +149,9 @@ export function ConsignmentDetailScreen() {
 
       {/* Title row */}
       <div className="mb-3 mt-2 flex items-center gap-3">
-        <h1 className="text-xl font-semibold text-foreground">Consignment View</h1>
+        <Heading as="h1" size="5" weight="bold" className="text-foreground">
+          Consignment View
+        </Heading>
         <Badge size="2" color={getStateColor(consignment.state)}>
           {formatState(consignment.state)}
         </Badge>
@@ -161,12 +163,20 @@ export function ConsignmentDetailScreen() {
       {/* ID + date row */}
       <div className="mb-4 md:mb-6 flex items-start gap-10">
         <div>
-          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">Consignment ID</p>
-          <p className="text-xs font-mono text-foreground-muted">{consignment.id}</p>
+          <Text as="p" size="1" weight="bold" className="text-foreground-subtle mb-0.5">
+            Consignment ID
+          </Text>
+          <Text as="p" size="1" className="font-mono text-foreground-muted">
+            {consignment.id}
+          </Text>
         </div>
         <div>
-          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">Date Created</p>
-          <p className="text-xs text-foreground-muted">{formatDateTime(consignment.createdAt)}</p>
+          <Text as="p" size="1" weight="bold" className="text-foreground-subtle mb-0.5">
+            Date Created
+          </Text>
+          <Text as="p" size="1" className="text-foreground-muted">
+            {formatDateTime(consignment.createdAt)}
+          </Text>
         </div>
       </div>
 
