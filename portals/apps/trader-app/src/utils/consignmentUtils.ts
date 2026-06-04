@@ -1,7 +1,12 @@
 import type { ConsignmentState } from '../services/types/consignment'
 
 /**
- * Get the appropriate color for a consignment state badge
+ * Get the appropriate color for a consignment state badge.
+ *
+ * Returns Radix UI semantic color names (consumed by Radix <Badge color={...}>).
+ * Radix is aligned to the brand tokens in main.tsx (<Theme>), so these map to:
+ *   orange → warning, green → success, red → error, gray → secondary.
+ * See the token block in index.css.
  */
 export function getStateColor(state: ConsignmentState): 'gray' | 'orange' | 'green' | 'red' {
   switch (state) {

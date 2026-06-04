@@ -47,7 +47,7 @@ initAppConfig()
             storage="sessionStorage"
             periodicTokenRefresh
           >
-            <Theme>
+            <Theme accentColor="indigo" grayColor="slate" radius="medium" panelBackground="solid" appearance="light">
               <BrowserRouter>
                 <App />
               </BrowserRouter>

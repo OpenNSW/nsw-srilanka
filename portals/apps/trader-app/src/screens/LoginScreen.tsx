@@ -6,10 +6,10 @@ export function LoginScreen() {
   const { systemName, appName, logoUrl, description, heroImageUrl, partnerLogos } = appConfig.branding
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-white lg:overflow-hidden overflow-y-auto">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-background lg:overflow-hidden overflow-y-auto">
       {/* Mobile logo strip — full-width box at the very top, hidden on desktop */}
       {logoUrl && (
-        <div className="lg:hidden w-full bg-white px-6 py-4 flex items-center justify-center border-b border-gray-100 shadow-sm">
+        <div className="lg:hidden w-full bg-background px-6 py-4 flex items-center justify-center border-b border-border shadow-sm">
           <img src={logoUrl} alt={appName} className="h-16 object-contain" />
         </div>
       )}
@@ -19,7 +19,7 @@ export function LoginScreen() {
         {/* Hero background — no clip on mobile (logo has its own strip above), diagonal on desktop */}
         <div className="absolute inset-0 [clip-path:none] lg:[clip-path:polygon(25%_0,100%_0,100%_100%,0%_100%)]">
           <div
-            className="absolute inset-0 bg-cover bg-center bg-secondary-950"
+            className="absolute inset-0 bg-cover bg-center bg-foreground"
             style={heroImageUrl ? { backgroundImage: `url(${heroImageUrl})` } : undefined}
           />
           <div className="absolute inset-0 bg-black/50" />
@@ -30,7 +30,7 @@ export function LoginScreen() {
           <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-wide mb-10 -mt-20 drop-shadow-lg">
             {systemName}
           </h1>
-          <div className="bg-secondary-950/80 border-2 border-white/30 py-10 px-8 xl:px-12 rounded-2xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+          <div className="bg-foreground/80 border-2 border-white/30 py-10 px-8 xl:px-12 rounded-2xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
             <div className="flex flex-col xl:flex-row items-center gap-8 xl:gap-12">
               <div className="flex flex-col items-center xl:items-start text-center xl:text-left">
                 <h2 className="text-2xl font-bold text-white tracking-wide">{displayName}</h2>
@@ -41,7 +41,7 @@ export function LoginScreen() {
                 onClick={() => {
                   void signIn()
                 }}
-                className="bg-primary-500 hover:bg-primary-600 text-white px-10 py-2.5 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
+                className="bg-primary hover:bg-primary-dark text-white px-10 py-2.5 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
               >
                 Sign In
               </button>
@@ -51,13 +51,13 @@ export function LoginScreen() {
       </div>
 
       {/* Identity & Branding */}
-      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 py-12 lg:py-0 relative z-10 bg-white lg:min-h-screen">
+      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 py-12 lg:py-0 relative z-10 bg-background lg:min-h-screen">
         <div className="max-w-md mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
           {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-32 mb-5 object-contain" />}
 
-          <h1 className="hidden lg:block text-3xl font-bold text-gray-900 leading-tight mb-5">{systemName}</h1>
+          <h1 className="hidden lg:block text-3xl font-bold text-foreground leading-tight mb-5">{systemName}</h1>
 
-          <p className="text-md text-gray-600 leading-relaxed text-center lg:text-left">{description}</p>
+          <p className="text-md text-foreground-muted leading-relaxed text-center lg:text-left">{description}</p>
 
           {partnerLogos && partnerLogos.some((logo) => logo.url) && (
             <div className="flex flex-row flex-wrap items-center justify-center lg:justify-start gap-4 mt-5">

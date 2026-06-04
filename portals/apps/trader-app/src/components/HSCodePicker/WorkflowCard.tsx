@@ -10,7 +10,7 @@ interface WorkflowCardProps {
 export function WorkflowCard({ workflow, selected, onSelect }: WorkflowCardProps) {
   return (
     <Card
-      className={`cursor-pointer transition-all ${selected ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}
+      className={`cursor-pointer transition-all ${selected ? 'ring-2 ring-info bg-info-subtle' : 'hover:bg-surface'}`}
       onClick={() => onSelect(workflow)}
     >
       <Text as="div" size="2" weight="bold">

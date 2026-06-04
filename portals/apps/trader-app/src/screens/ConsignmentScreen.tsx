@@ -122,8 +122,8 @@ function NewConsignmentDialog({ open, onOpenChange, creating, onCreate }: NewCon
                   aria-label="Select Import Trade Flow"
                   className={`flex-1 p-4 border-2 rounded-lg transition-all text-left group cursor-pointer ${
                     newConsignmentData.flow === 'IMPORT'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50'
+                      ? 'border-info bg-info-subtle'
+                      : 'border-border hover:border-info-subtle hover:bg-info-subtle/50'
                   }`}
                 >
                   <Flex align="center">
@@ -132,7 +132,7 @@ function NewConsignmentDialog({ open, onOpenChange, creating, onCreate }: NewCon
                         <RadixText
                           size="3"
                           weight="bold"
-                          className={`${newConsignmentData.flow === 'IMPORT' ? 'text-blue-700' : 'text-gray-900'} block`}
+                          className={`${newConsignmentData.flow === 'IMPORT' ? 'text-info-strong' : 'text-foreground'} block`}
                         >
                           Import
                         </RadixText>
@@ -159,8 +159,8 @@ function NewConsignmentDialog({ open, onOpenChange, creating, onCreate }: NewCon
                   aria-label="Select Export Trade Flow"
                   className={`flex-1 p-4 border-2 rounded-lg transition-all text-left group cursor-pointer ${
                     newConsignmentData.flow === 'EXPORT'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-green-300 hover:bg-green-50/50'
+                      ? 'border-success bg-success-subtle'
+                      : 'border-border hover:border-success-subtle hover:bg-success-subtle/50'
                   }`}
                 >
                   <Flex align="center">
@@ -169,7 +169,7 @@ function NewConsignmentDialog({ open, onOpenChange, creating, onCreate }: NewCon
                         <RadixText
                           size="3"
                           weight="bold"
-                          className={`${newConsignmentData.flow === 'EXPORT' ? 'text-green-700' : 'text-gray-900'} block`}
+                          className={`${newConsignmentData.flow === 'EXPORT' ? 'text-success-strong' : 'text-foreground'} block`}
                         >
                           Export
                         </RadixText>
@@ -345,8 +345,8 @@ export function ConsignmentScreen() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Consignments{totalCount > 0 && <span className="ml-2 text-lg font-normal text-gray-400">({totalCount})</span>}
+        <h1 className="text-2xl font-semibold text-foreground">
+          Consignments{totalCount > 0 && <span className="ml-2 text-lg font-normal text-foreground-subtle">({totalCount})</span>}
         </h1>
         <div className="flex gap-2">
           {role === 'cha' ? null : (
@@ -366,7 +366,7 @@ export function ConsignmentScreen() {
       />
 
       <div className="mb-6">
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-border">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <TextField.Root
@@ -429,32 +429,32 @@ export function ConsignmentScreen() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <tr className="border-b border-border bg-surface">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
                     Consignment ID
                   </th>
                   {/* HS Code Column removed as per request */}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
                     Trade Flow
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
                     State
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
                     Created
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {filteredConsignments.map((consignment) => {
                   return (
                     <tr
                       key={consignment.id}
                       onClick={() => void navigate(`/consignments/${consignment.id}`)}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="hover:bg-surface cursor-pointer transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Text size="2" weight="medium" className="text-blue-600 font-mono">
+                        <Text size="2" weight="medium" className="text-info-strong font-mono">
                           {consignment.id}
                         </Text>
                       </td>
