@@ -13,7 +13,7 @@
     "format:check": "prettier --check .",
     "format:fix": "prettier --write .",
     "lint": "pnpm --recursive --parallel run lint",
-    "format": "pnpm --recursive --parallel run format",
+    "format": "pnpm format:fix && pnpm --recursive --parallel run format",
     "type-check": "pnpm --recursive --parallel run type-check",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -21,9 +21,6 @@
   "author": "",
   "license": "ISC",
   "private": true,
-  "workspaces": [
-    "apps/*"
-  ],
   "devDependencies": {
     "prettier": "^3.8.3"
   }

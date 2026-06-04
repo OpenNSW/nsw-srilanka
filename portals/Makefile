@@ -70,11 +70,11 @@ build-trader:
 # Linting and Formatting
 lint:
 	@echo "🔍 Running ESLint..."
-	@pnpm -r lint
+	@pnpm run lint
 
 format:
 	@echo "🔧 Auto-fixing lint and formatting issues..."
-	@pnpm -r run format
+	@pnpm run format
 	@echo "✅ Formatting complete!"
 
 type-check:
