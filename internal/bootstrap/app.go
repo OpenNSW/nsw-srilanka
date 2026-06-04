@@ -14,8 +14,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/nsw/backend/internal/auth"
-	"github.com/OpenNSW/nsw/backend/internal/config"
 	"github.com/OpenNSW/nsw/backend/internal/consignment"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/config"
 	"github.com/OpenNSW/nsw/backend/internal/database"
 	"github.com/OpenNSW/nsw/backend/internal/hscode"
 	"github.com/OpenNSW/nsw/backend/internal/middleware"
@@ -300,7 +300,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	// -------------------------------------------------------------------
 	// Stage 10: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	handler := middleware.CORS(&cfg.CORS)(mux)
+	corsCfg := middleware.CORSConfig(cfg.CORS)
+	handler := middleware.CORS(&corsCfg)(mux)
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
