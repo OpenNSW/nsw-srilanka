@@ -15,7 +15,7 @@ RUN pnpm --filter trader-app build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine3.23-perl
 
-LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw"
+LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
 LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"
 
 COPY apps/trader-app/nginx.conf /etc/nginx/templates/default.conf.template
