@@ -196,28 +196,6 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 }
 ```
 
-### Critical Guidelines for Forms, Dropdowns, and Optional Fields (Common Gotchas)
-
-1. **No Trailing Commas in JSON**:
-   - JSON configurations (including form schemas, render settings, and subtask profiles) are loaded by standard JSON parsers that are strict. **Do not leave trailing commas in arrays (e.g. `required` lists) or object properties.** A single trailing comma will cause the entire config loader to fail on startup:
-     ```json
-     // INVALID JSON (fails to parse):
-     "required": [
-       "certificate_id",
-     ]
-     ```
-
-2. **Safe Sanitization for Optional Fields & Dropdowns**:
-   - If optional form fields (especially checkboxes or dropdowns/select fields) are not checked or selected by the user, their keys are omitted from the form data payload.
-   - If they are omitted, output mappings in the Go/Temporal orchestration engine will fail with `output mapping error: required task variable '<key>' not found in task result` if the key is not present in the task result payload.
-   - To prevent this:
-     - The frontend runs a sanitization function (`sanitizeFormData`) right before form submission.
-     - **For checkboxes/booleans**: If unchecked/missing, they default to `false` (or their schema-defined default).
-     - **For dropdowns & input fields**: If empty/missing/unselected, they are automatically set to their schema-defined `default` value if present, or explicitly set to `null` if no default is specified.
-     - Setting them to `null` ensures the key is present in the JSON payload, which resolves to `nil` in Go, satisfying the output mapping check safely without polluting the data with arbitrary strings.
-
----
-
 ## 6. Development Workflow & Hot-Reloading
 
 1. **Parent Workflow Hot-Reload**:
