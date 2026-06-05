@@ -103,7 +103,32 @@ This repo depends on the core engine as a normal, version-pinned Go module — t
   go get github.com/OpenNSW/nsw/backend@taskv2
   go mod tidy
   ```
-* **Develop the engine and this repo together** — if you need an unreleased local change in `OpenNSW/nsw` reflected here, push it to a branch and `go get` that ref, or run the server **natively** (outside Docker) with a local `go.work` pointing at your sibling checkout, using `make dev` only for the backing services. The dev container itself intentionally does **not** mount sibling repositories.
+* **Develop the engine and this repo together** — push your engine change to a branch and `go get` that ref, or use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across repositories.
+
+#### Native cross-repo development
+
+The dev container is hermetic: it builds from the pinned `go.mod` version, ignores any `go.work` (`GOWORK=off`), and does **not** mount sibling repos. That's intentional — it keeps every container build reproducible. When you need to edit `OpenNSW/nsw` (or another sibling) and see the change live, run the **Go API natively on your host** and use Docker only for the backing services:
+
+1. **Clone the siblings** next to `nsw-srilanka` and create a workspace (`go.work` is gitignored, so this stays personal):
+   ```bash
+   go work init . ../nsw/backend ../nsw-task-flow ../go-temporal-workflow
+   ```
+2. **Prepare env** — the template is already tuned for native runs (`DB_HOST=localhost`, `TEMPORAL_HOST=localhost`, `AUTH_JWKS_URL=https://localhost:8090`, `SERVICES_CONFIG_PATH=./configs/services.json`):
+   ```bash
+   cp .env.example .env
+   ```
+3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
+   ```bash
+   make deps
+   ```
+4. **Run the API on the host**, where your `go.work` is fully honored:
+   ```bash
+   go run ./cmd/server
+   ```
+
+Edits in the sibling repos are now picked up by the host compiler, and you get a native debugger. Because `docker compose` reads the same `.env`, the published service ports and the ports your host binary connects to stay in sync automatically (e.g. `DB_PORT`).
+
+> Don't mix the two: if `make dev` is already running, its `api` container holds port `8080` — run `make down` (or just `docker compose stop api`) before starting the native server.
 
 ---
 

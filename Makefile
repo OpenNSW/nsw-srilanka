@@ -10,6 +10,10 @@
 COMPOSE         := docker compose
 # Pass only the base file to exclude the override == the real built images.
 COMPOSE_PREVIEW := docker compose -f compose.yml
+# Source services built from this repo; `make deps` starts everything else.
+APP_SERVICES    := api trader-portal
+# A literal space, so APP_SERVICES can be turned into a grep alternation.
+SPACE           := $(subst ,, )
 
 .DEFAULT_GOAL := help
 
@@ -36,6 +40,14 @@ preview: ## Build and run the real images locally (detached; use `make logs` to 
 .PHONY: build
 build: ## Build the images without starting anything
 	$(COMPOSE_PREVIEW) build
+
+# ---------------------------------------------------------------------------
+# Native development (run the Go API on the host, e.g. for go.work cross-repo)
+# ---------------------------------------------------------------------------
+
+.PHONY: deps
+deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
+	$(COMPOSE) up -d $$($(COMPOSE) config --services | grep -vxE '$(subst $(SPACE),|,$(APP_SERVICES))')
 
 # ---------------------------------------------------------------------------
 # Lifecycle
