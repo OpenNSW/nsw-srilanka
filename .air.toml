@@ -1,0 +1,21 @@
+# Air hot-reload config — used by the dev container (compose.override.yml).
+# https://github.com/air-verse/air
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Rebuild the server binary on change, then run it.
+  cmd = "go build -o ./tmp/server ./cmd/server"
+  bin = "./tmp/server"
+  # Only Go changes trigger a rebuild.
+  include_ext = ["go"]
+  # Don't watch generated/vendored/unrelated trees.
+  exclude_dir = ["tmp", "bucket", "configs", "migrations", "portals", "node_modules", ".git"]
+  # Debounce rapid saves; abort the restart if the build fails.
+  delay = 1000
+  stop_on_error = true
+  send_interrupt = true
+  kill_delay = 2000
+
+[misc]
+  clean_on_exit = true

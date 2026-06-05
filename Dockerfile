@@ -1,33 +1,22 @@
 FROM golang:1.25-bookworm AS builder
 
-# Install git (required for cloning the nsw shared library)
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
-
-# Clone the nsw shared library (public repo; Go module lives in backend/)
-ARG NSW_REF=taskv2
-RUN git clone --depth 1 --branch ${NSW_REF} \
-    https://github.com/OpenNSW/nsw.git /deps/nsw
-
 WORKDIR /src
 
-# Cache go.mod / go.sum first
+# Cache go.mod / go.sum first. All dependencies — including
+# github.com/OpenNSW/nsw/backend, which is pinned in go.mod and checksummed
+# in go.sum — are fetched from the Go module proxy. No external clone needed.
 COPY go.mod go.sum ./
-# Rewrite the local replace directive to point at the cloned copy
-RUN go mod edit -replace github.com/OpenNSW/nsw=/deps/nsw/backend
-
-# Download dependencies
 RUN GOWORK=off go mod download
 
 # Copy the full source tree
 COPY . .
-# Re-apply replace (COPY overwrites go.mod with the repo's original)
-RUN go mod edit -replace github.com/OpenNSW/nsw=/deps/nsw/backend
 
-# Ensure bucket directory exists for runtime data
-RUN mkdir -p /src/bucket
-
-# Build the binary (adjust path if main package differs)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOWORK=off \
+# Build the binary (adjust path if main package differs).
+# TARGETOS/TARGETARCH are provided automatically by BuildKit so the image
+# builds correctly for amd64 and arm64 (e.g. Apple Silicon) alike.
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOWORK=off \
     go build -ldflags="-s -w" -o /out/server ./cmd/server
 
 # -------------------------------------------------------------------
@@ -46,13 +35,14 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy binary and required runtime assets
+# Copy the binary. Configs are NOT baked into the image — they are
+# environment data, mounted at /app/configs at runtime (see docker-compose.yml).
 COPY --from=builder /out/server /app/server
-COPY --from=builder /deps/nsw/backend/configs /app/configs
-COPY --from=builder /src/bucket /app/bucket
 
-# Adjust ownership
-RUN chown -R appuser:appuser /app
+# Create the mount points for runtime config and blob storage. /app/configs
+# is overlaid by a read-only bind mount; /app/bucket by a writable volume.
+RUN mkdir -p /app/configs /app/bucket \
+    && chown -R appuser:appuser /app
 
 USER appuser
 

@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   nsw-network:
     driver: bridge
@@ -13,7 +11,7 @@ volumes:
     driver: local
   temporal_data:
     driver: local
-  go-cache:
+  bucket_data:
     driver: local
 
 services:
@@ -152,36 +150,23 @@ services:
     restart: "no"
 
   # -------------------------------------------------------------------
-  # 5. Backend Orchestration API Layer (Local Hot-Reload Setup)
+  # 5. Backend Orchestration API Layer
   # -------------------------------------------------------------------
   api:
-    image: golang:1.25-bookworm
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: nsw-backend-api
     networks:
       - nsw-network
     ports:
       - "${BACKEND_PORT:-8080}:8080"
-    working_dir: /src
     volumes:
-      # Direct local host application path mapping
-      - .:/src
-      - go-cache:/go/pkg/mod
-      # Flexible multi-repo developer mapping slots (optional, fallback to . if unset)
-      - type: bind
-        source: ${NSW_PATH:-.}
-        target: /nsw
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${NSW_TASK_FLOW_PATH:-.}
-        target: /nsw-task-flow
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${GO_TEMPORAL_WORKFLOW_PATH:-.}
-        target: /go-temporal-workflow
-        bind:
-          create_host_path: false
+      # Mount configs from the repo (read-only) instead of baking them into
+      # the image — a config change needs no rebuild, just a restart.
+      - ./configs:/app/configs:ro
+      # Persist runtime blob storage written by the storage driver.
+      - bucket_data:/app/bucket
     environment:
       # Target relational store parameter mapping
       - DB_HOST=db
@@ -211,10 +196,7 @@ services:
       - NPQS_OGA_SUBMISSION_URL=http://host.docker.internal:8081/api/v1/inject
       - PRECONSIGNMENT_OGA_SUBMISSION_URL=http://host.docker.internal:8083/api/v1/inject
       - CDA_OGA_SUBMISSION_URL=http://host.docker.internal:8084/api/v1/inject
-      # Workspace path linkage variables (defaults to off, set GOWORK=/src/go.work to enable local development)
-      - GOWORK=${GOWORK:-off}
       - SERVICES_CONFIG_PATH=configs/services.docker.json
-    command: go run ./cmd/server
     depends_on:
       migrate:
         condition: service_completed_successfully
