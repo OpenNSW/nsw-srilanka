@@ -12,11 +12,12 @@ RUN GOWORK=off go mod download
 COPY . .
 
 # Build the binary (adjust path if main package differs).
-# TARGETOS/TARGETARCH are provided automatically by BuildKit so the image
-# builds correctly for amd64 and arm64 (e.g. Apple Silicon) alike.
+# BuildKit populates TARGETOS/TARGETARCH for cross/multi-arch builds. When they
+# are empty (e.g. no BuildKit), leaving GOOS/GOARCH unset lets Go target the
+# builder's native platform — avoids forcing amd64 emulation on arm64 hosts.
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOWORK=off \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
     go build -ldflags="-s -w" -o /out/server ./cmd/server
 
 # -------------------------------------------------------------------

@@ -23,7 +23,7 @@ volumes:
     driver: local
   go-bin:          # Persists the `air` binary so it isn't reinstalled each run.
     driver: local
-  pnpm-store:      # Linux-native node_modules (NOT the host's macOS ones).
+  pnpm-workspace-modules:  # Linux-native workspace-root node_modules (NOT the host's macOS ones).
     driver: local
   pnpm-app-modules:
     driver: local
@@ -46,7 +46,7 @@ services:
       # Ignore any local go.work; deps resolve from go.mod via the proxy.
       - GOWORK=off
     # Install air once (cached in go-bin), then watch & rebuild. Config: .air.toml.
-    command: sh -c "command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@latest; exec air -c .air.toml"
+    command: sh -c "command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@v1.65.3; exec air -c .air.toml"
 
   # -------------------------------------------------------------------
   # Trader portal — Vite dev server with HMR
@@ -60,7 +60,7 @@ services:
       - ./portals:/workspace
       # Overlay container-native node_modules so macOS host binaries
       # (swc, tailwind-oxide) don't leak into the Linux container.
-      - pnpm-store:/workspace/node_modules
+      - pnpm-workspace-modules:/workspace/node_modules
       - pnpm-app-modules:/workspace/apps/trader-app/node_modules
     # Replace the base host:8080 mapping — Vite serves on 5173, and keeping
     # host==container port lets HMR's websocket connect without extra config.
