@@ -1,7 +1,7 @@
 server:
-  hostname: {{.THUNDER_HOSTNAME}}
-  public_url: {{.THUNDER_PUBLIC_URL}}
-  port: {{.THUNDER_PORT}}
+  hostname: {{.HOSTNAME}}
+  public_url: {{.PUBLIC_URL}}
+  port: {{.PORT}}
 
 tls:
   min_version: "1.3"
@@ -51,23 +51,23 @@ jwt:
 
 email:
   smtp:
-    host: {{.THUNDER_SMTP_HOST}}
-    port: {{.THUNDER_SMTP_PORT}}
-    username: {{.THUNDER_SMTP_USERNAME}}
-    password: {{.THUNDER_SMTP_PASSWORD}}
-    from_address: {{.THUNDER_SMTP_FROM_ADDRESS}}
-    enable_start_tls: {{.THUNDER_SMTP_ENABLE_START_TLS}}
-    enable_authentication: {{.THUNDER_SMTP_ENABLE_AUTHENTICATION}}
+    host: {{.SMTP_HOST}}
+    port: {{.SMTP_PORT}}
+    username: {{.SMTP_USERNAME}}
+    password: {{.SMTP_PASSWORD}}
+    from_address: {{.SMTP_FROM_ADDRESS}}
+    enable_start_tls: {{.SMTP_ENABLE_START_TLS}}
+    enable_authentication: {{.SMTP_ENABLE_AUTHENTICATION}}
 
 cors:
   allowed_origins:
-{{- range .THUNDER_CORS_ORIGINS }}
+{{- range .CORS_ORIGINS }}
     - {{.}}
 {{- end }}
 
 passkey:
   allowed_origins:
-    - {{.THUNDER_PUBLIC_URL}}
+    - {{.PUBLIC_URL}}
 
 consent:
   enabled: false

@@ -5,9 +5,9 @@ networks:
 volumes:
   postgres_data:
     driver: local
-  thunder_db:
+  thunderid-db:
     driver: local
-  consent_db:
+  consent-db:
     driver: local
   temporal_data:
     driver: local
@@ -42,38 +42,37 @@ services:
   # 2. Identity Provider Core Services (Thunder Stack)
   # -------------------------------------------------------------------
   # Stage A: Seed static database schemas from container image layer
-  thunder-db-init:
-    image: ghcr.io/asgardeo/thunder:0.35.0
-    container_name: thunder-db-init
-    command: sh -c "cp -r /opt/thunder/repository/database/* /data/ && (cp -r /opt/thunder/consent/repository/database/* /consent-data/ 2>/dev/null || true)"
+  thunderid-db-init:
+    image: ghcr.io/thunder-id/thunderid:0.42.0
+    container_name: thunderid-db-init
+    command: sh -c "cp -r /opt/thunderid/repository/database/* /data/ && (cp -r /opt/thunderid/consent/repository/database/* /consent-data/ 2>/dev/null || true)"
     volumes:
-      - thunder_db:/data
-      - consent_db:/consent-data
+      - thunderid-db:/data
+      - consent-db:/consent-data
     restart: "no"
 
   # Stage B: Run bootstrap logic once SQLite files have mounted
-  thunder-setup:
-    image: ghcr.io/asgardeo/thunder:0.35.0
-    container_name: thunder-setup
+  thunderid-setup:
+    image: ghcr.io/thunder-id/thunderid:0.42.0
+    container_name: thunderid-setup
     command: ./setup.sh
     networks:
       - nsw-network
     env_file:
       - ./idp/.env
     volumes:
-      - thunder_db:/opt/thunder/repository/database
-      - consent_db:/opt/thunder/consent/repository/database
-      - ./idp/01-default-resources.sh:/opt/thunder/bootstrap/01-default-resources.sh
-      - ./idp/02-sample-resources.sh:/opt/thunder/bootstrap/02-sample-resources.sh
+      - thunderid-db:/opt/thunderid/repository/database
+      - consent-db:/opt/thunderid/consent/repository/database
+      - ./idp/02-sample-resources.sh:/opt/thunderid/bootstrap/02-sample-resources.sh
     depends_on:
-      thunder-db-init:
+      thunderid-db-init:
         condition: service_completed_successfully
     restart: "no"
 
   # Stage C: Boot active server instances listening for authentication queries
-  idp:
-    image: ghcr.io/asgardeo/thunder:0.35.0
-    container_name: nsw-idp
+  thunderid:
+    image: ghcr.io/thunder-id/thunderid:0.42.0
+    container_name: thunderid
     networks:
       - nsw-network
     ports:
@@ -81,11 +80,11 @@ services:
     env_file:
       - ./idp/.env
     volumes:
-      - thunder_db:/opt/thunder/repository/database
-      - consent_db:/opt/thunder/consent/repository/database
-      - ./idp/deployment.yaml:/opt/thunder/repository/conf/deployment.yaml
+      - thunderid-db:/opt/thunderid/repository/database
+      - consent-db:/opt/thunderid/consent/repository/database
+      - ./idp/deployment.yaml:/opt/thunderid/repository/conf/deployment.yaml
     depends_on:
-      thunder-setup:
+      thunderid-setup:
         condition: service_completed_successfully
 
   # -------------------------------------------------------------------
@@ -188,7 +187,7 @@ services:
       # - AUTH_ISSUER=${AUTH_ISSUER:-https://idp:${IDP_PORT:-8090}}
       # - AUTH_JWKS_URL=${AUTH_JWKS_URL:-https://idp:${IDP_PORT:-8090}/oauth2/jwks}
       - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
-      - AUTH_JWKS_URL=https://idp:${IDP_PORT:-8090}/oauth2/jwks
+      - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
       - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,IRD_TO_NSW,CDA_TO_NSW}
       - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
       - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
@@ -204,7 +203,7 @@ services:
         condition: service_healthy
       temporal:
         condition: service_started
-      idp:
+      thunderid:
         condition: service_started
 
   # -------------------------------------------------------------------
@@ -239,5 +238,5 @@ services:
     depends_on:
       api:
         condition: service_started
-      idp:
+      thunderid:
         condition: service_started
