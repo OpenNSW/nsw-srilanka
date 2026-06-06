@@ -65,6 +65,12 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       if (property.format === 'date-time') {
         return new Date().toISOString()
       }
+      if (property.format === 'time') {
+        return '10:00:00'
+      }
+      if (property.format === 'file') {
+        return 'sample_document.pdf'
+      }
       if (property.format === 'data-url') {
         // Return a small base64 pixel image as sample file
         return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -89,6 +95,12 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       }
       return {}
     case 'array':
+      if (property.items && typeof property.items === 'object') {
+        const itemVal = generateSampleValue(property.items, `${fieldName}_item`)
+        if (itemVal !== undefined) {
+          return [itemVal]
+        }
+      }
       return []
     default:
       return `Sample ${fieldName}`

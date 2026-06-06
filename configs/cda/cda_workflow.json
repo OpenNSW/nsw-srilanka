@@ -1,0 +1,132 @@
+{
+  "id": "cda-certificate-reg",
+  "name": "CDA Export Coconut Certificate Registration",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START",
+      "name": "Start"
+    },
+    {
+      "id": "cda_1_0_apply",
+      "type": "TASK",
+      "name": "[CDA 1.0] Submit Application",
+      "task_template_id": "cda-apply-coconut-cert-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {},
+      "output_mapping": {
+        "userform.cusdec_number": "cda.reference_number",
+        "userform": "cda.userform"
+      }
+    },
+    {
+      "id": "cda_check_payment_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Is Payment Required?"
+    },
+    {
+      "id": "cda_2_0_pay_fee",
+      "type": "TASK",
+      "name": "[CDA 2.0] Pay Application Fee",
+      "task_template_id": "cda-pay-app-fee-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "cda.reference_number": "reference_number",
+        "cda.userform": "userform"
+      },
+      "output_mapping": {
+        "payment_status": "cda.payment_status",
+        "payment_receipt_url?": "cda.payment_receipt_url",
+        "selected_method?": "cda.selected_method"
+      }
+    },
+    {
+      "id": "cda_3_0_review",
+      "type": "TASK",
+      "name": "[CDA 3.0] Wait on Review & Result",
+      "task_template_id": "cda-review-result-flow",
+      "lane": "CDA Officer",
+      "input_mapping": {
+        "cda.reference_number": "reference_number",
+        "cda.userform": "userform",
+        "cda.payment_receipt_url?": "payment_receipt_url",
+        "cda.selected_method?": "selected_method"
+      },
+      "output_mapping": {
+        "reviewerform.review_outcome": "cda.review_outcome",
+        "reviewerform.certificate_id": "cda.certificate_id",
+        "reviewerform.certificate_file": "cda.certificate_file"
+      }
+    },
+    {
+      "id": "cda_review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Evaluate Review Outcome"
+    },
+    {
+      "id": "end_success",
+      "type": "END",
+      "name": "Certificate Issued Successfully"
+    },
+    {
+      "id": "end_failed",
+      "type": "END",
+      "name": "Application Rejected"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start_to_apply",
+      "source_id": "start",
+      "target_id": "cda_1_0_apply"
+    },
+    {
+      "id": "e_apply_to_payment_gw",
+      "source_id": "cda_1_0_apply",
+      "target_id": "cda_check_payment_gateway"
+    },
+    {
+      "id": "e_pay_required",
+      "source_id": "cda_check_payment_gateway",
+      "target_id": "cda_2_0_pay_fee",
+      "condition": "cda.payment_status != 'success'"
+    },
+    {
+      "id": "e_pay_bypass",
+      "source_id": "cda_check_payment_gateway",
+      "target_id": "cda_3_0_review",
+      "condition": "cda.payment_status == 'success'"
+    },
+    {
+      "id": "e_pay_to_review",
+      "source_id": "cda_2_0_pay_fee",
+      "target_id": "cda_3_0_review"
+    },
+    {
+      "id": "e_review_to_gw",
+      "source_id": "cda_3_0_review",
+      "target_id": "cda_review_gateway"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "cda_review_gateway",
+      "target_id": "end_success",
+      "condition": "cda.review_outcome == 'approve'"
+    },
+    {
+      "id": "e_reject",
+      "source_id": "cda_review_gateway",
+      "target_id": "end_failed",
+      "condition": "cda.review_outcome == 'reject'"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "cda_review_gateway",
+      "target_id": "cda_1_0_apply",
+      "condition": "cda.review_outcome == 'needs_more_info'"
+    }
+  ]
+}

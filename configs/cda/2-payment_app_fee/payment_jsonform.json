@@ -1,0 +1,88 @@
+{
+  "id": "cda-pay-app-fee--payment-form",
+  "title": "CDA Application Fee Checkout",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "reference_number": {
+        "type": "string",
+        "title": "Reference Number"
+      },
+      "amount": {
+        "type": "string",
+        "title": "Amount (LKR)"
+      },
+      "currency": {
+        "type": "string",
+        "title": "Currency"
+      },
+      "selected_method": {
+        "type": "string",
+        "title": "Selected Payment Method",
+        "oneOf": [
+          { "const": "lankapay", "title": "Credit/Debit Card (LankaPay)" },
+          { "const": "govpay", "title": "GovPay (Bank/ATM/Online)" }
+        ]
+      },
+      "payment_receipt_url": {
+        "type": "string",
+        "format": "file",
+        "title": "Upload Payment Receipt"
+      }
+    },
+    "if": {
+      "properties": {
+        "selected_method": { "const": "govpay" }
+      }
+    },
+    "then": {
+      "required": ["payment_receipt_url"]
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/reference_number",
+        "options": {
+          "readonly": true
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/amount",
+        "options": {
+          "readonly": true
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/currency",
+        "options": {
+          "readonly": true
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/selected_method",
+        "options": {
+          "readonly": true
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/payment_receipt_url",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/selected_method",
+            "schema": {
+              "const": "govpay"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
