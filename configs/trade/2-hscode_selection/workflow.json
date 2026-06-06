@@ -1,0 +1,38 @@
+{
+  "id": "trade-hscode-selection-flow",
+  "name": "HS Code Selection",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "hscode_selection_task",
+      "type": "TASK",
+      "task_template_id": "trade-hscode-selection--user-input",
+      "input_mapping": {
+        "cha_id": "cha_id"
+      },
+      "output_mapping": {
+        "hs_codes": "traderinput.hs_codes"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "hscode_selection_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "hscode_selection_task",
+      "target_id": "end"
+    }
+  ]
+}
