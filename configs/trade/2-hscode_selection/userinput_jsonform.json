@@ -1,0 +1,38 @@
+{
+  "id": "trade-hscode-selection--form",
+  "title": "Select HS Codes",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "hs_codes": {
+        "type": "array",
+        "title": "Select HS Codes",
+        "items": {
+          "type": "string",
+          "oneOf": [
+            {
+              "const": "fcau-hs-code-0002",
+              "title": "fcau-health-certificate (FCAU Flow)"
+            },
+            {
+              "const": "npqs-hs-code-0001",
+              "title": "npqs-phyto-certificate (NPQS Flow)"
+            }
+          ]
+        },
+        "uniqueItems": true,
+        "minItems": 1
+      }
+    },
+    "required": ["hs_codes"]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/hs_codes"
+      }
+    ]
+  }
+}

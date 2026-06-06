@@ -107,6 +107,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to load taskv2 configs for npqs: %w", err)
 	}
+	if err := registry.LoadConfigsInto(templateRegistry, "configs/trade"); err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to load taskv2 configs for trade: %w", err)
+	}
 
 	templateService := service.NewTemplateService(db).WithRegistry(templateRegistry)
 	chaService := cha.NewService(db)

@@ -1,0 +1,28 @@
+{
+  "id": "trade-hscode-selection-flow:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "trade-hscode-selection--form",
+      "title": "Select HS Codes",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Complete Selection",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

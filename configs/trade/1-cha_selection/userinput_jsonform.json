@@ -1,0 +1,39 @@
+{
+  "id": "trade-cha-selection--form",
+  "title": "Select Customs House Agent (CHA)",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "cha_id": {
+        "title": "Select Customs House Agent",
+        "type": "string",
+        "oneOf": [
+          {
+            "const": "a1b2c3d4-0001-4000-8000-000000000001",
+            "title": "Suresh (ADAM PVT LTD)"
+          },
+          {
+            "const": "a1b2c3d4-0002-4000-8000-000000000002",
+            "title": "Ramesh (ADAM PVT LTD)"
+          },
+          {
+            "const": "a1b2c3d4-0003-4000-8000-000000000003",
+            "title": "Naresh (EDWARD PVT LTD)"
+          }
+        ]
+      }
+    },
+    "required": [
+      "cha_id"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/cha_id"
+      }
+    ]
+  }
+}
