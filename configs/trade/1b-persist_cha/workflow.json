@@ -1,0 +1,22 @@
+{
+  "id": "trade-persist-cha-flow",
+  "name": "Persist Selected CHA",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "persist_cha_task",
+      "type": "TASK",
+      "task_template_id": "trade-persist-cha--transform",
+      "input_mapping": {
+        "cha_id": "cha_id"
+      },
+      "output_mapping": {}
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e1", "source_id": "start", "target_id": "persist_cha_task" },
+    { "id": "e2", "source_id": "persist_cha_task", "target_id": "end" }
+  ]
+}

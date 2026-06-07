@@ -1,7 +1,7 @@
 {
   "id": "trade-export-v1",
   "name": "Single-Window Trade Export Process",
-  "version": 2,
+  "version": 3,
   "nodes": [
     {
       "id": "start",
@@ -18,6 +18,17 @@
       "output_mapping": {
         "traderinput.cha_id": "trade.cha_id"
       }
+    },
+    {
+      "id": "trade_1b_persist_cha",
+      "type": "TASK",
+      "name": "Persist Selected CHA",
+      "task_template_id": "trade-persist-cha-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "trade.cha_id": "cha_id"
+      },
+      "output_mapping": {}
     },
     {
       "id": "trade_2_hscode_selection",
@@ -69,8 +80,13 @@
       "target_id": "trade_1_cha_selection"
     },
     {
-      "id": "e_cha_to_hscode",
+      "id": "e_cha_to_persist",
       "source_id": "trade_1_cha_selection",
+      "target_id": "trade_1b_persist_cha"
+    },
+    {
+      "id": "e_persist_to_hscode",
+      "source_id": "trade_1b_persist_cha",
       "target_id": "trade_2_hscode_selection"
     },
     {

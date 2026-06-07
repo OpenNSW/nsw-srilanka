@@ -1,28 +1,17 @@
 import type {
   Consignment,
   ConsignmentListResult,
-  CreateConsignmentRequest,
   CreateConsignmentResponse,
   ConsignmentState,
   TradeFlow,
 } from './types/consignment'
 import { defaultApiClient, type ApiClient } from './api'
 
-export async function createConsignment(
-  request: CreateConsignmentRequest,
-  apiClient: ApiClient = defaultApiClient,
-): Promise<CreateConsignmentResponse> {
-  return apiClient.post<CreateConsignmentRequest, CreateConsignmentResponse>('/consignments', request)
-}
-
-export async function initializeConsignment(
-  consignmentId: string,
-  hsCodeIds: string[],
-  apiClient: ApiClient = defaultApiClient,
-): Promise<CreateConsignmentResponse> {
-  return apiClient.put<{ hsCodeIds: string[] }, CreateConsignmentResponse>(`/consignments/${consignmentId}`, {
-    hsCodeIds,
-  })
+// startConsignment creates an export consignment and starts its workflow directly — no CHA
+// company or HS code is collected up front; the workflow's own tasks (CHA selection, then
+// HS code selection) collect those later.
+export async function startConsignment(apiClient: ApiClient = defaultApiClient): Promise<CreateConsignmentResponse> {
+  return apiClient.post<Record<string, never>, CreateConsignmentResponse>('/consignments/start', {})
 }
 
 export async function getConsignment(id: string, apiClient: ApiClient = defaultApiClient): Promise<Consignment | null> {
