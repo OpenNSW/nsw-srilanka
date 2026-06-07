@@ -1,0 +1,24 @@
+{
+  "id": "trade-prepare-split-items-flow",
+  "name": "Prepare HS Code Split Items",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "build_split_items",
+      "type": "TASK",
+      "task_template_id": "trade-prepare-split-items--transform",
+      "input_mapping": {
+        "hs_codes": "hs_codes"
+      },
+      "output_mapping": {
+        "split_items": "split_items"
+      }
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e1", "source_id": "start", "target_id": "build_split_items" },
+    { "id": "e2", "source_id": "build_split_items", "target_id": "end" }
+  ]
+}

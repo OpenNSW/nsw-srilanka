@@ -27,7 +27,14 @@ export function ActionListView({
   const filteredSteps = useMemo(() => {
     return steps.filter((step) => {
       const type = step.workflowNodeTemplate.type?.toUpperCase()
-      return type !== 'START' && type !== 'END' && type !== 'GATEWAY' && type !== 'END_NODE'
+      return (
+        type !== 'START' &&
+        type !== 'END' &&
+        type !== 'GATEWAY' &&
+        type !== 'END_NODE' &&
+        type !== 'SYSTEM' &&
+        type !== 'SPLIT_TASK'
+      )
     })
   }, [steps])
 
