@@ -38,6 +38,12 @@ func HscodeSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) er
 		})
 	}
 
+	if ctx.Record == nil {
+		return fmt.Errorf("hscode_split_builder: task record is nil")
+	}
+	if ctx.Record.Data == nil {
+		ctx.Record.Data = make(map[string]any)
+	}
 	ctx.Record.Data["split_items"] = splitItems
 	return nil
 }
