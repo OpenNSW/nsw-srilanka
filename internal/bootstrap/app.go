@@ -150,7 +150,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	consignmentService := consignment.NewService(db, templateService, chaService, companyService, userProfileService, hsCodeService)
+	consignmentService := consignment.NewService(db, templateService, chaService, companyService, userProfileService, hsCodeService, taskV2.Store)
 	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)
 
 	pr, stopParentRunner, err := workflow.WireParentRunner(temporalClient, tm, consignmentService)
