@@ -25,6 +25,7 @@ import (
 	"github.com/OpenNSW/nsw/backend/internal/profile/user"
 	"github.com/OpenNSW/nsw/backend/internal/taskv2"
 	taskv2plugins "github.com/OpenNSW/nsw/backend/internal/taskv2/plugins"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/trade"
 	"github.com/OpenNSW/nsw/backend/internal/taskv2/registry"
 	taskrenderer "github.com/OpenNSW/nsw/backend/internal/taskv2/renderer"
 	"github.com/OpenNSW/nsw/backend/internal/temporal"
@@ -159,6 +160,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
+	pr.RegisterDefinitionHandler(func(templateID string) (engine.WorkflowDefinition, error) {
+		def, ok := templateRegistry.GetWorkflow(templateID)
+		if !ok {
+			return engine.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in registry", templateID)
+		}
+		return def, nil
+	})
 	parentRunner = pr
 
 	if err := consignmentService.RegisterWorkflowManager(parentRunner); err != nil {
@@ -357,6 +365,9 @@ func initTaskV2(
 	pluginsRegistry := flowplugins.NewRegistry()
 	if err := taskv2plugins.Register(pluginsRegistry, remoteManager, paymentService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("failed to register taskv2 plugins: %w", err)
+	}
+	if err := pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)); err != nil {
+		return nil, nil, fmt.Errorf("failed to register HSCODE_SPLIT_BUILDER plugin: %w", err)
 	}
 
 	// Construct UI projectors

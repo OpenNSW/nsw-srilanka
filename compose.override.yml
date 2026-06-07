@@ -19,11 +19,14 @@
 # from compose.yml.
 
 volumes:
-  go-cache:        # Go module cache — survives container restarts.
+  go-cache:
+    # Go module cache — survives container restarts.
     driver: local
-  go-bin:          # Persists the `air` binary so it isn't reinstalled each run.
+  go-bin:
+    # Persists the `air` binary so it isn't reinstalled each run.
     driver: local
-  pnpm-workspace-modules:  # Linux-native workspace-root node_modules (NOT the host's macOS ones).
+  pnpm-workspace-modules:
+    # Linux-native workspace-root node_modules (NOT the host's macOS ones).
     driver: local
   pnpm-app-modules:
     driver: local
@@ -42,9 +45,13 @@ services:
       - .:/src
       - go-cache:/go/pkg/mod
       - go-bin:/go/bin
+      # Mount local sibling directories for go.work resolution
+      - ${NSW_PATH:-../nsw}:/nsw
+      - ${NSW_TASK_FLOW_PATH:-../nsw-task-flow}:/nsw-task-flow
+      - ${GO_TEMPORAL_WORKFLOW_PATH:-../go-temporal-workflow}:/go-temporal-workflow
     environment:
-      # Ignore any local go.work; deps resolve from go.mod via the proxy.
-      - GOWORK=off
+      # Load GOWORK from environment (defaults to off if not set)
+      - GOWORK=${GOWORK:-off}
     # Install air once (cached in go-bin), then watch & rebuild. Config: .air.toml.
     command: sh -c "command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@v1.65.3; exec air -c .air.toml"
 
@@ -67,4 +74,4 @@ services:
     ports: !override
       - "${TRADER_PORTAL_PORT:-5173}:5173"
     # Install deps, then start Vite bound to all interfaces on 5173.
-    command: sh -c "corepack enable && pnpm install --frozen-lockfile && exec pnpm --filter trader-app dev -- --host 0.0.0.0 --port 5173"
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && exec pnpm --filter trader-app exec vite --host 0.0.0.0 --port 5173 --strictPort"

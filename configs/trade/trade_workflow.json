@@ -1,7 +1,7 @@
 {
   "id": "trade-export-v1",
   "name": "Single-Window Trade Export Process",
-  "version": 1,
+  "version": 2,
   "nodes": [
     {
       "id": "start",
@@ -33,6 +33,30 @@
       }
     },
     {
+      "id": "trade_3_prepare_split_items",
+      "type": "TASK",
+      "name": "Prepare Agency Flow Items",
+      "task_template_id": "trade-prepare-split-items-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "trade.hs_codes": "hs_codes"
+      },
+      "output_mapping": {
+        "split_items": "trade.split_items"
+      }
+    },
+    {
+      "id": "trade_4_trigger_flows",
+      "type": "SPLIT_TASK",
+      "name": "Trigger Agency Flows",
+      "split_task": {
+        "mode": "DIFFERENT_TEMPLATES",
+        "items_variable": "trade.split_items",
+        "results_variable": "trade.agency_results",
+        "failure_mode": "COLLECT_ALL"
+      }
+    },
+    {
       "id": "end",
       "type": "END",
       "name": "End"
@@ -50,8 +74,18 @@
       "target_id": "trade_2_hscode_selection"
     },
     {
-      "id": "e_hscode_to_end",
+      "id": "e_hscode_to_prepare",
       "source_id": "trade_2_hscode_selection",
+      "target_id": "trade_3_prepare_split_items"
+    },
+    {
+      "id": "e_prepare_to_trigger",
+      "source_id": "trade_3_prepare_split_items",
+      "target_id": "trade_4_trigger_flows"
+    },
+    {
+      "id": "e_trigger_to_end",
+      "source_id": "trade_4_trigger_flows",
       "target_id": "end"
     }
   ]

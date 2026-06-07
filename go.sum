@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/go-temporal-workflow v0.4.0 h1:a8G+XCcDRP+H/vaLS5b3HkU1B6o7s8HQ5TOtOTPMn4k=
-github.com/OpenNSW/go-temporal-workflow v0.4.0/go.mod h1:YryMiRQ9MBkQUpAz8CwYnW56uFEYqb/cmmOd/YaYmao=
+github.com/OpenNSW/go-temporal-workflow v0.5.0 h1:5yKi2nRdglJBiQxetT0YsnECeXwOTYdDIIppaoVEc8g=
+github.com/OpenNSW/go-temporal-workflow v0.5.0/go.mod h1:YryMiRQ9MBkQUpAz8CwYnW56uFEYqb/cmmOd/YaYmao=
 github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36 h1:Al1vGb+/YYLJpqcJh8vDTzNS6ivtFg1XIcujRK2BOYk=
 github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36/go.mod h1:xrgLSS3AILQiE2QO1MAoKkW5Hwy8u0NqE/9pIiOAr8s=
 github.com/OpenNSW/nsw/backend v0.0.0-20260603095413-304662603415 h1:jICFrTDdpWKjkls3DYQUiVB2Qzkpl7HiigwX/23E+BQ=
