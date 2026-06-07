@@ -18,7 +18,9 @@ export function Zone({ name, component, onAction }: Props) {
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-widest text-foreground-subtle">{name}</span>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-foreground-subtle">{component.type}</span>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-foreground-subtle">
+          {component.type}
+        </span>
       </div>
       <div className="bg-background rounded-lg shadow-sm border border-border">
         {renderZoneComponent(component, { onAction })}

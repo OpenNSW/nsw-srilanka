@@ -71,7 +71,9 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
           </div>
           <div>
             <h4 className="font-semibold text-primary text-base">Redirected to Payment Gateway</h4>
-            <p className="text-xs text-foreground-muted">Your session was redirected to the external payment gateway.</p>
+            <p className="text-xs text-foreground-muted">
+              Your session was redirected to the external payment gateway.
+            </p>
           </div>
         </div>
 

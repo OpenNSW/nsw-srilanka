@@ -1,0 +1,28 @@
+{
+  "id": "trade-cha-selection-flow:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "trade-cha-selection--form",
+      "title": "Select Customs House Agent (CHA)",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Save & Continue",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

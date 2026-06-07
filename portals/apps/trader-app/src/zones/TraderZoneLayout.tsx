@@ -151,7 +151,8 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-sm text-foreground">
-            <span className="font-semibold">{entry.actor}</span> <span className="text-foreground-muted">{entry.event}</span>
+            <span className="font-semibold">{entry.actor}</span>{' '}
+            <span className="text-foreground-muted">{entry.event}</span>
             {entry.from_state && entry.to_state && (
               <span className="ml-2 text-xs text-foreground-subtle font-mono">
                 {entry.from_state} → {entry.to_state}
