@@ -38,7 +38,7 @@ services:
   api:
     # Cancel the base file's `build:` and run the stock Go image instead.
     build: !reset null
-    image: golang:1.25-bookworm
+    image: golang:1.26.3-bookworm
     working_dir: /src
     volumes:
       # Live source mount — the container sees your edits instantly.
@@ -49,6 +49,7 @@ services:
       - ${NSW_PATH:-../nsw}:/nsw
       - ${NSW_TASK_FLOW_PATH:-../nsw-task-flow}:/nsw-task-flow
       - ${GO_TEMPORAL_WORKFLOW_PATH:-../go-temporal-workflow}:/go-temporal-workflow
+      - ${CORE_PATH:-../core}:/core
     environment:
       # Load GOWORK from environment (defaults to off if not set)
       - GOWORK=${GOWORK:-off}
