@@ -16,7 +16,7 @@
       "lane": "Trader/CHA",
       "input_mapping": {},
       "output_mapping": {
-        "traderinput.cha_id": "trade.cha_id"
+        "traderinput.cha_company_id": "trade.cha_company_id"
       }
     },
     {
@@ -26,7 +26,7 @@
       "task_template_id": "trade-persist-cha-flow",
       "lane": "Trader/CHA",
       "input_mapping": {
-        "trade.cha_id": "cha_id"
+        "trade.cha_company_id": "cha_company_id"
       },
       "output_mapping": {}
     },
@@ -37,7 +37,7 @@
       "task_template_id": "trade-hscode-selection-flow",
       "lane": "Trader/CHA",
       "input_mapping": {
-        "trade.cha_id": "cha_id"
+        "trade.cha_company_id": "cha_company_id"
       },
       "output_mapping": {
         "traderinput.hs_codes": "trade.hs_codes"
