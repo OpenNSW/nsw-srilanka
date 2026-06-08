@@ -12,7 +12,7 @@ require (
 )
 
 require (
-	github.com/OpenNSW/go-temporal-workflow v0.4.0 // indirect
+	github.com/OpenNSW/go-temporal-workflow v0.5.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.17 // indirect
@@ -64,5 +64,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
 )
-
-replace github.com/OpenNSW/core => ../core
