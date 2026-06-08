@@ -182,23 +182,16 @@ services:
       - SERVER_PORT=8080
       - SERVER_DEBUG=${SERVER_DEBUG:-true}
       - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
-      - SERVICE_URL=http://host.docker.internal:${BACKEND_PORT:-8080}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177}
-      # Core JWT Validation configs addressing the IdP container internally via network bridge
-      # - AUTH_ISSUER=${AUTH_ISSUER:-https://idp:${IDP_PORT:-8090}}
-      # - AUTH_JWKS_URL=${AUTH_JWKS_URL:-https://idp:${IDP_PORT:-8090}/oauth2/jwks}
+      - SERVICE_URL=${SERVICE_URL:-http://localhost:${BACKEND_PORT:-8080}}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177}
       - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
       - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
       - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,IRD_TO_NSW,CDA_TO_NSW}
       - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
       - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
-      - FCAU_OGA_SUBMISSION_URL=http://host.docker.internal:8082/api/v1/inject
-      - NPQS_OGA_SUBMISSION_URL=http://host.docker.internal:8081/api/v1/inject
-      - PRECONSIGNMENT_OGA_SUBMISSION_URL=http://host.docker.internal:8083/api/v1/inject
-      - CDA_OGA_SUBMISSION_URL=http://host.docker.internal:8084/api/v1/inject
-      - SERVICES_CONFIG_PATH=configs/services.docker.json
-      - PAYMENT_METHODS_CONFIG_PATH=configs/payment_methods.json
-      - NOTIFICATIONS_CONFIG_PATH=configs/notification.json
+      - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
+      - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
+      - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -233,7 +226,7 @@ services:
       - VITE_IDP_BASE_URL=${VITE_IDP_BASE_URL:-https://localhost:8090}
       - VITE_IDP_CLIENT_ID=${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}
       - VITE_APP_URL=${VITE_APP_URL:-http://localhost:5173}
-      - VITE_IDP_SCOPES=${VITE_IDP_SCOPES:-openid,profile,email,group,ou}
+      - VITE_IDP_SCOPES=${VITE_IDP_SCOPES:-openid,profile,email,group,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write}
       - VITE_IDP_PLATFORM=${VITE_IDP_PLATFORM:-AsgardeoV2}
       - VITE_IDP_TRADER_GROUP_NAME=${VITE_IDP_TRADER_GROUP_NAME:-Traders}
       - VITE_IDP_CHA_GROUP_NAME=${VITE_IDP_CHA_GROUP_NAME:-CHA}
