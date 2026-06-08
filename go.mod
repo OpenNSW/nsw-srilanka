@@ -3,9 +3,10 @@ module github.com/OpenNSW/nsw/backend/srilanka
 go 1.26.3
 
 require (
+	github.com/OpenNSW/core v0.0.0-20260608153546-9c3e08a703e0
 	github.com/OpenNSW/go-temporal-workflow v0.5.0
 	github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36
-	github.com/OpenNSW/nsw/backend v0.0.0-20260608050601-4b2cfc346ed3
+	github.com/OpenNSW/nsw/backend v0.0.0-20260608153312-2171372c45ec
 	go.temporal.io/sdk v1.44.1
 	gorm.io/gorm v1.31.1
 )
