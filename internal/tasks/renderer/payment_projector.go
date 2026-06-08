@@ -57,6 +57,9 @@ func (p *PaymentProjector) Project(ctx context.Context, templateContent []byte, 
 	if err != nil {
 		return uiprojector.Projection{}, fmt.Errorf("payment_projector: get payment method %q: %w", selectedMethod, err)
 	}
+	if method == nil {
+		return uiprojector.Projection{}, fmt.Errorf("payment_projector: payment method %q is nil", selectedMethod)
+	}
 
 	var tmpl *template.Template
 	if cached, ok := p.tmplCache.Load(selectedMethod); ok {

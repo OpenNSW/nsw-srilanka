@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw/backend/internal/consignment"
 	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
 	"gorm.io/gorm"
@@ -38,7 +38,7 @@ func NewCHAPersistPlugin(db *gorm.DB, chaService cha.Service) *CHAPersistPlugin 
 	return &CHAPersistPlugin{db: db, chaService: chaService}
 }
 
-func (p *CHAPersistPlugin) Execute(ctx flowplugins.PluginContext, _ json.RawMessage) error {
+func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage) error {
 	chaID, ok := ctx.Inputs["cha_id"].(string)
 	if !ok || chaID == "" {
 		return fmt.Errorf("cha_persist: cha_id not found in inputs")

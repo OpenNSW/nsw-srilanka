@@ -3,7 +3,7 @@ package trade
 import (
 	"encoding/json"
 
-	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/core/taskflow/plugins"
 )
 
 // TODO: github.com/OpenNSW/core is consolidating nsw-task-flow and
@@ -15,12 +15,12 @@ import (
 // delete this copy.
 
 // ExecutorFunc is synchronous computation logic that can be wrapped as a
-// flowplugins.TaskPlugin via NewGenericExecutorPlugin. It has the same shape
+// plugins.TaskPlugin via NewGenericExecutorPlugin. It has the same shape
 // as TaskPlugin.Execute, so any plain function can be registered without
 // writing a dedicated plugin struct.
-type ExecutorFunc func(ctx flowplugins.PluginContext, config json.RawMessage) error
+type ExecutorFunc func(ctx plugins.PluginContext, config json.RawMessage) error
 
-// genericExecutorPlugin adapts an ExecutorFunc to flowplugins.TaskPlugin —
+// genericExecutorPlugin adapts an ExecutorFunc to plugins.TaskPlugin —
 // the function-to-interface adapter pattern (cf. http.HandlerFunc).
 type genericExecutorPlugin struct {
 	fn ExecutorFunc
@@ -30,10 +30,10 @@ type genericExecutorPlugin struct {
 // under any task type, e.g.:
 //
 //	pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc))
-func NewGenericExecutorPlugin(fn ExecutorFunc) flowplugins.TaskPlugin {
+func NewGenericExecutorPlugin(fn ExecutorFunc) plugins.TaskPlugin {
 	return &genericExecutorPlugin{fn: fn}
 }
 
-func (p *genericExecutorPlugin) Execute(ctx flowplugins.PluginContext, config json.RawMessage) error {
+func (p *genericExecutorPlugin) Execute(ctx plugins.PluginContext, config json.RawMessage) error {
 	return p.fn(ctx, config)
 }

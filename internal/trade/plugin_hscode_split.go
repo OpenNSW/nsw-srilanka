@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/core/taskflow/plugins"
 )
 
 // HscodeSplitBuilderFunc transforms a []string of workflow template IDs (stored in
@@ -14,7 +14,7 @@ import (
 // It is synchronous — it returns nil (not ErrSuspended) so the engine advances
 // immediately without waiting for any user or external action. Register it via
 // NewGenericExecutorPlugin.
-func HscodeSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error {
+func HscodeSplitBuilderFunc(ctx plugins.PluginContext, _ json.RawMessage) error {
 	raw, ok := ctx.Inputs["hs_codes"]
 	if !ok {
 		return fmt.Errorf("hscode_split_builder: hs_codes not found in inputs")

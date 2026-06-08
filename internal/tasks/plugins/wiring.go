@@ -35,6 +35,9 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	if mgr == nil {
 		return fmt.Errorf("plugins: remote manager is nil")
 	}
+	if paymentService == nil {
+		return fmt.Errorf("plugins: payment service is nil")
+	}
 
 	entries := []struct {
 		taskType string
