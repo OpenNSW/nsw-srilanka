@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OpenNSW/nsw/backend/internal/config"
+	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/bootstrap"
 )
 
