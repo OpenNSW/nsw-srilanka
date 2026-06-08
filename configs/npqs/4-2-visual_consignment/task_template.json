@@ -1,0 +1,6 @@
+{
+  "id": "npqs-visual-consignment-flow",
+  "type": "APPLICATION",
+  "workflow_id": "npqs-visual-consignment-flow",
+  "render_config_id": "npqs-visual-consignment-flow:render"
+}

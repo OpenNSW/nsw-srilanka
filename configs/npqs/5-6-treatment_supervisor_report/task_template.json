@@ -1,0 +1,6 @@
+{
+  "id": "npqs-treatment-supervisor-report",
+  "type": "REVIEW",
+  "workflow_id": "npqs-treatment-supervisor-report",
+  "render_config_id": "npqs-treatment-supervisor-report:render"
+}

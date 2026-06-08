@@ -1,0 +1,6 @@
+{
+  "id": "fcau-visual-assessment-flow",
+  "type": "VISUAL_ASSESSMENT",
+  "workflow_id": "fcau-visual-assessment-flow",
+  "render_config_id": "fcau-visual-assessment-flow:render"
+}
