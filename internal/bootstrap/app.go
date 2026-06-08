@@ -313,7 +313,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	// -------------------------------------------------------------------
-	// Stage 10: Server Instantiation & Close Hook
+	// Stage 9: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
 	handler := middleware.CORS(&cfg.CORS)(mux)
 
