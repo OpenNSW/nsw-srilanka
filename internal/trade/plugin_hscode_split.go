@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	flowplugins "github.com/OpenNSW/nsw-task-flow/plugins"
+	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 )
 
 // HscodeSplitBuilderFunc transforms a []string of workflow template IDs (stored in

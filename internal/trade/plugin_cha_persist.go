@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	flowplugins "github.com/OpenNSW/nsw-task-flow/plugins"
+	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw/backend/internal/consignment"
 	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
 	"gorm.io/gorm"

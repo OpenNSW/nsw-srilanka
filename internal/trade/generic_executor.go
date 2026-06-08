@@ -3,7 +3,7 @@ package trade
 import (
 	"encoding/json"
 
-	flowplugins "github.com/OpenNSW/nsw-task-flow/plugins"
+	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 )
 
 // TODO: github.com/OpenNSW/core is consolidating nsw-task-flow and

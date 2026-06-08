@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
-	engine "github.com/OpenNSW/go-temporal-workflow"
-	flowplugins "github.com/OpenNSW/nsw-task-flow/plugins"
+	engine "github.com/OpenNSW/core/workflow"
+	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw/backend/internal/workflow"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/scopes"
 	"go.temporal.io/sdk/client"
