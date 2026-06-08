@@ -29,6 +29,12 @@ type CHAPersistPlugin struct {
 
 // NewCHAPersistPlugin creates a CHAPersistPlugin backed by db and chaService.
 func NewCHAPersistPlugin(db *gorm.DB, chaService cha.Service) *CHAPersistPlugin {
+	if db == nil {
+		panic("db is nil")
+	}
+	if chaService == nil {
+		panic("chaService is nil")
+	}
 	return &CHAPersistPlugin{db: db, chaService: chaService}
 }
 
