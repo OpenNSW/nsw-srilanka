@@ -4,14 +4,15 @@ go 1.26.3
 
 require (
 	github.com/OpenNSW/core v0.0.0-00010101000000-000000000000
+	github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36
 	github.com/OpenNSW/nsw/backend v0.0.0-20260606063512-9719951de3de
+	github.com/shopspring/decimal v1.4.0
 	go.temporal.io/sdk v1.44.1
 	gorm.io/gorm v1.31.1
 )
 
 require (
 	github.com/OpenNSW/go-temporal-workflow v0.4.0 // indirect
-	github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.17 // indirect
@@ -48,7 +49,6 @@ require (
 	github.com/nexus-rpc/sdk-go v0.6.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
-	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	go.temporal.io/api v1.62.12 // indirect
