@@ -31,6 +31,7 @@ const rawScopes = getEnv('VITE_IDP_SCOPES')
 const IDP_SCOPES = rawScopes
   ? rawScopes.split(',').map((s: string) => s.trim())
   : ['openid', 'profile', 'group', 'email']
+const IDP_RESOURCE = getEnv('VITE_IDP_RESOURCE', 'NSW_API')
 
 initAppConfig()
   .then(() => {
@@ -44,6 +45,7 @@ initAppConfig()
             afterSignInUrl={APP_URL}
             afterSignOutUrl={APP_URL}
             scopes={IDP_SCOPES}
+            signInOptions={{ resource: IDP_RESOURCE }}
             storage="sessionStorage"
             periodicTokenRefresh
           >
