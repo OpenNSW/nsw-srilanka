@@ -9,7 +9,7 @@
       "type": "TASK",
       "task_template_id": "trade-persist-cha--transform",
       "input_mapping": {
-        "cha_id": "cha_id"
+        "cha_company_id": "cha_company_id"
       },
       "output_mapping": {}
     },

@@ -166,7 +166,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		return parentRunner.TaskDone(context.Background(), parentWorkflowID, parentRunID, parentNodeID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, paymentService, chaService, artifactRegistry, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, paymentService, companyService, artifactRegistry, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -513,7 +513,7 @@ func initTask(
 	db *gorm.DB,
 	temporalClient client.Client,
 	paymentService payments.PaymentService,
-	chaService cha.Service,
+	companyService company.Service,
 	artifactRegistry *artifact.Registry,
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
@@ -532,7 +532,7 @@ func initTask(
 	if err := pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register HSCODE_SPLIT_BUILDER plugin: %w", err)
 	}
-	if err := pluginsRegistry.Register("CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, chaService)); err != nil {
+	if err := pluginsRegistry.Register("CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register CHA_PERSIST_WRITER plugin: %w", err)
 	}
 
