@@ -27,7 +27,6 @@ import (
 	"github.com/OpenNSW/nsw/backend/internal/profile/user"
 	"github.com/OpenNSW/nsw/backend/internal/taskv2"
 	taskv2plugins "github.com/OpenNSW/nsw/backend/internal/taskv2/plugins"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/trade"
 	"github.com/OpenNSW/nsw/backend/internal/taskv2/registry"
 	taskrenderer "github.com/OpenNSW/nsw/backend/internal/taskv2/renderer"
 	"github.com/OpenNSW/nsw/backend/internal/temporal"
@@ -36,16 +35,13 @@ import (
 	"github.com/OpenNSW/nsw/backend/pkg/storage"
 	"github.com/OpenNSW/nsw/backend/pkg/storage/drivers"
 	"github.com/OpenNSW/nsw/backend/pkg/uiprojector"
-
-	"github.com/OpenNSW/nsw/backend/pkg/notification"
-	"github.com/OpenNSW/nsw/backend/pkg/notification/channels"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/trade"
 )
 
 // App contains an initialized HTTP server and cleanup hooks.
 type App struct {
-	Server              *http.Server
-	NotificationManager *notification.Manager
-	close               func() error
+	Server *http.Server
+	close  func() error
 }
 
 // Close releases resources initialized during bootstrap.
@@ -215,26 +211,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	// -------------------------------------------------------------------
-	// Stage 8: Notification Channels Setup
-	// -------------------------------------------------------------------
-	// Initialize notification manager
-	notificationManager := notification.NewManager()
-	emailChannel := channels.NewEmailChannel(notification.EmailConfig{
-		SMTPHost:     cfg.Notification.SMTPHost,
-		SMTPPort:     cfg.Notification.SMTPPort,
-		SMTPUsername: cfg.Notification.SMTPUsername,
-		SMTPPassword: cfg.Notification.SMTPPassword,
-		SMTPSender:   cfg.Notification.SMTPSender,
-		TemplateRoot: cfg.Notification.TemplateRoot,
-	})
-	notificationManager.RegisterEmailChannel(emailChannel)
-
-	// TODO: Add SMS channel if needed
-	// smsChannel := channels.NewSMSChannel(...)
-	// notificationManager.RegisterSMSChannel(smsChannel)
-
-	// -------------------------------------------------------------------
-	// Stage 9: HTTP Route & Middleware Registration
+	// Stage 8: HTTP Route & Middleware Registration
 	// -------------------------------------------------------------------
 	hsCodeRouter := hscode.NewRouter(hsCodeService)
 	chaHandler := cha.NewHandler(chaService)
@@ -366,9 +343,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	return &App{
-		Server:              server,
-		NotificationManager: notificationManager,
-		close:               closeFn,
+		Server: server,
+		close:  closeFn,
 	}, nil
 }
 
