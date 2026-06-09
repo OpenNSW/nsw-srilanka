@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/taskflow/store"
-	"github.com/OpenNSW/nsw/backend/pkg/remote"
 )
 
 // ExternalReviewPlugin is our custom replacement for the generic

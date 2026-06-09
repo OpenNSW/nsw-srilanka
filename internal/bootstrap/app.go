@@ -36,8 +36,8 @@ import (
 	"github.com/OpenNSW/nsw/backend/internal/profile/user"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/consignment"
 
-	"github.com/OpenNSW/nsw/backend/pkg/remote"
-	"github.com/OpenNSW/nsw/backend/pkg/storage/drivers"
+	"github.com/OpenNSW/core/remote"
+	"github.com/OpenNSW/core/storage/drivers"
 	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
 	taskplugins "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/renderer"
