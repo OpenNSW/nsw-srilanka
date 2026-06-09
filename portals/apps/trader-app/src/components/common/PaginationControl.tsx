@@ -1,5 +1,6 @@
 import { Button, Flex, Text } from '@radix-ui/themes'
 import { ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 
 interface PaginationControlProps {
   currentPage: number
@@ -18,6 +19,8 @@ export function PaginationControl({
   hasPrev,
   totalCount,
 }: PaginationControlProps) {
+  const { t } = useTranslation()
+
   return (
     <Flex
       justify="between"
@@ -32,21 +35,21 @@ export function PaginationControl({
       <Flex align="center" gap="4">
         {totalCount !== undefined && (
           <Text size="2" color="gray">
-            Total: {totalCount}
+            {t('common.pagination.total', { count: totalCount })}
           </Text>
         )}
       </Flex>
 
       <Flex gap="2" align="center">
         <Text size="2" color="gray" mr="2">
-          Page {currentPage} of {totalPages || 1}
+          {t('common.pagination.page', { page: currentPage, totalPages: totalPages || 1 })}
         </Text>
         <Button variant="soft" disabled={!hasPrev} onClick={() => onPageChange(currentPage - 1)}>
           <ChevronLeftIcon />
-          Previous
+          {t('common.pagination.previous')}
         </Button>
         <Button variant="soft" disabled={!hasNext} onClick={() => onPageChange(currentPage + 1)}>
-          Next
+          {t('common.pagination.next')}
           <ChevronRightIcon />
         </Button>
       </Flex>

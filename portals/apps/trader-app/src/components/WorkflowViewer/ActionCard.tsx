@@ -1,5 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Badge, Box, Card, Flex, Text } from '@radix-ui/themes'
 import {
   CheckCircledIcon,
@@ -57,6 +58,14 @@ const statusConfig: Record<
   },
 }
 
+const STATUS_KEYS: Record<WorkflowNodeState, 'completed' | 'ready' | 'inProgress' | 'locked' | 'failed'> = {
+  COMPLETED: 'completed',
+  READY: 'ready',
+  IN_PROGRESS: 'inProgress',
+  LOCKED: 'locked',
+  FAILED: 'failed',
+}
+
 export interface ActionCardProps {
   step: WorkflowNode
   consignmentId: string
@@ -75,6 +84,7 @@ const statusStyles: Record<string, string> = {
 
 export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
 
   const handleOpen = () => {
@@ -121,7 +131,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
                 <Badge color={config.color} variant="soft" size="1">
                   <Flex align="center" gap="1">
                     {config.icon}
-                    {config.label}
+                    {t(`workflow.status.${STATUS_KEYS[step.state]}`)}
                   </Flex>
                 </Badge>
               </Flex>
