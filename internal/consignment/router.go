@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/authn"
+	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
 	"github.com/OpenNSW/nsw/backend/internal/profile/company"
-	"github.com/OpenNSW/core/pagination"
 )
 
 type Router struct {
