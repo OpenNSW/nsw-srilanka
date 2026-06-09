@@ -10,7 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/OpenNSW/nsw/backend/pkg/pagination"
+	"github.com/OpenNSW/core/pagination"
 )
 
 // Service defines operations for company profile management.

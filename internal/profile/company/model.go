@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/OpenNSW/nsw/backend/pkg/pagination"
+	"github.com/OpenNSW/core/pagination"
 )
 
 // Record represents a company's persisted profile in the database.

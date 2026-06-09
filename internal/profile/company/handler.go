@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/OpenNSW/nsw/backend/pkg/pagination"
+	"github.com/OpenNSW/core/pagination"
 )
 
 // Handler exposes company profile endpoints.
