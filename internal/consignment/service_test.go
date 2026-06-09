@@ -287,7 +287,7 @@ func TestConsignmentService_CreateConsignmentShell_Success(t *testing.T) {
 	traderID := "trader1"
 
 	mockCompany.On("GetCompanyByID", ctx, chaCompanyID).Return(&company.Record{ID: chaCompanyID, HasCHA: true}, nil)
-	mockUser.On("GetUser", traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
+	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", ctx, "trader-ou").Return(&company.Record{ID: traderCompanyID}, nil)
 
 	sqlMock.ExpectBegin()

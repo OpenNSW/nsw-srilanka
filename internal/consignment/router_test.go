@@ -109,7 +109,7 @@ func TestConsignmentRouter_HandleCreateConsignment(t *testing.T) {
 	consignmentID := uuid.NewString()
 
 	mockCompany.On("GetCompanyByID", mock.Anything, chaCompanyID).Return(&company.Record{ID: chaCompanyID, HasCHA: true}, nil)
-	mockUser.On("GetUser", traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
+	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID}, nil)
 
 	payload := CreateConsignmentDTO{
