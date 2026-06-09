@@ -31,10 +31,10 @@ import (
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
 	"github.com/OpenNSW/nsw/backend/internal/payments"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
 	"github.com/OpenNSW/nsw/backend/internal/profile/company"
 	"github.com/OpenNSW/nsw/backend/internal/profile/user"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/consignment"
 
 	"github.com/OpenNSW/nsw/backend/pkg/remote"
 	"github.com/OpenNSW/nsw/backend/pkg/storage/drivers"
@@ -160,7 +160,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
 	pr.RegisterDefinitionHandler(func(templateID string) (workflow.WorkflowDefinition, error) {
-		log.Printf("\n[Parent Runner] Definition handler called for template: %s\n", templateID)
 		def, err := workflowdef.Load(context.Background(), artifactRegistry, templateID)
 		if err != nil {
 			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in artifact registry: %w", templateID, err)
