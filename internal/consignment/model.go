@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/pagination"
-	"github.com/OpenNSW/nsw/backend/internal/workflow/model"
+	"github.com/OpenNSW/nsw-srilanka/internal/workflow/model"
 )
 
 // Flow represents the flow type of consignment.

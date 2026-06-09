@@ -16,9 +16,9 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/user"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
 
 // MockCHAService implements cha.Service for testing.

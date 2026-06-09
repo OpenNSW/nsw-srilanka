@@ -28,17 +28,17 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
 
-	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
-	govpay "github.com/OpenNSW/nsw/backend/srilanka/integration/payment"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/consignment"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/user"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/scopes"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/tasks"
-	taskplugins "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/plugins"
-	taskrenderer "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/renderer"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/trade"
+	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
+	govpay "github.com/OpenNSW/nsw-srilanka/integration/payment"
+	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
+	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
+	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
+	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
@@ -352,8 +352,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 }
 
 // parentWorkflowQueue is the Temporal task queue the macro/parent workflow
-// runner polls. Mirrors workflow.ParentWorkflowQueue from
-// github.com/OpenNSW/nsw/backend/internal/workflow/wiring.go.
+// runner polls.
 const parentWorkflowQueue = "INTERPRETER_TASK_QUEUE"
 
 // parentTaskActivator is the narrow surface wireParentRunner needs from the
@@ -371,10 +370,9 @@ type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }
 
-// wireParentRunner is the core/workflow port of workflow.WireParentRunner (see
-// github.com/OpenNSW/nsw/backend/internal/workflow/wiring.go). core ships no
-// wrapper for this, so — per the "least file changes" migration approach — the
-// wiring is inlined here, the only place that needs it.
+// wireParentRunner wires the core/workflow port of workflow.WireParentRunner.
+// core ships no wrapper for this, so the wiring is inlined here, the only
+// place that needs it.
 //
 // It starts the Temporal worker that runs macro/parent workflows on
 // parentWorkflowQueue. When a parent workflow reaches a Task node, the

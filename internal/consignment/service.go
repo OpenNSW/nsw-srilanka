@@ -17,10 +17,10 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/core/pagination"
-	"github.com/OpenNSW/nsw/backend/internal/workflow/model"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/user"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
+	"github.com/OpenNSW/nsw-srilanka/internal/workflow/model"
 )
 
 // TaskStore is the narrow interface needed from taskv2 package to load task records.

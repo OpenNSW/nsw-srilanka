@@ -46,9 +46,6 @@ services:
       - go-cache:/go/pkg/mod
       - go-bin:/go/bin
       # Mount local sibling directories for go.work resolution
-      - ${NSW_PATH:-../nsw}:/nsw
-      - ${NSW_TASK_FLOW_PATH:-../nsw-task-flow}:/nsw-task-flow
-      - ${GO_TEMPORAL_WORKFLOW_PATH:-../go-temporal-workflow}:/go-temporal-workflow
       - ${CORE_PATH:-../core}:/core
     environment:
       # Load GOWORK from environment (defaults to off if not set)

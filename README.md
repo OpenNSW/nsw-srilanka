@@ -178,8 +178,6 @@ go mod tidy
 
 There is **no** `replace` directive and **no** sibling clone of `OpenNSW/nsw` required to build.
 
-> The local module path declares itself as `github.com/OpenNSW/nsw/backend/srilanka` so Go's `internal/...` visibility rule allows importing `github.com/OpenNSW/nsw/backend/internal/*`. The physical directory name (`nsw-srilanka`) is independent of the module path.
-
 ---
 
 ## Configuration Reference

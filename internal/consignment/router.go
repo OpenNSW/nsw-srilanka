@@ -8,8 +8,8 @@ import (
 
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/pagination"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
 
 type Router struct {
