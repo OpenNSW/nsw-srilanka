@@ -3,9 +3,9 @@ module github.com/OpenNSW/nsw/backend/srilanka
 go 1.26.3
 
 require (
-	github.com/OpenNSW/core v0.0.0-20260608092108-7ca654c29b5d
+	github.com/OpenNSW/core v0.0.0-20260608153546-9c3e08a703e0
 	github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36
-	github.com/OpenNSW/nsw/backend v0.0.0-20260606063512-9719951de3de
+	github.com/OpenNSW/nsw/backend v0.0.0-20260609033819-59eadede94f6
 	github.com/shopspring/decimal v1.4.0
 	go.temporal.io/sdk v1.44.1
 	gorm.io/gorm v1.31.1
