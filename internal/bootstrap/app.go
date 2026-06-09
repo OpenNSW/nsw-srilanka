@@ -24,13 +24,14 @@ import (
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
 
-	"github.com/OpenNSW/nsw/backend/internal/auth"
-	"github.com/OpenNSW/nsw/backend/internal/authz"
-	"github.com/OpenNSW/nsw/backend/internal/config"
+	"github.com/OpenNSW/core/authn"
+	"github.com/OpenNSW/core/authz"
+	"github.com/OpenNSW/core/cors"
+	"github.com/OpenNSW/core/database"
+	"github.com/OpenNSW/core/storage"
+	"github.com/OpenNSW/core/temporal"
 	"github.com/OpenNSW/nsw/backend/internal/consignment"
-	"github.com/OpenNSW/nsw/backend/internal/database"
 	"github.com/OpenNSW/nsw/backend/internal/hscode"
-	"github.com/OpenNSW/nsw/backend/internal/middleware"
 	"github.com/OpenNSW/nsw/backend/internal/payments"
 	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
 	"github.com/OpenNSW/nsw/backend/internal/profile/company"
@@ -39,13 +40,12 @@ import (
 	tfstore "github.com/OpenNSW/nsw-task-flow/store"
 
 	"github.com/OpenNSW/nsw/backend/internal/taskv2/registry"
-	"github.com/OpenNSW/nsw/backend/internal/temporal"
 	"github.com/OpenNSW/nsw/backend/internal/workflow/service"
 	"github.com/OpenNSW/nsw/backend/pkg/remote"
-	"github.com/OpenNSW/nsw/backend/pkg/storage"
 	"github.com/OpenNSW/nsw/backend/pkg/storage/drivers"
 	taskplugins "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/trade"
 )
 
@@ -222,22 +222,22 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
 	// -------------------------------------------------------------------
-	authManager, err := auth.NewManager(userProfileService, cfg.Auth)
+	authnManager, err := authn.NewManager(userProfileService, cfg.Authn)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
 		temporalClient.Close()
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to create auth manager: %w", err)
+		return nil, fmt.Errorf("failed to create authn manager: %w", err)
 	}
 
-	if err := authManager.Health(); err != nil {
+	if err := authnManager.Health(); err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
 		temporalClient.Close()
-		_ = authManager.Close()
+		_ = authnManager.Close()
 		_ = database.Close(db)
-		return nil, fmt.Errorf("auth system health check failed: %w", err)
+		return nil, fmt.Errorf("authn system health check failed: %w", err)
 	}
 
 	// -------------------------------------------------------------------
@@ -250,13 +250,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler)
 
 	// withAuth wraps an individual handler with the authentication middleware.
-	withAuth := authManager.RequireAuthMiddleware()
+	withAuth := authnManager.RequireAuthMiddleware()
 
 	// authzr gates routes by the OAuth2 scopes carried on the token.
-	// The extractor bridges the authn layer (auth.GetAuthContext) into the
-	// generic authz.Principal interface — authz imports nothing from internal/auth.
+	// The extractor bridges the authn layer (authn.GetAuthContext) into the
+	// generic authz.Principal interface — authz imports nothing from core/authn.
 	authzr, err := authz.New(func(ctx context.Context) (authz.Principal, bool) {
-		ac := auth.GetAuthContext(ctx)
+		ac := authn.GetAuthContext(ctx)
 		if ac == nil || ac.Type() == "" {
 			return nil, false
 		}
@@ -266,12 +266,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		_ = stopParentRunner()
 		_ = stopTask()
 		temporalClient.Close()
-		_ = authManager.Close()
+		_ = authnManager.Close()
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to create authz: %w", err)
 	}
 	// withScope returns a middleware requiring the given scope; compose after withAuth
-	// so the auth context is already injected when the scope check runs.
+	// so the authn context is already injected when the scope check runs.
 	withScope := func(scope string) func(http.Handler) http.Handler {
 		return authzr.RequireScope(scope)
 	}
@@ -287,8 +287,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		if err := database.HealthCheck(db); err != nil {
 			unhealthy = append(unhealthy, "database")
 		}
-		if err := authManager.Health(); err != nil {
-			unhealthy = append(unhealthy, "auth")
+		if err := authnManager.Health(); err != nil {
+			unhealthy = append(unhealthy, "authn")
 		}
 
 		if len(unhealthy) > 0 {
@@ -306,7 +306,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 		})
 	})
 
-	// API routes. Each handler is wrapped with auth (JWT validation) then a
+	// API routes. Each handler is wrapped with authn (JWT validation) then a
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (payments, local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(taskHandler.HandleGetTask))))
@@ -332,7 +332,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	mux.Handle("GET /api/v1/storage/{key}", withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
 	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
 
-	// External Webhooks bypass standard JWT auth.
+	// External Webhooks bypass standard JWT authn.
 	// They should use webhook signatures, implemented in the handler directly or via specialized middleware.
 	mux.Handle("POST /api/v1/payments/webhook", http.HandlerFunc(paymentHandler.HandleWebhook))
 	mux.Handle("POST /api/v1/payments/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
@@ -346,7 +346,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	// -------------------------------------------------------------------
 	// Stage 9: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	handler := middleware.CORS(&cfg.CORS)(mux)
+	handler := cors.CORS(&cfg.CORS)(mux)
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
@@ -363,8 +363,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop taskv2: %w", err))
 		}
 		temporalClient.Close()
-		if err := authManager.Close(); err != nil {
-			closeErrs = append(closeErrs, fmt.Errorf("failed to close auth manager: %w", err))
+		if err := authnManager.Close(); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to close authn manager: %w", err))
 		}
 		if err := database.Close(db); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to close database: %w", err))

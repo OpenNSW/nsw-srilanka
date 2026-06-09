@@ -182,6 +182,7 @@ services:
       - SERVER_PORT=8080
       - SERVER_DEBUG=${SERVER_DEBUG:-true}
       - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
+      - SERVICE_URL=http://host.docker.internal:${BACKEND_PORT:-8080}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177}
       # Core JWT Validation configs addressing the IdP container internally via network bridge
       # - AUTH_ISSUER=${AUTH_ISSUER:-https://idp:${IDP_PORT:-8090}}
@@ -196,6 +197,8 @@ services:
       - PRECONSIGNMENT_OGA_SUBMISSION_URL=http://host.docker.internal:8083/api/v1/inject
       - CDA_OGA_SUBMISSION_URL=http://host.docker.internal:8084/api/v1/inject
       - SERVICES_CONFIG_PATH=configs/services.docker.json
+      - PAYMENT_METHODS_CONFIG_PATH=configs/payment_methods.json
+      - NOTIFICATIONS_CONFIG_PATH=configs/notification.json
     depends_on:
       migrate:
         condition: service_completed_successfully
