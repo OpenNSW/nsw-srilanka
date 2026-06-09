@@ -192,7 +192,15 @@ func (s *Service) InitializeConsignmentByID(
 	}
 	initialVars := map[string]any{"traderCompany": traderCompanyVars}
 
+	def, err := workflowdef.Load(ctx, s.artifactRegistry, workflowTemplateID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workflow template from provider: %w", err)
+	}
+
 	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
+	}
 	defer tx.Rollback()
 
 	consignment.State = InProgress
@@ -200,11 +208,6 @@ func (s *Service) InitializeConsignmentByID(
 
 	if err := tx.Save(&consignment).Error; err != nil {
 		return nil, fmt.Errorf("failed to update consignment: %w", err)
-	}
-
-	def, err := workflowdef.Load(ctx, s.artifactRegistry, workflowTemplateID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get workflow template from provider: %w", err)
 	}
 
 	if err := s.startWorkflow(ctx, consignment.ID, def, initialVars); err != nil {
@@ -268,6 +271,9 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	}
 
 	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
+	}
 	defer tx.Rollback()
 
 	if err := tx.Create(consignment).Error; err != nil {
