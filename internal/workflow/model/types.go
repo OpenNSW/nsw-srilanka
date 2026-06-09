@@ -22,8 +22,7 @@ func (a *StringArray) UnmarshalJSON(data []byte) error {
 
 	var ids []string
 	if err := json.Unmarshal(data, &ids); err != nil {
-		*a = []string{}
-		return nil
+		return err
 	}
 
 	*a = ids
