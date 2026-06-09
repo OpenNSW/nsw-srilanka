@@ -356,11 +356,7 @@ func validateRefNoOnly(params []govPayParam) (string, error) {
 	if strings.TrimSpace(param.ParamName) != "refNo" {
 		return "", fmt.Errorf("data must contain only refNo")
 	}
-	refNo, ok := param.Value.(string)
-	if !ok {
-		return "", fmt.Errorf("refNo must be a string")
-	}
-	refNo = strings.TrimSpace(refNo)
+	refNo := paramValueString(param.Value)
 	if refNo == "" {
 		return "", fmt.Errorf("refNo is required")
 	}
@@ -429,6 +425,10 @@ func paramDecimal(value interface{}) (decimal.Decimal, error) {
 		return decimal.NewFromFloat(x), nil
 	case json.Number:
 		return decimal.NewFromString(x.String())
+	case int:
+		return decimal.NewFromInt(int64(x)), nil
+	case int64:
+		return decimal.NewFromInt(x), nil
 	default:
 		return decimal.Decimal{}, fmt.Errorf("unsupported numeric type %T", value)
 	}
@@ -446,7 +446,7 @@ func firstNonEmpty(values ...string) string {
 func getStringField(payload map[string]json.RawMessage, keys ...string) (string, bool, error) {
 	for _, key := range keys {
 		raw, ok := payload[key]
-		if !ok {
+		if !ok || string(raw) == "null" {
 			continue
 		}
 		var value string
@@ -558,7 +558,7 @@ func newPaymentItem(idx int, seq, placeholder string, initialValue interface{}, 
 
 func valueDataType(value interface{}) string {
 	switch value.(type) {
-	case float32, float64, int, int32, int64, uint, uint32, uint64:
+	case float32, float64, int, int32, int64, uint, uint32, uint64, json.Number:
 		return "decimal"
 	default:
 		return "text"
