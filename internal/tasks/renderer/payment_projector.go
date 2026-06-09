@@ -3,28 +3,29 @@ package renderer
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"sync"
 	"text/template"
 
 	"github.com/OpenNSW/core/uiprojector"
-	"github.com/OpenNSW/nsw/backend/internal/payments"
 )
 
 // ProjectorPayment defines the payment instructions projector type.
 const ProjectorPayment uiprojector.ProjectorType = "PAYMENT"
 
-// PaymentProjector dynamically templates payment instructions from the payment service.
-type PaymentProjector struct {
-	paymentService payments.PaymentService
-	tmplCache      sync.Map // map[methodID string]*template.Template
-}
+// PaymentProjector renders payment instructions for a PENDING_PAYMENT task.
+//
+// The payment facts (reference, amount, instructions, flow type) are populated
+// on the task record by the payment plugin when it creates the checkout session
+// via core/payment. The projector renders those facts; it does not call the
+// payment service. If the task section carries its own markdown template
+// (templateContent) it is executed with the payment data, otherwise the
+// gateway-supplied instructions are rendered as-is.
+type PaymentProjector struct{}
 
 // NewPaymentProjector creates a new PaymentProjector.
-func NewPaymentProjector(paymentService payments.PaymentService) *PaymentProjector {
-	return &PaymentProjector{
-		paymentService: paymentService,
-	}
+func NewPaymentProjector() *PaymentProjector {
+	return &PaymentProjector{}
 }
 
 // Type returns the projector type.
@@ -32,10 +33,9 @@ func (p *PaymentProjector) Type() uiprojector.ProjectorType {
 	return ProjectorPayment
 }
 
-// Project resolves the selected payment method's instructions template and renders it.
-// When the payment facts haven't been populated yet (entering PENDING_PAYMENT before
-// CreateCheckoutSession completes), Project returns a placeholder markdown projection
-// so the page still loads instead of 500ing.
+// Project renders the payment instructions. When the payment facts haven't been
+// populated yet (entering PENDING_PAYMENT before CreateCheckoutSession
+// completes), it returns a placeholder so the page still loads instead of 500ing.
 func (p *PaymentProjector) Project(ctx context.Context, templateContent []byte, data any) (uiprojector.Projection, error) {
 	if data == nil {
 		return uiprojector.Projection{
@@ -48,60 +48,50 @@ func (p *PaymentProjector) Project(ctx context.Context, templateContent []byte, 
 		return uiprojector.Projection{}, fmt.Errorf("payment_projector: expected map data, got %T", data)
 	}
 
-	selectedMethod, _ := dataMap["selected_method"].(string)
-	if selectedMethod == "" {
-		selectedMethod = "lankapay"
-	}
+	instructions, _ := dataMap["instructions"].(string)
 
-	method, err := p.paymentService.GetPaymentMethod(selectedMethod)
-	if err != nil {
-		return uiprojector.Projection{}, fmt.Errorf("payment_projector: get payment method %q: %w", selectedMethod, err)
-	}
-	if method == nil {
-		return uiprojector.Projection{}, fmt.Errorf("payment_projector: payment method %q is nil", selectedMethod)
-	}
-
-	var tmpl *template.Template
-	if cached, ok := p.tmplCache.Load(selectedMethod); ok {
-		tmpl = cached.(*template.Template)
-	} else {
-		parsed, err := template.New("instructions").Parse(method.Template)
-		if err != nil {
-			return uiprojector.Projection{}, fmt.Errorf("payment_projector: parse template: %w", err)
+	// templateContent is the section's instructions wrapper, a JSON object of the
+	// form {"id": "...", "template": "{{ .instructions }}"}. Extract the inner
+	// template and render it against the payment data map (whose keys are the
+	// snake_case fields the plugin stored: instructions, reference_number,
+	// amount, currency, checkout_url, ...). Fall back to the raw instructions
+	// text if no template is configured.
+	content := instructions
+	if len(bytes.TrimSpace(templateContent)) > 0 {
+		var wrapper struct {
+			ID       string `json:"id"`
+			Template string `json:"template"`
 		}
-		p.tmplCache.Store(selectedMethod, parsed)
-		tmpl = parsed
+		if err := json.Unmarshal(templateContent, &wrapper); err != nil {
+			return uiprojector.Projection{}, fmt.Errorf("payment_projector: parse instructions wrapper: %w", err)
+		}
+		if t := wrapper.Template; t != "" {
+			tmpl, err := template.New("instructions").Parse(t)
+			if err != nil {
+				return uiprojector.Projection{}, fmt.Errorf("payment_projector: parse template: %w", err)
+			}
+			var buf bytes.Buffer
+			if err := tmpl.Execute(&buf, dataMap); err != nil {
+				return uiprojector.Projection{}, fmt.Errorf("payment_projector: execute template: %w", err)
+			}
+			content = buf.String()
+		}
 	}
 
-	orgName, _ := dataMap["org_name"].(string)
-	tmplData := map[string]any{
-		"ReferenceNumber":  dataMap["reference_number"],
-		"Amount":           dataMap["amount"],
-		"Currency":         dataMap["currency"],
-		"CheckoutURL":      dataMap["checkout_url"],
-		"ServiceName":      dataMap["service_name"],
-		"ServiceType":      dataMap["service_type"],
-		"OrganizationName": orgName,
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, tmplData); err != nil {
-		return uiprojector.Projection{}, fmt.Errorf("payment_projector: execute template: %w", err)
-	}
-
-	if method.Type == "REDIRECT" {
+	// REDIRECT-flow gateways return a hosted checkout URL the UI must navigate to.
+	if flowType, _ := dataMap["flow_type"].(string); flowType == "REDIRECT" {
 		checkoutURL, _ := dataMap["checkout_url"].(string)
 		return uiprojector.Projection{
 			Type: uiprojector.SectionType("REDIRECT"),
 			Content: map[string]any{
 				"checkout_url": checkoutURL,
-				"content":      buf.String(),
+				"content":      content,
 			},
 		}, nil
 	}
 
 	return uiprojector.Projection{
 		Type:    uiprojector.SectionTypeMarkdown,
-		Content: buf.String(),
+		Content: content,
 	}, nil
 }

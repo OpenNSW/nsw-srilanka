@@ -16,6 +16,7 @@ import (
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
+	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
@@ -27,8 +28,8 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
 
-	"github.com/OpenNSW/nsw/backend/internal/payments"
 	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
+	govpay "github.com/OpenNSW/nsw/backend/srilanka/integration/payment"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
@@ -92,12 +93,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	// -------------------------------------------------------------------
 	// Stage 2: Domain Core Repositories & Base Services
 	// -------------------------------------------------------------------
-	paymentRepo := payments.NewPaymentRepository(db)
-	paymentService, err := payments.NewPaymentService(paymentRepo, cfg.Server.PaymentMethodsConfigPath)
+	paymentRepo := payment.NewPaymentRepository(db)
+	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
+		"govpay": govpay.NewGovPayGateway,
+	})
 	if err != nil {
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to initialize payment service: %w", err)
+		return nil, fmt.Errorf("failed to load payment registry: %w", err)
 	}
+	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry)
 
 	artifactRegistry := artifact.NewRegistry()
 	artifactRegistry.RegisterLoader("local", local.New("configs"))
@@ -215,7 +219,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	// -------------------------------------------------------------------
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
-	paymentHandler := payments.NewHTTPHandler(paymentService)
+	paymentHandler := payment.NewHTTPHandler(paymentService)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler)
 
 	// withAuth wraps an individual handler with the authentication middleware.
@@ -302,8 +306,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 
 	// External Webhooks bypass standard JWT authn.
 	// They should use webhook signatures, implemented in the handler directly or via specialized middleware.
-	mux.Handle("POST /api/v1/payments/webhook", http.HandlerFunc(paymentHandler.HandleWebhook))
-	mux.Handle("POST /api/v1/payments/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
+	mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", http.HandlerFunc(paymentHandler.HandleWebhook))
+	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
@@ -445,7 +449,7 @@ func (p registryTemplateProvider) GetTemplate(ctx context.Context, id string) ([
 func initTask(
 	db *gorm.DB,
 	temporalClient client.Client,
-	paymentService payments.PaymentService,
+	paymentService payment.PaymentService,
 	companyService company.Service,
 	artifactRegistry *artifact.Registry,
 	cfg *config.Config,
@@ -472,7 +476,7 @@ func initTask(
 	taskStore := gormstore.New(db)
 
 	// Construct UI projectors and the renderer/zoneview assembler
-	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(paymentService))
+	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector())
 	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{reg: artifactRegistry}, projectors)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)

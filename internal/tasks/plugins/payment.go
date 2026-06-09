@@ -6,19 +6,19 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/OpenNSW/nsw/backend/internal/payments"
+	"github.com/OpenNSW/core/payment"
 	"github.com/shopspring/decimal"
 )
 
-// PaymentPlugin implements a custom generic_payment plugin for taskv2.
+// PaymentPlugin implements a custom generic_payment plugin for taskflow.
 // It initiates a checkout session with the payment service and transitions
 // the task record state to PENDING_PAYMENT.
 type PaymentPlugin struct {
-	paymentService payments.PaymentService
+	paymentService payment.PaymentService
 }
 
 // NewPaymentPlugin creates a new PaymentPlugin.
-func NewPaymentPlugin(paymentService payments.PaymentService) *PaymentPlugin {
+func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
 	return &PaymentPlugin{
 		paymentService: paymentService,
 	}
@@ -50,26 +50,24 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		selectedMethod = "lankapay" // Default fallback
 	}
 
-	_, err := p.paymentService.GetPaymentMethod(selectedMethod)
-	if err != nil {
-		return fmt.Errorf("payment: failed to get payment method %q: %w", selectedMethod, err)
-	}
-
 	// 2. Transition task state to PENDING_PAYMENT
 	ctx.Record.State = "PENDING_PAYMENT"
 
 	amount := cfg.Amount
 	currency := cfg.Currency
 
-	slog.Info("taskv2 payment: initiating checkout session",
+	slog.Info("task payment: initiating checkout session",
 		"taskId", ctx.Record.TaskID, "taskCode", cfg.TaskCode, "amount", amount, "method", selectedMethod)
 
-	// 5. Create checkout session in payments.PaymentService to register transaction
-	resp, err := p.paymentService.CreateCheckoutSession(ctx.Context, payments.CreateCheckoutRequest{
-		ReferenceNumber: "", // Empty string instructs the service to generate a unique TNSW- reference
-		Amount:          amount,
-		Currency:        currency,
-		ExpiresAt:       time.Now().Add(24 * time.Hour), // Aligned with typical TTL
+	// 3. Create the checkout session via core/payment. The selected gateway is
+	// passed as GatewayID; the service generates the TNSW- reference and (for
+	// instruction-flow gateways) returns the instructions to display. An unknown
+	// gateway surfaces here as an error.
+	resp, err := p.paymentService.CreateCheckoutSession(ctx.Context, payment.CreateCheckoutRequest{
+		GatewayID: selectedMethod,
+		Amount:    amount,
+		Currency:  currency,
+		ExpiresAt: time.Now().Add(24 * time.Hour), // Aligned with typical TTL
 		Metadata: map[string]string{
 			"task_id":   ctx.Record.TaskID,
 			"task_code": cfg.TaskCode,
@@ -80,7 +78,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return fmt.Errorf("payment: failed to create checkout session: %w", err)
 	}
 
-	slog.Info("taskv2 payment: checkout session registered",
+	slog.Info("task payment: checkout session registered",
 		"taskId", ctx.Record.TaskID, "sessionId", resp.SessionID, "referenceNumber", resp.ReferenceNumber, "method", selectedMethod)
 
 	// 6. Populate payment info under the active output namespace
@@ -101,6 +99,8 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			"currency":         currency,
 			"selected_method":  selectedMethod,
 			"checkout_url":     resp.CheckoutURL,
+			"instructions":     resp.Instructions,
+			"flow_type":        string(resp.Type),
 			"service_name":     serviceName,
 			"service_type":     cfg.TaskCode,
 		}

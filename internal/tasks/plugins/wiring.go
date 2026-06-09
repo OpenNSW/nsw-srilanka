@@ -6,9 +6,9 @@ package plugins
 import (
 	"fmt"
 
+	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
-	"github.com/OpenNSW/nsw/backend/internal/payments"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -28,7 +28,7 @@ const (
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payments.PaymentService, backendBaseURL string, devMode bool) error {
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, backendBaseURL string, devMode bool) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
