@@ -20,9 +20,9 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
-	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/internal/profile/company"
-	"github.com/OpenNSW/nsw/backend/internal/profile/user"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/user"
 )
 
 func withAuthContext(ctx context.Context, userID string) context.Context {

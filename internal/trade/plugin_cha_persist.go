@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/taskflow/plugins"
-	"github.com/OpenNSW/nsw/backend/internal/profile/company"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/consignment"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
 	"gorm.io/gorm"
 )
 

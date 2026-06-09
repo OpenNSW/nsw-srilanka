@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/OpenNSW/core v0.0.0-20260608153546-9c3e08a703e0
+	github.com/OpenNSW/core v0.0.0-20260609104617-66c100d4aa8a
 	github.com/OpenNSW/nsw/backend v0.0.0-20260609033819-59eadede94f6
 	github.com/google/uuid v1.6.0
 	github.com/shopspring/decimal v1.4.0
