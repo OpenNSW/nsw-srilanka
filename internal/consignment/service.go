@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,10 +94,10 @@ func (s *Service) CompletionHandler(workflowID string, finalContext map[string]a
 }
 
 // OnWorkflowStatusChanged handles workflow lifecycle state propagation to consignment domain state.
-func (s *Service) OnWorkflowStatusChanged(_ context.Context, tx *gorm.DB, workflowID string, _ model.WorkflowStatus, toStatus model.WorkflowStatus, _ *model.Workflow) error {
+func (s *Service) OnWorkflowStatusChanged(ctx context.Context, tx *gorm.DB, workflowID string, _ model.WorkflowStatus, toStatus model.WorkflowStatus, _ *model.Workflow) error {
 	switch toStatus {
 	case model.WorkflowStatusCompleted:
-		return s.markConsignmentAsFinished(tx, workflowID)
+		return s.markConsignmentAsFinished(ctx, tx, workflowID)
 	default:
 		return nil
 	}
@@ -191,6 +192,7 @@ func (s *Service) InitializeConsignmentByID(
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			panic(r)
 		}
 	}()
 
@@ -221,10 +223,6 @@ func (s *Service) InitializeConsignmentByID(
 	// Reload for response
 	if err := s.db.WithContext(ctx).First(&consignment, "id = ?", consignment.ID).Error; err != nil {
 		return nil, fmt.Errorf("failed to reload consignment: %w", err)
-	}
-
-	if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
-		return nil, fmt.Errorf("failed to get workflow details: %w", err)
 	}
 
 	responseDTO, err := s.buildConsignmentDetailDTO(ctx, &consignment)
@@ -308,11 +306,9 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) 
 		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
 	}
 
-	// Confirm the workflow is reachable if one exists; node details now come
-	// from task records rather than this status snapshot.
 	if consignment.State != Initialized {
 		if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
-			return nil, fmt.Errorf("failed to get workflow details: %w", err)
+			slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignmentID, "error", err)
 		}
 	}
 
@@ -469,13 +465,13 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 }
 
 // markConsignmentAsFinished updates the consignment state to FINISHED.
-func (s *Service) markConsignmentAsFinished(tx *gorm.DB, consignmentID string) error {
+func (s *Service) markConsignmentAsFinished(ctx context.Context, tx *gorm.DB, consignmentID string) error {
 	var consignment Consignment
-	if err := tx.First(&consignment, "id = ?", consignmentID).Error; err != nil {
+	if err := tx.WithContext(ctx).First(&consignment, "id = ?", consignmentID).Error; err != nil {
 		return fmt.Errorf("failed to retrieve consignment %s: %w", consignmentID, err)
 	}
 	consignment.State = Finished
-	if err := tx.Save(&consignment).Error; err != nil {
+	if err := tx.WithContext(ctx).Save(&consignment).Error; err != nil {
 		return fmt.Errorf("failed to update consignment %s state to FINISHED: %w", consignmentID, err)
 	}
 	return nil

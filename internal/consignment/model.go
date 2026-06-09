@@ -77,13 +77,6 @@ func (d *CreateConsignmentDTO) Validate() error {
 	return nil
 }
 
-// UpdateDTO represents the data required to update a consignment.
-type UpdateDTO struct {
-	ConsignmentID         string         `json:"consignmentId" binding:"required"` // Consignment ID
-	State                 *State         `json:"state,omitempty"`                  // New state of the consignment (optional)
-	AppendToGlobalContext map[string]any `json:"appendToGlobalContext,omitempty"`  // Additional global context to append to the consignment (optional)
-}
-
 // DetailDTO represents the full consignment data returned in detailed responses.
 type DetailDTO struct {
 	ID              string                          `json:"id"`              // Consignment ID
