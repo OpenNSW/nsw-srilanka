@@ -16,9 +16,9 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
-	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/internal/profile/company"
-	"github.com/OpenNSW/nsw/backend/internal/profile/user"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/user"
 )
 
 // MockCHAService implements cha.Service for testing.
@@ -47,8 +47,8 @@ func (m *MockCHAService) List(ctx context.Context) ([]cha.Record, error) {
 	return args.Get(0).([]cha.Record), args.Error(1)
 }
 
-func (m *MockCHAService) Health() error {
-	return m.Called().Error(0)
+func (m *MockCHAService) Health(ctx context.Context) error {
+	return m.Called(ctx).Error(0)
 }
 
 // MockCompanyService implements company.Service for testing.
@@ -93,28 +93,28 @@ type MockUserService struct {
 	mock.Mock
 }
 
-func (m *MockUserService) GetUser(id string) (*user.Record, error) {
-	args := m.Called(id)
+func (m *MockUserService) GetUser(ctx context.Context, id string) (*user.Record, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*user.Record), args.Error(1)
 }
 
-func (m *MockUserService) GetOrCreateUser(idpUserID, email, phone, ouID, ouHandle string) (*string, error) {
-	args := m.Called(idpUserID, email, phone, ouID, ouHandle)
+func (m *MockUserService) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle string) (string, error) {
+	args := m.Called(ctx, idpUserID, email, phone, ouID, ouHandle)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return "", args.Error(1)
 	}
-	return args.Get(0).(*string), args.Error(1)
+	return args.Get(0).(string), args.Error(1)
 }
 
-func (m *MockUserService) UpdateUserData(id string, data []byte) error {
-	return m.Called(id, data).Error(0)
+func (m *MockUserService) UpdateUserData(ctx context.Context, id string, data []byte) error {
+	return m.Called(ctx, id, data).Error(0)
 }
 
-func (m *MockUserService) Health() error {
-	return m.Called().Error(0)
+func (m *MockUserService) Health(ctx context.Context) error {
+	return m.Called(ctx).Error(0)
 }
 
 func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
@@ -287,7 +287,7 @@ func TestConsignmentService_CreateConsignmentShell_Success(t *testing.T) {
 	traderID := "trader1"
 
 	mockCompany.On("GetCompanyByID", ctx, chaCompanyID).Return(&company.Record{ID: chaCompanyID, HasCHA: true}, nil)
-	mockUser.On("GetUser", traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
+	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", ctx, "trader-ou").Return(&company.Record{ID: traderCompanyID}, nil)
 
 	sqlMock.ExpectBegin()

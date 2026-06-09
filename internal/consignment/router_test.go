@@ -20,9 +20,9 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
-	"github.com/OpenNSW/nsw/backend/internal/profile/cha"
-	"github.com/OpenNSW/nsw/backend/internal/profile/company"
-	"github.com/OpenNSW/nsw/backend/internal/profile/user"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw/backend/srilanka/internal/profile/user"
 )
 
 func withAuthContext(ctx context.Context, userID string) context.Context {
@@ -109,7 +109,7 @@ func TestConsignmentRouter_HandleCreateConsignment(t *testing.T) {
 	consignmentID := uuid.NewString()
 
 	mockCompany.On("GetCompanyByID", mock.Anything, chaCompanyID).Return(&company.Record{ID: chaCompanyID, HasCHA: true}, nil)
-	mockUser.On("GetUser", traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
+	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID}, nil)
 
 	payload := CreateConsignmentDTO{
