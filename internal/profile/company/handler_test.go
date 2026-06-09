@@ -223,3 +223,15 @@ func TestHandler_HandleGetCompanies_ServiceError(t *testing.T) {
 		t.Fatalf("expected 500, got %d", w.Code)
 	}
 }
+
+type errorWriter struct{ header http.Header }
+
+func (e *errorWriter) Header() http.Header       { return e.header }
+func (e *errorWriter) Write([]byte) (int, error) { return 0, errors.New("write error") }
+func (e *errorWriter) WriteHeader(int)           {}
+
+func TestHandler_HandleGetCompanies_EncodeError(t *testing.T) {
+	h := NewHandler(&stubService{listResult: &ListResult{Items: []Summary{{ID: "c-1"}}}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/companies", nil)
+	h.HandleGetCompanies(&errorWriter{header: http.Header{}}, req)
+}

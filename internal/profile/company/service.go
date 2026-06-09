@@ -46,15 +46,29 @@ func NewService(db *gorm.DB) Service {
 	return &service{db: db}
 }
 
-func (s *service) getByField(ctx context.Context, field, value string) (*Record, error) {
+func (s *service) getByID(ctx context.Context, id string) (*Record, error) {
 	var record Record
-	result := s.db.WithContext(ctx).Where(fmt.Sprintf("%s = ?", field), value).First(&record)
+	result := s.db.WithContext(ctx).Where("id = ?", id).First(&record)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			slog.Debug("company record not found", field, value)
+			slog.Debug("company record not found", "id", id)
 			return nil, ErrCompanyNotFound
 		}
-		slog.Error("failed to fetch company record", field, value, "error", result.Error)
+		slog.Error("failed to fetch company record", "id", id, "error", result.Error)
+		return nil, fmt.Errorf("database query failed: %w", result.Error)
+	}
+	return &record, nil
+}
+
+func (s *service) getByOUHandle(ctx context.Context, handle string) (*Record, error) {
+	var record Record
+	result := s.db.WithContext(ctx).Where("ou_handle = ?", handle).First(&record)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			slog.Debug("company record not found", "ou_handle", handle)
+			return nil, ErrCompanyNotFound
+		}
+		slog.Error("failed to fetch company record", "ou_handle", handle, "error", result.Error)
 		return nil, fmt.Errorf("database query failed: %w", result.Error)
 	}
 	return &record, nil
@@ -64,11 +78,14 @@ func (s *service) GetCompanyByID(ctx context.Context, id string) (*Record, error
 	if id == "" {
 		return nil, ErrInvalidCompanyID
 	}
-	return s.getByField(ctx, "id", id)
+	return s.getByID(ctx, id)
 }
 
 func (s *service) GetCompanyByOUHandle(ctx context.Context, ouHandle string) (*Record, error) {
-	return s.getByField(ctx, "ou_handle", ouHandle)
+	if ouHandle == "" {
+		return nil, ErrInvalidCompanyID
+	}
+	return s.getByOUHandle(ctx, ouHandle)
 }
 
 func (s *service) ListCompanies(ctx context.Context, filter ListFilter) (*ListResult, error) {

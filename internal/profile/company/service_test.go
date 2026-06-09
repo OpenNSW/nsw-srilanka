@@ -170,6 +170,13 @@ func TestService_GetCompanyByOUHandle_Success(t *testing.T) {
 	}
 }
 
+func TestService_GetCompanyByOUHandle_Empty(t *testing.T) {
+	svc := NewService(nil)
+	if _, err := svc.GetCompanyByOUHandle(context.Background(), ""); !errors.Is(err, ErrInvalidCompanyID) {
+		t.Fatalf("expected ErrInvalidCompanyID, got %v", err)
+	}
+}
+
 // --- ListCompanies ---
 
 func boolPtr(b bool) *bool    { return &b }
@@ -285,6 +292,27 @@ func TestService_ListCompanies_DBError(t *testing.T) {
 		WillReturnError(errors.New("db down"))
 
 	if _, err := svc.ListCompanies(context.Background(), ListFilter{}); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_ListCompanies_CountQueryError(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	offset := 10
+	// Non-zero offset means the optimisation branch is skipped and COUNT is always run.
+	mock.ExpectQuery(`SELECT .* FROM "company_records" ORDER BY name ASC LIMIT \$1 OFFSET \$2`).
+		WithArgs(50, 10).
+		WillReturnRows(sqlmock.NewRows(companyColumns))
+
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "company_records"`).
+		WillReturnError(errors.New("count failed"))
+
+	if _, err := svc.ListCompanies(context.Background(), ListFilter{Offset: &offset}); err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

@@ -23,7 +23,7 @@ type Service interface {
 	List(ctx context.Context) ([]Record, error)
 
 	// Health checks if the service can access the database.
-	Health() error
+	Health(ctx context.Context) error
 }
 
 type service struct {
@@ -81,12 +81,15 @@ func (s *service) List(ctx context.Context) ([]Record, error) {
 	return records, nil
 }
 
-func (s *service) Health() error {
-	var count int64
-	result := s.db.Model(&Record{}).Count(&count)
-	if result.Error != nil {
-		slog.Error("CHA service health check failed", "error", result.Error)
-		return fmt.Errorf("CHA service health check failed: %w", result.Error)
+func (s *service) Health(ctx context.Context) error {
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		slog.Error("failed to retrieve underlying sql db", "error", err)
+		return fmt.Errorf("failed to retrieve database: %w", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		slog.Error("CHA service health check failed", "error", err)
+		return fmt.Errorf("CHA service health check failed: %w", err)
 	}
 	return nil
 }

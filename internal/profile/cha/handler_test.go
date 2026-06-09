@@ -18,7 +18,7 @@ type stubService struct {
 func (s *stubService) GetByID(_ context.Context, _ string) (*Record, error)    { return nil, nil }
 func (s *stubService) GetByEmail(_ context.Context, _ string) (*Record, error) { return nil, nil }
 func (s *stubService) List(_ context.Context) ([]Record, error)                { return s.listRecords, s.listErr }
-func (s *stubService) Health() error                                           { return nil }
+func (s *stubService) Health(_ context.Context) error                          { return nil }
 
 func TestHandler_HandleGetCHAs_Success(t *testing.T) {
 	records := []Record{
@@ -78,4 +78,16 @@ func TestHandler_HandleGetCHAs_ServiceError(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", w.Code)
 	}
+}
+
+type errorWriter struct{ header http.Header }
+
+func (e *errorWriter) Header() http.Header       { return e.header }
+func (e *errorWriter) Write([]byte) (int, error) { return 0, errors.New("write error") }
+func (e *errorWriter) WriteHeader(int)           {}
+
+func TestHandler_HandleGetCHAs_EncodeError(t *testing.T) {
+	h := NewHandler(&stubService{listRecords: []Record{{ID: "cha-1"}}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/chas", nil)
+	h.HandleGetCHAs(&errorWriter{header: http.Header{}}, req)
 }

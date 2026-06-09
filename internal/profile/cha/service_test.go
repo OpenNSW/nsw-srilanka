@@ -28,6 +28,24 @@ func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	return gormDB, mock
 }
 
+func setupPingTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	t.Helper()
+	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	mock.ExpectPing() // consumed by gorm.Open's connectivity check
+	dialector := postgres.New(postgres.Config{Conn: db})
+	gormDB, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open gorm: %v", err)
+	}
+
+	return gormDB, mock
+}
+
 var chaColumns = []string{"id", "name", "description", "email", "company_id", "created_at", "updated_at"}
 
 func chaRow(id, name, email string) *sqlmock.Rows {
@@ -161,13 +179,12 @@ func TestService_List_Success(t *testing.T) {
 // --- Health ---
 
 func TestService_Health_Success(t *testing.T) {
-	db, mock := setupTestDB(t)
+	db, mock := setupPingTestDB(t)
 	svc := NewService(db)
 
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "customs_house_agents"`).
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+	mock.ExpectPing()
 
-	if err := svc.Health(); err != nil {
+	if err := svc.Health(context.Background()); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -176,14 +193,59 @@ func TestService_Health_Success(t *testing.T) {
 }
 
 func TestService_Health_DBError(t *testing.T) {
+	db, mock := setupPingTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectPing().WillReturnError(errors.New("health failed"))
+
+	if err := svc.Health(context.Background()); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// --- Additional coverage ---
+
+func TestService_GetByEmail_InvalidEmail(t *testing.T) {
+	svc := NewService(nil)
+	if _, err := svc.GetByEmail(context.Background(), ""); !errors.Is(err, ErrInvalidEmail) {
+		t.Fatalf("expected ErrInvalidEmail, got %v", err)
+	}
+}
+
+func TestService_GetByID_DBError(t *testing.T) {
 	db, mock := setupTestDB(t)
 	svc := NewService(db)
 
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "customs_house_agents"`).
-		WillReturnError(errors.New("health failed"))
+	mock.ExpectQuery(`SELECT .* FROM "customs_house_agents" WHERE id = \$1`).
+		WithArgs("cha-1", 1).
+		WillReturnError(errors.New("connection reset"))
 
-	if err := svc.Health(); err == nil {
+	_, err := svc.GetByID(context.Background(), "cha-1")
+	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if errors.Is(err, ErrCHANotFound) {
+		t.Fatalf("expected wrapped DB error, not ErrCHANotFound, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_GetByEmail_DBError(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectQuery(`SELECT .* FROM "customs_house_agents" WHERE email = \$1`).
+		WithArgs("agent@example.com", 1).
+		WillReturnError(errors.New("connection reset"))
+
+	_, err := svc.GetByEmail(context.Background(), "agent@example.com")
+	if err == nil || errors.Is(err, ErrCHANotFound) {
+		t.Fatalf("expected wrapped DB error, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
