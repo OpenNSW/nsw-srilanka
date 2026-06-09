@@ -209,6 +209,10 @@ func (c *Router) HandleInitializeConsignment(w http.ResponseWriter, r *http.Requ
 
 	consignment, err := c.cs.InitializeConsignmentByID(r.Context(), consignmentID, req.WorkflowTemplateID, chaRecord.ID)
 	if err != nil {
+		if errors.Is(err, ErrConsignmentNotFound) {
+			http.Error(w, "consignment not found", http.StatusNotFound)
+			return
+		}
 		if errors.Is(err, ErrCHACompanyMismatch) {
 			http.Error(w, "CHA does not belong to the consignment's CHA company", http.StatusForbidden)
 			return
@@ -244,6 +248,10 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 
 	consignment, err := c.cs.GetConsignmentByID(r.Context(), consignmentID)
 	if err != nil {
+		if errors.Is(err, ErrConsignmentNotFound) {
+			http.Error(w, "consignment not found", http.StatusNotFound)
+			return
+		}
 		slog.Error("failed to retrieve consignment", "error", err)
 		http.Error(w, "failed to retrieve consignment: "+err.Error(), http.StatusInternalServerError)
 		return
