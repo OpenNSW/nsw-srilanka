@@ -43,9 +43,9 @@ import (
 	"github.com/OpenNSW/nsw/backend/internal/workflow/service"
 	"github.com/OpenNSW/nsw/backend/pkg/remote"
 	"github.com/OpenNSW/nsw/backend/pkg/storage/drivers"
+	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
 	taskplugins "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw/backend/srilanka/internal/tasks/renderer"
-	"github.com/OpenNSW/nsw/backend/srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw/backend/srilanka/internal/trade"
 )
 
