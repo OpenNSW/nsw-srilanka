@@ -173,7 +173,7 @@ func TestConsignmentService_InitializeConsignmentByID_NotFound(t *testing.T) {
 
 	_, err := svc.InitializeConsignmentByID(context.Background(), id, "tmpl-1", "")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, gorm.ErrRecordNotFound))
+	assert.True(t, errors.Is(err, ErrConsignmentNotFound))
 }
 
 func TestConsignmentService_InitializeConsignmentByID_WrongState(t *testing.T) {

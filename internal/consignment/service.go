@@ -3,6 +3,7 @@ package consignment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -163,7 +164,10 @@ func (s *Service) InitializeConsignmentByID(
 
 	var consignment Consignment
 	if err := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID).Error; err != nil {
-		return nil, fmt.Errorf("consignment not found: %w", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrConsignmentNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve consignment: %w", err)
 	}
 
 	if consignment.State != Initialized {
@@ -189,34 +193,25 @@ func (s *Service) InitializeConsignmentByID(
 	initialVars := map[string]any{"traderCompany": traderCompanyVars}
 
 	tx := s.db.WithContext(ctx).Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-			panic(r)
-		}
-	}()
+	defer tx.Rollback()
 
 	consignment.State = InProgress
 	consignment.CHAID = &chaID
 
 	if err := tx.Save(&consignment).Error; err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("failed to update consignment: %w", err)
 	}
 
 	def, err := workflowdef.Load(ctx, s.artifactRegistry, workflowTemplateID)
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("failed to get workflow template from provider: %w", err)
 	}
 
 	if err := s.startWorkflow(ctx, consignment.ID, def, initialVars); err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("failed to register workflow: %w", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
@@ -303,6 +298,9 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) 
 	var consignment Consignment
 	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
 	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, ErrConsignmentNotFound
+		}
 		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
 	}
 
