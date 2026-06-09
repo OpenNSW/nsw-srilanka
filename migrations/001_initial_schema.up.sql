@@ -117,7 +117,6 @@ CREATE TABLE IF NOT EXISTS consignments (
 	flow varchar(50) NOT NULL CONSTRAINT consignments_flow_check CHECK ((flow)::text = ANY ((ARRAY['IMPORT'::character varying, 'EXPORT'::character varying])::text[])),
 	trader_id varchar(100) NOT NULL,
 	state varchar(50) NOT NULL CONSTRAINT consignments_state_check CHECK ((state)::text = ANY (ARRAY['INITIALIZED'::character varying, 'IN_PROGRESS'::character varying, 'FINISHED'::character varying])),
-	items jsonb NOT NULL,
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL,
 	trader_company_id varchar(100) NOT NULL REFERENCES company_records (id),
@@ -130,7 +129,6 @@ CREATE INDEX IF NOT EXISTS idx_consignments_cha_company_id ON consignments (cha_
 CREATE INDEX IF NOT EXISTS idx_consignments_state ON consignments (state);
 CREATE INDEX IF NOT EXISTS idx_consignments_flow ON consignments (flow);
 CREATE INDEX IF NOT EXISTS idx_consignments_created_at ON consignments (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_consignments_items ON consignments USING gin (items);
 CREATE INDEX IF NOT EXISTS idx_consignments_cha_id ON consignments (cha_id);
 
 -- -------------------------------------------------------------------
