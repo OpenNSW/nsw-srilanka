@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/pagination"
-	"github.com/OpenNSW/nsw-srilanka/internal/workflow/model"
 )
+
+// ── Domain types ──────────────────────────────────────────────────────────────
 
 // Flow represents the flow type of consignment.
 // Keep values in sync with workflow/model.ConsignmentFlow — the workflow
@@ -18,14 +19,15 @@ const (
 	FlowExport Flow = "EXPORT"
 )
 
-// State represents the state of a consignment.
+// State represents the lifecycle state of a consignment.
 type State string
 
 const (
-	Initialized State = "INITIALIZED"
-	InProgress  State = "IN_PROGRESS"
-	Finished    State = "FINISHED"
+	InProgress State = "IN_PROGRESS"
+	Finished   State = "FINISHED"
 )
+
+// ── Entity ────────────────────────────────────────────────────────────────────
 
 // Consignment represents a consignment in the system.
 type Consignment struct {
@@ -35,33 +37,24 @@ type Consignment struct {
 
 	// Core attributes
 	Flow  Flow  `gorm:"type:varchar(50);column:flow;not null" json:"flow"`   // IMPORT or EXPORT
-	State State `gorm:"type:varchar(50);column:state;not null" json:"state"` // INITIALIZED → IN_PROGRESS → FINISHED
+	State State `gorm:"type:varchar(50);column:state;not null" json:"state"` // IN_PROGRESS → FINISHED
 
-	// Trader (set at Stage 1)
+	// Trader
 	TraderID        string `gorm:"type:varchar(100);column:trader_id;not null" json:"traderId"`                // Trader user who created the consignment
 	TraderCompanyID string `gorm:"type:varchar(100);column:trader_company_id;not null" json:"traderCompanyId"` // Company the trader belongs to
 
-	// CHA (company chosen at Stage 1; specific CHA assigned at Stage 2). Both are nil for
-	// direct-start consignments (e.g. trade-export-v1), where CHA selection happens inside
-	// the workflow itself rather than as an upfront trader/CHA handoff.
-	CHACompanyID *string `gorm:"type:varchar(100);column:cha_company_id" json:"chaCompanyId,omitempty"` // CHA company selected by the trader at Stage 1
-	CHAID        *string `gorm:"type:varchar(100);column:cha_id" json:"chaId,omitempty"`                // CHA who claimed the consignment at Stage 2
-
-	// Relationships
-	Workflow *model.Workflow `gorm:"foreignKey:ID;references:ID" json:"-"` // Associated Workflow (1:1, same ID)
+	// CHA (nil for direct-start consignments where CHA selection happens inside the workflow)
+	CHACompanyID *string `gorm:"type:varchar(100);column:cha_company_id" json:"chaCompanyId,omitempty"` // CHA company selected by the trader
+	CHAID        *string `gorm:"type:varchar(100);column:cha_id" json:"chaId,omitempty"`                // CHA who claimed the consignment
 }
 
 func (c *Consignment) TableName() string {
 	return "consignments"
 }
 
-// InitializeConsignmentDTO is the request body for PUT /consignments/{id} (Stage 2 – CHA selects Workflow Template).
-type InitializeConsignmentDTO struct {
-	WorkflowTemplateID string `json:"workflowTemplateId" binding:"required"`
-}
+// ── Request DTOs ──────────────────────────────────────────────────────────────
 
-// CreateConsignmentDTO represents the data required to create a consignment.
-// Stage 1 (two-stage flow): provide flow + chaCompanyId → creates shell with state INITIALIZED.
+// CreateConsignmentDTO represents the request body for POST /consignments.
 type CreateConsignmentDTO struct {
 	Flow         Flow   `json:"flow"`
 	ChaCompanyID string `json:"chaCompanyId"`
@@ -77,41 +70,66 @@ func (d *CreateConsignmentDTO) Validate() error {
 	return nil
 }
 
-// DetailDTO represents the full consignment data returned in detailed responses.
-type DetailDTO struct {
-	ID              string                          `json:"id"`              // Consignment ID
-	Flow            Flow                            `json:"flow"`            // e.g., IMPORT, EXPORT
-	State           State                           `json:"state"`           // State of the consignment
-	TraderID        string                          `json:"traderId"`        // Trader user who created the consignment
-	TraderCompanyID string                          `json:"traderCompanyId"` // Company the trader belongs to
-	ChaCompanyID    string                          `json:"chaCompanyId"`    // CHA company selected at Stage 1
-	ChaID           string                          `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
-	CreatedAt       string                          `json:"createdAt"`       // Timestamp of consignment creation
-	UpdatedAt       string                          `json:"updatedAt"`       // Timestamp of last consignment update
-	WorkflowNodes   []model.WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details
-}
+// ── Response DTOs ─────────────────────────────────────────────────────────────
 
 // SummaryDTO represents the consignment data returned in list responses.
 type SummaryDTO struct {
-	ID                         string `json:"id"`                         // Consignment ID
-	Flow                       Flow   `json:"flow"`                       // e.g., IMPORT, EXPORT
-	State                      State  `json:"state"`                      // State of the consignment
-	TraderID                   string `json:"traderId"`                   // Trader user who created the consignment
-	TraderCompanyID            string `json:"traderCompanyId"`            // Company the trader belongs to
-	ChaCompanyID               string `json:"chaCompanyId"`               // CHA company selected at Stage 1
-	ChaID                      string `json:"chaId,omitempty"`            // CHA assigned at Stage 2 (empty until claimed)
-	CreatedAt                  string `json:"createdAt"`                  // Timestamp of consignment creation
-	UpdatedAt                  string `json:"updatedAt"`                  // Timestamp of last consignment update
-	WorkflowNodeCount          int    `json:"workflowNodeCount"`          // Total number of workflow nodes
-	CompletedWorkflowNodeCount int    `json:"completedWorkflowNodeCount"` // Number of completed workflow nodes
+	ID              string `json:"id"`              // Consignment ID
+	Flow            Flow   `json:"flow"`            // e.g., IMPORT, EXPORT
+	State           State  `json:"state"`           // State of the consignment
+	TraderID        string `json:"traderId"`        // Trader user who created the consignment
+	TraderCompanyID string `json:"traderCompanyId"` // Company the trader belongs to
+	ChaCompanyID    string `json:"chaCompanyId"`    // CHA company selected at Stage 1
+	ChaID           string `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
+	CreatedAt       string `json:"createdAt"`       // Timestamp of consignment creation
+	UpdatedAt       string `json:"updatedAt"`       // Timestamp of last consignment update
 }
 
 // ListResult is the pagination envelope returned by the list consignments endpoint.
 type ListResult = pagination.Page[SummaryDTO]
 
-// Filter will be used when querying consignments as batch.
-// For GET /consignments?role=trader use TraderCompanyID; for role=cha use CHACompanyID.
-// Scoping is company-based so colleagues at the same company see each other's consignments.
+// DetailDTO represents the full consignment data returned in detailed responses.
+type DetailDTO struct {
+	ID              string                    `json:"id"`              // Consignment ID
+	Flow            Flow                      `json:"flow"`            // e.g., IMPORT, EXPORT
+	State           State                     `json:"state"`           // State of the consignment
+	TraderID        string                    `json:"traderId"`        // Trader user who created the consignment
+	TraderCompanyID string                    `json:"traderCompanyId"` // Company the trader belongs to
+	ChaCompanyID    string                    `json:"chaCompanyId"`    // CHA company selected at Stage 1
+	ChaID           string                    `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
+	CreatedAt       string                    `json:"createdAt"`       // Timestamp of consignment creation
+	UpdatedAt       string                    `json:"updatedAt"`       // Timestamp of last consignment update
+	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details
+}
+
+// WorkflowNodeResponseDTO represents a workflow node in the response.
+type WorkflowNodeResponseDTO struct {
+	ID                   string                          `json:"id"`                   // Workflow Node ID
+	CreatedAt            string                          `json:"createdAt"`            // Timestamp of node creation
+	UpdatedAt            string                          `json:"updatedAt"`            // Timestamp of last node update
+	WorkflowNodeTemplate WorkflowNodeTemplateResponseDTO `json:"workflowNodeTemplate"` // Workflow node template details
+	State                WorkflowNodeState               `json:"state"`                // State of the workflow node
+}
+
+type WorkflowNodeState string
+
+const (
+	WorkflowNodeStateInProgress WorkflowNodeState = "IN_PROGRESS" // Node is currently active and in progress
+	WorkflowNodeStateCompleted  WorkflowNodeState = "COMPLETED"   // Node has been completed
+)
+
+// WorkflowNodeTemplateResponseDTO represents workflow node template details in the response.
+type WorkflowNodeTemplateResponseDTO struct {
+	Name        string `json:"name"`        // Name of the workflow node template
+	Description string `json:"description"` // Description of the workflow node template
+	Type        string `json:"type"`        // Type of the workflow node template
+}
+
+// ── Query ─────────────────────────────────────────────────────────────────────
+
+// Filter scopes a batch consignment query.
+// Use TraderCompanyID for role=trader and CHACompanyID for role=cha so that
+// colleagues at the same company see each other's consignments.
 type Filter struct {
 	TraderCompanyID *string `json:"traderCompanyId,omitempty"`
 	CHACompanyID    *string `json:"chaCompanyId,omitempty"`
@@ -120,3 +138,13 @@ type Filter struct {
 	Offset          *int    `json:"offset,omitempty"`
 	Limit           *int    `json:"limit,omitempty"`
 }
+
+// ── Internal ──────────────────────────────────────────────────────────────────
+
+// WorkflowStatus represents the lifecycle status received from the workflow engine,
+// used to propagate state changes to the consignment domain.
+type WorkflowStatus string
+
+const (
+	WorkflowStatusCompleted WorkflowStatus = "COMPLETED"
+)

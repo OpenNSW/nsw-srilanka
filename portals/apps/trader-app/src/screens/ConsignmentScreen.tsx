@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../services/types/consignment.ts'
-import { startConsignment, getAllConsignments } from '../services/consignment.ts'
+import { createConsignment, getAllConsignments } from '../services/consignment.ts'
 import { useApi } from '../services/ApiContext'
 import { useRole } from '../services/RoleContext'
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
@@ -34,7 +34,7 @@ export function ConsignmentScreen() {
   const handleCreateConsignment = async () => {
     setCreating(true)
     try {
-      const response = await startConsignment(api)
+      const response = await createConsignment(api)
       void navigate(`/consignments/${response.id}`)
     } catch (error) {
       console.error('Failed to create consignment:', error)

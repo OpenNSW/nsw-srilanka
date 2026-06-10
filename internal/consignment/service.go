@@ -20,7 +20,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
-	"github.com/OpenNSW/nsw-srilanka/internal/workflow/model"
 )
 
 // TaskStore is the narrow interface needed from taskv2 package to load task records.
@@ -91,144 +90,17 @@ func (s *Service) getWorkflowStatus(ctx context.Context, workflowID string) erro
 
 // CompletionHandler is called by the workflow runtime when a workflow completes.
 func (s *Service) CompletionHandler(workflowID string, finalContext map[string]any) error {
-	return s.OnWorkflowStatusChanged(context.Background(), s.db, workflowID, model.WorkflowStatusInProgress, model.WorkflowStatusCompleted, nil)
+	return s.OnWorkflowStatusChanged(context.Background(), s.db, workflowID, WorkflowStatusCompleted)
 }
 
 // OnWorkflowStatusChanged handles workflow lifecycle state propagation to consignment domain state.
-func (s *Service) OnWorkflowStatusChanged(ctx context.Context, tx *gorm.DB, workflowID string, _ model.WorkflowStatus, toStatus model.WorkflowStatus, _ *model.Workflow) error {
+func (s *Service) OnWorkflowStatusChanged(ctx context.Context, tx *gorm.DB, workflowID string, toStatus WorkflowStatus) error {
 	switch toStatus {
-	case model.WorkflowStatusCompleted:
+	case WorkflowStatusCompleted:
 		return s.markConsignmentAsFinished(ctx, tx, workflowID)
 	default:
 		return nil
 	}
-}
-
-// CreateConsignmentShell creates a shell consignment (Stage 1: Trader selects a CHA company).
-// The trader's company is resolved from the trader user's OU handle. The specific CHA is not
-// assigned yet — that happens at Stage 2 (InitializeConsignmentByID).
-func (s *Service) CreateConsignmentShell(ctx context.Context, flow Flow, chaCompanyID string, traderID string) (*DetailDTO, error) {
-	chaCompany, err := s.companyService.GetCompanyByID(ctx, chaCompanyID)
-	if err != nil {
-		return nil, fmt.Errorf("CHA company lookup failed: %w", err)
-	}
-	if !chaCompany.HasCHA {
-		return nil, ErrCompanyNotCHA
-	}
-
-	traderUser, err := s.userService.GetUser(ctx, traderID)
-	if err != nil {
-		return nil, fmt.Errorf("trader user lookup failed: %w", err)
-	}
-
-	traderCompany, err := s.companyService.GetCompanyByOUHandle(ctx, traderUser.OUHandle)
-	if err != nil {
-		return nil, fmt.Errorf("trader company lookup failed: %w", err)
-	}
-
-	consignment := &Consignment{
-		ID:              uuid.NewString(),
-		Flow:            flow,
-		TraderID:        traderID,
-		TraderCompanyID: traderCompany.ID,
-		CHACompanyID:    &chaCompany.ID,
-		State:           Initialized,
-	}
-	if err := s.db.WithContext(ctx).Create(consignment).Error; err != nil {
-		return nil, fmt.Errorf("failed to create consignment: %w", err)
-	}
-	// Reload for response (no workflow nodes at stage 1)
-	if err := s.db.WithContext(ctx).First(consignment, "id = ?", consignment.ID).Error; err != nil {
-		return nil, fmt.Errorf("failed to reload consignment: %w", err)
-	}
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment)
-	if err != nil {
-		return nil, err
-	}
-	return responseDTO, nil
-}
-
-// InitializeConsignmentByID runs Stage 2: a CHA from the consignment's CHA company picks the
-// consignment up, the workflow template is selected directly, and the workflow is started
-// with the trader company data as initial variables.
-func (s *Service) InitializeConsignmentByID(
-	ctx context.Context,
-	consignmentID string,
-	workflowTemplateID string,
-	chaID string,
-) (*DetailDTO, error) {
-
-	if workflowTemplateID == "" {
-		return nil, fmt.Errorf("workflow template ID is required")
-	}
-
-	var consignment Consignment
-	if err := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrConsignmentNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve consignment: %w", err)
-	}
-
-	if consignment.State != Initialized {
-		return nil, fmt.Errorf("consignment must be in INITIALIZED (current state: %s)", consignment.State)
-	}
-
-	chaRecord, err := s.chaService.GetByID(ctx, chaID)
-	if err != nil {
-		return nil, fmt.Errorf("CHA lookup failed: %w", err)
-	}
-	if consignment.CHACompanyID == nil || chaRecord.CompanyID != *consignment.CHACompanyID {
-		return nil, ErrCHACompanyMismatch
-	}
-
-	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
-	if err != nil {
-		return nil, fmt.Errorf("trader company lookup failed: %w", err)
-	}
-	traderCompanyVars, err := companyRecordToMap(traderCompany)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal trader company: %w", err)
-	}
-	initialVars := map[string]any{"traderCompany": traderCompanyVars}
-
-	def, err := workflowdef.Load(ctx, s.artifactRegistry, workflowTemplateID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get workflow template from provider: %w", err)
-	}
-
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
-	}
-	defer tx.Rollback()
-
-	consignment.State = InProgress
-	consignment.CHAID = &chaID
-
-	if err := tx.Save(&consignment).Error; err != nil {
-		return nil, fmt.Errorf("failed to update consignment: %w", err)
-	}
-
-	if err := s.startWorkflow(ctx, consignment.ID, def, initialVars); err != nil {
-		return nil, fmt.Errorf("failed to register workflow: %w", err)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return nil, fmt.Errorf("failed to commit: %w", err)
-	}
-
-	// Reload for response
-	if err := s.db.WithContext(ctx).First(&consignment, "id = ?", consignment.ID).Error; err != nil {
-		return nil, fmt.Errorf("failed to reload consignment: %w", err)
-	}
-
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, &consignment)
-	if err != nil {
-		return nil, err
-	}
-
-	return responseDTO, nil
 }
 
 // directStartExportWorkflowTemplateID is the top-level workflow started immediately by
@@ -310,10 +182,8 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) 
 		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
 	}
 
-	if consignment.State != Initialized {
-		if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
-			slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignmentID, "error", err)
-		}
+	if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
+		slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignmentID, "error", err)
 	}
 
 	responseDTO, err := s.buildConsignmentDetailDTO(ctx, &consignment)
@@ -356,6 +226,7 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 
 	var consignments []Consignment
 	if err := filteredQuery().
+		WithContext(ctx).
 		Offset(finalOffset).
 		Limit(finalLimit).
 		Order("created_at DESC").
@@ -377,68 +248,10 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 		return &result, nil
 	}
 
-	// Collect Consignment IDs to fetch workflow node counts
-	consignmentIDs := make([]string, len(consignments))
-	for i, c := range consignments {
-		consignmentIDs[i] = c.ID
-	}
-
-	// Fetch workflow node counts in batch (via workflow_id which equals consignment ID)
-	type NodeCounts struct {
-		WorkflowID string
-		Total      int
-		Completed  int
-	}
-
-	var nodeCounts []NodeCounts
-	err := s.db.WithContext(ctx).Model(&model.WorkflowNode{}).
-		Select("workflow_id, count(*) as total, count(case when state = ? then 1 end) as completed", model.WorkflowNodeStateCompleted).
-		Where("workflow_id IN ?", consignmentIDs).
-		Group("workflow_id").
-		Scan(&nodeCounts).Error
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch workflow node counts: %w", err)
-	}
-
-	// Map counts to consignment IDs (workflow_id == consignment_id) for easy lookup
-	countsMap := make(map[string]NodeCounts)
-	for _, nc := range nodeCounts {
-		countsMap[nc.WorkflowID] = nc
-	}
-
-	// Check which consignments have end nodes (via the workflows table)
-	type WorkflowEndNode struct {
-		ID        string
-		EndNodeID *string
-	}
-	var workflowEndNodes []WorkflowEndNode
-	err = s.db.WithContext(ctx).Model(&model.Workflow{}).
-		Select("id, end_node_id").
-		Where("id IN ?", consignmentIDs).
-		Scan(&workflowEndNodes).Error
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch workflow end nodes: %w", err)
-	}
-	endNodeMap := make(map[string]bool)
-	for _, w := range workflowEndNodes {
-		if w.EndNodeID != nil {
-			endNodeMap[w.ID] = true
-		}
-	}
-
 	// Build Summary DTOs for all consignments
 	var consignmentDTOs []SummaryDTO
 	for i := range consignments {
 		c := consignments[i]
-		counts := countsMap[c.ID]
-
-		// If the workflow has an EndNode, subtract it from the total count
-		if endNodeMap[c.ID] {
-			if counts.Total > 0 {
-				counts.Total -= 1
-			}
-		}
 
 		chaID := ""
 		if c.CHAID != nil {
@@ -450,17 +263,15 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 		}
 
 		consignmentDTOs = append(consignmentDTOs, SummaryDTO{
-			ID:                         c.ID,
-			Flow:                       c.Flow,
-			State:                      c.State,
-			TraderID:                   c.TraderID,
-			TraderCompanyID:            c.TraderCompanyID,
-			ChaCompanyID:               chaCompanyID,
-			ChaID:                      chaID,
-			CreatedAt:                  c.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:                  c.UpdatedAt.Format(time.RFC3339),
-			WorkflowNodeCount:          counts.Total,
-			CompletedWorkflowNodeCount: counts.Completed,
+			ID:              c.ID,
+			Flow:            c.Flow,
+			State:           c.State,
+			TraderID:        c.TraderID,
+			TraderCompanyID: c.TraderCompanyID,
+			ChaCompanyID:    chaCompanyID,
+			ChaID:           chaID,
+			CreatedAt:       c.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:       c.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 
@@ -516,31 +327,29 @@ func (s *Service) buildConsignmentDetailDTO(
 
 // buildNodeDTOsFromTaskRecords queries tasks via the TaskStore by root_workflow_id and converts each
 // non-SYSTEM record into a WorkflowNodeResponseDTO for the consignment detail response.
-func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentID string) ([]model.WorkflowNodeResponseDTO, error) {
+func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentID string) ([]WorkflowNodeResponseDTO, error) {
 	if s.taskStore == nil {
 		return nil, fmt.Errorf("task store not initialized")
 	}
 	tasks := s.taskStore.GetAllTasks(ctx, consignmentID)
 
-	dtos := make([]model.WorkflowNodeResponseDTO, 0, len(tasks))
+	dtos := make([]WorkflowNodeResponseDTO, 0, len(tasks))
 	for _, t := range tasks {
 		if t.TaskType == "SYSTEM" {
 			continue
 		}
-		var nodeState model.WorkflowNodeState
+		var nodeState WorkflowNodeState
 		switch t.State {
 		case "COMPLETED":
-			nodeState = model.WorkflowNodeStateCompleted
-		case "FAILED":
-			nodeState = model.WorkflowNodeStateFailed
+			nodeState = WorkflowNodeStateCompleted
 		default:
-			nodeState = model.WorkflowNodeStateInProgress
+			nodeState = WorkflowNodeStateInProgress
 		}
-		dtos = append(dtos, model.WorkflowNodeResponseDTO{
+		dtos = append(dtos, WorkflowNodeResponseDTO{
 			ID:        t.TaskID,
 			CreatedAt: t.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
-			WorkflowNodeTemplate: model.WorkflowNodeTemplateResponseDTO{
+			WorkflowNodeTemplate: WorkflowNodeTemplateResponseDTO{
 				Name: taskDisplayName(t.ActiveTaskTemplateID, t.RenderConfig),
 				Type: t.TaskType,
 			},
