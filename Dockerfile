@@ -21,7 +21,65 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
     go build -ldflags="-s -w" -o /out/server ./cmd/server
 
 # -------------------------------------------------------------------
-# Runtime image – minimal, non‑root, with healthcheck and labels
+# Migrate builder – builds the standalone migrator from nsw-agency.
+# It lives in a separate module, so we fetch it at a pinned pseudo-version
+# inside a throwaway module rather than adding it to this repo's go.mod. CGO is
+# disabled: the tool imports go-sqlite3, but we only drive postgres (pure-Go
+# pgx), so sqlite stays an unused runtime stub. We use `go build -o` rather than
+# `go install`, because `go install` refuses to write the binary when
+# cross-compiling for a non-host GOOS/GOARCH (multi-arch buildx).
+# -------------------------------------------------------------------
+FROM golang:1.26.3-bookworm AS migrate-builder
+
+# Bump to adopt a newer migrator. No semver tag exists on
+# nsw-agency/backend yet, so this is a pinned pseudo-version.
+ARG MIGRATE_VERSION=v0.0.0-20260610120959-d981e67a7a47
+
+ARG TARGETOS
+ARG TARGETARCH
+RUN mkdir /tmp-build && cd /tmp-build \
+    && GOWORK=off go mod init migrate-build \
+    && GOWORK=off go get github.com/OpenNSW/nsw-agency/backend/cmd/migrate@${MIGRATE_VERSION} \
+    && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
+       go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/nsw-agency/backend/cmd/migrate
+
+# -------------------------------------------------------------------
+# Migrate image – self-contained schema migrator. Runs to completion
+# (compose gates `api` on it via service_completed_successfully) and
+# is also usable ad hoc: `docker compose run --rm migrate status`.
+# The SQL files are baked in so the image needs no bind mount.
+# Built explicitly via `--target migrate`; `runtime` is kept LAST so a
+# bare `docker build .` (and any consumer without an explicit target)
+# resolves to the server image, not the migrator.
+# -------------------------------------------------------------------
+FROM debian:bookworm-slim AS migrate
+
+LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
+LABEL org.opencontainers.image.description="NSW schema migrator (nsw-agency migrate tool)"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -s /sbin/nologin -d /app appuser
+
+WORKDIR /app
+
+COPY --from=migrate-builder /out/migrate /usr/local/bin/migrate
+COPY migrations/ /app/migrations/
+
+# Tell the migrator where the baked-in SQL lives; the postgres connection
+# is supplied via DB_* env vars at runtime (see compose.yml).
+ENV MIGRATION_DIR=/app/migrations \
+    DB_DRIVER=postgres
+
+USER appuser
+
+# Apply all pending migrations by default; override with status/down/generate.
+CMD ["migrate", "up"]
+
+# -------------------------------------------------------------------
+# Runtime image – minimal, non‑root, with healthcheck and labels.
+# Kept as the LAST stage so it is the default build target.
 # -------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
