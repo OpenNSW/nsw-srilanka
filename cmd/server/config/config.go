@@ -25,6 +25,13 @@ type Config struct {
 	Authn        authn.Config
 	Notification notification.Config
 	Temporal     temporal.Config
+	Audit        AuditConfig
+}
+
+// AuditConfig holds Argus audit service configuration
+type AuditConfig struct {
+	ServiceURL string
+	AuthToken  string
 }
 
 // ServerConfig holds server configuration.
@@ -96,6 +103,10 @@ func Load() (*Config, error) {
 			Host:      getEnvOrDefault("TEMPORAL_HOST", "localhost"),
 			Port:      getIntEnvOrDefault("TEMPORAL_PORT", 7233),
 			Namespace: getEnvOrDefault("TEMPORAL_NAMESPACE", "default"),
+		},
+		Audit: AuditConfig{
+			ServiceURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
+			AuthToken:  os.Getenv("ARGUS_AUTH_TOKEN"),
 		},
 	}
 

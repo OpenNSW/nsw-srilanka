@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/LSFLK/argus/pkg/audit v0.0.0-20260507005814-d59aefb70fba
 	github.com/OpenNSW/core v0.0.0-20260615113605-81d30de10cb4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
