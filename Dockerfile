@@ -97,14 +97,12 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy the binary. Configs are NOT baked into the image — they are
-# environment data, mounted at /app/configs at runtime (see docker-compose.yml).
-COPY --from=builder /out/server /app/server
+# Copy the binary and configs with correct ownership.
+COPY --from=builder --chown=appuser:appuser /out/server /app/server
+COPY --from=builder --chown=appuser:appuser /src/configs /app/configs
 
-# Create the mount points for runtime config and blob storage. /app/configs
-# is overlaid by a read-only bind mount; /app/bucket by a writable volume.
-RUN mkdir -p /app/configs /app/bucket \
-    && chown -R appuser:appuser /app
+# Create mount point for blob storage
+RUN mkdir -p /app/bucket && chown -R appuser:appuser /app/bucket
 
 USER appuser
 
