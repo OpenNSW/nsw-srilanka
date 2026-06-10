@@ -50,7 +50,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
 	svc := NewService(db, nil, nil, nil, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, nil)
+	r := NewRouter(svc, nil, nil, nil)
 
 	consignmentID := uuid.NewString()
 	sqlMock.MatchExpectationsInOrder(false)
@@ -73,7 +73,7 @@ func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany)
+	r := NewRouter(svc, nil, mockCompany, nil)
 
 	traderID := "trader1"
 	companyID := "company-trader"
@@ -106,7 +106,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 
 	svc := NewService(db, reg, nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, mockCompany)
+	r := NewRouter(svc, nil, mockCompany, nil)
 
 	traderID := "trader1"
 	traderCompanyID := uuid.NewString()
@@ -137,7 +137,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleCreateConsignment_Unauthorized(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil)
+	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nil)
 
 	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
 	w := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
 	svc := NewService(db, nil, nil, nil, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, nil)
+	r := NewRouter(svc, nil, nil, nil)
 
 	id := uuid.NewString()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
@@ -168,7 +168,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleGetConsignmentByID_MissingID(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil)
+	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nil)
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/", nil)
 	req = req.WithContext(withAuthContext(req.Context(), "trader1"))
@@ -179,7 +179,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_MissingID(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleGetConsignments_Unauthorized(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil)
+	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nil)
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
 	w := httptest.NewRecorder()
@@ -189,7 +189,7 @@ func TestConsignmentRouter_HandleGetConsignments_Unauthorized(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleGetConsignments_InvalidRole(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil)
+	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nil)
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=superadmin", nil)
 	req = req.WithContext(withAuthContextOU(req.Context(), "user1", "ou1"))
@@ -203,7 +203,7 @@ func TestConsignmentRouter_HandleGetConsignments_DefaultRole(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany)
+	r := NewRouter(svc, nil, mockCompany, nil)
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
@@ -223,7 +223,7 @@ func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany)
+	r := NewRouter(svc, nil, mockCompany, nil)
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(nil, company.ErrCompanyNotFound)
@@ -240,7 +240,7 @@ func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany)
+	r := NewRouter(svc, nil, mockCompany, nil)
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
@@ -258,7 +258,7 @@ func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
 func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 	mockUser := new(MockUserService)
 	svc := NewService(nil, nil, nil, nil, mockUser, nil)
-	r := NewRouter(svc, nil, nil)
+	r := NewRouter(svc, nil, nil, nil)
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(nil, errors.New("lookup failed"))
 
@@ -273,7 +273,7 @@ func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 func TestConsignmentRouter_HandleGetConsignmentByID_ServiceError(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	svc := NewService(db, nil, nil, nil, nil, nil)
-	r := NewRouter(svc, nil, nil)
+	r := NewRouter(svc, nil, nil, nil)
 
 	id := uuid.NewString()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).

@@ -42,6 +42,8 @@ import (
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 
+	"github.com/LSFLK/argus/pkg/audit"
+
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
 )
@@ -154,8 +156,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
+	auditClient := audit.NewClient(audit.Config{
+		BaseURL:   cfg.Audit.ServiceURL,
+		AuthToken: cfg.Audit.AuthToken,
+	})
+
 	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
-	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)
+	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService, auditClient)
 
 	pr, stopParentRunner, err := wireParentRunner(temporalClient, tm, consignmentService)
 	if err != nil {
@@ -328,6 +335,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	closeFn := func() error {
 		var closeErrs []error
+
+		if auditClient != nil && auditClient.IsEnabled() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := auditClient.Close(shutdownCtx); err != nil {
+				closeErrs = append(closeErrs, fmt.Errorf("failed to close audit client: %w", err))
+			}
+			cancel()
+		}
 
 		if err := stopParentRunner(); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop parent runner: %w", err))
