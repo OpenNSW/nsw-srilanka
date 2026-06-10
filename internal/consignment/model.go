@@ -116,6 +116,7 @@ type WorkflowNodeState string
 const (
 	WorkflowNodeStateInProgress WorkflowNodeState = "IN_PROGRESS" // Node is currently active and in progress
 	WorkflowNodeStateCompleted  WorkflowNodeState = "COMPLETED"   // Node has been completed
+	WorkflowNodeStateFailed     WorkflowNodeState = "FAILED"      // Node has failed
 )
 
 // WorkflowNodeTemplateResponseDTO represents workflow node template details in the response.
