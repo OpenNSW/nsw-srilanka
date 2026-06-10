@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS workflow_template_map (
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
+-- Index the hs_code_id FK: workflow-template selection joins on it, so without
+-- this Postgres would fall back to a sequential scan.
+CREATE INDEX IF NOT EXISTS idx_workflow_template_map_hs_code_id ON workflow_template_map (hs_code_id);
 
 -- -------------------------------------------------------------------
 -- 3. Workflow Instances & Node States

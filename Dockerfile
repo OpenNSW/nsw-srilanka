@@ -31,15 +31,18 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
 # -------------------------------------------------------------------
 FROM golang:1.26.3-bookworm AS migrate-builder
 
-# Bump to adopt a newer migrator. No semver tag exists on
-# nsw-agency/backend yet, so this is a pinned pseudo-version.
-ARG MIGRATE_VERSION=v0.0.0-20260610120959-d981e67a7a47
-
 ARG TARGETOS
 ARG TARGETARCH
-RUN mkdir /tmp-build && cd /tmp-build \
-    && GOWORK=off go mod init migrate-build \
-    && GOWORK=off go get github.com/OpenNSW/nsw-agency/backend/cmd/migrate@${MIGRATE_VERSION} \
+
+# Version-independent setup is kept above the MIGRATE_VERSION ARG so a version
+# bump only invalidates the fetch+build layer below, not these cached steps.
+WORKDIR /tmp-build
+RUN GOWORK=off go mod init migrate-build
+
+# Bump to adopt a newer migrator (overridable via --build-arg / compose). No
+# semver tag exists on nsw-agency/backend yet, so this is a pinned pseudo-version.
+ARG MIGRATE_VERSION=v0.0.0-20260610120959-d981e67a7a47
+RUN GOWORK=off go get github.com/OpenNSW/nsw-agency/backend/cmd/migrate@${MIGRATE_VERSION} \
     && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
        go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/nsw-agency/backend/cmd/migrate
 

@@ -128,6 +128,11 @@ services:
       context: .
       dockerfile: Dockerfile
       target: migrate
+      args:
+        # Override the migrator version without editing the Dockerfile:
+        #   MIGRATE_VERSION=<pseudo-version> docker compose build migrate
+        # Falls back to the Dockerfile's pinned default when unset.
+        MIGRATE_VERSION: ${MIGRATE_VERSION:-v0.0.0-20260610120959-d981e67a7a47}
     container_name: nsw-migrate
     networks:
       - nsw-network
@@ -139,7 +144,7 @@ services:
       - DB_USER=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-changeme}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-    command: ["migrate", "up"]
+    # No `command:` — the migrate image's default CMD is ["migrate", "up"].
     depends_on:
       db:
         condition: service_healthy
