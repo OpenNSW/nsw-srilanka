@@ -52,6 +52,14 @@ jobs:
             context: .
             dockerfile: ./Dockerfile
             description: NSW Backend API Service
+          - service_name: NSW Migrate
+            image_name: nsw-migrate
+            context: .
+            dockerfile: ./Dockerfile
+            description: NSW schema migrator (nsw-agency migrate tool)
+            # The migrator is a non-default stage; other entries have no target
+            # and build their Dockerfile's default (last) stage.
+            target: migrate
     permissions:
       packages: write          # push images to GHCR
       security-events: write   # upload Trivy SARIF results to GitHub Security
@@ -158,6 +166,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          # Empty for default-stage images; set to `migrate` for the migrator.
+          target: ${{ matrix.target }}
           push: ${{ steps.release-mode.outputs.enabled == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -350,11 +360,13 @@ jobs:
             ### Published Image Targets
             - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/trader-app:${{ needs.collate-digests.outputs.version }}`
             - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/nsw-backend:${{ needs.collate-digests.outputs.version }}`
+            - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/nsw-migrate:${{ needs.collate-digests.outputs.version }}`
 
             ### Pull Images
             ```bash
             docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/trader-app:${{ needs.collate-digests.outputs.version }}
             docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/nsw-backend:${{ needs.collate-digests.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/nsw-migrate:${{ needs.collate-digests.outputs.version }}
             ```
 
             ### Image Digests
