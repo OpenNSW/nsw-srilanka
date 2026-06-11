@@ -1,0 +1,6 @@
+{
+  "id": "npqs-pay-for-treatment",
+  "type": "PAYMENT",
+  "workflow_id": "npqs-pay-for-treatment",
+  "render_config_id": "npqs-pay-for-treatment:render"
+}

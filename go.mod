@@ -1,12 +1,15 @@
-module github.com/OpenNSW/nsw/backend/srilanka
+module github.com/OpenNSW/nsw-srilanka
 
-go 1.25.7
+go 1.26.3
 
 require (
-	github.com/OpenNSW/go-temporal-workflow v0.4.0
-	github.com/OpenNSW/nsw-task-flow v0.0.0-20260526134015-a84391d97c36
-	github.com/OpenNSW/nsw/backend v0.0.0-20260603095413-304662603415
-	go.temporal.io/sdk v1.43.0
+	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/OpenNSW/core v0.0.0-20260609104617-66c100d4aa8a
+	github.com/google/uuid v1.6.0
+	github.com/shopspring/decimal v1.4.0
+	github.com/stretchr/testify v1.11.1
+	go.temporal.io/sdk v1.44.1
+	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -32,11 +35,9 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/expr-lang/expr v1.17.8 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
-	github.com/go-mail/mail/v2 v2.3.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/mock v1.6.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -48,10 +49,8 @@ require (
 	github.com/nexus-rpc/sdk-go v0.6.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
-	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
-	go.temporal.io/api v1.62.11 // indirect
+	go.temporal.io/api v1.62.12 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
@@ -61,7 +60,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
 	google.golang.org/grpc v1.81.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/driver/postgres v1.6.0 // indirect
 )

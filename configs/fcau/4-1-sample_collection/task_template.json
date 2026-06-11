@@ -1,0 +1,6 @@
+{
+  "id": "fcau-sample-collection-flow",
+  "type": "SAMPLE_COLLECTION",
+  "workflow_id": "fcau-sample-collection-flow",
+  "render_config_id": "fcau-sample-collection-flow:render"
+}

@@ -1,0 +1,36 @@
+{
+  "id": "trade-cha-selection-flow",
+  "name": "Customs House Agent (CHA) Selection",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "cha_selection_task",
+      "type": "TASK",
+      "task_template_id": "trade-cha-selection--user-input",
+      "input_mapping": {},
+      "output_mapping": {
+        "cha_company_id": "traderinput.cha_company_id"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "cha_selection_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "cha_selection_task",
+      "target_id": "end"
+    }
+  ]
+}

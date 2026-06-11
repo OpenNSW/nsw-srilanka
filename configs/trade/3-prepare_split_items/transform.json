@@ -1,0 +1,5 @@
+{
+  "id": "trade-prepare-split-items--transform",
+  "task_type": "HSCODE_SPLIT_BUILDER",
+  "plugin_properties": {}
+}

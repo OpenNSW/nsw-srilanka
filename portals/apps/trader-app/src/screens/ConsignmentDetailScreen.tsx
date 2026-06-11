@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Badge, Spinner, Text, Flex } from '@radix-ui/themes'
-import { ArrowLeftIcon, InfoCircledIcon, ClockIcon, MagnifyingGlassIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
+import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { ActionListView } from '../components/WorkflowViewer'
 import type { ConsignmentDetail } from '../services/types/consignment.ts'
-import { getConsignment, initializeConsignment } from '../services/consignment.ts'
+import { getConsignment } from '../services/consignment.ts'
 import { useApi } from '../services/ApiContext'
-import { useRole } from '../services/RoleContext'
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
-import { HSCodePicker } from '../components/HSCodePicker'
-import type { HSCode } from '../services/types/hsCode'
 
 export function ConsignmentDetailScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
@@ -19,10 +16,6 @@ export function ConsignmentDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hsPickerOpen, setHsPickerOpen] = useState(false)
-  const [initializing, setInitializing] = useState(false)
-
-  const { role } = useRole()
 
   const fetchConsignment = useCallback(async () => {
     if (!consignmentId) {
@@ -103,23 +96,6 @@ export function ConsignmentDetailScreen() {
   }
 
   const workflowNodes = consignment.workflowNodes || []
-  const isChaView = role === 'cha'
-
-  const handleSelectHSCode = async (hsCode: HSCode) => {
-    if (!consignmentId) return
-    setInitializing(true)
-    try {
-      await initializeConsignment(consignmentId, [hsCode.id], api)
-      setHsPickerOpen(false)
-      await fetchConsignment()
-    } catch (e) {
-      console.error('Failed to initialize consignment:', e)
-      // keep it minimal: reuse existing error area
-      setError('Failed to initialize consignment')
-    } finally {
-      setInitializing(false)
-    }
-  }
 
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-64px)] flex flex-col">
@@ -194,71 +170,6 @@ export function ConsignmentDetailScreen() {
                 consignmentState={consignment.state}
               />
             </div>
-          ) : consignment.state === 'INITIALIZED' ? (
-            <div
-              className={`flex-1 flex items-center justify-center bg-surface/50 rounded-xl border border-dashed transition-all duration-200 
-                ${
-                  isChaView
-                    ? 'border-info-subtle hover:border-info hover:bg-info-subtle/30 cursor-pointer group shadow-sm hover:shadow-md'
-                    : 'border-border-strong'
-                }`}
-              onClick={isChaView && !initializing ? () => setHsPickerOpen(true) : undefined}
-            >
-              <div className="text-center max-w-md p-6">
-                {isChaView ? (
-                  <>
-                    <div className="mb-4 flex justify-center group-hover:scale-110 transition-transform duration-200">
-                      <div className="p-3 bg-info-subtle group-hover:bg-info/15 rounded-full transition-colors">
-                        <InfoCircledIcon width="32" height="32" className="text-info" />
-                      </div>
-                    </div>
-                    <Text
-                      size="4"
-                      weight="bold"
-                      className="block mb-2 text-foreground-muted group-hover:text-info-strong transition-colors"
-                    >
-                      Initialize Workflow
-                    </Text>
-                    <Text size="2" color="gray" className="block mb-6">
-                      To begin the consignment process, you must first select the appropriate HS Code for this
-                      consignment.
-                    </Text>
-                    <Flex
-                      align="center"
-                      justify="center"
-                      gap="2"
-                      className="text-info font-semibold group-hover:text-info-strong transition-colors"
-                    >
-                      {initializing ? (
-                        <Spinner size="1" />
-                      ) : (
-                        <div className="bg-info-subtle text-info-strong p-1.5 rounded-full group-hover:bg-info/15 transition-colors shadow-sm">
-                          <MagnifyingGlassIcon width="16" height="16" />
-                        </div>
-                      )}
-                      <Text size="3" className="group-hover:underline decoration-2 underline-offset-4">
-                        {initializing ? 'Initializing...' : 'Select HS Code'}
-                      </Text>
-                    </Flex>
-                  </>
-                ) : (
-                  <>
-                    <div className="mb-4 flex justify-center">
-                      <div className="p-3 bg-warning-subtle rounded-full">
-                        <ClockIcon width="32" height="32" className="text-warning" />
-                      </div>
-                    </div>
-                    <Text size="4" color="gray" weight="bold" className="block mb-2">
-                      Awaiting HS Code Selection
-                    </Text>
-                    <Text size="2" color="gray" className="block">
-                      Your Customs House Agent (CHA) needs to select the HS Code for this consignment before the
-                      workflow steps can be generated.
-                    </Text>
-                  </>
-                )}
-              </div>
-            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -273,18 +184,6 @@ export function ConsignmentDetailScreen() {
           )}
         </div>
       </div>
-
-      {/* Reuse existing HS code modal, but skip trade-flow step (flow is already known) */}
-      <HSCodePicker
-        open={hsPickerOpen}
-        onOpenChange={setHsPickerOpen}
-        fixedTradeFlow={consignment.flow}
-        title="Select HS Code"
-        confirmText="Start Workflow"
-        cancelText="Cancel"
-        isCreating={initializing}
-        onSelect={(hsCode) => handleSelectHSCode(hsCode)}
-      />
     </div>
   )
 }

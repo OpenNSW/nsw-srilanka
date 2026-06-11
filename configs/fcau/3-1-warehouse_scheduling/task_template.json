@@ -1,0 +1,6 @@
+{
+  "id": "fcau-warehouse-scheduling-flow",
+  "type": "APPLICATION",
+  "workflow_id": "fcau-warehouse-scheduling-flow",
+  "render_config_id": "fcau-warehouse-scheduling-flow:render"
+}

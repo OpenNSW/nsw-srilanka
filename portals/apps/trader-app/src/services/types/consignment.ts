@@ -80,16 +80,6 @@ export interface ConsignmentDetail {
 // Deprecated: Use ConsignmentDetail or ConsignmentSummary
 export type Consignment = ConsignmentDetail
 
-export interface CreateConsignmentItemRequest {
-  hsCodeId: string
-}
-
-export interface CreateConsignmentRequest {
-  flow: TradeFlow
-  items?: CreateConsignmentItemRequest[]
-  chaCompanyId?: string
-}
-
 export type CreateConsignmentResponse = ConsignmentDetail
 
 export type ConsignmentListResult = PaginatedResponse<ConsignmentSummary>

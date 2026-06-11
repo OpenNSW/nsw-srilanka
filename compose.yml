@@ -1,0 +1,240 @@
+networks:
+  nsw-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  thunderid-db:
+    driver: local
+  consent-db:
+    driver: local
+  temporal_data:
+    driver: local
+  bucket_data:
+    driver: local
+
+services:
+  # -------------------------------------------------------------------
+  # 1. Shared Infrastructure Database (PostgreSQL)
+  # -------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: nsw-postgres
+    networks:
+      - nsw-network
+    ports:
+      # Expose standard port on localhost for migration tooling scripts to fire against
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-nsw_db}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-nsw_db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # -------------------------------------------------------------------
+  # 2. Identity Provider Core Services (Thunder Stack)
+  # -------------------------------------------------------------------
+  # Stage A: Seed static database schemas from container image layer
+  thunderid-db-init:
+    image: ghcr.io/thunder-id/thunderid:0.42.0
+    container_name: thunderid-db-init
+    command: sh -c "cp -r /opt/thunderid/repository/database/* /data/ && (cp -r /opt/thunderid/consent/repository/database/* /consent-data/ 2>/dev/null || true)"
+    volumes:
+      - thunderid-db:/data
+      - consent-db:/consent-data
+    restart: "no"
+
+  # Stage B: Run bootstrap logic once SQLite files have mounted
+  thunderid-setup:
+    image: ghcr.io/thunder-id/thunderid:0.42.0
+    container_name: thunderid-setup
+    command: ./setup.sh
+    networks:
+      - nsw-network
+    env_file:
+      - ./idp/.env
+    volumes:
+      - thunderid-db:/opt/thunderid/repository/database
+      - consent-db:/opt/thunderid/consent/repository/database
+      - ./idp/02-sample-resources.sh:/opt/thunderid/bootstrap/02-sample-resources.sh
+    depends_on:
+      thunderid-db-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # Stage C: Boot active server instances listening for authentication queries
+  thunderid:
+    image: ghcr.io/thunder-id/thunderid:0.42.0
+    container_name: thunderid
+    networks:
+      - nsw-network
+    ports:
+      - "${IDP_PORT:-8090}:${IDP_PORT:-8090}"
+    env_file:
+      - ./idp/.env
+    volumes:
+      - thunderid-db:/opt/thunderid/repository/database
+      - consent-db:/opt/thunderid/consent/repository/database
+      - ./idp/deployment.yaml:/opt/thunderid/repository/conf/deployment.yaml
+    depends_on:
+      thunderid-setup:
+        condition: service_completed_successfully
+
+  # -------------------------------------------------------------------
+  # 3. Temporal Workflow Engine Infrastructure
+  # -------------------------------------------------------------------
+  temporal:
+    image: temporalio/auto-setup:1.28.3
+    container_name: temporal
+    networks:
+      - nsw-network
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233"
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=${DB_USERNAME:-postgres}
+      - POSTGRES_PWD=${DB_PASSWORD:-changeme}
+      - POSTGRES_SEEDS=db
+      - DB_NAME=temporal
+    depends_on:
+      db:
+        condition: service_healthy
+
+  temporal-ui:
+    image: temporalio/ui:2.48.0
+    container_name: temporal-ui
+    networks:
+      - nsw-network
+    ports:
+      - "${TEMPORAL_UI_PORT:-8233}:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - temporal
+
+  # -------------------------------------------------------------------
+  # 4. Database Migrations
+  # -------------------------------------------------------------------
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+      args:
+        # Override the migrator version without editing the Dockerfile:
+        #   MIGRATE_VERSION=<pseudo-version> docker compose build migrate
+        # Falls back to the Dockerfile's pinned default when unset.
+        MIGRATE_VERSION: ${MIGRATE_VERSION:-v0.0.0-20260610120959-d981e67a7a47}
+    container_name: nsw-migrate
+    networks:
+      - nsw-network
+    environment:
+      - DB_DRIVER=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-nsw_db}
+      - DB_USER=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+    # No `command:` — the migrate image's default CMD is ["migrate", "up"].
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # -------------------------------------------------------------------
+  # 5. Backend Orchestration API Layer
+  # -------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nsw-backend-api
+    networks:
+      - nsw-network
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      # Mount configs from the repo (read-only) instead of baking them into
+      # the image — a config change needs no rebuild, just a restart.
+      - ./configs:/app/configs:ro
+      # Persist runtime blob storage written by the storage driver.
+      - bucket_data:/app/bucket
+    environment:
+      # Target relational store parameter mapping
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-nsw_db}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+      # Engine configuration variables
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      - TEMPORAL_NAMESPACE=${TEMPORAL_NAMESPACE:-default}
+      # Context variables translated directly from old start-dev parameters
+      - SERVER_PORT=8080
+      - SERVER_DEBUG=${SERVER_DEBUG:-true}
+      - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
+      - SERVICE_URL=${SERVICE_URL:-http://localhost:${BACKEND_PORT:-8080}}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177}
+      - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
+      - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
+      - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,IRD_TO_NSW,CDA_TO_NSW}
+      - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
+      - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
+      - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
+      - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
+      - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      thunderid:
+        condition: service_started
+
+  # -------------------------------------------------------------------
+  # 6. Trader Portal Frontend (React SPA served via Nginx)
+  # -------------------------------------------------------------------
+  trader-portal:
+    build:
+      # Build context is the portals workspace root; the Dockerfile copies
+      # the root pnpm files and apps/trader-app, then builds with pnpm.
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: nsw-trader-portal
+    networks:
+      - nsw-network
+    ports:
+      # Nginx listens on 8080 inside the container; expose on 5173 to match
+      # VITE_APP_URL and the backend CORS allow-list.
+      - "${TRADER_PORTAL_PORT:-5173}:8080"
+    environment:
+      # Injected into runtime-env.js at container start. These are read by the
+      # browser, so they must target host-exposed ports (localhost), not the
+      # internal service hostnames.
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
+      - VITE_IDP_BASE_URL=${VITE_IDP_BASE_URL:-https://localhost:8090}
+      - VITE_IDP_CLIENT_ID=${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}
+      - VITE_APP_URL=${VITE_APP_URL:-http://localhost:5173}
+      - VITE_IDP_SCOPES=${VITE_IDP_SCOPES:-openid,profile,email,group,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write}
+      - VITE_IDP_PLATFORM=${VITE_IDP_PLATFORM:-AsgardeoV2}
+      - VITE_IDP_TRADER_GROUP_NAME=${VITE_IDP_TRADER_GROUP_NAME:-Traders}
+      - VITE_IDP_CHA_GROUP_NAME=${VITE_IDP_CHA_GROUP_NAME:-CHA}
+      - VITE_SHOW_AUTOFILL_BUTTON=${VITE_SHOW_AUTOFILL_BUTTON:-true}
+    depends_on:
+      api:
+        condition: service_started
+      thunderid:
+        condition: service_started

@@ -1,0 +1,6 @@
+{
+  "id": "npqs-issue-treatment-cert",
+  "type": "REVIEW",
+  "workflow_id": "npqs-issue-treatment-cert",
+  "render_config_id": "npqs-issue-treatment-cert:render"
+}

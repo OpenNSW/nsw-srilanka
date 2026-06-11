@@ -1,0 +1,6 @@
+{
+  "id": "fcau-post-wh-lab-testing-flow",
+  "type": "LAB_TEST",
+  "workflow_id": "fcau-post-wh-lab-testing-flow",
+  "render_config_id": "fcau-post-wh-lab-testing-flow:render"
+}

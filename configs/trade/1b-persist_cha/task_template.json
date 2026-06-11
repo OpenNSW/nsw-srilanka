@@ -1,0 +1,6 @@
+{
+  "id": "trade-persist-cha-flow",
+  "type": "SYSTEM",
+  "workflow_id": "trade-persist-cha-flow",
+  "render_config_id": "trade-persist-cha-flow:render"
+}

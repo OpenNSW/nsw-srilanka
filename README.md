@@ -48,64 +48,87 @@ cp configs/payment_methods.example.json configs/payment_methods.json
 The FCAU workflow JSON tree under `configs/fcau/` is gitignored — make sure you have pulled it from your team's workflow template store before running the application.
 
 ### 2. Start the Docker Stack
-The repository provides a unified `docker-compose.yml` stack that brings up all required backing services (PostgreSQL, IDP, Temporal) and runs the Go backend API container with hot-reloading and multi-repo workspace linking enabled.
+The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
 
-To start the services:
 ```bash
-docker compose up -d
+make dev      # development: hot reload (air for Go, Vite HMR for the portal)
+make preview  # build and run the real images from the Dockerfiles, locally
+make help     # list all targets
 ```
+
 This spins up:
 * **`nsw-postgres`** (Port `5432`): Database populated with base tables/schemas.
 * **`nsw-idp`** (Port `8090`): Thunder Identity Provider.
 * **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
-* **`nsw-backend-api`** (Port `8080`): The Go backend server running `go run ./cmd/server` inside the container in watch/reload mode.
+* **`nsw-backend-api`** (Port `8080`): The Go backend server.
+* **`nsw-trader-portal`** (Port `5173`): The React Trader Portal frontend.
 
-#### 2. Start the Frontend (Trader Portal)
-The Trader Portal frontend remains in the sibling `nsw` repository for now. You must run it locally from there:
+> [!IMPORTANT]
+> **`docker compose up` gives you the *development* stack.**
+> A `compose.override.yml` sits next to `compose.yml` and Docker Compose
+> **auto-merges it** on any bare `docker compose` command — so a plain
+> `docker compose up` runs the hot-reload dev stack (stock language images,
+> source bind-mounted, `air`/Vite recompiling in place). The real built images
+> from the Dockerfiles are **only** used when the override is excluded with
+> `-f compose.yml`.
+>
+> | Goal                  | Command                                                                 |
+> |-----------------------|-------------------------------------------------------------------------|
+> | Dev (hot reload)      | `make dev` &nbsp;·&nbsp; `docker compose up`                            |
+> | Preview (real images) | `make preview` &nbsp;·&nbsp; `docker compose -f compose.yml up --build` |
+>
+> **CI/deploy scripts that shell out to `docker compose` directly must pass
+> `-f compose.yml`** (or call `make preview`), otherwise they will silently build
+> and run the dev stack.
+
+In development, edits to Go files trigger an `air` rebuild and frontend edits hot-reload via Vite — no image rebuild and no container restart needed.
+
+The Trader Portal frontend runs as part of the stack — `make dev` serves it via the Vite dev server at `http://localhost:5173`, with backend requests going to `localhost:8080` and auth to the Thunder IDP at `localhost:8090`. No separate repository or process is required.
+
+### 3. Iterating on Go code
+
+In `make dev`, the API container runs [`air`](https://github.com/air-verse/air) against your bind-mounted source. Saving a `.go` file triggers an automatic rebuild and restart of the server inside the container — usually a second or two — while PostgreSQL, Temporal, and the IDP keep running undisturbed. There is nothing to restart manually.
+
+To watch the rebuild output:
 ```bash
-cd ../nsw
-./start-dev.sh
+make logs
 ```
-This runs the frontend dev server on `http://localhost:5173`, proxying backend requests to the Docker container at `localhost:8080` and auth requests to the Thunder IDP at `localhost:8090`.
 
-#### 3. Sibling Repositories & Local Development (Modes A & B)
-The backend container can be run in two modes using Go workspaces:
+#### Working against the core engine (`OpenNSW/nsw/backend`)
 
-##### Mode A: Remote Dependencies (Default)
-By default, the backend API compiles using the dependencies specified in `go.mod` (fetched from GitHub). You do not need to have the sibling repositories cloned locally.
-* **How it works:** `GOWORK` defaults to `off` inside the container. The Docker volume bind mounts fallback to `.` (the current directory) to avoid mount errors on the host if sibling folders don't exist.
+This repo depends on the core engine as a normal, version-pinned Go module — there is **no** sibling clone, `replace` directive, or `GOWORK` setting involved (see [Upstream Dependency](#upstream-dependency)). Two common workflows:
 
-##### Mode B: Local Workspace Dependencies
-If you are developing across multiple repositories and want local changes in sibling folders to be automatically picked up and compiled:
-1. **Clone the sibling repositories** as siblings to `nsw-srilanka`:
-   * `nsw`
-   * `nsw-task-flow`
-   * `go-temporal-workflow`
-2. **Configure your `.env` file** to enable the workspace and specify the sibling paths:
-   ```env
-   # Enable Go Workspace compilation inside the container
-   GOWORK=/src/go.work
+* **Bump to a newer engine build** — point `go.mod` at a new commit and let the dev container pick it up on its next rebuild:
+  ```bash
+  go get github.com/OpenNSW/nsw/backend@taskv2
+  go mod tidy
+  ```
+* **Develop the engine and this repo together** — push your engine change to a branch and `go get` that ref, or use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across repositories.
 
-   # Map host paths to the sibling directories
-   NSW_PATH=../nsw
-   NSW_TASK_FLOW_PATH=../nsw-task-flow
-   GO_TEMPORAL_WORKFLOW_PATH=../go-temporal-workflow
-   ```
-3. **Initialize the `go.work` file** at the root of `nsw-srilanka`. Since workspace files are developer-specific and gitignored, you should generate it using:
+#### Native cross-repo development
+
+The dev container is hermetic: it builds from the pinned `go.mod` version, ignores any `go.work` (`GOWORK=off`), and does **not** mount sibling repos. That's intentional — it keeps every container build reproducible. When you need to edit `OpenNSW/nsw` (or another sibling) and see the change live, run the **Go API natively on your host** and use Docker only for the backing services:
+
+1. **Clone the siblings** next to `nsw-srilanka` and create a workspace (`go.work` is gitignored, so this stays personal):
    ```bash
-   go work init . ../nsw-task-flow ../go-temporal-workflow ../nsw/backend
+   go work init . ../nsw/backend ../nsw-task-flow ../go-temporal-workflow
    ```
-   This will generate a `go.work` file that references these local paths. (If you already have a `go.work` file, you can add missing directories using `go work use <directory_path>`).
+2. **Prepare env** — the template is already tuned for native runs (`DB_HOST=localhost`, `TEMPORAL_HOST=localhost`, `AUTH_JWKS_URL=https://localhost:8090`, `SERVICES_CONFIG_PATH=./configs/services.json`):
+   ```bash
+   cp .env.example .env
+   ```
+3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
+   ```bash
+   make deps
+   ```
+4. **Run the API on the host**, where your `go.work` is fully honored:
+   ```bash
+   go run ./cmd/server
+   ```
 
-To compile and apply your latest Go code changes from any of these local directories, you do not need to restart the entire database/IDP stack. You can quickly rebuild and restart just the backend API container:
-```bash
-docker compose up -d --force-recreate api
-```
-Or simply:
-```bash
-docker compose restart api
-```
-This re-runs `go run` inside the container, rebuilding and starting your backend in seconds while keeping PostgreSQL, Temporal, and the IDP running undisturbed.
+Edits in the sibling repos are now picked up by the host compiler, and you get a native debugger. Because `docker compose` reads the same `.env`, the published service ports and the ports your host binary connects to stay in sync automatically (e.g. `DB_PORT`).
+
+> Don't mix the two: if `make dev` is already running, its `api` container holds port `8080` — run `make down` (or just `docker compose stop api`) before starting the native server.
 
 ---
 
@@ -138,6 +161,49 @@ REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own.
 
 ---
 
+## Database migrations
+
+Schema migrations live in `migrations/` as `NNN_name.sql` files, each holding a
+`-- @UP` and a `-- @DOWN` block. They are applied by the standalone migrator from
+[`nsw-agency`](https://github.com/OpenNSW/nsw-agency) (`backend/cmd/migrate`),
+which tracks applied versions in a `__migrations` table and runs each migration
+in its own transaction.
+
+**In Docker (default):** the `migrate` service builds the dedicated `migrate`
+image target (SQL files baked in), runs `migrate up` to completion, and the `api`
+service waits on it via `depends_on: service_completed_successfully`. A fresh
+`db` volume already creates the database, so there is no separate "create DB"
+step. To reset everything, wipe the volume:
+
+```bash
+make clean        # docker compose down -v — drops the db volume
+make deps         # brings the stack back up; migrate re-applies from scratch
+```
+
+Run ad-hoc commands against the running stack:
+
+```bash
+docker compose run --rm migrate status   # show applied / pending
+docker compose run --rm migrate down     # roll back the latest migration
+```
+
+**Locally (native, without Docker):** install the tool once, then point it at
+your database. Note the env var names differ slightly from the app's
+(`DB_USER`, not `DB_USERNAME`):
+
+```bash
+# Pin the same version the Docker image uses (see MIGRATE_VERSION in the Dockerfile / Makefile).
+go install github.com/OpenNSW/nsw-agency/backend/cmd/migrate@v0.0.0-20260610120959-d981e67a7a47
+
+DB_DRIVER=postgres MIGRATION_DIR=./migrations \
+  DB_HOST=localhost DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" \
+  DB_USER="$DB_USERNAME" DB_PASSWORD="$DB_PASSWORD" \
+  migrate up        # or: status | down | generate <name>
+```
+
+`migrate generate <name>` scaffolds the next `NNN_<name>.sql` with empty
+`@UP`/`@DOWN` stubs.
+
 ## Upstream Dependency
 
 The core engine is pulled directly from GitHub via Go modules:
@@ -155,17 +221,15 @@ go mod tidy
 
 There is **no** `replace` directive and **no** sibling clone of `OpenNSW/nsw` required to build.
 
-> The local module path declares itself as `github.com/OpenNSW/nsw/backend/srilanka` so Go's `internal/...` visibility rule allows importing `github.com/OpenNSW/nsw/backend/internal/*`. The physical directory name (`nsw-srilanka`) is independent of the module path.
-
 ---
 
 ## Configuration Reference
 
-| File | Purpose | Source of truth |
-|------|---------|-----------------|
-| `.env` | Runtime environment (DB, Temporal, CORS, auth, storage, config paths) | `.env.example` |
-| `configs/services.json` | Outbound service endpoint registry (FCAU, NPQS, IRD, customs, …) | `configs/services.example.json` |
-| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template) | `configs/payment_methods.example.json` |
-| `configs/fcau/` | FCAU health-certificate workflow definition + JSONForms + render configs | Per-team workflow store |
+| File                           | Purpose                                                                  | Source of truth                        |
+|--------------------------------|--------------------------------------------------------------------------|----------------------------------------|
+| `.env`                         | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)    | `.env.example`                         |
+| `configs/services.json`        | Outbound service endpoint registry (FCAU, NPQS, IRD, customs, …)         | `configs/services.example.json`        |
+| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)  | `configs/payment_methods.example.json` |
+| `configs/fcau/`                | FCAU health-certificate workflow definition + JSONForms + render configs | Per-team workflow store                |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in the upstream `github.com/OpenNSW/nsw/backend` README and the FCAU configs themselves.

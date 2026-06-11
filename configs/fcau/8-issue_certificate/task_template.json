@@ -1,0 +1,6 @@
+{
+  "id": "fcau-issue-certificate-flow",
+  "type": "CERTIFICATE_ISSUANCE",
+  "workflow_id": "fcau-issue-certificate-flow",
+  "render_config_id": "fcau-issue-certificate-flow:render"
+}

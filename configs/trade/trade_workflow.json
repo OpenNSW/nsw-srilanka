@@ -1,0 +1,108 @@
+{
+  "id": "trade-export-v1",
+  "name": "Single-Window Trade Export Process",
+  "version": 3,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START",
+      "name": "Start"
+    },
+    {
+      "id": "trade_1_cha_selection",
+      "type": "TASK",
+      "name": "Select Customs House Agent (CHA)",
+      "task_template_id": "trade-cha-selection-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {},
+      "output_mapping": {
+        "traderinput.cha_company_id": "trade.cha_company_id"
+      }
+    },
+    {
+      "id": "trade_1b_persist_cha",
+      "type": "TASK",
+      "name": "Persist Selected CHA",
+      "task_template_id": "trade-persist-cha-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "trade.cha_company_id": "cha_company_id"
+      },
+      "output_mapping": {}
+    },
+    {
+      "id": "trade_2_hscode_selection",
+      "type": "TASK",
+      "name": "Select HS Codes",
+      "task_template_id": "trade-hscode-selection-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "trade.cha_company_id": "cha_company_id"
+      },
+      "output_mapping": {
+        "traderinput.hs_codes": "trade.hs_codes"
+      }
+    },
+    {
+      "id": "trade_3_prepare_split_items",
+      "type": "TASK",
+      "name": "Prepare Agency Flow Items",
+      "task_template_id": "trade-prepare-split-items-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "trade.hs_codes": "hs_codes"
+      },
+      "output_mapping": {
+        "split_items": "trade.split_items"
+      }
+    },
+    {
+      "id": "trade_4_trigger_flows",
+      "type": "SPLIT_TASK",
+      "name": "Trigger Agency Flows",
+      "split_task": {
+        "mode": "DIFFERENT_TEMPLATES",
+        "items_variable": "trade.split_items",
+        "results_variable": "trade.agency_results",
+        "failure_mode": "COLLECT_ALL"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END",
+      "name": "End"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_start_to_cha",
+      "source_id": "start",
+      "target_id": "trade_1_cha_selection"
+    },
+    {
+      "id": "e_cha_to_persist",
+      "source_id": "trade_1_cha_selection",
+      "target_id": "trade_1b_persist_cha"
+    },
+    {
+      "id": "e_persist_to_hscode",
+      "source_id": "trade_1b_persist_cha",
+      "target_id": "trade_2_hscode_selection"
+    },
+    {
+      "id": "e_hscode_to_prepare",
+      "source_id": "trade_2_hscode_selection",
+      "target_id": "trade_3_prepare_split_items"
+    },
+    {
+      "id": "e_prepare_to_trigger",
+      "source_id": "trade_3_prepare_split_items",
+      "target_id": "trade_4_trigger_flows"
+    },
+    {
+      "id": "e_trigger_to_end",
+      "source_id": "trade_4_trigger_flows",
+      "target_id": "end"
+    }
+  ]
+}

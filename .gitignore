@@ -36,3 +36,9 @@ bucket/*
 # Go Workspace files (developer-specific local files)
 go.work
 go.work.sum
+
+# air hot-reload build output (compose.override.yml dev loop)
+tmp/
+
+# macOS
+.DS_Store

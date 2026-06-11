@@ -1,0 +1,6 @@
+{
+  "id": "npqs-upload-docs",
+  "type": "APPLICATION",
+  "workflow_id": "npqs-upload-docs",
+  "render_config_id": "npqs-upload-docs:render"
+}

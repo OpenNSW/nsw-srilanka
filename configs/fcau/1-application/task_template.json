@@ -1,0 +1,6 @@
+{
+  "id": "fcau-apply-health-cert-flow",
+  "type": "APPLICATION",
+  "workflow_id": "fcau-apply-health-cert-flow",
+  "render_config_id": "fcau-apply-health-cert-flow:render"
+}

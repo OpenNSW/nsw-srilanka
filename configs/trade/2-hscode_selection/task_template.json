@@ -1,0 +1,6 @@
+{
+  "id": "trade-hscode-selection-flow",
+  "type": "APPLICATION",
+  "workflow_id": "trade-hscode-selection-flow",
+  "render_config_id": "trade-hscode-selection-flow:render"
+}

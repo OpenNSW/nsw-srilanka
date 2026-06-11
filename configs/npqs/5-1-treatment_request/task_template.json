@@ -1,0 +1,6 @@
+{
+  "id": "npqs-treatment-request",
+  "type": "APPLICATION",
+  "workflow_id": "npqs-treatment-request",
+  "render_config_id": "npqs-treatment-request:render"
+}

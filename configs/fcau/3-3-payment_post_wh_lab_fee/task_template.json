@@ -1,0 +1,6 @@
+{
+  "id": "fcau-pay-post-wh-lab-fee-flow",
+  "type": "PAYMENT",
+  "workflow_id": "fcau-pay-post-wh-lab-fee-flow",
+  "render_config_id": "fcau-pay-post-wh-lab-fee-flow:render"
+}

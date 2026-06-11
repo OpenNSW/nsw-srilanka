@@ -1,0 +1,23 @@
+# Version control / CI
+.git/
+.gitignore
+.github/
+
+# Frontend — irrelevant to the Go build, large build context
+portals/
+
+# Runtime data — must never be baked into the image
+bucket/
+
+# Docs & meta
+*.md
+LICENSE
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Build output
+/out/
+*.test

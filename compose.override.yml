@@ -1,0 +1,75 @@
+# compose.override.yml — DEVELOPMENT inner loop (auto-loaded by `docker compose up`).
+#
+# Because it is named compose.override.yml, a bare `docker compose up` merges it
+# on top of compose.yml automatically, giving the hot-reload dev stack by
+# default. Prefer the Makefile targets over raw compose commands:
+#
+#   make dev      -> this hot-reload stack (air + Vite HMR)
+#   make preview  -> compose.yml ONLY (real built images, no override)
+#
+# It turns the two source services (api, trader-portal) into live,
+# hot-reloading dev containers: it does NOT build the production images, it
+# runs the stock language base images, bind-mounts your source, and recompiles
+# in place when files change. Editing a file does not rebuild any image.
+#
+#   api           -> `air` watches *.go and rebuilds the binary on save
+#   trader-portal -> Vite dev server with HMR
+#
+# All backing services (db, temporal, idp, migrate) are inherited unchanged
+# from compose.yml.
+
+volumes:
+  go-cache:
+    # Go module cache — survives container restarts.
+    driver: local
+  go-bin:
+    # Persists the `air` binary so it isn't reinstalled each run.
+    driver: local
+  pnpm-workspace-modules:
+    # Linux-native workspace-root node_modules (NOT the host's macOS ones).
+    driver: local
+  pnpm-app-modules:
+    driver: local
+
+services:
+  # -------------------------------------------------------------------
+  # Go API — hot reload via air
+  # -------------------------------------------------------------------
+  api:
+    # Cancel the base file's `build:` and run the stock Go image instead.
+    build: !reset null
+    image: golang:1.26.3-bookworm
+    working_dir: /src
+    volumes:
+      # Live source mount — the container sees your edits instantly.
+      - .:/src
+      - go-cache:/go/pkg/mod
+      - go-bin:/go/bin
+      # Mount local sibling directories for go.work resolution
+      - ${CORE_PATH:-../core}:/core
+    environment:
+      # Load GOWORK from environment (defaults to off if not set)
+      - GOWORK=${GOWORK:-off}
+    # Install air once (cached in go-bin), then watch & rebuild. Config: .air.toml.
+    command: sh -c "command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@v1.65.3; exec air -c .air.toml"
+
+  # -------------------------------------------------------------------
+  # Trader portal — Vite dev server with HMR
+  # -------------------------------------------------------------------
+  trader-portal:
+    build: !reset null
+    image: node:22-bookworm-slim
+    working_dir: /workspace
+    volumes:
+      # Live source mount of the pnpm workspace root.
+      - ./portals:/workspace
+      # Overlay container-native node_modules so macOS host binaries
+      # (swc, tailwind-oxide) don't leak into the Linux container.
+      - pnpm-workspace-modules:/workspace/node_modules
+      - pnpm-app-modules:/workspace/apps/trader-app/node_modules
+    # Replace the base host:8080 mapping — Vite serves on 5173, and keeping
+    # host==container port lets HMR's websocket connect without extra config.
+    ports: !override
+      - "${TRADER_PORTAL_PORT:-5173}:5173"
+    # Install deps, then start Vite bound to all interfaces on 5173.
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && exec pnpm --filter trader-app exec vite --host 0.0.0.0 --port 5173 --strictPort"

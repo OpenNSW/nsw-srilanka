@@ -1,0 +1,6 @@
+{
+  "id": "npqs-upload-treatment-certs",
+  "type": "APPLICATION",
+  "workflow_id": "npqs-upload-treatment-certs",
+  "render_config_id": "npqs-upload-treatment-certs:render"
+}

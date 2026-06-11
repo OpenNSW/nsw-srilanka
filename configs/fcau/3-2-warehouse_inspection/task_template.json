@@ -1,0 +1,6 @@
+{
+  "id": "fcau-warehouse-inspection-flow",
+  "type": "REVIEW",
+  "workflow_id": "fcau-warehouse-inspection-flow",
+  "render_config_id": "fcau-warehouse-inspection-flow:render"
+}
