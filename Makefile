@@ -98,10 +98,22 @@ help: ## Show this help
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
 
 .PHONY: setup
-setup: tools ## Install Go quality tools and configure git hooks
+setup: tools ## First-time setup: install tools, configure git hooks, seed config files from examples
 	git config core.hooksPath .githooks
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
+	@for f in .env.example idp/env.example; do \
+		target=$$(echo $$f | sed 's/\.example//'); \
+		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
+		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
+		else echo "  Skipped: $$target (already exists)"; fi; \
+	done
+	@for f in configs/notification.example.json configs/services.docker.example.json configs/payment_methods.example.json; do \
+		target=$$(echo $$f | sed 's/\.example\.json/.json/'); \
+		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
+		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
+		else echo "  Skipped: $$target (already exists)"; fi; \
+	done
 
 .PHONY: tools
 tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
