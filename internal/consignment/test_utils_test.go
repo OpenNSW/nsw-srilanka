@@ -35,8 +35,8 @@ type MockWM struct {
 	mock.Mock
 }
 
-func (m *MockWM) StartWorkflow(ctx context.Context, ID string, workflowDefinition workflow.WorkflowDefinition, initialWorkflowVariables map[string]any) error {
-	args := m.Called(ctx, ID, workflowDefinition, initialWorkflowVariables)
+func (m *MockWM) StartWorkflow(ctx context.Context, id string, workflowDefinition workflow.WorkflowDefinition, initialWorkflowVariables map[string]any) error {
+	args := m.Called(ctx, id, workflowDefinition, initialWorkflowVariables)
 	return args.Error(0)
 }
 
@@ -58,7 +58,7 @@ func (m *MockWM) GetStatus(ctx context.Context, workflowID string) (*workflow.Wo
 	return args.Get(0).(*workflow.WorkflowInstance), args.Error(1)
 }
 
-// mockLoader is a simple loader for test artifacts
+// mockLoader is a simple loader for test artifacts.
 type mockLoader struct {
 	content map[string][]byte
 }
