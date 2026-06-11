@@ -139,6 +139,7 @@ type Filter struct {
 	CHACompanyID    *string `json:"chaCompanyId,omitempty"`
 	Flow            *Flow   `json:"flow,omitempty"`
 	State           *State  `json:"state,omitempty"`
+	Query           *string `json:"q,omitempty"`
 	Offset          *int    `json:"offset,omitempty"`
 	Limit           *int    `json:"limit,omitempty"`
 }

@@ -82,6 +82,9 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		flow := Flow(flowStr)
 		filter.Flow = &flow
 	}
+	if q := r.URL.Query().Get("q"); q != "" {
+		filter.Query = &q
+	}
 
 	// Role-based identity resolution.
 	if role != "trader" && role != "cha" {
