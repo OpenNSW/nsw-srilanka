@@ -25,15 +25,14 @@ nsw-srilanka/
 ├── portals/                              # Trader Portal frontend (React/Vite monorepo)
 ├── idp/                                  # Identity Provider configuration and seed resources
 ├── configs/
-│   ├── manifest.json                     # Artifact registry manifest — lists all workflow/form configs
-│   ├── services.json                     # Remote service endpoints (gitignored)
-│   ├── services.example.json             # Template for services.json
-│   ├── payment_methods.json              # Payment gateway catalogue (gitignored)
-│   ├── payment_methods.example.json      # Template for payment_methods.json
-│   ├── notification.json                 # Notification provider configuration
-│   ├── fcau/                             # FCAU health-certificate workflow, JSONForms, render configs
-│   ├── trade/                            # Trade (consignment) workflow and form configs
-│   └── npqs/                             # NPQS workflow and form configs
+│   ├── manifest.json                        # Artifact registry manifest — lists all workflow/form configs
+│   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
+│   ├── services.example.json                # Template for services.json (local/native dev — localhost)
+│   ├── payment_methods.example.json         # Template for payment_methods.json
+│   ├── notification.example.json            # Template for notification.json
+│   ├── fcau/                                # FCAU health-certificate workflow, JSONForms, render configs
+│   ├── trade/                               # Trade (consignment) workflow and form configs
+│   └── npqs/                               # NPQS workflow and form configs
 ├── .env.example                          # Template for environment variables
 ├── .gitignore
 ├── Dockerfile
@@ -50,12 +49,21 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ## How to Run Locally
 
 ### 1. Prepare local config files
-Copy the templates and edit each one for your environment:
+
+Copy each example file to its live name (the real files are gitignored and must not be committed):
+
 ```bash
 cp .env.example .env
-cp configs/services.example.json configs/services.json
+cp idp/env.example idp/.env
+cp configs/services.docker.example.json configs/services.docker.json
+# cp configs/services.example.json configs/services.json
+# For local development with direct host DB access, use the non-docker
+# config with localhost references instead of container hostnames.
 cp configs/payment_methods.example.json configs/payment_methods.json
+cp configs/notification.example.json configs/notification.json
 ```
+
+Edit each seeded file for your environment before starting the stack.
 
 ### 2. Start the Docker Stack
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
@@ -259,13 +267,15 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 ## Configuration Reference
 
-| File                           | Purpose                                                                  | Source of truth                        |
-|--------------------------------|--------------------------------------------------------------------------|----------------------------------------|
-| `.env`                         | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)    | `.env.example`                         |
-| `configs/manifest.json`        | Artifact registry index — lists every workflow/form/render config file   | Committed to the repository            |
-| `configs/services.json`        | Outbound service endpoint registry (FCAU, NPQS, IRD, customs, …)         | `configs/services.example.json`        |
-| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)  | `configs/payment_methods.example.json` |
-| `configs/notification.json`    | Notification provider settings (SMS, email channels)                     | Committed to the repository            |
-| `configs/<agency_code>/`       | Agency workflow definitions, JSONForms schemas, and render configs       | Committed to the repository            |
+| File                                  | Purpose                                                                         | Source of truth                               |
+|---------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
+| `.env`                                | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)           | `.env.example`                                |
+| `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/env.example`                             |
+| `configs/manifest.json`               | Artifact registry index — lists every workflow/form/render config file          | Committed to the repository                   |
+| `configs/services.docker.json`        | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json`       |
+| `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
+| `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
+| `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
+| `configs/<agency_code>/`              | Agency workflow definitions, JSONForms schemas, and render configs              | Committed to the repository                   |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

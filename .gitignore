@@ -20,9 +20,11 @@ coverage.html
 .env*
 !*.example
 
-# Services Configs
-backend/configs/*
-!backend/configs/*.example.json
+# Real config files — copy from *.example.json (gitignored; never commit)
+configs/notification.json
+configs/services.json
+configs/services.docker.json
+configs/payment_methods.json
 
 # Local bucket files
 bucket/*
