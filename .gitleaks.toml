@@ -9,7 +9,7 @@ useDefault = true
 # documentation aids, not real credentials. The live secrets file is gitignored.
 description = "Placeholder tokens in notification config template"
 paths = [
-  "configs/notification.json",
+  "configs/notification.example.json",
 ]
 
 [[allowlists]]
