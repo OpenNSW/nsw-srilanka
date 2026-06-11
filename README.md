@@ -5,7 +5,7 @@
 
 `nsw-srilanka` is the deployer-specific application repository for the **Sri Lanka instance** of the National Single Window (NSW) Platform.
 
-It depends on the open-source core engine published at `github.com/OpenNSW/core` and wires Sri Lanka–specific service endpoints, payment gateways, and agency workflow configurations on top of it.
+It depends on the open-source core engine published at [github.com/OpenNSW/core](https://github.com/OpenNSW/core) and wires Sri Lanka–specific service endpoints, payment gateways, and agency workflow configurations on top of it.
 
 ---
 
