@@ -97,13 +97,19 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy the binary. Configs are NOT baked into the image — they are
-# environment data, mounted at /app/configs at runtime (see docker-compose.yml).
+# Copy the binary.
 COPY --from=builder /out/server /app/server
 
-# Create the mount points for runtime config and blob storage. /app/configs
-# is overlaid by a read-only bind mount; /app/bucket by a writable volume.
-RUN mkdir -p /app/configs /app/bucket \
+# Bake application configs into the image. These files are tracked in git and
+# version with the code (workflow/form definitions, payment_methods.json,
+# manifest, notification, etc.), and the payment registry reads them at boot.
+# Environment-specific values (e.g. services.json) are still overlaid at runtime
+# via ConfigMap/bind mount; a host bind mount over /app/configs (docker-compose)
+# also continues to take precedence over what is baked here.
+COPY --from=builder /src/configs /app/configs
+
+# Create the writable blob storage mount point and normalise ownership.
+RUN mkdir -p /app/bucket \
     && chown -R appuser:appuser /app
 
 USER appuser
