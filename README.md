@@ -43,7 +43,7 @@ nsw-srilanka/
 
 The agency-specific workflow definitions live under `configs/<agency_code>/` as JSON files (workflow graphs, JSONForms schemas, render configs). All behaviour is configured through these JSON files — the Go server itself is intentionally thin. The `configs/manifest.json` file is the index that tells the artifact registry which files to load at startup.
 
-For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md).
+For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
 
 ---
 
@@ -203,4 +203,4 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `configs/notification.json`    | Notification provider settings (SMS, email channels)                     | Committed to the repository            |
 | `configs/<agency_code>/`       | Agency workflow definitions, JSONForms schemas, and render configs       | Committed to the repository            |
 
-Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
+Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
