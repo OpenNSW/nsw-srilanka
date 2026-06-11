@@ -104,9 +104,10 @@ setup: tools ## Install Go quality tools and configure git hooks
 	@echo "  Git hooks configured: .githooks/"
 
 .PHONY: tools
-tools: ## Install Go quality tools (golangci-lint, gosec, govulncheck, gitleaks)
+tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
 	@echo "Installing Go quality tools..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
+		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
 	go install github.com/securego/gosec/v2/cmd/gosec@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 	go install github.com/zricethezav/gitleaks/v8@latest

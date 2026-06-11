@@ -33,6 +33,9 @@ linters:
         # G115: integer overflow conversion. False positive originating from
         # generated code in the Temporal SDK dependency.
         - G115
+        # G706: log injection via user-controlled data. Logging request IDs for
+        # diagnostics is intentional; input is not rendered into HTML or eval'd.
+        - G706
 
     gocritic:
       disabled-checks:
@@ -44,12 +47,14 @@ linters:
       - vendor
 
     rules:
-      # Test files: relax errcheck (test helpers often ignore errors intentionally)
-      # and gosec (test fixtures may use insecure patterns by design).
+      # Test files: relax errcheck (test helpers often ignore errors intentionally),
+      # gosec (test fixtures may use insecure patterns by design), and noctx
+      # (http.NewRequest without context is standard in unit test helpers).
       - path: "_test\\.go"
         linters:
           - errcheck
           - gosec
+          - noctx
 
 # In golangci-lint v2, formatters are a separate category from linters.
 formatters:
