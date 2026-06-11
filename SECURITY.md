@@ -10,7 +10,7 @@ Once versioning is implemented, we will update this section with supported versi
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-If you discover a security vulnerability, please report it privately using one of the following methods:
+If you discover a security vulnerability, please report it privately using the following method:
 
 - **GitHub Private Vulnerability Reporting**: Use the "Report a vulnerability" button on the Security tab of this repository
 
