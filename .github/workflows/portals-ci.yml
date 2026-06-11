@@ -41,12 +41,9 @@ jobs:
       - name: TypeScript Type Check
         run: pnpm run type-check
 
-      # 2. Lint (Permissive)
-      # Kept 'continue-on-error: true' as requested for legacy issues.
-      # TODO: We should aim to fix lint issues and eventually remove 'continue-on-error' to enforce linting.
+      # 2. Lint
       - name: Run ESLint
         run: pnpm run --recursive --parallel lint
-        continue-on-error: true
 
       # 3. Check Formatting (Prettier)
       - name: Check Formatting (Prettier)
@@ -76,7 +73,6 @@ jobs:
         with:
           base-ref: ${{ github.event.pull_request.base.sha }}
           head-ref: ${{ github.event.pull_request.head.sha }}
-        continue-on-error: true
 
       # Setup environment for Audit
       - name: Setup pnpm
@@ -98,4 +94,3 @@ jobs:
 
       - name: Run pnpm audit
         run: pnpm audit --audit-level=high
-        continue-on-error: true

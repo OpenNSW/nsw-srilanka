@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Pre-commit quality gate.
+# Runs: gitleaks → gofmt → golangci-lint → go build → go mod tidy check.
+# Skip individual checks: SKIP_GITLEAKS=1, SKIP_LINT=1, SKIP_BUILD=1, etc.
+set -euo pipefail
+
+# ── GOPATH/bin on PATH ────────────────────────────────────────────────────────
+# Tools installed via `make tools` (golangci-lint, gitleaks) live in GOPATH/bin.
+# Prepend it so the hook works regardless of the developer's shell config.
+if [ -z "${GOPATH:-}" ] && command -v go >/dev/null 2>&1; then
+  GOPATH="$(go env GOPATH)"
+fi
+if [ -n "${GOPATH:-}" ]; then
+  export PATH="$GOPATH/bin:$PATH"
+fi
+
+# ── Staged Go files ──────────────────────────────────────────────────────────
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+# ── gitleaks ─────────────────────────────────────────────────────────────────
+if [ -z "${SKIP_GITLEAKS:-}" ]; then
+  if command -v gitleaks >/dev/null 2>&1; then
+    echo "==> gitleaks: scanning staged files for secrets..."
+    gitleaks protect --staged --config .gitleaks.toml --verbose
+  else
+    echo "WARN: gitleaks not found — run 'make tools' to install. Skipping secret scan."
+  fi
+fi
+
+# ── gofmt ────────────────────────────────────────────────────────────────────
+if [ -n "$STAGED_GO_FILES" ] && [ -z "${SKIP_FMT:-}" ]; then
+  echo "==> gofmt: checking staged Go files..."
+  UNFORMATTED=$(gofmt -l $STAGED_GO_FILES)
+  if [ -n "$UNFORMATTED" ]; then
+    echo "ERROR: the following files are not gofmt'd:"
+    echo "$UNFORMATTED"
+    echo "Run: gofmt -w $UNFORMATTED"
+    exit 1
+  fi
+fi
+
+# ── golangci-lint ─────────────────────────────────────────────────────────────
+if [ -n "$STAGED_GO_FILES" ] && [ -z "${SKIP_LINT:-}" ]; then
+  if command -v golangci-lint >/dev/null 2>&1; then
+    echo "==> golangci-lint: linting changed packages..."
+    PKGS=$(echo "$STAGED_GO_FILES" | xargs -I{} dirname {} | sort -u | sed 's|^|./|')
+    GOWORK=off golangci-lint run --config .golangci.yml $PKGS
+  else
+    echo "WARN: golangci-lint not found — run 'make tools' to install. Skipping lint."
+  fi
+fi
+
+# ── go build ──────────────────────────────────────────────────────────────────
+if [ -n "$STAGED_GO_FILES" ] && [ -z "${SKIP_BUILD:-}" ]; then
+  echo "==> go build: verifying compilation..."
+  GOWORK=off go build ./...
+fi
+
+# ── go mod tidy ───────────────────────────────────────────────────────────────
+if [ -z "${SKIP_TIDY:-}" ]; then
+  echo "==> go mod tidy: checking go.mod/go.sum are tidy..."
+  GOWORK=off go mod tidy
+  if ! git diff --exit-code go.mod go.sum > /dev/null 2>&1; then
+    echo "ERROR: go.mod/go.sum changed after running 'go mod tidy'."
+    echo "Stage the updated go.mod/go.sum and retry the commit."
+    exit 1
+  fi
+fi
+
+echo "==> pre-commit checks passed."

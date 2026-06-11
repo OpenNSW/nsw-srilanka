@@ -1,0 +1,132 @@
+name: Backend CI
+# Three-stage Go quality and security pipeline.
+# Stage 1: quality-gate   — mod tidy + golangci-lint (fast; blocks further work)
+# Stage 2: test-and-security — go test -race + gosec SARIF (heavy; blocks security scans)
+# Stage 3: govulncheck + secret-scan (parallel; independent security checks)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'migrations/**'
+      - 'Makefile'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # STAGE 1: Quality Gate
+  # Verifies go.mod tidiness and runs the linter. Fast — if this fails, there
+  # is no point running tests or security scans.
+  # ---------------------------------------------------------------------------
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify go.mod is tidy
+        run: |
+          GOWORK=off go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.2
+          args: --config .golangci.yml
+        env:
+          GOWORK: off
+
+  # ---------------------------------------------------------------------------
+  # STAGE 2: Test & Security
+  # Runs the full test suite with the race detector, then gosec for SAST.
+  # gosec findings are uploaded to the GitHub Security tab (informational).
+  # ---------------------------------------------------------------------------
+  test-and-security:
+    name: Test & Security
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    permissions:
+      security-events: write
+    env:
+      GOWORK: off
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test -race -count=1 ./...
+
+      - name: Run gosec
+        uses: securego/gosec@v2.27.1
+        with:
+          # -no-fail: upload findings to Security tab without blocking the build.
+          # gosec is informational here; govulncheck (stage 3) is the blocking gate.
+          args: '-no-fail -fmt sarif -out gosec.sarif ./...'
+
+      - name: Upload gosec SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+  # ---------------------------------------------------------------------------
+  # STAGE 3: Parallel Security Scans
+  # govulncheck: call-graph-precise vulnerability check against Go vuln DB.
+  # secret-scan: gitleaks scan for accidental credential commits.
+  # Both run independently once the test stage passes.
+  # ---------------------------------------------------------------------------
+  govulncheck:
+    name: Go Vulnerability Check
+    runs-on: ubuntu-latest
+    needs: test-and-security
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod
+          go-package: ./...
+        env:
+          GOWORK: off
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    needs: test-and-security
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml

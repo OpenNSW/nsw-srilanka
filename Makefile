@@ -87,4 +87,54 @@ config: ## Print the merged dev config (for debugging)
 .PHONY: help
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+# ---------------------------------------------------------------------------
+# Go code quality (mirrors the backend CI pipeline)
+# Prepend GOPATH/bin so tools installed by `make tools` are found without
+# requiring the developer to manually update their shell profile.
+# ---------------------------------------------------------------------------
+
+export PATH := $(shell go env GOPATH)/bin:$(PATH)
+
+.PHONY: setup
+setup: tools ## Install Go quality tools and configure git hooks
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit .githooks/pre-push
+	@echo "  Git hooks configured: .githooks/"
+
+.PHONY: tools
+tools: ## Install Go quality tools (golangci-lint, gosec, govulncheck, gitleaks)
+	@echo "Installing Go quality tools..."
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/zricethezav/gitleaks/v8@latest
+	@echo "Tools installed."
+
+.PHONY: fmt
+fmt: ## Format all Go source files with gofmt
+	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
+
+.PHONY: lint
+lint: ## Run golangci-lint
+	GOWORK=off golangci-lint run --config .golangci.yml ./...
+
+.PHONY: tidy
+tidy: ## Run go mod tidy
+	GOWORK=off go mod tidy
+
+.PHONY: test
+test: ## Run all tests with the race detector
+	GOWORK=off go test -race -count=1 ./...
+
+.PHONY: vuln
+vuln: ## Run govulncheck against the Go vulnerability database
+	GOWORK=off govulncheck ./...
+
+.PHONY: secrets
+secrets: ## Run gitleaks secret scan on the repository
+	gitleaks detect --config .gitleaks.toml --verbose
+
+.PHONY: check
+check: tidy fmt lint test ## Run all quality checks: tidy → fmt → lint → test

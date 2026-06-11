@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Pre-push quality gate.
+# Runs the full test suite with the race detector before every push.
+# Skip: SKIP_TESTS=1 git push
+set -euo pipefail
+
+# ── GOPATH/bin on PATH ────────────────────────────────────────────────────────
+if [ -z "${GOPATH:-}" ] && command -v go >/dev/null 2>&1; then
+  GOPATH="$(go env GOPATH)"
+fi
+if [ -n "${GOPATH:-}" ]; then
+  export PATH="$GOPATH/bin:$PATH"
+fi
+
+# ── go test -race ─────────────────────────────────────────────────────────────
+if [ -z "${SKIP_TESTS:-}" ]; then
+  echo "==> go test -race: running full test suite before push..."
+  GOWORK=off go test -race -count=1 ./...
+fi
+
+echo "==> pre-push checks passed."

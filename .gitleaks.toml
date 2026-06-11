@@ -1,0 +1,21 @@
+title = "nsw-srilanka gitleaks configuration"
+
+[extend]
+# Inherit the full gitleaks default ruleset and extend with the allowlists below.
+useDefault = true
+
+[[allowlists]]
+# configs/notification.json holds placeholder tokens and passwords that are
+# documentation aids, not real credentials. The live secrets file is gitignored.
+description = "Placeholder tokens in notification config template"
+paths = [
+  "configs/notification.json",
+]
+
+[[allowlists]]
+# .env.example files contain documented example values only, never real secrets.
+description = "Example environment files"
+paths = [
+  ".env.example",
+  "portals/apps/trader-app/.env.example",
+]
