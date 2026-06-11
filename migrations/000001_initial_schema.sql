@@ -1,5 +1,6 @@
+-- @UP
 -- ============================================================================
--- Migration: 001_initial_schema.sql
+-- Migration: 000001_initial_schema.sql
 -- Purpose: Create baseline schema tables, constraints, indexes.
 -- ============================================================================
 
@@ -65,6 +66,9 @@ CREATE TABLE IF NOT EXISTS workflow_template_map (
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
+-- Index the hs_code_id FK: workflow-template selection joins on it, so without
+-- this Postgres would fall back to a sequential scan.
+CREATE INDEX IF NOT EXISTS idx_workflow_template_map_hs_code_id ON workflow_template_map (hs_code_id);
 
 -- -------------------------------------------------------------------
 -- 3. Workflow Instances & Node States
@@ -111,6 +115,8 @@ CREATE INDEX IF NOT EXISTS idx_workflow_nodes_state ON workflow_nodes (state);
 
 -- -------------------------------------------------------------------
 -- 4. Business Consignments
+--    cha_company_id is nullable: direct-start consignments (e.g.
+--    trade-export-v1) select the CHA inside the workflow, not up front.
 -- -------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS consignments (
 	id text NOT NULL PRIMARY KEY,
@@ -120,7 +126,7 @@ CREATE TABLE IF NOT EXISTS consignments (
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL,
 	trader_company_id varchar(100) NOT NULL REFERENCES company_records (id),
-	cha_company_id varchar(100) NOT NULL REFERENCES company_records (id),
+	cha_company_id varchar(100) REFERENCES company_records (id),
 	cha_id varchar(100) REFERENCES customs_house_agents (id)
 );
 CREATE INDEX IF NOT EXISTS idx_consignments_trader_id ON consignments (trader_id);
@@ -132,45 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_consignments_created_at ON consignments (created_
 CREATE INDEX IF NOT EXISTS idx_consignments_cha_id ON consignments (cha_id);
 
 -- -------------------------------------------------------------------
--- 5. Legacy/Auxiliary Engine Tables
--- -------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS task_infos (
-	id text NOT NULL PRIMARY KEY,
-	type varchar(50) NOT NULL CONSTRAINT task_infos_type_check CHECK ((type)::text = ANY ((ARRAY['SIMPLE_FORM'::character varying, 'WAIT_FOR_EVENT'::character varying, 'PAYMENT'::character varying])::text[])),
-	state varchar(50) NOT NULL CONSTRAINT task_infos_state_check CHECK ((state)::text = ANY (ARRAY[('INITIALIZED'::character varying)::text, ('IN_PROGRESS'::character varying)::text, ('COMPLETED'::character varying)::text, ('FAILED'::character varying)::text])),
-	plugin_state varchar(100),
-	config jsonb,
-	local_state jsonb,
-	global_context jsonb,
-	created_at timestamp with time zone DEFAULT now() NOT NULL,
-	updated_at timestamp with time zone DEFAULT now() NOT NULL,
-	workflow_id text NOT NULL,
-	workflow_node_template_id text
-);
-CREATE INDEX IF NOT EXISTS idx_task_infos_status ON task_infos (state);
-CREATE INDEX IF NOT EXISTS idx_task_infos_type ON task_infos (type);
-CREATE INDEX IF NOT EXISTS idx_task_infos_command_set ON task_infos USING gin (config);
-CREATE INDEX IF NOT EXISTS idx_task_infos_local_state ON task_infos USING gin (local_state);
-CREATE INDEX IF NOT EXISTS idx_task_infos_global_context ON task_infos USING gin (global_context);
-CREATE INDEX IF NOT EXISTS idx_task_infos_workflow_id ON task_infos (workflow_id);
-CREATE INDEX IF NOT EXISTS idx_task_infos_workflow_node_template_id ON task_infos (workflow_node_template_id);
-
-CREATE TABLE IF NOT EXISTS forms (
-	id text NOT NULL PRIMARY KEY,
-	name varchar(255) NOT NULL,
-	description text,
-	schema jsonb NOT NULL,
-	ui_schema jsonb NOT NULL,
-	version varchar(50) DEFAULT '1.0'::character varying NOT NULL,
-	active boolean DEFAULT true NOT NULL,
-	created_at timestamp with time zone DEFAULT now() NOT NULL,
-	updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_forms_name ON forms (name);
-CREATE INDEX IF NOT EXISTS idx_forms_active ON forms (active);
-
--- -------------------------------------------------------------------
--- 6. Taskv2 & Payment Tables
+-- 5. Taskv2 & Payment Tables
 -- -------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS payment_transactions (
     id text NOT NULL PRIMARY KEY,
@@ -181,6 +149,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     currency VARCHAR(10) NOT NULL,
     status VARCHAR(50) NOT NULL,
     payment_method VARCHAR(50),
+    gateway_id VARCHAR(255) NOT NULL DEFAULT '',
     expiry_date TIMESTAMP WITH TIME ZONE NOT NULL,
     gateway_metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -188,19 +157,6 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
 );
 CREATE INDEX idx_payment_tx_task_id ON payment_transactions (task_id);
 CREATE INDEX idx_payment_tx_reference_number ON payment_transactions (reference_number);
-
-CREATE TABLE IF NOT EXISTS task_workflow_tasks (
-    task_id text NOT NULL PRIMARY KEY,
-    macro_workflow_id text NOT NULL,
-    task_template_id text NOT NULL,
-    state varchar(50) NOT NULL,
-    data jsonb NOT NULL DEFAULT '{}'::jsonb,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_task_workflow_tasks_macro_workflow_id ON task_workflow_tasks (macro_workflow_id);
-CREATE INDEX IF NOT EXISTS idx_task_workflow_tasks_task_template_id ON task_workflow_tasks (task_template_id);
-CREATE INDEX IF NOT EXISTS idx_task_workflow_tasks_state ON task_workflow_tasks (state);
 
 CREATE TABLE IF NOT EXISTS task_records_v2 (
     task_id                 TEXT PRIMARY KEY,
@@ -215,9 +171,33 @@ CREATE TABLE IF NOT EXISTS task_records_v2 (
     subtask_node_id         TEXT,
     active_task_template_id TEXT,
     active_output_namespace TEXT NOT NULL DEFAULT '',
+    root_workflow_id        TEXT NOT NULL DEFAULT '',
     data                    JSONB,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_task_records_v2_parent_workflow_id ON task_records_v2(parent_workflow_id);
 CREATE INDEX idx_task_records_v2_task_workflow_id ON task_records_v2(task_workflow_id);
+CREATE INDEX idx_task_records_v2_root_workflow_id ON task_records_v2(root_workflow_id);
+
+-- @DOWN
+-- ============================================================================
+-- Roll back baseline schema objects in reverse dependency order.
+-- ============================================================================
+
+-- 1. Drop runtime workflow nodes and consignments first due to foreign keys
+DROP TABLE IF EXISTS workflow_nodes;
+DROP TABLE IF EXISTS consignments;
+
+-- 2. Drop dependent schema tables
+DROP TABLE IF EXISTS customs_house_agents;
+DROP TABLE IF EXISTS workflow_template_map;
+DROP TABLE IF EXISTS company_records;
+DROP TABLE IF EXISTS hs_codes;
+DROP TABLE IF EXISTS user_records;
+DROP TABLE IF EXISTS workflows;
+
+-- 3. Drop legacy / engine / config tables
+DROP TABLE IF EXISTS task_records_v2;
+DROP TABLE IF EXISTS payment_transactions;
+DROP TABLE IF EXISTS workflow_node_templates;

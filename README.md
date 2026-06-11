@@ -171,6 +171,49 @@ REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own after a 
 
 ---
 
+## Database migrations
+
+Schema migrations live in `migrations/` as `NNN_name.sql` files, each holding a
+`-- @UP` and a `-- @DOWN` block. They are applied by the standalone migrator from
+[`nsw-agency`](https://github.com/OpenNSW/nsw-agency) (`backend/cmd/migrate`),
+which tracks applied versions in a `__migrations` table and runs each migration
+in its own transaction.
+
+**In Docker (default):** the `migrate` service builds the dedicated `migrate`
+image target (SQL files baked in), runs `migrate up` to completion, and the `api`
+service waits on it via `depends_on: service_completed_successfully`. A fresh
+`db` volume already creates the database, so there is no separate "create DB"
+step. To reset everything, wipe the volume:
+
+```bash
+make clean        # docker compose down -v — drops the db volume
+make deps         # brings the stack back up; migrate re-applies from scratch
+```
+
+Run ad-hoc commands against the running stack:
+
+```bash
+docker compose run --rm migrate status   # show applied / pending
+docker compose run --rm migrate down     # roll back the latest migration
+```
+
+**Locally (native, without Docker):** install the tool once, then point it at
+your database. Note the env var names differ slightly from the app's
+(`DB_USER`, not `DB_USERNAME`):
+
+```bash
+# Pin the same version the Docker image uses (see MIGRATE_VERSION in the Dockerfile / Makefile).
+go install github.com/OpenNSW/nsw-agency/backend/cmd/migrate@v0.0.0-20260610120959-d981e67a7a47
+
+DB_DRIVER=postgres MIGRATION_DIR=./migrations \
+  DB_HOST=localhost DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" \
+  DB_USER="$DB_USERNAME" DB_PASSWORD="$DB_PASSWORD" \
+  migrate up        # or: status | down | generate <name>
+```
+
+`migrate generate <name>` scaffolds the next `NNN_<name>.sql` with empty
+`@UP`/`@DOWN` stubs.
+
 ## Upstream Dependency
 
 The core engine is pulled directly from GitHub via Go modules:
