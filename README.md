@@ -152,18 +152,40 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 INFO-type gateways (e.g. `govpay`) don't fire a real callback. To advance a `PENDING_PAYMENT` task manually:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/payments/govpay/webhook \
+curl -X POST "http://localhost:8080/api/v1/payments/govpay/webhook" \
   -H "Content-Type: application/json" \
   -d '{
-    "reference_number": "TNSW-XXXXXXXX",
-    "session_id": "manual-test-1",
-    "gateway_transaction_id": "MOCK-001",
-    "status": "SUCCESS",
-    "amount": "1500",
-    "currency": "LKR",
-    "payment_method": "govpay",
-    "timestamp": "2026-01-01T00:00:00Z",
-    "metadata": {}
+    "transactionID": "TNSWPYRMTWMY",
+    "subinstId": "sub-001",
+    "serviceid": "FCAU",
+    "serviceName": "FCAU Application Fee",
+    "data": [
+      {
+        "seq": "1",
+        "paramName": "refNo",
+        "value": "TNSWPYRMTWMY"
+      },
+      {
+        "seq": "2",
+        "paramName": "amount",
+        "value": "1500"
+      },
+      {
+        "seq": "3",
+        "paramName": "currency",
+        "value": "LKR"
+      },
+      {
+        "seq": "4",
+        "paramName": "status",
+        "value": "SUCCESS"
+      },
+      {
+        "seq": "5",
+        "paramName": "paymentMethod",
+        "value": "ONLINE_BANKING"
+      }
+    ]
   }'
 ```
 
