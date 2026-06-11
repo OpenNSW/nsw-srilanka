@@ -23,32 +23,32 @@ linters:
     - gocyclo       # cyclomatic complexity
     - gocritic      # opinionated but high signal-to-noise style checks
 
-linters-settings:
-  gocyclo:
-    min-complexity: 15
+  settings:
+    gocyclo:
+      min-complexity: 15
 
-  gosec:
-    excludes:
-      # G304: file path constructed from variable. Config loaders in this repo
-      # take validated paths from typed config structs, not raw user input.
-      - G304
-      # G115: integer overflow conversion. False positive originating from
-      # generated code in the Temporal SDK dependency.
-      - G115
+    gosec:
+      excludes:
+        # G304: file path constructed from variable. Config loaders in this repo
+        # take validated paths from typed config structs, not raw user input.
+        - G304
+        # G115: integer overflow conversion. False positive originating from
+        # generated code in the Temporal SDK dependency.
+        - G115
 
-  gocritic:
-    disabled-checks:
-      # appendAssign fires as a false positive on GORM scan patterns.
-      - appendAssign
+    gocritic:
+      disabled-checks:
+        # appendAssign fires as a false positive on GORM scan patterns.
+        - appendAssign
 
-issues:
-  exclude-dirs:
-    - vendor
+  exclusions:
+    paths:
+      - vendor
 
-  exclude-rules:
-    # Test files: relax errcheck (test helpers often ignore errors intentionally)
-    # and gosec (test fixtures may use insecure patterns by design).
-    - path: "_test\\.go"
-      linters:
-        - errcheck
-        - gosec
+    rules:
+      # Test files: relax errcheck (test helpers often ignore errors intentionally)
+      # and gosec (test fixtures may use insecure patterns by design).
+      - path: "_test\\.go"
+        linters:
+          - errcheck
+          - gosec
