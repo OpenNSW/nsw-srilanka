@@ -1,0 +1,11 @@
+{
+  "id": "cda-review-result--officer-review",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "reviewerform",
+  "plugin_properties": {
+    "officer_jsonforms_id": "cda-review-result--officer-form",
+    "service_id": "cda",
+    "path": "/api/v1/inject",
+    "task_code": "cda_review_result_v1"
+  }
+}

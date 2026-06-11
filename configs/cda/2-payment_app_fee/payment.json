@@ -1,0 +1,11 @@
+{
+  "id": "cda-pay-app-fee--payment",
+  "task_type": "PAYMENT",
+  "output_namespace": "payment",
+  "plugin_properties": {
+    "task_code": "cda_app_fee_payment_v1",
+    "service_name": "CDA Application Fee",
+    "amount": "2000.00",
+    "currency": "LKR"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "cda-apply-coconut-cert--user-input",
+  "task_type": "USER_INPUT",
+  "output_namespace": "userform",
+  "plugin_properties": {
+    "user_jsonforms_id": "cda-apply-coconut-cert--user-form"
+  }
+}

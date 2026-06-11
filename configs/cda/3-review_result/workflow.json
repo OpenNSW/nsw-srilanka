@@ -1,0 +1,44 @@
+{
+  "id": "cda-review-result-flow",
+  "name": "CDA Review and Result",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "cda-review-result--officer-review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform": "userform",
+        "payment_receipt_url?": "payment_receipt_url",
+        "selected_method?": "selected_method"
+      },
+      "output_mapping": {
+        "review_outcome": "reviewerform.review_outcome",
+        "rejection_reason": "reviewerform.rejection_reason",
+        "certificate_id": "reviewerform.certificate_id",
+        "certificate_file": "reviewerform.certificate_file"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_review"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_review",
+      "target_id": "end"
+    }
+  ]
+}

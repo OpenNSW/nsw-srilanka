@@ -1,0 +1,300 @@
+{
+  "id": "cda-apply-coconut-cert--user-form",
+  "title": "CDA Export Coconut Certificate Application",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "exporter_details": {
+        "type": "string",
+        "title": "Exporter Name, Address & Registration Number",
+        "oneOf": [
+          {
+            "const": "EXP-CDA-001",
+            "title": "Lanka Coconuts Ltd (CDA/REG/001) - 123 Galle Road, Colombo 03"
+          },
+          {
+            "const": "EXP-CDA-002",
+            "title": "Ceylon Organics Premium Exporters (CDA/REG/002) - 456 Kandy Road, Kurunegala"
+          },
+          {
+            "const": "EXP-CDA-003",
+            "title": "Coconut Development Authority Exports Mock (CDA/REG/003) - 789 Negombo Road, Katunayake"
+          }
+        ],
+        "default": "EXP-CDA-001"
+      },
+
+      "cusdec_number": {
+        "type": "string",
+        "title": "CUSDEC Number",
+        "example": "CUSDEC-2026-904821"
+      },
+      "hs_code": {
+        "type": "number",
+        "title": "HS CODE",
+        "example": 8011200
+      },
+      "contract_number": {
+        "type": "number",
+        "title": "Contract Number",
+        "example": 987654
+      },
+      "lot_number": {
+        "type": "number",
+        "title": "Lot Number",
+        "example": 321
+      },
+      "dc_grades": {
+        "type": "array",
+        "title": "DC Grade & Packaging Details",
+        "items": {
+          "type": "object",
+          "properties": {
+            "dc_grade": {
+              "type": "string",
+              "title": "DC Grade",
+              "oneOf": [
+                { "const": "FINE", "title": "FINE" },
+                { "const": "MEDIAM", "title": "MEDIAM" },
+                { "const": "CHIPS_VADC", "title": "CHIPS VADC" },
+                { "const": "M_MEDIUM", "title": "M/MEDIUM" },
+                { "const": "SHRED", "title": "SHRED" },
+                { "const": "SPECIAL_MACROON", "title": "SPECIAL MACROON" },
+                { "const": "THRED", "title": "THRED" },
+                { "const": "LOW_FAT", "title": "LOW FAT" },
+                { "const": "COARSE", "title": "COARSE" },
+                { "const": "FLAKES", "title": "FLAKES" }
+              ]
+            },
+            "number_of_bags": {
+              "type": "number",
+              "title": "Number of Bags",
+              "example": 500
+            },
+            "weight_of_bag": {
+              "type": "number",
+              "title": "Weight of a Bag (kg)",
+              "example": 25
+            },
+            "total_weight": {
+              "type": "number",
+              "title": "Total Weight (kg)",
+              "example": 12500
+            }
+          },
+          "required": [
+            "dc_grade",
+            "number_of_bags",
+            "weight_of_bag",
+            "total_weight"
+          ]
+        }
+      },
+      "date_of_containerization": {
+        "type": "string",
+        "format": "date",
+        "title": "Date of Containerization",
+        "example": "2026-06-10"
+      },
+      "vessel_name": {
+        "type": "string",
+        "title": "Name of the Vessel",
+        "example": "OCEAN GLORY V109"
+      },
+      "container_number": {
+        "type": "string",
+        "title": "Container Number",
+        "example": "MSCU-908241-5"
+      },
+      "date_of_sailing": {
+        "type": "string",
+        "format": "date",
+        "title": "Date of Sailing",
+        "example": "2026-06-12"
+      },
+      "port_of_discharge": {
+        "type": "string",
+        "title": "Port of Discharge",
+        "example": "Port of Rotterdam"
+      },
+      "final_destination": {
+        "type": "string",
+        "title": "Final Destination",
+        "example": "Rotterdam, Netherlands"
+      },
+      "buyer_name": {
+        "type": "string",
+        "title": "Name of the Buyer",
+        "example": "European Food Distributors BV"
+      },
+      "container_filling_status": {
+        "type": "string",
+        "title": "Container Filling Status",
+        "oneOf": [
+          { "const": "full", "title": "Full" },
+          { "const": "part", "title": "Part" }
+        ],
+        "default": "full"
+      },
+      "balance_material_nature": {
+        "type": "string",
+        "title": "If Part, Declare Nature of Balance Material",
+        "example": "Remaining capacity filled with standard pallet packaging materials."
+      },
+      "req_cert_salmonella": {
+        "type": "boolean",
+        "title": "SALOMNELLA FREE CERTIFICATE",
+        "default": false
+      },
+      "req_cert_physical": {
+        "type": "boolean",
+        "title": "PHYSICAL QUALITY CERTIFICATE",
+        "default": false
+      },
+      "download_dc_bags_details": {
+        "type": "string",
+        "title": "Download DC Bags Details Template",
+        "description": "Please download the bag details spreadsheet from: https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0",
+        "default": "https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0",
+        "readOnly": true
+      },
+      "uploaded_dc_bags_details": {
+        "type": "string",
+        "format": "file",
+        "title": "Upload Filled DC Bags Details File"
+      }
+    },
+    "required": [
+      "exporter_details",
+      "cusdec_number",
+      "dc_grades",
+      "port_of_discharge",
+      "final_destination",
+      "container_filling_status",
+      "uploaded_dc_bags_details"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Group",
+        "label": "1. Exporter & Consignment General Info",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/exporter_details"
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/cusdec_number" },
+              { "type": "Control", "scope": "#/properties/hs_code" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/contract_number" },
+              { "type": "Control", "scope": "#/properties/lot_number" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "2. DC Grade & Packaging Details",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/dc_grades"
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "3. Shipping & Transport Logistics",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/date_of_containerization" },
+              { "type": "Control", "scope": "#/properties/date_of_sailing" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/vessel_name" },
+              { "type": "Control", "scope": "#/properties/container_number" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/port_of_discharge" },
+              { "type": "Control", "scope": "#/properties/final_destination" }
+            ]
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/buyer_name"
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "4. Container Filling Status",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/container_filling_status",
+            "options": {
+              "format": "radio"
+            }
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/balance_material_nature",
+            "rule": {
+              "effect": "SHOW",
+              "condition": {
+                "scope": "#/properties/container_filling_status",
+                "schema": {
+                  "const": "part"
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "5. Required Certificates & DC Bag Details Upload",
+        "elements": [
+          {
+            "type": "Group",
+            "label": "Required Certificates",
+            "elements": [
+              {
+                "type": "HorizontalLayout",
+                "elements": [
+                  { "type": "Control", "scope": "#/properties/req_cert_salmonella" },
+                  { "type": "Control", "scope": "#/properties/req_cert_physical" }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/download_dc_bags_details"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/uploaded_dc_bags_details"
+          }
+        ]
+      }
+    ]
+  }
+}

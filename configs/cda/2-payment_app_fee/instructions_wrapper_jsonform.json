@@ -1,0 +1,4 @@
+{
+  "id": "cda-pay-app-fee--instructions-wrapper",
+  "template": "{{ .instructions }}"
+}

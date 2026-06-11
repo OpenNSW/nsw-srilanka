@@ -1,0 +1,28 @@
+{
+  "id": "cda-apply-coconut-cert-flow:render",
+  "type": "APPLICATION",
+  "sections": {
+    "workspace": {
+      "templateId": "cda-apply-coconut-cert--user-form",
+      "title": "CDA Export Coconut Certificate Application",
+      "projector": "FORM",
+      "dataKey": "userform",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Application",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

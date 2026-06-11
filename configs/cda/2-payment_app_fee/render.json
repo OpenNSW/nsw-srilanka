@@ -1,0 +1,69 @@
+{
+  "id": "cda-pay-app-fee-flow:render",
+  "type": "PAYMENT",
+  "sections": {
+    "workspace": {
+      "templateId": "cda-pay-app-fee--select-method-form",
+      "title": "Select Payment Gateway",
+      "projector": "FORM",
+      "dataKey": "payment_method",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Proceed to Payment",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "payment_instructions": {
+      "templateId": "cda-pay-app-fee--instructions-wrapper",
+      "title": "Payment Instructions",
+      "projector": "PAYMENT",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "PENDING_PAYMENT"
+        ]
+      }
+    },
+    "payment_details": {
+      "templateId": "cda-pay-app-fee--payment-form",
+      "title": "Application Fee Details",
+      "projector": "FORM",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "PENDING_PAYMENT"
+        ]
+      }
+    },
+    "payment_success": {
+      "templateId": "cda-pay-app-fee--success-message",
+      "title": "Payment Successful",
+      "projector": "MARKDOWN",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    },
+    "PENDING_PAYMENT": {
+      "actions": []
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "cda-review-result-flow:render",
+  "type": "REVIEW",
+  "sections": {
+    "workspace": {
+      "templateId": "cda-review-result--officer-form",
+      "title": "CDA Officer Review & Certificate Issuance",
+      "projector": "FORM",
+      "dataKey": "reviewerform"
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "kind": "submit_form",
+          "label": "Submit Review & Issue Certificate",
+          "command": "submit",
+          "variant": "primary"
+        }
+      ]
+    }
+  }
+}

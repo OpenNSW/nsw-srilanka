@@ -1,0 +1,28 @@
+{
+  "id": "cda-pay-app-fee--select-method-form",
+  "title": "Select Payment Gateway",
+  "schema": {
+    "type": "object",
+    "required": ["selected_method"],
+    "properties": {
+      "selected_method": {
+        "type": "string",
+        "title": "Payment Method",
+        "default": "lankapay",
+        "oneOf": [
+          { "const": "lankapay", "title": "Credit/Debit Card (LankaPay) [Redirect]" },
+          { "const": "govpay", "title": "GovPay (Bank/ATM/Online) [Offline Instructions]" }
+        ]
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/selected_method"
+      }
+    ]
+  }
+}

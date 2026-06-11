@@ -1,0 +1,53 @@
+{
+  "id": "cda-apply-coconut-cert-flow",
+  "name": "Apply for Export Coconut Certificate",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "applicant_submission",
+      "type": "TASK",
+      "task_template_id": "cda-apply-coconut-cert--user-input",
+      "input_mapping": {},
+      "output_mapping": {
+        "exporter_details": "userform.exporter_details",
+        "cusdec_number": "userform.cusdec_number",
+        "hs_code": "userform.hs_code",
+        "contract_number": "userform.contract_number",
+        "lot_number": "userform.lot_number",
+        "dc_grades": "userform.dc_grades",
+        "date_of_containerization": "userform.date_of_containerization",
+        "vessel_name": "userform.vessel_name",
+        "container_number": "userform.container_number",
+        "date_of_sailing": "userform.date_of_sailing",
+        "port_of_discharge": "userform.port_of_discharge",
+        "final_destination": "userform.final_destination",
+        "buyer_name": "userform.buyer_name",
+        "container_filling_status": "userform.container_filling_status",
+        "balance_material_nature": "userform.balance_material_nature",
+        "req_cert_salmonella": "userform.req_cert_salmonella",
+        "req_cert_physical": "userform.req_cert_physical",
+        "uploaded_dc_bags_details": "userform.uploaded_dc_bags_details"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "applicant_submission"
+    },
+    {
+      "id": "e2",
+      "source_id": "applicant_submission",
+      "target_id": "end"
+    }
+  ]
+}
