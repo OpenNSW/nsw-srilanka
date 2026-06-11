@@ -108,9 +108,9 @@ tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint 
 	@echo "Installing Go quality tools..."
 	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
 		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
-	go install github.com/securego/gosec/v2/cmd/gosec@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install github.com/zricethezav/gitleaks/v8@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+	go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+	go install github.com/zricethezav/gitleaks/v8@v8.30.1
 	@echo "Tools installed."
 
 .PHONY: fmt
