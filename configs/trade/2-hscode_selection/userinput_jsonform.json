@@ -17,6 +17,10 @@
             {
               "const": "npqs-export-phytosanitary-reg",
               "title": "npqs-phyto-certificate (NPQS Flow)"
+            },
+            {
+              "const": "cda-certificate-reg",
+              "title": "cda-coconut-certificate (CDA Flow)"
             }
           ]
         },
@@ -24,7 +28,9 @@
         "minItems": 1
       }
     },
-    "required": ["hs_codes"]
+    "required": [
+      "hs_codes"
+    ]
   },
   "uiSchema": {
     "type": "VerticalLayout",

@@ -1,5 +1,6 @@
+-- @UP
 -- ============================================================================
--- Migration: 005_add_cda_seed_data.up.sql
+-- Migration: 000005_add_cda_seed_data.sql
 -- Purpose: Seed CDA top-level workflow template, HS code, and mapping.
 -- ============================================================================
 
@@ -26,3 +27,12 @@ VALUES
         'cda-certificate-reg'
     )
 ON CONFLICT (id) DO NOTHING;
+
+-- @DOWN
+-- ============================================================================
+-- Migration: 000005_add_cda_seed_data.sql
+-- Purpose: Rollback CDA seed data mapping and HS code.
+-- ============================================================================
+
+DELETE FROM workflow_template_map WHERE id = 'cda-wf-map-0001';
+DELETE FROM hs_codes WHERE id = 'cda-hs-code-0001';
