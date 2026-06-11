@@ -1,33 +1,19 @@
 import { BackpackIcon, IdCardIcon } from '@radix-ui/react-icons'
 import { Select, Flex, Text, Box } from '@radix-ui/themes'
 import { type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useRole, type Role } from '../../services/RoleContext'
 
-const ROLE_CONFIG: Record<
-  Role,
-  {
-    label: string
-    description: string
-    dropdownDescription: string
-    icon: ReactNode
-  }
-> = {
-  trader: {
-    label: 'Trader',
-    description: 'Managing consignments',
-    dropdownDescription: 'Create and manage consignments',
-    icon: <BackpackIcon className="text-info-strong" />,
-  },
-  cha: {
-    label: 'CHA',
-    description: 'Handling Customs Clearances',
-    dropdownDescription: 'Handle customs clearances',
-    icon: <IdCardIcon className="text-warning-strong" />,
-  },
+const ROLE_ICONS: Record<Role, ReactNode> = {
+  trader: <BackpackIcon className="text-info-strong" />,
+  cha: <IdCardIcon className="text-warning-strong" />,
 }
 
 function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel: boolean }) {
-  const { label, description, icon } = ROLE_CONFIG[role]
+  const { t } = useTranslation()
+  const icon = ROLE_ICONS[role]
+  const label = t(`roles.${role}.label` as const)
+  const description = t(`roles.${role}.description` as const)
 
   return (
     <Flex align="center" gap="3" className="w-60 text-left">
@@ -39,7 +25,7 @@ function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel:
           </Text>
           {showPrimaryLabel && (
             <Text size="1" color="gray" className="font-normal">
-              (Primary)
+              {t('roles.primary')}
             </Text>
           )}
         </Flex>
@@ -53,6 +39,7 @@ function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel:
 
 export function RoleSwitcher() {
   const { role, setRole, availableRoles, isLoading } = useRole()
+  const { t } = useTranslation()
 
   const showSwitcher = availableRoles.length > 1
 
@@ -71,7 +58,9 @@ export function RoleSwitcher() {
             {showSwitcher && (
               <Select.Content position="popper" className="w-full min-w-[320px]">
                 {availableRoles.map((r) => {
-                  const { label, dropdownDescription, icon } = ROLE_CONFIG[r]
+                  const icon = ROLE_ICONS[r]
+                  const label = t(`roles.${r}.label` as const)
+                  const dropdownDescription = t(`roles.${r}.dropdownDescription` as const)
 
                   return (
                     <Select.Item

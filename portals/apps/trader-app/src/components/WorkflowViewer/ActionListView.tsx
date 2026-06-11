@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { CheckCircledIcon, ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 import type { WorkflowNode } from '../../services/types/consignment'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -24,6 +25,8 @@ export function ActionListView({
   className = '',
   consignmentState,
 }: ActionListViewProps) {
+  const { t } = useTranslation()
+
   const filteredSteps = useMemo(() => {
     return steps.filter((step) => {
       const type = step.workflowNodeTemplate.type?.toUpperCase()
@@ -58,7 +61,7 @@ export function ActionListView({
     onRefresh && !isConsignmentTerminal ? (
       <Button variant="soft" color="blue" size="2" onClick={onRefresh} disabled={refreshing} className="cursor-pointer">
         <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-        Refresh
+        {t('workflow.refresh')}
       </Button>
     ) : null
 
@@ -73,7 +76,7 @@ export function ActionListView({
                   className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-success' : 'bg-error'} rounded-full`}
                 />
                 <Heading size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
-                  Task History
+                  {t('workflow.taskHistory')}
                 </Heading>
                 <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
                   {displaySteps.length}
@@ -94,7 +97,7 @@ export function ActionListView({
                   <Flex align="center" gap="2">
                     <div className="w-1.5 h-5 bg-info rounded-full" />
                     <Heading size="4" color="blue" weight="bold">
-                      Action Required
+                      {t('workflow.actionRequired')}
                     </Heading>
                     <Badge color="blue" variant="solid" radius="full">
                       {groups.active.length}
@@ -119,10 +122,10 @@ export function ActionListView({
                   <CheckCircledIcon className="w-10 h-10 text-success-strong" />
                 </div>
                 <Heading size="4" color="green" mb="2">
-                  Process Complete
+                  {t('workflow.processComplete.title')}
                 </Heading>
                 <Text size="3" color="green" className="opacity-80">
-                  All workflow steps have been finished successfully. No further actions are required.
+                  {t('workflow.processComplete.description')}
                 </Text>
               </Box>
             ) : filteredSteps.length > 0 ? (
@@ -135,15 +138,15 @@ export function ActionListView({
                 {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
                 <ClockIcon className="w-12 h-12 text-foreground-subtle mx-auto mb-3" />
                 <Heading size="3" color="gray" mb="1">
-                  Waiting for Updates
+                  {t('workflow.waitingForUpdates.title')}
                 </Heading>
                 <Text size="2" color="gray">
-                  Current steps are being processed. Next tasks will unlock automatically.
+                  {t('workflow.waitingForUpdates.description')}
                 </Text>
               </Box>
             ) : null}
 
-            <CollapsibleSection title="Process History" count={groups.finished.length} color="green">
+            <CollapsibleSection title={t('workflow.processHistory')} count={groups.finished.length} color="green">
               {groups.finished.map((step) => (
                 <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
               ))}
@@ -163,7 +166,7 @@ export function ActionListView({
           <Flex direction="column" align="center" gap="3">
             <UpdateIcon className="animate-spin w-8 h-8 text-info-strong" />
             <Text weight="medium" color="blue">
-              Updating your list...
+              {t('workflow.updatingList')}
             </Text>
           </Flex>
         </Flex>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Heading, Text, Badge, Spinner, Flex, Box, Callout } from '@radix-ui/themes'
 import { FileTextIcon, PlayIcon, EyeOpenIcon, CheckCircledIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 import {
   getTraderPreConsignments,
   createPreConsignment,
@@ -14,6 +15,7 @@ import { PaginationControl } from '../components/common/PaginationControl'
 export function PreconsignmentScreen() {
   const navigate = useNavigate()
   const api = useApi()
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<TraderPreConsignmentItem[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -38,7 +40,7 @@ export function PreconsignmentScreen() {
         return
       }
       console.error('Failed to load pre-consignments', error)
-      setNotification({ type: 'error', message: 'Failed to load pre-consignments list.' })
+      setNotification({ type: 'error', message: t('preconsignment.error.loadFailed') })
     } finally {
       if (requestId === listRequestIdRef.current) {
         setLoading(false)
@@ -46,13 +48,10 @@ export function PreconsignmentScreen() {
     }
   }
 
-  // Check if all dependencies for a template are completed
   const areDependenciesMet = (item: TraderPreConsignmentItem): boolean => {
     if (!item.dependsOn || item.dependsOn.length === 0) {
-      return true // No dependencies
+      return true
     }
-
-    // Check if all dependent pre-consignments are completed
     return item.dependsOn.every((depId) => {
       const depItem = items.find((i) => i.id === depId)
       return depItem?.state === 'COMPLETED'
@@ -63,7 +62,6 @@ export function PreconsignmentScreen() {
     loadData()
   }, [api, page])
 
-  // Auto-dismiss success notifications
   useEffect(() => {
     if (notification?.type === 'success') {
       const timer = setTimeout(() => setNotification(null), 5000)
@@ -86,12 +84,12 @@ export function PreconsignmentScreen() {
       if (targetNode) {
         navigate(`/pre-consignments/${instance.id}/tasks/${targetNode.id}`)
       } else {
-        setNotification({ type: 'error', message: 'No ready task found in pre-consignment.' })
+        setNotification({ type: 'error', message: t('preconsignment.error.noReadyTask') })
         setLoading(false)
       }
     } catch (error) {
       console.error('Failed to start process', error)
-      setNotification({ type: 'error', message: 'Failed to start registration process.' })
+      setNotification({ type: 'error', message: t('preconsignment.error.startFailed') })
       setLoading(false)
     }
   }
@@ -103,7 +101,6 @@ export function PreconsignmentScreen() {
       const instance = await getPreConsignment(preConsignmentId, api)
       const nodes = instance.workflowNodes || []
 
-      // Find the appropriate task
       let targetNode = nodes.find((node) => node.state === 'IN_PROGRESS' || node.state === 'READY')
       if (!targetNode && nodes.length > 0) {
         targetNode = nodes[nodes.length - 1]
@@ -112,17 +109,16 @@ export function PreconsignmentScreen() {
       if (targetNode) {
         navigate(`/pre-consignments/${instance.id}/tasks/${targetNode.id}`)
       } else {
-        setNotification({ type: 'error', message: 'No task found in pre-consignment.' })
+        setNotification({ type: 'error', message: t('preconsignment.error.noTask') })
         setLoading(false)
       }
     } catch (error) {
       console.error('Failed to load process details', error)
-      setNotification({ type: 'error', message: 'An error occurred while loading the process details.' })
+      setNotification({ type: 'error', message: t('preconsignment.error.loadDetailFailed') })
       setLoading(false)
     }
   }
 
-  // Render logic for notifications
   const renderNotification = () => {
     if (!notification) return null
     return (
@@ -145,7 +141,7 @@ export function PreconsignmentScreen() {
 
   return (
     <Box p="6">
-      <Heading mb="6">Verified Documents</Heading>
+      <Heading mb="6">{t('preconsignment.title')}</Heading>
 
       {renderNotification()}
 
@@ -183,7 +179,7 @@ export function PreconsignmentScreen() {
                       style={{ cursor: isLocked || !areDependenciesMet(item) ? 'not-allowed' : 'pointer' }}
                       title={!areDependenciesMet(item) ? 'Complete dependent pre-consignments first' : ''}
                     >
-                      <PlayIcon /> Start
+                      <PlayIcon /> {t('preconsignment.action.start')}
                     </Button>
                   ) : isCompleted ? (
                     <Button
@@ -192,14 +188,14 @@ export function PreconsignmentScreen() {
                       onClick={() => handleContinueProcess(item.preConsignment!.id)}
                       style={{ cursor: 'pointer' }}
                     >
-                      <EyeOpenIcon /> View
+                      <EyeOpenIcon /> {t('preconsignment.action.view')}
                     </Button>
                   ) : (
                     <Button
                       onClick={() => handleContinueProcess(item.preConsignment!.id)}
                       style={{ cursor: 'pointer' }}
                     >
-                      Continue
+                      {t('preconsignment.action.continue')}
                     </Button>
                   )}
                 </Flex>
