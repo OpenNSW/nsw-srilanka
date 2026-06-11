@@ -97,8 +97,9 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy the binary.
-COPY --from=builder /out/server /app/server
+# Copy the binary. Set ownership at copy time (--chown) to avoid a redundant
+# chown -R layer that would duplicate the copied files.
+COPY --chown=appuser:appuser --from=builder /out/server /app/server
 
 # Bake application configs into the image. These files are tracked in git and
 # version with the code (workflow/form definitions, payment_methods.json,
@@ -106,11 +107,11 @@ COPY --from=builder /out/server /app/server
 # Environment-specific values (e.g. services.json) are still overlaid at runtime
 # via ConfigMap/bind mount; a host bind mount over /app/configs (docker-compose)
 # also continues to take precedence over what is baked here.
-COPY --from=builder /src/configs /app/configs
+COPY --chown=appuser:appuser --from=builder /src/configs /app/configs
 
-# Create the writable blob storage mount point and normalise ownership.
+# Create the writable blob storage mount point.
 RUN mkdir -p /app/bucket \
-    && chown -R appuser:appuser /app
+    && chown appuser:appuser /app/bucket
 
 USER appuser
 
