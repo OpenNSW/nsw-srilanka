@@ -4,16 +4,22 @@
     {
       "id": "lankapay",
       "is_active": true,
-      "type": "REDIRECT",
-      "gateway_url": "https://sandbox.govpay.lk/checkout",
-      "template": "Pay {{ .Amount }} {{ .Currency }} ref {{ .ReferenceNumber }}"
+      "render_info": {
+        "display_name": "LankaPay",
+        "description": "Pay securely with LankaPay",
+        "display_order": 1
+      },
+      "config": {}
     },
     {
       "id": "govpay",
       "is_active": true,
-      "type": "INFO",
-      "gateway_url": "",
-      "template": "GovPay ref {{ .ReferenceNumber }} amount {{ .Amount }}"
+      "render_info": {
+        "display_name": "GovPay",
+        "description": "Offline payment instructions",
+        "display_order": 2
+      },
+      "config": {}
     }
   ]
 }
