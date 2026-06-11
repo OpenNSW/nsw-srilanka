@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
+import { useDebounce } from '../hooks/useDebounce'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
@@ -22,6 +23,7 @@ export function ConsignmentScreen() {
   const limit = 50
 
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearchQuery = useDebounce(searchQuery, 400)
   const [stateFilter, setStateFilter] = useState<string>('all')
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
@@ -44,6 +46,10 @@ export function ConsignmentScreen() {
   }
 
   useEffect(() => {
+    setPage(0)
+  }, [debouncedSearchQuery])
+
+  useEffect(() => {
     async function fetchConsignments() {
       const requestId = ++listRequestIdRef.current
       setLoading(true)
@@ -55,6 +61,7 @@ export function ConsignmentScreen() {
           tradeFlowFilter as TradeFlow | 'all',
           role,
           api,
+          debouncedSearchQuery,
         )
         if (requestId !== listRequestIdRef.current) {
           return
@@ -74,33 +81,7 @@ export function ConsignmentScreen() {
     }
 
     void fetchConsignments()
-  }, [api, page, stateFilter, tradeFlowFilter, role])
-
-  const filteredConsignments = consignments.filter((c) => {
-    const item = c.items?.[0]
-    const hsCode = item?.hsCode?.hsCode || ''
-    const description = item?.hsCode?.description || ''
-    const matchesSearch =
-      searchQuery === '' ||
-      c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      hsCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      description.toLowerCase().includes(searchQuery.toLowerCase())
-
-    return matchesSearch
-  })
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="flex items-center justify-center py-12">
-          <Spinner size="3" />
-          <Text size="3" color="gray" className="ml-3">
-            {t('consignments.list.loading')}
-          </Text>
-        </div>
-      </div>
-    )
-  }
+  }, [api, page, stateFilter, tradeFlowFilter, role, debouncedSearchQuery])
 
   return (
     <div className="p-6">
@@ -130,7 +111,11 @@ export function ConsignmentScreen() {
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
               >
                 <TextField.Slot>
-                  <MagnifyingGlassIcon height="16" width="16" />
+                  {loading && searchQuery !== '' ? (
+                    <Spinner size="1" />
+                  ) : (
+                    <MagnifyingGlassIcon height="16" width="16" />
+                  )}
                 </TextField.Slot>
               </TextField.Root>
             </div>
@@ -169,70 +154,80 @@ export function ConsignmentScreen() {
           </div>
         </div>
 
-        {filteredConsignments.length === 0 ? (
-          <div className="p-12 text-center">
-            <Text size="3" color="gray">
-              {consignments.length === 0
-                ? role === 'cha'
-                  ? t('consignments.list.empty.cha')
-                  : t('consignments.list.empty.trader')
-                : t('consignments.list.empty.filtered')}
-            </Text>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-surface">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    {t('consignments.list.table.id')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    {t('consignments.list.table.tradeFlow')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    {t('consignments.list.table.state')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    {t('consignments.list.table.created')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredConsignments.map((consignment) => {
-                  return (
-                    <tr
-                      key={consignment.id}
-                      onClick={() => void navigate(`/consignments/${consignment.id}`)}
-                      className="hover:bg-surface cursor-pointer transition-colors"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Text size="2" weight="medium" className="text-info-strong font-mono">
-                          {consignment.id}
-                        </Text>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                          {consignment.flow}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge size="1" color={getStateColor(consignment.state)}>
-                          {formatState(consignment.state)}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Text size="2" color="gray">
-                          {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
-                        </Text>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div className="relative min-h-[400px]">
+          {loading && (
+            <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-2">
+              <Spinner size="3" />
+              <Text size="2" color="gray">
+                {t('consignments.list.loading')}
+              </Text>
+            </div>
+          )}
+          {consignments.length === 0 ? (
+            <div className="p-12 text-center">
+              <Text size="3" color="gray">
+                {debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
+                  ? t('consignments.list.empty.filtered')
+                  : role === 'cha'
+                    ? t('consignments.list.empty.cha')
+                    : t('consignments.list.empty.trader')}
+              </Text>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-surface">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                      {t('consignments.list.table.id')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                      {t('consignments.list.table.tradeFlow')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                      {t('consignments.list.table.state')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                      {t('consignments.list.table.created')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {consignments.map((consignment) => {
+                    return (
+                      <tr
+                        key={consignment.id}
+                        onClick={() => void navigate(`/consignments/${consignment.id}`)}
+                        className="hover:bg-surface cursor-pointer transition-colors"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Text size="2" weight="medium" className="text-info-strong font-mono">
+                            {consignment.id}
+                          </Text>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
+                            {consignment.flow}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge size="1" color={getStateColor(consignment.state)}>
+                            {formatState(consignment.state)}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Text size="2" color="gray">
+                            {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
+                          </Text>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         <PaginationControl
           currentPage={page + 1}
           totalPages={Math.ceil(totalCount / limit)}

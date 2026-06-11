@@ -136,6 +136,28 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockTaskStore.AssertExpectations(t)
 }
 
+func TestConsignmentRouter_HandleGetConsignments_WithSearch(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := NewRouter(svc, nil, mockCompany)
+
+	traderID := "trader1"
+	companyID := "company-trader"
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: companyID, OUHandle: "trader-ou"}, nil)
+
+	sqlMock.MatchExpectationsInOrder(false)
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*LIKE`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "trader_id", "trader_company_id"}))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&q=abc123", nil)
+	req = req.WithContext(withAuthContextOU(req.Context(), traderID, "trader-ou"))
+	w := httptest.NewRecorder()
+	r.HandleGetConsignments(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockCompany.AssertExpectations(t)
+}
+
 func TestConsignmentRouter_HandleCreateConsignment_Unauthorized(t *testing.T) {
 	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil)
 
