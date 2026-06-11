@@ -120,7 +120,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleGetConsignmentByID handles GET /api/v1/consignments/{id}
+// HandleGetConsignmentByID handles GET /api/v1/consignments/{id}.
 func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
