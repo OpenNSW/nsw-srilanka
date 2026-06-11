@@ -1,0 +1,6 @@
+{
+  "id": "cda-review-result-flow",
+  "type": "REVIEW",
+  "workflow_id": "cda-review-result-flow",
+  "render_config_id": "cda-review-result-flow:render"
+}

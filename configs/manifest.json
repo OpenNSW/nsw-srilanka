@@ -1378,6 +1378,146 @@
       "version": "",
       "loader": "local",
       "path": "fcau/fcau_workflow.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/render.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/userinput.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/userinput_jsonform.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/workflow.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/task_template.json"
+    },
+    {
+      "id": "cda-pay-app-fee--instructions-wrapper",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/instructions_wrapper_jsonform.json"
+    },
+    {
+      "id": "cda-pay-app-fee--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/payment.json"
+    },
+    {
+      "id": "cda-pay-app-fee--payment-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/payment_jsonform.json"
+    },
+    {
+      "id": "cda-pay-app-fee-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/render.json"
+    },
+    {
+      "id": "cda-pay-app-fee--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/select_method.json"
+    },
+    {
+      "id": "cda-pay-app-fee--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/select_method_jsonform.json"
+    },
+    {
+      "id": "cda-pay-app-fee--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/success_message_jsonform.json"
+    },
+    {
+      "id": "cda-pay-app-fee-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/workflow.json"
+    },
+    {
+      "id": "cda-pay-app-fee-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/2-payment_app_fee/task_template.json"
+    },
+    {
+      "id": "cda-review-result-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/render.json"
+    },
+    {
+      "id": "cda-review-result--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/officerinput_jsonform.json"
+    },
+    {
+      "id": "cda-review-result--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/officerinput.json"
+    },
+    {
+      "id": "cda-review-result-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/workflow.json"
+    },
+    {
+      "id": "cda-review-result-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/task_template.json"
+    },
+    {
+      "id": "cda-certificate-reg",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "cda/cda_workflow.json"
     }
   ]
 }
