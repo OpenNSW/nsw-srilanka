@@ -198,11 +198,12 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) 
 // TraderCompanyID; for role=cha the caller passes CHACompanyID. Exactly one of the two must be set.
 func (s *Service) ListConsignments(ctx context.Context, filter Filter) (*ListResult, error) {
 	var baseQuery *gorm.DB
-	if filter.CHACompanyID != nil {
+	switch {
+	case filter.CHACompanyID != nil:
 		baseQuery = s.db.WithContext(ctx).Model(&Consignment{}).Where("cha_company_id = ?", *filter.CHACompanyID)
-	} else if filter.TraderCompanyID != nil {
+	case filter.TraderCompanyID != nil:
 		baseQuery = s.db.WithContext(ctx).Model(&Consignment{}).Where("trader_company_id = ?", *filter.TraderCompanyID)
-	} else {
+	default:
 		return nil, fmt.Errorf("either TraderCompanyID or CHACompanyID must be set in filter")
 	}
 	return s.listConsignmentsWithBaseQuery(ctx, baseQuery, filter)

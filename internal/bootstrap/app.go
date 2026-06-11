@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/loaders/local"
@@ -76,7 +77,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // Build initializes dependencies and returns a fully wired application server.
 // The initialization flow is structured in distinct stages to ensure readability.
-func Build(ctx context.Context, cfg *config.Config) (*App, error) {
+func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:gocyclo
 	// -------------------------------------------------------------------
 	// Stage 1: Relational Database & Connection Health Check
 	// -------------------------------------------------------------------
@@ -319,8 +320,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	handler := cors.CORS(&cfg.CORS)(mux)
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: handler,
+		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	closeFn := func() error {
