@@ -50,12 +50,11 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ## How to Run Locally
 
 ### 1. Prepare local config files
-Copy the templates and edit each one for your environment:
+Run first-time setup to install tools, configure git hooks, and seed config files from their example templates:
 ```bash
-cp .env.example .env
-cp configs/services.example.json configs/services.json
-cp configs/payment_methods.example.json configs/payment_methods.json
+make setup
 ```
+This creates `.env`, `configs/services.json`, `configs/notification.json`, and `configs/payment_methods.json` from their `.example.*` counterparts — only if they don't already exist. Edit each seeded file for your environment.
 
 ### 2. Start the Docker Stack
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
@@ -265,7 +264,7 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `configs/manifest.json`        | Artifact registry index — lists every workflow/form/render config file   | Committed to the repository            |
 | `configs/services.json`        | Outbound service endpoint registry (FCAU, NPQS, IRD, customs, …)         | `configs/services.example.json`        |
 | `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)  | `configs/payment_methods.example.json` |
-| `configs/notification.json`    | Notification provider settings (SMS, email channels)                     | Committed to the repository            |
+| `configs/notification.json`    | Notification provider settings (SMS, email channels)                     | `configs/notification.example.json`    |
 | `configs/<agency_code>/`       | Agency workflow definitions, JSONForms schemas, and render configs       | Committed to the repository            |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

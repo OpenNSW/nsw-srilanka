@@ -20,6 +20,11 @@ coverage.html
 .env*
 !*.example
 
+# Real config files — copy from *.example.json via `make setup`
+configs/notification.json
+configs/services.json
+configs/payment_methods.json
+
 # Services Configs
 backend/configs/*
 !backend/configs/*.example.json
