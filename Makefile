@@ -14,6 +14,9 @@ COMPOSE_PREVIEW := docker compose -f compose.yml
 APP_SERVICES    := api trader-portal
 # A literal space, so APP_SERVICES can be turned into a grep alternation.
 SPACE           := $(subst ,, )
+# Migrator version for `make migration` — KEEP IN SYNC with the
+# MIGRATE_VERSION build arg in the Dockerfile.
+MIGRATE_VERSION := v0.0.0-20260610120959-d981e67a7a47
 
 .DEFAULT_GOAL := help
 
@@ -48,6 +51,16 @@ build: ## Build the images without starting anything
 .PHONY: deps
 deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
 	$(COMPOSE) up -d $$($(COMPOSE) config --services | grep -vxE '$(subst $(SPACE),|,$(APP_SERVICES))')
+
+# ---------------------------------------------------------------------------
+# Migrations (uses the nsw-agency migrate tool; generate needs no database)
+# ---------------------------------------------------------------------------
+
+.PHONY: migration
+migration: ## Scaffold a new migration file: make migration name=<description>
+	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
+	@GOWORK=off MIGRATION_DIR=./migrations DB_DRIVER=sqlite \
+		go run github.com/OpenNSW/nsw-agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
 
 # ---------------------------------------------------------------------------
 # Lifecycle

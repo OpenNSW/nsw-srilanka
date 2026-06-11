@@ -1,1 +1,0 @@
-ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS gateway_id VARCHAR(255) NOT NULL DEFAULT '';

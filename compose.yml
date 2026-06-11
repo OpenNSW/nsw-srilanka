@@ -124,25 +124,27 @@ services:
   # 4. Database Migrations
   # -------------------------------------------------------------------
   migrate:
-    image: postgres:16-bookworm
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+      args:
+        # Override the migrator version without editing the Dockerfile:
+        #   MIGRATE_VERSION=<pseudo-version> docker compose build migrate
+        # Falls back to the Dockerfile's pinned default when unset.
+        MIGRATE_VERSION: ${MIGRATE_VERSION:-v0.0.0-20260610120959-d981e67a7a47}
     container_name: nsw-migrate
     networks:
       - nsw-network
-    working_dir: /src/migrations
-    volumes:
-      - .:/src
     environment:
+      - DB_DRIVER=postgres
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-nsw_db}
-      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_USER=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - MIGRATION_DB_HOST=db
-      - NPQS_OGA_SUBMISSION_URL=${NPQS_OGA_SUBMISSION_URL:-http://host.docker.internal:8081/api/v1/inject}
-      - FCAU_OGA_SUBMISSION_URL=${FCAU_OGA_SUBMISSION_URL:-http://host.docker.internal:8082/api/v1/inject}
-      - PRECONSIGNMENT_OGA_SUBMISSION_URL=${PRECONSIGNMENT_OGA_SUBMISSION_URL:-http://host.docker.internal:8083/api/v1/inject}
-      - CDA_OGA_SUBMISSION_URL=${CDA_OGA_SUBMISSION_URL:-http://host.docker.internal:8084/api/v1/inject}
-    command: bash -c "which bash && bash --version && bash run.sh --clean-run"
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+    # No `command:` — the migrate image's default CMD is ["migrate", "up"].
     depends_on:
       db:
         condition: service_healthy

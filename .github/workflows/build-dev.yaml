@@ -30,6 +30,13 @@ jobs:
             image_name: nsw-backend
             context: .
             dockerfile: ./Dockerfile
+          - service_name: NSW Migrate
+            image_name: nsw-migrate
+            context: .
+            dockerfile: ./Dockerfile
+            # The migrator is a non-default stage; the backend/portal entries
+            # have no target and build their Dockerfile's default (last) stage.
+            target: migrate
           - service_name: Trader Portal
             image_name: onetrade-app
             context: ./portals
@@ -58,6 +65,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          # Empty for default-stage images; set to `migrate` for the migrator.
+          target: ${{ matrix.target }}
           push: true
           # Sequential run numbers let Argo CD Image Updater sort/detect the newest dev builds.
           tags: |
