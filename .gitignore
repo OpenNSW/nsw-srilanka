@@ -20,14 +20,11 @@ coverage.html
 .env*
 !*.example
 
-# Real config files — copy from *.example.json via `make setup`
+# Real config files — copy from *.example.json (gitignored; never commit)
 configs/notification.json
 configs/services.json
+configs/services.docker.json
 configs/payment_methods.json
-
-# Services Configs
-backend/configs/*
-!backend/configs/*.example.json
 
 # Local bucket files
 bucket/*

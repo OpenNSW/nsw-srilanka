@@ -84,22 +84,6 @@ config: ## Print the merged dev config (for debugging)
 
 # ---------------------------------------------------------------------------
 
-.PHONY: tools
-tools: ## Install Go quality tools (golangci-lint, etc.)
-	@echo "  Installing Go quality tools..."
-
-.PHONY: setup
-setup: tools ## First-time setup: install tools, configure git hooks, seed config files from examples
-	git config core.hooksPath .githooks
-	chmod +x .githooks/pre-commit .githooks/pre-push
-	@echo "  Git hooks configured: .githooks/"
-	@cp -n .env.example .env 2>/dev/null && echo "  Created: .env" || echo "  Skipped: .env (already exists)"
-	@for f in configs/notification.example.json configs/services.example.json configs/payment_methods.example.json; do \
-		target=$$(echo $$f | sed 's/\.example\.json/.json/'); \
-		if [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
-		else echo "  Skipped: $$target (already exists)"; fi; \
-	done
-
 .PHONY: help
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
