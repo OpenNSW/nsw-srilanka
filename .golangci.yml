@@ -10,8 +10,6 @@ linters:
     - unused        # unexported identifiers never used outside their package
 
     # Style / maintainability
-    - gofmt         # formatting (also enforced in pre-commit hook)
-    - goimports     # import grouping and ordering
     - misspell      # common spelling mistakes in comments and strings
     - godot         # comment sentences should end with a period
 
@@ -52,3 +50,9 @@ linters:
         linters:
           - errcheck
           - gosec
+
+# In golangci-lint v2, formatters are a separate category from linters.
+formatters:
+  enable:
+    - gofmt         # standard Go formatting
+    - goimports     # import grouping and ordering
