@@ -29,6 +29,12 @@ export function LoginScreen() {
 
         {/* Centered Authentication Card */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+          {auth.error && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-xl">
+              <p className="text-sm text-red-700 font-semibold">{t('auth.login.errorTitle')}</p>
+              <p className="text-xs text-red-600 mt-1">{auth.error.message}</p>
+            </div>
+          )}
           <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-wide mb-10 -mt-20 drop-shadow-lg">
             {systemName}
           </h1>

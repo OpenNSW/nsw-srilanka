@@ -5,7 +5,6 @@ import { Layout } from './components/Layout'
 import { ConsignmentScreen } from './screens/ConsignmentScreen.tsx'
 import { ConsignmentDetailScreen } from './screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from './screens/TaskDetailScreen.tsx'
-import { PreconsignmentScreen } from './screens/PreconsignmentScreen.tsx'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { ApiProvider, useApi } from './services/ApiContext'
@@ -47,7 +46,13 @@ function ProtectedLayout() {
 
 function SignedOutRoute() {
   const { isAuthenticated, isLoading } = useAuth()
-  if (isLoading) return null
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
   if (isAuthenticated) return <Navigate to="/" replace />
   return <LoginScreen />
 }
