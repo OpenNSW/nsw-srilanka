@@ -1,6 +1,7 @@
 package consignment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -17,11 +18,10 @@ type Router struct {
 	cs      *Service
 	cha     cha.Service
 	company company.Service
-	audit   *audit.Client
 }
 
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditClient *audit.Client) *Router {
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: auditClient}
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service) *Router {
+	return &Router{cs: cs, cha: chaService, company: companyService}
 }
 
 // HandleCreateConsignment handles POST /api/v1/consignments
@@ -43,25 +43,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if c.audit != nil {
-		msgBytes, _ := json.Marshal(consignment)
-		c.audit.LogEvent(ctx, &audit.AuditLogRequest{
-			Timestamp:  audit.CurrentTimestamp(),
-			EventType:  "MANAGEMENT_EVENT",
-			Action:     "CREATE",
-			Status:     audit.StatusSuccess,
-			ActorType:  "MEMBER",
-			ActorID:    authCtx.User.ID,
-			TargetType: "RESOURCE",
-			TargetID:   &consignment.ID,
-			Message:    msgBytes,
-			Metadata: map[string]interface{}{
-				"flow":            consignment.Flow,
-				"traderCompanyId": consignment.TraderCompanyID,
-				"chaCompanyId":    consignment.ChaCompanyID,
-			},
-		})
-	}
+	logConsignmentAudit(ctx, "CREATE", consignment, authCtx.User.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -176,4 +158,24 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+func logConsignmentAudit(ctx context.Context, action string, consignment *DetailDTO, actorID string) {
+	msgBytes, _ := json.Marshal(consignment)
+	audit.LogAuditEvent(ctx, &audit.AuditLogRequest{
+		Timestamp:  audit.CurrentTimestamp(),
+		EventType:  "MANAGEMENT_EVENT",
+		Action:     action,
+		Status:     audit.StatusSuccess,
+		ActorType:  "MEMBER",
+		ActorID:    actorID,
+		TargetType: "RESOURCE",
+		TargetID:   &consignment.ID,
+		Message:    msgBytes,
+		Metadata: map[string]interface{}{
+			"flow":            consignment.Flow,
+			"traderCompanyId": consignment.TraderCompanyID,
+			"chaCompanyId":    consignment.ChaCompanyID,
+		},
+	})
 }

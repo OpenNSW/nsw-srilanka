@@ -14,6 +14,8 @@ import (
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
+
+	"github.com/LSFLK/argus/pkg/audit"
 )
 
 // Config holds all configuration for the application.
@@ -25,13 +27,7 @@ type Config struct {
 	Authn        authn.Config
 	Notification notification.Config
 	Temporal     temporal.Config
-	Audit        AuditConfig
-}
-
-// AuditConfig holds Argus audit service configuration
-type AuditConfig struct {
-	ServiceURL string
-	AuthToken  string
+	Audit        audit.Config
 }
 
 // ServerConfig holds server configuration.
@@ -104,9 +100,9 @@ func Load() (*Config, error) {
 			Port:      getIntEnvOrDefault("TEMPORAL_PORT", 7233),
 			Namespace: getEnvOrDefault("TEMPORAL_NAMESPACE", "default"),
 		},
-		Audit: AuditConfig{
-			ServiceURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
-			AuthToken:  os.Getenv("ARGUS_AUTH_TOKEN"),
+		Audit: audit.Config{
+			BaseURL:   getEnvOrDefault("ARGUS_SERVICE_URL", ""),
+			AuthToken: os.Getenv("ARGUS_AUTH_TOKEN"),
 		},
 	}
 
