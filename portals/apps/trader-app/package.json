@@ -12,7 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@asgardeo/react": "^0.13.0",
+    "oidc-client-ts": "^3.5.0",
+    "react-oidc-context": "^3.3.1",
     "@jsonforms/core": "^3.7.0",
     "@jsonforms/react": "^3.7.0",
     "@opennsw/jsonforms-renderers": "^0.2.1",

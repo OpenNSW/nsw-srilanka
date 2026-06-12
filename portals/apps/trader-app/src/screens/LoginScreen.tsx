@@ -1,9 +1,9 @@
-import { useAsgardeo } from '@asgardeo/react'
+import { useAuth } from 'react-oidc-context'
 import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '../config'
 
 export function LoginScreen() {
-  const { signIn } = useAsgardeo()
+  const auth = useAuth()
   const { t } = useTranslation()
   const { systemName, appName, logoUrl, description, heroImageUrl, partnerLogos } = appConfig.branding
 
@@ -40,9 +40,7 @@ export function LoginScreen() {
               </div>
 
               <button
-                onClick={() => {
-                  void signIn()
-                }}
+                onClick={() => void auth.signinRedirect()}
                 className="bg-primary hover:bg-primary-dark text-white px-10 py-2.5 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
               >
                 {t('auth.login.button')}

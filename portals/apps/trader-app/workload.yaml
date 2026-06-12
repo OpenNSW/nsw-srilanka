@@ -23,7 +23,5 @@ configurations:
       value: http://localhost:5173
     - name: VITE_IDP_SCOPES
       value: openid,profile,email
-    - name: VITE_IDP_PLATFORM
-      value: AsgardeoV2
     - name: VITE_SHOW_AUTOFILL_BUTTON
       value: 'false'
