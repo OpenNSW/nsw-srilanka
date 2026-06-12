@@ -233,7 +233,6 @@ services:
       - VITE_IDP_CLIENT_ID=${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}
       - VITE_APP_URL=${VITE_APP_URL:-http://localhost:5173}
       - VITE_IDP_SCOPES=${VITE_IDP_SCOPES:-openid,profile,email,group,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write}
-      - VITE_IDP_PLATFORM=${VITE_IDP_PLATFORM:-AsgardeoV2}
       - VITE_IDP_TRADER_GROUP_NAME=${VITE_IDP_TRADER_GROUP_NAME:-Traders}
       - VITE_IDP_CHA_GROUP_NAME=${VITE_IDP_CHA_GROUP_NAME:-CHA}
       - VITE_SHOW_AUTOFILL_BUTTON=${VITE_SHOW_AUTOFILL_BUTTON:-true}
