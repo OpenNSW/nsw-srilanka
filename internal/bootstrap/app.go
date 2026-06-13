@@ -30,8 +30,10 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
 
+	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	govpay "github.com/OpenNSW/nsw-srilanka/integration/payment"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -40,8 +42,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/middleware"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 
 	"github.com/LSFLK/argus/pkg/audit"
@@ -295,7 +295,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(taskHandler.HandleGetTask))))
 	mux.Handle("POST /api/v1/tasks/{id}/commands/{command}", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
 	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
-
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
 	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
@@ -321,7 +320,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 9: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	handler := cors.CORS(&cfg.CORS)(middleware.TraceMiddleware(mux))
+	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(mux))
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),

@@ -2,9 +2,11 @@ package consignment
 
 import (
 	"context"
+	"crypto"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/taskflow/store"
@@ -107,7 +110,8 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 
 	svc := NewService(db, reg, nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	auditor := &mockAuditor{}
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
 
 	traderID := "trader1"
 	traderCompanyID := uuid.NewString()
@@ -132,6 +136,16 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	r.HandleCreateConsignment(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
+
+	// Assert audit event was recorded
+	require.Len(t, auditor.events, 1)
+	assert.Equal(t, string(nswaudit.EventConsignment), auditor.events[0].EventType)
+	assert.Equal(t, string(nswaudit.ActionCreate), auditor.events[0].Action)
+	assert.Equal(t, string(nswaudit.TargetConsignment), auditor.events[0].TargetType)
+	assert.Equal(t, returnedID, *auditor.events[0].TargetID)
+	assert.Equal(t, Flow("EXPORT"), auditor.events[0].Metadata["flow"])
+	assert.Equal(t, traderCompanyID, auditor.events[0].Metadata["traderCompanyId"])
+
 	mockUser.AssertExpectations(t)
 	mockWM.AssertExpectations(t)
 	mockTaskStore.AssertExpectations(t)
@@ -287,4 +301,36 @@ func TestConsignmentRouter_HandleGetConsignmentByID_ServiceError(t *testing.T) {
 	r.HandleGetConsignmentByID(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+type mockAuditor struct {
+	mu     sync.Mutex
+	events []*argus.AuditLogRequest
+}
+
+func (m *mockAuditor) LogEvent(ctx context.Context, event *argus.AuditLogRequest) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, event)
+	return true
+}
+
+func (m *mockAuditor) IsEnabled() bool { return true }
+
+func (m *mockAuditor) SignEvent(ctx context.Context, event *argus.AuditLogRequest) error {
+	return nil
+}
+
+func (m *mockAuditor) SignMessageBytes(ctx context.Context, message []byte) (string, error) {
+	return "", nil
+}
+
+func (m *mockAuditor) LogSignedEvent(ctx context.Context, event *argus.AuditLogRequest) {}
+
+func (m *mockAuditor) VerifyIntegrity(event *argus.AuditLogRequest, publicKey crypto.PublicKey) (bool, error) {
+	return true, nil
+}
+
+func (m *mockAuditor) Close(ctx context.Context) error {
+	return nil
 }

@@ -53,6 +53,15 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	}
 	if consignment == nil {
 		slog.Error("consignment is nil after successful creation")
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionCreate,
+			TargetType: nswaudit.TargetConsignment,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error": "consignment is nil after successful creation",
+			},
+		})
 		http.Error(w, "failed to create consignment: empty response", http.StatusInternalServerError)
 		return
 	}
