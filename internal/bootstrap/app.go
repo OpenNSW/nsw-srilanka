@@ -40,6 +40,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/middleware"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 
@@ -159,9 +160,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	auditClient := audit.NewClient(cfg.Audit)
 	audit.InitializeGlobalAudit(auditClient)
+	recorder := nswaudit.NewRecorder(auditClient)
 
 	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
-	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)
+	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService, recorder)
 
 	pr, stopParentRunner, err := wireParentRunner(temporalClient, tm, consignmentService)
 	if err != nil {
@@ -256,7 +258,27 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	withScope := func(scope string) func(http.Handler) http.Handler {
 		return authzr.RequireScope(scope)
 	}
-	withAudit := middleware.AuditMiddleware
+
+	taskIDWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventTask,
+		TargetType:       nswaudit.TargetTask,
+		TargetIDFromPath: "id",
+	})
+	taskWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventTask,
+		TargetType:       nswaudit.TargetTask,
+		TargetIDFromResp: "id",
+	})
+	storageUploadWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventStorage,
+		TargetType:       nswaudit.TargetStorage,
+		TargetIDFromResp: "key",
+	})
+	storageDeleteWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventStorage,
+		TargetType:       nswaudit.TargetStorage,
+		TargetIDFromPath: "key",
+	})
 
 	mux := http.NewServeMux()
 
@@ -292,24 +314,24 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (payments, local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(taskHandler.HandleGetTask))))
-	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
+	mux.Handle("POST /api/v1/tasks/{id}", withAuth(taskIDWrap(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
 	// TODO(oga-callback): remove once OGA POSTs directly to /api/v1/tasks/{id}
 	// with the bare reviewer payload. This legacy route accepts OGA's
 	// {task_id, workflow_id, payload:{action, content}} envelope and the
 	// handler unwraps payload.content + falls back to body-level task_id.
-	mux.Handle("POST /api/v1/tasks", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
+	mux.Handle("POST /api/v1/tasks", withAuth(taskWrap(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
-	mux.Handle("POST /api/v1/consignments", withAuth(withAudit(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment)))))
+	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
 	// Storage
-	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
+	mux.Handle("POST /api/v1/storage", withAuth(storageUploadWrap(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload)))))
 	mux.Handle("GET /api/v1/storage/{key}", withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
-	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
+	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(storageDeleteWrap(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete)))))
 
 	// External Webhooks bypass standard JWT authn.
 	// They should use webhook signatures, implemented in the handler directly or via specialized middleware.
@@ -325,7 +347,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 9: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	handler := cors.CORS(&cfg.CORS)(mux)
+	handler := cors.CORS(&cfg.CORS)(middleware.TraceMiddleware(mux))
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
