@@ -222,6 +222,9 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 		if filter.Flow != nil {
 			q = q.Where("flow = ?", *filter.Flow)
 		}
+		if filter.Query != nil && *filter.Query != "" {
+			q = q.Where("LOWER(id) LIKE LOWER(?)", "%"+*filter.Query+"%")
+		}
 		return q
 	}
 

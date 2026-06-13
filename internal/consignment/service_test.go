@@ -123,6 +123,41 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
+func TestConsignmentService_ListConsignments_WithQuery(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+	ctx := context.Background()
+	companyID := "company-1"
+	query := "abc123"
+
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*LIKE`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID, Query: &query})
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Items)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestConsignmentService_ListConsignments_EmptyQuery(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+	ctx := context.Background()
+	companyID := "company-1"
+	emptyQuery := ""
+
+	// Empty query string is ignored — no LIKE clause should appear
+	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE trader_company_id`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID, Query: &emptyQuery})
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Items)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
 func TestConsignmentService_ListConsignments_TraderCompany_Empty(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	svc := NewService(db, nil, nil, nil, nil, nil)
