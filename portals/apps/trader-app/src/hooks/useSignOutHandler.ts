@@ -1,24 +1,10 @@
 import { useCallback } from 'react'
-import { useAsgardeo } from '@asgardeo/react'
+import { useAuth } from 'react-oidc-context'
 
 export function useSignOutHandler(): () => void {
-  const { signOut } = useAsgardeo()
+  const auth = useAuth()
 
   return useCallback(() => {
-    void (async () => {
-      try {
-        const signOutResult = await signOut(undefined, (redirectUrl: string) => {
-          if (redirectUrl) {
-            window.location.assign(redirectUrl)
-          }
-        })
-
-        if (typeof signOutResult === 'string' && signOutResult) {
-          window.location.assign(signOutResult)
-        }
-      } catch {
-        // Let the SDK configuration drive sign-out redirects.
-      }
-    })()
-  }, [signOut])
+    void auth.signoutRedirect()
+  }, [auth])
 }

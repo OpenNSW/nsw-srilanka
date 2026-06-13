@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useAsgardeo } from '@asgardeo/react'
+import { useMemo } from 'react'
+import { useAuth } from 'react-oidc-context'
 import type { Role } from '../services/RoleContext'
 import { mapClaimsToRoles } from '../utils/roleMapper'
 
@@ -11,63 +11,27 @@ interface UseAuthContextResult {
 }
 
 export function useAuthContext(): UseAuthContextResult {
-  const { isSignedIn, isLoading, getDecodedIdToken } = useAsgardeo()
-  const [availableRoles, setAvailableRoles] = useState<Role[] | null>(null)
-  const [isResolvingRoles, setIsResolvingRoles] = useState(false)
+  const auth = useAuth()
 
-  useEffect(() => {
-    let isMounted = true
-
-    const resolveAvailableRoles = async () => {
-      if (isLoading) {
-        return
-      }
-
-      if (!isSignedIn) {
-        if (isMounted) {
-          setAvailableRoles(null)
-          setIsResolvingRoles(false)
-        }
-        return
-      }
-
-      setIsResolvingRoles(true)
-      try {
-        const decodedIdToken = await getDecodedIdToken()
-        if (!isMounted) {
-          return
-        }
-
-        const claimsCandidate =
-          (decodedIdToken as { decodedIDTokenPayload?: unknown })?.decodedIDTokenPayload ??
-          (decodedIdToken as { payload?: unknown })?.payload ??
-          decodedIdToken
-
-        setAvailableRoles(mapClaimsToRoles(claimsCandidate as { groups?: unknown }))
-      } catch {
-        if (!isMounted) {
-          return
-        }
-
-        setAvailableRoles([])
-      } finally {
-        if (isMounted) {
-          setIsResolvingRoles(false)
-        }
-      }
+  const availableRoles = useMemo(() => {
+    if (!auth.isAuthenticated || !auth.user) {
+      return null
     }
 
-    void resolveAvailableRoles()
-
-    return () => {
-      isMounted = false
+    try {
+      return mapClaimsToRoles(auth.user.profile as { groups?: unknown })
+    } catch {
+      return []
     }
-  }, [getDecodedIdToken, isLoading, isSignedIn])
+  }, [auth.isAuthenticated, auth.user])
 
-  return {
-    isSignedIn,
-    isLoading,
-    availableRoles,
-    isResolvingRoles,
-  }
+  return useMemo(
+    () => ({
+      isSignedIn: auth.isAuthenticated,
+      isLoading: auth.isLoading,
+      availableRoles,
+      isResolvingRoles: false,
+    }),
+    [auth.isAuthenticated, auth.isLoading, availableRoles],
+  )
 }

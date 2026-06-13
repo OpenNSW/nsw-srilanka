@@ -1,18 +1,18 @@
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { useAsgardeo } from '@asgardeo/react'
+import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { userManager } from '../oidcUserManager'
 import { createApiClient, type ApiClient } from './api'
 
 const ApiContext = createContext<ApiClient | null>(null)
 
 export function ApiProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken } = useAsgardeo()
-  const getAccessTokenRef = useRef(getAccessToken)
-
-  useEffect(() => {
-    getAccessTokenRef.current = getAccessToken
-  }, [getAccessToken])
-
-  const client = useMemo(() => createApiClient(async () => getAccessTokenRef.current()), [])
+  const client = useMemo(
+    () =>
+      createApiClient(async () => {
+        const user = await userManager.getUser()
+        return user?.access_token
+      }),
+    [],
+  )
 
   return <ApiContext.Provider value={client}>{children}</ApiContext.Provider>
 }
