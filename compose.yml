@@ -13,6 +13,8 @@ volumes:
     driver: local
   bucket_data:
     driver: local
+  spool_data:
+    driver: local
 
 services:
   # -------------------------------------------------------------------
@@ -168,6 +170,8 @@ services:
       - ./configs:/app/configs:ro
       # Persist runtime blob storage written by the storage driver.
       - bucket_data:/app/bucket
+      # Persist failed audit spools for client recovery.
+      - spool_data:/app/spool
     environment:
       # Target relational store parameter mapping
       - DB_HOST=db
@@ -196,6 +200,7 @@ services:
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_AUTH_TOKEN=${ARGUS_AUTH_TOKEN:-nsw-super-secret-audit-token}
+      - ARGUS_SPOOL_DIR=/app/spool
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -247,7 +252,7 @@ services:
   # 7. Audit Service (Argus)
   # -------------------------------------------------------------------
   argus:
-    image: ghcr.io/lsflk/argus:d59aefb70fba
+    image: ghcr.io/opennsw/argus:d59aefb70fba
     container_name: nsw-argus
     networks:
       - nsw-network

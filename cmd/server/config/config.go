@@ -103,6 +103,7 @@ func Load() (*Config, error) {
 		Audit: audit.Config{
 			BaseURL:   getEnvOrDefault("ARGUS_SERVICE_URL", ""),
 			AuthToken: os.Getenv("ARGUS_AUTH_TOKEN"),
+			SpoolDir:  getEnvOrDefault("ARGUS_SPOOL_DIR", ""),
 		},
 	}
 
