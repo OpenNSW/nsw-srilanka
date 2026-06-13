@@ -1,11 +1,13 @@
 package consignment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -40,6 +42,9 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "failed to create consignment: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	logConsignmentAudit(ctx, "CREATE", consignment, authCtx.User.ID)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(consignment); err != nil {
@@ -153,4 +158,24 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+func logConsignmentAudit(ctx context.Context, action string, consignment *DetailDTO, actorID string) {
+	msgBytes, _ := json.Marshal(consignment)
+	audit.LogAuditEvent(ctx, &audit.AuditLogRequest{
+		Timestamp:  audit.CurrentTimestamp(),
+		EventType:  "MANAGEMENT_EVENT",
+		Action:     action,
+		Status:     audit.StatusSuccess,
+		ActorType:  "MEMBER",
+		ActorID:    actorID,
+		TargetType: "RESOURCE",
+		TargetID:   &consignment.ID,
+		Message:    msgBytes,
+		Metadata: map[string]interface{}{
+			"flow":            consignment.Flow,
+			"traderCompanyId": consignment.TraderCompanyID,
+			"chaCompanyId":    consignment.ChaCompanyID,
+		},
+	})
 }

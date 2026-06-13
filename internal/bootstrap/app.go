@@ -40,7 +40,10 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw-srilanka/internal/middleware"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
+
+	"github.com/LSFLK/argus/pkg/audit"
 
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
@@ -154,6 +157,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
+	auditClient := audit.NewClient(cfg.Audit)
+	audit.InitializeGlobalAudit(auditClient)
+
 	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
 	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)
 
@@ -250,6 +256,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	withScope := func(scope string) func(http.Handler) http.Handler {
 		return authzr.RequireScope(scope)
 	}
+	withAudit := middleware.AuditMiddleware
 
 	mux := http.NewServeMux()
 
@@ -295,7 +302,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
-	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
+	mux.Handle("POST /api/v1/consignments", withAuth(withAudit(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment)))))
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
@@ -328,6 +335,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	closeFn := func() error {
 		var closeErrs []error
+
+		if auditClient != nil && auditClient.IsEnabled() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := auditClient.Close(shutdownCtx); err != nil {
+				closeErrs = append(closeErrs, fmt.Errorf("failed to close audit client: %w", err))
+			}
+			cancel()
+		}
 
 		if err := stopParentRunner(); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop parent runner: %w", err))
