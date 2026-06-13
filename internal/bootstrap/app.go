@@ -40,6 +40,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/middleware"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 
 	"github.com/LSFLK/argus/pkg/audit"
@@ -158,9 +160,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	auditClient := audit.NewClient(cfg.Audit)
 	audit.InitializeGlobalAudit(auditClient)
+	recorder := nswaudit.NewRecorder(auditClient)
 
 	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
-	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)
+	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService, recorder)
 
 	pr, stopParentRunner, err := wireParentRunner(temporalClient, tm, consignmentService)
 	if err != nil {
@@ -318,7 +321,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 9: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	handler := cors.CORS(&cfg.CORS)(mux)
+	handler := cors.CORS(&cfg.CORS)(middleware.TraceMiddleware(mux))
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),

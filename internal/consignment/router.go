@@ -8,6 +8,7 @@ import (
 
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/pagination"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
@@ -16,10 +17,11 @@ type Router struct {
 	cs      *Service
 	cha     cha.Service
 	company company.Service
+	audit   *nswaudit.Recorder
 }
 
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service) *Router {
-	return &Router{cs: cs, cha: chaService, company: companyService}
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder) *Router {
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder}
 }
 
 // HandleCreateConsignment handles POST /api/v1/consignments
@@ -37,9 +39,37 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID)
 	if err != nil {
 		slog.Error("failed to create and start consignment", "error", err)
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionCreate,
+			TargetType: nswaudit.TargetConsignment,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error": err.Error(),
+			},
+		})
 		http.Error(w, "failed to create consignment: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if consignment == nil {
+		slog.Error("consignment is nil after successful creation")
+		http.Error(w, "failed to create consignment: empty response", http.StatusInternalServerError)
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionCreate,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignment.ID,
+		Failure:    false,
+		Message:    consignment,
+		Metadata: map[string]any{
+			"flow":            consignment.Flow,
+			"traderCompanyId": consignment.TraderCompanyID,
+			"chaCompanyId":    consignment.ChaCompanyID,
+		},
+	})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(consignment); err != nil {
