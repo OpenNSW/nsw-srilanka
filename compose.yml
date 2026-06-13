@@ -195,7 +195,7 @@ services:
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
       - ARGUS_SERVICE_URL=http://argus:3001
-      - ARGUS_AUTH_TOKEN=nsw-super-secret-audit-token
+      - ARGUS_AUTH_TOKEN=${ARGUS_AUTH_TOKEN:-nsw-super-secret-audit-token}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -253,9 +253,12 @@ services:
       - nsw-network
     ports:
       - "${ARGUS_PORT:-3001}:3001"
+    volumes:
+      - ./configs/argus/config.yaml:/app/configs/config.yaml:ro
     environment:
       - ENVIRONMENT=development
       - PORT=3001
+      - AUDIT_ENUMS_CONFIG=/app/configs/config.yaml
       - DB_TYPE=postgres
       - DB_HOST=db
       - DB_PORT=5432
@@ -263,7 +266,7 @@ services:
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-changeme}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - ARGUS_AUTH_TOKEN=nsw-super-secret-audit-token
+      - ARGUS_AUTH_TOKEN=${ARGUS_AUTH_TOKEN:-nsw-super-secret-audit-token}
     depends_on:
       db:
         condition: service_healthy

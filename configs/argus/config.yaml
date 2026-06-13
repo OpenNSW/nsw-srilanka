@@ -1,0 +1,23 @@
+# NSW Sri Lanka audit configuration. Mounted into the Argus container at deploy time.
+enums:
+  eventTypes:
+    - CONSIGNMENT_EVENT
+    - TASK_EVENT
+    - STORAGE_EVENT
+    - PAYMENT_EVENT
+    - USER_MANAGEMENT
+  eventActions:
+    - CREATE
+    - READ
+    - UPDATE
+    - DELETE
+  actorTypes:
+    - ADMIN
+    - MEMBER          # authenticated user (trader / CHA / officer)
+    - SERVICE         # service-to-service client credential
+    - SYSTEM          # automated / unauthenticated internal action
+  targetTypes:
+    - CONSIGNMENT
+    - TASK
+    - STORAGE_OBJECT
+    - PAYMENT
