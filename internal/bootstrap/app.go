@@ -21,6 +21,7 @@ import (
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
+	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
@@ -505,7 +506,8 @@ func initTask(
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 
-	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
+	extensionsRegistry := extensions.NewRegistry()
+	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
 
 	if err := workflowRunner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start micro workflow worker: %w", err)
