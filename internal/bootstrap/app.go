@@ -259,6 +259,26 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return authzr.RequireScope(scope)
 	}
 
+	taskIDWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventTask,
+		TargetType:       nswaudit.TargetTask,
+		TargetIDFromPath: "id",
+	})
+	taskWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:  nswaudit.EventTask,
+		TargetType: nswaudit.TargetTask,
+	})
+	storageUploadWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventStorage,
+		TargetType:       nswaudit.TargetStorage,
+		TargetIDFromResp: "key",
+	})
+	storageDeleteWrap := recorder.Wrap(nswaudit.Spec{
+		EventType:        nswaudit.EventStorage,
+		TargetType:       nswaudit.TargetStorage,
+		TargetIDFromPath: "key",
+	})
+
 	mux := http.NewServeMux()
 
 	// Health check is public and returns JSON in all cases.
@@ -293,13 +313,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (payments, local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(taskHandler.HandleGetTask))))
-	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
+	mux.Handle("POST /api/v1/tasks/{id}", withAuth(taskIDWrap(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
 	// TODO(oga-callback): remove once OGA POSTs directly to /api/v1/tasks/{id}
 	// with the bare reviewer payload. This legacy route accepts OGA's
 	// {task_id, workflow_id, payload:{action, content}} envelope and the
 	// handler unwraps payload.content + falls back to body-level task_id.
-	mux.Handle("POST /api/v1/tasks", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
+	mux.Handle("POST /api/v1/tasks", withAuth(taskWrap(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
@@ -308,9 +328,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
 	// Storage
-	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
+	mux.Handle("POST /api/v1/storage", withAuth(storageUploadWrap(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload)))))
 	mux.Handle("GET /api/v1/storage/{key}", withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
-	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
+	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(storageDeleteWrap(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete)))))
 
 	// External Webhooks bypass standard JWT authn.
 	// They should use webhook signatures, implemented in the handler directly or via specialized middleware.
