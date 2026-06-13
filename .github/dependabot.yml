@@ -1,0 +1,63 @@
+version: 2
+
+updates:
+  # Go module dependencies
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/*"
+      temporal:
+        patterns:
+          - "go.temporal.io/*"
+      gorm:
+        patterns:
+          - "gorm.io/*"
+      opennsw:
+        patterns:
+          - "github.com/OpenNSW/*"
+    open-pull-requests-limit: 5
+
+  # Frontend (pnpm workspace)
+  - package-ecosystem: npm
+    directory: /portals
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      vite-ecosystem:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "@tailwindcss/*"
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+          - "react-*"
+      eslint-ecosystem:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "typescript-eslint"
+          - "globals"
+      typescript:
+        patterns:
+          - "typescript"
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

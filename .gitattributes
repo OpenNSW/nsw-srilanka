@@ -1,1 +1,17 @@
+# Default: normalise all text files to LF on commit, LF on checkout.
 * text=auto eol=lf
+
+# Shell scripts and git hooks must have LF endings so they are executable on
+# Linux CI runners even when checked out on Windows.
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+# Go source
+*.go text eol=lf
+
+# Binaries — no diff, no merge, no line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.db  binary

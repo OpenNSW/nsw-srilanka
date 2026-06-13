@@ -41,9 +41,10 @@ jobs:
       - name: TypeScript Type Check
         run: pnpm run type-check
 
-      # 2. Lint (Permissive)
-      # Kept 'continue-on-error: true' as requested for legacy issues.
-      # TODO: We should aim to fix lint issues and eventually remove 'continue-on-error' to enforce linting.
+      # 2. Lint
+      # TODO: Fix pre-existing lint errors and remove continue-on-error to enforce linting.
+      # Tracked issues: no-floating-promises, no-misused-promises, no-unsafe-* (Asgardeo SDK types),
+      # react-hooks/refs in ApiContext, react-refresh/only-export-components in context files.
       - name: Run ESLint
         run: pnpm run --recursive --parallel lint
         continue-on-error: true
@@ -70,13 +71,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Dependency Review needs the git history to compare base/head
+      # Dependency Review needs the git history to compare base/head.
+      # TODO: Remove continue-on-error once GitHub Dependency Graph is enabled for this repo
+      # (requires a repo admin to enable it under Settings → Code security and analysis).
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
+        continue-on-error: true
         with:
           base-ref: ${{ github.event.pull_request.base.sha }}
           head-ref: ${{ github.event.pull_request.head.sha }}
-        continue-on-error: true
 
       # Setup environment for Audit
       - name: Setup pnpm
@@ -96,6 +99,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # TODO: Remove continue-on-error once @asgardeo/react is upgraded to >=0.23.7.
+      # @asgardeo/browser <0.7.0 bundles a vulnerable axios (<1.16.0) which cannot
+      # be overridden via pnpm.overrides in pnpm v11.1.2. The 11 high-severity
+      # GHSA findings (GHSA-35jp, GHSA-3g43, GHSA-pmwg, etc.) are all transitive
+      # from apps/trader-app/@asgardeo/react. --prod excludes devDep tool chains.
       - name: Run pnpm audit
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --prod --audit-level=high
         continue-on-error: true
