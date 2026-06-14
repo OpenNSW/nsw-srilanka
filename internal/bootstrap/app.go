@@ -31,7 +31,7 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
-	govpay "github.com/OpenNSW/nsw-srilanka/integration/payment"
+	"github.com/OpenNSW/nsw-srilanka/integration/payment/govpay"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
