@@ -12,8 +12,8 @@
       "type": "TASK",
       "task_template_id": "fcau-post-wh-lab-testing--wait",
       "input_mapping": {
-        "reference_number": "reference_number",
-        "userform": "userform"
+        "reference_number": "submission.reference_number",
+        "userform": "submission"
       },
       "output_mapping": {
         "lab_result": "post_wh_lab_outcome"
