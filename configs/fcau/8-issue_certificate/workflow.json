@@ -12,8 +12,8 @@
       "type": "TASK",
       "task_template_id": "fcau-issue-certificate--officer-review",
       "input_mapping": {
-        "reference_number": "reference_number",
-        "userform": "userform"
+        "reference_number": "submission.reference_number",
+        "userform": "submission"
       },
       "output_mapping": {
         "certificate_id": "certificate_id",
