@@ -76,6 +76,7 @@ const en = {
       loading: {
         processing: 'Processing your submission...',
         consignment: 'Loading consignment...',
+        settingUp: 'Setting up your consignment...',
       },
       back: 'Back',
       backToList: 'Back to Consignments',
