@@ -89,6 +89,10 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       }
       return {}
     case 'array':
+      if (property.items && typeof property.items === 'object') {
+        const item = generateSampleValue(property.items, 'item')
+        return item !== undefined ? [item] : []
+      }
       return []
     default:
       return `Sample ${fieldName}`
