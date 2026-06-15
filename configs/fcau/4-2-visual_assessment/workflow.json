@@ -12,8 +12,8 @@
       "type": "TASK",
       "task_template_id": "fcau-visual-assessment--officer-review",
       "input_mapping": {
-        "reference_number": "reference_number",
-        "userform": "userform"
+        "reference_number": "submission.reference_number",
+        "userform": "submission"
       },
       "output_mapping": {
         "visual_outcome": "visual_outcome"
