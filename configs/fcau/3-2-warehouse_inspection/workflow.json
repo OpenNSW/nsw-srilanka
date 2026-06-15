@@ -11,7 +11,10 @@
       "id": "officer_inspection",
       "type": "TASK",
       "task_template_id": "fcau-warehouse-inspection--officer-review",
-      "input_mapping": {},
+      "input_mapping": {
+        "reference_number": "submission.reference_number",
+        "userform": "submission"
+      },
       "output_mapping": {
         "inspection_outcome": "inspection_outcome"
       }
