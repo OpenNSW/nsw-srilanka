@@ -136,9 +136,7 @@ export function ConsignmentDetailScreen() {
       </div>
 
       <div className="mb-3 mt-2 flex items-center gap-3">
-        <h1 className="text-xl font-semibold text-foreground">
-          {consignment.name || t('consignments.detail.title')}
-        </h1>
+        <h1 className="text-xl font-semibold text-foreground">{consignment.name || t('consignments.detail.title')}</h1>
         <Badge size="2" color={getStateColor(consignment.state)}>
           {formatState(consignment.state)}
         </Badge>
