@@ -1,4 +1,4 @@
 {
   "id": "fcau-visual-assessment--reviewer-instructions",
-  "template": "### Perform Manual Visual Assessment\n\nPlease inspect the consignment sample physically and record the outcome.\n\n* **Reference Number**: {{.reference_number}}\n\nSelect whether the sample is satisfactory ('Pass'), unsatisfactory ('Fail'), or if you need to escalate for chemical/microbiological analysis ('Lab Test Required')."
+  "template": "### Visual Assessment in Progress\n\nFCAU officers will perform a physical visual inspection of the consignment sample and record the outcome.\n\n* **Reference Number**: {{.reference_number}}\n\nThis page will be updated automatically once the results of the review are received."
 }

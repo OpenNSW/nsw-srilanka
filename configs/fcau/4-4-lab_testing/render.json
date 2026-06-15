@@ -13,9 +13,9 @@
       }
     },
     "officerform": {
-      "templateId": "fcau-lab-testing--officer-form",
-      "title": "Submit Lab Test Outcome",
-      "projector": "FORM",
+      "templateId": "fcau-lab-testing--trader-results",
+      "title": "Laboratory Test Outcome",
+      "projector": "MARKDOWN",
       "dataKey": "lab",
       "visibleWhen": {
         "requireDataKey": "lab"

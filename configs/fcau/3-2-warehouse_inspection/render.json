@@ -2,12 +2,25 @@
   "id": "fcau-warehouse-inspection-flow:render",
   "type": "REVIEW",
   "sections": {
+    "status_message": {
+      "templateId": "fcau-warehouse-inspection--trader-instructions",
+      "title": "Inspection Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    },
     "reference": {
       "id": "reference",
-      "templateId": "fcau-warehouse-inspection--officer-form",
+      "templateId": "fcau-warehouse-inspection--trader-results",
       "title": "Warehouse Inspection Outcome",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
     }
   },
   "states": {

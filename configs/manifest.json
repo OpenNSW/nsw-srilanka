@@ -883,6 +883,13 @@
       "path": "fcau/1-application/reviewerinput_jsonform.json"
     },
     {
+      "id": "fcau-apply-health-cert--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/1-application/trader_results_jsonform.json"
+    },
+    {
       "id": "fcau-apply-health-cert--user-input",
       "kind": "subtask_template",
       "version": "",
@@ -930,6 +937,13 @@
       "version": "",
       "loader": "local",
       "path": "fcau/2-payment_app_fee/payment_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-app-fee--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/2-payment_app_fee/payment_details_markdown.json"
     },
     {
       "id": "fcau-pay-app-fee-flow:render",
@@ -1023,6 +1037,20 @@
       "path": "fcau/3-2-warehouse_inspection/officerinput_jsonform.json"
     },
     {
+      "id": "fcau-warehouse-inspection--trader-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-2-warehouse_inspection/trader_instructions_jsonform.json"
+    },
+    {
+      "id": "fcau-warehouse-inspection--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-2-warehouse_inspection/trader_results_jsonform.json"
+    },
+    {
       "id": "fcau-warehouse-inspection-flow:render",
       "kind": "generic_template",
       "version": "",
@@ -1063,6 +1091,13 @@
       "version": "",
       "loader": "local",
       "path": "fcau/3-3-payment_post_wh_lab_fee/payment_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-post-wh-lab-fee--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-3-payment_post_wh_lab_fee/payment_details_markdown.json"
     },
     {
       "id": "fcau-pay-post-wh-lab-fee-flow:render",
@@ -1121,6 +1156,13 @@
       "path": "fcau/3-4-post_wh_lab_testing/register_task_and_wait_jsonform.json"
     },
     {
+      "id": "fcau-post-wh-lab-testing--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-4-post_wh_lab_testing/trader_results_jsonform.json"
+    },
+    {
       "id": "fcau-post-wh-lab-testing-flow:render",
       "kind": "generic_template",
       "version": "",
@@ -1168,6 +1210,13 @@
       "version": "",
       "loader": "local",
       "path": "fcau/4-1-sample_collection/register_task_and_wait_jsonform.json"
+    },
+    {
+      "id": "fcau-sample-collection--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-1-sample_collection/trader_results_jsonform.json"
     },
     {
       "id": "fcau-sample-collection-flow:render",
@@ -1219,6 +1268,13 @@
       "path": "fcau/4-2-visual_assessment/reviewerinput_jsonform.json"
     },
     {
+      "id": "fcau-visual-assessment--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-2-visual_assessment/trader_results_jsonform.json"
+    },
+    {
       "id": "fcau-visual-assessment-flow",
       "kind": "workflow",
       "version": "",
@@ -1252,6 +1308,13 @@
       "version": "",
       "loader": "local",
       "path": "fcau/4-3-payment_lab_fee/payment_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-lab-fee--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-3-payment_lab_fee/payment_details_markdown.json"
     },
     {
       "id": "fcau-pay-lab-fee-flow:render",
@@ -1310,6 +1373,13 @@
       "path": "fcau/4-4-lab_testing/register_task_and_wait_jsonform.json"
     },
     {
+      "id": "fcau-lab-testing--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-4-lab_testing/trader_results_jsonform.json"
+    },
+    {
       "id": "fcau-lab-testing-flow:render",
       "kind": "generic_template",
       "version": "",
@@ -1350,6 +1420,20 @@
       "version": "",
       "loader": "local",
       "path": "fcau/8-issue_certificate/officerinput_jsonform.json"
+    },
+    {
+      "id": "fcau-issue-certificate--trader-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/8-issue_certificate/trader_instructions_jsonform.json"
+    },
+    {
+      "id": "fcau-issue-certificate--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/8-issue_certificate/trader_results_jsonform.json"
     },
     {
       "id": "fcau-issue-certificate-flow:render",

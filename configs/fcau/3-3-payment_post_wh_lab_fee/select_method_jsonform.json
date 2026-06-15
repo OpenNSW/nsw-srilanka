@@ -8,9 +8,8 @@
       "selected_method": {
         "type": "string",
         "title": "Payment Method",
-        "default": "lankapay",
+        "default": "govpay",
         "oneOf": [
-          { "const": "lankapay", "title": "Credit/Debit Card (LankaPay) [Redirect]" },
           { "const": "govpay", "title": "GovPay (Bank/ATM/Online) [Offline Instructions]" }
         ]
       }
@@ -19,6 +18,10 @@
   "uiSchema": {
     "type": "VerticalLayout",
     "elements": [
+      {
+        "type": "Label",
+        "text": "Please select the preferred payment method. The next screen will show you the payment amount and instructions for completing the payment."
+      },
       {
         "type": "Control",
         "scope": "#/properties/selected_method"

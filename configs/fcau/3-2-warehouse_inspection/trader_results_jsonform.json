@@ -1,0 +1,4 @@
+{
+  "id": "fcau-warehouse-inspection--trader-results",
+  "template": "### Warehouse Inspection Results\n\nThe warehouse visual inspection has been completed by the FCAU officer.\n\n* **Outcome**: {{if eq .inspection_outcome \"pass\"}}🟢 Passed (Satisfactory){{else if eq .inspection_outcome \"fail\"}}🔴 Failed (Deficiencies Found){{else if eq .inspection_outcome \"lab_test_required\"}}🟡 Requires Laboratory Testing{{else}}{{.inspection_outcome}}{{end}}\n* **Comments**: {{if .inspection_comments}}{{.inspection_comments}}{{else}}*No comments provided.*{{end}}"
+}

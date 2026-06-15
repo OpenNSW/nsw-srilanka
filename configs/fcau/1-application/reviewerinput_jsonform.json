@@ -51,8 +51,23 @@
       }
     },
     "required": [
-      "application_review_outcome",
-      "reference_number"
+      "application_review_outcome"
+    ],
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "application_review_outcome": {
+              "const": "approve"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "reference_number"
+          ]
+        }
+      }
     ]
   },
   "uiSchema": {
@@ -76,7 +91,16 @@
       },
       {
         "type": "Control",
-        "scope": "#/properties/reference_number"
+        "scope": "#/properties/reference_number",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/application_review_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
       },
       {
         "type": "Control",

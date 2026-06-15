@@ -1,0 +1,4 @@
+{
+  "id": "fcau-issue-certificate--trader-instructions",
+  "template": "### Awaiting Certificate Decision\n\nPlease wait for the FCAU officer to issue the certificate decision.\n\n* **Reference Number**: {{.reference_number}}\n\nThis page will be updated automatically once the decision is recorded."
+}

@@ -20,21 +20,10 @@
         }
       ]
     },
-    "payment_instructions": {
-      "templateId": "fcau-pay-app-fee--instructions-wrapper",
-      "title": "Payment Instructions",
-      "projector": "PAYMENT",
-      "dataKey": "payment",
-      "visibleWhen": {
-        "states": [
-          "PENDING_PAYMENT"
-        ]
-      }
-    },
     "payment_details": {
-      "templateId": "fcau-pay-app-fee--payment-form",
+      "templateId": "fcau-pay-app-fee--payment-details-markdown",
       "title": "Application Fee Details",
-      "projector": "FORM",
+      "projector": "MARKDOWN",
       "dataKey": "payment",
       "visibleWhen": {
         "states": [

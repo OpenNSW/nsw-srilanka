@@ -1,0 +1,4 @@
+{
+  "id": "fcau-lab-testing--trader-results",
+  "template": "### Laboratory Test Results\n\nThe laboratory analysis has been completed by the FCAU laboratory.\n\n* **Clearance Status**: {{if eq .lab_result \"pass\"}}🟢 Pass - Cleared{{else if eq .lab_result \"fail\"}}🔴 Fail - Deficiencies Found{{else}}{{.lab_result}}{{end}}"
+}

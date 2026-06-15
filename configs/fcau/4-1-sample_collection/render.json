@@ -13,9 +13,9 @@
       }
     },
     "officerform": {
-      "templateId": "fcau-sample-collection--reviewer-form",
+      "templateId": "fcau-sample-collection--trader-results",
       "title": "Register Sample & Issue Number",
-      "projector": "FORM",
+      "projector": "MARKDOWN",
       "dataKey": "sample_delivery",
       "visibleWhen": {
         "requireDataKey": "sample_delivery"

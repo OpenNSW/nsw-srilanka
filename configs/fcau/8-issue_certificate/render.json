@@ -2,11 +2,24 @@
   "id": "fcau-issue-certificate-flow:render",
   "type": "CERTIFICATE_ISSUANCE",
   "sections": {
+    "status_message": {
+      "templateId": "fcau-issue-certificate--trader-instructions",
+      "title": "Certificate Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    },
     "officerform": {
-      "templateId": "fcau-issue-certificate--officer-form",
+      "templateId": "fcau-issue-certificate--trader-results",
       "title": "Health Certificate Issuance",
-      "projector": "FORM",
-      "dataKey": "officerform"
+      "projector": "MARKDOWN",
+      "dataKey": "officerform",
+      "visibleWhen": {
+        "requireDataKey": "officerform"
+      }
     }
   }
 }

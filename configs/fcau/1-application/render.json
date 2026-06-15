@@ -15,10 +15,10 @@
         }
       ]
     },
-    "reference": {
-      "templateId": "fcau-apply-health-cert--reviewer-form",
-      "title": "Application Assessment Review",
-      "projector": "FORM",
+    "instructions": {
+      "templateId": "fcau-apply-health-cert--trader-results",
+      "title": "Application Assessment Outcome",
+      "projector": "MARKDOWN",
       "dataKey": "reviewerform",
       "visibleWhen": {
         "requireDataKey": "reviewerform"

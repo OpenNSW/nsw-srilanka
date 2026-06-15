@@ -1,0 +1,4 @@
+{
+  "id": "fcau-warehouse-inspection--trader-instructions",
+  "template": "### Warehouse Inspection in Progress\n\nFCAU officers will perform a visual inspection at the designated warehouse location and record the outcome.\n\n* **Reference Number**: {{.reference_number}}\n\nThis page will be updated automatically once the results of the review are received."
+}
