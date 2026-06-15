@@ -1,6 +1,7 @@
 {
   "id": "npqs-treatment-request:render",
   "type": "APPLICATION",
+  "title": "Treatment Request Details",
   "sections": {
     "workspace_trader": {
       "templateId": "npqs-treatment-request--trader-form",

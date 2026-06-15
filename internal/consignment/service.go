@@ -367,19 +367,15 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 	return dtos, nil
 }
 
-// taskDisplayName extracts the human-readable title from a task's render config workspace
-// section, falling back to the active template ID when no title is present.
+// taskDisplayName extracts the human-readable title from a task's render config root level,
+// falling back to the template ID when no title is present.
 func taskDisplayName(templateID string, renderConfig json.RawMessage) string {
 	if len(renderConfig) > 0 {
 		var rc struct {
-			Sections map[string]struct {
-				Title string `json:"title"`
-			} `json:"sections"`
+			Title string `json:"title"`
 		}
-		if err := json.Unmarshal(renderConfig, &rc); err == nil {
-			if ws, ok := rc.Sections["workspace"]; ok && ws.Title != "" {
-				return ws.Title
-			}
+		if err := json.Unmarshal(renderConfig, &rc); err == nil && rc.Title != "" {
+			return rc.Title
 		}
 	}
 	return templateID

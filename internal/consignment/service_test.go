@@ -339,7 +339,7 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 		{TaskID: "t2", TaskType: "FORM", State: "FAILED", ActiveTaskTemplateID: "step-2", CreatedAt: now, UpdatedAt: now},
 		{
 			TaskID: "t3", TaskType: "FORM", State: "IN_PROGRESS", ActiveTaskTemplateID: "step-3", CreatedAt: now, UpdatedAt: now,
-			RenderConfig: json.RawMessage(`{"sections":{"workspace":{"title":"My Step"}}}`),
+			RenderConfig: json.RawMessage(`{"title":"My Step"}`),
 		},
 		{TaskID: "t4", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
 	}
@@ -407,17 +407,13 @@ func TestTaskDisplayName(t *testing.T) {
 	// nil render config → template ID
 	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", nil))
 
-	// workspace title present → use title
-	rc := json.RawMessage(`{"sections":{"workspace":{"title":"Customs Declaration"}}}`)
-	assert.Equal(t, "Customs Declaration", taskDisplayName("trade-export-v1", rc))
+	// root-level title present → use title
+	rcRootTitle := json.RawMessage(`{"title":"My Root Title"}`)
+	assert.Equal(t, "My Root Title", taskDisplayName("trade-export-v1", rcRootTitle))
 
-	// workspace section absent → template ID
-	rc2 := json.RawMessage(`{"sections":{"other":{"title":"Other"}}}`)
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rc2))
-
-	// workspace title empty → template ID
-	rc3 := json.RawMessage(`{"sections":{"workspace":{"title":""}}}`)
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rc3))
+	// root-level title empty → template ID
+	rcEmptyTitle := json.RawMessage(`{"title":""}`)
+	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcEmptyTitle))
 
 	// invalid JSON → template ID
 	rc4 := json.RawMessage(`invalid`)

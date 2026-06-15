@@ -1,6 +1,7 @@
 {
   "id": "npqs-review-docs:render",
   "type": "REVIEW",
+  "title": "Review Consignment Documents",
   "sections": {
     "reference": {
       "id": "reference",

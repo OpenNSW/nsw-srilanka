@@ -1,6 +1,7 @@
 {
   "id": "npqs-issue-treatment-cert:render",
   "type": "REVIEW",
+  "title": "Issue Treatment Certificate Details",
   "sections": {
     "reference": {
       "id": "reference",

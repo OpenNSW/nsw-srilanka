@@ -1,6 +1,7 @@
 {
   "id": "fcau-warehouse-inspection-flow:render",
   "type": "REVIEW",
+  "title": "Warehouse Visual Inspection",
   "sections": {
     "status_message": {
       "templateId": "fcau-warehouse-inspection--trader-instructions",

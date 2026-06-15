@@ -1,6 +1,7 @@
 {
   "id": "fcau-lab-testing-flow:render",
   "type": "LAB_TEST",
+  "title": "Laboratory Sample Testing",
   "sections": {
     "status_message": {
       "templateId": "fcau-lab-testing--reviewer-instructions",
