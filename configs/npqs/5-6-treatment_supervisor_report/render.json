@@ -1,7 +1,7 @@
 {
   "id": "npqs-treatment-supervisor-report:render",
   "type": "REVIEW",
-  "title": "Supervision Observation Report",
+  "title": "[NPQS] Supervision Observation Report",
   "sections": {
     "reference": {
       "id": "reference",

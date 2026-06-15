@@ -1,7 +1,7 @@
 {
   "id": "fcau-warehouse-scheduling-flow:render",
   "type": "APPLICATION",
-  "title": "Warehouse Inspection Scheduling",
+  "title": "[FCAU] Warehouse Inspection Scheduling",
   "sections": {
     "workspace": {
       "id": "workspace",

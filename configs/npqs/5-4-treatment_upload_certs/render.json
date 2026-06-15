@@ -1,7 +1,7 @@
 {
   "id": "npqs-upload-treatment-certs:render",
   "type": "APPLICATION",
-  "title": "Upload Treatment Certificate Documents",
+  "title": "[NPQS] Upload Treatment Certificate Documents",
   "sections": {
     "workspace": {
       "templateId": "npqs-upload-treatment-certs--trader-form",

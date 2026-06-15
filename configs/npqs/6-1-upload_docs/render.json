@@ -1,7 +1,7 @@
 {
   "id": "npqs-upload-docs:render",
   "type": "APPLICATION",
-  "title": "Upload Additional Consignment Documents",
+  "title": "[NPQS] Upload Additional Consignment Documents",
   "sections": {
     "workspace": {
       "templateId": "npqs-upload-docs--trader-form",

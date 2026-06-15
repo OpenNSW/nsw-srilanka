@@ -1,7 +1,7 @@
 {
   "id": "fcau-issue-certificate-flow:render",
   "type": "CERTIFICATE_ISSUANCE",
-  "title": "Issue Health Certificate",
+  "title": "[FCAU] Issue Health Certificate",
   "sections": {
     "status_message": {
       "templateId": "fcau-issue-certificate--trader-instructions",

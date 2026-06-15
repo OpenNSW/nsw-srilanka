@@ -1,7 +1,7 @@
 {
   "id": "fcau-visual-assessment-flow:render",
   "type": "VISUAL_ASSESSMENT",
-  "title": "Manual Sample Assessment",
+  "title": "[FCAU] Manual Sample Assessment",
   "sections": {
     "status_message": {
       "templateId": "fcau-visual-assessment--reviewer-instructions",

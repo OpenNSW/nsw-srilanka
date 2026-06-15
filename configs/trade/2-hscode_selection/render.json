@@ -1,7 +1,7 @@
 {
   "id": "trade-hscode-selection-flow:render",
   "type": "APPLICATION",
-  "title": "Select HS Codes",
+  "title": "[Trade] Select HS Codes",
   "sections": {
     "workspace": {
       "templateId": "trade-hscode-selection--form",

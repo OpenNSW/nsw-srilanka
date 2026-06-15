@@ -1,7 +1,7 @@
 {
   "id": "fcau-pay-lab-fee-flow:render",
   "type": "PAYMENT",
-  "title": "Pay Lab Test Fee",
+  "title": "[FCAU] Pay Lab Test Fee",
   "sections": {
     "workspace": {
       "templateId": "fcau-pay-lab-fee--select-method-form",
