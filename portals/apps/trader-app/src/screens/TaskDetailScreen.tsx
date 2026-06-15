@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Spinner, Text } from '@radix-ui/themes'
-import { ArrowLeftIcon } from '@radix-ui/react-icons'
+import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { getZoneView, submitTaskStep } from '../services/task'
 import { useApi } from '../services/ApiContext'
 import { TraderZoneLayout } from '../zones/TraderZoneLayout'
 import type { ZoneView } from '../zones/types'
 
-const POLL_INTERVAL_MS = 3000
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 
 export function TaskDetailScreen() {
@@ -19,19 +18,11 @@ export function TaskDetailScreen() {
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearTimeout(pollTimerRef.current)
-      pollTimerRef.current = null
-    }
-  }, [])
 
   const fetchTask = useCallback(
-    async (silent = false) => {
-      stopPolling()
+    async (mode: 'initial' | 'refresh' = 'initial') => {
       if (!taskId) {
         setError(t('tasks.error.missingId'))
         setLoading(false)
@@ -39,36 +30,26 @@ export function TaskDetailScreen() {
       }
 
       try {
-        if (!silent) setLoading(true)
-        if (!silent) setError(null)
+        if (mode === 'refresh') setRefreshing(true)
+        else setLoading(true)
+        setError(null)
 
         const zv = await getZoneView(taskId, api)
         setZoneView(zv)
-        const awaitingUserInput = Object.values(zv.view).some((component) => (component.handles?.length ?? 0) > 0)
-        if (awaitingUserInput) {
-          stopPolling()
-        } else {
-          pollTimerRef.current = setTimeout(() => void fetchTask(true), POLL_INTERVAL_MS)
-        }
       } catch (err) {
-        if (silent) {
-          console.error('Background poll failed:', err)
-          pollTimerRef.current = setTimeout(() => void fetchTask(true), POLL_INTERVAL_MS)
-        } else {
-          setError(t('tasks.error.fetchFailed'))
-          console.error(err)
-        }
+        setError(t('tasks.error.fetchFailed'))
+        console.error(err)
       } finally {
-        if (!silent) setLoading(false)
+        if (mode === 'refresh') setRefreshing(false)
+        else setLoading(false)
       }
     },
-    [api, taskId, stopPolling, t],
+    [api, taskId, t],
   )
 
   useEffect(() => {
     void fetchTask()
-    return () => stopPolling()
-  }, [fetchTask, stopPolling])
+  }, [fetchTask])
 
   if (loading) {
     return (
@@ -119,10 +100,21 @@ export function TaskDetailScreen() {
 
   return (
     <div className="bg-surface min-h-full">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
         <Button variant="ghost" color="gray" onClick={goBack}>
           <ArrowLeftIcon />
           {t('tasks.back')}
+        </Button>
+        <Button
+          variant="soft"
+          color="blue"
+          size="2"
+          onClick={() => void fetchTask('refresh')}
+          disabled={refreshing}
+          className="cursor-pointer"
+        >
+          <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
+          {t('tasks.refresh')}
         </Button>
       </div>
       <TraderZoneLayout

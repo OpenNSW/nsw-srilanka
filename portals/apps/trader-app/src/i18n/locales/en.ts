@@ -121,6 +121,7 @@ const en = {
     loading: 'Loading task...',
     back: 'Back to Tasks',
     goBack: 'Go Back',
+    refresh: 'Refresh',
     error: {
       missingId: 'Task ID is missing.',
       fetchFailed: 'Failed to fetch task details.',
