@@ -94,7 +94,7 @@ func (p *NotificationPlugin) Execute(ctx pluginContext, configRaw json.RawMessag
 
 	ctx.Record.State = "NOTIFIED"
 
-	if ctx.Record.ActiveOutputNamespace != "" {
+	if ctx.OutputNamespace != "" {
 		if ctx.Record.Data == nil {
 			ctx.Record.Data = make(map[string]any)
 		}
@@ -107,7 +107,7 @@ func (p *NotificationPlugin) Execute(ctx pluginContext, configRaw json.RawMessag
 		if status == "sent" {
 			out["sent_at"] = time.Now().UTC().Format(time.RFC3339)
 		}
-		ctx.Record.Data[ctx.Record.ActiveOutputNamespace] = out
+		ctx.Record.Data[ctx.OutputNamespace] = out
 	}
 
 	return nil

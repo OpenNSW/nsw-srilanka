@@ -170,7 +170,6 @@ CREATE TABLE IF NOT EXISTS task_records_v2 (
     task_run_id             TEXT,
     subtask_node_id         TEXT,
     active_task_template_id TEXT,
-    active_output_namespace TEXT NOT NULL DEFAULT '',
     root_workflow_id        TEXT NOT NULL DEFAULT '',
     data                    JSONB,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),

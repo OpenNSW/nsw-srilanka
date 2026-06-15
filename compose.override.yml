@@ -38,7 +38,7 @@ services:
   api:
     # Cancel the base file's `build:` and run the stock Go image instead.
     build: !reset null
-    image: golang:1.26.3-bookworm
+    image: golang:1.26.4-bookworm
     working_dir: /src
     volumes:
       # Live source mount — the container sees your edits instantly.

@@ -82,7 +82,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		"taskId", ctx.Record.TaskID, "sessionId", resp.SessionID, "referenceNumber", resp.ReferenceNumber, "method", selectedMethod)
 
 	// 6. Populate payment info under the active output namespace
-	if ctx.Record.ActiveOutputNamespace != "" {
+	if ctx.OutputNamespace != "" {
 		if ctx.Record.Data == nil {
 			ctx.Record.Data = make(map[string]any)
 		}
@@ -105,7 +105,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			"service_type":     cfg.TaskCode,
 		}
 
-		ctx.Record.Data[ctx.Record.ActiveOutputNamespace] = pData
+		ctx.Record.Data[ctx.OutputNamespace] = pData
 	}
 
 	// Suspend the workflow until LankaPay/webhook callback arrives
