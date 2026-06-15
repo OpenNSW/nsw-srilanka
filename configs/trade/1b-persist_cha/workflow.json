@@ -9,7 +9,8 @@
       "type": "TASK",
       "task_template_id": "trade-persist-cha--transform",
       "input_mapping": {
-        "cha_company_id": "cha_company_id"
+        "cha_company_id": "cha_company_id",
+        "consignment_name": "consignment_name"
       },
       "output_mapping": {}
     },

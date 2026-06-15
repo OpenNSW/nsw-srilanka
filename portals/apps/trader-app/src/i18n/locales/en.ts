@@ -47,7 +47,7 @@ const en = {
       title: 'Consignments',
       create: 'New Consignment',
       creating: 'Creating...',
-      searchPlaceholder: 'Search by ID or HS Code...',
+      searchPlaceholder: 'Search by Name, ID, or HS Code...',
       filter: {
         statePlaceholder: 'State',
         allStates: 'All States',
@@ -66,7 +66,7 @@ const en = {
         filtered: 'No consignments match your filters.',
       },
       table: {
-        id: 'Consignment ID',
+        id: 'Consignment',
         tradeFlow: 'Trade Flow',
         state: 'State',
         created: 'Created',

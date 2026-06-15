@@ -263,8 +263,14 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			chaCompanyID = *c.CHACompanyID
 		}
 
+		name := ""
+		if c.Name != nil {
+			name = *c.Name
+		}
+
 		consignmentDTOs = append(consignmentDTOs, SummaryDTO{
 			ID:              c.ID,
+			Name:            name,
 			Flow:            c.Flow,
 			State:           c.State,
 			TraderID:        c.TraderID,
@@ -312,8 +318,14 @@ func (s *Service) buildConsignmentDetailDTO(
 		chaCompanyID = *consignment.CHACompanyID
 	}
 
+	name := ""
+	if consignment.Name != nil {
+		name = *consignment.Name
+	}
+
 	return &DetailDTO{
 		ID:              consignment.ID,
+		Name:            name,
 		Flow:            consignment.Flow,
 		State:           consignment.State,
 		TraderID:        consignment.TraderID,

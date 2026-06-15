@@ -36,8 +36,9 @@ type Consignment struct {
 	UpdatedAt time.Time `gorm:"type:timestamptz;column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
 
 	// Core attributes
-	Flow  Flow  `gorm:"type:varchar(50);column:flow;not null" json:"flow"`   // IMPORT or EXPORT
-	State State `gorm:"type:varchar(50);column:state;not null" json:"state"` // IN_PROGRESS → FINISHED
+	Name  *string `gorm:"type:varchar(255);column:name" json:"name,omitempty"`
+	Flow  Flow    `gorm:"type:varchar(50);column:flow;not null" json:"flow"`   // IMPORT or EXPORT
+	State State   `gorm:"type:varchar(50);column:state;not null" json:"state"` // IN_PROGRESS → FINISHED
 
 	// Trader
 	TraderID        string `gorm:"type:varchar(100);column:trader_id;not null" json:"traderId"`                // Trader user who created the consignment
@@ -75,6 +76,7 @@ func (d *CreateConsignmentDTO) Validate() error {
 // SummaryDTO represents the consignment data returned in list responses.
 type SummaryDTO struct {
 	ID              string `json:"id"`              // Consignment ID
+	Name            string `json:"name,omitempty"`  // Consignment Name
 	Flow            Flow   `json:"flow"`            // e.g., IMPORT, EXPORT
 	State           State  `json:"state"`           // State of the consignment
 	TraderID        string `json:"traderId"`        // Trader user who created the consignment
@@ -91,6 +93,7 @@ type ListResult = pagination.Page[SummaryDTO]
 // DetailDTO represents the full consignment data returned in detailed responses.
 type DetailDTO struct {
 	ID              string                    `json:"id"`              // Consignment ID
+	Name            string                    `json:"name,omitempty"`  // Consignment Name
 	Flow            Flow                      `json:"flow"`            // e.g., IMPORT, EXPORT
 	State           State                     `json:"state"`           // State of the consignment
 	TraderID        string                    `json:"traderId"`        // Trader user who created the consignment

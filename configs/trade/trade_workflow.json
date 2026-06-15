@@ -16,7 +16,8 @@
       "lane": "Trader/CHA",
       "input_mapping": {},
       "output_mapping": {
-        "traderinput.cha_company_id": "trade.cha_company_id"
+        "traderinput.cha_company_id": "trade.cha_company_id",
+        "traderinput.consignment_name": "trade.consignment_name"
       }
     },
     {
@@ -26,7 +27,8 @@
       "task_template_id": "trade-persist-cha-flow",
       "lane": "Trader/CHA",
       "input_mapping": {
-        "trade.cha_company_id": "cha_company_id"
+        "trade.cha_company_id": "cha_company_id",
+        "trade.consignment_name": "consignment_name"
       },
       "output_mapping": {}
     },

@@ -108,8 +108,8 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 
 	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(consignmentID, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "state", "created_at", "updated_at"}).
-			AddRow(consignmentID, "IMPORT", "trader1", "IN_PROGRESS", time.Now(), time.Now()))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "state", "created_at", "updated_at"}).
+			AddRow(consignmentID, "My Test Consignment", "IMPORT", "trader1", "IN_PROGRESS", time.Now(), time.Now()))
 
 	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
@@ -118,6 +118,7 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, consignmentID, result.ID)
+	assert.Equal(t, "My Test Consignment", result.Name)
 	mockWM.AssertExpectations(t)
 	mockTaskStore.AssertExpectations(t)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
