@@ -14,7 +14,7 @@ export function TraderZoneLayout({ task, onSubmitForm }: Props) {
   const zones = orderedZones(task.view)
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {zones.map(([name, component]) => (
