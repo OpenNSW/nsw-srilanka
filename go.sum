@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/core v0.0.0-20260612190859-9c090fdca33c h1:6GT//4KDAnzEoa2GVZd3CcDFVUCY9BOTmAoIvDWVgck=
-github.com/OpenNSW/core v0.0.0-20260612190859-9c090fdca33c/go.mod h1:GXzKRNvmBgCWVc37ptewmoHGXqZ3D5JoJMzCRQxyBco=
+github.com/OpenNSW/core v0.0.0-20260615070209-c67a399229c5 h1:um2eyHe010TjU8P1NWt20KuV/m15Lw55pkPK1hMTo70=
+github.com/OpenNSW/core v0.0.0-20260615070209-c67a399229c5/go.mod h1:GXzKRNvmBgCWVc37ptewmoHGXqZ3D5JoJMzCRQxyBco=
 github.com/aws/aws-sdk-go-v2 v1.42.0 h1:XvXMJTkFQtpBKIWZnmr9ZEOc2InWM2yldjXEJ/bymhA=
 github.com/aws/aws-sdk-go-v2 v1.42.0/go.mod h1:27+ACypSLljLAEKsCYOmrjKh83vuTRkuAe9Uv/3A4bg=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.13 h1:p1BBrg/Hhp6uK7zpejeI8QFXHJeC/mynzi04Sl03k9g=
