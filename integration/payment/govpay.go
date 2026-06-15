@@ -169,7 +169,7 @@ func (g *GovPayGateway) GetFlowType() corepayment.InteractionType {
 func (g *GovPayGateway) CreateSession(ctx context.Context, req corepayment.SessionRequest) (*corepayment.SessionResponse, error) {
 	return &corepayment.SessionResponse{
 		Type:         corepayment.FlowTypeInstruction,
-		Instructions: "Please use the provided reference number to make payment via your banking apps GovPay option.",
+		Instructions: "Please use the provided reference number to make a payment via your banking app's GovPay option.",
 	}, nil
 }
 
