@@ -1,6 +1,7 @@
 {
   "id": "npqs-lab-testing:render",
   "type": "REVIEW",
+  "title": "[NPQS] Laboratory Test Results",
   "sections": {
     "reference": {
       "id": "reference",

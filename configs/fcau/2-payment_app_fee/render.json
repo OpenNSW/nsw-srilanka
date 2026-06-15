@@ -1,6 +1,7 @@
 {
   "id": "fcau-pay-app-fee-flow:render",
   "type": "PAYMENT",
+  "title": "[FCAU] Pay Application Fee",
   "sections": {
     "workspace": {
       "templateId": "fcau-pay-app-fee--select-method-form",

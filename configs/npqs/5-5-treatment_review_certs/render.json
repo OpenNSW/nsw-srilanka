@@ -1,6 +1,7 @@
 {
   "id": "npqs-review-treatment-certs:render",
   "type": "REVIEW",
+  "title": "[NPQS] Review Treatment Certificate Results",
   "sections": {
     "reference": {
       "id": "reference",

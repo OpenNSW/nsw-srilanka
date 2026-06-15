@@ -1,6 +1,7 @@
 {
   "id": "npqs-visual-consignment-flow:render",
   "type": "APPLICATION",
+  "title": "[NPQS] Schedule Consignment Visual Inspection",
   "sections": {
     "workspace_trader": {
       "templateId": "npqs-visual-consignment--trader-schedule-form",

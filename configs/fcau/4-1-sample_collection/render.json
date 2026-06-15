@@ -1,6 +1,7 @@
 {
   "id": "fcau-sample-collection-flow:render",
   "type": "SAMPLE_COLLECTION",
+  "title": "[FCAU] Submit, Receive and Number Sample",
   "sections": {
     "status_message": {
       "templateId": "fcau-sample-collection--handover-instructions",

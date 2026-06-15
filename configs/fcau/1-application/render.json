@@ -1,6 +1,7 @@
 {
   "id": "fcau-apply-health-cert-flow:render",
   "type": "APPLICATION",
+  "title": "[FCAU] Apply for Health Certificate",
   "sections": {
     "workspace": {
       "templateId": "fcau-apply-health-cert--user-form",

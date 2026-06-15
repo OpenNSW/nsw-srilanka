@@ -1,6 +1,7 @@
 {
   "id": "trade-cha-selection-flow:render",
   "type": "APPLICATION",
+  "title": "[Trade] Select Customs House Agent (CHA)",
   "sections": {
     "workspace": {
       "templateId": "trade-cha-selection--form",

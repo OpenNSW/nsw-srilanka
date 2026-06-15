@@ -1,6 +1,7 @@
 {
   "id": "npqs-visual-sample-inspection:render",
   "type": "REVIEW",
+  "title": "[NPQS] Visual Sample Inspection Results",
   "sections": {
     "reference": {
       "id": "reference",

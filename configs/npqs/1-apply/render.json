@@ -1,6 +1,7 @@
 {
   "id": "npqs-apply-phyto-cert:render",
   "type": "APPLICATION",
+  "title": "[NPQS] Phytosanitary Certificate Application",
   "sections": {
     "workspace": {
       "templateId": "npqs-apply-phyto-cert--user-form",
