@@ -67,6 +67,9 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 
 	updates := map[string]any{"cha_company_id": chaCompanyID}
 	if name, ok := ctx.Inputs["consignment_name"].(string); ok && name != "" {
+		if len([]rune(name)) > 255 {
+			return fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters")
+		}
 		updates["name"] = name
 	}
 

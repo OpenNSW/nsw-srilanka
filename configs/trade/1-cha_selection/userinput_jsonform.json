@@ -6,7 +6,8 @@
     "properties": {
       "consignment_name": {
         "title": "Consignment Name",
-        "type": "string"
+        "type": "string",
+        "maxLength": 255
       },
       "cha_company_id": {
         "title": "Select Customs House Agent",
