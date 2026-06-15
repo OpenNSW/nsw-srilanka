@@ -415,6 +415,14 @@ func TestTaskDisplayName(t *testing.T) {
 	rcEmptyTitle := json.RawMessage(`{"title":""}`)
 	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcEmptyTitle))
 
+	// root-level title missing → template ID
+	rcNoTitle := json.RawMessage("{}")
+	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcNoTitle))
+
+	// JSON null render config → template ID
+	rcNull := json.RawMessage("null")
+	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcNull))
+
 	// invalid JSON → template ID
 	rc4 := json.RawMessage(`invalid`)
 	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rc4))
