@@ -248,10 +248,10 @@ services:
   # -------------------------------------------------------------------
   argus:
     build:
-      context: https://github.com/LSFLK/argus.git#fix/postgres-blob-type
+      context: https://github.com/LSFLK/argus.git#main
       dockerfile: Dockerfile
       args:
-        BUILD_VERSION: d59aefb70fba
+        BUILD_VERSION: 858f4ee608e839fac48873bfb4d582e14105a8df
     image: nsw-argus:local
     container_name: nsw-argus
     networks:
@@ -271,7 +271,7 @@ services:
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-changeme}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - ARGUS_AUTH_TOKEN=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
+      - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
     depends_on:
       db:
         condition: service_healthy
