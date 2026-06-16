@@ -86,7 +86,7 @@ func Load() (*Config, error) {
 			JWKSURL:               getEnvOrDefault("AUTH_JWKS_URL", "https://localhost:8090/oauth2/jwks"),
 			Issuer:                getEnvOrDefault("AUTH_ISSUER", "https://localhost:8090"),
 			Audience:              getEnvOrDefault("AUTH_AUDIENCE", "NSW_API"),
-			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,IRD_TO_NSW,CDA_TO_NSW")),
+			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,IRD_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW")),
 			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
 		},
 		Notification: notification.Config{

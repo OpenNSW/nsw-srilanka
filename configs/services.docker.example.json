@@ -17,6 +17,16 @@
       "timeout": "30s"
     },
     {
+      "id": "cda",
+      "url": "http://host.docker.internal:8084",
+      "timeout": "30s"
+    },
+    {
+      "id": "slpa",
+      "url": "http://host.docker.internal:8085",
+      "timeout": "30s"
+    },
+    {
       "id": "customs-asycuda",
       "url": "https://customs-asycuda.example.com",
       "timeout": "10s"

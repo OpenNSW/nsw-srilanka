@@ -83,7 +83,7 @@ single project script via a mount:
   themes, and i18n translations.
 - **`02-sample-resources.sh`** (this repo) — project sample resources:
   - **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
-  - **Government Organization** OU with **NPQS / FCAU / IRD / CDA** child OUs
+  - **Government Organization** OU with **NPQS / FCAU / IRD / CDA / SLPA** child OUs
   - **`Private_User`** and **`Government_User`** user types
   - **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
     matching groups — role inheritance is group-based)
@@ -91,7 +91,7 @@ single project script via a mount:
     role (machine clients) — see *API authorization* below
   - **`NSW_API`** and **`AGENCY_API`** OAuth2 resource servers (scopes + token audiences)
   - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
-    `npqs_user` / `fcau_user` / `ird_user` / `cda_user` (government OUs)
+    `npqs_user` / `fcau_user` / `ird_user` / `cda_user` / `slpa_user` (government OUs)
   - **SPA applications** and **M2M applications** (see below)
 
 ## Applications created
@@ -103,9 +103,10 @@ single project script via a mount:
 | FCAUPortalApp | `OGA_PORTAL_APP_FCAU` | http://localhost:5175 |
 | IRDPortalApp | `OGA_PORTAL_APP_IRD` | http://localhost:5176 |
 | CDAPortalApp | `OGA_PORTAL_APP_CDA` | http://localhost:5177 |
+| SLPAPortalApp | `OGA_PORTAL_APP_SLPA` | http://localhost:5178 |
 
 M2M (client-credentials) apps for external services calling NSW APIs:
-`NPQS_TO_NSW`, `FCAU_TO_NSW`, `IRD_TO_NSW`, `CDA_TO_NSW` (auth method:
+`NPQS_TO_NSW`, `FCAU_TO_NSW`, `IRD_TO_NSW`, `CDA_TO_NSW`, `SLPA_TO_NSW` (auth method:
 `client_secret_basic`).
 
 ## API authorization (OAuth2)
