@@ -30,9 +30,9 @@
         "example": "CUSDEC-2026-904821"
       },
       "hs_code": {
-        "type": "number",
+        "type": "string",
         "title": "HS CODE",
-        "example": 8011200
+        "example": "08011200"
       },
       "contract_number": {
         "type": "number",
@@ -55,7 +55,7 @@
               "title": "DC Grade",
               "oneOf": [
                 { "const": "FINE", "title": "FINE" },
-                { "const": "MEDIAM", "title": "MEDIAM" },
+                { "const": "MEDIUM", "title": "MEDIUM" },
                 { "const": "CHIPS_VADC", "title": "CHIPS VADC" },
                 { "const": "M_MEDIUM", "title": "M/MEDIUM" },
                 { "const": "SHRED", "title": "SHRED" },
@@ -143,7 +143,7 @@
       },
       "req_cert_salmonella": {
         "type": "boolean",
-        "title": "SALOMNELLA FREE CERTIFICATE",
+        "title": "SALMONELLA FREE CERTIFICATE",
         "default": false
       },
       "req_cert_physical": {

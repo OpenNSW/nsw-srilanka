@@ -1506,6 +1506,13 @@
       "path": "cda/1-application/submitted_message_jsonform.json"
     },
     {
+      "id": "cda-apply-coconut-cert--feedback",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/feedback_jsonform.json"
+    },
+    {
       "id": "cda-apply-coconut-cert-flow",
       "kind": "workflow",
       "version": "",

@@ -102,7 +102,7 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
         if (Array.isArray(property.items)) {
           return property.items.map((itemSchema: any, idx: number) => generateSampleValue(itemSchema, 'item' + idx))
         }
-        if (typeof property.items === 'object') {
+        if (typeof property.items === 'object' && !Array.isArray(property.items)) {
           const item = generateSampleValue(property.items, 'item')
           return item !== undefined ? [item] : []
         }

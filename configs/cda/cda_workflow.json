@@ -14,7 +14,9 @@
       "name": "[CDA 1.0] Submit Application",
       "task_template_id": "cda-apply-coconut-cert-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {},
+      "input_mapping": {
+        "cda.rejection_reason?": "rejection_reason"
+      },
       "output_mapping": {
         "userform.cusdec_number": "cda.reference_number",
         "userform": "cda.userform"
@@ -56,6 +58,7 @@
       },
       "output_mapping": {
         "reviewerform.review_outcome": "cda.review_outcome",
+        "reviewerform.rejection_reason?": "cda.rejection_reason",
         "reviewerform.certificate_id": "cda.certificate_id",
         "reviewerform.certificate_file": "cda.certificate_file"
       }

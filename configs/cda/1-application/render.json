@@ -26,6 +26,15 @@
           "element": "primary_action"
         }
       ]
+    },
+    "feedback": {
+      "templateId": "cda-apply-coconut-cert--feedback",
+      "title": "Officer Feedback & Deficiencies",
+      "projector": "MARKDOWN",
+      "dataKey": "rejection_reason",
+      "visibleWhen": {
+        "requireDataKey": "rejection_reason"
+      }
     }
   },
   "states": {

@@ -1,0 +1,4 @@
+{
+  "id": "cda-apply-coconut-cert--feedback",
+  "template": "### Officer Feedback & Rejection Comments\n\nYour application requires attention. Please address the following deficiencies/comments from the reviewer:\n\n> {{.}}"
+}
