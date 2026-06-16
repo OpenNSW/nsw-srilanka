@@ -20,6 +20,7 @@ export function TaskDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const fetchTask = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -117,16 +118,28 @@ export function TaskDetailScreen() {
           {t('tasks.refresh')}
         </Button>
       </div>
+      {submitError && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="rounded-lg border border-red-6 bg-red-2 px-4 py-3">
+            <Text size="2" color="red" weight="medium">
+              {submitError}
+            </Text>
+          </div>
+        </div>
+      )}
       <TraderZoneLayout
         task={zoneView}
         onSubmitForm={async (_command, data) => {
           if (!taskId) return
+          setSubmitError(null)
           try {
             await submitTaskStep(taskId, data, api)
             await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
             await fetchTask()
           } catch (err) {
-            setError(t('tasks.error.submitFailed'))
+            // Use a local error here rather than the screen-level `error`, which
+            // would unmount the layout and discard the user's entered form data.
+            setSubmitError(t('tasks.error.submitFailed'))
             console.error(err)
           }
         }}

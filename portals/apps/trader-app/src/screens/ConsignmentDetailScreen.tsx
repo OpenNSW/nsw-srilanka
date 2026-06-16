@@ -33,6 +33,7 @@ export function ConsignmentDetailScreen() {
   const [error, setError] = useState<ConsignmentErrorKey | null>(null)
   const provisionAttemptsRef = useRef(0)
   const provisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const requestCountRef = useRef(0)
 
   const clearProvisionTimer = useCallback(() => {
     if (provisionTimerRef.current) {
@@ -50,6 +51,11 @@ export function ConsignmentDetailScreen() {
       }
 
       clearProvisionTimer()
+      // Track this request so stale responses (e.g. a manual refresh fired
+      // while a poll is still pending) can be ignored, preventing duplicate
+      // concurrent polling loops.
+      const requestId = ++requestCountRef.current
+
       // A poll continuation keeps the attempt counter and the current view; an
       // initial load or a manual refresh starts a fresh provisioning cycle.
       if (mode !== 'poll') {
@@ -60,6 +66,8 @@ export function ConsignmentDetailScreen() {
 
       try {
         const result = await getConsignment(consignmentId, api)
+        if (requestId !== requestCountRef.current) return
+
         if (!result) {
           setError('notFound')
           setProvisioning(false)
@@ -80,12 +88,26 @@ export function ConsignmentDetailScreen() {
           setProvisioning(false)
         }
       } catch (err) {
+        if (requestId !== requestCountRef.current) return
         console.error('Failed to fetch consignment:', err)
-        setProvisioning(false)
-        if (mode !== 'poll') setError('loadFailed')
+
+        // A transient failure mid-provisioning should keep retrying with
+        // backoff rather than dropping the user onto a misleading
+        // "no workflow" or error screen. Only surface the error once retries
+        // are exhausted.
+        if (mode === 'poll' && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
+          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
+          provisionAttemptsRef.current += 1
+          provisionTimerRef.current = setTimeout(() => void fetchConsignment('poll'), delay)
+        } else {
+          setProvisioning(false)
+          setError('loadFailed')
+        }
       } finally {
-        if (mode === 'initial') setLoading(false)
-        if (mode === 'refresh') setRefreshing(false)
+        if (requestId === requestCountRef.current) {
+          if (mode === 'initial') setLoading(false)
+          if (mode === 'refresh') setRefreshing(false)
+        }
       }
     },
     [api, consignmentId, clearProvisionTimer],
