@@ -16,7 +16,7 @@ import (
 	"github.com/OpenNSW/core/temporal"
 )
 
-// Config holds all configuration for the application
+// Config holds all configuration for the application.
 type Config struct {
 	Database     database.Config
 	Server       ServerConfig
@@ -27,7 +27,7 @@ type Config struct {
 	Temporal     temporal.Config
 }
 
-// ServerConfig holds server configuration
+// ServerConfig holds server configuration.
 type ServerConfig struct {
 	Port                     int
 	ServiceURL               string
@@ -37,7 +37,7 @@ type ServerConfig struct {
 	LogLevel                 slog.Level
 }
 
-// Load reads configuration from environment variables
+// Load reads configuration from environment variables.
 func Load() (*Config, error) {
 	serverPort := getIntEnvOrDefault("SERVER_PORT", 8080)
 
@@ -86,7 +86,7 @@ func Load() (*Config, error) {
 			JWKSURL:               getEnvOrDefault("AUTH_JWKS_URL", "https://localhost:8090/oauth2/jwks"),
 			Issuer:                getEnvOrDefault("AUTH_ISSUER", "https://localhost:8090"),
 			Audience:              getEnvOrDefault("AUTH_AUDIENCE", "NSW_API"),
-			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,IRD_TO_NSW,CDA_TO_NSW")),
+			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW")),
 			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
 		},
 		Notification: notification.Config{
@@ -107,7 +107,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate checks that all required configuration is present
+// Validate checks that all required configuration is present.
 func (c *Config) Validate() error {
 	if c.Server.ServiceURL == "" {
 		return fmt.Errorf("SERVICE_URL is required")
@@ -177,7 +177,7 @@ func getDurationOrDefault(key string, defaultValue time.Duration) time.Duration 
 	return defaultValue
 }
 
-// parseCommaSeparated splits a comma-separated string into a slice of trimmed strings
+// parseCommaSeparated splits a comma-separated string into a slice of trimmed strings.
 func parseCommaSeparated(value string) []string {
 	if value == "" {
 		return []string{}

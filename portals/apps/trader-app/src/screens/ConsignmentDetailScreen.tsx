@@ -1,64 +1,148 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 import { ActionListView } from '../components/WorkflowViewer'
 import type { ConsignmentDetail } from '../services/types/consignment.ts'
 import { getConsignment } from '../services/consignment.ts'
 import { useApi } from '../services/ApiContext'
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
 
+type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
+
+// A freshly created consignment can be returned before its workflow has been
+// provisioned (workflowNodes still empty). Rather than flashing the empty
+// "no workflow" state, re-fetch a bounded number of times with exponential
+// backoff until the nodes appear or the consignment reaches a terminal state.
+const PROVISION_MAX_ATTEMPTS = 5
+const PROVISION_BASE_DELAY_MS = 1000
+const PROVISION_MAX_DELAY_MS = 5000
+
+type FetchMode = 'initial' | 'refresh' | 'poll'
+
 export function ConsignmentDetailScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const api = useApi()
+  const { t } = useTranslation()
   const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [provisioning, setProvisioning] = useState(false)
+  const [error, setError] = useState<ConsignmentErrorKey | null>(null)
+  const provisionAttemptsRef = useRef(0)
+  const provisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const requestCountRef = useRef(0)
 
-  const fetchConsignment = useCallback(async () => {
-    if (!consignmentId) {
-      setError('Consignment ID is required')
-      setLoading(false)
-      return
+  const clearProvisionTimer = useCallback(() => {
+    if (provisionTimerRef.current) {
+      clearTimeout(provisionTimerRef.current)
+      provisionTimerRef.current = null
     }
+  }, [])
 
-    setLoading(true)
-    setError(null)
-    try {
-      const result = await getConsignment(consignmentId, api)
-      if (result) {
-        setConsignment(result)
-      } else {
-        setError('Consignment not found')
+  const fetchConsignment = useCallback(
+    async (mode: FetchMode = 'initial') => {
+      if (!consignmentId) {
+        setError('idRequired')
+        setLoading(false)
+        return
       }
-    } catch (err) {
-      console.error('Failed to fetch consignment:', err)
-      setError('Failed to load consignment')
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [api, consignmentId])
+
+      clearProvisionTimer()
+      // Track this request so stale responses (e.g. a manual refresh fired
+      // while a poll is still pending) can be ignored, preventing duplicate
+      // concurrent polling loops.
+      const requestId = ++requestCountRef.current
+
+      // A poll continuation keeps the attempt counter and the current view; an
+      // initial load or a manual refresh starts a fresh provisioning cycle.
+      if (mode !== 'poll') {
+        provisionAttemptsRef.current = 0
+        setError(null)
+      }
+      if (mode === 'initial') setLoading(true)
+
+      try {
+        const result = await getConsignment(consignmentId, api)
+        if (requestId !== requestCountRef.current) return
+
+        if (!result) {
+          setError('notFound')
+          setProvisioning(false)
+          return
+        }
+        setConsignment(result)
+
+        const awaitingProvisioning =
+          (result.workflowNodes?.length ?? 0) === 0 &&
+          (result.state === 'INITIALIZED' || result.state === 'IN_PROGRESS')
+
+        if (awaitingProvisioning && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
+          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
+          provisionAttemptsRef.current += 1
+          setProvisioning(true)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
+        } else {
+          setProvisioning(false)
+        }
+      } catch (err) {
+        if (requestId !== requestCountRef.current) return
+        console.error('Failed to fetch consignment:', err)
+
+        // A transient failure mid-provisioning should keep retrying with
+        // backoff rather than dropping the user onto a misleading
+        // "no workflow" or error screen. Only surface the error once retries
+        // are exhausted.
+        if (mode === 'poll' && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
+          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
+          provisionAttemptsRef.current += 1
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
+        } else {
+          setProvisioning(false)
+          setError('loadFailed')
+        }
+      } finally {
+        if (requestId === requestCountRef.current) {
+          if (mode === 'initial') setLoading(false)
+          if (mode === 'refresh') setRefreshing(false)
+        }
+      }
+    },
+    [api, consignmentId, clearProvisionTimer],
+  )
+
+  // The provisioning poll reschedules itself via setTimeout. Invoke through a
+  // ref to the latest fetchConsignment so a pending timeout never fires a stale
+  // closure, and so fetchConsignment doesn't need to depend on itself.
+  const fetchConsignmentRef = useRef(fetchConsignment)
+  useEffect(() => {
+    fetchConsignmentRef.current = fetchConsignment
+  }, [fetchConsignment])
 
   const handleRefresh = () => {
     setRefreshing(true)
-    fetchConsignment()
+    void fetchConsignment('refresh')
   }
 
   useEffect(() => {
-    fetchConsignment()
-  }, [fetchConsignment])
+    void fetchConsignment('initial')
+    return () => clearProvisionTimer()
+  }, [fetchConsignment, clearProvisionTimer])
 
-  if (loading) {
-    const isProcessing = !consignment // If we don't have consignment data yet, we're in initial load
+  if (loading || provisioning) {
+    const message = provisioning
+      ? t('consignments.detail.loading.settingUp')
+      : consignment
+        ? t('consignments.detail.loading.consignment')
+        : t('consignments.detail.loading.processing')
     return (
       <div className="p-6">
         <div className="flex items-center justify-center py-12">
           <Spinner size="3" />
           <Text size="3" color="gray" className="ml-3">
-            {isProcessing ? 'Processing your submission...' : 'Loading consignment...'}
+            {message}
           </Text>
         </div>
       </div>
@@ -66,29 +150,40 @@ export function ConsignmentDetailScreen() {
   }
 
   if (error || !consignment) {
+    const isLoadFailed = error === 'loadFailed'
+    const errorKey = error ?? 'notFound'
+    const errorTitle =
+      errorKey === 'loadFailed'
+        ? t('consignments.detail.error.loadFailed')
+        : errorKey === 'idRequired'
+          ? t('consignments.detail.error.idRequired')
+          : t('consignments.detail.error.notFound')
+
     return (
       <div className="p-6">
         <div className="mb-6">
           <Button variant="ghost" color="gray" onClick={() => navigate('/consignments')}>
             <ArrowLeftIcon />
-            Back
+            {t('consignments.detail.back')}
           </Button>
         </div>
         <div className="bg-background rounded-lg shadow p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
-            {error || 'Consignment not found'}
+            {errorTitle}
           </Text>
           <Text size="2" color="gray" className="block mb-6">
-            {error === 'Failed to load consignment'
-              ? 'There was a problem loading the consignment details. Please try again.'
-              : "The consignment you're looking for doesn't exist or you don't have access to it."}
+            {isLoadFailed
+              ? t('consignments.detail.error.loadFailedDescription')
+              : t('consignments.detail.error.notFoundDescription')}
           </Text>
           <div className="flex gap-3 justify-center">
             <Button variant="soft" onClick={() => navigate('/consignments')}>
               <ArrowLeftIcon />
-              Back to Consignments
+              {t('consignments.detail.backToList')}
             </Button>
-            {error === 'Failed to load consignment' && <Button onClick={fetchConsignment}>Try Again</Button>}
+            {isLoadFailed && (
+              <Button onClick={() => void fetchConsignment('initial')}>{t('consignments.detail.tryAgain')}</Button>
+            )}
           </div>
         </div>
       </div>
@@ -99,7 +194,6 @@ export function ConsignmentDetailScreen() {
 
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-64px)] flex flex-col">
-      {/* Top row: Back + Refresh */}
       <div className="mb-3 flex items-center justify-between">
         <Button
           variant="ghost"
@@ -108,7 +202,7 @@ export function ConsignmentDetailScreen() {
           aria-label="Back to consignments list"
         >
           <ArrowLeftIcon />
-          Back
+          {t('consignments.detail.back')}
         </Button>
         <Button
           variant="soft"
@@ -119,13 +213,12 @@ export function ConsignmentDetailScreen() {
           className="cursor-pointer"
         >
           <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-          Refresh
+          {t('consignments.detail.refresh')}
         </Button>
       </div>
 
-      {/* Title row */}
       <div className="mb-3 mt-2 flex items-center gap-3">
-        <h1 className="text-xl font-semibold text-foreground">Consignment View</h1>
+        <h1 className="text-xl font-semibold text-foreground">{consignment.name || t('consignments.detail.title')}</h1>
         <Badge size="2" color={getStateColor(consignment.state)}>
           {formatState(consignment.state)}
         </Badge>
@@ -134,14 +227,17 @@ export function ConsignmentDetailScreen() {
         </Badge>
       </div>
 
-      {/* ID + date row */}
       <div className="mb-4 md:mb-6 flex items-start gap-10">
         <div>
-          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">Consignment ID</p>
+          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">
+            {t('consignments.detail.field.consignmentId')}
+          </p>
           <p className="text-xs font-mono text-foreground-muted">{consignment.id}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">Date Created</p>
+          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">
+            {t('consignments.detail.field.dateCreated')}
+          </p>
           <p className="text-xs text-foreground-muted">{formatDateTime(consignment.createdAt)}</p>
         </div>
       </div>
@@ -152,7 +248,7 @@ export function ConsignmentDetailScreen() {
             <div className="flex items-center gap-3 bg-background px-6 py-4 rounded-lg shadow-lg">
               <Spinner size="3" />
               <Text size="3" weight="medium" color="gray">
-                Refreshing...
+                {t('consignments.detail.refreshing')}
               </Text>
             </div>
           </div>
@@ -174,10 +270,10 @@ export function ConsignmentDetailScreen() {
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <Text size="4" color="gray" weight="medium" className="block mb-2">
-                  No Workflow Steps
+                  {t('consignments.detail.noWorkflow.title')}
                 </Text>
                 <Text size="2" color="gray">
-                  This consignment doesn't have any workflow steps configured.
+                  {t('consignments.detail.noWorkflow.description')}
                 </Text>
               </div>
             </div>

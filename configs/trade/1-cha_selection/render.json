@@ -1,12 +1,18 @@
 {
   "id": "trade-cha-selection-flow:render",
   "type": "APPLICATION",
+  "title": "[Trade] Initialize Consignment",
   "sections": {
     "workspace": {
       "templateId": "trade-cha-selection--form",
-      "title": "Select Customs House Agent (CHA)",
+      "title": "Initialize Consignment",
       "projector": "FORM",
       "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
       "handles": [
         {
           "command": "submit",
@@ -14,6 +20,17 @@
           "element": "primary_action"
         }
       ]
+    },
+    "summary": {
+      "templateId": "trade-cha-selection--summary",
+      "title": "Consignment Initialized",
+      "projector": "MARKDOWN",
+      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
     }
   },
   "states": {

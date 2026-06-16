@@ -1,6 +1,7 @@
 {
   "id": "npqs-draw-sample:render",
   "type": "APPLICATION",
+  "title": "[NPQS] Sample Drop-Off Confirmation",
   "sections": {
     "workspace_trader": {
       "templateId": "npqs-draw-sample--trader-submit-form",

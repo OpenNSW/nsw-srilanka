@@ -1,4 +1,4 @@
-FROM golang:1.26.3-bookworm AS builder
+FROM golang:1.26.4-bookworm AS builder
 
 WORKDIR /src
 
@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
 # `go install`, because `go install` refuses to write the binary when
 # cross-compiling for a non-host GOOS/GOARCH (multi-arch buildx).
 # -------------------------------------------------------------------
-FROM golang:1.26.3-bookworm AS migrate-builder
+FROM golang:1.26.4-bookworm AS migrate-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -97,14 +97,21 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy the binary. Configs are NOT baked into the image — they are
-# environment data, mounted at /app/configs at runtime (see docker-compose.yml).
-COPY --from=builder /out/server /app/server
+# Copy the binary. Set ownership at copy time (--chown) to avoid a redundant
+# chown -R layer that would duplicate the copied files.
+COPY --chown=appuser:appuser --from=builder /out/server /app/server
 
-# Create the mount points for runtime config and blob storage. /app/configs
-# is overlaid by a read-only bind mount; /app/bucket by a writable volume.
-RUN mkdir -p /app/configs /app/bucket \
-    && chown -R appuser:appuser /app
+# Bake application configs into the image. These files are tracked in git and
+# version with the code (workflow/form definitions, payment_methods.json,
+# manifest, notification, etc.), and the payment registry reads them at boot.
+# Environment-specific values (e.g. services.json) are still overlaid at runtime
+# via ConfigMap/bind mount; a host bind mount over /app/configs (docker-compose)
+# also continues to take precedence over what is baked here.
+COPY --chown=appuser:appuser --from=builder /src/configs /app/configs
+
+# Create the writable blob storage mount point.
+RUN mkdir -p /app/bucket \
+    && chown appuser:appuser /app/bucket
 
 USER appuser
 

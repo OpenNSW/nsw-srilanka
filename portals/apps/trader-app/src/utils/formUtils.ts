@@ -62,6 +62,9 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       if (property.format === 'date') {
         return new Date().toISOString().split('T')[0]
       }
+      if (property.format === 'time') {
+        return '10:00:00'
+      }
       if (property.format === 'date-time') {
         return new Date().toISOString()
       }
@@ -95,10 +98,13 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       }
       return {}
     case 'array':
-      if (property.items && typeof property.items === 'object') {
-        const itemVal = generateSampleValue(property.items, `${fieldName}_item`)
-        if (itemVal !== undefined) {
-          return [itemVal]
+      if (property.items) {
+        if (Array.isArray(property.items)) {
+          return property.items.map((itemSchema: any, idx: number) => generateSampleValue(itemSchema, 'item' + idx))
+        }
+        if (typeof property.items === 'object') {
+          const item = generateSampleValue(property.items, 'item')
+          return item !== undefined ? [item] : []
         }
       }
       return []

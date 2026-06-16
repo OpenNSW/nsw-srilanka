@@ -53,6 +53,7 @@ export interface ConsignmentItem {
 
 export interface ConsignmentSummary {
   id: string
+  name?: string
   flow: TradeFlow
   traderId: string
   chaId?: string
@@ -66,6 +67,7 @@ export interface ConsignmentSummary {
 
 export interface ConsignmentDetail {
   id: string
+  name?: string
   flow: TradeFlow
   traderId: string
   chaId?: string

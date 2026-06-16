@@ -1,6 +1,7 @@
 {
   "id": "npqs-pay-for-treatment:render",
   "type": "PAYMENT",
+  "title": "[NPQS] Pay Treatment Fee",
   "sections": {
     "workspace": {
       "templateId": "npqs-pay-for-treatment--select-method-form",

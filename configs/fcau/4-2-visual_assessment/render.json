@@ -1,10 +1,11 @@
 {
   "id": "fcau-visual-assessment-flow:render",
   "type": "VISUAL_ASSESSMENT",
+  "title": "[FCAU] Manual Sample Assessment",
   "sections": {
     "status_message": {
       "templateId": "fcau-visual-assessment--reviewer-instructions",
-      "title": "Assessment Instructions",
+      "title": "Assessment Status",
       "projector": "MARKDOWN",
       "visibleWhen": {
         "states": [
@@ -13,9 +14,9 @@
       }
     },
     "officerform": {
-      "templateId": "fcau-visual-assessment--reviewer-form",
+      "templateId": "fcau-visual-assessment--trader-results",
       "title": "Visual Sample Assessment",
-      "projector": "FORM",
+      "projector": "MARKDOWN",
       "dataKey": "reviewerform",
       "visibleWhen": {
         "requireDataKey": "reviewerform"

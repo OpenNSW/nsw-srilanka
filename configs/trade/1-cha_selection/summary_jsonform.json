@@ -1,0 +1,4 @@
+{
+  "id": "trade-cha-selection--summary",
+  "template": "### Consignment Initialized\n\nThis consignment has been initialized successfully.\n\n* **Consignment Name**: {{.consignment_name}}\n* **Customs House Agent (CHA)**: {{if eq .cha_company_id \"adam-pvt-ltd\"}}ADAM PVT LTD{{else}}{{.cha_company_id}}{{end}}\n\nThe initialization step is complete. You may proceed with the next step in the workflow."
+}

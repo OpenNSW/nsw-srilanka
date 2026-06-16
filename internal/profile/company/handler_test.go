@@ -32,7 +32,7 @@ func emptyResult() *ListResult {
 	return &ListResult{Items: []Summary{}, Total: 0, Offset: 0, Limit: 50}
 }
 
-func TestHandler_HandleGetCompanies_Success(t *testing.T) {
+func TestHandler_HandleGetCompanies_Success(t *testing.T) { //nolint:gocyclo
 	result := &ListResult{
 		Items: []Summary{
 			{ID: "adam-pvt-ltd", Name: "ADAM PVT LTD", HasCHA: true},

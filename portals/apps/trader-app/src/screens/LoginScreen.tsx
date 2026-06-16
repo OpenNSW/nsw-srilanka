@@ -1,8 +1,10 @@
 import { useAsgardeo } from '@asgardeo/react'
+import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '../config'
 
 export function LoginScreen() {
   const { signIn } = useAsgardeo()
+  const { t } = useTranslation()
   const { systemName, appName, logoUrl, description, heroImageUrl, partnerLogos } = appConfig.branding
 
   return (
@@ -15,7 +17,7 @@ export function LoginScreen() {
       )}
 
       {/* Hero & Authentication */}
-      <div className="lg:order-last relative flex-1 min-h-[500px] lg:min-h-screen overflow-hidden">
+      <div className="lg:order-last relative flex-1 min-h-125 lg:min-h-screen overflow-hidden">
         {/* Hero background — no clip on mobile (logo has its own strip above), diagonal on desktop */}
         <div className="absolute inset-0 [clip-path:none] lg:[clip-path:polygon(25%_0,100%_0,100%_100%,0%_100%)]">
           <div
@@ -34,7 +36,7 @@ export function LoginScreen() {
             <div className="flex flex-col xl:flex-row items-center gap-8 xl:gap-12">
               <div className="flex flex-col items-center xl:items-start text-center xl:text-left">
                 <h2 className="text-2xl font-bold text-white tracking-wide">{displayName}</h2>
-                <p className="text-white/60 text-xs mt-1">Sign in to continue to your consignments.</p>
+                <p className="text-white/60 text-xs mt-1">{t('auth.login.tagline')}</p>
               </div>
 
               <button
@@ -43,7 +45,7 @@ export function LoginScreen() {
                 }}
                 className="bg-primary hover:bg-primary-dark text-white px-10 py-2.5 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
               >
-                Sign In
+                {t('auth.login.button')}
               </button>
             </div>
           </div>

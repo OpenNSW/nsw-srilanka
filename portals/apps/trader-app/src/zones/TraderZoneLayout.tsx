@@ -1,4 +1,6 @@
 import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from './types'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { Zone } from './Zone'
 
 type Props = {
@@ -6,15 +8,13 @@ type Props = {
   onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
 }
 
-// Zones render in this order when present; any unknown keys render after, in
-// insertion order.
 const ZONE_ORDER = ['instructions', 'workspace', 'reference']
 
 export function TraderZoneLayout({ task, onSubmitForm }: Props) {
   const zones = orderedZones(task.view)
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {zones.map(([name, component]) => (
@@ -108,6 +108,7 @@ function alertIcon(variant: AlertVariant) {
 }
 
 function AuditLog({ entries }: { entries: AuditEntry[] }) {
+  const { t } = useTranslation()
   const sorted = [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   return (
     <details className="group rounded-lg border border-border bg-background overflow-hidden">
@@ -124,12 +125,12 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
               clipRule="evenodd"
             />
           </svg>
-          <span className="text-sm font-semibold text-foreground-muted">Activity</span>
-          <span className="text-xs text-foreground-subtle">· {entries.length} entries</span>
+          <span className="text-sm font-semibold text-foreground-muted">{t('audit.title')}</span>
+          <span className="text-xs text-foreground-subtle">{t('audit.entries', { count: entries.length })}</span>
         </span>
       </summary>
       <div className="relative border-t border-border px-4 py-4">
-        <div className="absolute left-[26px] top-6 bottom-6 w-px bg-surface-muted" aria-hidden />
+        <div className="absolute left-6.5 top-6 bottom-6 w-px bg-surface-muted" aria-hidden />
         <ol className="space-y-4">
           {sorted.map((entry) => (
             <AuditEntryRow key={`${entry.timestamp}:${entry.event}`} entry={entry} />
@@ -141,6 +142,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
 }
 
 function AuditEntryRow({ entry }: { entry: AuditEntry }) {
+  const { t } = useTranslation()
   const color = auditDotColor(entry)
   return (
     <li className="relative flex items-start gap-3">
@@ -160,7 +162,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
             )}
           </p>
           <time className="text-xs text-foreground-subtle shrink-0" dateTime={entry.timestamp}>
-            {formatRelative(entry.timestamp)}
+            {formatRelative(entry.timestamp, t)}
           </time>
         </div>
         {entry.details && <p className="mt-1 text-sm text-foreground-muted whitespace-pre-wrap">{entry.details}</p>}
@@ -178,17 +180,17 @@ function auditDotColor(entry: AuditEntry): string {
   return 'bg-foreground-subtle'
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, t: TFunction): string {
   const ts = new Date(iso).getTime()
   if (Number.isNaN(ts)) return iso
   const diff = Date.now() - ts
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 1) return t('audit.time.justNow')
+  if (mins < 60) return t('audit.time.minutesAgo', { mins })
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('audit.time.hoursAgo', { hours })
   const days = Math.floor(mins / 60 / 24)
-  if (days < 7) return `${days}d ago`
+  if (days < 7) return t('audit.time.daysAgo', { days })
   return new Date(iso).toLocaleDateString()
 }
 

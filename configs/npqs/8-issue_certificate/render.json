@@ -1,6 +1,7 @@
 {
   "id": "npqs-issue-certificate:render",
   "type": "REVIEW",
+  "title": "[NPQS] Upload final Phytosanitary Certificate Details",
   "sections": {
     "reference": {
       "id": "reference",

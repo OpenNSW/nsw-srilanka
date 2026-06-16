@@ -1,4 +1,5 @@
 import type { ConsignmentState } from '../services/types/consignment'
+import i18n from '../i18n'
 
 /**
  * Get the appropriate color for a consignment state badge.
@@ -32,11 +33,11 @@ export function formatState(state: ConsignmentState): string {
 }
 
 /**
- * Format a date string for display
+ * Format a date string for display using the active locale.
  * Example: 2026-01-27T10:30:00Z -> Jan 27, 2026
  */
 export function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  return new Date(dateString).toLocaleDateString(i18n.resolvedLanguage || undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -44,7 +45,8 @@ export function formatDate(dateString: string): string {
 }
 
 /**
- * Format a date string with time for display
+ * Format a date string with time for display using the active locale.
+ * Produces locale-appropriate output using the dateTimeAt translation template.
  * Example: 2026-01-27T10:30:00Z -> January 27, 2026 at 10:30 AM
  */
 export function formatDateTime(dateString: string): string {
@@ -52,11 +54,15 @@ export function formatDateTime(dateString: string): string {
   if (isNaN(date.getTime())) {
     return '-'
   }
-  return date.toLocaleDateString('en-US', {
+  const lang = i18n.resolvedLanguage || undefined
+  const datePart = date.toLocaleDateString(lang, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+  })
+  const timePart = date.toLocaleTimeString(lang, {
     hour: '2-digit',
     minute: '2-digit',
   })
+  return i18n.t('common.dateTimeAt', { date: datePart, time: timePart })
 }

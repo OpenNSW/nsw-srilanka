@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
-import { DashboardIcon, FileTextIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
+import { DashboardIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
 import { type ReactNode, useEffect, useRef, useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useRole, type Role } from '../../services/RoleContext'
 
 interface NavItem {
@@ -19,11 +20,6 @@ interface NavGroup {
 
 type NavItemOrGroup = NavItem | NavGroup
 
-const navStructure: NavItemOrGroup[] = [
-  { name: 'Consignments', path: '/consignments', icon: <DashboardIcon className="w-5 h-5" /> },
-  { name: 'Verified Docs', path: '/pre-consignments', icon: <FileTextIcon className="w-5 h-5" />, roles: ['trader'] },
-]
-
 function isNavGroup(item: NavItemOrGroup): item is NavGroup {
   return 'items' in item
 }
@@ -36,18 +32,24 @@ interface SidebarProps {
 export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
   const location = useLocation()
   const { role } = useRole()
+  const { t } = useTranslation()
   const [isHovered, setIsHovered] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const previousPathRef = useRef<string>(location.pathname)
 
+  const navStructure = useMemo(
+    (): NavItemOrGroup[] => [
+      { name: t('sidebar.nav.consignments'), path: '/consignments', icon: <DashboardIcon className="w-5 h-5" /> },
+    ],
+    [t],
+  )
+
   const filteredNavStructure = useMemo(() => {
     return navStructure
       .filter((item) => {
-        // If item has roles defined, check if current role is included
         return !(item.roles && !item.roles.includes(role))
       })
       .map((item) => {
-        // If it's a group, also filter its nested items
         if (isNavGroup(item)) {
           return {
             ...item,
@@ -57,15 +59,12 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         return item
       })
       .filter((item) => {
-        // If a group has no items left after filtering, hide the group itself
         return !(isNavGroup(item) && item.items.length === 0)
       })
-  }, [role])
+  }, [role, navStructure])
 
-  // Determine if sidebar should show expanded content
   const showExpanded = isExpanded || (!isExpanded && isHovered)
 
-  // Auto-expand groups that contain the active page
   useEffect(() => {
     if (previousPathRef.current !== location.pathname) {
       previousPathRef.current = location.pathname
@@ -120,14 +119,11 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
     const hasActivePath = group.items.some((item) => item.path === location.pathname)
 
     if (!showExpanded) {
-      // Collapsed sidebar: show group header and expanded sub-items with shared background
       return (
         <div key={group.name} className="flex flex-col gap-1">
-          {/* Wrapper with shaded background if expanded */}
           <div
             className={clsx('flex flex-col gap-1 rounded-md transition-all', isGroupExpanded && 'bg-primary/20 p-1')}
           >
-            {/* Group header */}
             <button
               onClick={() => toggleGroup(group.name)}
               className={clsx(
@@ -141,7 +137,6 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
               title={group.name}
             >
               <span className="flex items-center text-xl shrink-0">{group.icon}</span>
-              {/* Expand/collapse indicator */}
               <ChevronDownIcon
                 className={clsx(
                   'w-3 h-3 absolute bottom-1 right-1 transition-transform',
@@ -150,7 +145,6 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
               />
             </button>
 
-            {/* Expanded sub-items */}
             {isGroupExpanded &&
               group.items.map((item) => {
                 const isActive = location.pathname === item.path
@@ -175,7 +169,6 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
       )
     }
 
-    // Expanded sidebar: show group header with expand/collapse
     return (
       <div key={group.name} className="flex flex-col gap-1">
         <button
@@ -208,7 +201,6 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => !isExpanded && setIsHovered(false)}
     >
-      {/* Navigation */}
       <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
         {filteredNavStructure.map((item) => {
           if (isNavGroup(item)) {
@@ -218,27 +210,19 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         })}
       </nav>
 
-      {/* Footer with Software Info and Toggle Button */}
       <div className="border-t border-primary-dark/40">
-        {/* Software Info */}
         {showExpanded && (
           <div className="p-4">
             <div className="flex items-center gap-3 px-4 py-3 rounded-md bg-primary/15 text-primary-subtle">
-              {/*<img src={logoIcon} alt="Textura" className="w-8 h-8 flex-shrink-0" />*/}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">NSW</p>
+                <p className="text-sm font-medium text-white truncate">{t('sidebar.version.label')}</p>
                 <p className="text-xs text-primary-subtle truncate">v0.1.0</p>
               </div>
             </div>
           </div>
         )}
-        {!showExpanded && (
-          <div className="p-4 flex justify-center">
-            {/*<img src={logoIcon} alt="Textura" className="w-10 h-10" />*/}
-          </div>
-        )}
+        {!showExpanded && <div className="p-4 flex justify-center"></div>}
 
-        {/* Toggle Button */}
         <div className="px-4 pb-4">
           <button
             onClick={onToggle}
@@ -247,9 +231,13 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
             } h-10 rounded-full bg-primary hover:bg-primary-dark flex items-center ${
               showExpanded ? 'justify-between px-4' : 'justify-center'
             } text-white transition-all shadow-lg`}
-            title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            title={isExpanded ? t('sidebar.toggle.collapseTitle') : t('sidebar.toggle.expandTitle')}
           >
-            {showExpanded && <span className="text-sm font-medium">{isExpanded ? 'Collapse' : 'Expand'}</span>}
+            {showExpanded && (
+              <span className="text-sm font-medium">
+                {isExpanded ? t('sidebar.toggle.collapse') : t('sidebar.toggle.expand')}
+              </span>
+            )}
             {isExpanded ? <ChevronLeftIcon className="w-5 h-5" /> : <ChevronRightIcon className="w-5 h-5" />}
           </button>
         </div>

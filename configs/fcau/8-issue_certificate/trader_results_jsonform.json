@@ -1,0 +1,4 @@
+{
+  "id": "fcau-issue-certificate--trader-results",
+  "template": "### Health Certificate Issued\n\nThe Health Certificate decision has been completed by the authorized officer.\n\n* **Certificate ID**: `{{.certificate_id}}`\n* **Authority**: {{.authorized_signature}}\n{{if .certificate_url}}* **Registry Link**: [View Online Registry]({{.certificate_url}})\n{{end}}\n{{if .certificate}}\n[📄 Download Issued Certificate (PDF)]({{.certificate}})\n{{end}}"
+}

@@ -1,11 +1,11 @@
 # NSW Sri Lanka Platform
 
-[![Go Version](https://img.shields.io/badge/Go-1.25.7-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26.3-blue.svg)](https://golang.org)
 [![Platform](https://img.shields.io/badge/NSW-Platform-green.svg)](#)
 
 `nsw-srilanka` is the deployer-specific application repository for the **Sri Lanka instance** of the National Single Window (NSW) Platform.
 
-It depends on the core engine published as `github.com/OpenNSW/nsw/backend` (taskv2 branch) and wires Sri Lanka–specific service endpoints, payment gateways, and FCAU workflow configurations on top of it.
+It depends on the open-source core engine published at [github.com/OpenNSW/core](https://github.com/OpenNSW/core) and wires Sri Lanka–specific service endpoints, payment gateways, and agency workflow configurations on top of it.
 
 ---
 
@@ -18,13 +18,21 @@ nsw-srilanka/
 │       └── main.go                       # Entry point: loads config, builds the app, runs the HTTP server
 ├── internal/
 │   └── bootstrap/
-│       └── app.go                        # Wires DB, Temporal, taskv2, auth, storage, notifications, routes
+│       └── app.go                        # Wires DB, Temporal, taskflow, auth, storage, notifications, routes
+├── integration/
+│   └── payment/                          # Sri Lanka–specific payment gateway implementations (GovPay+)
+├── migrations/                           # PostgreSQL migration files (up/down SQL)
+├── portals/                              # Trader Portal frontend (React/Vite monorepo)
+├── idp/                                  # Identity Provider configuration and seed resources
 ├── configs/
-│   ├── services.json                     # Remote service endpoints (gitignored)
-│   ├── services.example.json             # Template for services.json
-│   ├── payment_methods.json              # Payment gateway catalogue (gitignored)
-│   ├── payment_methods.example.json      # Template for payment_methods.json
-│   └── fcau/                             # FCAU health-certificate workflow + JSONForms (gitignored)
+│   ├── manifest.json                        # Artifact registry manifest — lists all workflow/form configs
+│   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
+│   ├── services.example.json                # Template for services.json (local/native dev — localhost)
+│   ├── payment_methods.example.json         # Template for payment_methods.json
+│   ├── notification.example.json            # Template for notification.json
+│   ├── fcau/                                # FCAU health-certificate workflow, JSONForms, render configs
+│   ├── trade/                               # Trade (consignment) workflow and form configs
+│   └── npqs/                               # NPQS workflow and form configs
 ├── .env.example                          # Template for environment variables
 ├── .gitignore
 ├── Dockerfile
@@ -32,20 +40,30 @@ nsw-srilanka/
 └── go.sum
 ```
 
-The Sri Lanka–specific FCAU workflow lives under `configs/fcau/` as a set of JSON files (workflow graph, JSONForms, render configs). The Go server itself is intentionally thin — most behaviour is configured via these JSON files and the `github.com/OpenNSW/nsw/backend` module.
+The agency-specific workflow definitions live under `configs/<agency_code>/` as JSON files (workflow graphs, JSONForms schemas, render configs). All behaviour is configured through these JSON files — the Go server itself is intentionally thin. The `configs/manifest.json` file is the index that tells the artifact registry which files to load at startup.
+
+For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
 
 ---
 
 ## How to Run Locally
 
 ### 1. Prepare local config files
-Copy the templates and edit each one for your environment:
+
+Copy each example file to its live name (the real files are gitignored and must not be committed):
+
 ```bash
 cp .env.example .env
-cp configs/services.example.json configs/services.json
+cp idp/env.example idp/.env
+cp configs/services.docker.example.json configs/services.docker.json
+# cp configs/services.example.json configs/services.json
+# For local development with direct host DB access, use the non-docker
+# config with localhost references instead of container hostnames.
 cp configs/payment_methods.example.json configs/payment_methods.json
+cp configs/notification.example.json configs/notification.json
 ```
-The FCAU workflow JSON tree under `configs/fcau/` is gitignored — make sure you have pulled it from your team's workflow template store before running the application.
+
+Edit each seeded file for your environment before starting the stack.
 
 ### 2. Start the Docker Stack
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
@@ -94,24 +112,24 @@ To watch the rebuild output:
 make logs
 ```
 
-#### Working against the core engine (`OpenNSW/nsw/backend`)
+#### Working against the core engine (`OpenNSW/core`)
 
-This repo depends on the core engine as a normal, version-pinned Go module — there is **no** sibling clone, `replace` directive, or `GOWORK` setting involved (see [Upstream Dependency](#upstream-dependency)). Two common workflows:
+This repo depends on the core engine as a normal, version-pinned Go module — there is **no** sibling clone, `replace` directive, or `GOWORK` setting involved by default (see [Upstream Dependency](#upstream-dependency)). Two common workflows:
 
-* **Bump to a newer engine build** — point `go.mod` at a new commit and let the dev container pick it up on its next rebuild:
+* **Bump to a newer engine release** — update `go.mod` to a new version and let the dev container pick it up on its next rebuild:
   ```bash
-  go get github.com/OpenNSW/nsw/backend@taskv2
+  go get github.com/OpenNSW/core@latest
   go mod tidy
   ```
-* **Develop the engine and this repo together** — push your engine change to a branch and `go get` that ref, or use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across repositories.
+* **Develop the engine and this repo together** — use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across both repositories.
 
 #### Native cross-repo development
 
-The dev container is hermetic: it builds from the pinned `go.mod` version, ignores any `go.work` (`GOWORK=off`), and does **not** mount sibling repos. That's intentional — it keeps every container build reproducible. When you need to edit `OpenNSW/nsw` (or another sibling) and see the change live, run the **Go API natively on your host** and use Docker only for the backing services:
+The dev container is hermetic: it builds from the pinned `go.mod` version, ignores any `go.work` (`GOWORK=off`), and does **not** mount sibling repos. That's intentional — it keeps every container build reproducible. When you need to edit `OpenNSW/core` and see the change live, run the **Go API natively on your host** and use Docker only for the backing services:
 
-1. **Clone the siblings** next to `nsw-srilanka` and create a workspace (`go.work` is gitignored, so this stays personal):
+1. **Clone `OpenNSW/core`** next to `nsw-srilanka` and create a workspace (`go.work` is gitignored, so this stays personal):
    ```bash
-   go work init . ../nsw/backend ../nsw-task-flow ../go-temporal-workflow
+   go work init . ../core
    ```
 2. **Prepare env** — the template is already tuned for native runs (`DB_HOST=localhost`, `TEMPORAL_HOST=localhost`, `AUTH_JWKS_URL=https://localhost:8090`, `SERVICES_CONFIG_PATH=./configs/services.json`):
    ```bash
@@ -126,7 +144,7 @@ The dev container is hermetic: it builds from the pinned `go.mod` version, ignor
    go run ./cmd/server
    ```
 
-Edits in the sibling repos are now picked up by the host compiler, and you get a native debugger. Because `docker compose` reads the same `.env`, the published service ports and the ports your host binary connects to stay in sync automatically (e.g. `DB_PORT`).
+Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a native debugger. Because `docker compose` reads the same `.env`, the published service ports and the ports your host binary connects to stay in sync automatically (e.g. `DB_PORT`).
 
 > Don't mix the two: if `make dev` is already running, its `api` container holds port `8080` — run `make down` (or just `docker compose stop api`) before starting the native server.
 
@@ -135,29 +153,51 @@ Edits in the sibling repos are now picked up by the host compiler, and you get a
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"nsw-backend"}`.
-- Logs will report DB connection, Temporal worker startup, and the FCAU workflow registrations from `configs/fcau/`.
+- Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations from `configs/manifest.json`.
 
 ### 5. Simulating a payment webhook (dev only)
 
 INFO-type gateways (e.g. `govpay`) don't fire a real callback. To advance a `PENDING_PAYMENT` task manually:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/payments/webhook \
+curl -X POST "http://localhost:8080/api/v1/payments/govpay/webhook" \
   -H "Content-Type: application/json" \
   -d '{
-    "reference_number": "TNSW-XXXXXXXX",
-    "session_id": "manual-test-1",
-    "gateway_transaction_id": "MOCK-001",
-    "status": "SUCCESS",
-    "amount": "1500",
-    "currency": "LKR",
-    "payment_method": "govpay",
-    "timestamp": "2026-01-01T00:00:00Z",
-    "metadata": {}
+    "transactionID": "TNSWPYRMTWMY",
+    "subinstId": "sub-001",
+    "serviceid": "FCAU",
+    "serviceName": "FCAU Application Fee",
+    "data": [
+      {
+        "seq": "1",
+        "paramName": "refNo",
+        "value": "TNSWPYRMTWMY"
+      },
+      {
+        "seq": "2",
+        "paramName": "amount",
+        "value": "1500"
+      },
+      {
+        "seq": "3",
+        "paramName": "currency",
+        "value": "LKR"
+      },
+      {
+        "seq": "4",
+        "paramName": "status",
+        "value": "SUCCESS"
+      },
+      {
+        "seq": "5",
+        "paramName": "paymentMethod",
+        "value": "ONLINE_BANKING"
+      }
+    ]
   }'
 ```
 
-REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own.
+REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own after a successful redirect.
 
 ---
 
@@ -209,27 +249,33 @@ DB_DRIVER=postgres MIGRATION_DIR=./migrations \
 The core engine is pulled directly from GitHub via Go modules:
 
 ```
-github.com/OpenNSW/nsw/backend v0.0.0-…  // pinned to a taskv2 commit
+github.com/OpenNSW/core v0.0.0-…  // pinned to a specific commit
 ```
 
-To pull the latest taskv2:
+To pull the latest release:
 
 ```bash
-go get github.com/OpenNSW/nsw/backend@taskv2
+go get github.com/OpenNSW/core@latest
 go mod tidy
 ```
 
-There is **no** `replace` directive and **no** sibling clone of `OpenNSW/nsw` required to build.
+There is **no** `replace` directive and **no** sibling clone of `OpenNSW/core` required to build.
+
+The `OpenNSW/core` SDK provides all the infrastructure building blocks used by this application — workflow orchestration, task management, payment gateways, authentication, storage, notifications, and more. See the [core README](https://github.com/OpenNSW/core) for the full package reference and architecture overview.
 
 ---
 
 ## Configuration Reference
 
-| File                           | Purpose                                                                  | Source of truth                        |
-|--------------------------------|--------------------------------------------------------------------------|----------------------------------------|
-| `.env`                         | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)    | `.env.example`                         |
-| `configs/services.json`        | Outbound service endpoint registry (FCAU, NPQS, IRD, customs, …)         | `configs/services.example.json`        |
-| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)  | `configs/payment_methods.example.json` |
-| `configs/fcau/`                | FCAU health-certificate workflow definition + JSONForms + render configs | Per-team workflow store                |
+| File                                  | Purpose                                                                         | Source of truth                               |
+|---------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
+| `.env`                                | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)           | `.env.example`                                |
+| `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/env.example`                             |
+| `configs/manifest.json`               | Artifact registry index — lists every workflow/form/render config file          | Committed to the repository                   |
+| `configs/services.docker.json`        | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json`       |
+| `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
+| `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
+| `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
+| `configs/<agency_code>/`              | Agency workflow definitions, JSONForms schemas, and render configs              | Committed to the repository                   |
 
-Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in the upstream `github.com/OpenNSW/nsw/backend` README and the FCAU configs themselves.
+Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

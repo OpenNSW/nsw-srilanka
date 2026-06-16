@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/loaders/local"
@@ -20,6 +21,7 @@ import (
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
+	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
@@ -76,7 +78,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // Build initializes dependencies and returns a fully wired application server.
 // The initialization flow is structured in distinct stages to ensure readability.
-func Build(ctx context.Context, cfg *config.Config) (*App, error) {
+func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:gocyclo
 	// -------------------------------------------------------------------
 	// Stage 1: Relational Database & Connection Health Check
 	// -------------------------------------------------------------------
@@ -294,9 +296,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
 	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
-	mux.Handle("POST /api/v1/consignments/start", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleStartConsignment))))
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
-	mux.Handle("PUT /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleInitializeConsignment))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
 	// Storage
@@ -321,8 +321,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) {
 	handler := cors.CORS(&cfg.CORS)(mux)
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: handler,
+		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	closeFn := func() error {
@@ -505,7 +506,8 @@ func initTask(
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 
-	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
+	extensionsRegistry := extensions.NewRegistry()
+	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
 
 	if err := workflowRunner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start micro workflow worker: %w", err)

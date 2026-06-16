@@ -1,6 +1,7 @@
 {
   "id": "npqs-visual-system-inspection:render",
   "type": "REVIEW",
+  "title": "[NPQS] External System Inspection Verification",
   "sections": {
     "reference": {
       "id": "reference",

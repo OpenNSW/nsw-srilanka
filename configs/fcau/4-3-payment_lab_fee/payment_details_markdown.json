@@ -1,0 +1,4 @@
+{
+  "id": "fcau-pay-lab-fee--payment-details-markdown",
+  "template": "### Laboratory Test Fee Details\n\nPlease use the following payment reference number to make the payment via GovPay option in your banking app.\n\n* **Reference Number**: `{{.reference_number}}`\n* **Amount**: **{{.amount}} {{.currency}}**"
+}

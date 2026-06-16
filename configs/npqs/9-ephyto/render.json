@@ -1,6 +1,7 @@
 {
   "id": "npqs-ephyto-upload:render",
   "type": "APPLICATION",
+  "title": "[NPQS] IPPC ePhyto Hub Transfer",
   "sections": {
     "workspace": {
       "templateId": "npqs-ephyto-upload--instructions",

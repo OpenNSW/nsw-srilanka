@@ -1,6 +1,7 @@
 {
   "id": "fcau-post-wh-lab-testing-flow:render",
   "type": "LAB_TEST",
+  "title": "[FCAU] Wait on Post-Warehouse Lab Results",
   "sections": {
     "status_message": {
       "templateId": "fcau-post-wh-lab-testing--reviewer-instructions",
@@ -13,9 +14,9 @@
       }
     },
     "officerform": {
-      "templateId": "fcau-post-wh-lab-testing--officer-form",
-      "title": "Submit Lab Test Outcome",
-      "projector": "FORM",
+      "templateId": "fcau-post-wh-lab-testing--trader-results",
+      "title": "Laboratory Test Outcome",
+      "projector": "MARKDOWN",
       "dataKey": "lab",
       "visibleWhen": {
         "requireDataKey": "lab"

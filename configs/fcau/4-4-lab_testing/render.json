@@ -1,6 +1,7 @@
 {
   "id": "fcau-lab-testing-flow:render",
   "type": "LAB_TEST",
+  "title": "[FCAU] Laboratory Sample Testing",
   "sections": {
     "status_message": {
       "templateId": "fcau-lab-testing--reviewer-instructions",
@@ -13,9 +14,9 @@
       }
     },
     "officerform": {
-      "templateId": "fcau-lab-testing--officer-form",
-      "title": "Submit Lab Test Outcome",
-      "projector": "FORM",
+      "templateId": "fcau-lab-testing--trader-results",
+      "title": "Laboratory Test Outcome",
+      "projector": "MARKDOWN",
       "dataKey": "lab",
       "visibleWhen": {
         "requireDataKey": "lab"

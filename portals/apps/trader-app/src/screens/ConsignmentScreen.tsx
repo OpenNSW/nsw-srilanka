@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../services/types/consignment.ts'
-import { startConsignment, getAllConsignments } from '../services/consignment.ts'
+import { createConsignment, getAllConsignments } from '../services/consignment.ts'
 import { useApi } from '../services/ApiContext'
 import { useRole } from '../services/RoleContext'
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
@@ -12,6 +13,7 @@ import { PaginationControl } from '../components/common/PaginationControl'
 export function ConsignmentScreen() {
   const navigate = useNavigate()
   const api = useApi()
+  const { t } = useTranslation()
   const [consignments, setConsignments] = useState<ConsignmentSummary[]>([])
 
   const [totalCount, setTotalCount] = useState(0)
@@ -19,14 +21,12 @@ export function ConsignmentScreen() {
   const [page, setPage] = useState(0)
   const limit = 50
 
-  // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [stateFilter, setStateFilter] = useState<string>('all')
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
   const { role } = useRole()
 
-  // New consignment state
   const [creating, setCreating] = useState(false)
 
   const listRequestIdRef = useRef(0)
@@ -34,7 +34,7 @@ export function ConsignmentScreen() {
   const handleCreateConsignment = async () => {
     setCreating(true)
     try {
-      const response = await startConsignment(api)
+      const response = await createConsignment(api)
       void navigate(`/consignments/${response.id}`)
     } catch (error) {
       console.error('Failed to create consignment:', error)
@@ -83,6 +83,7 @@ export function ConsignmentScreen() {
     const matchesSearch =
       searchQuery === '' ||
       c.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.name && c.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       hsCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       description.toLowerCase().includes(searchQuery.toLowerCase())
 
@@ -95,7 +96,7 @@ export function ConsignmentScreen() {
         <div className="flex items-center justify-center py-12">
           <Spinner size="3" />
           <Text size="3" color="gray" className="ml-3">
-            Loading Consignments...
+            {t('consignments.list.loading')}
           </Text>
         </div>
       </div>
@@ -106,14 +107,14 @@ export function ConsignmentScreen() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-foreground">
-          Consignments
+          {t('consignments.list.title')}
           {totalCount > 0 && <span className="ml-2 text-lg font-normal text-foreground-subtle">({totalCount})</span>}
         </h1>
         <div className="flex gap-2">
           {role === 'cha' ? null : (
             <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
               <PlusIcon />
-              {creating ? 'Creating...' : 'New Consignment'}
+              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
             </Button>
           )}
         </div>
@@ -125,7 +126,7 @@ export function ConsignmentScreen() {
             <div className="flex-1">
               <TextField.Root
                 size="2"
-                placeholder="Search by ID or HS Code..."
+                placeholder={t('consignments.list.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
               >
@@ -142,13 +143,13 @@ export function ConsignmentScreen() {
                   setPage(0)
                 }}
               >
-                <Select.Trigger placeholder="State" />
+                <Select.Trigger placeholder={t('consignments.list.filter.statePlaceholder')} />
                 <Select.Content>
-                  <Select.Item value="all">All States</Select.Item>
-                  <Select.Item value="INITIALIZED">Initialized</Select.Item>
-                  <Select.Item value="IN_PROGRESS">In Progress</Select.Item>
-                  <Select.Item value="FINISHED">Finished</Select.Item>
-                  <Select.Item value="FAILED">Failed</Select.Item>
+                  <Select.Item value="all">{t('consignments.list.filter.allStates')}</Select.Item>
+                  <Select.Item value="INITIALIZED">{t('consignments.list.filter.initialized')}</Select.Item>
+                  <Select.Item value="IN_PROGRESS">{t('consignments.list.filter.inProgress')}</Select.Item>
+                  <Select.Item value="FINISHED">{t('consignments.list.filter.finished')}</Select.Item>
+                  <Select.Item value="FAILED">{t('consignments.list.filter.failed')}</Select.Item>
                 </Select.Content>
               </Select.Root>
               <Select.Root
@@ -158,11 +159,11 @@ export function ConsignmentScreen() {
                   setPage(0)
                 }}
               >
-                <Select.Trigger placeholder="Trade Flow" />
+                <Select.Trigger placeholder={t('consignments.list.filter.tradeFlowPlaceholder')} />
                 <Select.Content>
-                  <Select.Item value="all">All Types</Select.Item>
-                  <Select.Item value="IMPORT">Import</Select.Item>
-                  <Select.Item value="EXPORT">Export</Select.Item>
+                  <Select.Item value="all">{t('consignments.list.filter.allTypes')}</Select.Item>
+                  <Select.Item value="IMPORT">{t('consignments.list.filter.import')}</Select.Item>
+                  <Select.Item value="EXPORT">{t('consignments.list.filter.export')}</Select.Item>
                 </Select.Content>
               </Select.Root>
             </div>
@@ -174,9 +175,9 @@ export function ConsignmentScreen() {
             <Text size="3" color="gray">
               {consignments.length === 0
                 ? role === 'cha'
-                  ? 'No consignments yet.'
-                  : 'No consignments yet. Click "New Consignment" to create your first one.'
-                : 'No consignments match your filters.'}
+                  ? t('consignments.list.empty.cha')
+                  : t('consignments.list.empty.trader')
+                : t('consignments.list.empty.filtered')}
             </Text>
           </div>
         ) : (
@@ -185,17 +186,16 @@ export function ConsignmentScreen() {
               <thead>
                 <tr className="border-b border-border bg-surface">
                   <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    Consignment ID
-                  </th>
-                  {/* HS Code Column removed as per request */}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    Trade Flow
+                    {t('consignments.list.table.id')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    State
+                    {t('consignments.list.table.tradeFlow')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
-                    Created
+                    {t('consignments.list.table.state')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                    {t('consignments.list.table.created')}
                   </th>
                 </tr>
               </thead>
@@ -208,9 +208,20 @@ export function ConsignmentScreen() {
                       className="hover:bg-surface cursor-pointer transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Text size="2" weight="medium" className="text-info-strong font-mono">
-                          {consignment.id}
-                        </Text>
+                        {consignment.name ? (
+                          <div className="flex flex-col">
+                            <Text size="2" weight="bold" className="text-info-strong">
+                              {consignment.name}
+                            </Text>
+                            <Text size="1" color="gray" className="font-mono mt-0.5">
+                              {consignment.id}
+                            </Text>
+                          </div>
+                        ) : (
+                          <Text size="2" weight="medium" className="text-info-strong font-mono">
+                            {consignment.id}
+                          </Text>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">

@@ -1,6 +1,7 @@
 {
   "id": "npqs-pay-certificate-fee:render",
   "type": "PAYMENT",
+  "title": "[NPQS] Pay Phytosanitary Certificate Fee",
   "sections": {
     "workspace": {
       "templateId": "npqs-pay-certificate-fee--select-method-form",

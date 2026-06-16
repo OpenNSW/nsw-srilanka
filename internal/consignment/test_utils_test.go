@@ -13,6 +13,8 @@ import (
 
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
 
 // MockTaskStore implements consignment.TaskStore for testing.
@@ -33,8 +35,8 @@ type MockWM struct {
 	mock.Mock
 }
 
-func (m *MockWM) StartWorkflow(ctx context.Context, ID string, workflowDefinition workflow.WorkflowDefinition, initialWorkflowVariables map[string]any) error {
-	args := m.Called(ctx, ID, workflowDefinition, initialWorkflowVariables)
+func (m *MockWM) StartWorkflow(ctx context.Context, id string, workflowDefinition workflow.WorkflowDefinition, initialWorkflowVariables map[string]any) error {
+	args := m.Called(ctx, id, workflowDefinition, initialWorkflowVariables)
 	return args.Error(0)
 }
 
@@ -56,7 +58,7 @@ func (m *MockWM) GetStatus(ctx context.Context, workflowID string) (*workflow.Wo
 	return args.Get(0).(*workflow.WorkflowInstance), args.Error(1)
 }
 
-// mockLoader is a simple loader for test artifacts
+// mockLoader is a simple loader for test artifacts.
 type mockLoader struct {
 	content map[string][]byte
 }
@@ -66,6 +68,32 @@ func (m *mockLoader) Load(ctx context.Context, path string) ([]byte, error) {
 		return data, nil
 	}
 	return nil, fmt.Errorf("artifact not found at path: %s", path)
+}
+
+// MockUserService implements user.Service for testing.
+type MockUserService struct {
+	mock.Mock
+}
+
+func (m *MockUserService) GetUser(ctx context.Context, id string) (*user.Record, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*user.Record), args.Error(1)
+}
+
+func (m *MockUserService) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle string) (string, error) {
+	args := m.Called(ctx, idpUserID, email, phone, ouID, ouHandle)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockUserService) UpdateUserData(ctx context.Context, id string, data []byte) error {
+	return m.Called(ctx, id, data).Error(0)
+}
+
+func (m *MockUserService) Health(ctx context.Context) error {
+	return m.Called(ctx).Error(0)
 }
 
 func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {

@@ -1,0 +1,7 @@
+-- Created at: 2026-06-15T18:30:00Z
+
+-- @UP
+ALTER TABLE consignments ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+
+-- @DOWN
+ALTER TABLE consignments DROP COLUMN IF EXISTS name;

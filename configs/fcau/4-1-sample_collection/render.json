@@ -1,6 +1,7 @@
 {
   "id": "fcau-sample-collection-flow:render",
   "type": "SAMPLE_COLLECTION",
+  "title": "[FCAU] Submit, Receive and Number Sample",
   "sections": {
     "status_message": {
       "templateId": "fcau-sample-collection--handover-instructions",
@@ -13,9 +14,9 @@
       }
     },
     "officerform": {
-      "templateId": "fcau-sample-collection--reviewer-form",
+      "templateId": "fcau-sample-collection--trader-results",
       "title": "Register Sample & Issue Number",
-      "projector": "FORM",
+      "projector": "MARKDOWN",
       "dataKey": "sample_delivery",
       "visibleWhen": {
         "requireDataKey": "sample_delivery"

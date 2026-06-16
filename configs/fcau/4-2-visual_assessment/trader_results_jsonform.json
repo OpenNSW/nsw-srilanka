@@ -1,0 +1,4 @@
+{
+  "id": "fcau-visual-assessment--trader-results",
+  "template": "### Visual Assessment Results\n\nThe visual inspection of the consignment sample has been completed by the FCAU officer.\n\n* **Outcome**: {{if eq .visual_outcome \"pass\"}}🟢 Pass - Satisfactory{{else if eq .visual_outcome \"fail\"}}🔴 Fail - Unsatisfactory{{else if eq .visual_outcome \"lab_test_required\"}}🟡 Lab Test Required{{else}}{{.visual_outcome}}{{end}}\n* **Comments**: {{if .comments}}{{.comments}}{{else}}*No comments provided.*{{end}}"
+}

@@ -13,7 +13,8 @@
       "task_template_id": "trade-cha-selection--user-input",
       "input_mapping": {},
       "output_mapping": {
-        "cha_company_id": "traderinput.cha_company_id"
+        "cha_company_id": "traderinput.cha_company_id",
+        "consignment_name": "traderinput.consignment_name"
       }
     },
     {

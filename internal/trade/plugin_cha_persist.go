@@ -3,6 +3,7 @@ package trade
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
@@ -65,10 +66,18 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 		return fmt.Errorf("cha_persist: parent workflow id is empty")
 	}
 
+	updates := map[string]any{"cha_company_id": chaCompanyID}
+	if name, ok := ctx.Inputs["consignment_name"].(string); ok && strings.TrimSpace(name) != "" {
+		if len([]rune(name)) > 255 {
+			return fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters")
+		}
+		updates["name"] = name
+	}
+
 	result := p.db.WithContext(ctx.Context).
 		Model(&consignment.Consignment{}).
 		Where("id = ?", consignmentID).
-		Updates(map[string]any{"cha_company_id": chaCompanyID})
+		Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("cha_persist: failed to update consignment %q: %w", consignmentID, result.Error)
 	}
