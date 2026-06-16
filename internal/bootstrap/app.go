@@ -156,13 +156,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	auditClient := audit.NewClient(audit.Config{
-		BaseURL:   cfg.Audit.ServiceURL,
-		AuthToken: cfg.Audit.AuthToken,
-	})
+	auditClient := audit.NewClient(cfg.Audit)
+	audit.InitializeGlobalAudit(auditClient)
 
 	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
-	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService, auditClient)
+	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService)
 
 	pr, stopParentRunner, err := wireParentRunner(temporalClient, tm, consignmentService)
 	if err != nil {

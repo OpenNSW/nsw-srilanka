@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -17,11 +16,10 @@ type Router struct {
 	cs      *Service
 	cha     cha.Service
 	company company.Service
-	audit   *audit.Client
 }
 
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditClient *audit.Client) *Router {
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: auditClient}
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service) *Router {
+	return &Router{cs: cs, cha: chaService, company: companyService}
 }
 
 // HandleCreateConsignment handles POST /api/v1/consignments
@@ -42,27 +40,6 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "failed to create consignment: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	if c.audit != nil {
-		msgBytes, _ := json.Marshal(consignment)
-		c.audit.LogEvent(ctx, &audit.AuditLogRequest{
-			Timestamp:  audit.CurrentTimestamp(),
-			EventType:  "MANAGEMENT_EVENT",
-			Action:     "CREATE",
-			Status:     audit.StatusSuccess,
-			ActorType:  "MEMBER",
-			ActorID:    authCtx.User.ID,
-			TargetType: "RESOURCE",
-			TargetID:   &consignment.ID,
-			Message:    msgBytes,
-			Metadata: map[string]interface{}{
-				"flow":            consignment.Flow,
-				"traderCompanyId": consignment.TraderCompanyID,
-				"chaCompanyId":    consignment.ChaCompanyID,
-			},
-		})
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(consignment); err != nil {
