@@ -83,7 +83,7 @@ export function ConsignmentDetailScreen() {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
           setProvisioning(true)
-          provisionTimerRef.current = setTimeout(() => void fetchConsignment('poll'), delay)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
         } else {
           setProvisioning(false)
         }
@@ -98,7 +98,7 @@ export function ConsignmentDetailScreen() {
         if (mode === 'poll' && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
-          provisionTimerRef.current = setTimeout(() => void fetchConsignment('poll'), delay)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
         } else {
           setProvisioning(false)
           setError('loadFailed')
@@ -112,6 +112,14 @@ export function ConsignmentDetailScreen() {
     },
     [api, consignmentId, clearProvisionTimer],
   )
+
+  // The provisioning poll reschedules itself via setTimeout. Invoke through a
+  // ref to the latest fetchConsignment so a pending timeout never fires a stale
+  // closure, and so fetchConsignment doesn't need to depend on itself.
+  const fetchConsignmentRef = useRef(fetchConsignment)
+  useEffect(() => {
+    fetchConsignmentRef.current = fetchConsignment
+  }, [fetchConsignment])
 
   const handleRefresh = () => {
     setRefreshing(true)

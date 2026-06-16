@@ -39,7 +39,7 @@ export function TaskDetailScreen() {
         setZoneView(zv)
       } catch (err) {
         setError(t('tasks.error.fetchFailed'))
-        console.error(err)
+        console.error('TaskDetailScreen: failed to fetch task:', err)
       } finally {
         if (mode === 'refresh') setRefreshing(false)
         else setLoading(false)
@@ -140,7 +140,7 @@ export function TaskDetailScreen() {
             // Use a local error here rather than the screen-level `error`, which
             // would unmount the layout and discard the user's entered form data.
             setSubmitError(t('tasks.error.submitFailed'))
-            console.error(err)
+            console.error('TaskDetailScreen: failed to submit task step:', err)
           }
         }}
       />
