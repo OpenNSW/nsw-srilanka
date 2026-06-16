@@ -19,6 +19,16 @@ func TestReplay_TradeUpToHSCode(t *testing.T) {
 	runFlow(t, h, "trade_up_to_hscode.json")
 }
 
+// TestReplay_FCAUApplicationApprove drives the FCAU branch through its external
+// agency: submit the application → the EXTERNAL_REVIEW injects to the mock
+// agency → the agency posts an "approve" OGA callback → the application task
+// completes and the workflow advances to the pay-fee step.
+func TestReplay_FCAUApplicationApprove(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "fcau_application_approve.json")
+}
+
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()
@@ -30,6 +40,7 @@ func runFlow(t *testing.T, h *harness, file string) {
 
 	r := replay.New(h.server.URL, h.client)
 	r.Logf = t.Logf
+	r.Agency = h.agency // drives `callback` steps (external-agency flows)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()

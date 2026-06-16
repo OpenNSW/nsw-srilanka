@@ -17,6 +17,7 @@ package replay_e2e
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -71,6 +72,7 @@ type harness struct {
 	server *httptest.Server
 	client *http.Client
 	signed *signedAuth
+	agency *mockAgency
 	userID string
 }
 
@@ -86,10 +88,15 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("config.Load: %v", err)
 	}
 	// Defaults point at gitignored real config files; redirect to the committed
-	// examples (absolute, so they resolve irrespective of cwd).
-	cfg.Server.ServicesConfigPath = filepath.Join(root, "configs", "services.example.json")
+	// example (absolute, so it resolves irrespective of cwd).
 	cfg.Server.PaymentMethodsConfigPath = filepath.Join(root, "configs", "payment_methods.example.json")
 	cfg.Storage.LocalBaseDir = t.TempDir() // keep blob storage out of the repo tree
+
+	// A controllable mock agency stands in for external OGA services; point the
+	// `fcau` service at it so EXTERNAL_REVIEW injects land here. (Unused by flows
+	// that don't reach an external review.)
+	agency := newMockAgency(t)
+	cfg.Server.ServicesConfigPath = writeServicesConfig(t, agency.server.URL)
 
 	userID := "e2e-user-" + uuid.NewString()
 	seedUser(t, cfg, userID, userOUHandle)
@@ -109,10 +116,16 @@ func newHarness(t *testing.T) *harness {
 	srv := httptest.NewServer(app.Server.Handler)
 	t.Cleanup(srv.Close)
 
+	// Now that the app is listening, tell the mock agency where to call back and
+	// give it a real `fcau` bearer for the authenticated callback.
+	agency.callbackBase = srv.URL
+	agency.bearer = signed.tokens["fcau"]
+
 	return &harness{
 		server: srv,
 		client: &http.Client{Transport: signed.transport()},
 		signed: signed,
+		agency: agency,
 		userID: userID,
 	}
 }
@@ -136,4 +149,25 @@ func seedUser(t *testing.T, cfg *config.Config, userID, ouHandle string) {
 	if err != nil {
 		t.Fatalf("seed user_records: %v", err)
 	}
+}
+
+// writeServicesConfig writes a temp remote-services config pointing the `fcau`
+// service at the mock agency, and returns its path.
+func writeServicesConfig(t *testing.T, fcauURL string) string {
+	t.Helper()
+	cfg := map[string]any{
+		"version": "1.0",
+		"services": []map[string]any{
+			{"id": "fcau", "url": fcauURL, "timeout": "30s"},
+		},
+	}
+	raw, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal services config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "services.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write services config: %v", err)
+	}
+	return path
 }

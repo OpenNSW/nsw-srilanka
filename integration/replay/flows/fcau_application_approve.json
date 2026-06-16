@@ -1,0 +1,91 @@
+{
+  "name": "fcau_application_approve",
+  "steps": [
+    {
+      "name": "trader creates consignment",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments",
+        "expectStatus": 201,
+        "extract": { "consignmentId": "id" }
+      }
+    },
+    {
+      "name": "wait for Initialize Consignment task",
+      "wait": { "node": "Initialize Consignment", "state": "IN_PROGRESS", "into": "initTask", "timeout": "45s" }
+    },
+    {
+      "name": "trader initializes consignment (name + CHA)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "body": { "consignment_name": "E2E FCAU Consignment", "cha_company_id": "adam-pvt-ltd" },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for HS-code selection task",
+      "wait": { "node": "Select HS Codes", "state": "IN_PROGRESS", "into": "hsTask", "timeout": "45s" }
+    },
+    {
+      "name": "trader selects the FCAU HS code",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "body": { "hs_codes": ["fcau-health-certificate-reg"] },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for FCAU application task (agency split fired)",
+      "wait": { "node": "[FCAU] Apply for Health Certificate", "state": "IN_PROGRESS", "into": "fcauApp", "timeout": "60s" }
+    },
+    {
+      "name": "trader submits the FCAU application",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{fcauApp}}",
+        "body": {
+          "exporter_name": "ACME Premium Food Exports Ltd.",
+          "exporter_address": "No 18, Galle Road, Colombo 03, Sri Lanka",
+          "consignee_name": "Hamburg Fine Foods Import GMBH",
+          "consignee_address": "Industriestrasse 104, 20457 Hamburg, Germany",
+          "description_of_food": "Premium Organic Coconut Cream, canned (400ml) - 500 Cartons, 5400 kg",
+          "intended_export_date": "2026-07-01",
+          "lc_number": "LC-88392-COL",
+          "container_numbers": "MSCU-849201-9, GATU-102938-2",
+          "vessel_name": "CMA CGM MARCO POLO / V092",
+          "consignment_storage_address": "ACME Cold Storage, Sector 4, Export Zone, Biyagama",
+          "package_batch_weight_details": "Cans in Corrugated Cartons, Batch CC-2026-94, 5400 kg",
+          "ingredients_details": "Organic Coconut Extract (99.8%), Xanthan Gum (0.2%)",
+          "in_house_quality_monitoring": "Daily microbiological sampling and HACCP CCP verification logs.",
+          "analysis_certificates": "s3://e2e/analysis-cert.pdf",
+          "other_declarations": "Non-GMO certified; radiation-free consignment."
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "FCAU agency approves the application (external callback)",
+      "callback": {
+        "taskCode": "fcau_application_review_v1",
+        "content": {
+          "application_review_outcome": "approve",
+          "reference_number": "REF-FCAU-E2E",
+          "sample_inspection_required": false,
+          "lab_test_required": false,
+          "warehouse_inspection_required": false
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for FCAU pay-fee task (application approved & advanced)",
+      "wait": { "node": "[FCAU] Pay Application Fee", "state": "IN_PROGRESS", "timeout": "60s" }
+    }
+  ]
+}

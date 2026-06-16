@@ -124,11 +124,29 @@ Some tasks are `EXTERNAL_REVIEW`: the system POSTs an *inject* to an external
 agency and parks the workflow until the agency calls back to `/api/v1/tasks`
 with an OGA envelope (`{task_id, consignment_id, payload:{action, content}}`,
 unwrapped by `unwrapOGACallback` in
-[internal/tasks/http_handler.go](../../internal/tasks/http_handler.go)). The
-engine models this with the `callback` step + the `replay.Agency` seam: a
-controllable mock agency receives the inject (pointed at it via the `fcau`
-service URL in a services config) and posts the callback as the `fcau` actor.
-The mock agency and the first FCAU flow are a planned follow-up.
+[internal/tasks/http_handler.go](../../internal/tasks/http_handler.go)).
+
+The harness models this with a **controllable mock agency**
+([mockagency_test.go](mockagency_test.go)) wired into every harness:
+- It serves `POST /api/v1/inject` and records each inject. The harness writes a
+  temp services config pointing the `fcau` service at it, so EXTERNAL_REVIEW
+  injects land here.
+- The engine's `callback` step calls `Agency.Respond(taskCode, content, …)`: the
+  mock waits for a matching inject, then POSTs the OGA envelope back to the app's
+  `/api/v1/tasks` with a **real `fcau` bearer** (the same minted SERVICE token),
+  so the production `withAuth`/`withScope` validate it. It uses the
+  harness-provided callback base (the in-process app), not the inject's
+  `serviceUrl` (which points at `cfg.Server.ServiceURL`).
+
+See [flows/fcau_application_approve.json](flows/fcau_application_approve.json) for
+a worked example: submit the application → the inject is received → an `approve`
+callback advances the workflow to the pay-fee step.
+
+> Authoring tip: a USER_INPUT task's submission must include **every field its
+> node `output_mapping` references without a `?` suffix** (a `?` marks the field
+> optional). E.g. the FCAU application maps `other_declarations` (no `?`), so the
+> submission must include it even though the JSONForms schema lists it as
+> optional — otherwise the task is woken but never completes.
 
 ## Troubleshooting
 
