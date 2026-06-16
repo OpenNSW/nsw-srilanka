@@ -101,8 +101,8 @@ func Load() (*Config, error) {
 			Namespace: getEnvOrDefault("TEMPORAL_NAMESPACE", "default"),
 		},
 		Audit: audit.Config{
-			BaseURL:   getEnvOrDefault("ARGUS_SERVICE_URL", ""),
-			AuthToken: os.Getenv("ARGUS_API_KEY"),
+			BaseURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
+			APIKey:  os.Getenv("ARGUS_API_KEY"),
 		},
 	}
 
