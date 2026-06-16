@@ -1,0 +1,4 @@
+{
+  "id": "cda-pay-app-fee--payment-details-markdown",
+  "template": "### Application Fee Details\n\nPlease use the following payment reference number to make the payment via GovPay option in your banking app.\n\n* **Reference Number**: `{{.reference_number}}`\n* **Amount**: **{{.amount}} {{.currency}}**"
+}

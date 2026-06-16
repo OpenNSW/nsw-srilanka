@@ -1,0 +1,4 @@
+{
+  "id": "cda-review-result--trader-results",
+  "template": "### Review Result & Certificate Issuance Decision\n\nThe assessment of your Export Coconut Certificate Application has been completed by the CDA Officer.\n\n* **Review Outcome**: {{if eq .review_outcome \"approve\"}}🟢 Approved & Issued{{else if eq .review_outcome \"reject\"}}🔴 Rejected{{else if eq .review_outcome \"needs_more_info\"}}🟡 Needs More Information{{else}}{{.review_outcome}}{{end}}\n{{if eq .review_outcome \"approve\"}}\n* **Certificate ID**: `{{.certificate_id}}`\n{{if .certificate_file}}\n[📄 Download Issued Certificate (PDF)]({{.certificate_file}})\n{{end}}\n{{else if eq .review_outcome \"reject\"}}\n* **Rejection Reason / Comments**: {{.rejection_reason}}\n{{else if eq .review_outcome \"needs_more_info\"}}\n* **Comments / Deficiencies**: {{.rejection_reason}}\n{{end}}"
+}

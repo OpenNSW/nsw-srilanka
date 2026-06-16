@@ -1,0 +1,4 @@
+{
+  "id": "cda-review-result--trader-instructions",
+  "template": "### Awaiting Review & Certificate Decision\n\nPlease wait for the CDA Officer to review the application and issue the certificate decision.\n\n* **CUSDEC Reference**: `{{.reference_number}}`\n\nThis page will automatically update once the officer review is complete."
+}

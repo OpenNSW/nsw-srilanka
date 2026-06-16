@@ -1,7 +1,19 @@
 {
   "id": "cda-apply-coconut-cert-flow:render",
   "type": "APPLICATION",
+  "title": "[CDA] Submit Application",
   "sections": {
+    "instructions": {
+      "templateId": "cda-apply-coconut-cert--submitted-message",
+      "title": "Submission Status",
+      "projector": "MARKDOWN",
+      "dataKey": "userform",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    },
     "workspace": {
       "templateId": "cda-apply-coconut-cert--user-form",
       "title": "CDA Export Coconut Certificate Application",

@@ -1,24 +1,27 @@
 {
   "id": "cda-review-result-flow:render",
   "type": "REVIEW",
+  "title": "[CDA] Officer Review & Certificate Issuance",
   "sections": {
+    "status_message": {
+      "templateId": "cda-review-result--trader-instructions",
+      "title": "Review Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER",
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    },
     "workspace": {
-      "templateId": "cda-review-result--officer-form",
-      "title": "CDA Officer Review & Certificate Issuance",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Submit Review & Issue Certificate",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+      "templateId": "cda-review-result--trader-results",
+      "title": "Review Outcome",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
     }
   }
 }

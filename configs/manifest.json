@@ -92,6 +92,13 @@
       "path": "trade/2-hscode_selection/userinput_jsonform.json"
     },
     {
+      "id": "trade-hscode-selection--summary-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "trade/2-hscode_selection/summary_markdown.json"
+    },
+    {
       "id": "trade-hscode-selection-flow",
       "kind": "workflow",
       "version": "",
@@ -1492,6 +1499,13 @@
       "path": "cda/1-application/userinput_jsonform.json"
     },
     {
+      "id": "cda-apply-coconut-cert--submitted-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/submitted_message_jsonform.json"
+    },
+    {
       "id": "cda-apply-coconut-cert-flow",
       "kind": "workflow",
       "version": "",
@@ -1506,11 +1520,11 @@
       "path": "cda/1-application/task_template.json"
     },
     {
-      "id": "cda-pay-app-fee--instructions-wrapper",
+      "id": "cda-pay-app-fee--payment-details-markdown",
       "kind": "generic_template",
       "version": "",
       "loader": "local",
-      "path": "cda/2-payment_app_fee/instructions_wrapper_jsonform.json"
+      "path": "cda/2-payment_app_fee/payment_details_markdown.json"
     },
     {
       "id": "cda-pay-app-fee--payment",
@@ -1518,13 +1532,6 @@
       "version": "",
       "loader": "local",
       "path": "cda/2-payment_app_fee/payment.json"
-    },
-    {
-      "id": "cda-pay-app-fee--payment-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "cda/2-payment_app_fee/payment_jsonform.json"
     },
     {
       "id": "cda-pay-app-fee-flow:render",
@@ -1581,6 +1588,20 @@
       "version": "",
       "loader": "local",
       "path": "cda/3-review_result/officerinput_jsonform.json"
+    },
+    {
+      "id": "cda-review-result--trader-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/trader_instructions_jsonform.json"
+    },
+    {
+      "id": "cda-review-result--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/3-review_result/trader_results_jsonform.json"
     },
     {
       "id": "cda-review-result--officer-review",

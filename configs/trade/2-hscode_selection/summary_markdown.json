@@ -1,0 +1,4 @@
+{
+  "id": "trade-hscode-selection--summary-markdown",
+  "template": "### Selected Items Summary\n\nThe following items have been selected for processing:\n\n{{range .hs_codes}}\n- {{if eq . \"fcau-health-certificate-reg\"}}FCAU Health Certificate (FCAU Flow){{else if eq . \"npqs-export-phytosanitary-reg\"}}NPQS Phyto Certificate (NPQS Flow){{else if eq . \"cda-certificate-reg\"}}CDA Coconut Certificate (CDA Flow){{else}}{{.}}{{end}}\n{{end}}"
+}

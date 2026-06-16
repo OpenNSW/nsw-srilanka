@@ -3,11 +3,27 @@
   "type": "APPLICATION",
   "title": "[Trade] Select HS Codes",
   "sections": {
+    "instructions": {
+      "templateId": "trade-hscode-selection--summary-markdown",
+      "title": "Selected HS Codes Summary",
+      "projector": "MARKDOWN",
+      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    },
     "workspace": {
       "templateId": "trade-hscode-selection--form",
       "title": "Select HS Codes",
       "projector": "FORM",
       "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
       "handles": [
         {
           "command": "submit",
