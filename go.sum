@@ -1,7 +1,5 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/core v0.0.0-20260615070209-c67a399229c5 h1:um2eyHe010TjU8P1NWt20KuV/m15Lw55pkPK1hMTo70=
-github.com/OpenNSW/core v0.0.0-20260615070209-c67a399229c5/go.mod h1:GXzKRNvmBgCWVc37ptewmoHGXqZ3D5JoJMzCRQxyBco=
 github.com/OpenNSW/core v0.0.0-20260615113605-81d30de10cb4 h1:JBc4Tj/8tWRV6lMSF5ynqvtdf5Chjky0snrFegTKXPQ=
 github.com/OpenNSW/core v0.0.0-20260615113605-81d30de10cb4/go.mod h1:GXzKRNvmBgCWVc37ptewmoHGXqZ3D5JoJMzCRQxyBco=
 github.com/aws/aws-sdk-go-v2 v1.42.0 h1:XvXMJTkFQtpBKIWZnmr9ZEOc2InWM2yldjXEJ/bymhA=
