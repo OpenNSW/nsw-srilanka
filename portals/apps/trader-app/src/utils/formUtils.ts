@@ -62,6 +62,9 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       if (property.format === 'date') {
         return new Date().toISOString().split('T')[0]
       }
+      if (property.format === 'time') {
+        return '10:00:00'
+      }
       if (property.format === 'date-time') {
         return new Date().toISOString()
       }
