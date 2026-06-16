@@ -19,9 +19,9 @@
       },
       "output_mapping": {
         "review_outcome": "reviewerform.review_outcome",
-        "rejection_reason": "reviewerform.rejection_reason",
-        "certificate_id": "reviewerform.certificate_id",
-        "certificate_file": "reviewerform.certificate_file"
+        "rejection_reason?": "reviewerform.rejection_reason",
+        "certificate_id?": "reviewerform.certificate_id",
+        "certificate_file?": "reviewerform.certificate_file"
       }
     },
     {
