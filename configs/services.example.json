@@ -12,18 +12,13 @@
       "timeout": "30s"
     },
     {
-      "id": "ird",
+      "id": "cda",
       "url": "http://localhost:8083",
       "timeout": "30s"
     },
     {
-      "id": "cda",
-      "url": "http://localhost:8084",
-      "timeout": "30s"
-    },
-    {
       "id": "slpa",
-      "url": "http://localhost:8085",
+      "url": "http://localhost:8084",
       "timeout": "30s"
     },
     {

@@ -12,18 +12,13 @@
       "timeout": "30s"
     },
     {
-      "id": "ird",
+      "id": "cda",
       "url": "http://host.docker.internal:8083",
       "timeout": "30s"
     },
     {
-      "id": "cda",
-      "url": "http://host.docker.internal:8084",
-      "timeout": "30s"
-    },
-    {
       "id": "slpa",
-      "url": "http://host.docker.internal:8085",
+      "url": "http://host.docker.internal:8084",
       "timeout": "30s"
     },
     {
