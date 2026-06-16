@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { DashboardIcon, FileTextIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
+import { DashboardIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
 import { type ReactNode, useEffect, useRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRole, type Role } from '../../services/RoleContext'
@@ -40,12 +40,6 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
   const navStructure = useMemo(
     (): NavItemOrGroup[] => [
       { name: t('sidebar.nav.consignments'), path: '/consignments', icon: <DashboardIcon className="w-5 h-5" /> },
-      {
-        name: t('sidebar.nav.verifiedDocs'),
-        path: '/pre-consignments',
-        icon: <FileTextIcon className="w-5 h-5" />,
-        roles: ['trader'],
-      },
     ],
     [t],
   )
