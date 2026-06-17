@@ -11,7 +11,9 @@
       "id": "applicant_submission",
       "type": "TASK",
       "task_template_id": "cda-apply-coconut-cert--user-input",
-      "input_mapping": {},
+      "input_mapping": {
+        "rejection_reason?": "rejection_reason"
+      },
       "output_mapping": {
         "exporter_details": "userform.exporter_details",
         "cusdec_number": "userform.cusdec_number",
@@ -34,6 +36,23 @@
       }
     },
     {
+      "id": "officer_verification",
+      "type": "TASK",
+      "task_template_id": "cda-apply-coconut-cert--officer-verification",
+      "input_mapping": {
+        "userform": "userform"
+      },
+      "output_mapping": {
+        "verification_outcome": "verificationform.verification_outcome",
+        "rejection_reason?": "rejection_reason"
+      }
+    },
+    {
+      "id": "verification_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
       "id": "end",
       "type": "END"
     }
@@ -47,7 +66,24 @@
     {
       "id": "e2",
       "source_id": "applicant_submission",
-      "target_id": "end"
+      "target_id": "officer_verification"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_verification",
+      "target_id": "verification_gateway"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "verification_gateway",
+      "target_id": "applicant_submission",
+      "condition": "verificationform.verification_outcome == 'needs_more_info'"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "verification_gateway",
+      "target_id": "end",
+      "condition": "verificationform.verification_outcome == 'approve'"
     }
   ]
 }

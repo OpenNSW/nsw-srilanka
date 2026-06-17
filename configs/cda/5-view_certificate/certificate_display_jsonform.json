@@ -1,0 +1,4 @@
+{
+  "id": "cda-view-new-certificate--display",
+  "template": "### Revised Coconut Export Certificate Issued\n\nThe CDA Officer has approved your lot adjustment request and issued a revised certificate:\n\n* **Revised Certificate ID**: `{{.certificate_id}}`\n* **Certificate File**: [📄 Download Revised Certificate (PDF)]({{.certificate_file}})"
+}

@@ -1,0 +1,67 @@
+{
+  "id": "cda-lot-adjustment-flow:render",
+  "type": "APPLICATION",
+  "title": "[CDA] Lot Adjustment Request",
+  "sections": {
+    "status_message": {
+      "templateId": "cda-lot-adjustment-officer--trader-instructions",
+      "title": "Review Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    },
+    "instructions": {
+      "templateId": "cda-lot-adjustment-trader--feedback",
+      "title": "Officer Feedback & Deficiencies",
+      "projector": "MARKDOWN",
+      "dataKey": "adjustment_feedback",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ],
+        "requireDataKey": "adjustment_feedback"
+      }
+    },
+    "certificate_display": {
+      "templateId": "cda-lot-adjustment-trader--certificate-display",
+      "title": "Currently Issued Certificate",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ],
+        "requireDataKey": "certificate_file"
+      }
+    },
+    "workspace": {
+      "templateId": "cda-lot-adjustment-trader--user-form",
+      "title": "CDA Export Certificate Lot Adjustment",
+      "projector": "FORM",
+      "dataKey": "adjustmentform",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Decision",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

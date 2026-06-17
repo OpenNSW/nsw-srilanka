@@ -1,0 +1,4 @@
+{
+  "id": "cda-lot-adjustment-trader--feedback",
+  "template": "### Officer Feedback on Lot Adjustment\n\nThe officer has returned your request for further adjustment:\n\n> {{.}}"
+}

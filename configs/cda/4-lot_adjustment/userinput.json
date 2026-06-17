@@ -1,0 +1,8 @@
+{
+  "id": "cda-lot-adjustment-trader--user-input",
+  "task_type": "USER_INPUT",
+  "output_namespace": "adjustmentform",
+  "plugin_properties": {
+    "user_jsonforms_id": "cda-lot-adjustment-trader--user-form"
+  }
+}

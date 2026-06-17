@@ -1,0 +1,4 @@
+{
+  "id": "cda-lot-adjustment-officer--trader-instructions",
+  "template": "### Awaiting Lot Adjustment Review\n\nPlease wait for the CDA Officer to review your lot adjustment request and upload the updated certificate.\n\n* **CUSDEC Reference**: `{{.reference_number}}`\n* **Status**: Awaiting Officer Review\n\nThis page will automatically update once the officer review is complete."
+}

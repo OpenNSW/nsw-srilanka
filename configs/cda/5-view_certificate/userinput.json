@@ -1,0 +1,8 @@
+{
+  "id": "cda-view-new-certificate--user-input",
+  "task_type": "USER_INPUT",
+  "output_namespace": "viewcertform",
+  "plugin_properties": {
+    "user_jsonforms_id": "cda-view-new-certificate--user-form"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "id": "cda-apply-coconut-cert--verified-message",
+  "template": "### Application Verified\n\nYour CDA Export Coconut Certificate Application has been verified and approved by the officer. Please proceed to the next step to complete the payment.\n\n* **CUSDEC Reference**: `{{.cusdec_number}}`\n* **Status**: Verified & Approved"
+}

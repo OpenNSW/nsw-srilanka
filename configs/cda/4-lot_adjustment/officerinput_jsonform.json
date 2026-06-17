@@ -1,0 +1,95 @@
+{
+  "id": "cda-lot-adjustment-officer--review-form",
+  "title": "CDA Officer Lot Adjustment Review",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "adjustment_outcome": {
+        "type": "string",
+        "title": "Assessment Outcome",
+        "oneOf": [
+          {
+            "const": "approve",
+            "title": "Approve Adjustment & Upload New Certificate"
+          },
+          {
+            "const": "needs_more_info",
+            "title": "Needs More Information (Send back to applicant)"
+          }
+        ],
+        "default": "approve",
+        "example": "approve"
+      },
+      "new_certificate_file": {
+        "type": "string",
+        "format": "file",
+        "title": "New Digital Certificate File (PDF)",
+        "example": "https://cda.gov.lk/certs/CDA-EXP-2026-08492-REV1.pdf"
+      },
+      "adjustment_feedback": {
+        "type": "string",
+        "title": "Officer Comments / Feedback / Rejection Reasons",
+        "example": "Please clarify which specific bags are being excluded."
+      }
+    },
+    "required": [
+      "adjustment_outcome"
+    ],
+    "if": {
+      "properties": {
+        "adjustment_outcome": { "const": "approve" }
+      },
+      "required": [
+        "adjustment_outcome"
+      ]
+    },
+    "then": {
+      "required": [
+        "new_certificate_file"
+      ]
+    },
+    "else": {
+      "required": [
+        "adjustment_feedback"
+      ]
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/adjustment_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/new_certificate_file",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/adjustment_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/adjustment_feedback",
+        "options": {
+          "multiLine": true
+        },
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/adjustment_outcome",
+            "schema": {
+              "const": "needs_more_info"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

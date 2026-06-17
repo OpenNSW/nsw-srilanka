@@ -1,0 +1,94 @@
+{
+  "id": "cda-lot-adjustment-flow",
+  "name": "CDA Lot Adjustment Sub-Workflow",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "trader_request",
+      "type": "TASK",
+      "task_template_id": "cda-lot-adjustment-trader--user-input",
+      "input_mapping": {
+        "certificate_id": "certificate_id",
+        "certificate_file": "certificate_file",
+        "adjustment_feedback?": "adjustment_feedback"
+      },
+      "output_mapping": {
+        "adjustment_choice": "adjustment_choice",
+        "lots_to_remove?": "lots_to_remove"
+      }
+    },
+    {
+      "id": "choice_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "cda-lot-adjustment-officer--review",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "lots_to_remove": "lots_to_remove"
+      },
+      "output_mapping": {
+        "adjustment_outcome": "adjustment_outcome",
+        "new_certificate_file?": "certificate_file",
+        "adjustment_feedback?": "adjustment_feedback"
+      }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "trader_request"
+    },
+    {
+      "id": "e2",
+      "source_id": "trader_request",
+      "target_id": "choice_gateway"
+    },
+    {
+      "id": "e_complete",
+      "source_id": "choice_gateway",
+      "target_id": "end",
+      "condition": "adjustment_choice == 'complete_application'"
+    },
+    {
+      "id": "e_adjust",
+      "source_id": "choice_gateway",
+      "target_id": "officer_review",
+      "condition": "adjustment_choice == 'request_lot_adjustment'"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_review",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "trader_request",
+      "condition": "adjustment_outcome == 'needs_more_info'"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "adjustment_outcome == 'approve'"
+    }
+  ]
+}

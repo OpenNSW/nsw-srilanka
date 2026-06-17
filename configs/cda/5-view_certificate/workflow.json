@@ -1,0 +1,37 @@
+{
+  "id": "cda-view-new-certificate-flow",
+  "name": "View New Certificate",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "view_cert",
+      "type": "TASK",
+      "task_template_id": "cda-view-new-certificate--user-input",
+      "input_mapping": {
+        "certificate_id": "certificate_id",
+        "certificate_file": "certificate_file"
+      },
+      "output_mapping": {}
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "view_cert"
+    },
+    {
+      "id": "e2",
+      "source_id": "view_cert",
+      "target_id": "end"
+    }
+  ]
+}

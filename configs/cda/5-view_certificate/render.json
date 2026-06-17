@@ -1,0 +1,45 @@
+{
+  "id": "cda-view-new-certificate-flow:render",
+  "type": "APPLICATION",
+  "title": "[CDA] View Revised Certificate",
+  "sections": {
+    "certificate_display": {
+      "templateId": "cda-view-new-certificate--display",
+      "title": "Revised Certificate",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ],
+        "requireDataKey": "certificate_file"
+      }
+    },
+    "done_button": {
+      "templateId": "cda-view-new-certificate--user-form",
+      "title": "Complete Application",
+      "projector": "FORM",
+      "dataKey": "viewcertform",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Done",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

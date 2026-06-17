@@ -3,9 +3,9 @@
   "type": "APPLICATION",
   "title": "[CDA] Submit Application",
   "sections": {
-    "instructions": {
-      "templateId": "cda-apply-coconut-cert--submitted-message",
-      "title": "Submission Status",
+    "verified_message": {
+      "templateId": "cda-apply-coconut-cert--verified-message",
+      "title": "Verification Status",
       "projector": "MARKDOWN",
       "dataKey": "userform",
       "visibleWhen": {
@@ -14,7 +14,27 @@
         ]
       }
     },
-    "workspace": {
+    "status_message": {
+      "templateId": "cda-apply-coconut-cert--submitted-message",
+      "title": "Submission Status",
+      "projector": "MARKDOWN",
+      "dataKey": "userform",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    },
+    "feedback": {
+      "templateId": "cda-apply-coconut-cert--feedback",
+      "title": "Officer Feedback & Deficiencies",
+      "projector": "MARKDOWN",
+      "dataKey": "rejection_reason",
+      "visibleWhen": {
+        "requireDataKey": "rejection_reason"
+      }
+    },
+    "user_form": {
       "templateId": "cda-apply-coconut-cert--user-form",
       "title": "CDA Export Coconut Certificate Application",
       "projector": "FORM",
@@ -26,15 +46,6 @@
           "element": "primary_action"
         }
       ]
-    },
-    "feedback": {
-      "templateId": "cda-apply-coconut-cert--feedback",
-      "title": "Officer Feedback & Deficiencies",
-      "projector": "MARKDOWN",
-      "dataKey": "rejection_reason",
-      "visibleWhen": {
-        "requireDataKey": "rejection_reason"
-      }
     }
   },
   "states": {

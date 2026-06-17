@@ -1,0 +1,11 @@
+{
+  "id": "cda-apply-coconut-cert--officer-verification",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "verificationform",
+  "plugin_properties": {
+    "officer_jsonforms_id": "cda-apply-coconut-cert--officer-verification-form",
+    "service_id": "cda",
+    "path": "/api/v1/inject",
+    "task_code": "cda_officer_verification_v1"
+  }
+}

@@ -1,54 +1,14 @@
 {
   "id": "cda-review-result--officer-form",
-  "title": "CDA Officer Review & Certificate Issuance",
+  "title": "CDA Officer Certificate Issuance",
   "schema": {
     "type": "object",
     "properties": {
-      "selected_method": {
-        "type": "string",
-        "title": "Selected Payment Method",
-        "oneOf": [
-          {
-            "const": "lankapay",
-            "title": "Credit/Debit Card (LankaPay)"
-          },
-          {
-            "const": "govpay",
-            "title": "GovPay (Bank/ATM/Online)"
-          }
-        ],
-        "readOnly": true
-      },
-      "payment_receipt_url": {
-        "type": "string",
-        "format": "file",
-        "title": "Payment Receipt",
-        "readOnly": true
-      },
       "review_outcome": {
         "type": "string",
         "title": "Review Assessment Outcome",
-        "oneOf": [
-          {
-            "const": "approve",
-            "title": "Approve & Issue Certificate"
-          },
-          {
-            "const": "reject",
-            "title": "Reject Application"
-          },
-          {
-            "const": "needs_more_info",
-            "title": "Needs More Information (Send back to applicant)"
-          }
-        ],
         "default": "approve",
         "example": "approve"
-      },
-      "rejection_reason": {
-        "type": "string",
-        "title": "Comments / Feedback / Rejection Reason / Deficiencies",
-        "example": "All consignment specifications and quality files verified successfully."
       },
       "certificate_id": {
         "type": "string",
@@ -60,103 +20,28 @@
         "format": "file",
         "title": "Digital Coconut Export Certificate File (PDF)",
         "example": "https://cda.gov.lk/certs/CDA-EXP-2026-08492.pdf"
-      },
-      "authorized_signature": {
-        "type": "string",
-        "title": "Authorized Officer Signature",
-        "example": "MR. K. SILVA - SENIOR COCONUT QUALITY ASSURANCE OFFICER"
       }
     },
     "required": [
-      "review_outcome"
-    ],
-    "if": {
-      "properties": {
-        "review_outcome": { "enum": ["reject", "needs_more_info"] }
-      }
-    },
-    "then": {
-      "required": [
-        "rejection_reason"
-      ]
-    }
+      "review_outcome",
+      "certificate_id",
+      "certificate_file"
+    ]
   },
   "uiSchema": {
     "type": "VerticalLayout",
     "elements": [
       {
         "type": "Group",
-        "label": "Payment Verification",
+        "label": "Certificate Issuance Details",
         "elements": [
           {
             "type": "Control",
-            "scope": "#/properties/selected_method"
+            "scope": "#/properties/certificate_id"
           },
           {
             "type": "Control",
-            "scope": "#/properties/payment_receipt_url",
-            "rule": {
-              "effect": "SHOW",
-              "condition": {
-                "scope": "#/properties/selected_method",
-                "schema": {
-                  "const": "govpay"
-                }
-              }
-            }
-          }
-        ]
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/review_outcome"
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/rejection_reason"
-      },
-      {
-        "type": "Group",
-        "label": "Certificate Issuance details (Approve only)",
-        "elements": [
-          {
-            "type": "Control",
-            "scope": "#/properties/certificate_id",
-            "rule": {
-              "effect": "SHOW",
-              "condition": {
-                "scope": "#/properties/review_outcome",
-                "schema": {
-                  "const": "approve"
-                }
-              }
-            }
-          },
-          {
-            "type": "Control",
-            "scope": "#/properties/certificate_file",
-            "rule": {
-              "effect": "SHOW",
-              "condition": {
-                "scope": "#/properties/review_outcome",
-                "schema": {
-                  "const": "approve"
-                }
-              }
-            }
-          },
-          {
-            "type": "Control",
-            "scope": "#/properties/authorized_signature",
-            "rule": {
-              "effect": "SHOW",
-              "condition": {
-                "scope": "#/properties/review_outcome",
-                "schema": {
-                  "const": "approve"
-                }
-              }
-            }
+            "scope": "#/properties/certificate_file"
           }
         ]
       }

@@ -1,0 +1,6 @@
+{
+  "id": "cda-lot-adjustment-flow",
+  "type": "APPLICATION",
+  "workflow_id": "cda-lot-adjustment-flow",
+  "render_config_id": "cda-lot-adjustment-flow:render"
+}

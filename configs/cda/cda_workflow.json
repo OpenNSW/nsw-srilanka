@@ -14,9 +14,7 @@
       "name": "[CDA 1.0] Submit Application",
       "task_template_id": "cda-apply-coconut-cert-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {
-        "cda.rejection_reason?": "rejection_reason"
-      },
+      "input_mapping": {},
       "output_mapping": {
         "userform.cusdec_number": "cda.reference_number",
         "userform": "cda.userform"
@@ -58,26 +56,50 @@
       },
       "output_mapping": {
         "reviewerform.review_outcome": "cda.review_outcome",
-        "reviewerform.rejection_reason?": "cda.rejection_reason",
         "reviewerform.certificate_id?": "cda.certificate_id",
         "reviewerform.certificate_file?": "cda.certificate_file"
       }
     },
     {
-      "id": "cda_review_gateway",
+      "id": "cda_4_0_lot_adjustment",
+      "type": "TASK",
+      "name": "[CDA 4.0] Lot Adjustment",
+      "task_template_id": "cda-lot-adjustment-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "cda.reference_number": "reference_number",
+        "cda.certificate_id": "certificate_id",
+        "cda.certificate_file": "certificate_file",
+        "cda.adjustment_feedback?": "adjustment_feedback"
+      },
+      "output_mapping": {
+        "adjustment_choice": "cda.adjustment_choice",
+        "certificate_file?": "cda.certificate_file"
+      }
+    },
+    {
+      "id": "cda_check_adjustment_completion",
       "type": "GATEWAY",
       "gateway_type": "EXCLUSIVE_SPLIT",
-      "name": "Evaluate Review Outcome"
+      "name": "Check Adjustment Completion"
+    },
+    {
+      "id": "cda_5_0_view_new_certificate",
+      "type": "TASK",
+      "name": "[CDA 5.0] View Revised Certificate",
+      "task_template_id": "cda-view-new-certificate-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "cda.reference_number": "reference_number",
+        "cda.certificate_id": "certificate_id",
+        "cda.certificate_file": "certificate_file"
+      },
+      "output_mapping": {}
     },
     {
       "id": "end_success",
       "type": "END",
       "name": "Certificate Issued Successfully"
-    },
-    {
-      "id": "end_failed",
-      "type": "END",
-      "name": "Application Rejected"
     }
   ],
   "edges": [
@@ -109,27 +131,31 @@
       "target_id": "cda_3_0_review"
     },
     {
-      "id": "e_review_to_gw",
+      "id": "e_review_to_lot_adj",
       "source_id": "cda_3_0_review",
-      "target_id": "cda_review_gateway"
+      "target_id": "cda_4_0_lot_adjustment"
     },
     {
-      "id": "e_approve",
-      "source_id": "cda_review_gateway",
+      "id": "e_lot_adj_to_gw",
+      "source_id": "cda_4_0_lot_adjustment",
+      "target_id": "cda_check_adjustment_completion"
+    },
+    {
+      "id": "e_complete_app",
+      "source_id": "cda_check_adjustment_completion",
       "target_id": "end_success",
-      "condition": "cda.review_outcome == 'approve'"
+      "condition": "cda.adjustment_choice == 'complete_application'"
     },
     {
-      "id": "e_reject",
-      "source_id": "cda_review_gateway",
-      "target_id": "end_failed",
-      "condition": "cda.review_outcome == 'reject'"
+      "id": "e_show_new_cert",
+      "source_id": "cda_check_adjustment_completion",
+      "target_id": "cda_5_0_view_new_certificate",
+      "condition": "cda.adjustment_choice == 'request_lot_adjustment'"
     },
     {
-      "id": "e_needs_info",
-      "source_id": "cda_review_gateway",
-      "target_id": "cda_1_0_apply",
-      "condition": "cda.review_outcome == 'needs_more_info'"
+      "id": "e_view_cert_to_success",
+      "source_id": "cda_5_0_view_new_certificate",
+      "target_id": "end_success"
     }
   ]
 }

@@ -1,0 +1,12 @@
+{
+  "id": "cda-lot-adjustment-officer--review",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "adjustmentreviewerform",
+  "plugin_properties": {
+    "officer_jsonforms_id": "cda-lot-adjustment-officer--review-form",
+    "reviewer_jsonforms_id": "cda-lot-adjustment-officer--review-form",
+    "service_id": "cda",
+    "path": "/api/v1/inject",
+    "task_code": "cda_lot_adjustment_review_v1"
+  }
+}

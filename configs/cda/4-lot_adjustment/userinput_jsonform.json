@@ -1,0 +1,67 @@
+{
+  "id": "cda-lot-adjustment-trader--user-form",
+  "title": "CDA Export Certificate Lot Adjustment",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "adjustment_choice": {
+        "type": "string",
+        "title": "Select Action",
+        "oneOf": [
+          {
+            "const": "complete_application",
+            "title": "Complete Application & Finish"
+          },
+          {
+            "const": "request_lot_adjustment",
+            "title": "Request Lot Adjustment (Remove specific lots)"
+          }
+        ],
+        "default": "complete_application"
+      },
+      "lots_to_remove": {
+        "type": "string",
+        "title": "Lot Numbers / Details to Remove",
+        "description": "Please list the lot numbers that cannot fit in the container and should be removed from the certificate."
+      }
+    },
+    "required": [
+      "adjustment_choice"
+    ],
+    "if": {
+      "properties": {
+        "adjustment_choice": { "const": "request_lot_adjustment" }
+      }
+    },
+    "then": {
+      "required": [
+        "lots_to_remove"
+      ]
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/adjustment_choice"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/lots_to_remove",
+        "options": {
+          "multiLine": true
+        },
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/adjustment_choice",
+            "schema": {
+              "const": "request_lot_adjustment"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

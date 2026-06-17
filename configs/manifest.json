@@ -1513,6 +1513,27 @@
       "path": "cda/1-application/feedback_jsonform.json"
     },
     {
+      "id": "cda-apply-coconut-cert--verified-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/verified_message_jsonform.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert--officer-verification",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/officer_verification.json"
+    },
+    {
+      "id": "cda-apply-coconut-cert--officer-verification-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/officer_verification_jsonform.json"
+    },
+    {
       "id": "cda-apply-coconut-cert-flow",
       "kind": "workflow",
       "version": "",
@@ -1630,6 +1651,118 @@
       "version": "",
       "loader": "local",
       "path": "cda/3-review_result/task_template.json"
+    },
+    {
+      "id": "cda-lot-adjustment-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/render.json"
+    },
+    {
+      "id": "cda-lot-adjustment-trader--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/userinput.json"
+    },
+    {
+      "id": "cda-lot-adjustment-trader--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/userinput_jsonform.json"
+    },
+    {
+      "id": "cda-lot-adjustment-trader--feedback",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/feedback_jsonform.json"
+    },
+    {
+      "id": "cda-lot-adjustment-trader--certificate-display",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/certificate_display_jsonform.json"
+    },
+    {
+      "id": "cda-lot-adjustment-officer--review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/officerinput_jsonform.json"
+    },
+    {
+      "id": "cda-lot-adjustment-officer--trader-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/trader_instructions_jsonform.json"
+    },
+    {
+      "id": "cda-lot-adjustment-officer--review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/officerinput.json"
+    },
+    {
+      "id": "cda-lot-adjustment-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/workflow.json"
+    },
+    {
+      "id": "cda-lot-adjustment-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/task_template.json"
+    },
+    {
+      "id": "cda-view-new-certificate-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/render.json"
+    },
+    {
+      "id": "cda-view-new-certificate--display",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/certificate_display_jsonform.json"
+    },
+    {
+      "id": "cda-view-new-certificate--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/userinput_jsonform.json"
+    },
+    {
+      "id": "cda-view-new-certificate--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/userinput.json"
+    },
+    {
+      "id": "cda-view-new-certificate-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/workflow.json"
+    },
+    {
+      "id": "cda-view-new-certificate-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/task_template.json"
     },
     {
       "id": "cda-certificate-reg",

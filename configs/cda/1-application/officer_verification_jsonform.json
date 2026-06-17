@@ -1,0 +1,68 @@
+{
+  "id": "cda-apply-coconut-cert--officer-verification-form",
+  "title": "CDA Officer Application Verification",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "verification_outcome": {
+        "type": "string",
+        "title": "Verification Outcome",
+        "oneOf": [
+          {
+            "const": "approve",
+            "title": "Approve Verification"
+          },
+          {
+            "const": "needs_more_info",
+            "title": "Needs More Information (Send back to applicant)"
+          }
+        ],
+        "default": "approve",
+        "example": "approve"
+      },
+      "rejection_reason": {
+        "type": "string",
+        "title": "Comments / Feedback / Deficiencies (Required if Needs More Info)",
+        "example": "Please upload the correct certificate template."
+      }
+    },
+    "required": [
+      "verification_outcome"
+    ],
+    "if": {
+      "properties": {
+        "verification_outcome": { "const": "needs_more_info" }
+      },
+      "required": [
+        "verification_outcome"
+      ]
+    },
+    "then": {
+      "required": [
+        "rejection_reason"
+      ]
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/verification_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/rejection_reason",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/verification_outcome",
+            "schema": {
+              "const": "needs_more_info"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "id": "cda-lot-adjustment-trader--certificate-display",
+  "template": "### Active Coconut Export Certificate\n\nYour application has been approved and a certificate is active:\n\n* **Certificate ID**: `{{.certificate_id}}`\n* **Certificate File**: [📄 Download Certificate (PDF)]({{.certificate_file}})\n\nIf you need to adjust any lots because they cannot fit into the container, select **Request Lot Adjustment** below and list the lots to remove. Otherwise, select **Complete Application & Finish** to conclude."
+}
