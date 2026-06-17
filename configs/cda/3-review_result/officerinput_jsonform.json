@@ -69,7 +69,17 @@
     },
     "required": [
       "review_outcome"
-    ]
+    ],
+    "if": {
+      "properties": {
+        "review_outcome": { "enum": ["reject", "needs_more_info"] }
+      }
+    },
+    "then": {
+      "required": [
+        "rejection_reason"
+      ]
+    }
   },
   "uiSchema": {
     "type": "VerticalLayout",

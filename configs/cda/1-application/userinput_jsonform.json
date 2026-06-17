@@ -35,12 +35,12 @@
         "example": "08011200"
       },
       "contract_number": {
-        "type": "number",
+        "type": "integer",
         "title": "Contract Number",
         "example": 987654
       },
       "lot_number": {
-        "type": "number",
+        "type": "integer",
         "title": "Lot Number",
         "example": 321
       },
@@ -67,7 +67,7 @@
               ]
             },
             "number_of_bags": {
-              "type": "number",
+              "type": "integer",
               "title": "Number of Bags",
               "example": 500
             },
@@ -151,17 +151,11 @@
         "title": "PHYSICAL QUALITY CERTIFICATE",
         "default": false
       },
-      "download_dc_bags_details": {
-        "type": "string",
-        "title": "Download DC Bags Details Template",
-        "description": "Please download the bag details spreadsheet from: https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0",
-        "default": "https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0",
-        "readOnly": true
-      },
       "uploaded_dc_bags_details": {
         "type": "string",
         "format": "file",
-        "title": "Upload Filled DC Bags Details File"
+        "title": "Upload Filled DC Bags Details File",
+        "description": "Please download the bag details spreadsheet template from: https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0"
       }
     },
     "required": [
@@ -284,10 +278,6 @@
                 ]
               }
             ]
-          },
-          {
-            "type": "Control",
-            "scope": "#/properties/download_dc_bags_details"
           },
           {
             "type": "Control",
