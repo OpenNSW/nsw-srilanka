@@ -66,9 +66,10 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// TODO: retrieve the authenticated context and validate it against the
 	// task's ownership bounds before completing the step.
 	taskID := r.PathValue("id")
+	command := r.PathValue("command")
 
-	var payload map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	var rawBody map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
 		// An empty body is a valid acknowledge-style completion; only fail on
 		// genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
@@ -78,21 +79,50 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// TODO(oga-callback): drop the body-id fallback once OGA POSTs directly
-	// to /api/v1/tasks/{id}. For now the legacy POST /api/v1/tasks route also
-	// wires here, and OGA's envelope carries task_id in the body.
-	if taskID == "" {
-		if id, ok := payload["task_id"].(string); ok {
-			taskID = id
+	// 1. Validate taskID (guaranteed by URL routing rules)
+	var payload map[string]any
+
+	// 2. Resolve command & payload
+	if command != "" {
+		// URL-based route: body is the flat payload
+		payload = rawBody
+	} else {
+		// Body-based route: body must be the nested envelope containing "command" and "payload"
+		if rawBody == nil {
+			writeJSONError(w, http.StatusBadRequest, "request body is required for body-based command route")
+			slog.Error("tasks: missing request body for body-based command", "taskId", taskID)
+			return
 		}
-	}
-	if taskID == "" {
-		writeJSONError(w, http.StatusBadRequest, "task id is required")
-		slog.Error("tasks: missing task id in request")
-		return
+
+		cmd, hasCmd := rawBody["command"].(string)
+		p, ok := rawBody["payload"].(map[string]any)
+
+		if !hasCmd || !ok {
+			writeJSONError(w, http.StatusBadRequest, "invalid request body: must be an envelope containing 'command' (string) and 'payload' (object)")
+			slog.Error("tasks: invalid body-based command envelope", "taskId", taskID, "hasCmd", hasCmd, "hasPayload", ok)
+			return
+		}
+
+		command = cmd
+		payload = p
 	}
 
-	payload = unwrapOGACallback(payload)
+	// 3. Validate system metadata collision
+	if payload != nil {
+		if _, exists := payload["__command"]; exists {
+			writeJSONError(w, http.StatusBadRequest, "invalid request payload: '__command' is a reserved system key")
+			slog.Error("tasks: reserved key '__command' present in payload", "taskId", taskID)
+			return
+		}
+	}
+
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+
+	payload["__command"] = command
+
+	slog.Info("tasks: processing complete step command", "taskId", taskID, "command", command)
 
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		slog.Error("tasks: failed to complete task step", "taskId", taskID, "error", err)
@@ -101,41 +131,6 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// unwrapOGACallback detects OGA's legacy TaskResponse envelope and returns the
-// reviewer payload that the task plugin actually expects.
-//
-// Agency's sendToService posts back:
-//
-//	{ "task_id": "...", "consignment_id": "...", "payload": { "action": "AGENCY_VERIFICATION", "content": {...} } }
-//
-// but our plugins expect the bare reviewer form data. We detect the envelope
-// (presence of task_id + consignment_id + payload.content) and lift content up.
-//
-// TODO(agency-callback): remove once the agency is updated to post the bare reviewer
-// payload directly to /api/v1/tasks/{id} (or to a dedicated /oga-callback
-// route that owns this translation).
-func unwrapOGACallback(payload map[string]any) map[string]any {
-	if payload == nil {
-		return payload
-	}
-	if _, hasTaskID := payload["task_id"]; !hasTaskID {
-		return payload
-	}
-	if _, hasConsignmentID := payload["consignment_id"]; !hasConsignmentID {
-		return payload
-	}
-	envelope, ok := payload["payload"].(map[string]any)
-	if !ok {
-		return payload
-	}
-	content, ok := envelope["content"].(map[string]any)
-	if !ok {
-		return payload
-	}
-	slog.Info("tasks: unwrapped OGA callback envelope", "action", envelope["action"])
-	return content
 }
 
 func writeJSONResponse(w http.ResponseWriter, status int, data any) {

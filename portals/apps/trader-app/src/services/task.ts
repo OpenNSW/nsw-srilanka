@@ -29,10 +29,11 @@ export async function getZoneView(taskId: string, apiClient: ApiClient = default
 
 export async function submitTaskStep(
   taskId: string,
+  command: string,
   payload: Record<string, unknown>,
   apiClient: ApiClient = defaultApiClient,
 ): Promise<void> {
-  await apiClient.post<Record<string, unknown>, unknown>(`${TASKS_API_URL}/${taskId}`, payload)
+  await apiClient.post<Record<string, unknown>, unknown>(`${TASKS_API_URL}/${taskId}/command/${command}`, payload)
 }
 
 export async function sendTaskAction(taskId: string, workflowId: string, action: string): Promise<TaskCommandResponse> {

@@ -25,7 +25,7 @@
       "request": {
         "actor": "trader",
         "method": "POST",
-        "path": "/api/v1/tasks/{{initTask}}",
+        "path": "/api/v1/tasks/{{initTask}}/command/submit",
         "body": { "consignment_name": "E2E Replay Consignment", "cha_company_id": "adam-pvt-ltd" },
         "expectStatus": 204
       }
@@ -44,7 +44,7 @@
       "request": {
         "actor": "trader",
         "method": "POST",
-        "path": "/api/v1/tasks/{{hsTask}}",
+        "path": "/api/v1/tasks/{{hsTask}}/command/submit",
         "body": { "hs_codes": ["fcau-health-certificate-reg"] },
         "expectStatus": 204
       }

@@ -129,11 +129,11 @@ export function TaskDetailScreen() {
       )}
       <TraderZoneLayout
         task={zoneView}
-        onSubmitForm={async (_command, data) => {
+        onSubmitForm={async (command, data) => {
           if (!taskId) return
           setSubmitError(null)
           try {
-            await submitTaskStep(taskId, data, api)
+            await submitTaskStep(taskId, command, data, api)
             await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
             await fetchTask()
           } catch (err) {
