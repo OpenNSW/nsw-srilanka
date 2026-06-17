@@ -85,7 +85,25 @@
     },
     {
       "name": "wait for FCAU pay-fee task (application approved & advanced)",
-      "wait": { "node": "[FCAU] Pay Application Fee", "state": "IN_PROGRESS", "timeout": "60s" }
+      "wait": { "node": "[FCAU] Pay Application Fee", "state": "IN_PROGRESS", "into": "payTask", "timeout": "60s" }
+    },
+    {
+      "name": "trader selects the payment method (GovPay)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{payTask}}",
+        "body": { "selected_method": "govpay" },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "GovPay confirms the application fee (simulated gateway webhook)",
+      "pay": { "taskVar": "payTask", "status": "paid", "timeout": "60s" }
+    },
+    {
+      "name": "wait for the application fee to be paid (workflow advanced past pay-fee)",
+      "wait": { "node": "[FCAU] Pay Application Fee", "state": "COMPLETED", "timeout": "60s" }
     }
   ]
 }

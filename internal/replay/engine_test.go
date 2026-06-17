@@ -211,6 +211,43 @@ func (f *fakeAgency) Respond(_ context.Context, taskCodeContains string, content
 	return nil
 }
 
+func TestDoPay(t *testing.T) {
+	r := New("", nil)
+	// Without a Gateway the pay step is an error.
+	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err == nil {
+		t.Error("expected error when Gateway is nil")
+	}
+
+	fake := &fakeGateway{}
+	r.Gateway = fake
+	// Missing taskVar is an error.
+	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err == nil {
+		t.Error("expected error when taskVar is not set")
+	}
+
+	r.Vars["payTask"] = "fcau_2_0_pay_fee:abc"
+	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err != nil {
+		t.Fatalf("doPay: %v", err)
+	}
+	if fake.taskID != "fcau_2_0_pay_fee:abc" {
+		t.Errorf("gateway taskID = %q", fake.taskID)
+	}
+	if fake.status != "paid" { // default when Pay.Status is empty
+		t.Errorf("gateway status = %q, want default paid", fake.status)
+	}
+}
+
+type fakeGateway struct {
+	taskID string
+	status string
+}
+
+func (f *fakeGateway) Pay(_ context.Context, taskID, status string, _ time.Duration) error {
+	f.taskID = taskID
+	f.status = status
+	return nil
+}
+
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

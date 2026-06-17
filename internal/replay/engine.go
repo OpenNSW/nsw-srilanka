@@ -46,12 +46,13 @@ type Flow struct {
 	Steps []Step `json:"steps"`
 }
 
-// Step is exactly one of request, wait, or callback.
+// Step is exactly one of request, wait, callback, or pay.
 type Step struct {
 	Name     string    `json:"name"`
 	Request  *Request  `json:"request,omitempty"`
 	Wait     *Wait     `json:"wait,omitempty"`
 	Callback *Callback `json:"callback,omitempty"`
+	Pay      *Pay      `json:"pay,omitempty"`
 }
 
 // Request issues an HTTP call as a given actor.
@@ -88,6 +89,23 @@ type Agency interface {
 	Respond(ctx context.Context, taskCodeContains string, content map[string]any, timeout time.Duration) error
 }
 
+// Pay drives a parked PAYMENT task to completion by simulating a gateway
+// success webhook for the payment created against the task in TaskVar.
+type Pay struct {
+	TaskVar string `json:"taskVar"`          // variable holding the pay task's id
+	Status  string `json:"status,omitempty"` // gateway success status (default "paid")
+	Timeout string `json:"timeout,omitempty"`
+}
+
+// Gateway is the mock payment gateway the pay step drives. The in-process test
+// provides an implementation that resolves the payment reference and posts the
+// gateway webhook.
+type Gateway interface {
+	// Pay waits (up to timeout) for the payment created against taskID, then
+	// confirms it by posting a gateway success webhook with the given status.
+	Pay(ctx context.Context, taskID, status string, timeout time.Duration) error
+}
+
 // LoadFlow reads and parses a JSON flow file.
 func LoadFlow(path string) (*Flow, error) {
 	raw, err := os.ReadFile(path)
@@ -111,6 +129,7 @@ type Runner struct {
 	Vars    map[string]any
 	Logf    func(string, ...any)
 	Agency  Agency
+	Gateway Gateway
 }
 
 // New builds a Runner with an empty variable store and a no-op logger.
@@ -138,8 +157,10 @@ func (r *Runner) Run(ctx context.Context, flow *Flow) error {
 			err = r.doWait(ctx, step.Wait)
 		case step.Callback != nil:
 			err = r.doCallback(ctx, step.Callback)
+		case step.Pay != nil:
+			err = r.doPay(ctx, step.Pay)
 		default:
-			err = fmt.Errorf("step has no request/wait/callback")
+			err = fmt.Errorf("step has no request/wait/callback/pay")
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", label, err)
@@ -249,6 +270,25 @@ func (r *Runner) doCallback(ctx context.Context, cb *Callback) error {
 		return err
 	}
 	return r.Agency.Respond(ctx, cb.TaskCode, r.interpolateMap(cb.Content), timeout)
+}
+
+func (r *Runner) doPay(ctx context.Context, p *Pay) error {
+	if r.Gateway == nil {
+		return fmt.Errorf("pay step requires a Gateway (none configured)")
+	}
+	timeout, err := parseTimeout(p.Timeout, 45*time.Second)
+	if err != nil {
+		return err
+	}
+	taskID, _ := r.Vars[p.TaskVar].(string)
+	if taskID == "" {
+		return fmt.Errorf("pay: %q variable not set (capture the pay task id via a wait `into` first)", p.TaskVar)
+	}
+	status := p.Status
+	if status == "" {
+		status = "paid"
+	}
+	return r.Gateway.Pay(ctx, taskID, status, timeout)
 }
 
 // ── consignment detail polling ──────────────────────────────────────────────

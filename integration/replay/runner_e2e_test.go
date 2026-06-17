@@ -40,7 +40,8 @@ func runFlow(t *testing.T, h *harness, file string) {
 
 	r := replay.New(h.server.URL, h.client)
 	r.Logf = t.Logf
-	r.Agency = h.agency // drives `callback` steps (external-agency flows)
+	r.Agency = h.agency   // drives `callback` steps (external-agency flows)
+	r.Gateway = h.gateway // drives `pay` steps (payment flows)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()

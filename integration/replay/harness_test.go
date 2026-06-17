@@ -69,11 +69,12 @@ func findRepoRoot() string {
 // harness is an in-process app (real authn) exposed via an httptest.Server,
 // plus a client that attaches minted bearer tokens per replay actor.
 type harness struct {
-	server *httptest.Server
-	client *http.Client
-	signed *signedAuth
-	agency *mockAgency
-	userID string
+	server  *httptest.Server
+	client  *http.Client
+	signed  *signedAuth
+	agency  *mockAgency
+	gateway *mockGateway
+	userID  string
 }
 
 // newHarness loads config from the environment (source .env first), seeds a
@@ -98,6 +99,16 @@ func newHarness(t *testing.T) *harness {
 	agency := newMockAgency(t)
 	cfg.Server.ServicesConfigPath = writeServicesConfig(t, agency.server.URL)
 
+	// A controllable mock payment gateway confirms payments by posting the GovPay
+	// webhook; it reads the generated reference from the payment store, so it
+	// needs DB access.
+	gwDB, err := database.New(cfg.Database)
+	if err != nil {
+		t.Fatalf("gateway: connect db: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close(gwDB) })
+	gateway := newMockGateway(t, gwDB)
+
 	userID := "e2e-user-" + uuid.NewString()
 	seedUser(t, cfg, userID, userOUHandle)
 
@@ -120,13 +131,15 @@ func newHarness(t *testing.T) *harness {
 	// give it a real `fcau` bearer for the authenticated callback.
 	agency.callbackBase = srv.URL
 	agency.bearer = signed.tokens["fcau"]
+	gateway.base = srv.URL
 
 	return &harness{
-		server: srv,
-		client: &http.Client{Transport: signed.transport()},
-		signed: signed,
-		agency: agency,
-		userID: userID,
+		server:  srv,
+		client:  &http.Client{Transport: signed.transport()},
+		signed:  signed,
+		agency:  agency,
+		gateway: gateway,
+		userID:  userID,
 	}
 }
 

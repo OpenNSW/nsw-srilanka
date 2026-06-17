@@ -93,6 +93,19 @@ earlier `extract`). On timeout it dumps the current nodes for debugging.
 Requires a `replay.Agency` wired on the runner. Not used by the trade flow; see
 *External-agency flows* below.
 
+### `pay` — confirm a PAYMENT task via a simulated gateway webhook
+```json
+{ "name": "GovPay confirms the fee", "pay": {
+    "taskVar": "payTask",     // variable holding the pay task's id (capture via a wait `into`)
+    "status": "paid",         // gateway success status (default "paid")
+    "timeout": "60s"
+} }
+```
+Requires a `replay.Gateway` wired on the runner. The mock gateway reads the
+generated payment reference from the payment store (`GetByTaskID`) and POSTs a
+GovPay success webhook to the public `/api/v1/payments/govpay/webhook`, which
+advances the workflow past the pay-fee task. See *Payment flows* below.
+
 Strings in `path` and `body` may reference variables as `{{name}}`.
 
 ## Authoring a new flow
@@ -147,6 +160,27 @@ callback advances the workflow to the pay-fee step.
 > optional). E.g. the FCAU application maps `other_declarations` (no `?`), so the
 > submission must include it even though the JSONForms schema lists it as
 > optional — otherwise the task is woken but never completes.
+
+## Payment flows
+
+A `PAYMENT` task creates a payment via `core/payment` (generating a `TNSW…`
+reference) and parks until a gateway confirms it. GovPay is offline
+(instruction-flow): the real gateway later POSTs a **public, unauthenticated
+webhook** to `/api/v1/payments/govpay/webhook`, which the payment service uses
+to advance the workflow.
+
+The harness models this with a **controllable mock gateway**
+([mockgateway_test.go](mockgateway_test.go)):
+- The engine's `pay` step calls `Gateway.Pay(taskID, status, …)`.
+- The mock waits for the payment created against the task, reads its reference +
+  amount + currency from the payment store (`payment.PaymentRepository.GetByTaskID`
+  — the reference is only rendered into the task's markdown view, not exposed as
+  JSON), then POSTs a GovPay success webhook (envelope mirrors
+  [integration/payment/govpay_test.go](../payment/govpay_test.go)).
+
+[flows/fcau_application_approve.json](flows/fcau_application_approve.json) runs
+the FCAU flow end-to-end through payment: application → approve → select GovPay →
+simulated webhook → the pay-fee task COMPLETES.
 
 ## Troubleshooting
 
