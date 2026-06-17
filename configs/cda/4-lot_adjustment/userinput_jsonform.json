@@ -31,7 +31,10 @@
     "if": {
       "properties": {
         "adjustment_choice": { "const": "request_lot_adjustment" }
-      }
+      },
+      "required": [
+        "adjustment_choice"
+      ]
     },
     "then": {
       "required": [
