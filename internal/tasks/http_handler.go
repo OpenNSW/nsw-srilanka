@@ -95,12 +95,21 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		}
 
 		cmd, hasCmd := rawBody["command"].(string)
-		p, ok := rawBody["payload"].(map[string]any)
-
-		if !hasCmd || !ok {
-			writeJSONError(w, http.StatusBadRequest, "invalid request body: must be an envelope containing 'command' (string) and 'payload' (object)")
-			slog.Error("tasks: invalid body-based command envelope", "taskId", taskID, "hasCmd", hasCmd, "hasPayload", ok)
+		if !hasCmd {
+			writeJSONError(w, http.StatusBadRequest, "invalid request body: must contain 'command' (string)")
+			slog.Error("tasks: invalid body-based command envelope", "taskId", taskID, "hasCmd", false)
 			return
+		}
+
+		var p map[string]any
+		if rawBody["payload"] != nil {
+			var ok bool
+			p, ok = rawBody["payload"].(map[string]any)
+			if !ok {
+				writeJSONError(w, http.StatusBadRequest, "invalid request body: 'payload' must be an object")
+				slog.Error("tasks: invalid body-based payload type", "taskId", taskID)
+				return
+			}
 		}
 
 		command = cmd
