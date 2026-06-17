@@ -23,7 +23,6 @@
         ],
         "default": "EXP-CDA-001"
       },
-
       "cusdec_number": {
         "type": "string",
         "title": "CUSDEC Number",
@@ -54,16 +53,46 @@
               "type": "string",
               "title": "DC Grade",
               "oneOf": [
-                { "const": "FINE", "title": "FINE" },
-                { "const": "MEDIUM", "title": "MEDIUM" },
-                { "const": "CHIPS_VADC", "title": "CHIPS VADC" },
-                { "const": "M_MEDIUM", "title": "M/MEDIUM" },
-                { "const": "SHRED", "title": "SHRED" },
-                { "const": "SPECIAL_MACROON", "title": "SPECIAL MACROON" },
-                { "const": "THRED", "title": "THRED" },
-                { "const": "LOW_FAT", "title": "LOW FAT" },
-                { "const": "COARSE", "title": "COARSE" },
-                { "const": "FLAKES", "title": "FLAKES" }
+                {
+                  "const": "FINE",
+                  "title": "FINE"
+                },
+                {
+                  "const": "MEDIUM",
+                  "title": "MEDIUM"
+                },
+                {
+                  "const": "CHIPS_VADC",
+                  "title": "CHIPS VADC"
+                },
+                {
+                  "const": "M_MEDIUM",
+                  "title": "M/MEDIUM"
+                },
+                {
+                  "const": "SHRED",
+                  "title": "SHRED"
+                },
+                {
+                  "const": "SPECIAL_MACAROON",
+                  "title": "SPECIAL MACAROON"
+                },
+                {
+                  "const": "THRED",
+                  "title": "THRED"
+                },
+                {
+                  "const": "LOW_FAT",
+                  "title": "LOW FAT"
+                },
+                {
+                  "const": "COARSE",
+                  "title": "COARSE"
+                },
+                {
+                  "const": "FLAKES",
+                  "title": "FLAKES"
+                }
               ]
             },
             "number_of_bags": {
@@ -131,8 +160,14 @@
         "type": "string",
         "title": "Container Filling Status",
         "oneOf": [
-          { "const": "full", "title": "Full" },
-          { "const": "part", "title": "Part" }
+          {
+            "const": "full",
+            "title": "Full"
+          },
+          {
+            "const": "part",
+            "title": "Part"
+          }
         ],
         "default": "full"
       },
@@ -182,15 +217,27 @@
           {
             "type": "HorizontalLayout",
             "elements": [
-              { "type": "Control", "scope": "#/properties/cusdec_number" },
-              { "type": "Control", "scope": "#/properties/hs_code" }
+              {
+                "type": "Control",
+                "scope": "#/properties/cusdec_number"
+              },
+              {
+                "type": "Control",
+                "scope": "#/properties/hs_code"
+              }
             ]
           },
           {
             "type": "HorizontalLayout",
             "elements": [
-              { "type": "Control", "scope": "#/properties/contract_number" },
-              { "type": "Control", "scope": "#/properties/lot_number" }
+              {
+                "type": "Control",
+                "scope": "#/properties/contract_number"
+              },
+              {
+                "type": "Control",
+                "scope": "#/properties/lot_number"
+              }
             ]
           }
         ]
@@ -212,22 +259,40 @@
           {
             "type": "HorizontalLayout",
             "elements": [
-              { "type": "Control", "scope": "#/properties/date_of_containerization" },
-              { "type": "Control", "scope": "#/properties/date_of_sailing" }
+              {
+                "type": "Control",
+                "scope": "#/properties/date_of_containerization"
+              },
+              {
+                "type": "Control",
+                "scope": "#/properties/date_of_sailing"
+              }
             ]
           },
           {
             "type": "HorizontalLayout",
             "elements": [
-              { "type": "Control", "scope": "#/properties/vessel_name" },
-              { "type": "Control", "scope": "#/properties/container_number" }
+              {
+                "type": "Control",
+                "scope": "#/properties/vessel_name"
+              },
+              {
+                "type": "Control",
+                "scope": "#/properties/container_number"
+              }
             ]
           },
           {
             "type": "HorizontalLayout",
             "elements": [
-              { "type": "Control", "scope": "#/properties/port_of_discharge" },
-              { "type": "Control", "scope": "#/properties/final_destination" }
+              {
+                "type": "Control",
+                "scope": "#/properties/port_of_discharge"
+              },
+              {
+                "type": "Control",
+                "scope": "#/properties/final_destination"
+              }
             ]
           },
           {
@@ -273,8 +338,14 @@
               {
                 "type": "HorizontalLayout",
                 "elements": [
-                  { "type": "Control", "scope": "#/properties/req_cert_salmonella" },
-                  { "type": "Control", "scope": "#/properties/req_cert_physical" }
+                  {
+                    "type": "Control",
+                    "scope": "#/properties/req_cert_salmonella"
+                  },
+                  {
+                    "type": "Control",
+                    "scope": "#/properties/req_cert_physical"
+                  }
                 ]
               }
             ]
