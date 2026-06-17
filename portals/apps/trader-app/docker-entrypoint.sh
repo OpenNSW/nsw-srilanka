@@ -29,7 +29,6 @@ window.__APP_CONFIG__ = {
   "VITE_IDP_CLIENT_ID": "$(escape_js "${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}")",
   "VITE_APP_URL": "$(escape_js "${VITE_APP_URL:-http://localhost:5173}")",
   "VITE_IDP_SCOPES": "$(escape_js "${VITE_IDP_SCOPES:-openid,profile,email,group,role}")",
-  "VITE_IDP_PLATFORM": "$(escape_js "${VITE_IDP_PLATFORM:-AsgardeoV2}")",
   "VITE_IDP_TRADER_GROUP_NAME": "$(escape_js "${VITE_IDP_TRADER_GROUP_NAME:-Traders}")",
   "VITE_IDP_CHA_GROUP_NAME": "$(escape_js "${VITE_IDP_CHA_GROUP_NAME:-CHA}")",
   "VITE_SHOW_AUTOFILL_BUTTON": "$(escape_js "${VITE_SHOW_AUTOFILL_BUTTON:-true}")"

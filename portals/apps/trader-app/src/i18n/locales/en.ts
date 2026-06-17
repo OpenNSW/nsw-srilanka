@@ -3,6 +3,7 @@ const en = {
     login: {
       tagline: 'Sign in to continue to your consignments.',
       button: 'Sign In',
+      errorTitle: 'Authentication Failed',
     },
     unauthorized: {
       title: 'Access Restricted',

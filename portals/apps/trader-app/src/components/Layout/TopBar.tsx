@@ -1,6 +1,6 @@
 import { BellIcon } from '@radix-ui/react-icons'
-import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@asgardeo/react'
 import { type ReactNode } from 'react'
+import { SignedIn, SignedOut, SignInButton, UserDropdown } from '../Auth'
 import { useSignOutHandler } from '../../hooks/useSignOutHandler'
 import { RoleSwitcher } from './RoleSwitcher'
 import { appConfig, displayName } from '../../config'
