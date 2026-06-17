@@ -60,7 +60,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 
 // HandleCompleteTaskStep advances a task by submitting a step payload.
 //
-//	POST /api/v1/tasks/{id}/command/{command}
+//	POST /api/v1/tasks/{id}/commands/{command}
 //	POST /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
 	// TODO: retrieve the authenticated context and validate it against the

@@ -33,7 +33,7 @@ export async function submitTaskStep(
   payload: Record<string, unknown>,
   apiClient: ApiClient = defaultApiClient,
 ): Promise<void> {
-  await apiClient.post<Record<string, unknown>, unknown>(`${TASKS_API_URL}/${taskId}/command/${command}`, payload)
+  await apiClient.post<Record<string, unknown>, unknown>(`${TASKS_API_URL}/${taskId}/commands/${command}`, payload)
 }
 
 export async function sendTaskAction(
@@ -42,7 +42,7 @@ export async function sendTaskAction(
   action: string,
 ): Promise<TaskCommandResponse> {
   return defaultApiClient.post<Record<string, unknown>, TaskCommandResponse>(
-    `${TASKS_API_URL}/${taskId}/command/${action}`,
+    `${TASKS_API_URL}/${taskId}/commands/${action}`,
     {},
   )
 }
@@ -53,11 +53,11 @@ export async function sendTaskCommand(
 ): Promise<TaskCommandResponse> {
   console.log(`Sending ${request.command} command for task: ${request.taskId}`, request)
 
-  // Use POST /api/v1/tasks/{taskId}/command/{action} with action type and submission data
+  // Use POST /api/v1/tasks/{taskId}/commands/{action} with action type and submission data
   const action: string = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
 
   return apiClient.post<Record<string, unknown>, TaskCommandResponse>(
-    `${TASKS_API_URL}/${request.taskId}/command/${action}`,
+    `${TASKS_API_URL}/${request.taskId}/commands/${action}`,
     request.data || {},
   )
 }

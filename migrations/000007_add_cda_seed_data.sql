@@ -1,6 +1,6 @@
 -- @UP
 -- ============================================================================
--- Migration: 000005_add_cda_seed_data.sql
+-- Migration: 000007_add_cda_seed_data.sql
 -- Purpose: Seed CDA top-level workflow template, HS code, and mapping.
 -- ============================================================================
 
@@ -30,7 +30,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- @DOWN
 -- ============================================================================
--- Migration: 000005_add_cda_seed_data.sql
+-- Migration: 000007_add_cda_seed_data.sql
 -- Purpose: Rollback CDA seed data mapping and HS code.
 -- ============================================================================
 
