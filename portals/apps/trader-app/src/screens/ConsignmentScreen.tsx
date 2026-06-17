@@ -37,6 +37,12 @@ export function ConsignmentScreen() {
     setPage(0)
   }
 
+  const [prevRole, setPrevRole] = useState(role)
+  if (role !== prevRole) {
+    setPrevRole(role)
+    setPage(0)
+  }
+
   const handleCreateConsignment = async () => {
     setCreating(true)
     try {

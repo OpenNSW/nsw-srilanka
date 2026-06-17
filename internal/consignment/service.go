@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -223,7 +224,11 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			q = q.Where("flow = ?", *filter.Flow)
 		}
 		if filter.Query != nil && *filter.Query != "" {
-			q = q.Where("LOWER(id) LIKE LOWER(?)", "%"+*filter.Query+"%")
+			escaped := strings.ReplaceAll(*filter.Query, "\\", "\\\\")
+			escaped = strings.ReplaceAll(escaped, "%", "\\%")
+			escaped = strings.ReplaceAll(escaped, "_", "\\_")
+			queryVal := "%" + strings.ToLower(escaped) + "%"
+			q = q.Where("LOWER(id) LIKE ? ESCAPE '\\'", queryVal)
 		}
 		return q
 	}

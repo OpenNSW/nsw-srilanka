@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/pagination"
@@ -49,6 +50,23 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// buildConsignmentFilter parses optional query filters (state, flow, q) from the request.
+func buildConsignmentFilter(r *http.Request, offset, limit *int) Filter {
+	filter := Filter{Offset: offset, Limit: limit}
+	if stateStr := r.URL.Query().Get("state"); stateStr != "" {
+		state := State(stateStr)
+		filter.State = &state
+	}
+	if flowStr := r.URL.Query().Get("flow"); flowStr != "" {
+		flow := Flow(flowStr)
+		filter.Flow = &flow
+	}
+	if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
+		filter.Query = &q
+	}
+	return filter
+}
+
 // HandleGetConsignments handles GET /api/v1/consignments
 // Query params: role=trader | role=cha (defaults to trader).
 func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
@@ -68,23 +86,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	filter := Filter{
-		Offset: offset,
-		Limit:  limit,
-	}
-
-	// Optional Filters
-	if stateStr := r.URL.Query().Get("state"); stateStr != "" {
-		state := State(stateStr)
-		filter.State = &state
-	}
-	if flowStr := r.URL.Query().Get("flow"); flowStr != "" {
-		flow := Flow(flowStr)
-		filter.Flow = &flow
-	}
-	if q := r.URL.Query().Get("q"); q != "" {
-		filter.Query = &q
-	}
+	filter := buildConsignmentFilter(r, offset, limit)
 
 	// Role-based identity resolution.
 	if role != "trader" && role != "cha" {
