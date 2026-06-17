@@ -52,6 +52,16 @@ build: ## Build the images without starting anything
 deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
 	$(COMPOSE) up -d $$($(COMPOSE) config --services | grep -vxE '$(subst $(SPACE),|,$(APP_SERVICES))')
 
+.PHONY: test-e2e
+test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api container)
+	$(COMPOSE) stop api
+	@if [ -f .env ]; then \
+		set -a; . ./.env; set +a; \
+	else \
+		echo "⚠️  No .env found — using the current environment"; \
+	fi; \
+	E2E=1 go test -v -count=1 -timeout 240s ./integration/...
+
 # ---------------------------------------------------------------------------
 # Migrations (uses the nsw-agency migrate tool; generate needs no database)
 # ---------------------------------------------------------------------------
