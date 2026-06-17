@@ -97,4 +97,67 @@ config: ## Print the merged dev config (for debugging)
 .PHONY: help
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+# ---------------------------------------------------------------------------
+# Go code quality (mirrors the backend CI pipeline)
+# Prepend GOPATH/bin so tools installed by `make tools` are found without
+# requiring the developer to manually update their shell profile.
+# ---------------------------------------------------------------------------
+
+export PATH := $(shell go env GOPATH)/bin:$(PATH)
+
+.PHONY: setup
+setup: tools ## First-time setup: install tools, configure git hooks, seed config files from examples
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit .githooks/pre-push
+	@echo "  Git hooks configured: .githooks/"
+	@for f in .env.example idp/.env.example; do \
+		target=$$(echo $$f | sed 's/\.example//'); \
+		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
+		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
+		else echo "  Skipped: $$target (already exists)"; fi; \
+	done
+	@for f in configs/notification.example.json configs/services.docker.example.json configs/payment_methods.example.json; do \
+		target=$$(echo $$f | sed 's/\.example\.json/.json/'); \
+		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
+		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
+		else echo "  Skipped: $$target (already exists)"; fi; \
+	done
+
+.PHONY: tools
+tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
+	@echo "Installing Go quality tools..."
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
+		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
+	go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+	go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+	go install github.com/zricethezav/gitleaks/v8@v8.30.1
+	@echo "Tools installed."
+
+.PHONY: fmt
+fmt: ## Format all Go source files with gofmt
+	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
+
+.PHONY: lint
+lint: ## Run golangci-lint
+	GOWORK=off golangci-lint run --config .golangci.yml ./...
+
+.PHONY: tidy
+tidy: ## Run go mod tidy
+	GOWORK=off go mod tidy
+
+.PHONY: test
+test: ## Run all tests with the race detector
+	GOWORK=off go test -race -count=1 ./...
+
+.PHONY: vuln
+vuln: ## Run govulncheck against the Go vulnerability database
+	GOWORK=off govulncheck ./...
+
+.PHONY: secrets
+secrets: ## Run gitleaks secret scan on the repository
+	gitleaks detect --config .gitleaks.toml --verbose
+
+.PHONY: check
+check: tidy fmt lint test ## Run all quality checks: tidy → fmt → lint → test

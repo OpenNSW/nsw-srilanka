@@ -1,0 +1,63 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Correctness
+    - errcheck      # unhandled errors
+    - govet         # suspicious constructs (printf, shadow, etc.)
+    - staticcheck   # full staticcheck suite (SA/S/QF checks)
+    - unused        # unexported identifiers never used outside their package
+
+    # Style / maintainability
+    - misspell      # common spelling mistakes in comments and strings
+    - godot         # comment sentences should end with a period
+
+    # Security-adjacent
+    - gosec         # OWASP-oriented security checks
+    - noctx         # http.NewRequest / http.Get without context.Context
+
+    # Complexity
+    - gocyclo       # cyclomatic complexity
+    - gocritic      # opinionated but high signal-to-noise style checks
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+
+    gosec:
+      excludes:
+        # G304: file path constructed from variable. Config loaders in this repo
+        # take validated paths from typed config structs, not raw user input.
+        - G304
+        # G115: integer overflow conversion. False positive originating from
+        # generated code in the Temporal SDK dependency.
+        - G115
+        # G706: log injection via user-controlled data. Logging request IDs for
+        # diagnostics is intentional; input is not rendered into HTML or eval'd.
+        - G706
+
+    gocritic:
+      disabled-checks:
+        # appendAssign fires as a false positive on GORM scan patterns.
+        - appendAssign
+
+  exclusions:
+    paths:
+      - vendor
+
+    rules:
+      # Test files: relax errcheck (test helpers often ignore errors intentionally),
+      # gosec (test fixtures may use insecure patterns by design), and noctx
+      # (http.NewRequest without context is standard in unit test helpers).
+      - path: "_test\\.go"
+        linters:
+          - errcheck
+          - gosec
+          - noctx
+
+# In golangci-lint v2, formatters are a separate category from linters.
+formatters:
+  enable:
+    - gofmt         # standard Go formatting
+    - goimports     # import grouping and ordering
