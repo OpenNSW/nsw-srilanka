@@ -1,9 +1,6 @@
-// portals/apps/trader-app/src/services/preConsignment.ts
-
-import { defaultApiClient, type ApiClient } from './api'
+import { http } from './http'
+import { API_BASE_URL, API_PATH_PREFIX } from '../constants'
 import { sendTaskCommand } from './task'
-
-// --- Types based on Backend DTOs ---
 
 export type PreConsignmentState = 'LOCKED' | 'READY' | 'IN_PROGRESS' | 'COMPLETED'
 export type WorkflowNodeState = 'LOCKED' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
@@ -17,10 +14,9 @@ export interface WorkflowNodeTemplate {
 export interface WorkflowNode {
   id: string
   state: WorkflowNodeState
-  workflowNodeTemplate: WorkflowNodeTemplate // Nested object
+  workflowNodeTemplate: WorkflowNodeTemplate
   createdAt: string
   updatedAt: string
-  // Note: Backend JSON response showed snake_case 'depends_on' for nodes
   depends_on?: string[]
 }
 
@@ -43,11 +39,11 @@ export interface PreConsignmentInstance {
 }
 
 export interface TraderPreConsignmentItem {
-  id: string // Template ID
+  id: string
   name: string
   description: string
   state: PreConsignmentState
-  dependsOn: string[] // From template
+  dependsOn: string[]
   preConsignment?: PreConsignmentInstance
   preConsignmentTemplate?: PreConsignmentTemplate
 }
@@ -75,14 +71,19 @@ export interface TaskCommandResponse {
   data?: unknown
 }
 
-// --- API Methods ---
+const BASE = `${API_BASE_URL}${API_PATH_PREFIX}`
 
 export async function getTraderPreConsignments(
   offset: number = 0,
   limit: number = 50,
-  apiClient: ApiClient = defaultApiClient,
 ): Promise<TraderPreConsignmentsResponse> {
-  const response = await apiClient.get<PreConsignmentListApiResponse>('/pre-consignments', { offset, limit })
+  const { data } = await http.request({
+    url: `${BASE}/pre-consignments`,
+    params: { offset, limit },
+    attachToken: true,
+  })
+
+  const response = data as PreConsignmentListApiResponse
 
   if (Array.isArray(response)) {
     const items: TraderPreConsignmentItem[] = response.map((instance) => ({
@@ -105,35 +106,29 @@ export async function getTraderPreConsignments(
   return response
 }
 
-export async function getPreConsignment(
-  id: string,
-  apiClient: ApiClient = defaultApiClient,
-): Promise<PreConsignmentInstance> {
-  return apiClient.get<PreConsignmentInstance>(`/pre-consignments/${id}`)
+export async function getPreConsignment(id: string): Promise<PreConsignmentInstance> {
+  const { data } = await http.request({
+    url: `${BASE}/pre-consignments/${id}`,
+    attachToken: true,
+  })
+  return data as PreConsignmentInstance
 }
 
-export async function createPreConsignment(
-  templateId: string,
-  apiClient: ApiClient = defaultApiClient,
-): Promise<PreConsignmentInstance> {
-  const payload: CreatePreConsignmentRequest = {
-    preConsignmentTemplateId: templateId,
-  }
-  return apiClient.post<CreatePreConsignmentRequest, PreConsignmentInstance>('/pre-consignments', payload)
+export async function createPreConsignment(templateId: string): Promise<PreConsignmentInstance> {
+  const { data } = await http.request({
+    url: `${BASE}/pre-consignments`,
+    method: 'POST',
+    data: { preConsignmentTemplateId: templateId } satisfies CreatePreConsignmentRequest,
+    attachToken: true,
+  })
+  return data as PreConsignmentInstance
 }
 
-// Submit the form data (Action: SUBMIT_FORM or DRAFT)
-export async function submitPreConsignmentTask(
-  request: TaskCommandRequest,
-  apiClient: ApiClient = defaultApiClient,
-): Promise<TaskCommandResponse> {
-  return sendTaskCommand(
-    {
-      command: request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMISSION',
-      taskId: request.taskId,
-      workflowId: request.workflowId,
-      data: request.data || {},
-    },
-    apiClient,
-  )
+export async function submitPreConsignmentTask(request: TaskCommandRequest): Promise<TaskCommandResponse> {
+  return sendTaskCommand({
+    command: request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMISSION',
+    taskId: request.taskId,
+    workflowId: request.workflowId,
+    data: request.data || {},
+  })
 }

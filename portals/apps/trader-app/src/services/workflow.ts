@@ -1,4 +1,5 @@
-import { apiGet } from './api'
+import { http } from './http'
+import { API_BASE_URL, API_PATH_PREFIX } from '../constants'
 import type { Workflow, WorkflowTemplate, WorkflowQueryParams } from './types/workflow'
 
 export interface WorkflowResponse {
@@ -6,10 +7,10 @@ export interface WorkflowResponse {
   export: Workflow[]
 }
 
-const WORKFLOW_TEMPLATES_ENDPOINT = '/workflows/templates'
+const BASE = `${API_BASE_URL}${API_PATH_PREFIX}`
+const WORKFLOW_TEMPLATES_URL = `${BASE}/workflows/templates`
 
 export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise<WorkflowResponse> {
-  // Fetch import and export workflows in parallel
   const [importWorkflow, exportWorkflow] = await Promise.all([
     fetchWorkflowByType(params.hs_code, 'IMPORT'),
     fetchWorkflowByType(params.hs_code, 'EXPORT'),
@@ -23,12 +24,13 @@ export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise
 
 async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT'): Promise<Workflow | null> {
   try {
-    const template = await apiGet<WorkflowTemplate>(WORKFLOW_TEMPLATES_ENDPOINT, {
-      hsCode,
-      tradeFlow,
+    const { data } = await http.request({
+      url: WORKFLOW_TEMPLATES_URL,
+      params: { hsCode, tradeFlow },
+      attachToken: true,
     })
 
-    // Transform WorkflowTemplate to Workflow
+    const template = data as WorkflowTemplate
     return {
       id: template.id,
       name: template.version,
@@ -36,7 +38,6 @@ async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT
       steps: template.steps,
     }
   } catch (error) {
-    // Return null for 404 errors (workflow not found)
     if (error instanceof Error && error.message.includes('404')) {
       return null
     }
@@ -45,5 +46,9 @@ async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT
 }
 
 export async function getWorkflowById(id: string): Promise<Workflow | undefined> {
-  return apiGet<Workflow>(`/workflows/${id}`)
+  const { data } = await http.request({
+    url: `${BASE}/workflows/${id}`,
+    attachToken: true,
+  })
+  return data as Workflow
 }

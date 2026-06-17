@@ -1,9 +1,5 @@
-/**
- * Trader-app–specific upload implementation. Points to this app's backend;
- * when the API or auth changes, only this file is updated.
- */
-import type { ApiClient } from './api'
-import { API_BASE_URL } from '../constants'
+import { http } from './http'
+import { API_BASE_URL, API_PATH_PREFIX } from '../constants'
 
 interface UploadMetadataRequest {
   filename: string
@@ -27,19 +23,25 @@ export interface UploadResponse {
   name: string
 }
 
-export async function uploadFile(apiClient: ApiClient, file: File): Promise<UploadResponse> {
-  const metadata = await apiClient.post<UploadMetadataRequest, UploadMetadataResponse>('/storage', {
-    filename: file.name,
-    mime_type: file.type || 'application/octet-stream',
-    size: file.size,
+const BASE = `${API_BASE_URL}${API_PATH_PREFIX}`
+
+export async function uploadFile(file: File): Promise<UploadResponse> {
+  const { data } = await http.request({
+    url: `${BASE}/storage`,
+    method: 'POST',
+    data: {
+      filename: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      size: file.size,
+    } satisfies UploadMetadataRequest,
+    attachToken: true,
   })
 
-  // Upload file bytes directly to the storage destination (presigned URL)
+  const metadata = data as UploadMetadataResponse
+
   const uploadResponse = await fetch(metadata.upload_url, {
     method: 'PUT',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-    },
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
   })
 
@@ -52,10 +54,14 @@ export async function uploadFile(apiClient: ApiClient, file: File): Promise<Uplo
   return { key: metadata.key, name: metadata.name }
 }
 
-export async function getDownloadUrl(apiClient: ApiClient, key: string): Promise<{ url: string; expiresAt: number }> {
-  const response = await apiClient.get<DownloadMetadataResponse>(`/storage/${key}`)
+export async function getDownloadUrl(key: string): Promise<{ url: string; expiresAt: number }> {
+  const { data } = await http.request({
+    url: `${BASE}/storage/${key}`,
+    attachToken: true,
+  })
 
-  // Normalize the URL if it's a relative path (common in local dev)
+  const response = data as DownloadMetadataResponse
+
   const url = response.download_url.startsWith('/')
     ? new URL(response.download_url, API_BASE_URL).toString()
     : response.download_url
