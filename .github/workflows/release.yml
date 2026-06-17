@@ -189,7 +189,7 @@ jobs:
 
       - name: Upload digest artifact
         if: steps.release-mode.outputs.enabled == 'true' && steps.build.outputs.digest != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.image_name }}
           path: /tmp/digests/${{ matrix.image_name }}.txt
@@ -302,7 +302,7 @@ jobs:
           cat release-digests.json
 
       - name: Upload collated digests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-digests
           path: release-digests.json
