@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # BuildKit is required for cache-from/cache-to and multi-stage build optimisations.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build ${{ matrix.name }} image
         uses: docker/build-push-action@v6
