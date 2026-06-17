@@ -329,30 +329,34 @@
       },
       {
         "type": "Group",
-        "label": "5. Required Certificates & DC Bag Details Upload",
+        "label": "5. Required Certificates",
         "elements": [
           {
-            "type": "Group",
-            "label": "Required Certificates",
+            "type": "HorizontalLayout",
             "elements": [
               {
-                "type": "HorizontalLayout",
-                "elements": [
-                  {
-                    "type": "Control",
-                    "scope": "#/properties/req_cert_salmonella"
-                  },
-                  {
-                    "type": "Control",
-                    "scope": "#/properties/req_cert_physical"
-                  }
-                ]
+                "type": "Control",
+                "scope": "#/properties/req_cert_salmonella"
+              },
+              {
+                "type": "Control",
+                "scope": "#/properties/req_cert_physical"
               }
             ]
-          },
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "6. DC Bag Details",
+        "elements": [
           {
             "type": "Control",
             "scope": "#/properties/uploaded_dc_bags_details"
+          },
+          {
+            "type": "Label",
+            "text": "Please download the bag details spreadsheet template from: https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0"
           }
         ]
       }
