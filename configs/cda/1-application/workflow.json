@@ -40,7 +40,7 @@
       "type": "TASK",
       "task_template_id": "cda-apply-coconut-cert--officer-verification",
       "input_mapping": {
-        "userform": "userform"
+        "userform": "submission"
       },
       "output_mapping": {
         "verification_outcome": "verificationform.verification_outcome",

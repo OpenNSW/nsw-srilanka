@@ -13,7 +13,7 @@
       "task_template_id": "cda-review-result--officer-review",
       "input_mapping": {
         "reference_number": "reference_number",
-        "userform": "userform"
+        "userform": "submission"
       },
       "output_mapping": {
         "review_outcome": "reviewerform.review_outcome",
