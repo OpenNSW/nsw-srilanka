@@ -174,7 +174,7 @@ func (r *Runner) doRequest(ctx context.Context, req *Request) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read response body: %w", err)
@@ -280,7 +280,7 @@ func (r *Runner) fetchDetail(ctx context.Context, consignmentID string) (consign
 	if err != nil {
 		return d, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return d, fmt.Errorf("read consignment detail response body: %w", err)

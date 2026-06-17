@@ -1,6 +1,12 @@
 packages:
   - apps/*
 
+# Force transitive dependencies up to patched versions to clear high-severity
+# advisories that upstream packages have not yet picked up themselves.
+overrides:
+  # lodash <4.17.24 (pulled transitively by @jsonforms/*) — GHSA-r5fr-rjxr-66jc.
+  lodash: '>=4.17.24'
+
 allowBuilds:
   '@swc/core': true
   core-js: false

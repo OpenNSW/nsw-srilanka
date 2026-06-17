@@ -5,7 +5,7 @@ import { Layout } from './components/Layout'
 import { ConsignmentScreen } from './screens/ConsignmentScreen.tsx'
 import { ConsignmentDetailScreen } from './screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from './screens/TaskDetailScreen.tsx'
-import { SignedOut } from '@asgardeo/react'
+import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { ApiProvider, useApi } from './services/ApiContext'
 import { RoleProvider } from './services/RoleContext'
@@ -44,6 +44,19 @@ function ProtectedLayout() {
   )
 }
 
+function SignedOutRoute() {
+  const { isAuthenticated, isLoading } = useAuth()
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
+  if (isAuthenticated) return <Navigate to="/" replace />
+  return <LoginScreen />
+}
+
 function App() {
   useEffect(() => {
     document.title = `${displayName} | ${appConfig.branding.systemName}`
@@ -59,14 +72,7 @@ function App() {
   return (
     <Routes>
       {import.meta.env.DEV && <Route path="/dev/zones" element={<ZonePreviewScreen />} />}
-      <Route
-        path="/login"
-        element={
-          <SignedOut fallback={<Navigate to="/" replace />}>
-            <LoginScreen />
-          </SignedOut>
-        }
-      />
+      <Route path="/login" element={<SignedOutRoute />} />
 
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<Navigate to="/consignments" replace />} />

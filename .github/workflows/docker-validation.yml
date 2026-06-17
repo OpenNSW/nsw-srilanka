@@ -1,34 +1,60 @@
 name: Docker Validation CI
-# Validates that the deployable Docker image builds successfully on PRs to main.
+# Validates that the deployable Docker images build successfully on PRs to main.
 # This workflow never pushes images — it is purely a build correctness check.
 # Image publishing is handled by build-dev.yaml (on push to main).
 
 on:
   pull_request:
     branches: [main]
-    # Only run when files that affect the Docker build context change,
+    # Run when any file that affects a Docker build context changes,
     # or when this workflow file itself changes.
     paths:
-      - "portals/**"
-      - ".github/workflows/docker-validation.yml"
+      - 'portals/**'
+      - 'Dockerfile'
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'migrations/**'
+      - '.github/workflows/docker-validation.yml'
 
 jobs:
   docker-validate:
-    name: Validate trader-portal image
+    name: Validate ${{ matrix.name }} image
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: trader-portal
+            context: ./portals
+            dockerfile: ./portals/apps/trader-app/Dockerfile
+            tags: trader-app:validate
+            target: ''
+          - name: nsw-backend
+            context: .
+            dockerfile: ./Dockerfile
+            tags: nsw-backend:validate
+            target: ''
+          - name: nsw-migrate
+            context: .
+            dockerfile: ./Dockerfile
+            tags: nsw-migrate:validate
+            target: migrate
+
     steps:
       - uses: actions/checkout@v4
 
       # BuildKit is required for cache-from/cache-to and multi-stage build optimisations.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
-      - name: Build trader-portal image
+      - name: Build ${{ matrix.name }} image
         uses: docker/build-push-action@v6
         with:
-          context: ./portals # full portals/ workspace needed for shared packages
-          file: ./portals/apps/trader-app/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: false # validation only — never push in this workflow
-          tags: trader-app:validate
-          # GHA cache backend reuses layers across runs, keyed by image name.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ matrix.tags }}
+          # Scope cache per image so matrix builds don't overwrite each other's layers.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
