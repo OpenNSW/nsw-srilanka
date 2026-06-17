@@ -198,7 +198,7 @@ jobs:
       # Trivy scans the pushed image for CRITICAL/HIGH CVEs.
       - name: Setup Trivy
         if: steps.release-mode.outputs.enabled == 'true'
-        uses: aquasecurity/setup-trivy@e6c2c5e321ed9123bda567646e2f96565e34abe1
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
         with:
           version: v0.69.3
 
