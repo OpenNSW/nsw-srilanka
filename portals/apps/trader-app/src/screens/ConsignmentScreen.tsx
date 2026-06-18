@@ -206,9 +206,20 @@ export function ConsignmentScreen() {
                         className="hover:bg-surface cursor-pointer transition-colors"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Text size="2" weight="medium" className="text-info-strong font-mono">
-                            {consignment.id}
-                          </Text>
+                          {consignment.name ? (
+                            <div className="flex flex-col">
+                              <Text size="2" weight="bold" className="text-info-strong">
+                                {consignment.name}
+                              </Text>
+                              <Text size="1" color="gray" className="font-mono mt-0.5">
+                                {consignment.id}
+                              </Text>
+                            </div>
+                          ) : (
+                            <Text size="2" weight="medium" className="text-info-strong font-mono">
+                              {consignment.id}
+                            </Text>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">

@@ -228,7 +228,7 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			escaped = strings.ReplaceAll(escaped, "%", "\\%")
 			escaped = strings.ReplaceAll(escaped, "_", "\\_")
 			queryVal := "%" + strings.ToLower(escaped) + "%"
-			q = q.Where("LOWER(id) LIKE ? ESCAPE '\\'", queryVal)
+			q = q.Where("LOWER(id) LIKE ? ESCAPE '\\' OR LOWER(name) LIKE ? ESCAPE '\\'", queryVal, queryVal)
 		}
 		return q
 	}
