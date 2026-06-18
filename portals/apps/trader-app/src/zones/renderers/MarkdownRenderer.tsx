@@ -20,13 +20,17 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
                 href ?? '',
               )
 
-             if (isStorageKey && href) {
+            if (isStorageKey && href) {
               const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
                 e.preventDefault()
                 if (uploadCtx?.getDownloadUrl) {
-                  // Synchronously open a new blank window to bypass browser popup blockers
-                  const newWindow = window.open('about:blank', '_blank', 'noopener,noreferrer')
-                  
+                  // Synchronously open a new blank window to bypass browser popup blockers.
+                  // We omit 'noopener,noreferrer' features here because it causes window.open to return null.
+                  const newWindow = window.open('about:blank', '_blank')
+                  if (newWindow) {
+                    newWindow.opener = null // Secure against reverse tabnabbing
+                  }
+
                   uploadCtx
                     .getDownloadUrl(href)
                     .then(({ url }) => {
@@ -44,7 +48,11 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
               }
 
               return (
-                <a href={`/storage/${href}`} onClick={handleClick} className="text-primary hover:underline cursor-pointer">
+                <a
+                  href={`/storage/${href}`}
+                  onClick={handleClick}
+                  className="text-primary hover:underline cursor-pointer"
+                >
                   {children}
                 </a>
               )
