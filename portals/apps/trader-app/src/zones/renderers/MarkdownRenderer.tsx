@@ -15,22 +15,23 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-3 mb-1">{children}</h3>,
           p: ({ children }) => <p className="text-foreground-muted">{children}</p>,
           a: ({ children, href }) => {
-            const isStorageKey = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\.[a-zA-Z0-9]+)?$/.test(href ?? '')
-            
+            const isStorageKey =
+              /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\.[a-zA-Z0-9]+)?$/.test(
+                href ?? '',
+              )
+
             if (isStorageKey && href) {
               const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
                 e.preventDefault()
                 if (uploadCtx?.getDownloadUrl) {
-                  uploadCtx.getDownloadUrl(href)
+                  uploadCtx
+                    .getDownloadUrl(href)
                     .then(({ url }) => {
                       window.open(url, '_blank', 'noopener,noreferrer')
                     })
                     .catch((err) => {
                       console.error('Failed to resolve secure download url from context', err)
-                      window.open(`/storage/${href}`, '_blank', 'noopener,noreferrer')
                     })
-                } else {
-                  window.open(`/storage/${href}`, '_blank', 'noopener,noreferrer')
                 }
               }
 
