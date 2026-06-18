@@ -16,6 +16,26 @@
           {
             "const": "adam-pvt-ltd",
             "title": "ADAM PVT LTD"
+          },
+          {
+            "const": "govtech-company",
+            "title": "GovTech Company"
+          },
+          {
+            "const": "piu-company",
+            "title": "PIU Company"
+          },
+          {
+            "const": "cda-company",
+            "title": "CDA Company"
+          },
+          {
+            "const": "npqs-company",
+            "title": "NPQS Company"
+          },
+          {
+            "const": "fcau-company",
+            "title": "FCAU Company"
           }
         ]
       }
