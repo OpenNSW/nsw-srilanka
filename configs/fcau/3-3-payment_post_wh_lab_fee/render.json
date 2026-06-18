@@ -25,7 +25,7 @@
         ]
       }
     },
-    "workspace": {
+    "user_input": {
       "id": "workspace",
       "templateId": "fcau-pay-post-wh-lab-fee--upload-form",
       "title": "Accredited Lab Payment Receipt Upload",
