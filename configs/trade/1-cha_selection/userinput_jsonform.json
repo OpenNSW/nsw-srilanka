@@ -18,23 +18,23 @@
             "title": "ADAM PVT LTD"
           },
           {
-            "const": "govtech-company",
+            "const": "govtech",
             "title": "GovTech Company"
           },
           {
-            "const": "piu-company",
+            "const": "piu",
             "title": "PIU Company"
           },
           {
-            "const": "cda-company",
+            "const": "cda",
             "title": "CDA Company"
           },
           {
-            "const": "npqs-company",
+            "const": "npqs",
             "title": "NPQS Company"
           },
           {
-            "const": "fcau-company",
+            "const": "fcau",
             "title": "FCAU Company"
           }
         ]
