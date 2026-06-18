@@ -3,7 +3,12 @@
   "type": "APPLICATION",
   "title": "[FCAU] Warehouse Inspection Scheduling",
   "sections": {
-    "workspace": {
+    "instructions": {
+      "templateId": "fcau-warehouse-scheduling--instructions",
+      "title": "Scheduling Instructions",
+      "projector": "MARKDOWN"
+    },
+    "user_input": {
       "id": "workspace",
       "templateId": "fcau-warehouse-scheduling--form",
       "title": "Warehouse Inspection Scheduling",

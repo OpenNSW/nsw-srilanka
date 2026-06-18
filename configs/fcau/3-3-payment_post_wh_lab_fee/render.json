@@ -1,13 +1,36 @@
 {
   "id": "fcau-pay-post-wh-lab-fee-flow:render",
-  "type": "PAYMENT",
+  "type": "APPLICATION",
   "title": "[FCAU] Pay Post-Warehouse Lab Test Fee",
   "sections": {
+    "instructions": {
+      "templateId": "fcau-pay-post-wh-lab-fee--feedback-instructions",
+      "title": "Officer Feedback",
+      "projector": "MARKDOWN",
+      "dataKey": "paymentreviewerform",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ],
+        "requireDataKey": "paymentreviewerform"
+      }
+    },
+    "payment_instructions": {
+      "templateId": "fcau-pay-post-wh-lab-fee--offline-instructions",
+      "title": "Payment Instructions",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      }
+    },
     "workspace": {
-      "templateId": "fcau-pay-post-wh-lab-fee--select-method-form",
-      "title": "Select Payment Gateway",
+      "id": "workspace",
+      "templateId": "fcau-pay-post-wh-lab-fee--upload-form",
+      "title": "Accredited Lab Payment Receipt Upload",
       "projector": "FORM",
-      "dataKey": "payment_method",
+      "dataKey": "traderinput",
       "visibleWhen": {
         "states": [
           "PENDING_USER"
@@ -16,30 +39,19 @@
       "handles": [
         {
           "command": "submit",
-          "label": "Proceed to Payment",
+          "label": "Submit Receipt",
           "element": "primary_action"
         }
       ]
     },
-    "payment_details": {
-      "templateId": "fcau-pay-post-wh-lab-fee--payment-details-markdown",
-      "title": "Post-Warehouse Laboratory Test Fee Details",
+    "status_message": {
+      "templateId": "fcau-pay-post-wh-lab-fee--review-status",
+      "title": "Verification Status",
       "projector": "MARKDOWN",
-      "dataKey": "payment",
+      "dataKey": "traderinput",
       "visibleWhen": {
         "states": [
-          "PENDING_PAYMENT"
-        ]
-      }
-    },
-    "payment_success": {
-      "templateId": "fcau-pay-post-wh-lab-fee--success-message",
-      "title": "Payment Successful",
-      "projector": "MARKDOWN",
-      "dataKey": "payment",
-      "visibleWhen": {
-        "states": [
-          "COMPLETED"
+          "QUEUED_EXTERNALLY"
         ]
       }
     }
@@ -51,9 +63,6 @@
           "command": "submit"
         }
       ]
-    },
-    "PENDING_PAYMENT": {
-      "actions": []
     }
   }
 }

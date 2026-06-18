@@ -9,11 +9,6 @@
         "title": "Generated Food Health Certificate ID",
         "example": "CERT-FCAU-ACME-9024"
       },
-      "certificate_url": {
-        "type": "string",
-        "title": "Digital Certificate Registry Link",
-        "example": "https://foodsafety.nsw.gov.lk/certs/FCAU-ACME-9024.pdf"
-      },
       "certificate": {
         "type": "string",
         "title": "Digital Certificate File Upload (PDF)",
@@ -21,13 +16,13 @@
       },
       "authorized_signature": {
         "type": "string",
-        "title": "Officer Cryptographic Signature Authority",
+        "title": "Approving Officer",
         "example": "DR. ANURA SILVA - CHIEF FOOD INSPECTOR"
       }
     },
     "required": [
       "certificate_id",
-      "certificate_url",
+      "certificate",
       "authorized_signature"
     ]
   },
@@ -37,10 +32,6 @@
       {
         "type": "Control",
         "scope": "#/properties/certificate_id"
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/certificate_url"
       },
       {
         "type": "Control",

@@ -1023,6 +1023,13 @@
       "path": "fcau/3-1-warehouse_scheduling/traderinput_jsonform.json"
     },
     {
+      "id": "fcau-warehouse-scheduling--instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-1-warehouse_scheduling/trader_instructions_jsonform.json"
+    },
+    {
       "id": "fcau-warehouse-scheduling-flow",
       "kind": "workflow",
       "version": "",
@@ -1086,32 +1093,53 @@
       "path": "fcau/3-2-warehouse_inspection/task_template.json"
     },
     {
-      "id": "fcau-pay-post-wh-lab-fee--instructions-wrapper",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/instructions_wrapper_jsonform.json"
-    },
-    {
-      "id": "fcau-pay-post-wh-lab-fee--payment",
+      "id": "fcau-pay-post-wh-lab-fee--upload-receipt",
       "kind": "subtask_template",
       "version": "",
       "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/payment.json"
+      "path": "fcau/3-3-payment_post_wh_lab_fee/upload_receipt.json"
     },
     {
-      "id": "fcau-pay-post-wh-lab-fee--payment-form",
+      "id": "fcau-pay-post-wh-lab-fee--upload-form",
       "kind": "generic_template",
       "version": "",
       "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/payment_jsonform.json"
+      "path": "fcau/3-3-payment_post_wh_lab_fee/upload_receipt_jsonform.json"
     },
     {
-      "id": "fcau-pay-post-wh-lab-fee--payment-details-markdown",
+      "id": "fcau-pay-post-wh-lab-fee--review-receipt",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-3-payment_post_wh_lab_fee/review_receipt.json"
+    },
+    {
+      "id": "fcau-pay-post-wh-lab-fee--review-form",
       "kind": "generic_template",
       "version": "",
       "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/payment_details_markdown.json"
+      "path": "fcau/3-3-payment_post_wh_lab_fee/review_receipt_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-post-wh-lab-fee--feedback-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-3-payment_post_wh_lab_fee/feedback_instructions_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-post-wh-lab-fee--offline-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-3-payment_post_wh_lab_fee/offline_instructions_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-post-wh-lab-fee--review-status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/3-3-payment_post_wh_lab_fee/review_status_jsonform.json"
     },
     {
       "id": "fcau-pay-post-wh-lab-fee-flow:render",
@@ -1119,27 +1147,6 @@
       "version": "",
       "loader": "local",
       "path": "fcau/3-3-payment_post_wh_lab_fee/render.json"
-    },
-    {
-      "id": "fcau-pay-post-wh-lab-fee--select-method",
-      "kind": "subtask_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/select_method.json"
-    },
-    {
-      "id": "fcau-pay-post-wh-lab-fee--select-method-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/select_method_jsonform.json"
-    },
-    {
-      "id": "fcau-pay-post-wh-lab-fee--success-message",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/success_message_jsonform.json"
     },
     {
       "id": "fcau-pay-post-wh-lab-fee-flow",
@@ -1303,32 +1310,53 @@
       "path": "fcau/4-2-visual_assessment/task_template.json"
     },
     {
-      "id": "fcau-pay-lab-fee--instructions-wrapper",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/instructions_wrapper_jsonform.json"
-    },
-    {
-      "id": "fcau-pay-lab-fee--payment",
+      "id": "fcau-pay-lab-fee--upload-receipt",
       "kind": "subtask_template",
       "version": "",
       "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/payment.json"
+      "path": "fcau/4-3-payment_lab_fee/upload_receipt.json"
     },
     {
-      "id": "fcau-pay-lab-fee--payment-form",
+      "id": "fcau-pay-lab-fee--upload-form",
       "kind": "generic_template",
       "version": "",
       "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/payment_jsonform.json"
+      "path": "fcau/4-3-payment_lab_fee/upload_receipt_jsonform.json"
     },
     {
-      "id": "fcau-pay-lab-fee--payment-details-markdown",
+      "id": "fcau-pay-lab-fee--review-receipt",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-3-payment_lab_fee/review_receipt.json"
+    },
+    {
+      "id": "fcau-pay-lab-fee--review-form",
       "kind": "generic_template",
       "version": "",
       "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/payment_details_markdown.json"
+      "path": "fcau/4-3-payment_lab_fee/review_receipt_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-lab-fee--feedback-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-3-payment_lab_fee/feedback_instructions_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-lab-fee--offline-instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-3-payment_lab_fee/offline_instructions_jsonform.json"
+    },
+    {
+      "id": "fcau-pay-lab-fee--review-status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/4-3-payment_lab_fee/review_status_jsonform.json"
     },
     {
       "id": "fcau-pay-lab-fee-flow:render",
@@ -1336,27 +1364,6 @@
       "version": "",
       "loader": "local",
       "path": "fcau/4-3-payment_lab_fee/render.json"
-    },
-    {
-      "id": "fcau-pay-lab-fee--select-method",
-      "kind": "subtask_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/select_method.json"
-    },
-    {
-      "id": "fcau-pay-lab-fee--select-method-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/select_method_jsonform.json"
-    },
-    {
-      "id": "fcau-pay-lab-fee--success-message",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/success_message_jsonform.json"
     },
     {
       "id": "fcau-pay-lab-fee-flow",

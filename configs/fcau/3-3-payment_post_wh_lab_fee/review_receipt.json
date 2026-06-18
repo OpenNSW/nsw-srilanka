@@ -1,0 +1,12 @@
+{
+  "id": "fcau-pay-post-wh-lab-fee--review-receipt",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "paymentreviewerform",
+  "plugin_properties": {
+    "officer_jsonforms_id": "fcau-pay-post-wh-lab-fee--review-form",
+    "reviewer_jsonforms_id": "fcau-pay-post-wh-lab-fee--review-form",
+    "service_id": "fcau",
+    "path": "/api/v1/inject",
+    "task_code": "fcau_post_wh_lab_fee_review_v1"
+  }
+}

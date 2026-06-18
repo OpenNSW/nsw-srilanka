@@ -206,7 +206,7 @@
         "fcau.userform": "userform"
       },
       "output_mapping": {
-        "lab_payment_status": "fcau.lab_fee_payment_status"
+        "payment_review_outcome": "fcau.lab_fee_payment_status"
       }
     },
     {
@@ -263,7 +263,10 @@
         "fcau.reference_number": "reference_number",
         "fcau.userform": "userform"
       },
-      "output_mapping": {}
+      "output_mapping": {
+        "certificate_id": "fcau.certificate_id",
+        "certificate": "fcau.certificate"
+      }
     },
     {
       "id": "end_app_review_failed",

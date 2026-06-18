@@ -53,22 +53,21 @@
     "required": [
       "application_review_outcome"
     ],
-    "allOf": [
-      {
-        "if": {
-          "properties": {
-            "application_review_outcome": {
-              "const": "approve"
-            }
-          }
-        },
-        "then": {
-          "required": [
-            "reference_number"
-          ]
+    "if": {
+      "properties": {
+        "application_review_outcome": {
+          "const": "approve"
         }
-      }
-    ]
+      },
+      "required": [
+        "application_review_outcome"
+      ]
+    },
+    "then": {
+      "required": [
+        "reference_number"
+      ]
+    }
   },
   "uiSchema": {
     "type": "VerticalLayout",

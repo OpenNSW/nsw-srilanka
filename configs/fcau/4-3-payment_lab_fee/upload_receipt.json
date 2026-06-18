@@ -1,0 +1,6 @@
+{
+  "id": "fcau-pay-lab-fee--upload-receipt",
+  "task_type": "USER_INPUT",
+  "output_namespace": "traderinput",
+  "plugin_properties": {}
+}

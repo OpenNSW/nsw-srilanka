@@ -8,25 +8,33 @@
       "type": "START"
     },
     {
-      "id": "select_method_task",
+      "id": "upload_receipt_task",
       "type": "TASK",
-      "task_template_id": "fcau-pay-post-wh-lab-fee--select-method",
-      "input_mapping": {},
+      "task_template_id": "fcau-pay-post-wh-lab-fee--upload-receipt",
+      "input_mapping": {
+        "payment_feedback?": "payment_feedback"
+      },
       "output_mapping": {
-        "selected_method": "selected_method"
+        "lab_receipt": "lab_receipt"
       }
     },
     {
-      "id": "pay_lab_fee_task",
+      "id": "review_receipt_task",
       "type": "TASK",
-      "task_template_id": "fcau-pay-post-wh-lab-fee--payment",
+      "task_template_id": "fcau-pay-post-wh-lab-fee--review-receipt",
       "input_mapping": {
         "reference_number": "reference_number",
-        "selected_method": "selected_method"
+        "lab_receipt": "lab_receipt"
       },
       "output_mapping": {
-        "payment_status": "post_wh_lab_payment_status"
+        "payment_review_outcome": "post_wh_lab_payment_status",
+        "payment_feedback?": "payment_feedback"
       }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
     },
     {
       "id": "end",
@@ -35,19 +43,31 @@
   ],
   "edges": [
     {
-      "id": "e1",
+      "id": "e_start",
       "source_id": "start",
-      "target_id": "select_method_task"
+      "target_id": "upload_receipt_task"
     },
     {
-      "id": "e2",
-      "source_id": "select_method_task",
-      "target_id": "pay_lab_fee_task"
+      "id": "e_to_review",
+      "source_id": "upload_receipt_task",
+      "target_id": "review_receipt_task"
     },
     {
-      "id": "e3",
-      "source_id": "pay_lab_fee_task",
-      "target_id": "end"
+      "id": "e_to_gateway",
+      "source_id": "review_receipt_task",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "upload_receipt_task",
+      "condition": "post_wh_lab_payment_status == 'needs_more_info'"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "post_wh_lab_payment_status == 'approve'"
     }
   ]
 }

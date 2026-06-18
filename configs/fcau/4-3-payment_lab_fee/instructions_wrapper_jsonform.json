@@ -1,4 +1,0 @@
-{
-  "id": "fcau-pay-lab-fee--instructions-wrapper",
-  "template": "{{ .instructions }}"
-}

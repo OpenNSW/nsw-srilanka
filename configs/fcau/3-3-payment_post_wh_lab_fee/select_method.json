@@ -1,8 +1,0 @@
-{
-  "id": "fcau-pay-post-wh-lab-fee--select-method",
-  "task_type": "USER_INPUT",
-  "output_namespace": "payment_method",
-  "plugin_properties": {
-    "task_code": "fcau_post_wh_lab_fee_select_method_v1"
-  }
-}

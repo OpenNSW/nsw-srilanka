@@ -1,0 +1,4 @@
+{
+  "id": "fcau-pay-lab-fee--review-status",
+  "template": "### Payment Verification Pending\n\nYour laboratory test payment receipt has been submitted and is currently being reviewed by an FCAU officer.\n\n**Receipt File**: [View Uploaded Receipt]({{.lab_receipt}})\n\nThis page will update automatically once the review is completed."
+}

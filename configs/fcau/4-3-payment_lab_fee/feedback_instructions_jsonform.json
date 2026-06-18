@@ -1,0 +1,4 @@
+{
+  "id": "fcau-pay-lab-fee--feedback-instructions",
+  "template": "### ⚠️ Needs More Information\n\nThe reviewing officer has requested updates regarding your laboratory fee payment:\n\n> **Officer Comments:** {{.payment_feedback}}"
+}

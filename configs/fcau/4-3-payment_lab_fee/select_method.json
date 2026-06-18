@@ -1,8 +1,0 @@
-{
-  "id": "fcau-pay-lab-fee--select-method",
-  "task_type": "USER_INPUT",
-  "output_namespace": "payment_method",
-  "plugin_properties": {
-    "task_code": "fcau_lab_fee_select_method_v1"
-  }
-}

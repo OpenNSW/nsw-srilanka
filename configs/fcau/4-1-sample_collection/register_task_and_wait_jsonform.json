@@ -12,19 +12,8 @@
       "received_at": {
         "type": "string",
         "format": "date",
-        "title": "Date & Time of Receipt",
+        "title": "Date of Receipt",
         "example": "2026-06-18T09:30:00Z"
-      },
-      "receipt_outcome": {
-        "type": "string",
-        "title": "Sample Receipt Outcome",
-        "oneOf": [
-          {
-            "const": "confirmed",
-            "title": "Confirmed"
-          }
-        ],
-        "default": "confirmed"
       },
       "notes": {
         "type": "string",
@@ -34,8 +23,7 @@
     },
     "required": [
       "initial_sample",
-      "received_at",
-      "receipt_outcome"
+      "received_at"
     ]
   },
   "uiSchema": {
@@ -48,10 +36,6 @@
       {
         "type": "Control",
         "scope": "#/properties/received_at"
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/receipt_outcome"
       },
       {
         "type": "Control",
