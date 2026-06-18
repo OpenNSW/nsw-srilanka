@@ -20,23 +20,31 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
                 href ?? '',
               )
 
-            if (isStorageKey && href) {
+             if (isStorageKey && href) {
               const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
                 e.preventDefault()
                 if (uploadCtx?.getDownloadUrl) {
+                  // Synchronously open a new blank window to bypass browser popup blockers
+                  const newWindow = window.open('about:blank', '_blank', 'noopener,noreferrer')
+                  
                   uploadCtx
                     .getDownloadUrl(href)
                     .then(({ url }) => {
-                      window.open(url, '_blank', 'noopener,noreferrer')
+                      if (newWindow) {
+                        newWindow.location.href = url
+                      }
                     })
                     .catch((err) => {
                       console.error('Failed to resolve secure download url from context', err)
+                      if (newWindow) {
+                        newWindow.close()
+                      }
                     })
                 }
               }
 
               return (
-                <a onClick={handleClick} className="text-primary hover:underline cursor-pointer">
+                <a href={`/storage/${href}`} onClick={handleClick} className="text-primary hover:underline cursor-pointer">
                   {children}
                 </a>
               )
