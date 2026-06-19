@@ -27,14 +27,9 @@ export class HttpError extends Error {
 const inFlightRequests = new Map<string, Promise<{ data: unknown }>>()
 
 function isPlainObject(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    !(value instanceof FormData) &&
-    !(value instanceof Blob) &&
-    !(value instanceof ArrayBuffer) &&
-    !(value instanceof URLSearchParams)
-  )
+  if (typeof value !== 'object' || value === null) return false
+  const proto = Object.getPrototypeOf(value) as unknown
+  return proto === null || proto === Object.prototype
 }
 
 export const http = {
@@ -42,11 +37,10 @@ export const http = {
     let url = config.url
     if (config.params) {
       const searchParams = new URLSearchParams()
-      for (const [key, value] of Object.entries(config.params)) {
-        if (value !== undefined && value !== null) {
-          searchParams.append(key, String(value))
-        }
-      }
+      Object.entries(config.params)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([key, value]) => searchParams.append(key, String(value)))
       const queryString = searchParams.toString()
       if (queryString) {
         url += (url.includes('?') ? '&' : '?') + queryString
@@ -54,8 +48,9 @@ export const http = {
     }
 
     const isGet = !config.method || config.method.toUpperCase() === 'GET'
+    const isCacheable = isGet && !config.signal
 
-    if (isGet && inFlightRequests.has(url)) {
+    if (isCacheable && inFlightRequests.has(url)) {
       return inFlightRequests.get(url)!
     }
 
@@ -86,7 +81,9 @@ export const http = {
         let body: unknown = errorText
         try {
           body = JSON.parse(errorText) as unknown
-        } catch {}
+        } catch {
+          // errorText is not valid JSON — use raw string as body
+        }
         throw new HttpError(response.status, response.statusText, body)
       }
 
@@ -104,7 +101,7 @@ export const http = {
       return { data }
     })()
 
-    if (isGet) {
+    if (isCacheable) {
       inFlightRequests.set(url, promise)
       void promise.finally(() => inFlightRequests.delete(url))
     }

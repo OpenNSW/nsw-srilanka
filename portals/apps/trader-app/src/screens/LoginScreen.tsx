@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '../config'
@@ -7,7 +7,7 @@ export function LoginScreen() {
   const auth = useAuth()
   const { t } = useTranslation()
 
-  const hasUrlError = new URLSearchParams(window.location.search).has('error')
+  const hasUrlError = useMemo(() => new URLSearchParams(window.location.search).has('error'), [])
 
   useEffect(() => {
     if (!hasUrlError) {
