@@ -4,22 +4,62 @@
     {
       "id": "npqs",
       "url": "http://localhost:8081",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://localhost:8090/oauth2/token",
+          "client_id": "NSW_TO_NPQS",
+          "client_secret": "env:M2M_NSW_TO_NPQS_SECRET",
+          "scopes": ["agency:application:inject"],
+          "insecure_skip_tls_verify": true
+        }
+      }
     },
     {
       "id": "fcau",
       "url": "http://localhost:8082",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://localhost:8090/oauth2/token",
+          "client_id": "NSW_TO_FCAU",
+          "client_secret": "env:M2M_NSW_TO_FCAU_SECRET",
+          "scopes": ["agency:application:inject"],
+          "insecure_skip_tls_verify": true
+        }
+      }
     },
     {
       "id": "cda",
       "url": "http://localhost:8083",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://localhost:8090/oauth2/token",
+          "client_id": "NSW_TO_CDA",
+          "client_secret": "env:M2M_NSW_TO_CDA_SECRET",
+          "scopes": ["agency:application:inject"],
+          "insecure_skip_tls_verify": true
+        }
+      }
     },
     {
       "id": "slpa",
       "url": "http://localhost:8084",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://localhost:8090/oauth2/token",
+          "client_id": "NSW_TO_SLPA",
+          "client_secret": "env:M2M_NSW_TO_SLPA_SECRET",
+          "scopes": ["agency:application:inject"],
+          "insecure_skip_tls_verify": true
+        }
+      }
     },
     {
       "id": "customs-asycuda",

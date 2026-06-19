@@ -4,22 +4,62 @@
     {
       "id": "npqs",
       "url": "http://host.docker.internal:8081",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "NSW_TO_NPQS",
+          "client_secret": "env:M2M_NSW_TO_NPQS_SECRET",
+          "insecure_skip_tls_verify": true,
+          "scopes": ["agency:application:inject"]
+        }
+      }
     },
     {
       "id": "fcau",
       "url": "http://host.docker.internal:8082",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "NSW_TO_FCAU",
+          "client_secret": "env:M2M_NSW_TO_FCAU_SECRET",
+          "insecure_skip_tls_verify": true,
+          "scopes": ["agency:application:inject"]
+        }
+      }
     },
     {
       "id": "cda",
       "url": "http://host.docker.internal:8083",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "NSW_TO_CDA",
+          "client_secret": "env:M2M_NSW_TO_CDA_SECRET",
+          "insecure_skip_tls_verify": true,
+          "scopes": ["agency:application:inject"]
+        }
+      }
     },
     {
       "id": "slpa",
       "url": "http://host.docker.internal:8084",
-      "timeout": "30s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "NSW_TO_SLPA",
+          "client_secret": "env:M2M_NSW_TO_SLPA_SECRET",
+          "insecure_skip_tls_verify": true,
+          "scopes": ["agency:application:inject"]
+        }
+      }
     },
     {
       "id": "customs-asycuda",
