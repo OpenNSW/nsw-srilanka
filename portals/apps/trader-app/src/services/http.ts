@@ -33,7 +33,7 @@ function isPlainObject(value: unknown): boolean {
 }
 
 export const http = {
-  request: async (config: RequestConfig): Promise<{ data: unknown }> => {
+  request: async <T = unknown>(config: RequestConfig): Promise<{ data: T }> => {
     let url = config.url
     if (config.params) {
       const searchParams = new URLSearchParams()
@@ -51,10 +51,10 @@ export const http = {
     const isCacheable = isGet && !config.signal
 
     if (isCacheable && inFlightRequests.has(url)) {
-      return inFlightRequests.get(url)!
+      return inFlightRequests.get(url)! as Promise<{ data: T }>
     }
 
-    const promise = (async (): Promise<{ data: unknown }> => {
+    const promise = (async (): Promise<{ data: T }> => {
       const headers: Record<string, string> = { ...config.headers }
 
       if (config.attachToken) {
@@ -72,7 +72,12 @@ export const http = {
       const response = await fetch(url, {
         method: config.method || 'GET',
         headers,
-        body: config.data ? (serializableBody ? JSON.stringify(config.data) : (config.data as BodyInit)) : undefined,
+        body:
+          config.data !== undefined
+            ? serializableBody
+              ? JSON.stringify(config.data)
+              : (config.data as BodyInit)
+            : undefined,
         signal: config.signal,
       })
 
@@ -94,11 +99,11 @@ export const http = {
         try {
           data = JSON.parse(text) as unknown
         } catch (e) {
-          console.warn('Failed to parse JSON response body:', e)
+          throw new Error(`Failed to parse JSON response body: ${e instanceof Error ? e.message : String(e)}`)
         }
       }
 
-      return { data }
+      return { data: data as T }
     })()
 
     if (isCacheable) {

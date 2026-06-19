@@ -21,18 +21,17 @@ export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise
 
 async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT'): Promise<Workflow | null> {
   try {
-    const { data } = await http.request({
+    const { data } = await http.request<WorkflowTemplate>({
       url: `${API_BASE_URL}/api/v1/workflows/templates`,
       params: { hsCode, tradeFlow },
       attachToken: true,
     })
 
-    const template = data as WorkflowTemplate
     return {
-      id: template.id,
-      name: template.version,
+      id: data.id,
+      name: data.version,
       type: tradeFlow.toLowerCase() as 'import' | 'export',
-      steps: template.steps,
+      steps: data.steps,
     }
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
@@ -43,9 +42,9 @@ async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT
 }
 
 export async function getWorkflowById(id: string): Promise<Workflow | undefined> {
-  const { data } = await http.request({
+  const { data } = await http.request<Workflow>({
     url: `${API_BASE_URL}/api/v1/workflows/${id}`,
     attachToken: true,
   })
-  return data as Workflow
+  return data
 }

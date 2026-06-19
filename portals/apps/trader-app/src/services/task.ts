@@ -18,11 +18,11 @@ export type TaskCommandResponse = {
 }
 
 export async function getZoneView(taskId: string): Promise<ZoneView> {
-  const { data } = await http.request({
+  const { data } = await http.request<ZoneView>({
     url: `${API_BASE_URL}/api/v1/tasks/${taskId}`,
     attachToken: true,
   })
-  return data as ZoneView
+  return data
 }
 
 export async function submitTaskStep(taskId: string, command: string, payload: Record<string, unknown>): Promise<void> {
@@ -37,7 +37,7 @@ export async function submitTaskStep(taskId: string, command: string, payload: R
 export async function sendTaskCommand(request: TaskCommandRequest): Promise<TaskCommandResponse> {
   const action: string = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
 
-  const { data } = await http.request({
+  const { data } = await http.request<TaskCommandResponse>({
     url: `${API_BASE_URL}/api/v1/tasks/${request.taskId}/commands/${action}`,
     method: 'POST',
     data: {
@@ -46,5 +46,5 @@ export async function sendTaskCommand(request: TaskCommandRequest): Promise<Task
     },
     attachToken: true,
   })
-  return data as TaskCommandResponse
+  return data
 }
