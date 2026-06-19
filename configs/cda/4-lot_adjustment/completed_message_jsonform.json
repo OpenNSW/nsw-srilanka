@@ -1,0 +1,4 @@
+{
+  "id": "cda-lot-adjustment-trader--completed",
+  "template": "### Lot Adjustment Complete\n\nYour lot adjustment request has been processed successfully.\n\n* **CUSDEC Reference**: `{{.reference_number}}`\n* **Status**: Completed\n\nThe revised certificate is available in the **View Revised Certificate** task. No further action is required on this step."
+}

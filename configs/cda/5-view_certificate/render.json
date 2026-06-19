@@ -31,6 +31,16 @@
           "element": "primary_action"
         }
       ]
+    },
+    "completed_message": {
+      "templateId": "cda-view-new-certificate--completed",
+      "title": "Application Complete",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
     }
   },
   "states": {
