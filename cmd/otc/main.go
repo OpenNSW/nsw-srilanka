@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -219,6 +220,7 @@ func handleAddCompany() {
 	}
 
 	db := initDB()
+	svc := company.NewService(db)
 
 	// Build the record
 	record := company.Record{
@@ -231,7 +233,7 @@ func handleAddCompany() {
 
 	fmt.Println()
 	fmt.Println("Inserting company record into database...")
-	if err := db.Create(&record).Error; err != nil {
+	if err := svc.CreateCompany(context.Background(), &record); err != nil {
 		fmt.Printf("Error: failed to insert company record: %v\n", err)
 		os.Exit(1)
 	}
