@@ -1675,6 +1675,13 @@
       "path": "cda/4-lot_adjustment/certificate_display_jsonform.json"
     },
     {
+      "id": "cda-lot-adjustment-trader--completed",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/4-lot_adjustment/completed_message_jsonform.json"
+    },
+    {
       "id": "cda-lot-adjustment-officer--review-form",
       "kind": "generic_template",
       "version": "",
@@ -1722,6 +1729,13 @@
       "version": "",
       "loader": "local",
       "path": "cda/5-view_certificate/certificate_display_jsonform.json"
+    },
+    {
+      "id": "cda-view-new-certificate--completed",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/5-view_certificate/completed_message_jsonform.json"
     },
     {
       "id": "cda-view-new-certificate--user-form",

@@ -53,6 +53,16 @@
           "element": "primary_action"
         }
       ]
+    },
+    "completed_message": {
+      "templateId": "cda-lot-adjustment-trader--completed",
+      "title": "Lot Adjustment Complete",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
     }
   },
   "states": {
