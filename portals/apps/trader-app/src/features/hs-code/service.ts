@@ -1,6 +1,6 @@
-import { http } from './http'
-import { API_BASE_URL } from '../constants'
-import type { HSCodeListResult, HSCodeQueryParams } from './types/hsCode'
+import { http } from '@/services/http'
+import { API_BASE_URL } from '@/constants'
+import type { HSCodeListResult, HSCodeQueryParams } from './types'
 
 export async function getHSCodes(params: HSCodeQueryParams = {}): Promise<HSCodeListResult> {
   const queryParams: Record<string, string | number> = {}

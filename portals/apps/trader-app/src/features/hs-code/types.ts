@@ -1,4 +1,4 @@
-import type { PaginatedResponse } from './common'
+import type { PaginatedResponse } from '@/services/types/common'
 
 export interface HSCode {
   id: string
