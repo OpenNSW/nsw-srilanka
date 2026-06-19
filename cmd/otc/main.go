@@ -24,7 +24,7 @@ func loadEnv() {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -43,7 +43,7 @@ func loadEnv() {
 			val = val[1 : len(val)-1]
 		}
 		if os.Getenv(key) == "" {
-			os.Setenv(key, val)
+			_ = os.Setenv(key, val)
 		}
 	}
 }
@@ -257,10 +257,10 @@ func handleListCompanies() {
 	fmt.Printf("Found %d company record(s):\n\n", len(records))
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tOU HANDLE\tHAS CHA\tCREATED AT")
-	fmt.Fprintln(w, "--\t----\t---------\t-------\t----------")
+	_, _ = fmt.Fprintln(w, "ID\tNAME\tOU HANDLE\tHAS CHA\tCREATED AT")
+	_, _ = fmt.Fprintln(w, "--\t----\t---------\t-------\t----------")
 	for _, r := range records {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\n",
 			r.ID,
 			r.Name,
 			r.OUHandle,
@@ -268,7 +268,7 @@ func handleListCompanies() {
 			r.CreatedAt.Format("2006-01-02 15:04:05"),
 		)
 	}
-	w.Flush()
+	_ = w.Flush()
 }
 
 func handleViewCompany(id string) {

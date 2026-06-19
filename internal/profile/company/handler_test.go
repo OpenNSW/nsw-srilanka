@@ -23,7 +23,7 @@ func (s *stubService) GetCompanyByOUHandle(_ context.Context, _ string) (*Record
 }
 func (s *stubService) UpdateCompany(_ context.Context, _ string, _ map[string]any) error { return nil }
 func (s *stubService) Health(_ context.Context) error                                    { return nil }
-func (s *stubService) CreateCompany(_ context.Context, _ *Record) error                   { return nil }
+func (s *stubService) CreateCompany(_ context.Context, _ *Record) error                  { return nil }
 func (s *stubService) ListCompanies(_ context.Context, filter ListFilter) (*ListResult, error) {
 	s.lastFilter = filter
 	return s.listResult, s.listErr
