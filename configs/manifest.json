@@ -904,6 +904,13 @@
       "path": "fcau/1-application/trader_results_jsonform.json"
     },
     {
+      "id": "fcau-apply-health-cert--submitted-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "fcau/1-application/submitted_message_jsonform.json"
+    },
+    {
       "id": "fcau-apply-health-cert--user-input",
       "kind": "subtask_template",
       "version": "",
