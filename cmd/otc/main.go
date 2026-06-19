@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -42,7 +44,7 @@ func loadEnv() {
 		if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
 			val = val[1 : len(val)-1]
 		}
-		if os.Getenv(key) == "" {
+		if _, exists := os.LookupEnv(key); !exists {
 			_ = os.Setenv(key, val)
 		}
 	}
@@ -133,6 +135,10 @@ func promptString(reader *bufio.Reader, promptText string, required bool, defaul
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Println("\nInput cancelled (EOF). Exiting...")
+				os.Exit(0)
+			}
 			log.Fatalf("Failed to read input: %v", err)
 		}
 		input = strings.TrimSpace(input)
@@ -159,6 +165,10 @@ func promptBool(reader *bufio.Reader, promptText string, defaultValue bool) bool
 		fmt.Printf("%s (y/n) [%s]: ", promptText, defaultStr)
 		input, err := reader.ReadString('\n')
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Println("\nInput cancelled (EOF). Exiting...")
+				os.Exit(0)
+			}
 			log.Fatalf("Failed to read input: %v", err)
 		}
 		input = strings.TrimSpace(input)
@@ -243,29 +253,33 @@ func handleAddCompany() {
 
 func handleListCompanies() {
 	db := initDB()
+	svc := company.NewService(db)
 
-	var records []company.Record
-	if err := db.Order("name ASC").Find(&records).Error; err != nil {
-		log.Fatalf("Failed to retrieve companies from database: %v", err)
+	limit := 1000
+	filter := company.ListFilter{
+		Limit: &limit,
 	}
 
-	if len(records) == 0 {
+	result, err := svc.ListCompanies(context.Background(), filter)
+	if err != nil {
+		log.Fatalf("Failed to retrieve companies: %v", err)
+	}
+
+	if len(result.Items) == 0 {
 		fmt.Println("No company records found in the database.")
 		return
 	}
 
-	fmt.Printf("Found %d company record(s):\n\n", len(records))
+	fmt.Printf("Found %d company record(s):\n\n", len(result.Items))
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ID\tNAME\tOU HANDLE\tHAS CHA\tCREATED AT")
-	_, _ = fmt.Fprintln(w, "--\t----\t---------\t-------\t----------")
-	for _, r := range records {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%s\n",
+	_, _ = fmt.Fprintln(w, "ID\tNAME\tHAS CHA")
+	_, _ = fmt.Fprintln(w, "--\t----\t-------")
+	for _, r := range result.Items {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%t\n",
 			r.ID,
 			r.Name,
-			r.OUHandle,
 			r.HasCHA,
-			r.CreatedAt.Format("2006-01-02 15:04:05"),
 		)
 	}
 	_ = w.Flush()
@@ -273,10 +287,11 @@ func handleListCompanies() {
 
 func handleViewCompany(id string) {
 	db := initDB()
+	svc := company.NewService(db)
 
-	var r company.Record
-	if err := db.Where("id = ?", id).First(&r).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	r, err := svc.GetCompanyByID(context.Background(), id)
+	if err != nil {
+		if errors.Is(err, company.ErrCompanyNotFound) {
 			fmt.Printf("Error: company with ID %q not found.\n", id)
 			os.Exit(1)
 		}
