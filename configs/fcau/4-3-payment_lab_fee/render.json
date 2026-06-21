@@ -4,19 +4,7 @@
   "title": "[FCAU] Pay Lab Test Fee",
   "sections": {
     "instructions": {
-      "templateId": "fcau-pay-lab-fee--feedback-instructions",
-      "title": "Officer Feedback",
-      "projector": "MARKDOWN",
-      "dataKey": "paymentreviewerform",
-      "visibleWhen": {
-        "states": [
-          "PENDING_USER"
-        ],
-        "requireDataKey": "paymentreviewerform"
-      }
-    },
-    "payment_instructions": {
-      "templateId": "fcau-pay-lab-fee--offline-instructions",
+      "templateId": "fcau-pay-lab-fee--review-status",
       "title": "Payment Instructions",
       "projector": "MARKDOWN",
       "visibleWhen": {
@@ -48,10 +36,10 @@
       "templateId": "fcau-pay-lab-fee--review-status",
       "title": "Verification Status",
       "projector": "MARKDOWN",
-      "dataKey": "traderinput",
       "visibleWhen": {
         "states": [
-          "QUEUED_EXTERNALLY"
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
         ]
       }
     }
@@ -63,6 +51,7 @@
           "command": "submit"
         }
       ]
-    }
+    },
+    "COMPLETED": {}
   }
 }

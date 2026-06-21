@@ -1330,20 +1330,7 @@
       "loader": "local",
       "path": "fcau/4-3-payment_lab_fee/review_receipt_jsonform.json"
     },
-    {
-      "id": "fcau-pay-lab-fee--feedback-instructions",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/feedback_instructions_jsonform.json"
-    },
-    {
-      "id": "fcau-pay-lab-fee--offline-instructions",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/4-3-payment_lab_fee/offline_instructions_jsonform.json"
-    },
+
     {
       "id": "fcau-pay-lab-fee--review-status",
       "kind": "generic_template",
