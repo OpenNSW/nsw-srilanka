@@ -1,21 +1,17 @@
-import { defaultApiClient, type ApiClient } from './api'
+import { http } from './http'
+import { API_BASE_URL } from '../constants'
 import type { HSCodeListResult, HSCodeQueryParams } from './types/hsCode'
 
-export async function getHSCodes(
-  params: HSCodeQueryParams = {},
-  apiClient: ApiClient = defaultApiClient,
-): Promise<HSCodeListResult> {
-  // Convert HSCodeQueryParams to QueryParams
+export async function getHSCodes(params: HSCodeQueryParams = {}): Promise<HSCodeListResult> {
   const queryParams: Record<string, string | number> = {}
-  if (params.hsCodeStartsWith) {
-    queryParams.hsCodeStartsWith = params.hsCodeStartsWith
-  }
-  if (params.limit !== undefined) {
-    queryParams.limit = params.limit
-  }
-  if (params.offset !== undefined) {
-    queryParams.offset = params.offset
-  }
+  if (params.hsCodeStartsWith) queryParams.hsCodeStartsWith = params.hsCodeStartsWith
+  if (params.limit !== undefined) queryParams.limit = params.limit
+  if (params.offset !== undefined) queryParams.offset = params.offset
 
-  return apiClient.get<HSCodeListResult>('/hscodes', queryParams)
+  const { data } = await http.request<HSCodeListResult>({
+    url: `${API_BASE_URL}/api/v1/hscodes`,
+    params: queryParams,
+    attachToken: true,
+  })
+  return data
 }

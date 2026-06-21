@@ -35,6 +35,9 @@ type Service interface {
 
 	// Health checks if the service can access the database.
 	Health(ctx context.Context) error
+
+	// CreateCompany creates a new company record in the database.
+	CreateCompany(ctx context.Context, record *Record) error
 }
 
 type service struct {
@@ -170,6 +173,25 @@ func (s *service) Health(ctx context.Context) error {
 	if err := sqlDB.PingContext(ctx); err != nil {
 		slog.Error("company service health check failed", "error", err)
 		return fmt.Errorf("company service health check failed: %w", err)
+	}
+	return nil
+}
+
+func (s *service) CreateCompany(ctx context.Context, record *Record) error {
+	if record.ID == "" {
+		return ErrInvalidCompanyID
+	}
+	if record.Name == "" {
+		return fmt.Errorf("company name is required")
+	}
+	if record.OUHandle == "" {
+		record.OUHandle = record.ID
+	}
+
+	result := s.db.WithContext(ctx).Create(record)
+	if result.Error != nil {
+		slog.Error("failed to create company record", "id", record.ID, "error", result.Error)
+		return fmt.Errorf("database insert failed: %w", result.Error)
 	}
 	return nil
 }

@@ -4,7 +4,6 @@ import { Button, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { getZoneView, submitTaskStep } from '../services/task'
-import { useApi } from '../services/ApiContext'
 import { TraderZoneLayout } from '../zones/TraderZoneLayout'
 import type { ZoneView } from '../zones/types'
 
@@ -14,7 +13,6 @@ export function TaskDetailScreen() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
   const goBack = () => navigate(-1)
-  const api = useApi()
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,7 +33,7 @@ export function TaskDetailScreen() {
         else setLoading(true)
         setError(null)
 
-        const zv = await getZoneView(taskId, api)
+        const zv = await getZoneView(taskId)
         setZoneView(zv)
       } catch (err) {
         setError(t('tasks.error.fetchFailed'))
@@ -45,7 +43,7 @@ export function TaskDetailScreen() {
         else setLoading(false)
       }
     },
-    [api, taskId, t],
+    [taskId, t],
   )
 
   useEffect(() => {
@@ -133,7 +131,7 @@ export function TaskDetailScreen() {
           if (!taskId) return
           setSubmitError(null)
           try {
-            await submitTaskStep(taskId, command, data, api)
+            await submitTaskStep(taskId, command, data)
             await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
             await fetchTask()
           } catch (err) {

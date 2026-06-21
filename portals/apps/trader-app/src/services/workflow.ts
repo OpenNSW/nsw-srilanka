@@ -1,4 +1,5 @@
-import { apiGet } from './api'
+import { http, HttpError } from './http'
+import { API_BASE_URL } from '../constants'
 import type { Workflow, WorkflowTemplate, WorkflowQueryParams } from './types/workflow'
 
 export interface WorkflowResponse {
@@ -6,10 +7,7 @@ export interface WorkflowResponse {
   export: Workflow[]
 }
 
-const WORKFLOW_TEMPLATES_ENDPOINT = '/workflows/templates'
-
 export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise<WorkflowResponse> {
-  // Fetch import and export workflows in parallel
   const [importWorkflow, exportWorkflow] = await Promise.all([
     fetchWorkflowByType(params.hs_code, 'IMPORT'),
     fetchWorkflowByType(params.hs_code, 'EXPORT'),
@@ -23,21 +21,20 @@ export async function getWorkflowsByHSCode(params: WorkflowQueryParams): Promise
 
 async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT'): Promise<Workflow | null> {
   try {
-    const template = await apiGet<WorkflowTemplate>(WORKFLOW_TEMPLATES_ENDPOINT, {
-      hsCode,
-      tradeFlow,
+    const { data } = await http.request<WorkflowTemplate>({
+      url: `${API_BASE_URL}/api/v1/workflows/templates`,
+      params: { hsCode, tradeFlow },
+      attachToken: true,
     })
 
-    // Transform WorkflowTemplate to Workflow
     return {
-      id: template.id,
-      name: template.version,
+      id: data.id,
+      name: data.version,
       type: tradeFlow.toLowerCase() as 'import' | 'export',
-      steps: template.steps,
+      steps: data.steps,
     }
   } catch (error) {
-    // Return null for 404 errors (workflow not found)
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof HttpError && error.status === 404) {
       return null
     }
     throw error
@@ -45,5 +42,9 @@ async function fetchWorkflowByType(hsCode: string, tradeFlow: 'IMPORT' | 'EXPORT
 }
 
 export async function getWorkflowById(id: string): Promise<Workflow | undefined> {
-  return apiGet<Workflow>(`/workflows/${id}`)
+  const { data } = await http.request<Workflow>({
+    url: `${API_BASE_URL}/api/v1/workflows/${id}`,
+    attachToken: true,
+  })
+  return data
 }

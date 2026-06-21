@@ -7,7 +7,6 @@ import { ConsignmentDetailScreen } from './screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from './screens/TaskDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
-import { ApiProvider, useApi } from './services/ApiContext'
 import { RoleProvider } from './services/RoleContext'
 import { UploadProvider } from '@opennsw/jsonforms-renderers'
 import { uploadFile, getDownloadUrl } from './services/storage'
@@ -18,9 +17,8 @@ import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
 
 function UploadWrapper({ children }: { children: ReactNode }) {
-  const api = useApi()
   return (
-    <UploadProvider onUpload={(file) => uploadFile(api, file)} getDownloadUrl={(key) => getDownloadUrl(api, key)}>
+    <UploadProvider onUpload={(file) => uploadFile(file)} getDownloadUrl={(key) => getDownloadUrl(key)}>
       {children}
     </UploadProvider>
   )
@@ -34,13 +32,11 @@ function ProtectedLayout() {
   if (!availableRoles || availableRoles.length === 0) return <UnauthorizedScreen />
 
   return (
-    <ApiProvider>
-      <RoleProvider availableGroups={availableRoles} isLoading={isResolvingRoles}>
-        <UploadWrapper>
-          <Layout />
-        </UploadWrapper>
-      </RoleProvider>
-    </ApiProvider>
+    <RoleProvider availableGroups={availableRoles} isLoading={isResolvingRoles}>
+      <UploadWrapper>
+        <Layout />
+      </UploadWrapper>
+    </RoleProvider>
   )
 }
 

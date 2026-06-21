@@ -47,6 +47,7 @@ services:
       - go-bin:/go/bin
       # Mount local sibling directories for go.work resolution
       - ${CORE_PATH:-../core}:/core
+      - ${CORE_REMOTE_PATH:-../core/remote}:/core/remote
     environment:
       # Load GOWORK from environment (defaults to off if not set)
       - GOWORK=${GOWORK:-off}

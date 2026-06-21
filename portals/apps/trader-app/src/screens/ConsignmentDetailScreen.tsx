@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 import { ActionListView } from '../components/WorkflowViewer'
 import type { ConsignmentDetail } from '../services/types/consignment.ts'
 import { getConsignment } from '../services/consignment.ts'
-import { useApi } from '../services/ApiContext'
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
@@ -24,7 +23,6 @@ type FetchMode = 'initial' | 'refresh' | 'poll'
 export function ConsignmentDetailScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
-  const api = useApi()
   const { t } = useTranslation()
   const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,7 +63,7 @@ export function ConsignmentDetailScreen() {
       if (mode === 'initial') setLoading(true)
 
       try {
-        const result = await getConsignment(consignmentId, api)
+        const result = await getConsignment(consignmentId)
         if (requestId !== requestCountRef.current) return
 
         if (!result) {
@@ -110,7 +108,7 @@ export function ConsignmentDetailScreen() {
         }
       }
     },
-    [api, consignmentId, clearProvisionTimer],
+    [consignmentId, clearProvisionTimer],
   )
 
   // The provisioning poll reschedules itself via setTimeout. Invoke through a

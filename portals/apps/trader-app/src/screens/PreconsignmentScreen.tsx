@@ -9,12 +9,10 @@ import {
   getPreConsignment,
   type TraderPreConsignmentItem,
 } from '../services/preConsignment'
-import { useApi } from '../services/ApiContext'
 import { PaginationControl } from '../components/common/PaginationControl'
 
 export function PreconsignmentScreen() {
   const navigate = useNavigate()
-  const api = useApi()
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<TraderPreConsignmentItem[]>([])
@@ -29,7 +27,7 @@ export function PreconsignmentScreen() {
     const requestId = ++listRequestIdRef.current
     try {
       setLoading(true)
-      const response = await getTraderPreConsignments(page * limit, limit, api)
+      const response = await getTraderPreConsignments(page * limit, limit)
       if (requestId !== listRequestIdRef.current) {
         return
       }
@@ -60,7 +58,7 @@ export function PreconsignmentScreen() {
 
   useEffect(() => {
     loadData()
-  }, [api, page])
+  }, [page])
 
   useEffect(() => {
     if (notification?.type === 'success') {
@@ -73,7 +71,7 @@ export function PreconsignmentScreen() {
     setNotification(null)
     try {
       setLoading(true)
-      const instance = await createPreConsignment(templateId, api)
+      const instance = await createPreConsignment(templateId)
 
       const nodes = instance.workflowNodes || []
       const targetNode = nodes.find(
@@ -98,7 +96,7 @@ export function PreconsignmentScreen() {
     setNotification(null)
     try {
       setLoading(true)
-      const instance = await getPreConsignment(preConsignmentId, api)
+      const instance = await getPreConsignment(preConsignmentId)
       const nodes = instance.workflowNodes || []
 
       let targetNode = nodes.find((node) => node.state === 'IN_PROGRESS' || node.state === 'READY')

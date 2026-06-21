@@ -5,14 +5,12 @@ import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../services/types/consignment.ts'
 import { createConsignment, getAllConsignments } from '../services/consignment.ts'
-import { useApi } from '../services/ApiContext'
 import { useRole } from '../services/RoleContext'
 import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
 import { PaginationControl } from '../components/common/PaginationControl'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
-  const api = useApi()
   const { t } = useTranslation()
   const [consignments, setConsignments] = useState<ConsignmentSummary[]>([])
 
@@ -34,7 +32,7 @@ export function ConsignmentScreen() {
   const handleCreateConsignment = async () => {
     setCreating(true)
     try {
-      const response = await createConsignment(api)
+      const response = await createConsignment()
       void navigate(`/consignments/${response.id}`)
     } catch (error) {
       console.error('Failed to create consignment:', error)
@@ -54,7 +52,6 @@ export function ConsignmentScreen() {
           stateFilter as ConsignmentState | 'all',
           tradeFlowFilter as TradeFlow | 'all',
           role,
-          api,
         )
         if (requestId !== listRequestIdRef.current) {
           return
@@ -74,7 +71,7 @@ export function ConsignmentScreen() {
     }
 
     void fetchConsignments()
-  }, [api, page, stateFilter, tradeFlowFilter, role])
+  }, [page, stateFilter, tradeFlowFilter, role])
 
   const filteredConsignments = consignments.filter((c) => {
     const item = c.items?.[0]

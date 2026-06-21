@@ -57,6 +57,10 @@ func (m *MockCompanyService) Health(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
 
+func (m *MockCompanyService) CreateCompany(ctx context.Context, record *company.Record) error {
+	return m.Called(ctx, record).Error(0)
+}
+
 func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
 	db, _ := setupTestDB(t)
 	svc := NewService(db, nil, nil, nil, nil, nil)

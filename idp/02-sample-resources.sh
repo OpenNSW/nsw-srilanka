@@ -19,15 +19,21 @@ SURESH_PASSWORD="${SAMPLE_SURESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 RAMESH_PASSWORD="${SAMPLE_RAMESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 GOMESH_PASSWORD="${SAMPLE_GOMESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 NARESH_PASSWORD="${SAMPLE_NARESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-NPQS_USER_PASSWORD="${SAMPLE_NPQS_USER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-FCAU_USER_PASSWORD="${SAMPLE_FCAU_USER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-CDA_USER_PASSWORD="${SAMPLE_CDA_USER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-SLPA_USER_PASSWORD="${SAMPLE_SLPA_USER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
+NPQS_OFFICER_PASSWORD="${SAMPLE_NPQS_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
+FCAU_OFFICER_PASSWORD="${SAMPLE_FCAU_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
+CDA_OFFICER_PASSWORD="${SAMPLE_CDA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
+SLPA_OFFICER_PASSWORD="${SAMPLE_SLPA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 M2M_CLIENT_SECRET="${M2M_CLIENT_SECRET:-1234}"
-NPQS_M2M_CLIENT_SECRET="${M2M_NPQS_SECRET:-${M2M_CLIENT_SECRET}}"
-FCAU_M2M_CLIENT_SECRET="${M2M_FCAU_SECRET:-${M2M_CLIENT_SECRET}}"
-CDA_M2M_CLIENT_SECRET="${M2M_CDA_SECRET:-${M2M_CLIENT_SECRET}}"
-SLPA_M2M_CLIENT_SECRET="${M2M_SLPA_SECRET:-${M2M_CLIENT_SECRET}}"
+# Outbound (Agency -> NSW) M2M client secrets — one per *_TO_NSW client.
+NPQS_M2M_CLIENT_SECRET="${M2M_NPQS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
+FCAU_M2M_CLIENT_SECRET="${M2M_FCAU_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
+CDA_M2M_CLIENT_SECRET="${M2M_CDA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
+SLPA_M2M_CLIENT_SECRET="${M2M_SLPA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
+# Inbound (NSW -> Agency) M2M client secrets — one per NSW_TO_* client.
+NSW_TO_NPQS_M2M_CLIENT_SECRET="${M2M_NSW_TO_NPQS_SECRET:-${M2M_CLIENT_SECRET}}"
+NSW_TO_FCAU_M2M_CLIENT_SECRET="${M2M_NSW_TO_FCAU_SECRET:-${M2M_CLIENT_SECRET}}"
+NSW_TO_CDA_M2M_CLIENT_SECRET="${M2M_NSW_TO_CDA_SECRET:-${M2M_CLIENT_SECRET}}"
+NSW_TO_SLPA_M2M_CLIENT_SECRET="${M2M_NSW_TO_SLPA_SECRET:-${M2M_CLIENT_SECRET}}"
 
 # ----------------------------------------------------------------------------
 # OAuth2 resource servers & scope sets
@@ -59,6 +65,10 @@ M2M_NSW_SCOPES='"nsw:task:write", "nsw:consignment:read", "nsw:storage:read", "n
 # Government reviewers (OGA portal SPA users via *PortalApp -> AGENCY_API):
 # review trader applications and read/write supporting documents.
 AGENCY_REVIEWER_SCOPES='"agency:application:read", "agency:application:review", "agency:application:feedback", "agency:consignment:read", "agency:storage:read", "agency:storage:write"'
+
+# NSW core (M2M client_credentials -> AGENCY_API): inject consignment/task
+# data into an agency's review queue.
+M2M_AGENCY_SCOPES='"agency:application:inject"'
 
 log_info "Creating sample Thunder resources..."
 echo ""
@@ -740,7 +750,7 @@ log_info "Creating AGENCY_API resource server (audience for the OpenNSW/nsw-agen
 AGENCY_RS_ID=$(create_resource_server "Agency API" "${AGENCY_API_IDENTIFIER}" "${DEFAULT_OU_ID}")
 AGENCY_ROOT_RES_ID=$(create_resource "$AGENCY_RS_ID" "agency" "Agency API")
 RID=$(create_resource "$AGENCY_RS_ID" "application" "Application" "$AGENCY_ROOT_RES_ID")
-create_action "$AGENCY_RS_ID" "$RID" "read" "Read"; create_action "$AGENCY_RS_ID" "$RID" "review" "Review"; create_action "$AGENCY_RS_ID" "$RID" "feedback" "Feedback"
+create_action "$AGENCY_RS_ID" "$RID" "read" "Read"; create_action "$AGENCY_RS_ID" "$RID" "review" "Review"; create_action "$AGENCY_RS_ID" "$RID" "feedback" "Feedback"; create_action "$AGENCY_RS_ID" "$RID" "inject" "Inject"
 RID=$(create_resource "$AGENCY_RS_ID" "consignment" "Consignment" "$AGENCY_ROOT_RES_ID")
 create_action "$AGENCY_RS_ID" "$RID" "read" "Read"
 RID=$(create_resource "$AGENCY_RS_ID" "storage" "Storage" "$AGENCY_ROOT_RES_ID")
@@ -1557,6 +1567,50 @@ assign_role_to_group "$OGA_REVIEWER_ROLE_ID" "$OGA_REVIEWERS_GROUP_ID" "OGA Revi
 echo ""
 
 # ============================================================================
+# Create NswM2M Role (granted to M2M clients calling the Agency API)
+# ============================================================================
+# Reverse of AgencyM2M: NSW core's machine clients (the NSW_TO_* apps below)
+# call the nsw-agency backend's inject endpoint. Assigning this role to each app
+# makes their client_credentials tokens carry aud=AGENCY_API plus the
+# agency:application:inject scope. Lives in the government-sector OU alongside
+# the OGA Reviewer role (same AGENCY_API audience).
+log_info "Creating NswM2M role (AGENCY_API permissions for machine clients)..."
+read -r -d '' NSW_M2M_ROLE_PAYLOAD <<JSON || true
+{
+    "name": "NswM2M",
+    "description": "Role for NSW machine-to-machine clients calling the Agency API",
+    "ouId": "${GOVERNMENT_ORG_OU_ID}",
+    "permissions": [
+        {
+            "resourceServerId": "${AGENCY_RS_ID}",
+            "permissions": [ ${M2M_AGENCY_SCOPES} ]
+        }
+    ]
+}
+JSON
+RESPONSE=$(api_call POST "/roles" "${NSW_M2M_ROLE_PAYLOAD}")
+HTTP_CODE="${RESPONSE: -3}"
+BODY="${RESPONSE%???}"
+if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]]; then
+    log_success "NswM2M role created successfully"
+    NSW_M2M_ROLE_ID=$(extract_first_id "$BODY")
+elif [[ "$HTTP_CODE" == "409" ]]; then
+    log_warning "NswM2M role already exists, retrieving ID..."
+    NSW_M2M_ROLE_ID=$(get_role_id_by_name "NswM2M" "$GOVERNMENT_ORG_OU_ID")
+else
+    log_error "Failed to create NswM2M role (HTTP $HTTP_CODE)"
+    echo "Response: $BODY"
+    exit 1
+fi
+if [[ -z "$NSW_M2M_ROLE_ID" ]]; then
+    log_error "Could not determine NswM2M role ID"
+    exit 1
+fi
+log_info "NswM2M role ID: $NSW_M2M_ROLE_ID"
+
+echo ""
+
+# ============================================================================
 # Create Users in OUs
 # ============================================================================
 
@@ -1574,16 +1628,16 @@ USER_GOMESH="$CREATED_USER_ID"
 create_user_in_ou "Private_User" "$EDWARD_PVT_LTD_OU_ID" "naresh" "naresh@edward-pvt-ltd.private-sector.dev" "Naresh" "Fernando" "$NARESH_PASSWORD" "+94771234570"
 USER_NARESH="$CREATED_USER_ID"
 
-create_user_in_ou "Government_User" "$NPQS_OU_ID" "npqs_user" "npqs_user@government.dev" "NPQS" "User" "$NPQS_USER_PASSWORD" "+94771234560"
+create_user_in_ou "Government_User" "$NPQS_OU_ID" "npqs_officer" "npqs_officer@government.dev" "NPQS" "Officer" "$NPQS_OFFICER_PASSWORD" "+94771234560"
 USER_NPQS_ID="$CREATED_USER_ID"
 
-create_user_in_ou "Government_User" "$FCAU_OU_ID" "fcau_user" "fcau_user@government.dev" "FCAU" "User" "$FCAU_USER_PASSWORD" "+94771234561"
+create_user_in_ou "Government_User" "$FCAU_OU_ID" "fcau_officer" "fcau_officer@government.dev" "FCAU" "Officer" "$FCAU_OFFICER_PASSWORD" "+94771234561"
 USER_FCAU_ID="$CREATED_USER_ID"
 
-create_user_in_ou "Government_User" "$CDA_OU_ID" "cda_user" "cda_user@government.dev" "CDA" "User" "$CDA_USER_PASSWORD" "+94771234563"
+create_user_in_ou "Government_User" "$CDA_OU_ID" "cda_officer" "cda_officer@government.dev" "CDA" "Officer" "$CDA_OFFICER_PASSWORD" "+94771234563"
 USER_CDA_ID="$CREATED_USER_ID"
 
-create_user_in_ou "Government_User" "$SLPA_OU_ID" "slpa_user" "slpa_user@government.dev" "SLPA" "User" "$SLPA_USER_PASSWORD" "+94771234564"
+create_user_in_ou "Government_User" "$SLPA_OU_ID" "slpa_officer" "slpa_officer@government.dev" "SLPA" "Officer" "$SLPA_OFFICER_PASSWORD" "+94771234564"
 USER_SLPA_ID="$CREATED_USER_ID"
 
 echo ""
@@ -1601,10 +1655,10 @@ ensure_user_in_group "$TRADERS_GROUP_ID" "$USER_GOMESH" "Traders" "gomesh"
 ensure_user_in_group "$CHA_GROUP_ID" "$USER_NARESH" "CHA" "naresh"
 
 # Government reviewers join the shared OGA Reviewers group (grants AGENCY_API).
-ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_NPQS_ID" "OGA Reviewers" "npqs_user"
-ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_FCAU_ID" "OGA Reviewers" "fcau_user"
-ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_CDA_ID" "OGA Reviewers" "cda_user"
-ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_SLPA_ID" "OGA Reviewers" "slpa_user"
+ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_NPQS_ID" "OGA Reviewers" "npqs_officer"
+ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_FCAU_ID" "OGA Reviewers" "fcau_officer"
+ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_CDA_ID" "OGA Reviewers" "cda_officer"
+ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_SLPA_ID" "OGA Reviewers" "slpa_officer"
 
 echo ""
 
@@ -1708,6 +1762,32 @@ assign_role_to_app "$AGENCY_M2M_ROLE_ID" "$SLPA_TO_NSW_M2M_APP_ID" "AgencyM2M" "
 echo ""
 
 # ============================================================================
+# Create M2M Applications for NSW core calling Agency APIs (NSW -> OGA)
+# ============================================================================
+# Reverse direction of the *_TO_NSW clients above: NSW core injects data into
+# each agency's portal via POST /api/v1/inject. Each app is assigned the NswM2M
+# role so its token carries aud=AGENCY_API + agency:application:inject. Created
+# in the government-sector OU to match the NswM2M role's OU.
+
+create_m2m_application "NSW_TO_NPQS_M2M" "Machine-to-machine integration for NSW to NPQS" "NSW_TO_NPQS" "${NSW_TO_NPQS_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
+NSW_TO_NPQS_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_NPQS_M2M_APP_ID" "NswM2M" "NSW_TO_NPQS_M2M"
+
+create_m2m_application "NSW_TO_FCAU_M2M" "Machine-to-machine integration for NSW to FCAU" "NSW_TO_FCAU" "${NSW_TO_FCAU_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
+NSW_TO_FCAU_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_FCAU_M2M_APP_ID" "NswM2M" "NSW_TO_FCAU_M2M"
+
+create_m2m_application "NSW_TO_CDA_M2M" "Machine-to-machine integration for NSW to CDA" "NSW_TO_CDA" "${NSW_TO_CDA_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
+NSW_TO_CDA_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_CDA_M2M_APP_ID" "NswM2M" "NSW_TO_CDA_M2M"
+
+create_m2m_application "NSW_TO_SLPA_M2M" "Machine-to-machine integration for NSW to SLPA" "NSW_TO_SLPA" "${NSW_TO_SLPA_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
+NSW_TO_SLPA_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_SLPA_M2M_APP_ID" "NswM2M" "NSW_TO_SLPA_M2M"
+
+echo ""
+
+# ============================================================================
 # Summary
 # ============================================================================
 
@@ -1728,7 +1808,9 @@ log_info "gomesh in groups: Traders"
 log_info "naresh (EDWARD PVT LTD) in groups: CHA"
 log_info "Government users: npqs_user, fcau_user, cda_user, slpa_user - all in OGA Reviewers group"
 log_info "App client IDs: TRADER_PORTAL_APP, OGA_PORTAL_APP_NPQS, OGA_PORTAL_APP_FCAU, OGA_PORTAL_APP_CDA, OGA_PORTAL_APP_SLPA"
-log_info "M2M client IDs: NPQS_TO_NSW, FCAU_TO_NSW, CDA_TO_NSW, SLPA_TO_NSW"
+log_info "M2M client IDs (OGA -> NSW): NPQS_TO_NSW, FCAU_TO_NSW, CDA_TO_NSW, SLPA_TO_NSW"
+log_info "M2M client IDs (NSW -> OGA): NSW_TO_NPQS, NSW_TO_FCAU, NSW_TO_CDA, NSW_TO_SLPA"
+log_info "M2M roles: AgencyM2M (clients -> NSW_API), NswM2M (clients -> AGENCY_API)"
 log_info "M2M auth method: client_secret_basic"
 echo ""
 log_info "Resource servers (token audiences):"

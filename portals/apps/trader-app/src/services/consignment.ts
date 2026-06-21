@@ -5,19 +5,28 @@ import type {
   ConsignmentState,
   TradeFlow,
 } from './types/consignment'
-import { defaultApiClient, type ApiClient } from './api'
+import { http, HttpError } from './http'
+import { API_BASE_URL } from '../constants'
 
-// createConsignment creates a new export consignment. It returns the created consignment's ID and initial state.
-export async function createConsignment(apiClient: ApiClient = defaultApiClient): Promise<CreateConsignmentResponse> {
-  return apiClient.post<Record<string, never>, CreateConsignmentResponse>('/consignments', {})
+export async function createConsignment(): Promise<CreateConsignmentResponse> {
+  const { data } = await http.request<CreateConsignmentResponse>({
+    url: `${API_BASE_URL}/api/v1/consignments`,
+    method: 'POST',
+    data: {},
+    attachToken: true,
+  })
+  return data
 }
 
-export async function getConsignment(id: string, apiClient: ApiClient = defaultApiClient): Promise<Consignment | null> {
+export async function getConsignment(id: string): Promise<Consignment | null> {
   try {
-    return await apiClient.get<Consignment>(`/consignments/${id}`)
+    const { data } = await http.request<Consignment>({
+      url: `${API_BASE_URL}/api/v1/consignments/${id}`,
+      attachToken: true,
+    })
+    return data
   } catch (error) {
-    // Return null for 404s, rethrow other errors
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof HttpError && error.status === 404) {
       return null
     }
     throw error
@@ -30,14 +39,16 @@ export async function getAllConsignments(
   state?: ConsignmentState | 'all',
   flow?: TradeFlow | 'all',
   role: 'trader' | 'cha' = 'trader',
-  apiClient: ApiClient = defaultApiClient,
 ): Promise<ConsignmentListResult> {
   const params: Record<string, string | number> = { offset, limit }
   if (state && state !== 'all') params.state = state
   if (flow && flow !== 'all') params.flow = flow
   params.role = role
 
-  const response = await apiClient.get<ConsignmentListResult>('/consignments', params)
-
-  return response
+  const { data } = await http.request<ConsignmentListResult>({
+    url: `${API_BASE_URL}/api/v1/consignments`,
+    params,
+    attachToken: true,
+  })
+  return data
 }

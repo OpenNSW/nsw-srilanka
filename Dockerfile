@@ -19,6 +19,8 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
     go build -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
+    go build -ldflags="-s -w" -o /out/otc ./cmd/otc
 
 # -------------------------------------------------------------------
 # Migrate builder – builds the standalone migrator from nsw-agency.
@@ -100,6 +102,7 @@ WORKDIR /app
 # Copy the binary. Set ownership at copy time (--chown) to avoid a redundant
 # chown -R layer that would duplicate the copied files.
 COPY --chown=appuser:appuser --from=builder /out/server /app/server
+COPY --chown=appuser:appuser --from=builder /out/otc /usr/local/bin/otc
 
 # Bake application configs into the image. These files are tracked in git and
 # version with the code (workflow/form definitions, payment_methods.json,

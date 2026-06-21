@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '../config'
@@ -5,6 +6,16 @@ import { appConfig, displayName } from '../config'
 export function LoginScreen() {
   const auth = useAuth()
   const { t } = useTranslation()
+
+  const hasUrlError = useMemo(() => new URLSearchParams(window.location.search).has('error'), [])
+
+  useEffect(() => {
+    if (!hasUrlError) {
+      void auth.clearStaleState()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const { systemName, appName, logoUrl, description, heroImageUrl, partnerLogos } = appConfig.branding
 
   return (
@@ -29,7 +40,7 @@ export function LoginScreen() {
 
         {/* Centered Authentication Card */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-          {auth.error && (
+          {auth.error && hasUrlError && (
             <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-xl">
               <p className="text-sm text-red-700 font-semibold">{t('auth.login.errorTitle')}</p>
               <p className="text-xs text-red-600 mt-1">{auth.error.message}</p>

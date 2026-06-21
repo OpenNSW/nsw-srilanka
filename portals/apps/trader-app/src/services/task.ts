@@ -1,4 +1,5 @@
-import { defaultApiClient, type ApiClient, type ApiResponse } from './api'
+import { http } from './http'
+import { API_BASE_URL } from '../constants'
 import type { ZoneView } from '../zones/types'
 
 export type TaskCommand = 'SUBMISSION' | 'SAVE_AS_DRAFT'
@@ -10,54 +11,40 @@ export interface TaskCommandRequest {
   data: Record<string, unknown>
 }
 
-export type TaskCommandResponse = ApiResponse<Record<string, unknown>>
-
-export interface SendTaskCommandRequest {
-  task_id: string
-  workflow_id: string
-  payload: {
-    action: string
-    content: Record<string, unknown>
-  }
+export type TaskCommandResponse = {
+  success: boolean
+  data: Record<string, unknown>
+  error?: { code: string; message: string; details: unknown }
 }
 
-const TASKS_API_URL = '/tasks'
-
-export async function getZoneView(taskId: string, apiClient: ApiClient = defaultApiClient): Promise<ZoneView> {
-  return apiClient.get<ZoneView>(`${TASKS_API_URL}/${taskId}`)
+export async function getZoneView(taskId: string): Promise<ZoneView> {
+  const { data } = await http.request<ZoneView>({
+    url: `${API_BASE_URL}/api/v1/tasks/${taskId}`,
+    attachToken: true,
+  })
+  return data
 }
 
-export async function submitTaskStep(
-  taskId: string,
-  command: string,
-  payload: Record<string, unknown>,
-  apiClient: ApiClient = defaultApiClient,
-): Promise<void> {
-  await apiClient.post<Record<string, unknown>, unknown>(`${TASKS_API_URL}/${taskId}/commands/${command}`, payload)
+export async function submitTaskStep(taskId: string, command: string, payload: Record<string, unknown>): Promise<void> {
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/tasks/${taskId}/commands/${command}`,
+    method: 'POST',
+    data: payload,
+    attachToken: true,
+  })
 }
 
-export async function sendTaskAction(
-  taskId: string,
-  _workflowId: string,
-  action: string,
-): Promise<TaskCommandResponse> {
-  return defaultApiClient.post<Record<string, unknown>, TaskCommandResponse>(
-    `${TASKS_API_URL}/${taskId}/commands/${action}`,
-    {},
-  )
-}
-
-export async function sendTaskCommand(
-  request: TaskCommandRequest,
-  apiClient: ApiClient = defaultApiClient,
-): Promise<TaskCommandResponse> {
-  console.log(`Sending ${request.command} command for task: ${request.taskId}`, request)
-
-  // Use POST /api/v1/tasks/{taskId}/commands/{action} with action type and submission data
+export async function sendTaskCommand(request: TaskCommandRequest): Promise<TaskCommandResponse> {
   const action: string = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
 
-  return apiClient.post<Record<string, unknown>, TaskCommandResponse>(
-    `${TASKS_API_URL}/${request.taskId}/commands/${action}`,
-    request.data || {},
-  )
+  const { data } = await http.request<TaskCommandResponse>({
+    url: `${API_BASE_URL}/api/v1/tasks/${request.taskId}/commands/${action}`,
+    method: 'POST',
+    data: {
+      workflow_id: request.workflowId,
+      content: request.data,
+    },
+    attachToken: true,
+  })
+  return data
 }
