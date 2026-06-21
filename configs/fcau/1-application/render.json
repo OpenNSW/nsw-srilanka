@@ -3,7 +3,27 @@
   "type": "APPLICATION",
   "title": "[FCAU] Apply for Health Certificate",
   "sections": {
-    "workspace": {
+    "assessment_outcome": {
+      "templateId": "fcau-apply-health-cert--trader-results",
+      "title": "Application Assessment Outcome",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "fcau-apply-health-cert--submitted-message",
+      "title": "Submission Status",
+      "projector": "MARKDOWN",
+      "dataKey": "userform",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    },
+    "user_form": {
       "templateId": "fcau-apply-health-cert--user-form",
       "title": "Health Certificate Application",
       "projector": "FORM",
@@ -15,15 +35,6 @@
           "element": "primary_action"
         }
       ]
-    },
-    "instructions": {
-      "templateId": "fcau-apply-health-cert--trader-results",
-      "title": "Application Assessment Outcome",
-      "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
-      "visibleWhen": {
-        "requireDataKey": "reviewerform"
-      }
     }
   },
   "states": {

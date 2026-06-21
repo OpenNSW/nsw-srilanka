@@ -3,7 +3,7 @@
   "type": "APPLICATION",
   "title": "[CDA] Submit Application",
   "sections": {
-    "verified_message": {
+    "approval_message": {
       "templateId": "cda-apply-coconut-cert--verified-message",
       "title": "Verification Status",
       "projector": "MARKDOWN",

@@ -6,12 +6,12 @@
     "properties": {
       "certificate_id": {
         "type": "string",
-        "title": "Generated Food Health Certificate ID",
+        "title": "Health Certificate ID",
         "example": "CERT-FCAU-ACME-9024"
       },
       "certificate": {
         "type": "string",
-        "title": "Digital Certificate File Upload (PDF)",
+        "title": "Certificate File Upload (PDF)",
         "format": "file"
       },
       "authorized_signature": {

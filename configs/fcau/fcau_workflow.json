@@ -25,12 +25,6 @@
       }
     },
     {
-      "id": "fcau_application_gateway",
-      "type": "GATEWAY",
-      "gateway_type": "EXCLUSIVE_SPLIT",
-      "name": "Is Application Satisfactory?"
-    },
-    {
       "id": "fcau_2_0_pay_fee",
       "type": "TASK",
       "name": "[FCAU 2.0] Pay Application Fee",
@@ -224,6 +218,34 @@
       }
     },
     {
+      "id": "fcau_6_0_pay_escalated_lab_fee",
+      "type": "TASK",
+      "name": "[FCAU 6.0-ESCALATED] Pay Escalated Lab Test Fee & Upload Receipt",
+      "task_template_id": "fcau-pay-lab-fee-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "fcau.reference_number": "reference_number",
+        "fcau.userform": "userform"
+      },
+      "output_mapping": {
+        "payment_review_outcome": "fcau.escalated_lab_fee_payment_status"
+      }
+    },
+    {
+      "id": "fcau_7_0_wait_escalated_lab_results",
+      "type": "TASK",
+      "name": "[FCAU 7.0-ESCALATED] Wait on Escalated Lab Results",
+      "task_template_id": "fcau-lab-testing-flow",
+      "lane": "FCAU Officer/NSW System",
+      "input_mapping": {
+        "fcau.reference_number": "reference_number",
+        "fcau.userform": "userform"
+      },
+      "output_mapping": {
+        "lab_outcome": "fcau.escalated_lab_test_outcome"
+      }
+    },
+    {
       "id": "fcau_join_lab_branch",
       "type": "GATEWAY",
       "gateway_type": "EXCLUSIVE_JOIN",
@@ -269,11 +291,6 @@
       }
     },
     {
-      "id": "end_app_review_failed",
-      "type": "END",
-      "name": "End: Application Disapproved"
-    },
-    {
       "id": "end_verification_failed",
       "type": "END",
       "name": "End: Testing or Inspection Failures Found"
@@ -291,21 +308,9 @@
       "target_id": "fcau_1_0_apply"
     },
     {
-      "id": "e_apply_to_gw",
+      "id": "e_apply_to_pay",
       "source_id": "fcau_1_0_apply",
-      "target_id": "fcau_application_gateway"
-    },
-    {
-      "id": "e_gw_to_pay",
-      "source_id": "fcau_application_gateway",
-      "target_id": "fcau_2_0_pay_fee",
-      "condition": "fcau.application_review_outcome == 'approve'"
-    },
-    {
-      "id": "e_gw_to_reject_end",
-      "source_id": "fcau_application_gateway",
-      "target_id": "end_app_review_failed",
-      "condition": "fcau.application_review_outcome == 'reject'"
+      "target_id": "fcau_2_0_pay_fee"
     },
     {
       "id": "e_pay_to_main_parallel_fork",
@@ -418,8 +423,18 @@
     {
       "id": "e_visual_to_lab_escalation",
       "source_id": "fcau_gw_visual_outcome_split",
-      "target_id": "fcau_join_lab_payment_pre",
+      "target_id": "fcau_6_0_pay_escalated_lab_fee",
       "condition": "fcau.visual_inspection_outcome == 'lab_test_required'"
+    },
+    {
+      "id": "e_escalated_lab_fee_to_results",
+      "source_id": "fcau_6_0_pay_escalated_lab_fee",
+      "target_id": "fcau_7_0_wait_escalated_lab_results"
+    },
+    {
+      "id": "e_escalated_lab_results_to_join",
+      "source_id": "fcau_7_0_wait_escalated_lab_results",
+      "target_id": "fcau_join_visual_branch"
     },
     {
       "id": "e_visual_normal_flow",
@@ -483,13 +498,13 @@
       "id": "e_assess_pass",
       "source_id": "fcau_result_assessment_gateway",
       "target_id": "fcau_8_0_issue_certificate",
-      "condition": "(fcau.warehouse_inspection_required == false || fcau.warehouse_inspection_outcome == 'pass' || (fcau.warehouse_inspection_outcome == 'lab_test_required' && fcau.post_wh_lab_test_outcome == 'pass')) && (fcau.sample_inspection_required == false || fcau.visual_inspection_outcome == 'pass' || (fcau.visual_inspection_outcome == 'lab_test_required' && fcau.lab_test_outcome == 'pass')) && (fcau.lab_test_required == false || fcau.lab_test_outcome == 'pass')"
+      "condition": "(fcau.warehouse_inspection_required == false || fcau.warehouse_inspection_outcome == 'pass' || (fcau.warehouse_inspection_outcome == 'lab_test_required' && fcau.post_wh_lab_test_outcome == 'pass')) && (fcau.sample_inspection_required == false || fcau.visual_inspection_outcome == 'pass' || (fcau.visual_inspection_outcome == 'lab_test_required' && fcau.escalated_lab_test_outcome == 'pass')) && (fcau.lab_test_required == false || fcau.lab_test_outcome == 'pass')"
     },
     {
       "id": "e_assess_fail",
       "source_id": "fcau_result_assessment_gateway",
       "target_id": "end_verification_failed",
-      "condition": "fcau.warehouse_inspection_outcome == 'fail' || fcau.post_wh_lab_test_outcome == 'fail' || fcau.visual_inspection_outcome == 'fail' || fcau.lab_test_outcome == 'fail'"
+      "condition": "fcau.warehouse_inspection_outcome == 'fail' || fcau.post_wh_lab_test_outcome == 'fail' || fcau.lab_test_outcome == 'fail' || fcau.escalated_lab_test_outcome == 'fail'"
     },
     {
       "id": "e_certificate_to_success",

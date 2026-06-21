@@ -9,7 +9,6 @@
         "title": "Visual Inspection Outcome",
         "oneOf": [
           { "const": "pass", "title": "Pass - Satisfactory" },
-          { "const": "fail", "title": "Fail - Unsatisfactory" },
           { "const": "lab_test_required", "title": "Lab Test Required" }
         ],
         "default": "pass"
