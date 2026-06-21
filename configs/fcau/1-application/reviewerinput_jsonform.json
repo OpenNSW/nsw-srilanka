@@ -13,10 +13,6 @@
             "title": "Approve"
           },
           {
-            "const": "reject",
-            "title": "Reject"
-          },
-          {
             "const": "needs_more_info",
             "title": "Needs More Information"
           }
@@ -46,28 +42,49 @@
       },
       "rejection_reason": {
         "type": "string",
-        "title": "Comments / Feedback / Deficiencies (if Reject/Needs Info)",
+        "title": "Comments / Feedback / Deficiencies (if Needs Info)",
         "example": "Consignment food grade manufacturing details verified; application is complete and approved for fee assessment."
       }
     },
     "required": [
       "application_review_outcome"
     ],
-    "if": {
-      "properties": {
-        "application_review_outcome": {
-          "const": "approve"
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "application_review_outcome": {
+              "const": "approve"
+            }
+          },
+          "required": [
+            "application_review_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "reference_number"
+          ]
         }
       },
-      "required": [
-        "application_review_outcome"
-      ]
-    },
-    "then": {
-      "required": [
-        "reference_number"
-      ]
-    }
+      {
+        "if": {
+          "properties": {
+            "application_review_outcome": {
+              "const": "needs_more_info"
+            }
+          },
+          "required": [
+            "application_review_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "rejection_reason"
+          ]
+        }
+      }
+    ]
   },
   "uiSchema": {
     "type": "VerticalLayout",

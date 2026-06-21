@@ -1128,20 +1128,6 @@
       "path": "fcau/3-3-payment_post_wh_lab_fee/review_receipt_jsonform.json"
     },
     {
-      "id": "fcau-pay-post-wh-lab-fee--feedback-instructions",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/feedback_instructions_jsonform.json"
-    },
-    {
-      "id": "fcau-pay-post-wh-lab-fee--offline-instructions",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/3-3-payment_post_wh_lab_fee/offline_instructions_jsonform.json"
-    },
-    {
       "id": "fcau-pay-post-wh-lab-fee--review-status",
       "kind": "generic_template",
       "version": "",

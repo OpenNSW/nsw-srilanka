@@ -42,7 +42,7 @@
         "sample_inspection_required": "reviewerform.sample_inspection_required",
         "lab_test_required": "reviewerform.lab_test_required",
         "warehouse_inspection_required": "reviewerform.warehouse_inspection_required",
-        "reference_number": "reviewerform.reference_number",
+        "reference_number?": "reviewerform.reference_number",
         "rejection_reason?": "reviewerform.rejection_reason"
       }
     },
@@ -77,12 +77,6 @@
       "source_id": "review_gateway",
       "target_id": "end",
       "condition": "reviewerform.application_review_outcome == 'approve'"
-    },
-    {
-      "id": "e_reject",
-      "source_id": "review_gateway",
-      "target_id": "end",
-      "condition": "reviewerform.application_review_outcome == 'reject'"
     },
     {
       "id": "e_needs_info",
