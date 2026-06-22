@@ -1,9 +1,27 @@
 {
   "id": "npqs-treatment-request:render",
   "type": "APPLICATION",
-  "title": "[NPQS] Treatment Request Details",
+  "title": "[NPQS] Treatment Request",
   "sections": {
-    "workspace_trader": {
+    "assessment_outcome": {
+      "templateId": "npqs-treatment-request--status",
+      "title": "Treatment Request Assessment",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-treatment-request--status",
+      "title": "Request Status",
+      "projector": "MARKDOWN",
+      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
+    },
+    "submission_form": {
       "templateId": "npqs-treatment-request--trader-form",
       "title": "Treatment Request Details",
       "projector": "FORM",
@@ -15,24 +33,11 @@
           "element": "primary_action"
         }
       ]
-    },
-    "reference_officer": {
-      "templateId": "npqs-treatment-request--reviewer-form",
-      "title": "Treatment Request Assessment",
-      "projector": "FORM",
-      "dataKey": "reviewerform",
-      "visibleWhen": {
-        "requireDataKey": "reviewerform"
-      }
     }
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

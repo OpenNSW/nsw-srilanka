@@ -69,12 +69,6 @@
       "condition": "reviewerform.treatment_request_outcome == 'approve'"
     },
     {
-      "id": "e_reject",
-      "source_id": "review_gateway",
-      "target_id": "end",
-      "condition": "reviewerform.treatment_request_outcome == 'reject'"
-    },
-    {
       "id": "e_needs_info",
       "source_id": "review_gateway",
       "target_id": "trader_request",

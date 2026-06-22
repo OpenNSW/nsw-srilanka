@@ -9,7 +9,8 @@
         "title": "Laboratory Test Outcome",
         "oneOf": [
           { "const": "pass", "title": "Pass (No Quarantine Pests Found)" },
-          { "const": "fail", "title": "Fail (Quarantine Pests Detected)" }
+          { "const": "fail_resubmit", "title": "Fail — Allow Sample Resubmission (First Failure)" },
+          { "const": "fail_final", "title": "Fail Final — Reject Consignment (Second Failure)" }
         ],
         "default": "pass"
       },
@@ -23,6 +24,11 @@
         "format": "file",
         "title": "Uploaded Lab Test Report",
         "example": "https://nsw.gov.lk/storage/reports/lab-report-2026.pdf"
+      },
+      "post_lab_visual_required": {
+        "type": "boolean",
+        "title": "Visual Inspection Required for Lab Tested Consignment (Airport PQS Officer)",
+        "default": false
       }
     },
     "required": [
@@ -32,18 +38,10 @@
   "uiSchema": {
     "type": "VerticalLayout",
     "elements": [
-      {
-        "type": "Control",
-        "scope": "#/properties/sample_test_result"
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/lab_comments"
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/lab_report_attachment_url"
-      }
+      { "type": "Control", "scope": "#/properties/sample_test_result" },
+      { "type": "Control", "scope": "#/properties/lab_comments" },
+      { "type": "Control", "scope": "#/properties/lab_report_attachment_url" },
+      { "type": "Control", "scope": "#/properties/post_lab_visual_required" }
     ]
   }
 }

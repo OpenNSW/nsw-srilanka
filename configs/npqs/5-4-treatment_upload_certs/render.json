@@ -1,9 +1,17 @@
 {
   "id": "npqs-upload-treatment-certs:render",
   "type": "APPLICATION",
-  "title": "[NPQS] Upload Treatment Certificate Documents",
+  "title": "[NPQS] Upload Treatment Certificates",
   "sections": {
-    "workspace": {
+    "status_message": {
+      "templateId": "npqs-treatment-upload-certs--status",
+      "title": "Upload Instructions",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["PENDING_USER"]
+      }
+    },
+    "submission_form": {
       "templateId": "npqs-upload-treatment-certs--trader-form",
       "title": "Upload Treatment Certificate Documents",
       "projector": "FORM",
@@ -19,11 +27,7 @@
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

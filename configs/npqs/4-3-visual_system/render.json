@@ -1,26 +1,24 @@
 {
   "id": "npqs-visual-system-inspection:render",
   "type": "REVIEW",
-  "title": "[NPQS] External System Inspection Verification",
+  "title": "[NPQS] Visual Inspection (Through System)",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-visual-system-inspection--officer-form",
-      "title": "External System Inspection Verification",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Confirm System Outcome",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+    "assessment_outcome": {
+      "templateId": "npqs-visual-system--status",
+      "title": "System Inspection Results",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-visual-system--status",
+      "title": "Inspection Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }

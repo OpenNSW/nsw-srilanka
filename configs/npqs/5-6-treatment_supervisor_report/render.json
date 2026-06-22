@@ -1,26 +1,24 @@
 {
   "id": "npqs-treatment-supervisor-report:render",
   "type": "REVIEW",
-  "title": "[NPQS] Supervision Observation Report",
+  "title": "[NPQS] Treatment Supervision Report",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-treatment-supervisor-report--officer-form",
-      "title": "Supervision Observation Report",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Record Supervision Notes",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+    "assessment_outcome": {
+      "templateId": "npqs-supervision-report--status",
+      "title": "Supervision Report",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-supervision-report--status",
+      "title": "Supervision Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }

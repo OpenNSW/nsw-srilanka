@@ -1,0 +1,4 @@
+{
+  "id": "npqs-draw-sample--results",
+  "template": "### ✅ Sample Registered\n\nThe sample has been received and registered by the NPQS officer.\n\n* **Issued Sample Number**: `{{.sample_number}}`\n{{if .receive_comments}}* **Officer Notes**: {{.receive_comments}}{{end}}\n\nYour application will now proceed to the next inspection or testing stage."
+}

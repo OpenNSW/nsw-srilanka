@@ -3,7 +3,25 @@
   "type": "APPLICATION",
   "title": "[NPQS] Phytosanitary Certificate Application",
   "sections": {
-    "workspace": {
+    "assessment_outcome": {
+      "templateId": "npqs-apply-phyto-cert--status",
+      "title": "Application Assessment",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-apply-phyto-cert--status",
+      "title": "Application Status",
+      "projector": "MARKDOWN",
+      "dataKey": "userform",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
+    },
+    "submission_form": {
       "templateId": "npqs-apply-phyto-cert--user-form",
       "title": "Phytosanitary Certificate Application",
       "projector": "FORM",
@@ -15,24 +33,11 @@
           "element": "primary_action"
         }
       ]
-    },
-    "reference": {
-      "templateId": "npqs-apply-phyto-cert--reviewer-form",
-      "title": "Application Assessment Review",
-      "projector": "FORM",
-      "dataKey": "reviewerform",
-      "visibleWhen": {
-        "requireDataKey": "reviewerform"
-      }
     }
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

@@ -95,12 +95,6 @@
       "condition": "reviewerform.review_outcome == 'approve'"
     },
     {
-      "id": "e_reject",
-      "source_id": "review_gateway",
-      "target_id": "end",
-      "condition": "reviewerform.review_outcome == 'reject'"
-    },
-    {
       "id": "e_needs_info",
       "source_id": "review_gateway",
       "target_id": "applicant_submission",

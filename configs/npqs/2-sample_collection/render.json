@@ -1,17 +1,32 @@
 {
   "id": "npqs-draw-sample:render",
   "type": "APPLICATION",
-  "title": "[NPQS] Sample Drop-Off Confirmation",
+  "title": "[NPQS] Sample Collection",
   "sections": {
-    "workspace_trader": {
+    "status_message": {
+      "templateId": "npqs-draw-sample--status",
+      "title": "Sample Collection Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["PENDING_USER", "QUEUED_EXTERNALLY"]
+      }
+    },
+    "results_summary": {
+      "templateId": "npqs-draw-sample--results",
+      "title": "Sample Registration Confirmed",
+      "projector": "MARKDOWN",
+      "dataKey": "officer_receive",
+      "visibleWhen": {
+        "requireDataKey": "officer_receive"
+      }
+    },
+    "submission_form": {
       "templateId": "npqs-draw-sample--trader-submit-form",
       "title": "Sample Drop-Off Confirmation",
       "projector": "FORM",
       "dataKey": "traderinput",
       "visibleWhen": {
-        "states": [
-          "PENDING_USER"
-        ]
+        "states": ["PENDING_USER"]
       },
       "handles": [
         {
@@ -20,54 +35,11 @@
           "element": "primary_action"
         }
       ]
-    },
-    "workspace_trader_submitted": {
-      "templateId": "npqs-draw-sample--trader-submit-form",
-      "title": "Sample Drop-Off Confirmation Details",
-      "projector": "FORM",
-      "dataKey": "traderinput",
-      "visibleWhen": {
-        "states": [
-          "QUEUED_EXTERNALLY",
-          "COMPLETED"
-        ],
-        "requireDataKey": "traderinput"
-      }
-    },
-    "workspace_officer_receive": {
-      "templateId": "npqs-draw-sample--officer-receive-form",
-      "title": "Verify & Number Dropped-Off Sample",
-      "projector": "FORM",
-      "dataKey": "officer_receive",
-      "visibleWhen": {
-        "states": [
-          "QUEUED_EXTERNALLY",
-          "COMPLETED"
-        ],
-        "requireDataKey": "traderinput"
-      }
-    },
-    "workspace_officer_draw": {
-      "templateId": "npqs-draw-sample--officer-draw-form",
-      "title": "Record Sample Drawn At Site",
-      "projector": "FORM",
-      "dataKey": "officer_draw",
-      "visibleWhen": {
-        "states": [
-          "QUEUED_EXTERNALLY",
-          "COMPLETED"
-        ],
-        "requireDataKey": "officer_draw"
-      }
     }
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

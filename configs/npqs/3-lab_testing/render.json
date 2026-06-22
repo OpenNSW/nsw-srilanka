@@ -1,26 +1,24 @@
 {
   "id": "npqs-lab-testing:render",
   "type": "REVIEW",
-  "title": "[NPQS] Laboratory Test Results",
+  "title": "[NPQS] Laboratory Testing",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-lab-testing--officer-form",
+    "assessment_outcome": {
+      "templateId": "npqs-lab-testing--status",
       "title": "Laboratory Test Results",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Record Lab Test Outcome",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-lab-testing--status",
+      "title": "Lab Test Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }

@@ -1,17 +1,34 @@
 {
   "id": "npqs-upload-docs:render",
   "type": "APPLICATION",
-  "title": "[NPQS] Upload Additional Consignment Documents",
+  "title": "[NPQS] Upload Consignment Documents",
   "sections": {
-    "workspace": {
+    "assessment_outcome": {
+      "templateId": "npqs-upload-docs--status",
+      "title": "Document Review Feedback",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-upload-docs--status",
+      "title": "Upload Instructions",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["PENDING_USER"]
+      }
+    },
+    "submission_form": {
       "templateId": "npqs-upload-docs--trader-form",
-      "title": "Upload Additional Consignment Documents",
+      "title": "Upload Consignment Documents",
       "projector": "FORM",
       "dataKey": "traderinput",
       "handles": [
         {
           "command": "submit",
-          "label": "Submit Additional Documents",
+          "label": "Submit Documents",
           "element": "primary_action"
         }
       ]
@@ -19,11 +36,7 @@
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

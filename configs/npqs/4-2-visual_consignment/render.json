@@ -1,35 +1,43 @@
 {
   "id": "npqs-visual-consignment-flow:render",
   "type": "APPLICATION",
-  "title": "[NPQS] Schedule Consignment Visual Inspection",
+  "title": "[NPQS] Consignment Visual Inspection",
   "sections": {
-    "workspace_trader": {
+    "assessment_outcome": {
+      "templateId": "npqs-visual-consignment--status",
+      "title": "Consignment Inspection Results",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-visual-consignment--status",
+      "title": "Inspection Status",
+      "projector": "MARKDOWN",
+      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
+    },
+    "submission_form": {
       "templateId": "npqs-visual-consignment--trader-schedule-form",
-      "title": "Schedule Consignment Visual Inspection",
+      "title": "Schedule Consignment Inspection",
       "projector": "FORM",
       "dataKey": "traderinput",
       "handles": [
         {
           "command": "submit",
-          "label": "Schedule Inspection",
+          "label": "Submit Inspection Schedule",
           "element": "primary_action"
         }
       ]
-    },
-    "reference_officer": {
-      "templateId": "npqs-visual-consignment--officer-form",
-      "title": "Consignment Visual Inspection Outcome",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
     }
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

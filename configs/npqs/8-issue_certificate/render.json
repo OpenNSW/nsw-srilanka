@@ -1,26 +1,24 @@
 {
   "id": "npqs-issue-certificate:render",
   "type": "REVIEW",
-  "title": "[NPQS] Upload final Phytosanitary Certificate Details",
+  "title": "[NPQS] Phytosanitary Certificate",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-issue-certificate--officer-form",
-      "title": "Upload final Phytosanitary Certificate Details",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Issue & Release Certificate",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+    "assessment_outcome": {
+      "templateId": "npqs-issue-certificate--status",
+      "title": "Certificate Issued",
+      "projector": "MARKDOWN",
+      "dataKey": "reviewerform",
+      "visibleWhen": {
+        "requireDataKey": "reviewerform"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-issue-certificate--status",
+      "title": "Certificate Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }
