@@ -62,7 +62,6 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       setShowErrors(true)
       return
     }
-    setShowErrors(true)
     setSubmitting(true)
     void onAction(h.command, data).finally(() => setSubmitting(false))
   }
