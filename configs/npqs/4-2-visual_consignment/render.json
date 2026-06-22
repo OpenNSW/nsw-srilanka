@@ -16,7 +16,6 @@
       "templateId": "npqs-visual-consignment--status",
       "title": "Inspection Status",
       "projector": "MARKDOWN",
-      "dataKey": "traderinput",
       "visibleWhen": {
         "states": ["QUEUED_EXTERNALLY"]
       }

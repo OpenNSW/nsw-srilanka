@@ -16,7 +16,6 @@
       "templateId": "npqs-treatment-request--status",
       "title": "Request Status",
       "projector": "MARKDOWN",
-      "dataKey": "traderinput",
       "visibleWhen": {
         "states": ["QUEUED_EXTERNALLY"]
       }
