@@ -1,4 +1,4 @@
 {
   "id": "customs-boat-note-approval--instructions",
-  "template": "### Wait on Boat Note Approval\n\nYour Boat Note has been submitted successfully and is currently pending review and approval by Customs Officers at the port.\n\nOnce the officer approves the Boat Note in the Customs Agency app, this task will mark as completed and the flow will advance."
+  "template": "{{if .boat_note_approval}}### {{if eq .boat_note_approval.approval_status \"approved\"}}✅ Boat Note Approved{{else}}❌ Boat Note Rejected{{end}}\n\nYour Boat Note review has been completed.\n\n* **Status**: {{.boat_note_approval.approval_status}}\n{{if .boat_note_approval.remarks}}* **Officer Remarks**: {{.boat_note_approval.remarks}}{{end}}{{else}}### Wait on Boat Note Approval\n\nYour Boat Note has been submitted successfully and is currently pending review and approval by Customs Officers at the port.\n\nOnce the officer approves the Boat Note in the Customs Agency app, this task will mark as completed and the flow will advance.{{end}}"
 }

@@ -9,7 +9,8 @@
       "projector": "MARKDOWN",
       "visibleWhen": {
         "states": [
-          "QUEUED_EXTERNALLY"
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
         ]
       }
     }
