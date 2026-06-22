@@ -1,0 +1,245 @@
+{
+  "id": "customs-cusdec--user-form",
+  "title": "Customs Declaration (CusDec) Submission",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "exporter_name": {
+        "type": "string",
+        "title": "Exporter Name",
+        "example": "ACME Premium Food Exports Ltd."
+      },
+      "exporter_address": {
+        "type": "string",
+        "title": "Exporter Address",
+        "example": "No 18, Galle Road, Colombo 03, Sri Lanka"
+      },
+      "declarant_name": {
+        "type": "string",
+        "title": "Declarant Name (CHA)",
+        "example": "ADAM PVT LTD"
+      },
+      "declarant_address": {
+        "type": "string",
+        "title": "Declarant Address",
+        "example": "No 45, York Street, Colombo 01, Sri Lanka"
+      },
+      "consignee_name": {
+        "type": "string",
+        "title": "Consignee Name",
+        "example": "Hamburg Fine Foods Import GMBH"
+      },
+      "consignee_address": {
+        "type": "string",
+        "title": "Consignee Address",
+        "example": "Industriestrasse 104, 20457 Hamburg, Germany"
+      },
+      "port_of_loading": {
+        "type": "string",
+        "title": "Port of Loading",
+        "example": "Port of Colombo (LKCMB)"
+      },
+      "port_of_discharge": {
+        "type": "string",
+        "title": "Port of Discharge",
+        "example": "Port of Hamburg (DEHAM)"
+      },
+      "vessel_name": {
+        "type": "string",
+        "title": "Vessel / Craft Name",
+        "example": "CMA CGM MARCO POLO"
+      },
+      "voyage_number": {
+        "type": "string",
+        "title": "Voyage / Flight Number",
+        "example": "V092"
+      },
+      "bill_of_lading_number": {
+        "type": "string",
+        "title": "Bill of Lading / AWB No",
+        "example": "BL-9382019-COL"
+      },
+      "declaration_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Declaration Date",
+        "example": "2026-06-22"
+      },
+      "hs_code": {
+        "type": "string",
+        "title": "HS Code",
+        "example": "1513.19.00"
+      },
+      "description_of_goods": {
+        "type": "string",
+        "title": "Description of Goods",
+        "example": "Refined Organic Coconut Oil, packed in food-grade steel drums"
+      },
+      "package_details": {
+        "type": "string",
+        "title": "Number & Kind of Packages",
+        "example": "80 steel drums on 20 wooden pallets"
+      },
+      "gross_mass": {
+        "type": "number",
+        "title": "Gross Mass (Kg)",
+        "example": 16500.5
+      },
+      "net_mass": {
+        "type": "number",
+        "title": "Net Mass (Kg)",
+        "example": 15900.0
+      },
+      "invoice_value": {
+        "type": "number",
+        "title": "Total Invoice Value (LKR)",
+        "example": 4500000.00
+      },
+      "sad_document": {
+        "type": "string",
+        "format": "file",
+        "title": "Single Administrative Document (SAD) Upload"
+      },
+      "supporting_documents": {
+        "type": "array",
+        "title": "Other Supporting Documents (Invoice, Packing List)",
+        "items": {
+          "type": "string",
+          "format": "file"
+        }
+      }
+    },
+    "required": [
+      "exporter_name",
+      "exporter_address",
+      "declarant_name",
+      "consignee_name",
+      "consignee_address",
+      "port_of_loading",
+      "port_of_discharge",
+      "vessel_name",
+      "voyage_number",
+      "bill_of_lading_number",
+      "declaration_date",
+      "hs_code",
+      "description_of_goods",
+      "package_details",
+      "gross_mass",
+      "net_mass",
+      "invoice_value",
+      "sad_document"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Group",
+        "label": "1. Exporter & Declarant Details",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/exporter_name" },
+              { "type": "Control", "scope": "#/properties/declarant_name" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/exporter_address" },
+              { "type": "Control", "scope": "#/properties/declarant_address" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "2. Consignee & Route Details",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/consignee_name" },
+              { "type": "Control", "scope": "#/properties/declaration_date" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/consignee_address" },
+              { "type": "Control", "scope": "#/properties/port_of_loading" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/port_of_discharge" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "3. Transport Details",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/vessel_name" },
+              { "type": "Control", "scope": "#/properties/voyage_number" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/bill_of_lading_number" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "4. Cargo & Valuations Details",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/hs_code" },
+              { "type": "Control", "scope": "#/properties/invoice_value" }
+            ]
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/description_of_goods"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/package_details"
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/gross_mass" },
+              { "type": "Control", "scope": "#/properties/net_mass" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "5. Attachments",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/sad_document"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/supporting_documents"
+          }
+        ]
+      }
+    ]
+  }
+}

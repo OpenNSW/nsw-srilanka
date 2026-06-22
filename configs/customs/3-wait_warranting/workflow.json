@@ -1,0 +1,38 @@
+{
+  "id": "customs-wait-warranting-flow",
+  "name": "Wait on CusDec Warranting",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "wait_warranting_task",
+      "type": "TASK",
+      "task_template_id": "customs-wait-warranting",
+      "input_mapping": {
+        "cusdec_number": "cusdec_number"
+      },
+      "output_mapping": {
+        "warranting_status": "warranting_status"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "wait_warranting_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "wait_warranting_task",
+      "target_id": "end"
+    }
+  ]
+}

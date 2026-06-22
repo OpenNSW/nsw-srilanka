@@ -1,0 +1,17 @@
+{
+  "id": "customs-wait-cdn-ack-flow:render",
+  "type": "REVIEW",
+  "title": "[Customs] CDN Acknowledgement Status",
+  "sections": {
+    "status_message": {
+      "templateId": "customs-wait-cdn-ack--instructions",
+      "title": "CDN Acknowledgement Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    }
+  }
+}

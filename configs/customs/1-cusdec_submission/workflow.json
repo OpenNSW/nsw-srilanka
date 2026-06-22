@@ -1,0 +1,93 @@
+{
+  "id": "customs-cusdec-apply-flow",
+  "name": "Submit & Review Customs Declaration",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "applicant_submission",
+      "type": "TASK",
+      "task_template_id": "customs-cusdec--user-input",
+      "input_mapping": {
+        "reviewerform.rejection_reason?": "rejection_reason"
+      },
+      "output_mapping": {
+        "exporter_name": "userform.exporter_name",
+        "exporter_address": "userform.exporter_address",
+        "declarant_name": "userform.declarant_name",
+        "declarant_address": "userform.declarant_address",
+        "consignee_name": "userform.consignee_name",
+        "consignee_address": "userform.consignee_address",
+        "port_of_loading": "userform.port_of_loading",
+        "port_of_discharge": "userform.port_of_discharge",
+        "vessel_name": "userform.vessel_name",
+        "voyage_number": "userform.voyage_number",
+        "bill_of_lading_number": "userform.bill_of_lading_number",
+        "declaration_date": "userform.declaration_date",
+        "hs_code": "userform.hs_code",
+        "description_of_goods": "userform.description_of_goods",
+        "package_details": "userform.package_details",
+        "gross_mass": "userform.gross_mass",
+        "net_mass": "userform.net_mass",
+        "invoice_value": "userform.invoice_value",
+        "sad_document": "userform.sad_document",
+        "supporting_documents": "userform.supporting_documents"
+      }
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "customs-cusdec--external-review",
+      "input_mapping": {
+        "userform": "submission"
+      },
+      "output_mapping": {
+        "review_outcome": "reviewerform.review_outcome",
+        "rejection_reason?": "reviewerform.rejection_reason",
+        "cusdec_number?": "reviewerform.cusdec_number",
+        "amount_to_pay?": "reviewerform.amount_to_pay"
+      }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "applicant_submission"
+    },
+    {
+      "id": "e2",
+      "source_id": "applicant_submission",
+      "target_id": "officer_review"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_review",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.review_outcome == 'approve'"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "applicant_submission",
+      "condition": "reviewerform.review_outcome == 'needs_more_info'"
+    }
+  ]
+}

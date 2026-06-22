@@ -1,0 +1,17 @@
+{
+  "id": "customs-wait-export-release-flow:render",
+  "type": "REVIEW",
+  "title": "[Customs] Export Release Status",
+  "sections": {
+    "status_message": {
+      "templateId": "customs-wait-export-release--instructions",
+      "title": "Export Release Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    }
+  }
+}

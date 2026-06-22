@@ -62,6 +62,21 @@
       }
     },
     {
+      "id": "customs",
+      "url": "http://localhost:8085",
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://localhost:8090/oauth2/token",
+          "client_id": "NSW_TO_CUSTOMS",
+          "client_secret": "env:M2M_NSW_TO_CUSTOMS_SECRET",
+          "scopes": ["agency:application:inject"],
+          "insecure_skip_tls_verify": true
+        }
+      }
+    },
+    {
       "id": "customs-asycuda",
       "url": "https://customs-asycuda.example.com",
       "timeout": "10s"

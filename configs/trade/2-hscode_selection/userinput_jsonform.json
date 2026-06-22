@@ -21,6 +21,10 @@
             {
               "const": "cda-certificate-reg",
               "title": "CDA Coconut Certificate (CDA Flow)"
+            },
+            {
+              "const": "customs-workflow",
+              "title": "Customs Declaration & Clearance (Customs Flow)"
             }
           ]
         },

@@ -1,0 +1,38 @@
+{
+  "id": "customs-create-boat-note-flow",
+  "name": "Create Boat Note",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "applicant_submission",
+      "type": "TASK",
+      "task_template_id": "customs-boat-note--user-input",
+      "input_mapping": {
+        "cdn_number": "cdn_number"
+      },
+      "output_mapping": {
+        "userform": "userform"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "applicant_submission"
+    },
+    {
+      "id": "e2",
+      "source_id": "applicant_submission",
+      "target_id": "end"
+    }
+  ]
+}
