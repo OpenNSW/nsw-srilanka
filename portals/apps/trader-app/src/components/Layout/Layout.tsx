@@ -21,7 +21,7 @@ export function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="min-h-screen bg-app-surface">
       <TopBar />
 
       <div className="flex">
@@ -29,9 +29,11 @@ export function Layout() {
 
         <main
           style={{ marginLeft: `${sidebarWidth}px`, width: `calc(100% - ${sidebarWidth}px)` }}
-          className="min-h-[calc(100vh-64px)] transition-all duration-300 mt-16"
+          className="min-h-[calc(100vh-64px)] transition-all duration-300 mt-16 bg-app-bg"
         >
-          <Outlet />
+          <div className="max-w-360 mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
