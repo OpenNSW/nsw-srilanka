@@ -381,7 +381,9 @@
       "task_template_id": "npqs-upload-docs",
       "input_mapping": {
         "npqs.reference_number": "reference_number",
-        "npqs.userform": "userform"
+        "npqs.userform": "userform",
+        "npqs.docs_review_outcome?": "docs_review_outcome",
+        "npqs.docs_review_comments?": "review_comments"
       },
       "output_mapping": {
         "traderinput": "npqs.docs_traderinput"
@@ -398,7 +400,8 @@
         "npqs.docs_traderinput": "traderinput"
       },
       "output_mapping": {
-        "docs_review_outcome": "npqs.docs_review_outcome"
+        "docs_review_outcome": "npqs.docs_review_outcome",
+        "review_comments?": "npqs.docs_review_comments"
       }
     },
     {

@@ -7,9 +7,8 @@
       "templateId": "npqs-upload-docs--status",
       "title": "Document Review Feedback",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "docs_review_outcome"
       }
     },
     "status_message": {
@@ -25,6 +24,9 @@
       "title": "Upload Consignment Documents",
       "projector": "FORM",
       "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": ["PENDING_USER"]
+      },
       "handles": [
         {
           "command": "submit",
