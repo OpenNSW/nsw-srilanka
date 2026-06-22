@@ -73,7 +73,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
           </div>
         </div>
 
-        <div className="text-foreground-muted mb-6 bg-background/60 p-4 rounded-md border border-border">
+        <div className="text-foreground-muted mb-6 bg-app-bg/60 p-4 rounded-md border border-border">
           <ReactMarkdown
             components={{
               a: ({ children, href }) => (

@@ -103,7 +103,7 @@ function FormActionBar({
   canSubmit: boolean
 }) {
   return (
-    <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur rounded-b-lg shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.08)]">
+    <div className="sticky bottom-0 border-t border-border bg-app-bg/95 backdrop-blur rounded-b-lg shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.08)]">
       <div className="px-6 py-4 flex items-center gap-3">
         {onAutoFill && (
           <Button type="button" variant="soft" color="purple" size="3" onClick={onAutoFill} disabled={submitting}>
