@@ -176,4 +176,3 @@ function isEmpty(value: unknown): boolean {
   if (Array.isArray(value) && value.length === 0) return true
   return false
 }
-
