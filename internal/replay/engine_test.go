@@ -225,13 +225,13 @@ func (f *fakeAgency) Respond(_ context.Context, taskID, command string, content 
 
 func TestDoPay(t *testing.T) {
 	r := New("", nil)
-	// Without a Gateway the pay step is an error.
+	// Without a PaymentGateway the pay step is an error.
 	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err == nil {
 		t.Error("expected error when Gateway is nil")
 	}
 
 	fake := &fakeGateway{}
-	r.Gateway = fake
+	r.PaymentGateway = fake
 	// Missing taskVar is an error.
 	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err == nil {
 		t.Error("expected error when taskVar is not set")

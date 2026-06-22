@@ -15,10 +15,12 @@ import (
 	"github.com/OpenNSW/core/payment"
 )
 
+const gatewayPollInterval = 300 * time.Millisecond
+
 // mockGateway is a controllable stand-in for the GovPay payment gateway. GovPay
 // is an offline (INSTRUCTION-flow) gateway: NSW generates a TNSW reference and
 // the real gateway later confirms payment via a PUBLIC, unauthenticated webhook.
-// This mock simulates that webhook. It implements replay.Gateway.
+// This mock simulates that webhook. It implements replay.PaymentGateway.
 //
 // The reference is only rendered into the task's markdown view, so the mock
 // reads it from the payment store (GetByTaskID) rather than over HTTP.
@@ -43,7 +45,7 @@ func newMockGateway(t *testing.T, db *gorm.DB) *mockGateway {
 // from the payment record so they match (the handler validates them).
 func (g *mockGateway) Pay(ctx context.Context, taskID, status string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(300 * time.Millisecond)
+	ticker := time.NewTicker(gatewayPollInterval)
 	defer ticker.Stop()
 
 	var tx *payment.PaymentTransaction

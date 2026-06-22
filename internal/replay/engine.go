@@ -41,6 +41,14 @@ const AuthActorHeader = "X-Auth-Actor"
 // wait/callback steps poll against. A create step typically extracts it.
 const consignmentIDVar = "consignmentId"
 
+// Default timeouts used when a step omits the timeout field.
+const (
+	defaultWaitTimeout     = 45 * time.Second
+	defaultCallbackTimeout = 30 * time.Second
+	defaultPayTimeout      = 45 * time.Second
+	waitPollInterval       = 500 * time.Millisecond
+)
+
 // Flow is an ordered list of steps loaded from a JSON file.
 type Flow struct {
 	Name  string `json:"name"`
@@ -99,10 +107,10 @@ type Pay struct {
 	Timeout string `json:"timeout,omitempty"`
 }
 
-// Gateway is the mock payment gateway the pay step drives. The in-process test
-// provides an implementation that resolves the payment reference and posts the
-// gateway webhook.
-type Gateway interface {
+// PaymentGateway is the mock payment gateway the pay step drives. The in-process
+// test provides an implementation that resolves the payment reference and posts
+// the gateway webhook.
+type PaymentGateway interface {
 	// Pay waits (up to timeout) for the payment created against taskID, then
 	// confirms it by posting a gateway success webhook with the given status.
 	Pay(ctx context.Context, taskID, status string, timeout time.Duration) error
@@ -126,12 +134,12 @@ func LoadFlow(path string) (*Flow, error) {
 
 // Runner executes flows against a backend reachable at BaseURL.
 type Runner struct {
-	BaseURL string
-	Client  *http.Client
-	Vars    map[string]any
-	Logf    func(string, ...any)
-	Agency  Agency
-	Gateway Gateway
+	BaseURL        string
+	Client         *http.Client
+	Vars           map[string]any
+	Logf           func(string, ...any)
+	Agency         Agency
+	PaymentGateway PaymentGateway
 }
 
 // New builds a Runner with an empty variable store and a no-op logger.
@@ -228,7 +236,7 @@ func (r *Runner) doRequest(ctx context.Context, req *Request) error {
 }
 
 func (r *Runner) doWait(ctx context.Context, w *Wait) error {
-	timeout, err := parseTimeout(w.Timeout, 45*time.Second)
+	timeout, err := parseTimeout(w.Timeout, defaultWaitTimeout)
 	if err != nil {
 		return err
 	}
@@ -257,7 +265,7 @@ func (r *Runner) doWait(ctx context.Context, w *Wait) error {
 			buf, _ := json.MarshalIndent(last.WorkflowNodes, "", "  ")
 			return fmt.Errorf("timed out after %s waiting for node %q state %q; current nodes:\n%s", timeout, w.Node, w.State, buf)
 		}
-		if err := sleep(ctx, 500*time.Millisecond); err != nil {
+		if err := sleep(ctx, waitPollInterval); err != nil {
 			return err
 		}
 	}
@@ -267,7 +275,7 @@ func (r *Runner) doCallback(ctx context.Context, cb *Callback) error {
 	if r.Agency == nil {
 		return fmt.Errorf("callback step requires an Agency responder (none configured)")
 	}
-	timeout, err := parseTimeout(cb.Timeout, 30*time.Second)
+	timeout, err := parseTimeout(cb.Timeout, defaultCallbackTimeout)
 	if err != nil {
 		return err
 	}
@@ -279,10 +287,10 @@ func (r *Runner) doCallback(ctx context.Context, cb *Callback) error {
 }
 
 func (r *Runner) doPay(ctx context.Context, p *Pay) error {
-	if r.Gateway == nil {
-		return fmt.Errorf("pay step requires a Gateway (none configured)")
+	if r.PaymentGateway == nil {
+		return fmt.Errorf("pay step requires a PaymentGateway (none configured)")
 	}
-	timeout, err := parseTimeout(p.Timeout, 45*time.Second)
+	timeout, err := parseTimeout(p.Timeout, defaultPayTimeout)
 	if err != nil {
 		return err
 	}
@@ -294,7 +302,7 @@ func (r *Runner) doPay(ctx context.Context, p *Pay) error {
 	if status == "" {
 		status = "paid"
 	}
-	return r.Gateway.Pay(ctx, taskID, status, timeout)
+	return r.PaymentGateway.Pay(ctx, taskID, status, timeout)
 }
 
 // ── consignment detail polling ──────────────────────────────────────────────

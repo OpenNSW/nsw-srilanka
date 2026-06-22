@@ -24,6 +24,8 @@ type injectRequest struct {
 	ServiceURL    string         `json:"serviceUrl"`
 }
 
+const agencyPollInterval = 300 * time.Millisecond
+
 // mockAgency is a generic controllable stand-in for any external OGA agency.
 // It receives the system's inject and, when a replay `callback` step fires,
 // posts {command, payload} back to the NSW task endpoint to complete the
@@ -87,7 +89,7 @@ func (a *mockAgency) findInject(taskID string) (injectRequest, bool) {
 // complete the parked EXTERNAL_REVIEW step.
 func (a *mockAgency) Respond(ctx context.Context, taskID, command string, content map[string]any, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(300 * time.Millisecond)
+	ticker := time.NewTicker(agencyPollInterval)
 	defer ticker.Stop()
 
 	var inj injectRequest
