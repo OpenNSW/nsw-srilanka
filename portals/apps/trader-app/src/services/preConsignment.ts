@@ -1,6 +1,6 @@
 import { http } from './http'
 import { API_BASE_URL } from '../constants'
-import { sendTaskCommand } from './task'
+import { sendTaskCommand } from '@/features/task/service'
 
 export type PreConsignmentState = 'LOCKED' | 'READY' | 'IN_PROGRESS' | 'COMPLETED'
 export type WorkflowNodeState = 'LOCKED' | 'READY' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'

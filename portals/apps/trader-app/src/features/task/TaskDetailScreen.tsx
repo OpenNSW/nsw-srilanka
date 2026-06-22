@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { getZoneView, submitTaskStep } from '../services/task'
-import { TraderZoneLayout } from '../zones/TraderZoneLayout'
-import type { ZoneView } from '../zones/types'
+import { getZoneView, submitTaskStep } from './service'
+import { TraderZoneLayout } from '@/zones/TraderZoneLayout'
+import type { ZoneView } from '@/zones/types'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 
