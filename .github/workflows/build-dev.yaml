@@ -74,3 +74,19 @@ jobs:
           # Scope cache per image so the two matrix builds don't overwrite each other's layers.
           cache-from: type=gha,scope=${{ matrix.image_name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}
+
+  trigger-e2e:
+    name: Trigger E2E Tests
+    needs: build-and-push-dev
+    # Only run if we're on the main branch, as requested (though the workflow itself is scoped to push on main, it's good practice to be explicit for downstream jobs)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger E2E Integration Workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          # Note: GITHUB_TOKEN cannot dispatch to other repositories, so a PAT is strictly required.
+          token: ${{ secrets.E2E_TRIGGER_TOKEN }}
+          repository: OpenNSW/nsw-e2e-tests
+          event-type: dev-deploy
+          client-payload: '{"repo":"nsw-srilanka","run_number":"${{ github.run_number }}","sha":"${{ github.sha }}"}'
