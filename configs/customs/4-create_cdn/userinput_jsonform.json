@@ -85,9 +85,9 @@
         "example": "SLPA-83921"
       },
       "seal_no": {
-        "type": "number",
+        "type": "string",
         "title": "11.a Seal No",
-        "example": 894021
+        "example": "894021"
       },
       "cdn_number": {
         "type": "string",
@@ -239,7 +239,6 @@
       "lorry_trailer_no",
       "sn_bl_no",
       "tare_weight",
-      "slpa_no",
       "seal_no",
       "cdn_number",
       "driver_name",
@@ -253,8 +252,6 @@
       "gross_weight",
       "cube_volume",
       "container_type",
-      "custom_officer_name",
-      "received_details",
       "preparing_company_name",
       "declarant_name",
       "telephone_no"

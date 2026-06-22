@@ -12,7 +12,7 @@
       "type": "TASK",
       "task_template_id": "customs-cdn--user-input",
       "input_mapping": {
-        "cusdec_number": "cusdec_number"
+        "cusdec_number": "cusdec_numbers"
       },
       "output_mapping": {
         "cdn_number": "userform.cdn_number",

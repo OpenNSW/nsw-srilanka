@@ -8,8 +8,7 @@
         "type": "string",
         "title": "Approval Outcome",
         "oneOf": [
-          { "const": "approved", "title": "Approve Boat Note" },
-          { "const": "rejected", "title": "Reject / Return to Trader" }
+          { "const": "approved", "title": "Approve Boat Note" }
         ],
         "default": "approved"
       },
