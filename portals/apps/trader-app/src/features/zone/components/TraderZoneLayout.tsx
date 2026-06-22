@@ -14,7 +14,7 @@ export function TraderZoneLayout({ task, onSubmitForm }: Props) {
   const zones = orderedZones(task.view)
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {zones.map(([name, component]) => (
@@ -111,8 +111,8 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
   const { t } = useTranslation()
   const sorted = [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   return (
-    <details className="group rounded-lg border border-border bg-background overflow-hidden">
-      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-surface">
+    <details className="group rounded-lg border border-border bg-app-bg overflow-hidden">
+      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-app-surface">
         <span className="flex items-center gap-2">
           <svg
             className="w-4 h-4 text-foreground-subtle transition-transform group-open:rotate-90"
@@ -130,7 +130,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
         </span>
       </summary>
       <div className="relative border-t border-border px-4 py-4">
-        <div className="absolute left-6.5 top-6 bottom-6 w-px bg-surface-muted" aria-hidden />
+        <div className="absolute left-6.5 top-6 bottom-6 w-px bg-app-surface-muted" aria-hidden />
         <ol className="space-y-4">
           {sorted.map((entry) => (
             <AuditEntryRow key={`${entry.timestamp}:${entry.event}`} entry={entry} />
