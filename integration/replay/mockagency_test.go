@@ -87,6 +87,9 @@ func (a *mockAgency) findInject(taskID string) (injectRequest, bool) {
 // complete the parked EXTERNAL_REVIEW step.
 func (a *mockAgency) Respond(ctx context.Context, taskID, command string, content map[string]any, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+
 	var inj injectRequest
 	for {
 		var ok bool
@@ -99,7 +102,7 @@ func (a *mockAgency) Respond(ctx context.Context, taskID, command string, conten
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(300 * time.Millisecond):
+		case <-ticker.C:
 		}
 	}
 

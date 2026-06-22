@@ -43,6 +43,9 @@ func newMockGateway(t *testing.T, db *gorm.DB) *mockGateway {
 // from the payment record so they match (the handler validates them).
 func (g *mockGateway) Pay(ctx context.Context, taskID, status string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+
 	var tx *payment.PaymentTransaction
 	for {
 		got, err := g.repo.GetByTaskID(ctx, taskID)
@@ -59,7 +62,7 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, status string, timeout ti
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(300 * time.Millisecond):
+		case <-ticker.C:
 		}
 	}
 	g.logf("mock-gateway: confirming payment ref=%s amount=%s %s (task %s)", tx.ReferenceNumber, tx.Amount.String(), tx.Currency, taskID)
