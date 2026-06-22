@@ -8,7 +8,7 @@
       "title": "Sample Collection Status",
       "projector": "MARKDOWN",
       "visibleWhen": {
-        "states": ["PENDING_USER", "QUEUED_EXTERNALLY"]
+        "states": ["QUEUED_EXTERNALLY"]
       }
     },
     "results_summary": {
@@ -19,27 +19,6 @@
       "visibleWhen": {
         "requireDataKey": "officer_receive"
       }
-    },
-    "submission_form": {
-      "templateId": "npqs-draw-sample--trader-submit-form",
-      "title": "Sample Drop-Off Confirmation",
-      "projector": "FORM",
-      "dataKey": "traderinput",
-      "visibleWhen": {
-        "states": ["PENDING_USER"]
-      },
-      "handles": [
-        {
-          "command": "submit",
-          "label": "Confirm Sample Dropped Off",
-          "element": "primary_action"
-        }
-      ]
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [{ "command": "submit" }]
     }
   }
 }
