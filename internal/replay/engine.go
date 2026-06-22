@@ -6,16 +6,17 @@
 // The engine speaks only HTTP + JSON, so it is independent of the backend's
 // internals and could later drive a black-box target. Per-step identity is
 // selected by the "actor" field, surfaced to the server via the
-// X-Auth-Actor header (the in-process test wires a stub-auth middleware that
-// reads it; a black-box transport would map actors to real tokens instead).
+// X-Auth-Actor header (the in-process test transport maps actors to real tokens).
 //
 // Step kinds:
 //   - request:  issue an HTTP call, assert the status, optionally extract
 //     response fields into variables for later steps.
 //   - wait:     poll the consignment detail until a workflow node (matched by
 //     display-name substring) reaches a state; optionally capture its task id.
-//   - callback: drive a mock external agency to post its OGA callback for a
-//     parked task, advancing an EXTERNAL_REVIEW step.
+//   - callback: drive a mock external agency to complete a parked EXTERNAL_REVIEW
+//     task, posting {command, payload} back into NSW.
+//   - pay:      drive a mock payment gateway to confirm a parked payment task via
+//     a gateway webhook.
 //
 // Strings in paths and request bodies may reference variables as {{name}}.
 package replay
@@ -46,12 +47,13 @@ type Flow struct {
 	Steps []Step `json:"steps"`
 }
 
-// Step is exactly one of request, wait, or callback.
+// Step is exactly one of request, wait, callback, or pay.
 type Step struct {
 	Name     string    `json:"name"`
 	Request  *Request  `json:"request,omitempty"`
 	Wait     *Wait     `json:"wait,omitempty"`
 	Callback *Callback `json:"callback,omitempty"`
+	Pay      *Pay      `json:"pay,omitempty"`
 }
 
 // Request issues an HTTP call as a given actor.
@@ -72,20 +74,38 @@ type Wait struct {
 	Timeout string `json:"timeout,omitempty"`
 }
 
-// Callback drives the mock agency to respond to a parked EXTERNAL_REVIEW task.
+// Callback drives the mock external agency to complete a parked EXTERNAL_REVIEW task.
 type Callback struct {
-	TaskCode string         `json:"taskCode"` // substring match on the inject's taskCode
-	Content  map[string]any `json:"content"`  // reviewer payload sent back to NSW
-	Timeout  string         `json:"timeout,omitempty"`
+	TaskVar string         `json:"taskVar"` // name of the flow variable that holds the task id (set by a prior wait `into`)
+	Command string         `json:"command"` // outcome command (e.g. "approve", "reject")
+	Content map[string]any `json:"content"` // reviewer payload sent back as the command payload
+	Timeout string         `json:"timeout,omitempty"`
 }
 
-// Agency is the mock external agency the callback step drives. The in-process
+// Agency is the generic mock external agency the callback step drives. The in-process
 // test provides an implementation backed by a stub HTTP server.
 type Agency interface {
-	// Respond waits (up to timeout) for an inject whose taskCode contains
-	// taskCodeContains, then posts the OGA callback envelope back into NSW with
-	// content as the reviewer payload.
-	Respond(ctx context.Context, taskCodeContains string, content map[string]any, timeout time.Duration) error
+	// Respond waits (up to timeout) for an inject for taskID, then posts
+	// {command, payload:content} to the NSW task endpoint to complete the
+	// parked EXTERNAL_REVIEW step.
+	Respond(ctx context.Context, taskID, command string, content map[string]any, timeout time.Duration) error
+}
+
+// Pay drives a parked PAYMENT task to completion by simulating a gateway
+// success webhook for the payment created against the task in TaskVar.
+type Pay struct {
+	TaskVar string `json:"taskVar"`          // variable holding the pay task's id
+	Status  string `json:"status,omitempty"` // gateway success status (default "paid")
+	Timeout string `json:"timeout,omitempty"`
+}
+
+// Gateway is the mock payment gateway the pay step drives. The in-process test
+// provides an implementation that resolves the payment reference and posts the
+// gateway webhook.
+type Gateway interface {
+	// Pay waits (up to timeout) for the payment created against taskID, then
+	// confirms it by posting a gateway success webhook with the given status.
+	Pay(ctx context.Context, taskID, status string, timeout time.Duration) error
 }
 
 // LoadFlow reads and parses a JSON flow file.
@@ -111,6 +131,7 @@ type Runner struct {
 	Vars    map[string]any
 	Logf    func(string, ...any)
 	Agency  Agency
+	Gateway Gateway
 }
 
 // New builds a Runner with an empty variable store and a no-op logger.
@@ -138,8 +159,10 @@ func (r *Runner) Run(ctx context.Context, flow *Flow) error {
 			err = r.doWait(ctx, step.Wait)
 		case step.Callback != nil:
 			err = r.doCallback(ctx, step.Callback)
+		case step.Pay != nil:
+			err = r.doPay(ctx, step.Pay)
 		default:
-			err = fmt.Errorf("step has no request/wait/callback")
+			err = fmt.Errorf("step has no request/wait/callback/pay")
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", label, err)
@@ -248,7 +271,30 @@ func (r *Runner) doCallback(ctx context.Context, cb *Callback) error {
 	if err != nil {
 		return err
 	}
-	return r.Agency.Respond(ctx, cb.TaskCode, r.interpolateMap(cb.Content), timeout)
+	taskID, _ := r.Vars[cb.TaskVar].(string)
+	if taskID == "" {
+		return fmt.Errorf("callback: %q variable not set (capture the task id via a wait `into` first)", cb.TaskVar)
+	}
+	return r.Agency.Respond(ctx, taskID, cb.Command, r.interpolateMap(cb.Content), timeout)
+}
+
+func (r *Runner) doPay(ctx context.Context, p *Pay) error {
+	if r.Gateway == nil {
+		return fmt.Errorf("pay step requires a Gateway (none configured)")
+	}
+	timeout, err := parseTimeout(p.Timeout, 45*time.Second)
+	if err != nil {
+		return err
+	}
+	taskID, _ := r.Vars[p.TaskVar].(string)
+	if taskID == "" {
+		return fmt.Errorf("pay: %q variable not set (capture the pay task id via a wait `into` first)", p.TaskVar)
+	}
+	status := p.Status
+	if status == "" {
+		status = "paid"
+	}
+	return r.Gateway.Pay(ctx, taskID, status, timeout)
 }
 
 // ── consignment detail polling ──────────────────────────────────────────────
