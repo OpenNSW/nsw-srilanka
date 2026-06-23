@@ -1,6 +1,6 @@
 import { http } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
-import type { ZoneView } from '@/zones/types'
+import type { ZoneView } from '@/features/zone/types'
 import type { TaskCommandRequest, TaskCommandResponse } from './types'
 
 export async function getZoneView(taskId: string): Promise<ZoneView> {

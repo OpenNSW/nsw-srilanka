@@ -3,10 +3,9 @@ import { JsonForms } from '@jsonforms/react'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button } from '@radix-ui/themes'
 import type { JsonSchema } from '@jsonforms/core'
-import type { Handle } from '../types'
-import type { ZoneRendererProps } from './types'
-import { autoFillForm } from '../../utils/formUtils'
-import { getBooleanEnv } from '../../runtimeConfig'
+import type { Handle, ZoneRendererProps } from '../../types'
+import { autoFillForm } from '@/utils/formUtils'
+import { getBooleanEnv } from '@/runtimeConfig'
 
 type Props = ZoneRendererProps<'FORM'> & {
   // handles, when non-empty, render as physical controls in the form's own
