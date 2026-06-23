@@ -4,18 +4,15 @@
 //
 // Auth is REAL: the app runs the production authn middleware, and the harness
 // mints RS256 tokens validated against a local in-test JWKS server (see
-// authsigned_test.go) — no IdP required. Per-step identity is chosen by the
+// signedauth_test.go) — no IdP required. Per-step identity is chosen by the
 // flow's `actor` (surfaced via X-Auth-Actor and swapped for a bearer token).
 //
-// External agency flows are supported via a generic mock agency (mockagency_test.go)
-// that receives injects from the app and, when a `callback` step fires, posts
-// {command, payload} back to complete the parked EXTERNAL_REVIEW task. Payment
-// flows are supported via a generic mock gateway (mockgateway_test.go) that
-// confirms payments by posting a gateway webhook. FCAU is the sample flow
-// exercising both; other agency or payment flows need only a new JSON flow file.
+// Actors (members and agencies) are defined in configs/members/ and
+// configs/agencies/. Adding a new agency or member actor requires only a new
+// JSON config file — no Go changes.
 //
 // Run: source .env first so DB/Temporal addresses match the running containers,
-// then `make test-e2e` (or `E2E=1 go test ./integration/replay/...`). Tests
+// then `make test-e2e` (or `E2E=1 go test ./test/e2e/replay/...`). Tests
 // skip unless E2E=1. The `api` container must be stopped so its Temporal
 // workers don't contend with the in-process workers this harness starts.
 //
@@ -39,11 +36,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/bootstrap"
 )
-
-// userOUHandle is a company seeded by migrations/000003. The MEMBER user is
-// seeded with this ou_handle so CreateAndStartConsignment's company lookup
-// resolves. (A Trader or a CHA both resolve the same way.)
-const userOUHandle = "adam-pvt-ltd"
 
 // TestMain changes the working directory to the repo root so bootstrap.Build's
 // working-dir-relative "configs" path resolves regardless of where `go test`
@@ -81,7 +73,6 @@ type harness struct {
 	signed  *signedAuth
 	agency  *mockAgency
 	gateway *mockGateway
-	userID  string
 }
 
 // newHarness loads config from the environment (source .env first), seeds a
@@ -90,6 +81,10 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	root := findRepoRoot()
+
+	members := loadMemberConfigs(t)
+	agencies := loadAgencyConfigs(t)
+	payments := loadPaymentConfigs(t)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -104,8 +99,8 @@ func newHarness(t *testing.T) *harness {
 	// known agency service ids are pointed at it so EXTERNAL_REVIEW injects land
 	// here regardless of which agency a flow exercises. Unused by flows that don't
 	// reach an external review.
-	agency := newMockAgency(t)
-	cfg.Server.ServicesConfigPath = writeServicesConfig(t, agency.server.URL)
+	agency := newMockAgency(t, agencies)
+	cfg.Server.ServicesConfigPath = writeServicesConfig(t, agency.server.URL, agencies)
 
 	// A controllable mock payment gateway confirms payments by posting the GovPay
 	// webhook; it reads the generated reference from the payment store, so it
@@ -115,15 +110,20 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("gateway: connect db: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close(gwDB) })
-	gateway := newMockGateway(t, gwDB)
+	gateway := newMockGateway(t, gwDB, payments)
 
-	userID := "e2e-user-" + uuid.NewString()
-	seedUser(t, cfg, userID, userOUHandle)
+	// Seed one user record per member actor so each gets their own company identity.
+	memberUserIDs := make(map[string]string, len(members))
+	for _, m := range members {
+		uid := "e2e-user-" + uuid.NewString()
+		seedUser(t, cfg, uid, m.OUHandle)
+		memberUserIDs[m.ID] = uid
+	}
 
 	// Run the REAL authn middleware against a JWKS server we control. Start it
 	// before Build so the authn manager's Health() check (which fetches JWKS)
 	// passes. Tokens are minted to match cfg.Authn (issuer/audience/client_id).
-	signed := newSignedAuth(t, cfg.Authn.Issuer, cfg.Authn.Audience, userID, userOUHandle)
+	signed := newSignedAuth(t, cfg.Authn.Issuer, cfg.Authn.Audience, memberUserIDs, members, agencies, payments)
 	cfg.Authn.JWKSURL = signed.jwks.URL
 
 	app, err := bootstrap.Build(context.Background(), cfg)
@@ -135,11 +135,17 @@ func newHarness(t *testing.T) *harness {
 	srv := httptest.NewServer(app.Server.Handler)
 	t.Cleanup(srv.Close)
 
-	// Now that the app is listening, tell the mock agency where to call back and
-	// give it a real `fcau` bearer for the authenticated callback.
+	// Now that the app is listening, wire per-agency and per-gateway bearers.
 	agency.callbackBase = srv.URL
-	agency.bearer = signed.tokens["fcau"]
+	for _, ac := range agencies {
+		agency.bearers[ac.ID] = signed.tokens[ac.ID]
+	}
 	gateway.base = srv.URL
+	for _, p := range payments {
+		if tok, ok := signed.tokens[p.ID]; ok {
+			gateway.bearers[p.ID] = tok
+		}
+	}
 
 	return &harness{
 		server:  srv,
@@ -147,7 +153,6 @@ func newHarness(t *testing.T) *harness {
 		signed:  signed,
 		agency:  agency,
 		gateway: gateway,
-		userID:  userID,
 	}
 }
 
@@ -172,14 +177,13 @@ func seedUser(t *testing.T, cfg *config.Config, userID, ouHandle string) {
 	}
 }
 
-// writeServicesConfig writes a temp remote-services config pointing agency
+// writeServicesConfig writes a temp remote-services config pointing all agency
 // service ids at the mock agency server, and returns its path.
-func writeServicesConfig(t *testing.T, agencyURL string) string {
+func writeServicesConfig(t *testing.T, agencyURL string, agencies []AgencyConfig) string {
 	t.Helper()
-	agencyIDs := []string{"fcau"}
-	services := make([]map[string]any, 0, len(agencyIDs))
-	for _, id := range agencyIDs {
-		services = append(services, map[string]any{"id": id, "url": agencyURL, "timeout": "30s"})
+	services := make([]map[string]any, 0, len(agencies))
+	for _, ac := range agencies {
+		services = append(services, map[string]any{"id": ac.ID, "url": agencyURL, "timeout": "30s"})
 	}
 	cfg := map[string]any{"version": "1.0", "services": services}
 	raw, err := json.MarshalIndent(cfg, "", "  ")

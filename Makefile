@@ -60,7 +60,7 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 	else \
 		echo "⚠️  No .env found — using the current environment"; \
 	fi; \
-	E2E=1 go test -v -count=1 -timeout 240s ./test/e2e/...
+	E2E=1 GOWORK=off go test -v -count=1 -timeout 240s ./test/e2e/...
 
 # ---------------------------------------------------------------------------
 # Migrations (uses the nsw-agency migrate tool; generate needs no database)

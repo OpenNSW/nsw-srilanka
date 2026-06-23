@@ -103,7 +103,7 @@
     },
     {
       "name": "payment gateway confirms the application fee",
-      "pay": { "taskVar": "payTask", "status": "paid", "timeout": "60s" }
+      "pay": { "taskVar": "payTask", "method": "govpay", "status": "paid", "timeout": "60s" }
     },
     {
       "name": "wait for the application fee to be paid (workflow advanced past pay-fee)",

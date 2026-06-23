@@ -15,38 +15,32 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/replay"
-	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 // signingKid identifies the in-test signing key in the JWKS we serve.
 const signingKid = "e2e-signing-key"
-
-// memberClientID is the IdP client both MEMBER user types (Trader, CHA) sign in
-// through; both carry the same nsw:* scopes, so one minter covers both.
-const memberClientID = "TRADER_PORTAL_APP"
 
 // signedAuth runs a local JWKS server and mints RS256 tokens that the REAL
 // authn manager accepts. It replaces the injected-auth stub: the app runs the
 // real withAuth/withScope, and tokens are validated against this server's JWKS
 // — exercising the full auth-enforcement path with no IdP and no user-token gap.
 //
-// The pattern mirrors core/authn/test_helpers_test.go. Principals are modelled
-// by kind — a MEMBER user (Trader or CHA) and a SERVICE client (an agency) —
-// while flows label the per-step actor by concrete role ("trader", "fcau", …).
+// Principals are driven entirely from configs/members/ and configs/agencies/.
+// Adding a new actor requires only a new JSON config file, no code change here.
 type signedAuth struct {
 	key      *rsa.PrivateKey
 	jwks     *httptest.Server
 	issuer   string
 	audience string
-	userID   string            // the seeded MEMBER user's id (sub)
-	userOU   string            // the MEMBER user's ou_handle
-	tokens   map[string]string // actor -> bearer token (happy path)
+	tokens   map[string]string // actor id -> bearer token
 }
 
-// newSignedAuth generates a keypair, starts the JWKS server (so it is reachable
-// before bootstrap.Build's authn Health() check runs), and pre-mints the
-// per-actor tokens. issuer/audience must match cfg.Authn so validation passes.
-func newSignedAuth(t *testing.T, issuer, audience, userID, userOU string) *signedAuth {
+// newSignedAuth generates a keypair, starts the JWKS server (reachable before
+// bootstrap.Build's authn Health() check), and pre-mints tokens for every member,
+// agency, and payment gateway config that carries an identity. issuer/audience must
+// match cfg.Authn so validation passes. memberUserIDs maps each member ID to its
+// seeded DB user id (sub claim).
+func newSignedAuth(t *testing.T, issuer, audience string, memberUserIDs map[string]string, members []MemberConfig, agencies []AgencyConfig, payments []PaymentConfig) *signedAuth {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -67,13 +61,23 @@ func newSignedAuth(t *testing.T, issuer, audience, userID, userOU string) *signe
 	}))
 	t.Cleanup(jwks.Close)
 
-	a := &signedAuth{key: key, jwks: jwks, issuer: issuer, audience: audience, userID: userID, userOU: userOU}
-	// Roles are carried on the token (real IdP tokens do) to future-proof
-	// role-based authz; no endpoint enforces them yet, matching current behavior.
-	// A future CHA actor would mint memberClaims([]string{"CHA"}).
-	a.tokens = map[string]string{
-		"trader": a.sign(t, a.memberClaims([]string{"Trader"})),
-		"fcau":   a.sign(t, a.serviceClaims("FCAU_TO_NSW", []string{"AgencyM2M"})),
+	a := &signedAuth{
+		key:      key,
+		jwks:     jwks,
+		issuer:   issuer,
+		audience: audience,
+		tokens:   make(map[string]string),
+	}
+	for _, m := range members {
+		a.tokens[m.ID] = a.sign(t, a.memberClaims(m, memberUserIDs[m.ID]))
+	}
+	for _, ag := range agencies {
+		a.tokens[ag.ID] = a.sign(t, a.serviceClaims(ag.Identity))
+	}
+	for _, p := range payments {
+		if p.Identity != nil {
+			a.tokens[p.ID] = a.sign(t, a.serviceClaims(*p.Identity))
+		}
 	}
 	return a
 }
@@ -93,35 +97,26 @@ func (a *signedAuth) baseClaims(grant, clientID string) jwt.MapClaims {
 	}
 }
 
-// memberClaims mints a MEMBER (authorization_code) token for the seeded user.
+// memberClaims mints an authorization_code token for a specific seeded user.
 // sub == the seeded idp_user_id so the middleware's GetOrCreateUser resolves
-// AuthContext.User.ID back to that user. Covers both Trader and CHA (the role
-// is carried on the `roles` claim for future role-based authz).
-func (a *signedAuth) memberClaims(roles []string) jwt.MapClaims {
-	c := a.baseClaims("authorization_code", memberClientID)
-	c["sub"] = a.userID
-	c["email"] = a.userID + "@example.com"
-	c["ouId"] = a.userOU
-	c["ouHandle"] = a.userOU
-	c["roles"] = roles
-	c["scope"] = strings.Join([]string{
-		scopes.ConsignmentRead, scopes.ConsignmentWrite,
-		scopes.TaskRead, scopes.TaskWrite,
-		scopes.CompanyRead, scopes.CHARead,
-		scopes.StorageRead, scopes.StorageWrite,
-	}, " ")
+// AuthContext.User.ID back to that user.
+func (a *signedAuth) memberClaims(m MemberConfig, userID string) jwt.MapClaims {
+	c := a.baseClaims("authorization_code", m.Identity.ClientID)
+	c["sub"] = userID
+	c["email"] = userID + "@example.com"
+	c["ouId"] = m.OUHandle
+	c["ouHandle"] = m.OUHandle
+	c["roles"] = m.Identity.Roles
+	c["scope"] = strings.Join(m.Identity.Scopes, " ")
 	return c
 }
 
-// serviceClaims mints a SERVICE (client_credentials) token for an agency client.
-func (a *signedAuth) serviceClaims(clientID string, roles []string) jwt.MapClaims {
-	c := a.baseClaims("client_credentials", clientID)
-	c["sub"] = clientID
-	c["roles"] = roles
-	c["scope"] = strings.Join([]string{
-		scopes.TaskWrite, scopes.ConsignmentRead,
-		scopes.StorageRead, scopes.StorageWrite,
-	}, " ")
+// serviceClaims mints a client_credentials token for a SERVICE (M2M) agency client.
+func (a *signedAuth) serviceClaims(id ActorIdentity) jwt.MapClaims {
+	c := a.baseClaims("client_credentials", id.ClientID)
+	c["sub"] = id.ClientID
+	c["roles"] = id.Roles
+	c["scope"] = strings.Join(id.Scopes, " ")
 	return c
 }
 
