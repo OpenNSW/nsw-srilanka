@@ -3,6 +3,17 @@
   "type": "APPLICATION",
   "title": "[Customs] Cargo Dispatch Note (CDN) Application",
   "sections": {
+    "completed_message": {
+      "templateId": "customs-cdn--completed-message",
+      "title": "CDN Submission Status",
+      "projector": "MARKDOWN",
+      "dataKey": "userform",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    },
     "user_form": {
       "templateId": "customs-cdn--user-form",
       "title": "CDN Application Details",

@@ -1934,6 +1934,13 @@
       "path": "customs/4-create_cdn/userinput_jsonform.json"
     },
     {
+      "id": "customs-cdn--completed-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/completed_message_jsonform.json"
+    },
+    {
       "id": "customs-create-cdn-flow",
       "kind": "workflow",
       "version": "",
@@ -2002,6 +2009,13 @@
       "version": "",
       "loader": "local",
       "path": "customs/6-create_boat_note/userinput_jsonform.json"
+    },
+    {
+      "id": "customs-boat-note--completed-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/completed_message_jsonform.json"
     },
     {
       "id": "customs-create-boat-note-flow",

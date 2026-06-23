@@ -3,6 +3,17 @@
   "type": "APPLICATION",
   "title": "[Customs] Boat Note Creation",
   "sections": {
+    "completed_message": {
+      "templateId": "customs-boat-note--completed-message",
+      "title": "Boat Note Submission Status",
+      "projector": "MARKDOWN",
+      "dataKey": "userform",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    },
     "user_form": {
       "templateId": "customs-boat-note--user-form",
       "title": "Boat Note Details",
