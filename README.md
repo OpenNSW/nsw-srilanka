@@ -19,8 +19,10 @@ nsw-srilanka/
 ├── internal/
 │   └── bootstrap/
 │       └── app.go                        # Wires DB, Temporal, taskflow, auth, storage, notifications, routes
-├── integration/
+├── external-integration/
 │   └── payment/                          # Sri Lanka–specific payment gateway implementations (GovPay+)
+├── integration/
+│   └── replay/                           # End-to-end integration tests (replay harness, mock gateway/agency)
 ├── migrations/                           # PostgreSQL migration files (up/down SQL)
 ├── portals/                              # Trader Portal frontend (React/Vite monorepo)
 ├── idp/                                  # Identity Provider configuration and seed resources
