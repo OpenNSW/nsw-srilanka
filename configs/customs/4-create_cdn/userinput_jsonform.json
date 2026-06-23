@@ -79,11 +79,7 @@
         "title": "9. Tare Wt. (Kg)",
         "example": 2200
       },
-      "slpa_no": {
-        "type": "string",
-        "title": "10. SLPA No",
-        "example": "SLPA-83921"
-      },
+
       "seal_no": {
         "type": "string",
         "title": "11.a Seal No",
@@ -167,44 +163,7 @@
         "title": "26. Place of Receipt (CY / CFS / DOOR)",
         "example": "CFS"
       },
-      "gate_arrival_time": {
-        "type": "string",
-        "title": "28.a Time of Arrival at Customs Gate"
-      },
-      "custom_officer_name": {
-        "type": "string",
-        "title": "28.b Custom Officer Name",
-        "example": "C. K. Wickramasinghe"
-      },
-      "alongside_arrival_time": {
-        "type": "string",
-        "title": "29.a Time of Arrival Alongside"
-      },
-      "pier_clerk": {
-        "type": "string",
-        "title": "29.b Pier Clerk"
-      },
-      "demount_discharge_time": {
-        "type": "string",
-        "title": "30.a Time & Date Demounted/Discharge"
-      },
-      "supervisor_pier_clerk": {
-        "type": "string",
-        "title": "30.b Supervisor/Pier Clerk"
-      },
-      "customs_export_office": {
-        "type": "string",
-        "title": "31. Customs Export Office"
-      },
-      "slpa_export_office": {
-        "type": "string",
-        "title": "32. SLPA Export Office"
-      },
-      "received_details": {
-        "type": "string",
-        "title": "33. (Received .....Packages/Containers trailers in good order)",
-        "example": "Received 80 drums in container MSCU-849201-9 in good order"
-      },
+
       "preparing_company_name": {
         "type": "string",
         "title": "34. Name of Company preparing Note",
@@ -406,50 +365,6 @@
               { "type": "Control", "scope": "#/properties/telephone_no" },
               { "type": "Control", "scope": "#/properties/declarant_signature" }
             ]
-          }
-        ]
-      },
-      {
-        "type": "Group",
-        "label": "5. Verification Details (For Customs / SLPA use)",
-        "elements": [
-          {
-            "type": "HorizontalLayout",
-            "elements": [
-              { "type": "Control", "scope": "#/properties/slpa_no" },
-              { "type": "Control", "scope": "#/properties/custom_officer_name" }
-            ]
-          },
-          {
-            "type": "HorizontalLayout",
-            "elements": [
-              { "type": "Control", "scope": "#/properties/gate_arrival_time" },
-              { "type": "Control", "scope": "#/properties/alongside_arrival_time" }
-            ]
-          },
-          {
-            "type": "HorizontalLayout",
-            "elements": [
-              { "type": "Control", "scope": "#/properties/pier_clerk" },
-              { "type": "Control", "scope": "#/properties/demount_discharge_time" }
-            ]
-          },
-          {
-            "type": "HorizontalLayout",
-            "elements": [
-              { "type": "Control", "scope": "#/properties/supervisor_pier_clerk" },
-              { "type": "Control", "scope": "#/properties/customs_export_office" }
-            ]
-          },
-          {
-            "type": "HorizontalLayout",
-            "elements": [
-              { "type": "Control", "scope": "#/properties/slpa_export_office" }
-            ]
-          },
-          {
-            "type": "Control",
-            "scope": "#/properties/received_details"
           }
         ]
       }

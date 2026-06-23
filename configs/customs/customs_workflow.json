@@ -69,7 +69,9 @@
       "name": "[Customs 5.0] Wait on CDN Ack",
       "task_template_id": "customs-wait-cdn-ack-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {},
+      "input_mapping": {
+        "customs.cdn_userform": "userform"
+      },
       "output_mapping": {
         "ack_status": "customs.cdn_ack_status"
       }
@@ -93,7 +95,9 @@
       "name": "[Customs 7.0] Boat Note Approval",
       "task_template_id": "customs-boat-note-approval-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {},
+      "input_mapping": {
+        "customs.boat_note_userform": "userform"
+      },
       "output_mapping": {
         "approval_status": "customs.boat_note_approval_status"
       }

@@ -11,7 +11,9 @@
       "id": "wait_ack_task",
       "type": "TASK",
       "task_template_id": "customs-wait-cdn-ack",
-      "input_mapping": {},
+      "input_mapping": {
+        "userform": "submission"
+      },
       "output_mapping": {
         "ack_status": "ack_status"
       }
