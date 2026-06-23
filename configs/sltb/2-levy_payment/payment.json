@@ -1,0 +1,11 @@
+{
+  "id": "sltb-pay-levy--payment",
+  "task_type": "PAYMENT",
+  "output_namespace": "payment",
+  "plugin_properties": {
+    "task_code": "sltb_levy_payment_v1",
+    "service_name": "SLTB Levy Payment",
+    "amount": "12500.00",
+    "currency": "LKR"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "id": "sltb-pay-levy-flow",
+  "name": "Pay SLTB Levy via GovPay",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "select_method_task",
+      "type": "TASK",
+      "task_template_id": "sltb-pay-levy--select-method",
+      "input_mapping": {},
+      "output_mapping": {
+        "selected_method": "selected_method"
+      }
+    },
+    {
+      "id": "pay_levy_task",
+      "type": "TASK",
+      "task_template_id": "sltb-pay-levy--payment",
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "selected_method": "selected_method"
+      },
+      "output_mapping": {
+        "payment_status": "payment_status",
+        "payment_receipt_url?": "payment.payment_receipt_url",
+        "selected_method?": "payment.selected_method"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "select_method_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "select_method_task",
+      "target_id": "pay_levy_task"
+    },
+    {
+      "id": "e3",
+      "source_id": "pay_levy_task",
+      "target_id": "end"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "id": "sltb-record-sample-draw--officer-form",
+  "title": "Record Warehouse Sample Draw",
+  "schema": {
+    "type": "object",
+    "required": ["sample_number", "draw_date"],
+    "properties": {
+      "scheduled_visit_date": {
+        "type": "string",
+        "title": "Scheduled Visit Date",
+        "readOnly": true
+      },
+      "inspector_name": {
+        "type": "string",
+        "title": "Assigned Tea Inspector",
+        "readOnly": true
+      },
+      "sample_number": {
+        "type": "string",
+        "title": "Assigned Sample Number",
+        "description": "Enter the SLTB sample number assigned to this consignment.",
+        "example": "SLTB-SMP-2026-904812"
+      },
+      "draw_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Date of Sample Draw"
+      },
+      "draw_notes": {
+        "type": "string",
+        "title": "Draw Notes / Comments (Optional)"
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/scheduled_visit_date",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/scheduled_visit_date",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/inspector_name",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/inspector_name",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      { "type": "Control", "scope": "#/properties/sample_number" },
+      { "type": "Control", "scope": "#/properties/draw_date" },
+      {
+        "type": "Control",
+        "scope": "#/properties/draw_notes",
+        "options": { "multiLine": true }
+      }
+    ]
+  }
+}

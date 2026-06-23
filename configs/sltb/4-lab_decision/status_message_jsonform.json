@@ -1,0 +1,4 @@
+{
+  "id": "sltb-lab-decision--status",
+  "template": "{{if .decision.lab_testing_required}}\n### ✅ Lab Testing Decision Made\n\n{{if eq .decision.lab_testing_required \"yes\"}}\nThe SLTB Officer has determined that laboratory testing is required for this consignment. Please proceed to pay the lab test fee.\n\n* **Sample Number**: `{{.sample_number}}`\n* **Decision**: Lab Testing Required\n{{else}}\nThe SLTB Officer has determined that laboratory testing is not required for this consignment. The application will proceed to the final review stage.\n\n* **Sample Number**: `{{.sample_number}}`\n* **Decision**: No Lab Testing Required\n{{end}}\n{{if .decision.decision_notes}}* **Notes**: {{.decision.decision_notes}}{{end}}\n{{else}}\n### ⏳ Lab Testing Decision Pending\n\nThe SLTB Officer is reviewing the submitted sample and will determine if laboratory testing is required.\n\n* **Sample Number**: `{{.sample_number}}`\n* **Status**: Awaiting Officer Decision\n{{end}}"
+}

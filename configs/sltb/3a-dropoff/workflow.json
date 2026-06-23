@@ -1,0 +1,25 @@
+{
+  "id": "sltb-dropoff-flow",
+  "name": "Sample Drop-off at SLTB",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "officer_ack",
+      "type": "TASK",
+      "name": "Acknowledge Sample Received & Record Sample Number",
+      "task_template_id": "sltb-dropoff--officer-ack",
+      "input_mapping": {},
+      "output_mapping": {
+        "sample_number": "sample_number",
+        "officer_ack": "ack.officer_ack",
+        "receipt_notes?": "ack.receipt_notes"
+      }
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e_start", "source_id": "start", "target_id": "officer_ack" },
+    { "id": "e_ack_end", "source_id": "officer_ack", "target_id": "end" }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "sltb-pay-lab-fee--upload-form",
+  "title": "SLTB Lab Test Fee Payment Receipt Upload",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "lab_receipt": {
+        "type": "string",
+        "format": "file",
+        "title": "Payment Receipt (PDF/Image)"
+      }
+    },
+    "required": [
+      "lab_receipt"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/lab_receipt"
+      }
+    ]
+  }
+}

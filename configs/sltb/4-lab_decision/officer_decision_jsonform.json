@@ -1,0 +1,49 @@
+{
+  "id": "sltb-lab-decision--officer-form",
+  "title": "Lab Testing Decision",
+  "schema": {
+    "type": "object",
+    "required": ["lab_testing_required"],
+    "properties": {
+      "sample_number": {
+        "type": "string",
+        "title": "Sample Number",
+        "readOnly": true
+      },
+      "lab_testing_required": {
+        "type": "string",
+        "title": "Lab Testing Decision",
+        "oneOf": [
+          { "const": "yes", "title": "Yes — Lab Testing Required" },
+          { "const": "no", "title": "No — Lab Testing Not Required" }
+        ]
+      },
+      "decision_notes": {
+        "type": "string",
+        "title": "Decision Notes (Optional)"
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/sample_number",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/sample_number",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      { "type": "Control", "scope": "#/properties/lab_testing_required" },
+      {
+        "type": "Control",
+        "scope": "#/properties/decision_notes",
+        "options": { "multiLine": true }
+      }
+    ]
+  }
+}

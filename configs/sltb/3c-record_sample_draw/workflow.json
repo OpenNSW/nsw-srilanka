@@ -1,0 +1,28 @@
+{
+  "id": "sltb-record-sample-draw-flow",
+  "name": "Officer Records Sample Draw",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "officer_record",
+      "type": "TASK",
+      "name": "Record Sample Draw & Assign Sample Number",
+      "task_template_id": "sltb-record-sample-draw--officer",
+      "input_mapping": {
+        "schedule.visit_date": "scheduled_visit_date",
+        "schedule.inspector_name": "inspector_name"
+      },
+      "output_mapping": {
+        "sample_number": "sample_number",
+        "draw_date": "draw.draw_date",
+        "draw_notes?": "draw.draw_notes"
+      }
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e_start", "source_id": "start", "target_id": "officer_record" },
+    { "id": "e_record_end", "source_id": "officer_record", "target_id": "end" }
+  ]
+}

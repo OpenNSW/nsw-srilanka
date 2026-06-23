@@ -1,0 +1,26 @@
+{
+  "id": "sltb-lab-decision-flow",
+  "name": "Officer Lab Testing Decision",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "officer_decide",
+      "type": "TASK",
+      "name": "Decide if Lab Testing is Required",
+      "task_template_id": "sltb-lab-decision--officer",
+      "input_mapping": {
+        "sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "lab_testing_required": "decision.lab_testing_required",
+        "decision_notes?": "decision.decision_notes"
+      }
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e_start", "source_id": "start", "target_id": "officer_decide" },
+    { "id": "e_decide_end", "source_id": "officer_decide", "target_id": "end" }
+  ]
+}

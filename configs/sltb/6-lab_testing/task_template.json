@@ -1,0 +1,6 @@
+{
+  "id": "sltb-lab-testing-flow",
+  "type": "APPLICATION",
+  "workflow_id": "sltb-lab-testing-flow",
+  "render_config_id": "sltb-lab-testing-flow:render"
+}

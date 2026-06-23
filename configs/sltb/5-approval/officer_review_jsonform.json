@@ -1,0 +1,94 @@
+{
+  "id": "sltb-final-decision--officer-form",
+  "title": "SLTB Final Application Decision",
+  "schema": {
+    "type": "object",
+    "required": [
+      "final_decision_outcome"
+    ],
+    "properties": {
+      "sample_number": {
+        "type": "string",
+        "title": "Sample Number",
+        "readOnly": true
+      },
+      "final_decision_outcome": {
+        "type": "string",
+        "title": "Final Decision Outcome",
+        "oneOf": [
+          {
+            "const": "approve",
+            "title": "Approve Application & Issue Tea Export Certificate"
+          }
+        ]
+      },
+      "remarks": {
+        "type": "string",
+        "title": "Decision Remarks / Comments",
+        "description": "Provide detail about the approval."
+      },
+      "certificate_id": {
+        "type": "string",
+        "title": "Issued SLTB Tea Export Certificate ID",
+        "example": "SLTB/CERT/2026/88412",
+        "description": "Enter the unique certificate number issued by the Sri Lanka Tea Board."
+      },
+      "certificate_file": {
+        "type": "string",
+        "format": "file",
+        "title": "Upload Issued Tea Export Certificate (PDF)",
+        "description": "Upload the signed digital certificate."
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/sample_number",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/sample_number",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/final_decision_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/remarks",
+        "options": {
+          "multiLine": true
+        }
+      },
+      {
+        "type": "Group",
+        "label": "Certificate Issuance",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/final_decision_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        },
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/certificate_id"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/certificate_file"
+          }
+        ]
+      }
+    ]
+  }
+}

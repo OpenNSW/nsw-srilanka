@@ -1,0 +1,46 @@
+{
+  "id": "sltb-submit-blendsheet-flow:render",
+  "type": "APPLICATION",
+  "title": "[SLTB] Submit & Review Blend Sheet",
+  "sections": {
+    "status_message": {
+      "templateId": "sltb-submit-blendsheet--status-message",
+      "title": "Submission & Review Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER",
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
+        ]
+      }
+    },
+    "user_form": {
+      "templateId": "sltb-submit-blendsheet--user-form",
+      "title": "SLTB Tea Blend Sheet Details",
+      "projector": "FORM",
+      "dataKey": "userform",
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Blend Sheet",
+          "element": "primary_action"
+        }
+      ],
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    }
+  }
+}

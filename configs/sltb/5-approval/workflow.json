@@ -1,0 +1,41 @@
+{
+  "id": "sltb-final-decision-flow",
+  "name": "Final Application Decision",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "officer_decision_task",
+      "type": "TASK",
+      "task_template_id": "sltb-final-decision--officer-review",
+      "input_mapping": {
+        "sample_number?": "sample_number"
+      },
+      "output_mapping": {
+        "final_decision_outcome": "decision.final_decision_outcome",
+        "remarks?": "decision.remarks",
+        "certificate_id?": "decision.certificate_id",
+        "certificate_file?": "decision.certificate_file"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "officer_decision_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "officer_decision_task",
+      "target_id": "end"
+    }
+  ]
+}

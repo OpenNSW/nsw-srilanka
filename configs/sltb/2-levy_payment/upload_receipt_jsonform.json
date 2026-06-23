@@ -1,0 +1,26 @@
+{
+  "id": "sltb-pay-levy--upload-form",
+  "title": "SLTB Levy Payment Receipt Upload",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "levy_receipt": {
+        "type": "string",
+        "format": "file",
+        "title": "Payment Receipt (PDF/Image)"
+      }
+    },
+    "required": [
+      "levy_receipt"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/levy_receipt"
+      }
+    ]
+  }
+}

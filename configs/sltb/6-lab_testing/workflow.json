@@ -1,0 +1,28 @@
+{
+  "id": "sltb-lab-testing-flow",
+  "name": "Lab Testing & Results",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "officer_test",
+      "type": "TASK",
+      "name": "Record Lab Test Results",
+      "task_template_id": "sltb-lab-testing--officer",
+      "input_mapping": {
+        "sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "test_result": "result.test_result",
+        "test_date": "result.test_date",
+        "test_report_ref?": "result.test_report_ref",
+        "test_notes?": "result.test_notes"
+      }
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e_start", "source_id": "start", "target_id": "officer_test" },
+    { "id": "e_test_end", "source_id": "officer_test", "target_id": "end" }
+  ]
+}

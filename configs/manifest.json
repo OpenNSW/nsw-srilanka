@@ -2135,6 +2135,531 @@
       "version": "",
       "loader": "local",
       "path": "customs/8-wait_export_release/officer_form_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/render.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/traderinput.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/traderinput_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--status-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/reviewerinput.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--officer-review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/reviewerinput_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/workflow.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/task_template.json"
+    },
+    {
+      "id": "sltb-pay-levy-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/render.json"
+    },
+    {
+      "id": "sltb-pay-levy--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/select_method.json"
+    },
+    {
+      "id": "sltb-pay-levy--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/select_method_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-levy--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/payment.json"
+    },
+    {
+      "id": "sltb-pay-levy--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/payment_details_markdown.json"
+    },
+    {
+      "id": "sltb-pay-levy--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/success_message_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-levy--upload-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/upload_receipt_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-levy--review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/review_receipt_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-levy-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/workflow.json"
+    },
+    {
+      "id": "sltb-pay-levy-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/task_template.json"
+    },
+    {
+      "id": "sltb-schedule-pickup-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/render.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--suggest",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/trader_suggest.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--suggest-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/trader_suggest_jsonform.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/officer_review.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--officer-review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/officer_review_jsonform.json"
+    },
+    {
+      "id": "sltb-schedule-pickup-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/workflow.json"
+    },
+    {
+      "id": "sltb-schedule-pickup-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/task_template.json"
+    },
+    {
+      "id": "sltb-dropoff-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/render.json"
+    },
+    {
+      "id": "sltb-dropoff--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-dropoff--officer-ack",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/officer_ack.json"
+    },
+    {
+      "id": "sltb-dropoff--officer-ack-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/officer_ack_jsonform.json"
+    },
+    {
+      "id": "sltb-dropoff-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/workflow.json"
+    },
+    {
+      "id": "sltb-dropoff-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/task_template.json"
+    },
+    {
+      "id": "sltb-record-sample-draw-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/render.json"
+    },
+    {
+      "id": "sltb-record-sample-draw--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-record-sample-draw--officer",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/officer_record.json"
+    },
+    {
+      "id": "sltb-record-sample-draw--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/officer_record_jsonform.json"
+    },
+    {
+      "id": "sltb-record-sample-draw-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/workflow.json"
+    },
+    {
+      "id": "sltb-record-sample-draw-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/task_template.json"
+    },
+    {
+      "id": "sltb-lab-decision-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/render.json"
+    },
+    {
+      "id": "sltb-lab-decision--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-decision--officer",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/officer_decision.json"
+    },
+    {
+      "id": "sltb-lab-decision--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/officer_decision_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-decision-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/workflow.json"
+    },
+    {
+      "id": "sltb-lab-decision-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/task_template.json"
+    },
+    {
+      "id": "sltb-lab-testing-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/render.json"
+    },
+    {
+      "id": "sltb-lab-testing--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-testing--officer",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/officer_test.json"
+    },
+    {
+      "id": "sltb-lab-testing--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/officer_test_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-testing-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/workflow.json"
+    },
+    {
+      "id": "sltb-lab-testing-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/task_template.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/render.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/select_method.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/select_method_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/payment.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/payment_details_markdown.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/success_message_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/workflow.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/task_template.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/render.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/select_method.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/select_method_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/payment.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/payment_details_markdown.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/success_message_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--upload-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/upload_receipt_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/review_receipt_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/workflow.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/task_template.json"
+    },
+    {
+      "id": "sltb-final-decision-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/render.json"
+    },
+    {
+      "id": "sltb-final-decision--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/officer_review.json"
+    },
+    {
+      "id": "sltb-final-decision--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/officer_review_jsonform.json"
+    },
+    {
+      "id": "sltb-final-decision--trader-view",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/trader_view_jsonform.json"
+    },
+    {
+      "id": "sltb-final-decision-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/workflow.json"
+    },
+    {
+      "id": "sltb-final-decision-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/task_template.json"
+    },
+    {
+      "id": "sltb-blendsheet-approval",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/sltb_workflow.json"
     }
   ]
 }

@@ -24,6 +24,7 @@ FCAU_OFFICER_PASSWORD="${SAMPLE_FCAU_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 CDA_OFFICER_PASSWORD="${SAMPLE_CDA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 SLPA_OFFICER_PASSWORD="${SAMPLE_SLPA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 CUSTOMS_OFFICER_PASSWORD="${SAMPLE_CUSTOMS_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
+SLTB_OFFICER_PASSWORD="${SAMPLE_SLTB_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 M2M_CLIENT_SECRET="${M2M_CLIENT_SECRET:-1234}"
 # Outbound (Agency -> NSW) M2M client secrets — one per *_TO_NSW client.
 NPQS_M2M_CLIENT_SECRET="${M2M_NPQS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
@@ -31,12 +32,14 @@ FCAU_M2M_CLIENT_SECRET="${M2M_FCAU_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 CDA_M2M_CLIENT_SECRET="${M2M_CDA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 SLPA_M2M_CLIENT_SECRET="${M2M_SLPA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 CUSTOMS_M2M_CLIENT_SECRET="${M2M_CUSTOMS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
+SLTB_M2M_CLIENT_SECRET="${M2M_SLTB_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 # Inbound (NSW -> Agency) M2M client secrets — one per NSW_TO_* client.
 NSW_TO_NPQS_M2M_CLIENT_SECRET="${M2M_NSW_TO_NPQS_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_FCAU_M2M_CLIENT_SECRET="${M2M_NSW_TO_FCAU_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_CDA_M2M_CLIENT_SECRET="${M2M_NSW_TO_CDA_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_SLPA_M2M_CLIENT_SECRET="${M2M_NSW_TO_SLPA_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_CUSTOMS_M2M_CLIENT_SECRET="${M2M_NSW_TO_CUSTOMS_SECRET:-${M2M_CLIENT_SECRET}}"
+NSW_TO_SLTB_M2M_CLIENT_SECRET="${M2M_NSW_TO_SLTB_SECRET:-${M2M_CLIENT_SECRET}}"
 
 # ----------------------------------------------------------------------------
 # OAuth2 resource servers & scope sets
@@ -971,6 +974,7 @@ FCAU_OU_HANDLE="fcau"
 CDA_OU_HANDLE="cda"
 SLPA_OU_HANDLE="slpa"
 CUSTOMS_OU_HANDLE="customs"
+SLTB_OU_HANDLE="sltb"
 
 log_info "Creating Government Organization root organization unit..."
 
@@ -1239,6 +1243,51 @@ if [[ -z "$CUSTOMS_OU_ID" ]]; then
 fi
 
 log_info "Customs OU ID: $CUSTOMS_OU_ID"
+
+echo ""
+log_info "Creating SLTB organization unit..."
+
+read -r -d '' SLTB_OU_PAYLOAD <<JSON || true
+{
+    "handle": "${SLTB_OU_HANDLE}",
+    "name": "SLTB",
+    "description": "Sri Lanka Tea Board",
+    "parent": "${GOVERNMENT_ORG_OU_ID}"
+}
+JSON
+
+RESPONSE=$(api_call POST "/organization-units" "${SLTB_OU_PAYLOAD}")
+HTTP_CODE="${RESPONSE: -3}"
+BODY="${RESPONSE%???}"
+
+if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]]; then
+    log_success "SLTB organization unit created successfully"
+    SLTB_OU_ID=$(extract_first_id "$BODY")
+elif [[ "$HTTP_CODE" == "409" ]]; then
+    log_warning "SLTB organization unit already exists, retrieving ID..."
+    RESPONSE=$(api_call GET "/organization-units/tree/${GOVERNMENT_ORG_OU_HANDLE}/${SLTB_OU_HANDLE}")
+    HTTP_CODE="${RESPONSE: -3}"
+    BODY="${RESPONSE%???}"
+
+    if [[ "$HTTP_CODE" == "200" ]]; then
+        SLTB_OU_ID=$(extract_first_id "$BODY")
+    else
+        log_error "Failed to fetch SLTB OU (HTTP $HTTP_CODE)"
+        echo "Response: $BODY"
+        exit 1
+    fi
+else
+    log_error "Failed to create SLTB organization unit (HTTP $HTTP_CODE)"
+    echo "Response: $BODY"
+    exit 1
+fi
+
+if [[ -z "$SLTB_OU_ID" ]]; then
+    log_error "Could not determine SLTB organization unit ID"
+    exit 1
+fi
+
+log_info "SLTB OU ID: $SLTB_OU_ID"
 
 echo ""
 
@@ -1692,6 +1741,9 @@ USER_SLPA_ID="$CREATED_USER_ID"
 create_user_in_ou "Government_User" "$CUSTOMS_OU_ID" "customs_officer" "customs_officer@government.dev" "Customs" "Officer" "$CUSTOMS_OFFICER_PASSWORD" "+94771234565"
 USER_CUSTOMS_ID="$CREATED_USER_ID"
 
+create_user_in_ou "Government_User" "$SLTB_OU_ID" "sltb_officer" "sltb_officer@government.dev" "SLTB" "Officer" "$SLTB_OFFICER_PASSWORD" "+94771234566"
+USER_SLTB_ID="$CREATED_USER_ID"
+
 echo ""
 
 # ============================================================================
@@ -1712,6 +1764,7 @@ ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_FCAU_ID" "OGA Reviewers" "
 ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_CDA_ID" "OGA Reviewers" "cda_officer"
 ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_SLPA_ID" "OGA Reviewers" "slpa_officer"
 ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_CUSTOMS_ID" "OGA Reviewers" "customs_officer"
+ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_SLTB_ID" "OGA Reviewers" "sltb_officer"
 
 echo ""
 
@@ -1766,6 +1819,7 @@ FCAU_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/fcau")
 CDA_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/cda")
 SLPA_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/slpa")
 CUSTOMS_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/customs")
+SLTB_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/sltb")
 
 create_spa_application "TraderApp" "Application for trader portal built with React" "TRADER_PORTAL_APP" "5173" "Private_User" "${DEFAULT_OU_ID_FOR_TRADER}" "${TRADER_NSW_SCOPES}"
 create_spa_application "NPQSPortalApp" "Application for NPQS portal built with React" "OGA_PORTAL_APP_NPQS" "5174" "Government_User" "${NPQS_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
@@ -1773,6 +1827,7 @@ create_spa_application "FCAUPortalApp" "Application for FCAU portal built with R
 create_spa_application "CDAPortalApp" "Application for CDA portal built with React" "OGA_PORTAL_APP_CDA" "5176" "Government_User" "${CDA_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 create_spa_application "SLPAPortalApp" "Application for SLPA portal built with React" "OGA_PORTAL_APP_SLPA" "5177" "Government_User" "${SLPA_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 create_spa_application "CustomsPortalApp" "Application for Customs portal built with React" "OGA_PORTAL_APP_CUSTOMS" "5178" "Government_User" "${CUSTOMS_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
+create_spa_application "SLTBPortalApp" "Application for SLTB portal built with React" "OGA_PORTAL_APP_SLTB" "5179" "Government_User" "${SLTB_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 
 echo ""
 
@@ -1818,6 +1873,10 @@ create_m2m_application "CUSTOMS_TO_NSW_M2M" "Machine-to-machine integration for 
 CUSTOMS_TO_NSW_M2M_APP_ID="$CREATED_M2M_APP_ID"
 assign_role_to_app "$AGENCY_M2M_ROLE_ID" "$CUSTOMS_TO_NSW_M2M_APP_ID" "AgencyM2M" "CUSTOMS_TO_NSW_M2M"
 
+create_m2m_application "SLTB_TO_NSW_M2M" "Machine-to-machine integration for SLTB to NSW" "SLTB_TO_NSW" "${SLTB_M2M_CLIENT_SECRET}" "${DEFAULT_OU_ID_FOR_M2M}" "${M2M_NSW_SCOPES}"
+SLTB_TO_NSW_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$AGENCY_M2M_ROLE_ID" "$SLTB_TO_NSW_M2M_APP_ID" "AgencyM2M" "SLTB_TO_NSW_M2M"
+
 echo ""
 
 # ============================================================================
@@ -1848,6 +1907,10 @@ create_m2m_application "NSW_TO_CUSTOMS_M2M" "Machine-to-machine integration for 
 NSW_TO_CUSTOMS_M2M_APP_ID="$CREATED_M2M_APP_ID"
 assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_CUSTOMS_M2M_APP_ID" "NswM2M" "NSW_TO_CUSTOMS_M2M"
 
+create_m2m_application "NSW_TO_SLTB_M2M" "Machine-to-machine integration for NSW to SLTB" "NSW_TO_SLTB" "${NSW_TO_SLTB_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
+NSW_TO_SLTB_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_SLTB_M2M_APP_ID" "NswM2M" "NSW_TO_SLTB_M2M"
+
 echo ""
 
 # ============================================================================
@@ -1859,7 +1922,7 @@ log_info "Private Sector OU path: ${PRIVATE_SECTOR_OU_HANDLE}"
 log_info "ADAM PVT LTD OU path: ${ADAM_PVT_LTD_OU_PATH}"
 log_info "EDWARD PVT LTD OU path: ${EDWARD_PVT_LTD_OU_PATH}"
 log_info "Government Organization OU path: ${GOVERNMENT_ORG_OU_HANDLE}"
-log_info "Government child OUs: ${NPQS_OU_HANDLE}, ${FCAU_OU_HANDLE}, ${CDA_OU_HANDLE}, ${SLPA_OU_HANDLE}"
+log_info "Government child OUs: ${NPQS_OU_HANDLE}, ${FCAU_OU_HANDLE}, ${CDA_OU_HANDLE}, ${SLPA_OU_HANDLE}, ${SLTB_OU_HANDLE}"
 log_info "Private user type: Private_User"
 log_info "Government user type: Government_User"
 log_info "Traders group -> Trader role (NSW_API scopes)"
@@ -1869,10 +1932,10 @@ log_info "suresh in groups: Traders, CHA"
 log_info "ramesh in groups: CHA"
 log_info "gomesh in groups: Traders"
 log_info "naresh (EDWARD PVT LTD) in groups: CHA"
-log_info "Government users: npqs_user, fcau_user, cda_user, slpa_user - all in OGA Reviewers group"
-log_info "App client IDs: TRADER_PORTAL_APP, OGA_PORTAL_APP_NPQS, OGA_PORTAL_APP_FCAU, OGA_PORTAL_APP_CDA, OGA_PORTAL_APP_SLPA"
-log_info "M2M client IDs (OGA -> NSW): NPQS_TO_NSW, FCAU_TO_NSW, CDA_TO_NSW, SLPA_TO_NSW"
-log_info "M2M client IDs (NSW -> OGA): NSW_TO_NPQS, NSW_TO_FCAU, NSW_TO_CDA, NSW_TO_SLPA"
+log_info "Government users: npqs_user, fcau_user, cda_user, slpa_user, customs_officer, sltb_officer - all in OGA Reviewers group"
+log_info "App client IDs: TRADER_PORTAL_APP, OGA_PORTAL_APP_NPQS, OGA_PORTAL_APP_FCAU, OGA_PORTAL_APP_CDA, OGA_PORTAL_APP_SLPA, OGA_PORTAL_APP_CUSTOMS, OGA_PORTAL_APP_SLTB"
+log_info "M2M client IDs (OGA -> NSW): NPQS_TO_NSW, FCAU_TO_NSW, CDA_TO_NSW, SLPA_TO_NSW, CUSTOMS_TO_NSW, SLTB_TO_NSW"
+log_info "M2M client IDs (NSW -> OGA): NSW_TO_NPQS, NSW_TO_FCAU, NSW_TO_CDA, NSW_TO_SLPA, NSW_TO_CUSTOMS, NSW_TO_SLTB"
 log_info "M2M roles: AgencyM2M (clients -> NSW_API), NswM2M (clients -> AGENCY_API)"
 log_info "M2M auth method: client_secret_basic"
 echo ""

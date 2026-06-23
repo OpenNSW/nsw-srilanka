@@ -1,0 +1,4 @@
+{
+  "id": "sltb-final-decision--trader-view",
+  "template": "{{if .final_decision_outcome}}\n### 🎉 Application Approved & Certificate Issued\n\nCongratulations! The Sri Lanka Tea Board has approved your tea blendsheet consignment application. The official Tea Export Certificate has been issued.\n\n* **Certificate ID**: `{{.certificate_id}}`\n* **Download Certificate**: [Download PDF]({{.certificate_file}})\n* **Officer Remarks**: {{.remarks}}\n* **Status**: Approved & Released\n{{else}}\n### ⏳ Final Review in Progress\n\nThe Export Division of the Sri Lanka Tea Board is reviewing your completed tea blendsheet application, levy payments, and laboratory test results.\n\n* **Status**: Under Final Review\n* **Next Action**: No action required. You will be notified of the approval outcome shortly.\n{{end}}"
+}

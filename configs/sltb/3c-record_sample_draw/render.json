@@ -1,0 +1,18 @@
+{
+  "id": "sltb-record-sample-draw-flow:render",
+  "type": "APPLICATION",
+  "title": "[SLTB 3C] Officer Records Sample Draw",
+  "sections": {
+    "status_message": {
+      "templateId": "sltb-record-sample-draw--status",
+      "title": "Sample Draw Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY", "COMPLETED"]
+      }
+    }
+  },
+  "states": {
+    "COMPLETED": {}
+  }
+}

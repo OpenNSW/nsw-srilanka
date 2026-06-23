@@ -1,0 +1,4 @@
+{
+  "id": "sltb-record-sample-draw--status",
+  "template": "{{if .draw.draw_date}}\n### ✅ Sample Draw Recorded\n\nThe SLTB Tea Inspector has completed the warehouse sample draw. The sample has been registered and will proceed to the lab decision stage.\n\n* **Sample Number**: `{{.sample_number}}`\n* **Date of Draw**: `{{.draw.draw_date}}`\n{{if .draw.draw_notes}}* **Notes**: {{.draw.draw_notes}}{{end}}\n* **Status**: Sample Registered\n{{else}}\n### ⏳ Awaiting Sample Draw Record\n\nThe SLTB Tea Inspector has completed (or is completing) the warehouse visit. The officer will record the sample draw details and assign a sample number.\n\n* **Status**: Awaiting Officer Record\n{{end}}"
+}

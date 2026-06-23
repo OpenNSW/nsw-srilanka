@@ -1,0 +1,65 @@
+{
+  "id": "sltb-schedule-pickup-flow",
+  "name": "Schedule Warehouse Pickup",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START" },
+    {
+      "id": "trader_suggest",
+      "type": "TASK",
+      "name": "Suggest Pickup Date & Time",
+      "task_template_id": "sltb-schedule-pickup--suggest",
+      "input_mapping": {
+        "schedule.reschedule_feedback?": "reschedule_feedback"
+      },
+      "output_mapping": {
+        "suggested_date": "suggest.suggested_date",
+        "suggested_time": "suggest.suggested_time",
+        "trader_notes?": "suggest.trader_notes"
+      }
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "name": "Review Suggested Pickup Schedule",
+      "task_template_id": "sltb-schedule-pickup--officer-review",
+      "input_mapping": {
+        "suggest.suggested_date": "suggested_date",
+        "suggest.suggested_time": "suggested_time",
+        "suggest.trader_notes?": "trader_notes"
+      },
+      "output_mapping": {
+        "schedule_outcome": "schedule.schedule_outcome",
+        "visit_date?": "schedule.visit_date",
+        "visit_time?": "schedule.visit_time",
+        "inspector_name?": "schedule.inspector_name",
+        "contact_number?": "schedule.contact_number",
+        "feedback?": "schedule.reschedule_feedback"
+      }
+    },
+    {
+      "id": "schedule_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Schedule Approved?"
+    },
+    { "id": "end", "type": "END" }
+  ],
+  "edges": [
+    { "id": "e_start", "source_id": "start", "target_id": "trader_suggest" },
+    { "id": "e_suggest_review", "source_id": "trader_suggest", "target_id": "officer_review" },
+    { "id": "e_review_gateway", "source_id": "officer_review", "target_id": "schedule_gateway" },
+    {
+      "id": "e_reschedule",
+      "source_id": "schedule_gateway",
+      "target_id": "trader_suggest",
+      "condition": "schedule.schedule_outcome == 'request_reschedule'"
+    },
+    {
+      "id": "e_approved",
+      "source_id": "schedule_gateway",
+      "target_id": "end",
+      "condition": "schedule.schedule_outcome == 'approve'"
+    }
+  ]
+}
