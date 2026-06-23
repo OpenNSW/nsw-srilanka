@@ -1,4 +1,5 @@
 import type { JsonSchema, UISchemaElement } from '@jsonforms/core'
+import type { ReactNode } from 'react'
 
 export type FormPayload = {
   schema: JsonSchema
@@ -63,3 +64,9 @@ export type ZoneView = {
   created_at: string
   updated_at: string
 }
+
+export type ZoneRendererProps<T extends ZoneComponent['type']> = {
+  payload: Extract<ZoneComponent, { type: T }>['payload']
+}
+
+export type ZoneRenderer<T extends ZoneComponent['type']> = (props: ZoneRendererProps<T>) => ReactNode

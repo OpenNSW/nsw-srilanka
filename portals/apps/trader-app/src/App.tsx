@@ -12,7 +12,7 @@ import { UploadProvider } from '@opennsw/jsonforms-renderers'
 import { uploadFile, getDownloadUrl } from './services/storage'
 import { useAuthContext } from './hooks/useAuthContext'
 import { UnauthorizedScreen } from './screens/UnauthorizedScreen.tsx'
-import { ZonePreviewScreen } from './screens/ZonePreviewScreen.tsx'
+import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
 

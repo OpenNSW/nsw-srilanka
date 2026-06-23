@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useUpload } from '@opennsw/jsonforms-renderers'
-import type { ZoneRendererProps } from './types'
+import type { ZoneRendererProps } from '../../types'
 
 export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
   const uploadCtx = useUpload()

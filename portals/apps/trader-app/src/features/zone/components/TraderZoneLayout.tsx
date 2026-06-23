@@ -1,4 +1,4 @@
-import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from './types'
+import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from '../types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { Zone } from './Zone'

@@ -1,5 +1,5 @@
-import { TraderZoneLayout } from '../zones/TraderZoneLayout'
-import { SAMPLE_TASK } from '../zones/fixtures'
+import { TraderZoneLayout } from './components/TraderZoneLayout'
+import { SAMPLE_TASK } from './fixtures'
 
 export function ZonePreviewScreen() {
   return (
