@@ -175,23 +175,33 @@ func TestLookupPath(t *testing.T) {
 func TestDoCallback(t *testing.T) {
 	r := New("", nil)
 	// Without an Agency the callback step is an error.
-	if err := r.doCallback(context.Background(), &Callback{TaskCode: "x"}); err == nil {
+	if err := r.doCallback(context.Background(), &Callback{TaskVar: "myTask"}); err == nil {
 		t.Error("expected error when Agency is nil")
 	}
 
 	fake := &fakeAgency{}
 	r.Agency = fake
+	// Missing taskVar is an error.
+	if err := r.doCallback(context.Background(), &Callback{TaskVar: "myTask", Command: "approve"}); err == nil {
+		t.Error("expected error when taskVar variable is not set")
+	}
+
+	r.Vars["myTask"] = "task-abc"
 	r.Vars["ref"] = "REF-9"
 	cb := &Callback{
-		TaskCode: "fcau_application_review_v1",
-		Content:  map[string]any{"application_review_outcome": "approve", "reference_number": "{{ref}}"},
-		Timeout:  "5s",
+		TaskVar: "myTask",
+		Command: "approve",
+		Content: map[string]any{"application_review_outcome": "approve", "reference_number": "{{ref}}"},
+		Timeout: "5s",
 	}
 	if err := r.doCallback(context.Background(), cb); err != nil {
 		t.Fatalf("doCallback: %v", err)
 	}
-	if fake.taskCode != "fcau_application_review_v1" {
-		t.Errorf("agency taskCode = %q", fake.taskCode)
+	if fake.taskID != "task-abc" {
+		t.Errorf("agency taskID = %q", fake.taskID)
+	}
+	if fake.command != "approve" {
+		t.Errorf("agency command = %q", fake.command)
 	}
 	if fake.content["reference_number"] != "REF-9" {
 		t.Errorf("callback content not interpolated: %v", fake.content)
@@ -201,13 +211,52 @@ func TestDoCallback(t *testing.T) {
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 type fakeAgency struct {
-	taskCode string
-	content  map[string]any
+	taskID  string
+	command string
+	content map[string]any
 }
 
-func (f *fakeAgency) Respond(_ context.Context, taskCodeContains string, content map[string]any, _ time.Duration) error {
-	f.taskCode = taskCodeContains
+func (f *fakeAgency) Respond(_ context.Context, taskID, command string, content map[string]any, _ time.Duration) error {
+	f.taskID = taskID
+	f.command = command
 	f.content = content
+	return nil
+}
+
+func TestDoPay(t *testing.T) {
+	r := New("", nil)
+	// Without a PaymentGateway the pay step is an error.
+	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err == nil {
+		t.Error("expected error when Gateway is nil")
+	}
+
+	fake := &fakeGateway{}
+	r.PaymentGateway = fake
+	// Missing taskVar is an error.
+	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err == nil {
+		t.Error("expected error when taskVar is not set")
+	}
+
+	r.Vars["payTask"] = "fcau_2_0_pay_fee:abc"
+	if err := r.doPay(context.Background(), &Pay{TaskVar: "payTask"}); err != nil {
+		t.Fatalf("doPay: %v", err)
+	}
+	if fake.taskID != "fcau_2_0_pay_fee:abc" {
+		t.Errorf("gateway taskID = %q", fake.taskID)
+	}
+	if fake.status != "paid" { // default when Pay.Status is empty
+		t.Errorf("gateway status = %q, want default paid", fake.status)
+	}
+}
+
+type fakeGateway struct {
+	taskID string
+	status string
+}
+
+func (f *fakeGateway) Pay(_ context.Context, taskID, status string, _ time.Duration) error {
+	f.taskID = taskID
+	f.status = status
 	return nil
 }
 

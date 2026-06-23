@@ -19,6 +19,15 @@ func TestReplay_TradeUpToHSCode(t *testing.T) {
 	runFlow(t, h, "trade_up_to_hscode.json")
 }
 
+// TestReplay_FCAUApplicationApprove drives the FCAU branch end-to-end: submit
+// the application → mock agency posts an "approve" callback → select payment
+// method → mock gateway confirms the payment → pay-fee COMPLETED.
+func TestReplay_FCAUApplicationApprove(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "fcau_application_approve.json")
+}
+
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()
@@ -30,6 +39,8 @@ func runFlow(t *testing.T, h *harness, file string) {
 
 	r := replay.New(h.server.URL, h.client)
 	r.Logf = t.Logf
+	r.Agency = h.agency          // drives `callback` steps (external-agency flows)
+	r.PaymentGateway = h.gateway // drives `pay` steps (payment flows)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
