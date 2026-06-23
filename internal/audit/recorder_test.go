@@ -66,7 +66,7 @@ func TestRecorder_Record_Member(t *testing.T) {
 		},
 	}
 	ctx := context.WithValue(context.Background(), authn.AuthContextKey, userCtx)
-	ctx = context.WithValue(ctx, trace.TraceIDKey, "trace-1")
+	ctx = trace.ContextWithTraceID(ctx, "trace-1")
 
 	recorder.Record(ctx, Event{
 		EventType:  EventConsignment,

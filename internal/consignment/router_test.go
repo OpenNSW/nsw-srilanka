@@ -155,7 +155,7 @@ func TestConsignmentRouter_HandleGetConsignments_WithSearch(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany)
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	traderID := "trader1"
 	companyID := "company-trader"
