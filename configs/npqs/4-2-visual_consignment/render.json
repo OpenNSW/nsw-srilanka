@@ -7,9 +7,8 @@
       "templateId": "npqs-visual-consignment--status",
       "title": "Consignment Inspection Results",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "visual_result"
       }
     },
     "status_message": {

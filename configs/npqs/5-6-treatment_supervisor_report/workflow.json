@@ -16,7 +16,8 @@
         "userform": "userform"
       },
       "output_mapping": {
-        "supervisor_notes": "supervisor_notes"
+        "supervisor_notes": "supervisor_notes",
+        "supervision_report_url?": "supervision_report_url"
       }
     },
     {

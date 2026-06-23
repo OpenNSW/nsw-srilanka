@@ -7,9 +7,8 @@
       "templateId": "npqs-visual-system--status",
       "title": "System Inspection Results",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "visual_result"
       }
     },
     "status_message": {

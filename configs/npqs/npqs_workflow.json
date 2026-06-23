@@ -275,7 +275,8 @@
       "task_template_id": "npqs-issue-treatment-cert",
       "input_mapping": {
         "npqs.reference_number": "reference_number",
-        "npqs.userform": "userform"
+        "npqs.userform": "userform",
+        "npqs.treatment_supervision?": "treatment_supervision"
       },
       "output_mapping": {
         "treatment_certificate_id": "npqs.treatment_certificate_id"
@@ -436,7 +437,8 @@
       "task_template_id": "npqs-issue-certificate",
       "input_mapping": {
         "npqs.reference_number": "reference_number",
-        "npqs.userform": "userform"
+        "npqs.userform": "userform",
+        "npqs.ephyto_required?": "ephyto_required"
       },
       "output_mapping": {
         "certificate_id": "npqs.certificate_id"

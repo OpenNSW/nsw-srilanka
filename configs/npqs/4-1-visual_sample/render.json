@@ -7,9 +7,8 @@
       "templateId": "npqs-visual-sample--status",
       "title": "Visual Sample Inspection Results",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "visual_result"
       }
     },
     "status_message": {

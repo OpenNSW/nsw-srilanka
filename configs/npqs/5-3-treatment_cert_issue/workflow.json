@@ -16,7 +16,9 @@
         "userform": "userform"
       },
       "output_mapping": {
-        "treatment_certificate_id": "treatment_certificate_id"
+        "treatment_certificate_id": "treatment_certificate_id",
+        "treatment_outcome": "treatment_outcome",
+        "issue_comments?": "issue_comments"
       }
     },
     {

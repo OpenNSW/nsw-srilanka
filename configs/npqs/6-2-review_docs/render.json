@@ -7,9 +7,8 @@
       "templateId": "npqs-review-docs--status",
       "title": "Document Review Outcome",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "docs_review_outcome"
       }
     },
     "status_message": {

@@ -17,7 +17,8 @@
         "sample_number": "sample_number"
       },
       "output_mapping": {
-        "visual_result": "visual_result"
+        "visual_result": "visual_result",
+        "visual_comments?": "visual_comments"
       }
     },
     {

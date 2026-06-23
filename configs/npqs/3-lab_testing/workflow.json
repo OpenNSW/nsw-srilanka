@@ -17,7 +17,10 @@
         "sample_number": "sample_number"
       },
       "output_mapping": {
-        "sample_test_result": "sample_test_result"
+        "sample_test_result": "sample_test_result",
+        "lab_comments?": "lab_comments",
+        "lab_report_attachment_url?": "lab_report_attachment_url",
+        "post_lab_visual_required?": "post_lab_visual_required"
       }
     },
     {

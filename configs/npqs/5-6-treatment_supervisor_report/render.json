@@ -7,9 +7,8 @@
       "templateId": "npqs-supervision-report--status",
       "title": "Supervision Report",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "supervisor_notes"
       }
     },
     "status_message": {

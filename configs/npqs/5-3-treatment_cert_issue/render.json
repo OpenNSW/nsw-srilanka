@@ -7,9 +7,8 @@
       "templateId": "npqs-treatment-cert-issue--status",
       "title": "Treatment Certificate Issued",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "treatment_certificate_id"
       }
     },
     "status_message": {

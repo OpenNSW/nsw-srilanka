@@ -7,9 +7,8 @@
       "templateId": "npqs-lab-testing--status",
       "title": "Laboratory Test Results",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "sample_test_result"
       }
     },
     "status_message": {

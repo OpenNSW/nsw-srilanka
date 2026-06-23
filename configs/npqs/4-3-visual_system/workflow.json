@@ -16,7 +16,9 @@
         "userform": "userform"
       },
       "output_mapping": {
-        "visual_result": "visual_result"
+        "visual_result": "visual_result",
+        "system_reference_id?": "system_reference_id",
+        "comments?": "comments"
       }
     },
     {

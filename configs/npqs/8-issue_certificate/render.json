@@ -7,9 +7,8 @@
       "templateId": "npqs-issue-certificate--status",
       "title": "Certificate Issued",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "certificate_id"
       }
     },
     "status_message": {

@@ -16,7 +16,9 @@
         "userform": "userform"
       },
       "output_mapping": {
-        "certificate_id": "certificate_id"
+        "certificate_id": "certificate_id",
+        "certificate_url?": "certificate_url",
+        "comments?": "comments"
       }
     },
     {

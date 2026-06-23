@@ -7,9 +7,8 @@
       "templateId": "npqs-treatment-review-certs--status",
       "title": "Certificate Review Outcome",
       "projector": "MARKDOWN",
-      "dataKey": "reviewerform",
       "visibleWhen": {
-        "requireDataKey": "reviewerform"
+        "requireDataKey": "treatment_review_result"
       }
     },
     "status_message": {
