@@ -15,26 +15,7 @@
         "cusdec_number": "cusdec_numbers"
       },
       "output_mapping": {
-        "cdn_number": "userform.cdn_number",
-        "shipper_name_address": "userform.shipper_name_address",
-        "cusdec_numbers": "userform.cusdec_numbers",
-        "consignee_name_address": "userform.consignee_name_address",
-        "vessel": "userform.vessel",
-        "voyage_no_date": "userform.voyage_no_date",
-        "port_of_discharge": "userform.port_of_discharge",
-        "port_of_loading": "userform.port_of_loading",
-        "lorry_trailer_no": "userform.lorry_trailer_no",
-        "sn_bl_no": "userform.sn_bl_no",
-        "tare_weight": "userform.tare_weight",
-        "slpa_no": "userform.slpa_no",
-        "seal_no": "userform.seal_no",
-        "driver_name": "userform.driver_name",
-        "location_of_goods": "userform.location_of_goods",
-        "container_marks_numbers": "userform.container_marks_numbers",
-        "description_of_goods": "userform.description_of_goods",
-        "gross_weight": "userform.gross_weight",
-        "cube_volume": "userform.cube_volume",
-        "container_type": "userform.container_type"
+        "userform": "submission"
       }
     },
     {

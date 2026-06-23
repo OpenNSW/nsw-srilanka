@@ -15,20 +15,7 @@
         "cdn_number": "cdn_number"
       },
       "output_mapping": {
-        "vessel_name": "userform.vessel_name",
-        "voyage_no": "userform.voyage_no",
-        "port_of_loading": "userform.port_of_loading",
-        "port_of_discharge": "userform.port_of_discharge",
-        "cdn_number": "userform.cdn_number",
-        "container_number": "userform.container_number",
-        "description_of_goods": "userform.description_of_goods",
-        "shipping_agent": "userform.shipping_agent",
-        "number_of_packages": "userform.number_of_packages",
-        "gross_mass": "userform.gross_mass",
-        "net_mass": "userform.net_mass",
-        "customs_seal_no": "userform.customs_seal_no",
-        "authorized_signatory": "userform.authorized_signatory",
-        "declaration_date": "userform.declaration_date"
+        "userform": "submission"
       }
     },
     {
