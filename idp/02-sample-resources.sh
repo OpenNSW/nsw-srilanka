@@ -23,17 +23,20 @@ NPQS_OFFICER_PASSWORD="${SAMPLE_NPQS_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 FCAU_OFFICER_PASSWORD="${SAMPLE_FCAU_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 CDA_OFFICER_PASSWORD="${SAMPLE_CDA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 SLPA_OFFICER_PASSWORD="${SAMPLE_SLPA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
+CUSTOMS_OFFICER_PASSWORD="${SAMPLE_CUSTOMS_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 M2M_CLIENT_SECRET="${M2M_CLIENT_SECRET:-1234}"
 # Outbound (Agency -> NSW) M2M client secrets — one per *_TO_NSW client.
 NPQS_M2M_CLIENT_SECRET="${M2M_NPQS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 FCAU_M2M_CLIENT_SECRET="${M2M_FCAU_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 CDA_M2M_CLIENT_SECRET="${M2M_CDA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 SLPA_M2M_CLIENT_SECRET="${M2M_SLPA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
+CUSTOMS_M2M_CLIENT_SECRET="${M2M_CUSTOMS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
 # Inbound (NSW -> Agency) M2M client secrets — one per NSW_TO_* client.
 NSW_TO_NPQS_M2M_CLIENT_SECRET="${M2M_NSW_TO_NPQS_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_FCAU_M2M_CLIENT_SECRET="${M2M_NSW_TO_FCAU_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_CDA_M2M_CLIENT_SECRET="${M2M_NSW_TO_CDA_SECRET:-${M2M_CLIENT_SECRET}}"
 NSW_TO_SLPA_M2M_CLIENT_SECRET="${M2M_NSW_TO_SLPA_SECRET:-${M2M_CLIENT_SECRET}}"
+NSW_TO_CUSTOMS_M2M_CLIENT_SECRET="${M2M_NSW_TO_CUSTOMS_SECRET:-${M2M_CLIENT_SECRET}}"
 
 # ----------------------------------------------------------------------------
 # OAuth2 resource servers & scope sets
@@ -967,6 +970,7 @@ NPQS_OU_HANDLE="npqs"
 FCAU_OU_HANDLE="fcau"
 CDA_OU_HANDLE="cda"
 SLPA_OU_HANDLE="slpa"
+CUSTOMS_OU_HANDLE="customs"
 
 log_info "Creating Government Organization root organization unit..."
 
@@ -1190,6 +1194,51 @@ if [[ -z "$SLPA_OU_ID" ]]; then
 fi
 
 log_info "SLPA OU ID: $SLPA_OU_ID"
+
+echo ""
+log_info "Creating Customs organization unit..."
+
+read -r -d '' CUSTOMS_OU_PAYLOAD <<JSON || true
+{
+    "handle": "${CUSTOMS_OU_HANDLE}",
+    "name": "Customs",
+    "description": "Sri Lanka Customs",
+    "parent": "${GOVERNMENT_ORG_OU_ID}"
+}
+JSON
+
+RESPONSE=$(api_call POST "/organization-units" "${CUSTOMS_OU_PAYLOAD}")
+HTTP_CODE="${RESPONSE: -3}"
+BODY="${RESPONSE%???}"
+
+if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]]; then
+    log_success "Customs organization unit created successfully"
+    CUSTOMS_OU_ID=$(extract_first_id "$BODY")
+elif [[ "$HTTP_CODE" == "409" ]]; then
+    log_warning "Customs organization unit already exists, retrieving ID..."
+    RESPONSE=$(api_call GET "/organization-units/tree/${GOVERNMENT_ORG_OU_HANDLE}/${CUSTOMS_OU_HANDLE}")
+    HTTP_CODE="${RESPONSE: -3}"
+    BODY="${RESPONSE%???}"
+
+    if [[ "$HTTP_CODE" == "200" ]]; then
+        CUSTOMS_OU_ID=$(extract_first_id "$BODY")
+    else
+        log_error "Failed to fetch Customs OU (HTTP $HTTP_CODE)"
+        echo "Response: $BODY"
+        exit 1
+    fi
+else
+    log_error "Failed to create Customs organization unit (HTTP $HTTP_CODE)"
+    echo "Response: $BODY"
+    exit 1
+fi
+
+if [[ -z "$CUSTOMS_OU_ID" ]]; then
+    log_error "Could not determine Customs organization unit ID"
+    exit 1
+fi
+
+log_info "Customs OU ID: $CUSTOMS_OU_ID"
 
 echo ""
 
@@ -1640,6 +1689,9 @@ USER_CDA_ID="$CREATED_USER_ID"
 create_user_in_ou "Government_User" "$SLPA_OU_ID" "slpa_officer" "slpa_officer@government.dev" "SLPA" "Officer" "$SLPA_OFFICER_PASSWORD" "+94771234564"
 USER_SLPA_ID="$CREATED_USER_ID"
 
+create_user_in_ou "Government_User" "$CUSTOMS_OU_ID" "customs_officer" "customs_officer@government.dev" "Customs" "Officer" "$CUSTOMS_OFFICER_PASSWORD" "+94771234565"
+USER_CUSTOMS_ID="$CREATED_USER_ID"
+
 echo ""
 
 # ============================================================================
@@ -1659,6 +1711,7 @@ ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_NPQS_ID" "OGA Reviewers" "
 ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_FCAU_ID" "OGA Reviewers" "fcau_officer"
 ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_CDA_ID" "OGA Reviewers" "cda_officer"
 ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_SLPA_ID" "OGA Reviewers" "slpa_officer"
+ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$USER_CUSTOMS_ID" "OGA Reviewers" "customs_officer"
 
 echo ""
 
@@ -1712,12 +1765,14 @@ NPQS_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/npqs")
 FCAU_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/fcau")
 CDA_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/cda")
 SLPA_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/slpa")
+CUSTOMS_OU_ID_FOR_APP=$(get_ou_id_by_handle "government-organization/customs")
 
 create_spa_application "TraderApp" "Application for trader portal built with React" "TRADER_PORTAL_APP" "5173" "Private_User" "${DEFAULT_OU_ID_FOR_TRADER}" "${TRADER_NSW_SCOPES}"
 create_spa_application "NPQSPortalApp" "Application for NPQS portal built with React" "OGA_PORTAL_APP_NPQS" "5174" "Government_User" "${NPQS_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 create_spa_application "FCAUPortalApp" "Application for FCAU portal built with React" "OGA_PORTAL_APP_FCAU" "5175" "Government_User" "${FCAU_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 create_spa_application "CDAPortalApp" "Application for CDA portal built with React" "OGA_PORTAL_APP_CDA" "5176" "Government_User" "${CDA_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 create_spa_application "SLPAPortalApp" "Application for SLPA portal built with React" "OGA_PORTAL_APP_SLPA" "5177" "Government_User" "${SLPA_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
+create_spa_application "CustomsPortalApp" "Application for Customs portal built with React" "OGA_PORTAL_APP_CUSTOMS" "5178" "Government_User" "${CUSTOMS_OU_ID_FOR_APP}" "${AGENCY_REVIEWER_SCOPES}"
 
 echo ""
 
@@ -1759,6 +1814,10 @@ create_m2m_application "SLPA_TO_NSW_M2M" "Machine-to-machine integration for SLP
 SLPA_TO_NSW_M2M_APP_ID="$CREATED_M2M_APP_ID"
 assign_role_to_app "$AGENCY_M2M_ROLE_ID" "$SLPA_TO_NSW_M2M_APP_ID" "AgencyM2M" "SLPA_TO_NSW_M2M"
 
+create_m2m_application "CUSTOMS_TO_NSW_M2M" "Machine-to-machine integration for Customs to NSW" "CUSTOMS_TO_NSW" "${CUSTOMS_M2M_CLIENT_SECRET}" "${DEFAULT_OU_ID_FOR_M2M}" "${M2M_NSW_SCOPES}"
+CUSTOMS_TO_NSW_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$AGENCY_M2M_ROLE_ID" "$CUSTOMS_TO_NSW_M2M_APP_ID" "AgencyM2M" "CUSTOMS_TO_NSW_M2M"
+
 echo ""
 
 # ============================================================================
@@ -1784,6 +1843,10 @@ assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_CDA_M2M_APP_ID" "NswM2M" "NSW_TO_
 create_m2m_application "NSW_TO_SLPA_M2M" "Machine-to-machine integration for NSW to SLPA" "NSW_TO_SLPA" "${NSW_TO_SLPA_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
 NSW_TO_SLPA_M2M_APP_ID="$CREATED_M2M_APP_ID"
 assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_SLPA_M2M_APP_ID" "NswM2M" "NSW_TO_SLPA_M2M"
+
+create_m2m_application "NSW_TO_CUSTOMS_M2M" "Machine-to-machine integration for NSW to Customs" "NSW_TO_CUSTOMS" "${NSW_TO_CUSTOMS_M2M_CLIENT_SECRET}" "${GOVERNMENT_ORG_OU_ID}" "${M2M_AGENCY_SCOPES}"
+NSW_TO_CUSTOMS_M2M_APP_ID="$CREATED_M2M_APP_ID"
+assign_role_to_app "$NSW_M2M_ROLE_ID" "$NSW_TO_CUSTOMS_M2M_APP_ID" "NswM2M" "NSW_TO_CUSTOMS_M2M"
 
 echo ""
 

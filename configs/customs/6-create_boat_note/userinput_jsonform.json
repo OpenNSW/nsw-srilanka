@@ -1,0 +1,180 @@
+{
+  "id": "customs-boat-note--user-form",
+  "title": "Customs Boat Note",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "vessel_name": {
+        "type": "string",
+        "title": "Name of Vessel",
+        "example": "CMA CGM MARCO POLO"
+      },
+      "voyage_no": {
+        "type": "string",
+        "title": "Voyage Number",
+        "example": "V092"
+      },
+      "port_of_loading": {
+        "type": "string",
+        "title": "Port of Loading",
+        "example": "Port of Colombo (LKCMB)"
+      },
+      "port_of_discharge": {
+        "type": "string",
+        "title": "Port of Discharge",
+        "example": "Port of Hamburg (DEHAM)"
+      },
+      "cdn_number": {
+        "type": "string",
+        "title": "Linked CDN Number",
+        "example": "CDN-2026-00481"
+      },
+      "container_number": {
+        "type": "string",
+        "title": "Container Marks & Number",
+        "example": "MSCU-849201-9"
+      },
+      "description_of_goods": {
+        "type": "string",
+        "title": "Description of Cargo / Goods",
+        "example": "Refined Organic Coconut Oil"
+      },
+      "shipping_agent": {
+        "type": "string",
+        "title": "Shipping Agent / Shipping Line",
+        "example": "CMA CGM Lanka Pvt Ltd"
+      },
+      "number_of_packages": {
+        "type": "string",
+        "title": "Number & Kind of Packages",
+        "example": "80 steel drums on 20 wooden pallets"
+      },
+      "gross_mass": {
+        "type": "number",
+        "title": "Gross Mass (Kg)",
+        "example": 16500.5
+      },
+      "net_mass": {
+        "type": "number",
+        "title": "Net Mass (Kg)",
+        "example": 15900.0
+      },
+      "customs_seal_no": {
+        "type": "string",
+        "title": "Customs Seal Number",
+        "example": "LK-CUS-894021"
+      },
+      "authorized_signatory": {
+        "type": "string",
+        "title": "Authorized Signatory Name",
+        "example": "M. T. Fernando"
+      },
+      "declaration_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Declaration Date",
+        "example": "2026-06-22"
+      }
+    },
+    "required": [
+      "vessel_name",
+      "voyage_no",
+      "port_of_loading",
+      "port_of_discharge",
+      "cdn_number",
+      "container_number",
+      "description_of_goods",
+      "shipping_agent",
+      "number_of_packages",
+      "gross_mass",
+      "net_mass",
+      "customs_seal_no",
+      "authorized_signatory",
+      "declaration_date"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Group",
+        "label": "1. Shipment & Vessel Information",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/vessel_name" },
+              { "type": "Control", "scope": "#/properties/voyage_no" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/port_of_loading" },
+              { "type": "Control", "scope": "#/properties/port_of_discharge" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/shipping_agent" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "2. Container & Seal Details",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/cdn_number" },
+              { "type": "Control", "scope": "#/properties/container_number" }
+            ]
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/customs_seal_no" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "3. Goods Specifications",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/description_of_goods"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/number_of_packages"
+          },
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/gross_mass" },
+              { "type": "Control", "scope": "#/properties/net_mass" }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "4. Signatory & Declaration",
+        "elements": [
+          {
+            "type": "HorizontalLayout",
+            "elements": [
+              { "type": "Control", "scope": "#/properties/authorized_signatory" },
+              { "type": "Control", "scope": "#/properties/declaration_date" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

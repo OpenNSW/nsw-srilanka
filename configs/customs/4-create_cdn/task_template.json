@@ -1,0 +1,6 @@
+{
+  "id": "customs-create-cdn-flow",
+  "type": "APPLICATION",
+  "workflow_id": "customs-create-cdn-flow",
+  "render_config_id": "customs-create-cdn-flow:render"
+}

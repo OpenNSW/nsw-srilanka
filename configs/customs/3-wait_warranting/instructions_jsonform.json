@@ -1,0 +1,4 @@
+{
+  "id": "customs-wait-warranting--instructions",
+  "template": "{{if .warranting}}### ✅ CusDec Warranting Completed\n\nYour Customs Declaration (CusDec) has been successfully warranted.\n\n* **Warrant Number**: `{{.warranting.warrant_number}}`\n* **CusDec Number**: `{{.cusdec_number}}`{{else}}### Wait on CusDec Warranting\n\nYour Customs Declaration (CusDec) **`{{.cusdec_number}}`** is currently pending warranting at the Customs Department.\n\nOnce the Customs Officers complete the warranting process, the Single Window will receive a notification and this step will advance automatically. No further action is required from you at this moment.{{end}}"
+}

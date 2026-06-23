@@ -1,0 +1,40 @@
+{
+  "id": "customs-wait-payment-flow",
+  "name": "Wait on Payment",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "wait_payment_task",
+      "type": "TASK",
+      "task_template_id": "customs-wait-payment",
+      "input_mapping": {
+        "amount_to_pay": "amount_to_pay",
+        "cusdec_number": "cusdec_number",
+        "userform": "submission"
+      },
+      "output_mapping": {
+        "payment_status": "payment_status"
+      }
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "wait_payment_task"
+    },
+    {
+      "id": "e2",
+      "source_id": "wait_payment_task",
+      "target_id": "end"
+    }
+  ]
+}

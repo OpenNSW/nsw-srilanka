@@ -1,0 +1,4 @@
+{
+  "id": "customs-wait-export-release--instructions",
+  "template": "{{if .export_release}}### ✅ Export Released\n\nYour consignment has completed all checks and has been granted the final Export Release clearance.\n\n* **Release Number**: `{{.export_release.release_number}}`\n* **Clearance Status**: Released for Export{{else}}### Wait on Export Release\n\nYour consignment has completed all checks and is currently waiting for the final Export Release clearance from the Customs Department.\n\n* **Release Number**: `{{.export_release.release_number}}`\n* **Clearance Status**: Released for Export\n\nOnce the release signal is received from the Customs Agency app, this task will complete, finalizing the export clearance process.{{end}}"
+}

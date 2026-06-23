@@ -1,0 +1,6 @@
+{
+  "id": "customs-wait-payment-flow",
+  "type": "REVIEW",
+  "workflow_id": "customs-wait-payment-flow",
+  "render_config_id": "customs-wait-payment-flow:render"
+}
