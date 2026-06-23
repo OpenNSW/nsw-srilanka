@@ -69,8 +69,8 @@ func findRepoRoot() string {
 	if !ok {
 		panic("replay_e2e: cannot determine caller location for repo root")
 	}
-	// thisFile = <root>/integration/replay/harness_test.go
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
+	// thisFile = <root>/test/e2e/replay/harness_test.go
+	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
 }
 
 // harness is an in-process app (real authn) exposed via an httptest.Server,

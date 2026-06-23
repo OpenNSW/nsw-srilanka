@@ -31,7 +31,7 @@ func TestReplay_FCAUApplicationApprove(t *testing.T) {
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()
-	flowPath := filepath.Join(findRepoRoot(), "integration", "replay", "flows", file)
+	flowPath := filepath.Join(findRepoRoot(), "test", "e2e", "replay", "flows", file)
 	flow, err := replay.LoadFlow(flowPath)
 	if err != nil {
 		t.Fatalf("load flow %s: %v", file, err)
