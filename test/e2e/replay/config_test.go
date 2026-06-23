@@ -72,10 +72,32 @@ func loadMemberConfigs(t *testing.T) []MemberConfig {
 	return configs
 }
 
-// loadAgencyConfigs reads every *.json file under test/e2e/replay/configs/agencies/.
+// loadAgencyConfigs reads every *.json file under test/e2e/replay/configs/agencies/
+// and asserts that each entry has all mandatory fields populated.
 func loadAgencyConfigs(t *testing.T) []AgencyConfig {
 	t.Helper()
-	return loadConfigs[AgencyConfig](t, "agencies")
+	configs := loadConfigs[AgencyConfig](t, "agencies")
+	for _, cfg := range configs {
+		if cfg.Identity.ClientID == "" {
+			t.Fatalf("agency config %q is missing required identity.clientID field", cfg.ID)
+		}
+		if cfg.Inbound.Endpoint == "" {
+			t.Fatalf("agency config %q is missing required inbound.endpoint field", cfg.ID)
+		}
+		if cfg.Inbound.TaskIDField == "" {
+			t.Fatalf("agency config %q is missing required inbound.taskIDField field", cfg.ID)
+		}
+		if cfg.Outbound.CallbackPath == "" {
+			t.Fatalf("agency config %q is missing required outbound.callbackPath field", cfg.ID)
+		}
+		if cfg.Outbound.CommandField == "" {
+			t.Fatalf("agency config %q is missing required outbound.commandField field", cfg.ID)
+		}
+		if cfg.Outbound.PayloadField == "" {
+			t.Fatalf("agency config %q is missing required outbound.payloadField field", cfg.ID)
+		}
+	}
+	return configs
 }
 
 // loadPaymentConfigs reads every *.json file under test/e2e/replay/configs/payments/
