@@ -251,11 +251,13 @@ func TestDoPay(t *testing.T) {
 
 type fakeGateway struct {
 	taskID string
+	method string
 	status string
 }
 
-func (f *fakeGateway) Pay(_ context.Context, taskID, status string, _ time.Duration) error {
+func (f *fakeGateway) Pay(_ context.Context, taskID, method, status string, _ time.Duration) error {
 	f.taskID = taskID
+	f.method = method
 	f.status = status
 	return nil
 }

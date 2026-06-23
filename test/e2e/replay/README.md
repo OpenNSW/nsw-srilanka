@@ -2,35 +2,111 @@
 
 Data-driven end-to-end tests for the NSW backend. Each business flow is a JSON file; adding coverage means writing JSON, not Go.
 
-The generic engine (flow schema, variable store, step execution, polling) lives in [`internal/replay`](../../internal/replay). This package is the in-process wiring, the flow files (`flows/`), and the tests that run them (`runner_e2e_test.go`).
+The generic engine (flow schema, variable store, step execution, polling) lives in [`internal/replay`](../../internal/replay). This package is the in-process wiring, the actor configs (`configs/`), the flow files (`flows/`), and the tests that run them (`runner_e2e_test.go`).
 
 ## How it works
 
 The harness starts the full app in-process with `bootstrap.Build` (no test-only production seams) and serves it via `httptest.Server`. Two test-only concerns are handled entirely in the harness:
 
-- **Real auth, no IdP.** The app runs the production authn middleware. The harness runs a local JWKS server (`authsigned_test.go`), points `cfg.Authn.JWKSURL` at it, and mints RS256 tokens matching `cfg.Authn` (issuer/audience/client_id). Both MEMBER and SERVICE tokens are minted; `withAuth`/`withScope` run unchanged.
+- **Real auth, no IdP.** The app runs the production authn middleware. The harness runs a local JWKS server (`signedauth_test.go`), points `cfg.Authn.JWKSURL` at it, and mints RS256 tokens matching `cfg.Authn` (issuer/audience/client_id). Both MEMBER and SERVICE tokens are minted from the actor configs; `withAuth`/`withScope` run unchanged.
 - **Config path.** `TestMain` calls `os.Chdir(repoRoot)` so `bootstrap.Build`'s working-directory-relative `configs/` path resolves under `go test`. No production change.
 
-Per-step identity is chosen by the flow's `actor`:
-- `"trader"` → the seeded MEMBER user (authorization_code token).
-- `"<agencyId>"` (e.g. `"fcau"`) → an agency SERVICE client (client_credentials token).
+Per-step identity is chosen by the flow's `actor`, which must match an actor `id` in one of the config files:
+- `"trader"` → MEMBER user (authorization_code token), defined in `configs/members/trader.json`.
+- `"<agencyId>"` (e.g. `"fcau"`) → SERVICE/M2M client (client_credentials token), defined in `configs/agencies/fcau.json`.
 
-**External agency flows** are handled by a generic mock agency (`mockagency_test.go`) that receives injects from the app and, when a `callback` step fires, posts `{command, payload}` back to complete the parked EXTERNAL_REVIEW task.
+**External agency flows** are handled by a generic mock agency (`mockagency_test.go`) that receives injects from the app and, when a `callback` step fires, posts the configured callback payload back to complete the parked EXTERNAL_REVIEW task.
 
 **Payment flows** are handled by a generic mock gateway (`mockgateway_test.go`) that resolves the payment reference and posts a gateway webhook to confirm the payment.
 
 FCAU is the sample flow exercising both. Other agency or payment flows need only a new JSON flow file.
 
+## Directory layout
+
+```
+test/e2e/replay/
+├── configs/
+│   ├── members/        # MEMBER actor configs (Trader, CHA, …) — identity for token minting
+│   │   └── trader.json
+│   ├── agencies/       # SERVICE/M2M agency configs — identity + inbound/outbound wire protocol
+│   │   └── fcau.json
+│   └── payments/       # Payment gateway configs — webhook path + optional identity
+│       └── govpay.json
+├── flows/              # Flow JSON files (one per business scenario)
+│   ├── fcau_application_approve.json
+│   └── trade_up_to_hscode.json
+├── config_test.go           # All config types (MemberConfig, AgencyConfig, PaymentConfig) and JSON loaders
+├── harness_test.go          # Full in-process app setup
+├── signedauth_test.go       # RS256 token minting + local JWKS server
+├── mockagency_test.go       # Config-driven mock agency (inject receiver + callback poster)
+├── mockgateway_test.go      # Config-driven mock payment gateway (DB poll + webhook poster)
+└── runner_e2e_test.go       # Test functions — one per flow file
+```
+
 ## Running
 
 ```bash
-make deps          # start Postgres + Temporal
-docker stop nsw-srilanka-api-1  # stop the api container (its workers compete with in-process ones)
-source .env        # DB_*, TEMPORAL_* must match running containers
-make test-e2e      # E2E=1 go test ./integration/replay/...
+make dev        # start the full dev stack (Postgres, Temporal, IDP, …)
+make test-e2e   # stops the api container, then runs E2E=1 GOWORK=off go test ./test/e2e/...
 ```
 
+`make test-e2e` sources `.env` automatically — ensure `GOWORK` is not set (or set to `off`) in `.env` so the go workspace does not interfere with module resolution.
+
 Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task queues.
+
+## Config schema
+
+### `configs/members/<id>.json`
+
+```json
+{
+  "id": "trader",
+  "identity": {
+    "clientID": "TRADER_PORTAL_APP",
+    "roles": ["Trader"],
+    "scopes": ["nsw:consignment:read", "nsw:consignment:write", "..."]
+  }
+}
+```
+
+### `configs/agencies/<id>.json`
+
+```json
+{
+  "id": "fcau",
+  "identity": {
+    "clientID": "FCAU_TO_NSW",
+    "roles": ["AgencyM2M"],
+    "scopes": ["nsw:task:write", "nsw:consignment:read", "..."]
+  },
+  "inbound": {
+    "endpoint": "POST /api/v1/inject",
+    "taskIDField": "taskId"
+  },
+  "outbound": {
+    "callbackPath": "/api/v1/tasks/{taskId}",
+    "commandField": "command",
+    "payloadField": "payload"
+  }
+}
+```
+
+| Section | Purpose |
+|---|---|
+| `identity` | IdP credentials — used to mint/validate the M2M token |
+| `inbound` | The HTTP endpoint the mock agency exposes to receive injects from the NSW app |
+| `outbound` | How the mock posts the callback back to the NSW app |
+
+### `configs/payments/<id>.json`
+
+```json
+{
+  "id": "govpay",
+  "webhookPath": "/api/v1/payments/govpay/webhook"
+}
+```
+
+`identity` is optional — current production gateways post unauthenticated webhooks. When a gateway is made protected, add an `identity` block (same shape as the agency `identity`) and a bearer token will be minted and included automatically.
 
 ## Flow file schema
 
@@ -64,7 +140,7 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 
 | Field | Notes |
 |---|---|
-| `actor` | Flow identity (see above). |
+| `actor` | Must match an `id` in `configs/members/` or `configs/agencies/`. |
 | `method` | HTTP method. |
 | `path` | URL path; `{{var}}` tokens interpolated. |
 | `body` | JSON body; `{{var}}` in string values interpolated. |
@@ -72,8 +148,6 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 | `extract` | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`). |
 
 #### Completing a USER_INPUT task
-
-All task completions use a single unified form:
 
 ```json
 {
@@ -141,12 +215,10 @@ Polls `GET /api/v1/consignments/{{consignmentId}}` (set by an earlier `extract`)
 |---|---|
 | `taskVar` | Name of the flow variable holding the task id (set by a prior `wait` with `into`). |
 | `command` | Outcome command sent to NSW (e.g. `"approve"`, `"reject"`). |
-| `content` | Reviewer payload; sent as `payload` in `{command, payload}`. `{{var}}` tokens interpolated. |
+| `content` | Reviewer payload. `{{var}}` tokens interpolated. |
 | `timeout` | Wait for the inject to arrive; default 30s. |
 
-The mock agency waits until the app sends the inject for that task id, then posts `{"command": "...", "payload": {...}}` to `POST /api/v1/tasks/{taskId}` with a real agency bearer token.
-
-The `content` fields must satisfy the reviewer task's `output_mapping.json` (every field without `?`). The `command` must be a valid outcome for the workflow gateway.
+The mock agency waits until the app sends the inject for that task id, then posts the callback using the wire format defined in `configs/agencies/<id>.json`.
 
 ---
 
@@ -166,10 +238,9 @@ The `content` fields must satisfy the reviewer task's `output_mapping.json` (eve
 | Field | Notes |
 |---|---|
 | `taskVar` | Name of the flow variable holding the pay task id. |
+| `method` | Payment gateway id — must match an `id` in `configs/payments/`. |
 | `status` | Gateway success status (default `"paid"`). |
 | `timeout` | Wait for the payment record to appear; default 45s. |
-
-The mock gateway polls the payment store for the reference created against the task, then posts a gateway webhook to confirm it, advancing the workflow past the pay step.
 
 ---
 
@@ -179,7 +250,7 @@ The mock gateway polls the payment store for the reference created against the t
 
 2. **Identify required payload fields** — for USER_INPUT tasks: every field in `output_mapping.json` without `?`, plus JSONForm required fields. For EXTERNAL_REVIEW (agency callback): every field in the reviewer task's `output_mapping.json` without `?`.
 
-3. **Create the flow file** at `integration/replay/flows/<name>.json`.
+3. **Create the flow file** at `test/e2e/replay/flows/<name>.json`.
 
 4. **Register a test** in `runner_e2e_test.go`:
 
@@ -190,19 +261,11 @@ The mock gateway polls the payment store for the reference created against the t
    }
    ```
 
-5. **For a new agency**: add its service id to `agencyIDs` in `writeServicesConfig` (`harness_test.go`). No other Go changes needed — the mock agency and engine are generic.
+5. **For a new agency**: add `test/e2e/replay/configs/agencies/<id>.json`. No Go changes needed.
 
-## Worked example: FCAU application approve
+6. **For a new member actor** (e.g. CHA): add `test/e2e/replay/configs/members/<id>.json`. No Go changes needed.
 
-`flows/fcau_application_approve.json` covers the full happy path:
-
-1. Create consignment → wait for init task → submit `{command:"submit", payload:{consignment_name, cha_company_id}}`
-2. Wait for HS-code task → submit `{command:"submit", payload:{hs_codes:["fcau-health-certificate-reg"]}}`
-3. Wait for FCAU application task → submit `{command:"submit", payload:{all 15 application fields}}`
-4. `callback` (`taskVar:"fcauApp"`, `command:"approve"`, reviewer content)
-5. Wait for pay-fee task → submit `{command:"submit", payload:{selected_method:"..."}}`
-6. `pay` (`taskVar:"payTask"`)
-7. Wait for pay-fee `COMPLETED`
+7. **For a new payment gateway**: add `test/e2e/replay/configs/payments/<id>.json`. No Go changes needed.
 
 ## Troubleshooting
 
@@ -210,10 +273,10 @@ The mock gateway polls the payment store for the reference created against the t
 
 **DB connection refused** — source `.env` (DB is published on `DB_PORT`, e.g. `55432`, not the in-container `5432`).
 
-**`callback` times out** — the inject hasn't arrived yet (prior `wait` caught `IN_PROGRESS` before the inject fired). Increase `timeout`. Also verify the agency service id is listed in `writeServicesConfig`.
+**`callback` times out** — the inject hasn't arrived yet. Increase `timeout`. Also verify the agency `id` in the flow matches a file in `configs/agencies/`.
 
-**Flow hangs after a `wait` (task never completes)** — a required field is missing from the prior `submit` payload. Check `output_mapping.json`: every field without `?` must be included, even if the JSONForm schema marks it optional.
+**Flow hangs after a `wait` (task never completes)** — a required field is missing from the prior `submit` payload. Check `output_mapping.json`: every field without `?` must be included.
 
 **`pay` times out** — the payment record hasn't been created. Increase `timeout` or check the payment method submit step succeeded.
 
-**401/403 on agency callback** — the mock posts with a real agency bearer. Ensure the agency service id (e.g. `"fcau"`) is in `AUTH_CLIENT_IDS` in `.env`.
+**401/403 on agency callback** — the mock posts with a real agency bearer. Ensure the agency `clientID` (from `configs/agencies/<id>.json`) is in `AUTH_CLIENT_IDS` in `.env`.
