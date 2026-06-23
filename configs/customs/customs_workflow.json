@@ -30,7 +30,8 @@
       "lane": "Trader/CHA",
       "input_mapping": {
         "customs.amount_to_pay": "amount_to_pay",
-        "customs.cusdec_number": "cusdec_number"
+        "customs.cusdec_number": "cusdec_number",
+        "customs.userform": "userform"
       },
       "output_mapping": {
         "payment_status": "customs.payment_status"
@@ -43,7 +44,8 @@
       "task_template_id": "customs-wait-warranting-flow",
       "lane": "Trader/CHA",
       "input_mapping": {
-        "customs.cusdec_number": "cusdec_number"
+        "customs.cusdec_number": "cusdec_number",
+        "customs.userform": "userform"
       },
       "output_mapping": {
         "warranting_status": "customs.warranting_status"
@@ -108,7 +110,9 @@
       "name": "[Customs 8.0] Wait on Export Release",
       "task_template_id": "customs-wait-export-release-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {},
+      "input_mapping": {
+        "customs.userform": "userform"
+      },
       "output_mapping": {
         "release_status": "customs.export_release_status"
       }

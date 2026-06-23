@@ -11,7 +11,9 @@
       "id": "wait_release_task",
       "type": "TASK",
       "task_template_id": "customs-wait-export-release",
-      "input_mapping": {},
+      "input_mapping": {
+        "userform": "submission"
+      },
       "output_mapping": {
         "release_status": "release_status"
       }

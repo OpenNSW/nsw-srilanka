@@ -13,7 +13,8 @@
       "task_template_id": "customs-wait-payment",
       "input_mapping": {
         "amount_to_pay": "amount_to_pay",
-        "cusdec_number": "cusdec_number"
+        "cusdec_number": "cusdec_number",
+        "userform": "submission"
       },
       "output_mapping": {
         "payment_status": "payment_status"

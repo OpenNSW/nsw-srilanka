@@ -12,7 +12,8 @@
       "type": "TASK",
       "task_template_id": "customs-wait-warranting",
       "input_mapping": {
-        "cusdec_number": "cusdec_number"
+        "cusdec_number": "cusdec_number",
+        "userform": "submission"
       },
       "output_mapping": {
         "warranting_status": "warranting_status"
