@@ -12,20 +12,20 @@ importers:
   .:
     devDependencies:
       prettier:
-        specifier: ^3.8.3
-        version: 3.8.3
+        specifier: ^3.8.4
+        version: 3.8.4
 
   apps/trader-app:
     dependencies:
       '@jsonforms/core':
-        specifier: ^3.7.0
-        version: 3.7.0
+        specifier: ^3.8.0
+        version: 3.8.0
       '@jsonforms/react':
-        specifier: ^3.7.0
-        version: 3.7.0(@jsonforms/core@3.7.0)(react@19.2.7)
+        specifier: ^3.8.0
+        version: 3.8.0(@jsonforms/core@3.8.0)(react@19.2.7)
       '@opennsw/jsonforms-renderers':
         specifier: ^0.3.1
-        version: 0.3.1(@jsonforms/core@3.7.0)(@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 0.3.1(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-icons':
         specifier: ^1.3.2
         version: 1.3.2(react@19.2.7)
@@ -282,13 +282,13 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@jsonforms/core@3.7.0':
-    resolution: {integrity: sha512-CE9viWtwi9QWLqlWLeOul1/R1GRAyOA9y6OoUpsCc0FhyR+g5p29F3k0fUExHWxL0Sf4KHcXYkfhtqfRBPS8ww==}
+  '@jsonforms/core@3.8.0':
+    resolution: {integrity: sha512-XSvaZuQSs/MceG5nDDcrE879onPHkGBy0xEuLeZMUkSM/M8wc1dEUrJtMOZVNSITocm9YXFY1qQ5gnsPP38zAg==}
 
-  '@jsonforms/react@3.7.0':
-    resolution: {integrity: sha512-HkY7qAx8vW97wPEgZ7GxCB3iiXG1c95GuObxtcDHGPBJWMwnxWBnVYJmv5h7nthrInKsQKHZL5OusnC/sj/1GQ==}
+  '@jsonforms/react@3.8.0':
+    resolution: {integrity: sha512-k81+yWLpCQl+3XizS1bLjXoBwYhW1OAkjSXFA8W5qNtfPZjSOXDgtiuMOGYDv4b60tu2e9RB8h2P2O7QhfkhiA==}
     peerDependencies:
-      '@jsonforms/core': 3.7.0
+      '@jsonforms/core': 3.8.0
       react: ^16.12.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@napi-rs/wasm-runtime@1.1.5':
@@ -1439,8 +1439,8 @@ packages:
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
 
-  ajv@8.13.0:
-    resolution: {integrity: sha512-PRA911Blj99jR5RMeTunVbNXMF6Lp4vZXnk5GQjcnUWUTsrXtekg/pnmFFI2u/I36Y/2bITGS30GZCXei6uNkA==}
+  ajv@8.20.0:
+    resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
   aria-hidden@1.2.6:
     resolution: {integrity: sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA==}
@@ -1619,6 +1619,9 @@ packages:
 
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
+
+  fast-uri@3.1.2:
+    resolution: {integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==}
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -2017,8 +2020,8 @@ packages:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
 
-  prettier@3.8.3:
-    resolution: {integrity: sha512-7igPTM53cGHMW8xWuVTydi2KO233VFiTNyF5hLJqpilHfmn8C8gPf+PS7dUT64YcXFbiMGZxS9pCSxL/Dxm/Jw==}
+  prettier@3.8.4:
+    resolution: {integrity: sha512-N2MylSdi48+5N/6S5j+maeHbUSIzzZ5uOcX5Hm4QpV8Dkb1HFjfAKTKX6yNPJQD9AhcT3ifHNB66tWTTJDi11Q==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -2570,16 +2573,16 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@jsonforms/core@3.7.0':
+  '@jsonforms/core@3.8.0':
     dependencies:
       '@types/json-schema': 7.0.15
-      ajv: 8.13.0
-      ajv-formats: 2.1.1(ajv@8.13.0)
+      ajv: 8.20.0
+      ajv-formats: 2.1.1(ajv@8.20.0)
       lodash: 4.18.1
 
-  '@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7)':
+  '@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7)':
     dependencies:
-      '@jsonforms/core': 3.7.0
+      '@jsonforms/core': 3.8.0
       lodash: 4.18.1
       react: 19.2.7
 
@@ -2590,10 +2593,10 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
-  '@opennsw/jsonforms-renderers@0.3.1(@jsonforms/core@3.7.0)(@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@opennsw/jsonforms-renderers@0.3.1(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@jsonforms/core': 3.7.0
-      '@jsonforms/react': 3.7.0(@jsonforms/core@3.7.0)(react@19.2.7)
+      '@jsonforms/core': 3.8.0
+      '@jsonforms/react': 3.8.0(@jsonforms/core@3.8.0)(react@19.2.7)
       '@radix-ui/react-icons': 1.3.2(react@19.2.7)
       '@radix-ui/themes': 3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       dayjs: 1.11.21
@@ -3698,9 +3701,9 @@ snapshots:
 
   acorn@8.17.0: {}
 
-  ajv-formats@2.1.1(ajv@8.13.0):
+  ajv-formats@2.1.1(ajv@8.20.0):
     optionalDependencies:
-      ajv: 8.13.0
+      ajv: 8.20.0
 
   ajv@6.15.0:
     dependencies:
@@ -3709,12 +3712,12 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
 
-  ajv@8.13.0:
+  ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
+      fast-uri: 3.1.2
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
-      uri-js: 4.4.1
 
   aria-hidden@1.2.6:
     dependencies:
@@ -3889,6 +3892,8 @@ snapshots:
   fast-json-stable-stringify@2.1.0: {}
 
   fast-levenshtein@2.0.6: {}
+
+  fast-uri@3.1.2: {}
 
   fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
@@ -4371,7 +4376,7 @@ snapshots:
 
   prelude-ls@1.2.1: {}
 
-  prettier@3.8.3: {}
+  prettier@3.8.4: {}
 
   property-information@7.1.0: {}
 
