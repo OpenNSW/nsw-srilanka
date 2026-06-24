@@ -105,12 +105,21 @@ COPY --chown=appuser:appuser --from=builder /out/server /app/server
 COPY --chown=appuser:appuser --from=builder /out/otc /usr/local/bin/otc
 
 # Bake application configs into the image. These files are tracked in git and
-# version with the code (workflow/form definitions, payment_methods.json,
-# manifest, notification, etc.), and the payment registry reads them at boot.
-# Environment-specific values (e.g. services.json) are still overlaid at runtime
-# via ConfigMap/bind mount; a host bind mount over /app/configs (docker-compose)
-# also continues to take precedence over what is baked here.
+# version with the code (workflow/form definitions, manifest, agency configs,
+# etc.). Environment-specific values (e.g. services.json) are still overlaid at
+# runtime via ConfigMap/bind mount; a host bind mount over /app/configs
+# (docker-compose) also continues to take precedence over what is baked here.
 COPY --chown=appuser:appuser --from=builder /src/configs /app/configs
+
+# Seed gitignored config files from their committed .example.json templates.
+# The app reads these at boot (e.g. payment_methods.json, notification.json);
+# they are gitignored to keep env-specific secrets out of the repo, but the
+# .example.json templates carry safe defaults suitable for all environments.
+RUN for f in /app/configs/*.example.json; do \
+      [ -e "$f" ] || continue; \
+      target="${f%.example.json}.json"; \
+      [ ! -f "$target" ] && cp "$f" "$target" && chown appuser:appuser "$target"; \
+    done
 
 # Create the writable blob storage mount point.
 RUN mkdir -p /app/bucket \
