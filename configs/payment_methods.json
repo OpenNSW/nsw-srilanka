@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "methods": [
+    {
+      "id": "lankapay",
+      "is_active": true,
+      "render_info": {
+        "display_name": "LankaPay",
+        "description": "Pay securely with LankaPay",
+        "display_order": 1
+      },
+      "config": {}
+    },
+    {
+      "id": "govpay",
+      "is_active": true,
+      "render_info": {
+        "display_name": "GovPay",
+        "description": "Offline payment instructions",
+        "display_order": 2
+      },
+      "config": {}
+    }
+  ]
+}
