@@ -216,7 +216,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
             <div className="flex items-center gap-3 px-4 py-3 rounded-md bg-primary/15 text-primary-subtle">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{t('sidebar.version.label')}</p>
-                <p className="text-xs text-primary-subtle truncate">v0.1.0</p>
+                <p className="text-xs text-primary-subtle truncate">{import.meta.env.VITE_APP_VERSION || 'dev'}</p>
               </div>
             </div>
           </div>

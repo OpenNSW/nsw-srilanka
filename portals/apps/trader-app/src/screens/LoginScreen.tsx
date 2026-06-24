@@ -69,6 +69,9 @@ export function LoginScreen() {
 
       {/* Identity & Branding */}
       <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 py-12 lg:py-0 relative z-10 bg-background lg:min-h-screen">
+        <p className="absolute bottom-4 left-8 lg:left-36 text-xs text-foreground-muted">
+          {import.meta.env.VITE_APP_VERSION || 'dev'}
+        </p>
         <div className="max-w-md mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
           {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-32 mb-5 object-contain" />}
 
