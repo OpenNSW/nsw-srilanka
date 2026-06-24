@@ -122,7 +122,10 @@ func (a *mockAgency) Respond(ctx context.Context, taskID, command string, conten
 		}
 	}
 
-	cfg := a.configs[inj.agencyID]
+	cfg, ok := a.configs[inj.agencyID]
+	if !ok {
+		return fmt.Errorf("mock-agency: no config found for agency ID %q", inj.agencyID)
+	}
 	callbackURL := a.callbackBase + strings.Replace(cfg.Outbound.CallbackPath, "{taskId}", taskID, 1)
 	body, err := json.Marshal(map[string]any{
 		cfg.Outbound.CommandField: command,

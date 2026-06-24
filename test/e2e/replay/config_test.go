@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,7 +65,12 @@ type PaymentConfig struct {
 func loadMemberConfigs(t *testing.T) []MemberConfig {
 	t.Helper()
 	configs := loadConfigs[MemberConfig](t, "members")
+	seen := make(map[string]bool, len(configs))
 	for _, cfg := range configs {
+		if seen[cfg.ID] {
+			t.Fatalf("member config: duplicate id %q", cfg.ID)
+		}
+		seen[cfg.ID] = true
 		if cfg.OUHandle == "" {
 			t.Fatalf("member config %q is missing required ouHandle field", cfg.ID)
 		}
@@ -77,7 +83,12 @@ func loadMemberConfigs(t *testing.T) []MemberConfig {
 func loadAgencyConfigs(t *testing.T) []AgencyConfig {
 	t.Helper()
 	configs := loadConfigs[AgencyConfig](t, "agencies")
+	seen := make(map[string]bool, len(configs))
 	for _, cfg := range configs {
+		if seen[cfg.ID] {
+			t.Fatalf("agency config: duplicate id %q", cfg.ID)
+		}
+		seen[cfg.ID] = true
 		if cfg.Identity.ClientID == "" {
 			t.Fatalf("agency config %q is missing required identity.clientID field", cfg.ID)
 		}
@@ -105,9 +116,17 @@ func loadAgencyConfigs(t *testing.T) []AgencyConfig {
 func loadPaymentConfigs(t *testing.T) []PaymentConfig {
 	t.Helper()
 	configs := loadConfigs[PaymentConfig](t, "payments")
+	seen := make(map[string]bool, len(configs))
 	for _, cfg := range configs {
+		if seen[cfg.ID] {
+			t.Fatalf("payment config: duplicate id %q", cfg.ID)
+		}
+		seen[cfg.ID] = true
 		if cfg.WebhookPath == "" {
 			t.Fatalf("payment config %q is missing required webhookPath field", cfg.ID)
+		}
+		if !strings.HasPrefix(cfg.WebhookPath, "/") {
+			t.Fatalf("payment config %q: webhookPath %q must start with '/'", cfg.ID, cfg.WebhookPath)
 		}
 	}
 	return configs
