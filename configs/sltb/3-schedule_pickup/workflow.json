@@ -9,9 +9,7 @@
       "type": "TASK",
       "name": "Suggest Pickup Date & Time",
       "task_template_id": "sltb-schedule-pickup--suggest",
-      "input_mapping": {
-        "schedule.reschedule_feedback?": "reschedule_feedback"
-      },
+      "input_mapping": {},
       "output_mapping": {
         "suggested_date": "suggest.suggested_date",
         "suggested_time": "suggest.suggested_time",

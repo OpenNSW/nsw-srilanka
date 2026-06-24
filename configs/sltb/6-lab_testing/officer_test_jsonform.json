@@ -20,7 +20,8 @@
       "test_date": {
         "type": "string",
         "format": "date",
-        "title": "Date of Testing"
+        "title": "Date of Testing",
+        "example": "2026-07-05"
       },
       "test_report_ref": {
         "type": "string",
@@ -29,7 +30,8 @@
       },
       "test_notes": {
         "type": "string",
-        "title": "Testing Notes / Comments (Optional)"
+        "title": "Testing Notes / Comments (Optional)",
+        "example": "Moisture content and grade within acceptable SLTB standards."
       }
     }
   },

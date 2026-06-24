@@ -25,7 +25,8 @@
       "remarks": {
         "type": "string",
         "title": "Decision Remarks / Comments",
-        "description": "Provide detail about the approval."
+        "description": "Provide detail about the approval.",
+        "example": "All quality checks passed. Certificate issued for export consignment."
       },
       "certificate_id": {
         "type": "string",

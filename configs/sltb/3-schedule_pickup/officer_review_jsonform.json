@@ -35,20 +35,24 @@
       },
       "visit_time": {
         "type": "string",
-        "title": "Confirmed Time Range (e.g. 10:00 AM - 12:30 PM)"
+        "title": "Confirmed Time Range (e.g. 10:00 AM - 12:30 PM)",
+        "example": "10:00 AM - 12:30 PM"
       },
       "inspector_name": {
         "type": "string",
-        "title": "Assigned Tea Inspector Name"
+        "title": "Assigned Tea Inspector Name",
+        "example": "K. Perera"
       },
       "contact_number": {
         "type": "string",
-        "title": "Inspector Contact Number"
+        "title": "Inspector Contact Number",
+        "example": "+94 77 123 4567"
       },
       "feedback": {
         "type": "string",
         "title": "Reschedule Instructions for Trader",
-        "description": "Explain why the suggested date cannot be accommodated."
+        "description": "Explain why the suggested date cannot be accommodated.",
+        "example": "Inspector unavailable that week. Please suggest a date after July 5th."
       }
     },
     "if": {

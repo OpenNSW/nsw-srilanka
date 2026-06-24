@@ -2235,20 +2235,6 @@
       "path": "sltb/2-levy_payment/success_message_jsonform.json"
     },
     {
-      "id": "sltb-pay-levy--upload-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "sltb/2-levy_payment/upload_receipt_jsonform.json"
-    },
-    {
-      "id": "sltb-pay-levy--review-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "sltb/2-levy_payment/review_receipt_jsonform.json"
-    },
-    {
       "id": "sltb-pay-levy-flow",
       "kind": "workflow",
       "version": "",
@@ -2583,20 +2569,6 @@
       "version": "",
       "loader": "local",
       "path": "sltb/4-lab_payment/success_message_jsonform.json"
-    },
-    {
-      "id": "sltb-pay-lab-fee--upload-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "sltb/4-lab_payment/upload_receipt_jsonform.json"
-    },
-    {
-      "id": "sltb-pay-lab-fee--review-form",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "sltb/4-lab_payment/review_receipt_jsonform.json"
     },
     {
       "id": "sltb-pay-lab-fee-flow",

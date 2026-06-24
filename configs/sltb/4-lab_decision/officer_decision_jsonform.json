@@ -20,7 +20,8 @@
       },
       "decision_notes": {
         "type": "string",
-        "title": "Decision Notes (Optional)"
+        "title": "Decision Notes (Optional)",
+        "example": "Random spot-check selected for quality verification."
       }
     }
   },

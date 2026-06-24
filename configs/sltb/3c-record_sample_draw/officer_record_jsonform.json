@@ -24,11 +24,13 @@
       "draw_date": {
         "type": "string",
         "format": "date",
-        "title": "Date of Sample Draw"
+        "title": "Date of Sample Draw",
+        "example": "2026-07-02"
       },
       "draw_notes": {
         "type": "string",
-        "title": "Draw Notes / Comments (Optional)"
+        "title": "Draw Notes / Comments (Optional)",
+        "example": "Sample drawn from warehouse lot WH-COLOMBO-TEA-01, batch #4."
       }
     }
   },

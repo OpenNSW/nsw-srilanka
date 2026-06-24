@@ -18,7 +18,8 @@
       },
       "receipt_notes": {
         "type": "string",
-        "title": "Receipt Notes (Optional)"
+        "title": "Receipt Notes (Optional)",
+        "example": "Package received intact, properly sealed and labeled."
       }
     }
   },

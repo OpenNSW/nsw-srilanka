@@ -29,12 +29,13 @@
       "feedback": {
         "type": "string",
         "title": "Officer Feedback & Deficiencies",
-        "description": "Provide detail if resubmission is required."
+        "description": "Provide detail if resubmission is required.",
+        "example": "Blendsheet figures don't reconcile with CUSDEC quantities. Please re-upload with corrected totals."
       },
       "levy_amount": {
         "type": "number",
         "title": "Assessed SLTB Levy (LKR)",
-        "default": 12500,
+        "example": 12500,
         "description": "Enter the calculated levy fee for the blendsheet consignment."
       },
       "collection_method": {
