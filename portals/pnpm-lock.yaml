@@ -24,8 +24,8 @@ importers:
         specifier: ^3.7.0
         version: 3.7.0(@jsonforms/core@3.7.0)(react@19.2.7)
       '@opennsw/jsonforms-renderers':
-        specifier: ^0.2.1
-        version: 0.2.1(@jsonforms/core@3.7.0)(@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^0.3.1
+        version: 0.3.1(@jsonforms/core@3.7.0)(@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-icons':
         specifier: ^1.3.2
         version: 1.3.2(react@19.2.7)
@@ -297,8 +297,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@opennsw/jsonforms-renderers@0.2.1':
-    resolution: {integrity: sha512-jXlVmt6Y91Hyfxi2MnOnm9Rm876fMxqi1gbXVF6UXzDFt/TQGVQWPERaw0YQM7ZapLfBkXqLft2YIeMXWZ/+mw==}
+  '@opennsw/jsonforms-renderers@0.3.1':
+    resolution: {integrity: sha512-Megua+I9JsfpYbp4zmo1YjOsGOMbLKzO90tIkqxTobtc0MdXqNnRvm8oYWYk5rj82d/E/uWfaR2sKWS57Q/Ljw==}
     peerDependencies:
       '@jsonforms/core': ^3.2.1
       '@jsonforms/react': ^3.2.1
@@ -1505,6 +1505,9 @@ packages:
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
+  dayjs@1.11.21:
+    resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
+
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
     engines: {node: '>=6.0'}
@@ -2587,12 +2590,13 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
-  '@opennsw/jsonforms-renderers@0.2.1(@jsonforms/core@3.7.0)(@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@opennsw/jsonforms-renderers@0.3.1(@jsonforms/core@3.7.0)(@jsonforms/react@3.7.0(@jsonforms/core@3.7.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@jsonforms/core': 3.7.0
       '@jsonforms/react': 3.7.0(@jsonforms/core@3.7.0)(react@19.2.7)
       '@radix-ui/react-icons': 1.3.2(react@19.2.7)
       '@radix-ui/themes': 3.2.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      dayjs: 1.11.21
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
@@ -3761,6 +3765,8 @@ snapshots:
       which: 2.0.2
 
   csstype@3.2.3: {}
+
+  dayjs@1.11.21: {}
 
   debug@4.4.3:
     dependencies:
