@@ -70,29 +70,58 @@ Once running, open the developer console at `https://localhost:8090/console`:
 `thunderid-setup` auto-discovers and runs numbered scripts in `/opt/thunderid/bootstrap`
 (sorted by name; `common.sh` — which provides `api_call`, `log_*`, `create_flow`, … — is
 sourced, not executed). The image ships `01-default-resources.sh`, `common.sh`, and the
-`flows/`, `themes/`, `i18n/` assets, all of which we use **as-is**. This repo adds a
-single project script via a mount:
-
-```yaml
-- ./02-sample-resources.sh:/opt/thunderid/bootstrap/02-sample-resources.sh
-```
+`flows/`, `themes/`, `i18n/` assets, all of which we use **as-is**.
 
 - **`01-default-resources.sh`** (image default, not overridden) — default OU, `Person`
   user type, default agent type, admin user, system resource server + permissions,
   `Administrators` group, `Administrator` role, default flows, the `Console` application,
   themes, and i18n translations.
-- **`02-sample-resources.sh`** (this repo) — project sample resources:
+
+The project's sample resources are **no longer auto-seeded at bootstrap** — they are
+applied by hand with `idp/sample-resources.sh` (see *Seeding sample resources manually*
+below). That script creates:
   - **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
-  - **Government Organization** OU with **NPQS / FCAU / CDA / SLPA** child OUs
+  - **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / Customs** child OUs
   - **`Private_User`** and **`Government_User`** user types
   - **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
     matching groups — role inheritance is group-based)
   - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
-    role (machine clients) — see *API authorization* below
+    and **`NswM2M`** roles (machine clients) — see *API authorization* below
   - **`NSW_API`** and **`AGENCY_API`** OAuth2 resource servers (scopes + token audiences)
   - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
-    `npqs_user` / `fcau_user` / `cda_user` / `slpa_user` (government OUs)
+    `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer`
+    (government OUs)
   - **SPA applications** and **M2M applications** (see below)
+
+## Seeding sample resources manually
+
+The project sample resources (OUs, users, groups, roles, SPA + M2M apps) are seeded by
+`idp/sample-resources.sh`, run by hand against a running deployment. The script is
+self-contained (no dependency on the image's `common.sh`) and **idempotent** — safe to
+re-run against a partially-seeded deployment (existing entities are detected via HTTP 409
+and reused).
+
+Against the local compose stack (bootstrap runs security-disabled, self-signed TLS):
+
+```bash
+docker compose up -d                 # wait until `thunderid` is healthy
+API_BASE=https://localhost:8090 ALLOW_NO_AUTH=1 ./idp/sample-resources.sh
+```
+
+Against a real deployment (management APIs require auth):
+
+```bash
+API_BASE=https://idp.example.com \
+AUTH_TOKEN=<bearer-token-for-the-management-API> \
+./idp/sample-resources.sh
+```
+
+- `API_BASE` defaults to `https://localhost:8090`.
+- `AUTH_TOKEN` is required for non-localhost targets; it is sent as `Authorization: Bearer …`.
+- `INSECURE=0` enforces TLS certificate validation (default `1` skips it for self-signed
+  localhost certs).
+- Values in `idp/.env` are loaded automatically and take precedence over the command line.
+- `./idp/sample-resources.sh --help` prints the full usage.
 
 ## Applications created
 
@@ -103,10 +132,14 @@ single project script via a mount:
 | FCAUPortalApp | `OGA_PORTAL_APP_FCAU` | http://localhost:5175 |
 | CDAPortalApp | `OGA_PORTAL_APP_CDA` | http://localhost:5176 |
 | SLPAPortalApp | `OGA_PORTAL_APP_SLPA` | http://localhost:5177 |
+| CustomsPortalApp | `OGA_PORTAL_APP_CUSTOMS` | http://localhost:5178 |
 
-M2M (client-credentials) apps for external services calling NSW APIs:
-`NPQS_TO_NSW`, `FCAU_TO_NSW`, `CDA_TO_NSW`, `SLPA_TO_NSW` (auth method:
-`client_secret_basic`).
+M2M (client-credentials) apps (auth method: `client_secret_basic`):
+
+- **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
+  `CDA_TO_NSW`, `SLPA_TO_NSW`, `CUSTOMS_TO_NSW`.
+- **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_NPQS`, `NSW_TO_FCAU`,
+  `NSW_TO_CDA`, `NSW_TO_SLPA`, `NSW_TO_CUSTOMS`.
 
 ## API authorization (OAuth2)
 
@@ -116,7 +149,7 @@ becomes the access-token **audience** (`aud`):
 | Resource server (`identifier`) | Backend | Scopes (`<resource>:<action>`) |
 | --- | --- | --- |
 | `NSW_API` | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/` | `nsw:consignment:{read,write}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
-| `AGENCY_API` | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback}`, `agency:consignment:read`, `agency:storage:{read,write}` |
+| `AGENCY_API` | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}` |
 
 Scopes are namespaced (`nsw:*` / `agency:*`) so each maps to exactly one audience.
 
@@ -129,6 +162,7 @@ requestable `scopes` list. So every caller is granted the relevant scopes via a 
 | TraderApp users | `Trader` / `CHA` role (via group) → `NSW_API` scopes | `NSW_API` |
 | `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes | `NSW_API` |
 | OGA portal users | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes | `AGENCY_API` |
+| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject` | `AGENCY_API` |
 
 > Because each caller's role sets the correct audience, the backends can enable
 > audience validation (`jwt.WithAudience("NSW_API")` / `"AGENCY_API"`). Without a role

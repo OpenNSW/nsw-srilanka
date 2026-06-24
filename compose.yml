@@ -51,7 +51,12 @@ services:
       - consent-db:/consent-data
     restart: "no"
 
-  # Stage B: Run bootstrap logic once SQLite files have mounted
+  # Stage B: Run the image's built-in bootstrap (01-default-resources.sh:
+  # admin user, default OU, Console app, flows, themes) once SQLite files have
+  # mounted. Project sample resources are NO LONGER seeded here — once this
+  # stack is healthy, seed them by hand against the running server:
+  #   API_BASE=https://localhost:8090 ALLOW_NO_AUTH=1 ./idp/sample-resources.sh
+  # (localhost bootstrap runs security-disabled, so no AUTH_TOKEN is needed.)
   thunderid-setup:
     image: ghcr.io/thunder-id/thunderid:0.42.0
     container_name: thunderid-setup
@@ -63,7 +68,6 @@ services:
     volumes:
       - thunderid-db:/opt/thunderid/repository/database
       - consent-db:/opt/thunderid/consent/repository/database
-      - ./idp/02-sample-resources.sh:/opt/thunderid/bootstrap/02-sample-resources.sh
     depends_on:
       thunderid-db-init:
         condition: service_completed_successfully
