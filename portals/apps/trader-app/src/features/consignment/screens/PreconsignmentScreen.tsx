@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Heading, Text, Badge, Spinner, Flex, Box, Callout } from '@radix-ui/themes'
 import { FileTextIcon, PlayIcon, EyeOpenIcon, CheckCircledIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
@@ -20,29 +20,6 @@ export function PreconsignmentScreen() {
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
-  const loadData = useCallback(async () => {
-    const requestId = ++listRequestIdRef.current
-    try {
-      setLoading(true)
-      const response = await getTraderPreConsignments(page * PAGE_LIMIT, PAGE_LIMIT)
-      if (requestId !== listRequestIdRef.current) {
-        return
-      }
-      setItems(response.items || [])
-      setTotalCount(response.total)
-    } catch (error) {
-      if (requestId !== listRequestIdRef.current) {
-        return
-      }
-      console.error('Failed to load pre-consignments', error)
-      setNotification({ type: 'error', message: t('preconsignment.error.loadFailed') })
-    } finally {
-      if (requestId === listRequestIdRef.current) {
-        setLoading(false)
-      }
-    }
-  }, [page, t])
-
   const areDependenciesMet = (item: TraderPreConsignmentItem): boolean => {
     if (!item.dependsOn || item.dependsOn.length === 0) {
       return true
@@ -54,9 +31,25 @@ export function PreconsignmentScreen() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData()
-  }, [loadData])
+    const requestId = ++listRequestIdRef.current
+    let cancelled = false
+    void getTraderPreConsignments(page * PAGE_LIMIT, PAGE_LIMIT)
+      .then((response) => {
+        if (cancelled || requestId !== listRequestIdRef.current) return
+        setItems(response.items || [])
+        setTotalCount(response.total)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled || requestId !== listRequestIdRef.current) return
+        console.error('Failed to load pre-consignments', err)
+        setNotification({ type: 'error', message: t('preconsignment.error.loadFailed') })
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [page, t])
 
   useEffect(() => {
     if (notification?.type === 'success') {
