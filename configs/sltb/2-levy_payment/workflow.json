@@ -22,7 +22,8 @@
       "task_template_id": "sltb-pay-levy--payment",
       "input_mapping": {
         "reference_number": "reference_number",
-        "selected_method": "selected_method"
+        "selected_method": "selected_method",
+        "levy_amount": "amount"
       },
       "output_mapping": {
         "payment_status": "payment_status",

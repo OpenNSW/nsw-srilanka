@@ -40,7 +40,27 @@
         "title": "Upload Issued Tea Export Certificate (PDF)",
         "description": "Upload the signed digital certificate."
       }
-    }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "final_decision_outcome": {
+              "const": "approve"
+            }
+          },
+          "required": [
+            "final_decision_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "certificate_id",
+            "certificate_file"
+          ]
+        }
+      }
+    ]
   },
   "uiSchema": {
     "type": "VerticalLayout",

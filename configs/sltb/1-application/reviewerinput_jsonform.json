@@ -72,7 +72,8 @@
         },
         "then": {
           "required": [
-            "reference_number"
+            "reference_number",
+            "levy_amount"
           ]
         }
       }
