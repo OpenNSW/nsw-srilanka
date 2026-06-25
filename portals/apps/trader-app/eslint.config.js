@@ -19,6 +19,7 @@ export default defineConfig([
     plugins: { path: eslintPluginPath },
     rules: {
       'path/no-relative-imports': ['error', { maxDepth: 0 }],
+      'arrow-body-style': ['error', 'as-needed'],
     },
     settings: {
       path: { config: 'tsconfig.app.json' },

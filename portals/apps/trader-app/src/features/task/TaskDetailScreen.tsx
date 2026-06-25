@@ -12,9 +12,7 @@ const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 export function TaskDetailScreen() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
-  const goBack = () => {
-    void navigate(-1)
-  }
+  const goBack = () => void navigate(-1)
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)

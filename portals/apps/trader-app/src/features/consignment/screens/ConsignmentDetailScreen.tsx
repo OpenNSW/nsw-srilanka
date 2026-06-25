@@ -198,13 +198,7 @@ export function ConsignmentDetailScreen() {
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Button
-            variant="ghost"
-            color="gray"
-            onClick={() => {
-              void navigate('/consignments')
-            }}
-          >
+          <Button variant="ghost" color="gray" onClick={() => void navigate('/consignments')}>
             <ArrowLeftIcon />
             {t('consignments.detail.back')}
           </Button>
@@ -219,12 +213,7 @@ export function ConsignmentDetailScreen() {
               : t('consignments.detail.error.notFoundDescription')}
           </Text>
           <div className="flex gap-3 justify-center">
-            <Button
-              variant="soft"
-              onClick={() => {
-                void navigate('/consignments')
-              }}
-            >
+            <Button variant="soft" onClick={() => void navigate('/consignments')}>
               <ArrowLeftIcon />
               {t('consignments.detail.backToList')}
             </Button>
@@ -254,9 +243,7 @@ export function ConsignmentDetailScreen() {
         <Button
           variant="ghost"
           color="gray"
-          onClick={() => {
-            void navigate('/consignments')
-          }}
+          onClick={() => void navigate('/consignments')}
           aria-label="Back to consignments list"
         >
           <ArrowLeftIcon />
