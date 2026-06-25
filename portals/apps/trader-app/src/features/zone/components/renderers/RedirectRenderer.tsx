@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@radix-ui/themes'
-import type { ZoneRendererProps } from '../../types'
+import type { ZoneRendererProps } from '@/features/zone/types'
 
 export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
   const { checkout_url, content } = payload

@@ -14,7 +14,7 @@ import {
   ReaderIcon,
   UpdateIcon,
 } from '@radix-ui/react-icons'
-import type { WorkflowNode, WorkflowNodeState } from '../../types'
+import type { WorkflowNode, WorkflowNodeState } from '@/features/consignment/types'
 
 const nodeTypeIcons: Record<string, React.ReactNode> = {
   SIMPLE_FORM: <FileTextIcon className="w-4 h-4" />,

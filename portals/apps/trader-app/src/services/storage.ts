@@ -1,5 +1,5 @@
 import { http } from './http'
-import { API_BASE_URL } from '../constants'
+import { API_BASE_URL } from '@/constants'
 
 interface UploadMetadataRequest {
   filename: string
