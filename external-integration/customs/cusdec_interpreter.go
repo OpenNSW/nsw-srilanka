@@ -4,6 +4,7 @@ package customs
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -38,10 +39,16 @@ func (CusdecInterpreter) BuildRequest(inputs map[string]any) any {
 	if !ok {
 		return inputs
 	}
-	if obj, ok := body.(map[string]any); ok {
-		obj["nswId"] = newID()
+	obj, ok := body.(map[string]any)
+	if !ok {
+		return body
 	}
-	return body
+	// Clone before injecting nswId so we never mutate the shared workflow input
+	// (avoids side effects / concurrent-write hazards on retries).
+	cloned := make(map[string]any, len(obj)+1)
+	maps.Copy(cloned, obj)
+	cloned["nswId"] = newID()
+	return cloned
 }
 
 // Interpret reports whether the submission was accepted and captures the SLC
@@ -56,7 +63,7 @@ func (CusdecInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 		}
 	}
 	if !accepted {
-		out["error"] = describeFailure(resp)
+		out["error"] = describeFailure(callErr, resp)
 	}
 	return accepted, out
 }
@@ -67,20 +74,25 @@ func hasErrors(resp map[string]any) bool {
 	return ok && len(errs) > 0
 }
 
-// statusIsAccepted reports whether a string "status" indicates success; a
-// non-string or absent status defers to the HTTP error / errors[].
+// statusIsAccepted reports whether the response's "status" is an explicitly
+// accepted value. Success statuses are defined by the spec, so anything else —
+// including a missing or non-string status (e.g. a problem+json error body) —
+// is treated as not accepted.
 func statusIsAccepted(resp map[string]any) bool {
 	s, ok := resp["status"].(string)
 	if !ok {
-		return true
+		return false
 	}
 	return s == statusQueued || s == statusAccepted
 }
 
-// describeFailure builds a trader-facing, markdown message from the SLC Edge
-// error shapes: an "errors" array of {code,message,fieldRef}, or a problem+json
-// "detail"/"title".
-func describeFailure(resp map[string]any) string {
+// describeFailure builds a trader-facing, markdown message for a rejected
+// submission. It prefers the SLC Edge error detail in the response body (an
+// "errors" array of {code,message,fieldRef}, or a problem+json
+// "detail"/"title"); when the body carries no detail it distinguishes a
+// transport/system failure (callErr set, e.g. timeout or 502 with no body)
+// from an unexplained rejection.
+func describeFailure(callErr error, resp map[string]any) string {
 	const intro = "Your customs declaration was not accepted by Sri Lanka Customs:"
 	const outro = "\n\nPlease correct the highlighted fields and resubmit."
 
@@ -92,10 +104,14 @@ func describeFailure(resp map[string]any) string {
 			bullets = []string{"- " + s}
 		}
 	}
-	if len(bullets) == 0 {
-		return intro + outro
+	if len(bullets) > 0 {
+		return intro + "\n\n" + strings.Join(bullets, "\n") + outro
 	}
-	return intro + "\n\n" + strings.Join(bullets, "\n") + outro
+
+	if callErr != nil {
+		return "We could not reach Sri Lanka Customs to submit your declaration. Please try again in a few minutes."
+	}
+	return intro + outro
 }
 
 // validationBullets renders each entry of the "errors" array as a markdown
