@@ -22,36 +22,42 @@ export function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const fetchTask = useCallback(
-    async (mode: 'initial' | 'refresh' = 'initial') => {
-      if (!taskId) {
-        setError(t('tasks.error.missingId'))
-        setLoading(false)
-        return
-      }
-
-      try {
-        if (mode === 'refresh') setRefreshing(true)
-        else setLoading(true)
-        setError(null)
-
-        const zv = await getZoneView(taskId)
-        setZoneView(zv)
-      } catch (err) {
-        setError(t('tasks.error.fetchFailed'))
-        console.error('TaskDetailScreen: failed to fetch task:', err)
-      } finally {
-        if (mode === 'refresh') setRefreshing(false)
-        else setLoading(false)
-      }
-    },
-    [taskId, t],
-  )
+  const fetchTask = useCallback(async () => {
+    if (!taskId) return
+    setRefreshing(true)
+    setError(null)
+    try {
+      const zv = await getZoneView(taskId)
+      setZoneView(zv)
+    } catch (err) {
+      setError(t('tasks.error.fetchFailed'))
+      console.error('TaskDetailScreen: failed to fetch task:', err)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [taskId, t])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchTask()
-  }, [fetchTask])
+    if (!taskId) return
+    let cancelled = false
+    void getZoneView(taskId)
+      .then((zv) => {
+        if (!cancelled) {
+          setZoneView(zv)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(t('tasks.error.fetchFailed'))
+          setLoading(false)
+          console.error('TaskDetailScreen: failed to fetch task:', err)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [taskId, t])
 
   if (loading) {
     return (
@@ -111,7 +117,7 @@ export function TaskDetailScreen() {
           variant="soft"
           color="blue"
           size="2"
-          onClick={() => void fetchTask('refresh')}
+          onClick={() => void fetchTask()}
           disabled={refreshing}
           className="cursor-pointer"
         >

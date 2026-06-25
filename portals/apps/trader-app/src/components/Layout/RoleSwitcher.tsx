@@ -2,8 +2,8 @@ import { BackpackIcon, IdCardIcon } from '@radix-ui/react-icons'
 import { Select, Flex, Text, Box } from '@radix-ui/themes'
 import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRole } from '../../services/useRole'
-import type { Role } from '../../services/RoleContext'
+import { useRole } from '@/services/useRole'
+import type { Role } from '@/services/RoleContext'
 
 const ROLE_ICONS: Record<Role, ReactNode> = {
   trader: <BackpackIcon className="text-info-strong" />,

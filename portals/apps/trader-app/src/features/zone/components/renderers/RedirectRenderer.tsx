@@ -11,27 +11,22 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
     try {
       return sessionStorage.getItem(sessionKey) === 'true'
     } catch {
-      return false
+      // sessionStorage unavailable — treat as already redirected to prevent loops
+      return true
     }
   })
 
   useEffect(() => {
-    if (checkout_url && !hasRedirected) {
-      let success = false
-      try {
-        sessionStorage.setItem(sessionKey, 'true')
-        success = true
-      } catch (err) {
-        console.error('Failed to set sessionStorage:', err)
-      }
-      if (success && (checkout_url.startsWith('https://') || checkout_url.startsWith('http://'))) {
-        window.location.href = checkout_url
-      } else {
-        // Fallback: if sessionStorage is unavailable, do not auto-redirect
-        // to prevent infinite loops. Force manual redirection instead.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setHasRedirected(true)
-      }
+    if (!checkout_url || hasRedirected) return
+    let storageSaved = false
+    try {
+      sessionStorage.setItem(sessionKey, 'true')
+      storageSaved = true
+    } catch (err) {
+      console.error('Failed to set sessionStorage:', err)
+    }
+    if (storageSaved && (checkout_url.startsWith('https://') || checkout_url.startsWith('http://'))) {
+      window.location.href = checkout_url
     }
   }, [checkout_url, hasRedirected, sessionKey])
 

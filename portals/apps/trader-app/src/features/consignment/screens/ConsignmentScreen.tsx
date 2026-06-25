@@ -6,9 +6,9 @@ import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../types.ts'
 import { createConsignment, getAllConsignments } from '../service.ts'
-import { useRole } from '../../../services/useRole'
+import { useRole } from '@/services/useRole'
 import { getStateColor, formatState, formatDateTime } from '../utils.ts'
-import { PaginationControl } from '../../../components/common/PaginationControl.tsx'
+import { PaginationControl } from '@/components/common/PaginationControl.tsx'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()

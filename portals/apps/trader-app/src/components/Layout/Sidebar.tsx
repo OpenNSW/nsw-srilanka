@@ -2,8 +2,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { DashboardIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
 import { type ReactNode, useEffect, useRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRole } from '../../services/useRole'
-import type { Role } from '../../services/RoleContext'
+import { useRole } from '@/services/useRole'
+import type { Role } from '@/services/RoleContext'
 
 interface NavItem {
   name: string
