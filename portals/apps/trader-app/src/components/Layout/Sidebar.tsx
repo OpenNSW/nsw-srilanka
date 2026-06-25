@@ -45,24 +45,22 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
     [t],
   )
 
-  const filteredNavStructure = useMemo(() => {
-    return navStructure
-      .filter((item) => {
-        return !(item.roles && !item.roles.includes(role))
-      })
-      .map((item) => {
-        if (isNavGroup(item)) {
-          return {
-            ...item,
-            items: item.items.filter((child) => !child.roles || child.roles.includes(role)),
+  const filteredNavStructure = useMemo(
+    () =>
+      navStructure
+        .filter((item) => !(item.roles && !item.roles.includes(role)))
+        .map((item) => {
+          if (isNavGroup(item)) {
+            return {
+              ...item,
+              items: item.items.filter((child) => !child.roles || child.roles.includes(role)),
+            }
           }
-        }
-        return item
-      })
-      .filter((item) => {
-        return !(isNavGroup(item) && item.items.length === 0)
-      })
-  }, [role, navStructure])
+          return item
+        })
+        .filter((item) => !(isNavGroup(item) && item.items.length === 0)),
+    [role, navStructure],
+  )
 
   const showExpanded = isExpanded || (!isExpanded && isHovered)
 

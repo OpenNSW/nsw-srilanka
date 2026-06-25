@@ -87,9 +87,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
   const { t } = useTranslation()
   const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
 
-  const handleOpen = () => {
-    void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
-  }
+  const handleOpen = () => void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
 
   const label = step.workflowNodeTemplate.name || `Step ${step.id.split('-').pop()}`
   const isClickable = step.state !== 'LOCKED'

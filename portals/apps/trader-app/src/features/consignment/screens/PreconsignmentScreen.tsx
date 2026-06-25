@@ -163,9 +163,7 @@ export function PreconsignmentScreen() {
 
                   {!hasInstance ? (
                     <Button
-                      onClick={() => {
-                        void handleStartProcess(item.id)
-                      }}
+                      onClick={() => void handleStartProcess(item.id)}
                       disabled={isLocked || !areDependenciesMet(item)}
                       style={{ cursor: isLocked || !areDependenciesMet(item) ? 'not-allowed' : 'pointer' }}
                       title={!areDependenciesMet(item) ? 'Complete dependent pre-consignments first' : ''}
@@ -176,18 +174,14 @@ export function PreconsignmentScreen() {
                     <Button
                       variant="outline"
                       color="green"
-                      onClick={() => {
-                        void handleContinueProcess(item.preConsignment!.id)
-                      }}
+                      onClick={() => void handleContinueProcess(item.preConsignment!.id)}
                       style={{ cursor: 'pointer' }}
                     >
                       <EyeOpenIcon /> {t('preconsignment.action.view')}
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => {
-                        void handleContinueProcess(item.preConsignment!.id)
-                      }}
+                      onClick={() => void handleContinueProcess(item.preConsignment!.id)}
                       style={{ cursor: 'pointer' }}
                     >
                       {t('preconsignment.action.continue')}
