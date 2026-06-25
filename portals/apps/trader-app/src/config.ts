@@ -22,7 +22,7 @@ export async function initAppConfig(): Promise<void> {
         systemName: 'NSW',
         appName: 'Trader Portal',
       },
-    } as UIConfig
+    }
     displayName = 'Trader Portal'
   }
 }
