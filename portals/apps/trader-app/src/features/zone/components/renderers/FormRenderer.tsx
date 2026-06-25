@@ -52,17 +52,12 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const handleAutoFill = () => {
     const next = autoFillForm(payload.schema, data) as Record<string, unknown>
     setData(next)
-    setErrors([])
   }
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
     setSubmitting(true)
-    void onAction(h.command, data)
-      .catch((error) => {
-        console.error('Form action failed:', error)
-      })
-      .finally(() => setSubmitting(false))
+    void onAction(h.command, data).finally(() => setSubmitting(false))
   }
 
   return (
