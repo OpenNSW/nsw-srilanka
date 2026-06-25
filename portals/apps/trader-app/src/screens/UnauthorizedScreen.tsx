@@ -1,6 +1,6 @@
 import { Button } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
-import { useSignOutHandler } from '../hooks/useSignOutHandler'
+import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 
 export function UnauthorizedScreen() {
   const handleSignOut = useSignOutHandler()

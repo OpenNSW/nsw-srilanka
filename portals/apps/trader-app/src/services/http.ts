@@ -1,4 +1,4 @@
-import { userManager } from '../oidcUserManager'
+import { userManager } from '@/oidcUserManager'
 
 interface RequestConfig {
   url: string

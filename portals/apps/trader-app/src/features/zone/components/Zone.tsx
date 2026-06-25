@@ -1,4 +1,4 @@
-import type { ZoneComponent } from '../types'
+import type { ZoneComponent } from '@/features/zone/types'
 import { renderZoneComponent } from './renderers'
 
 type Props = {
