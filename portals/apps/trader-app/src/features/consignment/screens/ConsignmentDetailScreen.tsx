@@ -81,7 +81,7 @@ export function ConsignmentDetailScreen() {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
           setProvisioning(true)
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
         } else {
           setProvisioning(false)
         }
@@ -96,7 +96,7 @@ export function ConsignmentDetailScreen() {
         if (mode === 'poll' && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
         } else {
           setProvisioning(false)
           setError('loadFailed')
@@ -114,8 +114,9 @@ export function ConsignmentDetailScreen() {
   // The provisioning poll reschedules itself via setTimeout. Invoke through a
   // ref to the latest fetchConsignment so a pending timeout never fires a stale
   // closure, and so fetchConsignment doesn't need to depend on itself.
-  const fetchConsignmentRef = useRef(fetchConsignment)
+  const fetchConsignmentRef = useRef<typeof fetchConsignment | null>(null)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
     fetchConsignmentRef.current = fetchConsignment
   }, [fetchConsignment])
 
@@ -125,6 +126,7 @@ export function ConsignmentDetailScreen() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchConsignment('initial')
     return () => clearProvisionTimer()
   }, [fetchConsignment, clearProvisionTimer])
@@ -160,7 +162,13 @@ export function ConsignmentDetailScreen() {
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Button variant="ghost" color="gray" onClick={() => navigate('/consignments')}>
+          <Button
+            variant="ghost"
+            color="gray"
+            onClick={() => {
+              void navigate('/consignments')
+            }}
+          >
             <ArrowLeftIcon />
             {t('consignments.detail.back')}
           </Button>
@@ -175,7 +183,12 @@ export function ConsignmentDetailScreen() {
               : t('consignments.detail.error.notFoundDescription')}
           </Text>
           <div className="flex gap-3 justify-center">
-            <Button variant="soft" onClick={() => navigate('/consignments')}>
+            <Button
+              variant="soft"
+              onClick={() => {
+                void navigate('/consignments')
+              }}
+            >
               <ArrowLeftIcon />
               {t('consignments.detail.backToList')}
             </Button>
@@ -196,7 +209,9 @@ export function ConsignmentDetailScreen() {
         <Button
           variant="ghost"
           color="gray"
-          onClick={() => navigate('/consignments')}
+          onClick={() => {
+            void navigate('/consignments')
+          }}
           aria-label="Back to consignments list"
         >
           <ArrowLeftIcon />

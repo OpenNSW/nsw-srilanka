@@ -29,6 +29,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
       } else {
         // Fallback: if sessionStorage is unavailable, do not auto-redirect
         // to prevent infinite loops. Force manual redirection instead.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHasRedirected(true)
       }
     }

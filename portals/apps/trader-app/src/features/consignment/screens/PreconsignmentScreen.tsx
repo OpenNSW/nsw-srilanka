@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Heading, Text, Badge, Spinner, Flex, Box, Callout } from '@radix-ui/themes'
 import { FileTextIcon, PlayIcon, EyeOpenIcon, CheckCircledIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
@@ -7,6 +7,8 @@ import { getTraderPreConsignments, createPreConsignment, getPreConsignment } fro
 import { PaginationControl } from '@/components/common/PaginationControl'
 import type { TraderPreConsignmentItem } from '../types'
 
+const PAGE_LIMIT = 15
+
 export function PreconsignmentScreen() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -14,16 +16,15 @@ export function PreconsignmentScreen() {
   const [items, setItems] = useState<TraderPreConsignmentItem[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
-  const limit = 15
   const listRequestIdRef = useRef(0)
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const requestId = ++listRequestIdRef.current
     try {
       setLoading(true)
-      const response = await getTraderPreConsignments(page * limit, limit)
+      const response = await getTraderPreConsignments(page * PAGE_LIMIT, PAGE_LIMIT)
       if (requestId !== listRequestIdRef.current) {
         return
       }
@@ -40,7 +41,7 @@ export function PreconsignmentScreen() {
         setLoading(false)
       }
     }
-  }
+  }, [page, t])
 
   const areDependenciesMet = (item: TraderPreConsignmentItem): boolean => {
     if (!item.dependsOn || item.dependsOn.length === 0) {
@@ -53,8 +54,9 @@ export function PreconsignmentScreen() {
   }
 
   useEffect(() => {
-    loadData()
-  }, [page])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData()
+  }, [loadData])
 
   useEffect(() => {
     if (notification?.type === 'success') {
@@ -76,7 +78,7 @@ export function PreconsignmentScreen() {
       )
 
       if (targetNode) {
-        navigate(`/pre-consignments/${instance.id}/tasks/${targetNode.id}`)
+        void navigate(`/pre-consignments/${instance.id}/tasks/${targetNode.id}`)
       } else {
         setNotification({ type: 'error', message: t('preconsignment.error.noReadyTask') })
         setLoading(false)
@@ -101,7 +103,7 @@ export function PreconsignmentScreen() {
       }
 
       if (targetNode) {
-        navigate(`/pre-consignments/${instance.id}/tasks/${targetNode.id}`)
+        void navigate(`/pre-consignments/${instance.id}/tasks/${targetNode.id}`)
       } else {
         setNotification({ type: 'error', message: t('preconsignment.error.noTask') })
         setLoading(false)
@@ -168,7 +170,9 @@ export function PreconsignmentScreen() {
 
                   {!hasInstance ? (
                     <Button
-                      onClick={() => handleStartProcess(item.id)}
+                      onClick={() => {
+                        void handleStartProcess(item.id)
+                      }}
                       disabled={isLocked || !areDependenciesMet(item)}
                       style={{ cursor: isLocked || !areDependenciesMet(item) ? 'not-allowed' : 'pointer' }}
                       title={!areDependenciesMet(item) ? 'Complete dependent pre-consignments first' : ''}
@@ -179,14 +183,18 @@ export function PreconsignmentScreen() {
                     <Button
                       variant="outline"
                       color="green"
-                      onClick={() => handleContinueProcess(item.preConsignment!.id)}
+                      onClick={() => {
+                        void handleContinueProcess(item.preConsignment!.id)
+                      }}
                       style={{ cursor: 'pointer' }}
                     >
                       <EyeOpenIcon /> {t('preconsignment.action.view')}
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => handleContinueProcess(item.preConsignment!.id)}
+                      onClick={() => {
+                        void handleContinueProcess(item.preConsignment!.id)
+                      }}
                       style={{ cursor: 'pointer' }}
                     >
                       {t('preconsignment.action.continue')}
@@ -201,9 +209,9 @@ export function PreconsignmentScreen() {
       {items.length > 0 && (
         <PaginationControl
           currentPage={page + 1}
-          totalPages={Math.ceil(totalCount / limit)}
+          totalPages={Math.ceil(totalCount / PAGE_LIMIT)}
           onPageChange={(p) => setPage(p - 1)}
-          hasNext={(page + 1) * limit < totalCount}
+          hasNext={(page + 1) * PAGE_LIMIT < totalCount}
           hasPrev={page > 0}
           totalCount={totalCount}
         />

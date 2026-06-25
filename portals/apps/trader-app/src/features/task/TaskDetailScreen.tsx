@@ -12,7 +12,9 @@ const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 export function TaskDetailScreen() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
-  const goBack = () => navigate(-1)
+  const goBack = () => {
+    void navigate(-1)
+  }
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,6 +54,7 @@ export function TaskDetailScreen() {
   )
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchTask()
   }, [fetchTask])
 
