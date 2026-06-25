@@ -43,6 +43,7 @@ import (
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
+	"github.com/OpenNSW/nsw-srilanka/internal/version"
 
 	"github.com/LSFLK/argus/pkg/audit"
 
@@ -70,6 +71,7 @@ func (a *App) Close() error {
 type healthResponse struct {
 	Status              string   `json:"status"`
 	Service             string   `json:"service"`
+	Version             string   `json:"version"`
 	UnhealthyComponents []string `json:"unhealthy_components,omitempty"`
 }
 
@@ -278,6 +280,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			writeJSON(w, http.StatusServiceUnavailable, healthResponse{
 				Status:              "error",
 				Service:             "nsw-backend",
+				Version:             version.Version,
 				UnhealthyComponents: unhealthy,
 			})
 			return
@@ -286,6 +289,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		writeJSON(w, http.StatusOK, healthResponse{
 			Status:  "ok",
 			Service: "nsw-backend",
+			Version: version.Version,
 		})
 	})
 

@@ -23,8 +23,6 @@ jobs:
       image_name: onetrade-app
       context: ./portals
       dockerfile: ./portals/apps/trader-app/Dockerfile
-      build-args: |
-        BUILD_VERSION=dev-${{ github.run_number }}-${{ github.sha }}
     permissions:
       contents: read
       packages: write

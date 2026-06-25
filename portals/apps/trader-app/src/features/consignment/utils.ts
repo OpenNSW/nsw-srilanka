@@ -1,5 +1,5 @@
-import type { ConsignmentState } from '../services/types/consignment'
-import i18n from '../i18n'
+import type { ConsignmentState } from './types'
+import i18n from '@/i18n'
 
 /**
  * Get the appropriate color for a consignment state badge.

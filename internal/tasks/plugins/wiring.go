@@ -9,6 +9,7 @@ import (
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -18,7 +19,12 @@ const (
 	TaskTypeExternalReview = "EXTERNAL_REVIEW"
 	TaskTypePayment        = "PAYMENT"
 	TaskTypeAPICall        = "API_CALL"
+	TaskTypeAuthAPICall    = "AUTH_API_CALL"
 	TaskTypeNotification   = "NOTIFICATION"
+
+	// TaskTypeCustomsCusdecDispatch is the generic AUTH_API_CALL plugin wired
+	// with the Sri Lanka Customs (SLC Edge) CusDec response interpreter.
+	TaskTypeCustomsCusdecDispatch = "CUSTOMS_CUSDEC_DISPATCH"
 )
 
 // Register installs the taskv2 plugins on reg.
@@ -47,6 +53,8 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, devMode)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
+		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
+		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, customs.NewCusdecInterpreter())},
 	}
 
 	for _, e := range entries {

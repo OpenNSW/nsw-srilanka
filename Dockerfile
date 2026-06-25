@@ -17,10 +17,13 @@ COPY . .
 # builder's native platform — avoids forcing amd64 emulation on arm64 hosts.
 ARG TARGETOS
 ARG TARGETARCH
+ARG BUILD_VERSION=dev
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-    go build -ldflags="-s -w" -o /out/server ./cmd/server
+    go build -ldflags="-s -w -X 'github.com/OpenNSW/nsw-srilanka/internal/version.Version=${BUILD_VERSION}'" \
+    -o /out/server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-    go build -ldflags="-s -w" -o /out/otc ./cmd/otc
+    go build -ldflags="-s -w -X 'github.com/OpenNSW/nsw-srilanka/internal/version.Version=${BUILD_VERSION}'" \
+    -o /out/otc ./cmd/otc
 
 # -------------------------------------------------------------------
 # Migrate builder – builds the standalone migrator from nsw-agency.

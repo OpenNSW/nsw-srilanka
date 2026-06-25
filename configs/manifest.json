@@ -1794,6 +1794,20 @@
       "path": "customs/1-cusdec_submission/reviewerinput.json"
     },
     {
+      "id": "customs-cusdec--cig-dispatch",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/dispatch.json"
+    },
+    {
+      "id": "customs-cusdec--cig-rejection",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/cig_rejection.json"
+    },
+    {
       "id": "customs-cusdec--reviewer-form",
       "kind": "generic_template",
       "version": "",

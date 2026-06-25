@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button } from '@radix-ui/themes'
@@ -38,33 +38,26 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // do *not* clobber in-flight edits — there is no server-side draft to merge
   // back in, so re-syncing payload.data would silently destroy user input.
   const [data, setData] = useState<Record<string, unknown>>(payload.data ?? {})
-  const dataRef = useRef(data)
-  dataRef.current = data
-  const [isValid, setIsValid] = useState(false)
+  const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    setIsValid(isFormValid(payload.schema, data, []))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
   // collapses interactivity, readonly, and button visibility into a single
   // derived fact — the same rule the backend uses to derive Role.
+  const isValid = errors.length === 0 && allRequiredFilled(payload.schema, data)
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('VITE_SHOW_AUTOFILL_BUTTON', false)
 
   const handleAutoFill = () => {
-    const next = autoFillForm(payload.schema, dataRef.current) as Record<string, unknown>
+    const next = autoFillForm(payload.schema, data) as Record<string, unknown>
     setData(next)
-    setIsValid(isFormValid(payload.schema, next, []))
   }
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
     setSubmitting(true)
-    void onAction(h.command, dataRef.current).finally(() => setSubmitting(false))
+    void onAction(h.command, data).finally(() => setSubmitting(false))
   }
 
   return (
@@ -79,7 +72,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
             setData(next)
-            setIsValid(isFormValid(payload.schema, next, errors ?? []))
+            setErrors(errors ?? [])
           }}
         />
       </div>
@@ -144,11 +137,6 @@ function HandleButton({
       {submitting ? 'Submitting...' : handle.label}
     </Button>
   )
-}
-
-function isFormValid(schema: JsonSchema, data: Record<string, unknown>, errors: unknown[]): boolean {
-  if (errors.length > 0) return false
-  return allRequiredFilled(schema, data)
 }
 
 // Walks the schema's `required` arrays and checks each path against the data.

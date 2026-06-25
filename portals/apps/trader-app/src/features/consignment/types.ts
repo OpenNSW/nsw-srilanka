@@ -1,4 +1,44 @@
-import type { PaginatedResponse } from './common'
+import type { PaginatedResponse } from '@/services/types/common'
+
+export type WorkflowStepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT' | 'PAYMENT'
+
+export interface WorkflowStepConfig {
+  formId?: string
+  agency?: string
+  service?: string
+  event?: string
+}
+
+export interface WorkflowStep {
+  stepId: string
+  type: WorkflowStepType
+  config: WorkflowStepConfig
+  dependsOn: string[]
+}
+
+export interface WorkflowTemplate {
+  id: string
+  createdAt: string
+  updatedAt: string
+  version: string
+  steps: WorkflowStep[]
+}
+
+export interface Workflow {
+  id: string
+  name: string
+  type: 'import' | 'export'
+  steps: WorkflowStep[]
+}
+
+export interface WorkflowQueryParams {
+  hs_code: string
+}
+
+export interface WorkflowResponse {
+  import: Workflow[]
+  export: Workflow[]
+}
 
 export interface CHA {
   id: string
@@ -85,3 +125,42 @@ export type Consignment = ConsignmentDetail
 export type CreateConsignmentResponse = ConsignmentDetail
 
 export type ConsignmentListResult = PaginatedResponse<ConsignmentSummary>
+
+// PreConsignment types
+export type PreConsignmentState = 'LOCKED' | 'READY' | 'IN_PROGRESS' | 'COMPLETED'
+
+export interface PreConsignmentTemplate {
+  id: string
+  name: string
+  description: string
+  dependsOn: string[]
+}
+
+export interface PreConsignmentInstance {
+  id: string
+  traderId: string
+  state: PreConsignmentState
+  traderContext: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+  preConsignmentTemplate: PreConsignmentTemplate
+  workflowNodes: WorkflowNode[]
+}
+
+export interface TraderPreConsignmentItem {
+  id: string
+  name: string
+  description: string
+  state: PreConsignmentState
+  dependsOn: string[]
+  preConsignment?: PreConsignmentInstance
+  preConsignmentTemplate?: PreConsignmentTemplate
+}
+
+export type TraderPreConsignmentsResponse = PaginatedResponse<TraderPreConsignmentItem>
+
+export type PreConsignmentListApiResponse = PreConsignmentInstance[] | TraderPreConsignmentsResponse
+
+export interface CreatePreConsignmentRequest {
+  preConsignmentTemplateId: string
+}

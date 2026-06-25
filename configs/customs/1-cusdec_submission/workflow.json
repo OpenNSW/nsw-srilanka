@@ -12,30 +12,39 @@
       "type": "TASK",
       "task_template_id": "customs-cusdec--user-input",
       "input_mapping": {
-        "reviewerform.rejection_reason?": "rejection_reason"
+        "reviewerform.rejection_reason?": "rejection_reason",
+        "cig.error?": "cig.error"
       },
       "output_mapping": {
-        "exporter_name": "userform.exporter_name",
-        "exporter_address": "userform.exporter_address",
-        "declarant_name": "userform.declarant_name",
-        "declarant_address": "userform.declarant_address",
-        "consignee_name": "userform.consignee_name",
-        "consignee_address": "userform.consignee_address",
-        "port_of_loading": "userform.port_of_loading",
-        "port_of_discharge": "userform.port_of_discharge",
-        "vessel_name": "userform.vessel_name",
-        "voyage_number": "userform.voyage_number",
-        "bill_of_lading_number": "userform.bill_of_lading_number",
-        "declaration_date": "userform.declaration_date",
-        "hs_code": "userform.hs_code",
-        "description_of_goods": "userform.description_of_goods",
-        "package_details": "userform.package_details",
-        "gross_mass": "userform.gross_mass",
-        "net_mass": "userform.net_mass",
-        "invoice_value": "userform.invoice_value",
-        "sad_document": "userform.sad_document",
-        "supporting_documents": "userform.supporting_documents"
+        "shipmentType": "userform.shipmentType",
+        "containerCount": "userform.containerCount",
+        "identification": "userform.identification",
+        "traders": "userform.traders",
+        "generalInfo": "userform.generalInfo",
+        "transport": "userform.transport",
+        "financial": "userform.financial",
+        "valuation": "userform.valuation",
+        "packages": "userform.packages",
+        "items": "userform.items"
       }
+    },
+    {
+      "id": "cig_dispatch",
+      "type": "TASK",
+      "task_template_id": "customs-cusdec--cig-dispatch",
+      "input_mapping": {
+        "userform": "payload"
+      },
+      "output_mapping": {
+        "cig.accepted": "cig.accepted",
+        "cig.edgeId?": "cig.edge_id",
+        "cig.error?": "cig.error"
+      }
+    },
+    {
+      "id": "dispatch_check",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
     },
     {
       "id": "officer_review",
@@ -70,7 +79,24 @@
     {
       "id": "e2",
       "source_id": "applicant_submission",
-      "target_id": "officer_review"
+      "target_id": "cig_dispatch"
+    },
+    {
+      "id": "e_cig_check",
+      "source_id": "cig_dispatch",
+      "target_id": "dispatch_check"
+    },
+    {
+      "id": "e_cig_accepted",
+      "source_id": "dispatch_check",
+      "target_id": "officer_review",
+      "condition": "cig.accepted == true"
+    },
+    {
+      "id": "e_cig_rejected",
+      "source_id": "dispatch_check",
+      "target_id": "applicant_submission",
+      "condition": "cig.accepted != true"
     },
     {
       "id": "e3",

@@ -3,13 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Card, Heading, Text, Badge, Spinner, Flex, Box, Callout } from '@radix-ui/themes'
 import { FileTextIcon, PlayIcon, EyeOpenIcon, CheckCircledIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import {
-  getTraderPreConsignments,
-  createPreConsignment,
-  getPreConsignment,
-  type TraderPreConsignmentItem,
-} from '../services/preConsignment'
-import { PaginationControl } from '../components/common/PaginationControl'
+import { getTraderPreConsignments, createPreConsignment, getPreConsignment } from '../service'
+import { PaginationControl } from '@/components/common/PaginationControl'
+import type { TraderPreConsignmentItem } from '../types'
 
 export function PreconsignmentScreen() {
   const navigate = useNavigate()
