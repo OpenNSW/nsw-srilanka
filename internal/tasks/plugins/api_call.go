@@ -12,7 +12,15 @@ import (
 // request body from the task inputs and interprets the response into an
 // acceptance flag plus fields to record into the output namespace.
 type Interpreter interface {
+	// BuildRequest returns the request body to POST, derived from the task's
+	// mapped inputs — e.g. selecting a payload key and injecting identifiers.
 	BuildRequest(inputs map[string]any) any
+
+	// Interpret turns the call outcome into a result: whether the call was
+	// accepted, plus the fields to record into the output namespace (e.g.
+	// response identifiers, or an error message on rejection). callErr is the
+	// transport/HTTP error (nil on success); resp is the decoded response body,
+	// which the remote client populates even on a 4xx/5xx JSON error.
 	Interpret(callErr error, resp map[string]any) (accepted bool, captured map[string]any)
 }
 
