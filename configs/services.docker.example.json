@@ -79,7 +79,17 @@
     {
       "id": "customs-asycuda",
       "url": "https://customs-asycuda.example.com",
-      "timeout": "10s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://idp.example.com/oauth2/token",
+          "client_id": "NSW_TO_ASYCUDA_CLIENT_ID",
+          "client_secret": "env:M2M_NSW_TO_ASYCUDA_SECRET",
+          "scopes": [],
+          "insecure_skip_tls_verify": false
+        }
+      }
     },
     {
       "id": "customs-app",

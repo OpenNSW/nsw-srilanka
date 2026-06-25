@@ -1,0 +1,4 @@
+{
+  "id": "customs-cusdec--cig-rejection",
+  "template": "{{if .error}}{{.error}}{{end}}"
+}
