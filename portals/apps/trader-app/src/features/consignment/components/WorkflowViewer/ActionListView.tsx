@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { CheckCircledIcon, ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { WorkflowNode } from '../../services/types/consignment'
+import type { WorkflowNode } from '../../types'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
 

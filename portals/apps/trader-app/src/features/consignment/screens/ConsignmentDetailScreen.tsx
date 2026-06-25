@@ -4,9 +4,9 @@ import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { ActionListView } from '../components/WorkflowViewer'
-import type { ConsignmentDetail } from '../services/types/consignment.ts'
-import { getConsignment } from '../services/consignment.ts'
-import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
+import type { ConsignmentDetail } from '../types.ts'
+import { getConsignment } from '../service.ts'
+import { getStateColor, formatState, formatDateTime } from '../utils.ts'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 

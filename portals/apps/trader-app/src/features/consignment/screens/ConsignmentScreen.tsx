@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
-import { useDebounce } from '../hooks/useDebounce'
+import { useDebounce } from '../../../hooks/useDebounce.ts'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../services/types/consignment.ts'
-import { createConsignment, getAllConsignments } from '../services/consignment.ts'
-import { useRole } from '../services/RoleContext'
-import { getStateColor, formatState, formatDateTime } from '../utils/consignmentUtils'
-import { PaginationControl } from '../components/common/PaginationControl'
+import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../types.ts'
+import { createConsignment, getAllConsignments } from '../service.ts'
+import { useRole } from '../../../services/RoleContext.tsx'
+import { getStateColor, formatState, formatDateTime } from '../utils.ts'
+import { PaginationControl } from '../../../components/common/PaginationControl.tsx'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
