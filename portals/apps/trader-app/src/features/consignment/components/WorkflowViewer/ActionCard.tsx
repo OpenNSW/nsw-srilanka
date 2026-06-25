@@ -88,7 +88,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
   const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
 
   const handleOpen = () => {
-    navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
+    void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
   }
 
   const label = step.workflowNodeTemplate.name || `Step ${step.id.split('-').pop()}`

@@ -1,16 +1,8 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { RoleContext } from './roleContextCore'
+import type { Role } from './roleContextCore'
 
-export type Role = 'trader' | 'cha'
-
-interface RoleContextType {
-  role: Role
-  setRole: (role: Role) => void
-  availableRoles: Role[]
-  setAvailableRoles: (roles: Role[]) => void
-  isLoading: boolean
-}
-
-const RoleContext = createContext<RoleContextType | undefined>(undefined)
+export type { Role } from './roleContextCore'
 
 interface RoleProviderProps {
   children: ReactNode
@@ -53,12 +45,4 @@ export function RoleProvider({ children, availableGroups = [], isLoading = false
       {children}
     </RoleContext.Provider>
   )
-}
-
-export function useRole() {
-  const context = useContext(RoleContext)
-  if (context === undefined) {
-    throw new Error('useRole must be used within a RoleProvider')
-  }
-  return context
 }

@@ -43,7 +43,8 @@ export function useAsync<T>(asyncFunction: () => Promise<T>, immediate = true): 
 
   useEffect(() => {
     if (immediate) {
-      execute()
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void execute()
     }
   }, [execute, immediate])
 
