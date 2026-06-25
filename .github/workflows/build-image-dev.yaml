@@ -67,6 +67,8 @@ jobs:
           # Sequential run numbers let Argo CD Image Updater sort/detect the newest dev builds.
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/${{ inputs.image_name }}:dev-${{ github.run_number }}-${{ github.sha }}
+          build-args: |
+            BUILD_VERSION=dev-${{ github.run_number }}-${{ github.sha }}
           # Scope cache per image so concurrent builds don't overwrite each other's layers.
           cache-from: type=gha,scope=${{ inputs.image_name }}
           cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}
