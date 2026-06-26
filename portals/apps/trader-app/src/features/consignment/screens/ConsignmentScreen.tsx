@@ -89,12 +89,16 @@ export function ConsignmentScreen() {
   }, [page, stateFilter, tradeFlowFilter, role, debouncedSearchQuery])
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-foreground">
-          {t('consignments.list.title')}
-          {totalCount > 0 && <span className="ml-2 text-lg font-normal text-foreground-subtle">({totalCount})</span>}
-        </h1>
+    <div className="min-h-[calc(100vh-64px)] p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('consignments.list.title')}</h1>
+          {totalCount > 0 && (
+            <span className="inline-flex items-center rounded-full bg-primary-subtle px-2.5 py-0.5 text-sm font-medium text-primary border border-border">
+              {totalCount}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           {role === 'cha' ? null : (
             <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
@@ -105,8 +109,8 @@ export function ConsignmentScreen() {
         </div>
       </div>
 
-      <div className="mb-6">
-        <div className="p-4 border-b border-border">
+      <div className="rounded-xl border border-border bg-app-surface shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border bg-app-surface/60">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <TextField.Root
@@ -169,7 +173,7 @@ export function ConsignmentScreen() {
             </div>
           )}
           {consignments.length === 0 ? (
-            <div className="p-12 text-center">
+            <div className="p-16 text-center">
               <Text size="3" color="gray">
                 {debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
                   ? t('consignments.list.empty.filtered')
@@ -182,17 +186,17 @@ export function ConsignmentScreen() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-border bg-surface">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                  <tr className="border-b border-border bg-app-surface-muted">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
                       {t('consignments.list.table.id')}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
                       {t('consignments.list.table.tradeFlow')}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
                       {t('consignments.list.table.state')}
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
                       {t('consignments.list.table.created')}
                     </th>
                   </tr>
@@ -203,7 +207,7 @@ export function ConsignmentScreen() {
                       <tr
                         key={consignment.id}
                         onClick={() => void navigate(`/consignments/${consignment.id}`)}
-                        className="hover:bg-surface cursor-pointer transition-colors"
+                        className="hover:bg-primary-subtle cursor-pointer transition-colors"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           {consignment.name ? (
@@ -244,14 +248,16 @@ export function ConsignmentScreen() {
             </div>
           )}
         </div>
-        <PaginationControl
-          currentPage={page + 1}
-          totalPages={Math.ceil(totalCount / limit)}
-          onPageChange={(p) => setPage(p - 1)}
-          hasNext={(page + 1) * limit < totalCount}
-          hasPrev={page > 0}
-          totalCount={totalCount}
-        />
+        <div className="border-t border-border bg-app-surface/60">
+          <PaginationControl
+            currentPage={page + 1}
+            totalPages={Math.ceil(totalCount / limit)}
+            onPageChange={(p) => setPage(p - 1)}
+            hasNext={(page + 1) * limit < totalCount}
+            hasPrev={page > 0}
+            totalCount={totalCount}
+          />
+        </div>
       </div>
     </div>
   )
