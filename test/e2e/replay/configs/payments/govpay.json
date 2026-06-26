@@ -1,0 +1,4 @@
+{
+  "id": "govpay",
+  "webhookPath": "/api/v1/payments/govpay/webhook"
+}

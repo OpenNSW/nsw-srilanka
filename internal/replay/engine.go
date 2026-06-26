@@ -103,6 +103,7 @@ type Agency interface {
 // success webhook for the payment created against the task in TaskVar.
 type Pay struct {
 	TaskVar string `json:"taskVar"`          // variable holding the pay task's id
+	Method  string `json:"method,omitempty"` // payment gateway id, e.g. "govpay"
 	Status  string `json:"status,omitempty"` // gateway success status (default "paid")
 	Timeout string `json:"timeout,omitempty"`
 }
@@ -113,7 +114,8 @@ type Pay struct {
 type PaymentGateway interface {
 	// Pay waits (up to timeout) for the payment created against taskID, then
 	// confirms it by posting a gateway success webhook with the given status.
-	Pay(ctx context.Context, taskID, status string, timeout time.Duration) error
+	// method identifies which payment gateway to use.
+	Pay(ctx context.Context, taskID, method, status string, timeout time.Duration) error
 }
 
 // LoadFlow reads and parses a JSON flow file.
@@ -302,7 +304,7 @@ func (r *Runner) doPay(ctx context.Context, p *Pay) error {
 	if status == "" {
 		status = "paid"
 	}
-	return r.PaymentGateway.Pay(ctx, taskID, status, timeout)
+	return r.PaymentGateway.Pay(ctx, taskID, p.Method, status, timeout)
 }
 
 // ── consignment detail polling ──────────────────────────────────────────────
