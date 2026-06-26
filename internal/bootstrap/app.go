@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
+	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/storage"
@@ -40,6 +41,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
@@ -521,7 +523,16 @@ func initTask(
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 
+	notifManager, err := notification.NewManager(cfg.Notification,
+		notify.NewEmailProvider(), notify.NewSMSProvider())
+	if err != nil {
+		return nil, nil, fmt.Errorf("notification manager: %w", err)
+	}
+
 	extensionsRegistry := extensions.NewRegistry()
+	if err := notify.Register(extensionsRegistry, notifManager, cfg.Server.Debug); err != nil {
+		return nil, nil, fmt.Errorf("register task extensions: %w", err)
+	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
 
 	if err := workflowRunner.StartWorker(); err != nil {
