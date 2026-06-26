@@ -67,6 +67,9 @@ func loadMemberConfigs(t *testing.T) []MemberConfig {
 	configs := loadConfigs[MemberConfig](t, "members")
 	seen := make(map[string]bool, len(configs))
 	for _, cfg := range configs {
+		if cfg.ID == "" {
+			t.Fatalf("member config in file has no id field")
+		}
 		if seen[cfg.ID] {
 			t.Fatalf("member config: duplicate id %q", cfg.ID)
 		}
@@ -85,6 +88,9 @@ func loadAgencyConfigs(t *testing.T) []AgencyConfig {
 	configs := loadConfigs[AgencyConfig](t, "agencies")
 	seen := make(map[string]bool, len(configs))
 	for _, cfg := range configs {
+		if cfg.ID == "" {
+			t.Fatalf("agency config in file has no id field")
+		}
 		if seen[cfg.ID] {
 			t.Fatalf("agency config: duplicate id %q", cfg.ID)
 		}
@@ -118,6 +124,9 @@ func loadPaymentConfigs(t *testing.T) []PaymentConfig {
 	configs := loadConfigs[PaymentConfig](t, "payments")
 	seen := make(map[string]bool, len(configs))
 	for _, cfg := range configs {
+		if cfg.ID == "" {
+			t.Fatalf("payment config in file has no id field")
+		}
 		if seen[cfg.ID] {
 			t.Fatalf("payment config: duplicate id %q", cfg.ID)
 		}

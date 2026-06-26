@@ -68,6 +68,26 @@ func newSignedAuth(t *testing.T, issuer, audience string, memberUserIDs map[stri
 		audience: audience,
 		tokens:   make(map[string]string),
 	}
+	seenIDs := make(map[string]string)
+	for _, m := range members {
+		if cat, exists := seenIDs[m.ID]; exists {
+			t.Fatalf("global config ID collision: %q is defined as both a member and a %s", m.ID, cat)
+		}
+		seenIDs[m.ID] = "member"
+	}
+	for _, ag := range agencies {
+		if cat, exists := seenIDs[ag.ID]; exists {
+			t.Fatalf("global config ID collision: %q is defined as both an agency and a %s", ag.ID, cat)
+		}
+		seenIDs[ag.ID] = "agency"
+	}
+	for _, p := range payments {
+		if cat, exists := seenIDs[p.ID]; exists {
+			t.Fatalf("global config ID collision: %q is defined as both a payment gateway and a %s", p.ID, cat)
+		}
+		seenIDs[p.ID] = "payment gateway"
+	}
+
 	for _, m := range members {
 		a.tokens[m.ID] = a.sign(t, a.memberClaims(m, memberUserIDs[m.ID]))
 	}
@@ -75,6 +95,7 @@ func newSignedAuth(t *testing.T, issuer, audience string, memberUserIDs map[stri
 		a.tokens[ag.ID] = a.sign(t, a.serviceClaims(ag.Identity))
 	}
 	for _, p := range payments {
+		// TODO: when the gateway webhook is made protected, enforce non-nil identity.
 		if p.Identity != nil {
 			a.tokens[p.ID] = a.sign(t, a.serviceClaims(*p.Identity))
 		}
