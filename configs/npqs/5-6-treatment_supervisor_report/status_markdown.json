@@ -1,0 +1,4 @@
+{
+  "id": "npqs-supervision-report--status",
+  "template": "{{if .supervisor_notes}}\n### ✅ Supervision Report Issued\n\nThe PQS/NPQS supervising officer has completed the supervision report for the treatment.\n\n* **Reference Number**: `{{.reference_number}}`\n* **Supervision Notes**: {{.supervisor_notes}}\n{{if .supervision_report_url}}* **Report Document**: [View Supervision Report]({{.supervision_report_url}}){{end}}\n\nYou will now be asked to upload the treatment certificates.\n{{else}}\n### ⏳ Supervision Report Being Prepared\n\nThe PQS/NPQS supervising officer is completing their observation report for the treatment carried out on your consignment.\n\n* **Reference Number**: `{{.reference_number}}`\n\nYou will be notified once the supervision report has been issued.\n{{end}}"
+}

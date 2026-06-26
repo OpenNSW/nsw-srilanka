@@ -9,7 +9,6 @@
         "title": "Treatment Request Decision",
         "oneOf": [
           { "const": "approve", "title": "Approve Treatment Plan" },
-          { "const": "reject", "title": "Reject Treatment Plan (Consignment Rejected)" },
           { "const": "needs_more_info", "title": "Needs More Info (Send back to trader with feedback)" }
         ],
         "default": "approve"

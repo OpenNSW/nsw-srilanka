@@ -13,17 +13,14 @@
       "gateway_type": "EXCLUSIVE_SPLIT"
     },
     {
-      "id": "trader_submit",
-      "type": "TASK",
-      "task_template_id": "npqs-draw-sample--trader-submit",
-      "input_mapping": {},
-      "output_mapping": {}
-    },
-    {
       "id": "officer_receive",
       "type": "TASK",
       "task_template_id": "npqs-draw-sample--officer-receive",
-      "input_mapping": {},
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "userform.nppo_office_location": "nppo_office_location",
+        "lab_sample_method": "lab_sample_method"
+      },
       "output_mapping": {
         "sample_number": "sample_number"
       }
@@ -32,7 +29,10 @@
       "id": "officer_draw",
       "type": "TASK",
       "task_template_id": "npqs-draw-sample--officer-draw",
-      "input_mapping": {},
+      "input_mapping": {
+        "reference_number": "reference_number",
+        "lab_sample_method": "lab_sample_method"
+      },
       "output_mapping": {
         "sample_number": "sample_number"
       }
@@ -56,7 +56,7 @@
     {
       "id": "e_split_dropoff",
       "source_id": "method_split",
-      "target_id": "trader_submit",
+      "target_id": "officer_receive",
       "condition": "lab_sample_method == 'drop_off'"
     },
     {
@@ -64,11 +64,6 @@
       "source_id": "method_split",
       "target_id": "officer_draw",
       "condition": "lab_sample_method == 'drawn_at_site'"
-    },
-    {
-      "id": "e_trader_to_officer",
-      "source_id": "trader_submit",
-      "target_id": "officer_receive"
     },
     {
       "id": "e_officer_receive_to_join",

@@ -3,11 +3,13 @@
   "type": "APPLICATION",
   "title": "[NPQS] IPPC ePhyto Hub Transfer",
   "sections": {
-    "workspace": {
+    "status_message": {
       "templateId": "npqs-ephyto-upload--instructions",
-      "title": "IPPC ePhyto Hub Transfer",
+      "title": "ePhyto Transmission Status",
       "projector": "MARKDOWN",
-      "dataKey": "traderinput",
+      "visibleWhen": {
+        "states": ["PENDING_USER", "COMPLETED"]
+      },
       "handles": [
         {
           "command": "submit",
@@ -19,11 +21,7 @@
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     }
   }
 }

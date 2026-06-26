@@ -14,7 +14,9 @@
       "input_mapping": {},
       "output_mapping": {
         "inspection_date": "traderinput.inspection_date",
-        "inspection_time": "traderinput.inspection_time"
+        "inspection_time": "traderinput.inspection_time",
+        "contact_name": "traderinput.contact_name",
+        "contact_phone": "traderinput.contact_phone"
       }
     },
     {

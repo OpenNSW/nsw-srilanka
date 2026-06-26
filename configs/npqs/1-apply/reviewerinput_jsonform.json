@@ -14,14 +14,13 @@
         "title": "Review Decision",
         "oneOf": [
           { "const": "approve", "title": "Accept & Proceed" },
-          { "const": "reject", "title": "Reject Application" },
-          { "const": "needs_more_info", "title": "Request Trader Modifications (Needs More Info)" }
+          { "const": "needs_more_info", "title": "Request Modifications (Send Back to Trader)" }
         ],
         "default": "approve"
       },
-      "rejection_reason": {
+      "clarification_reason": {
         "type": "string",
-        "title": "Rejection/Clarification Reason (If not approved)",
+        "title": "Clarification Required (If sending back to trader)",
         "example": "Please specify the exact scientific name of the cut foliage."
       },
       "treatment_required": {
@@ -82,7 +81,7 @@
       },
       {
         "type": "Control",
-        "scope": "#/properties/rejection_reason"
+        "scope": "#/properties/clarification_reason"
       },
       {
         "type": "Control",

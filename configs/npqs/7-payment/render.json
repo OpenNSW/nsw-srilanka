@@ -3,15 +3,31 @@
   "type": "PAYMENT",
   "title": "[NPQS] Pay Phytosanitary Certificate Fee",
   "sections": {
-    "workspace": {
+    "payment_instructions": {
+      "templateId": "npqs-pay-certificate-fee--instructions-wrapper",
+      "title": "Payment Instructions",
+      "projector": "PAYMENT",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": ["PENDING_PAYMENT"]
+      }
+    },
+    "payment_details": {
+      "templateId": "npqs-pay-certificate-fee--payment-form",
+      "title": "Phytosanitary Certificate Fee Details",
+      "projector": "FORM",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": ["PENDING_PAYMENT"]
+      }
+    },
+    "select_method": {
       "templateId": "npqs-pay-certificate-fee--select-method-form",
-      "title": "Select Payment Gateway",
+      "title": "Select Payment Method",
       "projector": "FORM",
       "dataKey": "payment_method",
       "visibleWhen": {
-        "states": [
-          "PENDING_USER"
-        ]
+        "states": ["PENDING_USER"]
       },
       "handles": [
         {
@@ -21,47 +37,19 @@
         }
       ]
     },
-    "payment_instructions": {
-      "templateId": "npqs-pay-certificate-fee--instructions-wrapper",
-      "title": "Payment Instructions",
-      "projector": "PAYMENT",
-      "dataKey": "payment",
-      "visibleWhen": {
-        "states": [
-          "PENDING_PAYMENT"
-        ]
-      }
-    },
-    "payment_details": {
-      "templateId": "npqs-pay-certificate-fee--payment-form",
-      "title": "Phytosanitary Certificate Fee Details",
-      "projector": "FORM",
-      "dataKey": "payment",
-      "visibleWhen": {
-        "states": [
-          "PENDING_PAYMENT"
-        ]
-      }
-    },
-    "payment_success": {
+    "success_message": {
       "templateId": "npqs-pay-certificate-fee--success-message",
       "title": "Payment Successful",
       "projector": "MARKDOWN",
       "dataKey": "payment",
       "visibleWhen": {
-        "states": [
-          "COMPLETED"
-        ]
+        "states": ["COMPLETED"]
       }
     }
   },
   "states": {
     "PENDING_USER": {
-      "actions": [
-        {
-          "command": "submit"
-        }
-      ]
+      "actions": [{ "command": "submit" }]
     },
     "PENDING_PAYMENT": {
       "actions": []

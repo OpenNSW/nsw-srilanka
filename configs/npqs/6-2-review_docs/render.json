@@ -3,24 +3,21 @@
   "type": "REVIEW",
   "title": "[NPQS] Review Consignment Documents",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-review-docs--officer-form",
-      "title": "Review Consignment Documents",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Record Review Decision",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+    "assessment_outcome": {
+      "templateId": "npqs-review-docs--status",
+      "title": "Document Review Outcome",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "requireDataKey": "docs_review_outcome"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-review-docs--status",
+      "title": "Review Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }

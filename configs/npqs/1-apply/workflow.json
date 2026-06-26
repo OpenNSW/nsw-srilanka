@@ -59,7 +59,7 @@
         "lab_sample_method": "reviewerform.lab_sample_method",
         "ephyto_required": "reviewerform.ephyto_required",
         "reference_number": "reviewerform.reference_number",
-        "rejection_reason?": "reviewerform.rejection_reason"
+        "clarification_reason?": "reviewerform.clarification_reason"
       }
     },
     {
@@ -93,12 +93,6 @@
       "source_id": "review_gateway",
       "target_id": "end",
       "condition": "reviewerform.review_outcome == 'approve'"
-    },
-    {
-      "id": "e_reject",
-      "source_id": "review_gateway",
-      "target_id": "end",
-      "condition": "reviewerform.review_outcome == 'reject'"
     },
     {
       "id": "e_needs_info",

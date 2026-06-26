@@ -17,7 +17,8 @@
         "traderinput": "traderinput"
       },
       "output_mapping": {
-        "docs_review_outcome": "docs_review_outcome"
+        "docs_review_outcome": "docs_review_outcome",
+        "review_comments?": "review_comments"
       }
     },
     {

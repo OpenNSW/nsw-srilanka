@@ -1,26 +1,23 @@
 {
   "id": "npqs-issue-treatment-cert:render",
   "type": "REVIEW",
-  "title": "[NPQS] Issue Treatment Certificate Details",
+  "title": "[NPQS] Issue Treatment Certificate",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-issue-treatment-cert--officer-form",
-      "title": "Issue Treatment Certificate Details",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Record Treatment Completion",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+    "assessment_outcome": {
+      "templateId": "npqs-treatment-cert-issue--status",
+      "title": "Treatment Certificate Issued",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "requireDataKey": "treatment_certificate_id"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-treatment-cert-issue--status",
+      "title": "Certificate Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }

@@ -8,8 +8,10 @@
         "type": "string",
         "title": "Payment Provider",
         "oneOf": [
-          { "const": "lankapay", "title": "LankaPay (Credit/Debit Card, Internet Banking)" },
-          { "const": "govpay", "title": "GovPay Sandbox (Mock checkout)" }
+          {
+            "const": "govpay",
+            "title": "GovPay Sandbox (Mock checkout)"
+          }
         ],
         "default": "govpay"
       }

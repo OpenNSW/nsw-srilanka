@@ -26,7 +26,7 @@
       "task_template_id": "npqs-treatment-request--officer-review",
       "input_mapping": {
         "reference_number": "reference_number",
-        "userform": "userform",
+        "userform": "submission",
         "traderinput": "traderinput"
       },
       "output_mapping": {
@@ -67,12 +67,6 @@
       "source_id": "review_gateway",
       "target_id": "end",
       "condition": "reviewerform.treatment_request_outcome == 'approve'"
-    },
-    {
-      "id": "e_reject",
-      "source_id": "review_gateway",
-      "target_id": "end",
-      "condition": "reviewerform.treatment_request_outcome == 'reject'"
     },
     {
       "id": "e_needs_info",

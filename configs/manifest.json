@@ -197,6 +197,13 @@
       "path": "npqs/1-apply/task_template.json"
     },
     {
+      "id": "npqs-apply-phyto-cert--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/1-apply/status_markdown.json"
+    },
+    {
       "id": "npqs-draw-sample--officer-draw",
       "kind": "subtask_template",
       "version": "",
@@ -260,6 +267,20 @@
       "path": "npqs/2-sample_collection/task_template.json"
     },
     {
+      "id": "npqs-draw-sample--results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/2-sample_collection/results_markdown.json"
+    },
+    {
+      "id": "npqs-draw-sample--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/2-sample_collection/status_markdown.json"
+    },
+    {
       "id": "npqs-lab-testing--officer-review",
       "kind": "subtask_template",
       "version": "",
@@ -295,6 +316,13 @@
       "path": "npqs/3-lab_testing/task_template.json"
     },
     {
+      "id": "npqs-lab-testing--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/3-lab_testing/status_markdown.json"
+    },
+    {
       "id": "npqs-visual-sample-inspection--officer-review",
       "kind": "subtask_template",
       "version": "",
@@ -328,6 +356,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/4-1-visual_sample/task_template.json"
+    },
+    {
+      "id": "npqs-visual-sample--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/4-1-visual_sample/status_markdown.json"
     },
     {
       "id": "npqs-visual-consignment--officer-review",
@@ -379,6 +414,13 @@
       "path": "npqs/4-2-visual_consignment/task_template.json"
     },
     {
+      "id": "npqs-visual-consignment--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/4-2-visual_consignment/status_markdown.json"
+    },
+    {
       "id": "npqs-visual-system-inspection--officer-review",
       "kind": "subtask_template",
       "version": "",
@@ -412,6 +454,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/4-3-visual_system/task_template.json"
+    },
+    {
+      "id": "npqs-visual-system--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/4-3-visual_system/status_markdown.json"
     },
     {
       "id": "npqs-treatment-request:render",
@@ -461,6 +510,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/5-1-treatment_request/task_template.json"
+    },
+    {
+      "id": "npqs-treatment-request--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/5-1-treatment_request/status_markdown.json"
     },
     {
       "id": "npqs-pay-for-treatment--instructions-wrapper",
@@ -561,6 +617,13 @@
       "path": "npqs/5-3-treatment_cert_issue/task_template.json"
     },
     {
+      "id": "npqs-treatment-cert-issue--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/5-3-treatment_cert_issue/status_markdown.json"
+    },
+    {
       "id": "npqs-upload-treatment-certs:render",
       "kind": "generic_template",
       "version": "",
@@ -594,6 +657,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/5-4-treatment_upload_certs/task_template.json"
+    },
+    {
+      "id": "npqs-treatment-upload-certs--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/5-4-treatment_upload_certs/status_markdown.json"
     },
     {
       "id": "npqs-review-treatment-certs--officer-review",
@@ -631,6 +701,13 @@
       "path": "npqs/5-5-treatment_review_certs/task_template.json"
     },
     {
+      "id": "npqs-treatment-review-certs--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/5-5-treatment_review_certs/status_markdown.json"
+    },
+    {
       "id": "npqs-treatment-supervisor-report--officer-review",
       "kind": "subtask_template",
       "version": "",
@@ -664,6 +741,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/5-6-treatment_supervisor_report/task_template.json"
+    },
+    {
+      "id": "npqs-supervision-report--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/5-6-treatment_supervisor_report/status_markdown.json"
     },
     {
       "id": "npqs-upload-docs:render",
@@ -701,6 +785,13 @@
       "path": "npqs/6-1-upload_docs/task_template.json"
     },
     {
+      "id": "npqs-upload-docs--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/6-1-upload_docs/status_markdown.json"
+    },
+    {
       "id": "npqs-review-docs--officer-review",
       "kind": "subtask_template",
       "version": "",
@@ -734,6 +825,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/6-2-review_docs/task_template.json"
+    },
+    {
+      "id": "npqs-review-docs--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/6-2-review_docs/status_markdown.json"
     },
     {
       "id": "npqs-pay-certificate-fee--instructions-wrapper",
@@ -832,6 +930,13 @@
       "version": "",
       "loader": "local",
       "path": "npqs/8-issue_certificate/task_template.json"
+    },
+    {
+      "id": "npqs-issue-certificate--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/8-issue_certificate/status_markdown.json"
     },
     {
       "id": "npqs-ephyto-upload--instructions",
@@ -1330,7 +1435,6 @@
       "loader": "local",
       "path": "fcau/4-3-payment_lab_fee/review_receipt_jsonform.json"
     },
-
     {
       "id": "fcau-pay-lab-fee--review-status",
       "kind": "generic_template",

@@ -9,7 +9,8 @@
         "title": "Inspection Outcome",
         "oneOf": [
           { "const": "pass", "title": "Pass (Sample is free of pests and damage)" },
-          { "const": "fail", "title": "Fail (Infestation or damage detected)" }
+          { "const": "fail", "title": "Fail (Infestation or damage detected)" },
+          { "const": "escalate_consignment", "title": "Escalate to Consignment Inspection (Sample insufficient)" }
         ],
         "default": "pass"
       },
@@ -26,14 +27,8 @@
   "uiSchema": {
     "type": "VerticalLayout",
     "elements": [
-      {
-        "type": "Control",
-        "scope": "#/properties/visual_result"
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/visual_comments"
-      }
+      { "type": "Control", "scope": "#/properties/visual_result" },
+      { "type": "Control", "scope": "#/properties/visual_comments" }
     ]
   }
 }

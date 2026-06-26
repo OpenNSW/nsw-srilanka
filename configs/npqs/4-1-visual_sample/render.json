@@ -1,26 +1,23 @@
 {
   "id": "npqs-visual-sample-inspection:render",
   "type": "REVIEW",
-  "title": "[NPQS] Visual Sample Inspection Results",
+  "title": "[NPQS] Visual Sample Inspection",
   "sections": {
-    "reference": {
-      "id": "reference",
-      "templateId": "npqs-visual-sample-inspection--officer-form",
+    "assessment_outcome": {
+      "templateId": "npqs-visual-sample--status",
       "title": "Visual Sample Inspection Results",
-      "projector": "FORM",
-      "dataKey": "reviewerform"
-    }
-  },
-  "states": {
-    "PENDING_USER": {
-      "actions": [
-        {
-          "kind": "submit_form",
-          "label": "Record Inspection Outcome",
-          "command": "submit",
-          "variant": "primary"
-        }
-      ]
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "requireDataKey": "visual_result"
+      }
+    },
+    "status_message": {
+      "templateId": "npqs-visual-sample--status",
+      "title": "Inspection Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY"]
+      }
     }
   }
 }

@@ -1,0 +1,4 @@
+{
+  "id": "npqs-treatment-upload-certs--status",
+  "template": "### 📎 Upload Treatment Certificate Documents\n\nPlease upload the treatment certificate and any related documents for the consignment.\n\n* **Reference Number**: `{{.reference_number}}`\n* **Treatment Provider**: {{if eq .treatment_provider \"npqs\"}}NPQS Treatment Division{{else}}Registered Private Treatment Provider{{end}}\n* **Supervision**: {{if eq .treatment_supervision \"with_supervision\"}}With supervision — please also upload the supervision report{{else}}Without supervision{{end}}\n\n**Required Documents:**\n* Treatment Certificate (from NPQS or registered provider)\n{{if eq .treatment_supervision \"with_supervision\"}}* Supervision Report (from the PQS/NPQS supervising officer){{end}}\n\nOnce submitted, an NPQS officer will review the uploaded documents."
+}
