@@ -1,0 +1,10 @@
+{
+  "id": "customs-wait-export-release",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "export_release",
+  "plugin_properties": {
+    "service_id": "customs",
+    "path": "/api/v1/inject",
+    "task_code": "customs_export_release_wait_v1"
+  }
+}

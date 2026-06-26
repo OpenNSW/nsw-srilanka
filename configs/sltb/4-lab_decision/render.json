@@ -1,0 +1,18 @@
+{
+  "id": "sltb-lab-decision-flow:render",
+  "type": "APPLICATION",
+  "title": "[SLTB 4] Lab Testing Decision",
+  "sections": {
+    "status_message": {
+      "templateId": "sltb-lab-decision--status",
+      "title": "Lab Decision Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["QUEUED_EXTERNALLY", "COMPLETED"]
+      }
+    }
+  },
+  "states": {
+    "COMPLETED": {}
+  }
+}

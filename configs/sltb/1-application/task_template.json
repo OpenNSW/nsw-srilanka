@@ -1,0 +1,6 @@
+{
+  "id": "sltb-submit-blendsheet-flow",
+  "type": "APPLICATION",
+  "workflow_id": "sltb-submit-blendsheet-flow",
+  "render_config_id": "sltb-submit-blendsheet-flow:render"
+}

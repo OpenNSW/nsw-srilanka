@@ -1,0 +1,10 @@
+{
+  "id": "customs-cusdec--external-review",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "reviewerform",
+  "plugin_properties": {
+    "service_id": "customs",
+    "path": "/api/v1/inject",
+    "task_code": "customs_cusdec_review_v1"
+  }
+}

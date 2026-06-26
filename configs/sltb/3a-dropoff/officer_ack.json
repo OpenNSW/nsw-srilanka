@@ -1,0 +1,11 @@
+{
+  "id": "sltb-dropoff--officer-ack",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "ack",
+  "plugin_properties": {
+    "officer_jsonforms_id": "sltb-dropoff--officer-ack-form",
+    "service_id": "sltb",
+    "path": "/api/v1/inject",
+    "task_code": "sltb_sample_ack_dropoff_v1"
+  }
+}

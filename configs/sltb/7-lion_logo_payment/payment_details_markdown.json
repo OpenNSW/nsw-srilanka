@@ -1,0 +1,4 @@
+{
+  "id": "sltb-pay-lion-logo--payment-details-markdown",
+  "template": "### SLTB Lion Logo Certification Fee Payment\n\nPlease use the following reference number to make the payment via GovPay.\n\n* **Reference Number**: `{{.reference_number}}`\n* **Amount**: **{{.amount}} {{.currency}}**"
+}

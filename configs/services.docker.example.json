@@ -62,9 +62,34 @@
       }
     },
     {
+      "id": "customs",
+      "url": "http://host.docker.internal:8085",
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "NSW_TO_CUSTOMS",
+          "client_secret": "env:M2M_NSW_TO_CUSTOMS_SECRET",
+          "insecure_skip_tls_verify": true,
+          "scopes": ["agency:application:inject"]
+        }
+      }
+    },
+    {
       "id": "customs-asycuda",
       "url": "https://customs-asycuda.example.com",
-      "timeout": "10s"
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://idp.example.com/oauth2/token",
+          "client_id": "NSW_TO_ASYCUDA_CLIENT_ID",
+          "client_secret": "env:M2M_NSW_TO_ASYCUDA_SECRET",
+          "scopes": [],
+          "insecure_skip_tls_verify": false
+        }
+      }
     },
     {
       "id": "customs-app",
@@ -75,6 +100,23 @@
       "id": "ippc-hub",
       "url": "http://ippc-hub",
       "timeout": "30s"
+    },
+    {
+      "id": "sltb",
+      "url": "http://host.docker.internal:8086",
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "NSW_TO_SLTB",
+          "client_secret": "env:M2M_NSW_TO_SLTB_SECRET",
+          "insecure_skip_tls_verify": true,
+          "scopes": [
+            "agency:application:inject"
+          ]
+        }
+      }
     }
   ]
 }

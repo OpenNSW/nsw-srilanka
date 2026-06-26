@@ -1,0 +1,38 @@
+{
+  "id": "customs-boat-note-approval--officer-form",
+  "title": "Approve Boat Note",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "approval_status": {
+        "type": "string",
+        "title": "Approval Outcome",
+        "oneOf": [
+          { "const": "approved", "title": "Approve Boat Note" }
+        ],
+        "default": "approved"
+      },
+      "remarks": {
+        "type": "string",
+        "title": "Officer Remarks",
+        "example": "All container seals verified. Boat note approved."
+      }
+    },
+    "required": [
+      "approval_status"
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/approval_status"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/remarks"
+      }
+    ]
+  }
+}

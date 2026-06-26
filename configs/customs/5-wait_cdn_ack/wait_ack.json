@@ -1,0 +1,10 @@
+{
+  "id": "customs-wait-cdn-ack",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "cdn_ack",
+  "plugin_properties": {
+    "service_id": "customs",
+    "path": "/api/v1/inject",
+    "task_code": "customs_cdn_ack_wait_v1"
+  }
+}

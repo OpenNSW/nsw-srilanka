@@ -1,0 +1,119 @@
+{
+  "id": "customs-cusdec-apply-flow",
+  "name": "Submit & Review Customs Declaration",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "applicant_submission",
+      "type": "TASK",
+      "task_template_id": "customs-cusdec--user-input",
+      "input_mapping": {
+        "reviewerform.rejection_reason?": "rejection_reason",
+        "cig.error?": "cig.error"
+      },
+      "output_mapping": {
+        "shipmentType": "userform.shipmentType",
+        "containerCount": "userform.containerCount",
+        "identification": "userform.identification",
+        "traders": "userform.traders",
+        "generalInfo": "userform.generalInfo",
+        "transport": "userform.transport",
+        "financial": "userform.financial",
+        "valuation": "userform.valuation",
+        "packages": "userform.packages",
+        "items": "userform.items"
+      }
+    },
+    {
+      "id": "cig_dispatch",
+      "type": "TASK",
+      "task_template_id": "customs-cusdec--cig-dispatch",
+      "input_mapping": {
+        "userform": "payload"
+      },
+      "output_mapping": {
+        "cig.accepted": "cig.accepted",
+        "cig.edgeId?": "cig.edge_id",
+        "cig.error?": "cig.error"
+      }
+    },
+    {
+      "id": "dispatch_check",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "customs-cusdec--external-review",
+      "input_mapping": {
+        "userform": "submission"
+      },
+      "output_mapping": {
+        "review_outcome": "reviewerform.review_outcome",
+        "rejection_reason?": "reviewerform.rejection_reason",
+        "cusdec_number?": "reviewerform.cusdec_number",
+        "amount_to_pay?": "reviewerform.amount_to_pay"
+      }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "applicant_submission"
+    },
+    {
+      "id": "e2",
+      "source_id": "applicant_submission",
+      "target_id": "cig_dispatch"
+    },
+    {
+      "id": "e_cig_check",
+      "source_id": "cig_dispatch",
+      "target_id": "dispatch_check"
+    },
+    {
+      "id": "e_cig_accepted",
+      "source_id": "dispatch_check",
+      "target_id": "officer_review",
+      "condition": "cig.accepted == true"
+    },
+    {
+      "id": "e_cig_rejected",
+      "source_id": "dispatch_check",
+      "target_id": "applicant_submission",
+      "condition": "cig.accepted != true"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_review",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.review_outcome == 'approve'"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "applicant_submission",
+      "condition": "reviewerform.review_outcome == 'needs_more_info'"
+    }
+  ]
+}

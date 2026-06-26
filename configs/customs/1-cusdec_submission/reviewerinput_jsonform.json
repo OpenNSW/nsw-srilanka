@@ -1,0 +1,128 @@
+{
+  "id": "customs-cusdec--reviewer-form",
+  "title": "CusDec Assessment Review",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "review_outcome": {
+        "type": "string",
+        "title": "CusDec Assessment Outcome",
+        "oneOf": [
+          {
+            "const": "approve",
+            "title": "Approve"
+          },
+          {
+            "const": "needs_more_info",
+            "title": "Needs More Information"
+          }
+        ],
+        "default": "approve",
+        "example": "approve"
+      },
+      "cusdec_number": {
+        "type": "string",
+        "title": "Generated CusDec Reference Number",
+        "example": "CUSDEC-2026-89421"
+      },
+      "amount_to_pay": {
+        "type": "number",
+        "title": "Amount to Pay for Consignment (LKR)",
+        "example": 25000.00
+      },
+      "rejection_reason": {
+        "type": "string",
+        "title": "Clarification / Correction Feedback (if Needs Info)",
+        "example": "Please upload a clearer scan of the SAD document."
+      }
+    },
+    "required": [
+      "review_outcome"
+    ],
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "review_outcome": {
+              "const": "approve"
+            }
+          },
+          "required": [
+            "review_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "cusdec_number",
+            "amount_to_pay"
+          ]
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "review_outcome": {
+              "const": "needs_more_info"
+            }
+          },
+          "required": [
+            "review_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "rejection_reason"
+          ]
+        }
+      }
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/review_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/cusdec_number",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/review_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/amount_to_pay",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/review_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/rejection_reason",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/review_outcome",
+            "schema": {
+              "const": "needs_more_info"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

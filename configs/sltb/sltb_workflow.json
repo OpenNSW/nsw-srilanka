@@ -1,0 +1,256 @@
+{
+  "id": "sltb-blendsheet-approval",
+  "name": "SLTB Tea Blendsheet Approval & Sample Collection Flow",
+  "version": 1,
+  "nodes": [
+    { "id": "start", "type": "START", "name": "Start" },
+    {
+      "id": "sltb_1_submit_blendsheet",
+      "type": "TASK",
+      "name": "[SLTB 1] Submit & Review Blend Sheet",
+      "task_template_id": "sltb-submit-blendsheet-flow",
+      "lane": "Trader/CHA & SLTB Officer",
+      "input_mapping": {},
+      "output_mapping": {
+        "userform": "sltb.userform",
+        "userform.lion_logo_requested?": "sltb.lion_logo_requested",
+        "reviewerform.review_outcome": "sltb.review_outcome",
+        "reviewerform.levy_amount": "sltb.levy_amount",
+        "reviewerform.collection_method?": "sltb.collection_method",
+        "reviewerform.reference_number": "sltb.reference_number"
+      }
+    },
+    {
+      "id": "sltb_2_pay_levy",
+      "type": "TASK",
+      "name": "[SLTB 2] Pay SLTB Levy via GovPay",
+      "task_template_id": "sltb-pay-levy-flow",
+      "lane": "Trader/CHA & SLTB Officer",
+      "input_mapping": {
+        "sltb.levy_amount": "levy_amount",
+        "sltb.reference_number": "reference_number"
+      },
+      "output_mapping": {
+        "payment_status": "sltb.levy_payment_outcome"
+      }
+    },
+    {
+      "id": "sltb_3_collection_split",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Split on Collection Method"
+    },
+    {
+      "id": "sltb_3a_dropoff",
+      "type": "TASK",
+      "name": "[SLTB 3A] Sample Drop-off at SLTB",
+      "task_template_id": "sltb-dropoff-flow",
+      "lane": "Trader/CHA & SLTB Officer",
+      "input_mapping": {},
+      "output_mapping": {
+        "sample_number": "sltb.sample_number"
+      }
+    },
+    {
+      "id": "sltb_3b_schedule_pickup",
+      "type": "TASK",
+      "name": "[SLTB 3B] Schedule Sample Draw at Warehouse",
+      "task_template_id": "sltb-schedule-pickup-flow",
+      "lane": "Trader/CHA & SLTB Officer",
+      "input_mapping": {},
+      "output_mapping": {
+        "schedule.visit_date": "sltb.schedule.visit_date",
+        "schedule.visit_time": "sltb.schedule.visit_time",
+        "schedule.inspector_name": "sltb.schedule.inspector_name",
+        "schedule.contact_number": "sltb.schedule.contact_number"
+      }
+    },
+    {
+      "id": "sltb_3c_record_sample_draw",
+      "type": "TASK",
+      "name": "[SLTB 3C] Officer Records Sample Draw",
+      "task_template_id": "sltb-record-sample-draw-flow",
+      "lane": "SLTB Officer",
+      "input_mapping": {
+        "sltb.schedule.visit_date": "schedule.visit_date",
+        "sltb.schedule.visit_time": "schedule.visit_time",
+        "sltb.schedule.inspector_name": "schedule.inspector_name"
+      },
+      "output_mapping": {
+        "sample_number": "sltb.sample_number"
+      }
+    },
+    {
+      "id": "sltb_3_collection_join",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN",
+      "name": "Join Collection Method"
+    },
+    {
+      "id": "sltb_4_sample_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Lab Decision Required?"
+    },
+    {
+      "id": "sltb_4_lab_decision",
+      "type": "TASK",
+      "name": "[SLTB 4] Officer: Lab Testing Decision",
+      "task_template_id": "sltb-lab-decision-flow",
+      "lane": "SLTB Officer",
+      "input_mapping": {
+        "sltb.sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "decision.lab_testing_required": "sltb.lab_testing_required"
+      }
+    },
+    {
+      "id": "sltb_4_lab_required_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Lab Testing Required?"
+    },
+    {
+      "id": "sltb_5_pay_lab_fee",
+      "type": "TASK",
+      "name": "[SLTB 5] Pay Lab Test Fee via GovPay",
+      "task_template_id": "sltb-pay-lab-fee-flow",
+      "lane": "Trader/CHA & SLTB Officer",
+      "input_mapping": {
+        "sltb.reference_number": "reference_number"
+      },
+      "output_mapping": {
+        "payment_status": "sltb.lab_payment_outcome"
+      }
+    },
+    {
+      "id": "sltb_6_lab_testing",
+      "type": "TASK",
+      "name": "[SLTB 6] Lab Testing & Results",
+      "task_template_id": "sltb-lab-testing-flow",
+      "lane": "SLTB Officer",
+      "input_mapping": {
+        "sltb.sample_number": "sample_number"
+      },
+      "output_mapping": {
+        "result.test_result": "sltb.lab_test_result"
+      }
+    },
+    {
+      "id": "sltb_lab_join",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN",
+      "name": "Join Lab Testing"
+    },
+    {
+      "id": "sltb_lion_logo_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Lion Logo Payment Required?"
+    },
+    {
+      "id": "sltb_7_pay_lion_logo",
+      "type": "TASK",
+      "name": "[SLTB 7] Pay Lion Logo Fee via GovPay",
+      "task_template_id": "sltb-pay-lion-logo-flow",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "sltb.reference_number": "reference_number"
+      },
+      "output_mapping": {
+        "payment_status": "sltb.lion_logo_payment_outcome"
+      }
+    },
+    {
+      "id": "sltb_lion_logo_join",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_JOIN",
+      "name": "Join Lion Logo"
+    },
+    {
+      "id": "sltb_8_final_decision",
+      "type": "TASK",
+      "name": "[SLTB 8] Final Application Approval",
+      "task_template_id": "sltb-final-decision-flow",
+      "lane": "SLTB Officer",
+      "input_mapping": {
+        "sltb.sample_number?": "sample_number"
+      },
+      "output_mapping": {
+        "final_decision_outcome": "sltb.final_decision_outcome"
+      }
+    },
+    { "id": "end_success", "type": "END", "name": "Application Approved (Certificate Issued)" }
+  ],
+  "edges": [
+    { "id": "e_start", "source_id": "start", "target_id": "sltb_1_submit_blendsheet" },
+    { "id": "e_1_2", "source_id": "sltb_1_submit_blendsheet", "target_id": "sltb_2_pay_levy" },
+    { "id": "e_2_split", "source_id": "sltb_2_pay_levy", "target_id": "sltb_3_collection_split" },
+    {
+      "id": "e_split_none",
+      "source_id": "sltb_3_collection_split",
+      "target_id": "sltb_3_collection_join",
+      "condition": "sltb.collection_method == 'none'"
+    },
+    {
+      "id": "e_split_dropoff",
+      "source_id": "sltb_3_collection_split",
+      "target_id": "sltb_3a_dropoff",
+      "condition": "sltb.collection_method == 'dropoff'"
+    },
+    {
+      "id": "e_split_pickup",
+      "source_id": "sltb_3_collection_split",
+      "target_id": "sltb_3b_schedule_pickup",
+      "condition": "sltb.collection_method == 'pickup'"
+    },
+    { "id": "e_dropoff_join", "source_id": "sltb_3a_dropoff", "target_id": "sltb_3_collection_join" },
+    { "id": "e_3b_3c", "source_id": "sltb_3b_schedule_pickup", "target_id": "sltb_3c_record_sample_draw" },
+    { "id": "e_3c_join", "source_id": "sltb_3c_record_sample_draw", "target_id": "sltb_3_collection_join" },
+    { "id": "e_join_sample_gw", "source_id": "sltb_3_collection_join", "target_id": "sltb_4_sample_gateway" },
+    {
+      "id": "e_no_sample",
+      "source_id": "sltb_4_sample_gateway",
+      "target_id": "sltb_lab_join",
+      "condition": "sltb.collection_method == 'none'"
+    },
+    {
+      "id": "e_sample_lab_dec",
+      "source_id": "sltb_4_sample_gateway",
+      "target_id": "sltb_4_lab_decision",
+      "condition": "sltb.collection_method != 'none'"
+    },
+    { "id": "e_lab_dec_split", "source_id": "sltb_4_lab_decision", "target_id": "sltb_4_lab_required_gateway" },
+    {
+      "id": "e_no_lab",
+      "source_id": "sltb_4_lab_required_gateway",
+      "target_id": "sltb_lab_join",
+      "condition": "sltb.lab_testing_required == 'no'"
+    },
+    {
+      "id": "e_yes_lab",
+      "source_id": "sltb_4_lab_required_gateway",
+      "target_id": "sltb_5_pay_lab_fee",
+      "condition": "sltb.lab_testing_required == 'yes'"
+    },
+    { "id": "e_lab_fee_testing", "source_id": "sltb_5_pay_lab_fee", "target_id": "sltb_6_lab_testing" },
+    { "id": "e_testing_join", "source_id": "sltb_6_lab_testing", "target_id": "sltb_lab_join" },
+    { "id": "e_lab_join_logo", "source_id": "sltb_lab_join", "target_id": "sltb_lion_logo_gateway" },
+    {
+      "id": "e_no_logo",
+      "source_id": "sltb_lion_logo_gateway",
+      "target_id": "sltb_lion_logo_join",
+      "condition": "sltb.lion_logo_requested != 'yes'"
+    },
+    {
+      "id": "e_yes_logo",
+      "source_id": "sltb_lion_logo_gateway",
+      "target_id": "sltb_7_pay_lion_logo",
+      "condition": "sltb.lion_logo_requested == 'yes'"
+    },
+    { "id": "e_logo_join", "source_id": "sltb_7_pay_lion_logo", "target_id": "sltb_lion_logo_join" },
+    { "id": "e_logo_join_final", "source_id": "sltb_lion_logo_join", "target_id": "sltb_8_final_decision" },
+    { "id": "e_final_end", "source_id": "sltb_8_final_decision", "target_id": "end_success" }
+  ]
+}

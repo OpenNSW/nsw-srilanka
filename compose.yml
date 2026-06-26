@@ -185,10 +185,10 @@ services:
       - SERVER_DEBUG=${SERVER_DEBUG:-true}
       - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
       - SERVICE_URL=${SERVICE_URL:-http://localhost:${BACKEND_PORT:-8080}}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178,http://localhost:5179}
       - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
       - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
-      - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW}
+      - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW}
       - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
       - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
       # NSW -> Agency m2m client secrets, referenced as env:... in services.*.json
@@ -196,6 +196,9 @@ services:
       - M2M_NSW_TO_FCAU_SECRET=${M2M_NSW_TO_FCAU_SECRET:-1234}
       - M2M_NSW_TO_CDA_SECRET=${M2M_NSW_TO_CDA_SECRET:-1234}
       - M2M_NSW_TO_SLPA_SECRET=${M2M_NSW_TO_SLPA_SECRET:-1234}
+      - M2M_NSW_TO_CUSTOMS_SECRET=${M2M_NSW_TO_CUSTOMS_SECRET:-1234}
+      - M2M_NSW_TO_SLTB_SECRET=${M2M_NSW_TO_SLTB_SECRET:-1234}
+      - M2M_NSW_TO_ASYCUDA_SECRET=${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
       - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}

@@ -1875,6 +1875,881 @@
       "version": "",
       "loader": "local",
       "path": "cda/cda_workflow.json"
+    },
+    {
+      "id": "customs-workflow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/customs_workflow.json"
+    },
+    {
+      "id": "customs-cusdec-apply-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/render.json"
+    },
+    {
+      "id": "customs-cusdec--external-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/reviewerinput.json"
+    },
+    {
+      "id": "customs-cusdec--cig-dispatch",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/dispatch.json"
+    },
+    {
+      "id": "customs-cusdec--cig-rejection",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/cig_rejection.json"
+    },
+    {
+      "id": "customs-cusdec--reviewer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/reviewerinput_jsonform.json"
+    },
+    {
+      "id": "customs-cusdec--submitted-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/submitted_message_jsonform.json"
+    },
+    {
+      "id": "customs-cusdec--trader-results",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/trader_results_jsonform.json"
+    },
+    {
+      "id": "customs-cusdec--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/userinput.json"
+    },
+    {
+      "id": "customs-cusdec--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/userinput_jsonform.json"
+    },
+    {
+      "id": "customs-cusdec-apply-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/workflow.json"
+    },
+    {
+      "id": "customs-cusdec-apply-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/1-cusdec_submission/task_template.json"
+    },
+    {
+      "id": "customs-wait-payment-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/2-wait_payment/render.json"
+    },
+    {
+      "id": "customs-wait-payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/2-wait_payment/wait_payment.json"
+    },
+    {
+      "id": "customs-wait-payment--instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/2-wait_payment/instructions_jsonform.json"
+    },
+    {
+      "id": "customs-wait-payment-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/2-wait_payment/workflow.json"
+    },
+    {
+      "id": "customs-wait-payment-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/2-wait_payment/task_template.json"
+    },
+    {
+      "id": "customs-wait-warranting-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/3-wait_warranting/render.json"
+    },
+    {
+      "id": "customs-wait-warranting",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/3-wait_warranting/wait_warranting.json"
+    },
+    {
+      "id": "customs-wait-warranting--instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/3-wait_warranting/instructions_jsonform.json"
+    },
+    {
+      "id": "customs-wait-warranting-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/3-wait_warranting/workflow.json"
+    },
+    {
+      "id": "customs-wait-warranting-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/3-wait_warranting/task_template.json"
+    },
+    {
+      "id": "customs-create-cdn-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/render.json"
+    },
+    {
+      "id": "customs-cdn--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/userinput.json"
+    },
+    {
+      "id": "customs-cdn--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/userinput_jsonform.json"
+    },
+    {
+      "id": "customs-cdn--completed-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/completed_message_jsonform.json"
+    },
+    {
+      "id": "customs-create-cdn-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/workflow.json"
+    },
+    {
+      "id": "customs-create-cdn-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/4-create_cdn/task_template.json"
+    },
+    {
+      "id": "customs-wait-cdn-ack-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/5-wait_cdn_ack/render.json"
+    },
+    {
+      "id": "customs-wait-cdn-ack",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/5-wait_cdn_ack/wait_ack.json"
+    },
+    {
+      "id": "customs-wait-cdn-ack--instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/5-wait_cdn_ack/instructions_jsonform.json"
+    },
+    {
+      "id": "customs-wait-cdn-ack-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/5-wait_cdn_ack/workflow.json"
+    },
+    {
+      "id": "customs-wait-cdn-ack-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/5-wait_cdn_ack/task_template.json"
+    },
+    {
+      "id": "customs-create-boat-note-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/render.json"
+    },
+    {
+      "id": "customs-boat-note--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/userinput.json"
+    },
+    {
+      "id": "customs-boat-note--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/userinput_jsonform.json"
+    },
+    {
+      "id": "customs-boat-note--completed-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/completed_message_jsonform.json"
+    },
+    {
+      "id": "customs-create-boat-note-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/workflow.json"
+    },
+    {
+      "id": "customs-create-boat-note-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/6-create_boat_note/task_template.json"
+    },
+    {
+      "id": "customs-boat-note-approval-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/7-boat_note_approval/render.json"
+    },
+    {
+      "id": "customs-boat-note-approval",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/7-boat_note_approval/approval.json"
+    },
+    {
+      "id": "customs-boat-note-approval--instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/7-boat_note_approval/instructions_jsonform.json"
+    },
+    {
+      "id": "customs-boat-note-approval-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/7-boat_note_approval/workflow.json"
+    },
+    {
+      "id": "customs-boat-note-approval-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/7-boat_note_approval/task_template.json"
+    },
+    {
+      "id": "customs-wait-export-release-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/8-wait_export_release/render.json"
+    },
+    {
+      "id": "customs-wait-export-release",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/8-wait_export_release/wait_release.json"
+    },
+    {
+      "id": "customs-wait-export-release--instructions",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/8-wait_export_release/instructions_jsonform.json"
+    },
+    {
+      "id": "customs-wait-export-release-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "customs/8-wait_export_release/workflow.json"
+    },
+    {
+      "id": "customs-wait-export-release-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/8-wait_export_release/task_template.json"
+    },
+    {
+      "id": "customs-payment-wait--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/2-wait_payment/officer_form_jsonform.json"
+    },
+    {
+      "id": "customs-warranting-wait--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/3-wait_warranting/officer_form_jsonform.json"
+    },
+    {
+      "id": "customs-cdn-ack-wait--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/5-wait_cdn_ack/officer_form_jsonform.json"
+    },
+    {
+      "id": "customs-boat-note-approval--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/7-boat_note_approval/officer_form_jsonform.json"
+    },
+    {
+      "id": "customs-export-release-wait--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "customs/8-wait_export_release/officer_form_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/render.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--user-input",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/traderinput.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--user-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/traderinput_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--status-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/reviewerinput.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet--officer-review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/reviewerinput_jsonform.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/workflow.json"
+    },
+    {
+      "id": "sltb-submit-blendsheet-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/1-application/task_template.json"
+    },
+    {
+      "id": "sltb-pay-levy-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/render.json"
+    },
+    {
+      "id": "sltb-pay-levy--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/select_method.json"
+    },
+    {
+      "id": "sltb-pay-levy--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/select_method_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-levy--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/payment.json"
+    },
+    {
+      "id": "sltb-pay-levy--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/payment_details_markdown.json"
+    },
+    {
+      "id": "sltb-pay-levy--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/success_message_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-levy-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/workflow.json"
+    },
+    {
+      "id": "sltb-pay-levy-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/2-levy_payment/task_template.json"
+    },
+    {
+      "id": "sltb-schedule-pickup-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/render.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--suggest",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/trader_suggest.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--suggest-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/trader_suggest_jsonform.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/officer_review.json"
+    },
+    {
+      "id": "sltb-schedule-pickup--officer-review-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/officer_review_jsonform.json"
+    },
+    {
+      "id": "sltb-schedule-pickup-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/workflow.json"
+    },
+    {
+      "id": "sltb-schedule-pickup-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3-schedule_pickup/task_template.json"
+    },
+    {
+      "id": "sltb-dropoff-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/render.json"
+    },
+    {
+      "id": "sltb-dropoff--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-dropoff--officer-ack",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/officer_ack.json"
+    },
+    {
+      "id": "sltb-dropoff--officer-ack-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/officer_ack_jsonform.json"
+    },
+    {
+      "id": "sltb-dropoff-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/workflow.json"
+    },
+    {
+      "id": "sltb-dropoff-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3a-dropoff/task_template.json"
+    },
+    {
+      "id": "sltb-record-sample-draw-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/render.json"
+    },
+    {
+      "id": "sltb-record-sample-draw--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-record-sample-draw--officer",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/officer_record.json"
+    },
+    {
+      "id": "sltb-record-sample-draw--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/officer_record_jsonform.json"
+    },
+    {
+      "id": "sltb-record-sample-draw-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/workflow.json"
+    },
+    {
+      "id": "sltb-record-sample-draw-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/3c-record_sample_draw/task_template.json"
+    },
+    {
+      "id": "sltb-lab-decision-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/render.json"
+    },
+    {
+      "id": "sltb-lab-decision--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-decision--officer",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/officer_decision.json"
+    },
+    {
+      "id": "sltb-lab-decision--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/officer_decision_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-decision-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/workflow.json"
+    },
+    {
+      "id": "sltb-lab-decision-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_decision/task_template.json"
+    },
+    {
+      "id": "sltb-lab-testing-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/render.json"
+    },
+    {
+      "id": "sltb-lab-testing--status",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/status_message_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-testing--officer",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/officer_test.json"
+    },
+    {
+      "id": "sltb-lab-testing--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/officer_test_jsonform.json"
+    },
+    {
+      "id": "sltb-lab-testing-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/workflow.json"
+    },
+    {
+      "id": "sltb-lab-testing-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/6-lab_testing/task_template.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/render.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/select_method.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/select_method_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/payment.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/payment_details_markdown.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/success_message_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/workflow.json"
+    },
+    {
+      "id": "sltb-pay-lion-logo-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/7-lion_logo_payment/task_template.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/render.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--select-method",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/select_method.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--select-method-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/select_method_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--payment",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/payment.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--payment-details-markdown",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/payment_details_markdown.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee--success-message",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/success_message_jsonform.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/workflow.json"
+    },
+    {
+      "id": "sltb-pay-lab-fee-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/4-lab_payment/task_template.json"
+    },
+    {
+      "id": "sltb-final-decision-flow:render",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/render.json"
+    },
+    {
+      "id": "sltb-final-decision--officer-review",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/officer_review.json"
+    },
+    {
+      "id": "sltb-final-decision--officer-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/officer_review_jsonform.json"
+    },
+    {
+      "id": "sltb-final-decision--trader-view",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/trader_view_jsonform.json"
+    },
+    {
+      "id": "sltb-final-decision-flow",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/workflow.json"
+    },
+    {
+      "id": "sltb-final-decision-flow",
+      "kind": "task_template",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/5-approval/task_template.json"
+    },
+    {
+      "id": "sltb-blendsheet-approval",
+      "kind": "workflow",
+      "version": "",
+      "loader": "local",
+      "path": "sltb/sltb_workflow.json"
     }
   ]
 }

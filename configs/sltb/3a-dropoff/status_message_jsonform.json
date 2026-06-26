@@ -1,0 +1,4 @@
+{
+  "id": "sltb-dropoff--status",
+  "template": "{{if .ack.officer_ack}}\n### ✅ Sample Received & Registered\n\nThe SLTB Export Division has confirmed receipt of your representative tea sample.\n\n* **Sample Number**: `{{.sample_number}}`\n{{if .ack.receipt_notes}}* **Officer Notes**: {{.ack.receipt_notes}}{{end}}\n* **Status**: Sample Registered — Awaiting Lab Decision\n{{else}}\n### 📍 Action Required: Deliver Sample to SLTB Export Division\n\nPlease deliver the representative tea samples of your blendsheet consignment to the SLTB Export Division for analysis.\n\n* **Delivery Address**: **SLTB Export Division, 323 Galle Rd, Colombo**\n* **Instructions**: Ensure the sample is sealed and labeled with your application reference. Drop off during business hours.\n* **Status**: Awaiting Sample Drop-off & SLTB Acknowledgement\n{{end}}"
+}

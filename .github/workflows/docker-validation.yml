@@ -28,7 +28,7 @@ jobs:
           - name: trader-portal
             context: ./portals
             dockerfile: ./portals/apps/trader-app/Dockerfile
-            tags: trader-app:validate
+            tags: onetrade-app:validate
             target: ''
           - name: nsw-backend
             context: .

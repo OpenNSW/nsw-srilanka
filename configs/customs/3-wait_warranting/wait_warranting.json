@@ -1,0 +1,10 @@
+{
+  "id": "customs-wait-warranting",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "warranting",
+  "plugin_properties": {
+    "service_id": "customs",
+    "path": "/api/v1/inject",
+    "task_code": "customs_warranting_wait_v1"
+  }
+}

@@ -1,0 +1,35 @@
+# Builds the nsw-backend (runtime) image when backend sources change.
+# The runtime stage compiles the Go source and bakes in configs/.
+name: Build Backend Dev Image
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'integration/**'
+      - 'configs/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - '.github/workflows/build-backend-dev.yaml'
+      - '.github/workflows/build-image-dev.yaml'
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch when a new commit arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-image-dev.yaml
+    with:
+      service_name: NSW Backend API
+      image_name: nsw-backend
+      context: .
+      dockerfile: ./Dockerfile
+    permissions:
+      contents: read
+      packages: write

@@ -1,0 +1,110 @@
+{
+  "id": "sltb-submit-blendsheet--user-form",
+  "title": "SLTB Blend Sheet Submission",
+  "schema": {
+    "type": "object",
+    "required": [
+      "exporter_registration_no",
+      "cusdec_number",
+      "warehouse_id",
+      "blendsheet_file"
+    ],
+    "properties": {
+      "exporter_registration_no": {
+        "type": "string",
+        "title": "Exporter Registration Number",
+        "default": "SLTB/EXP/2026/0498",
+        "oneOf": [
+          {
+            "const": "SLTB/EXP/2026/0498",
+            "title": "Ceylon Tea Gardens PLC (SLTB/EXP/2026/0498)"
+          },
+          {
+            "const": "SLTB/EXP/2026/0812",
+            "title": "Lanka Blend Masters Ltd (SLTB/EXP/2026/0812)"
+          }
+        ]
+      },
+      "cusdec_number": {
+        "type": "string",
+        "title": "CUSDEC Number",
+        "example": "CUSDEC-2026-778120"
+      },
+
+      "warehouse_id": {
+        "type": "string",
+        "title": "Warehouse Name / ID",
+        "default": "WH-COLOMBO-TEA-01",
+        "oneOf": [
+          {
+            "const": "WH-COLOMBO-TEA-01",
+            "title": "SLTB Colombo Central Warehouse (WH-COLOMBO-TEA-01)"
+          },
+          {
+            "const": "WH-GAMPOLA-TEA-02",
+            "title": "SLTB Gampola Tea Logistics Hub (WH-GAMPOLA-TEA-02)"
+          }
+        ]
+      },
+      "blendsheet_file": {
+        "type": "string",
+        "format": "file",
+        "title": "Upload Blend Sheet Data (Excel File)",
+        "description": "Please upload the official Excel sheet containing the detailed blend analysis (.xlsx)"
+      },
+      "lion_logo_requested": {
+        "type": "string",
+        "title": "Apply for Lion Logo Certification",
+        "description": "Select 'Yes' if this consignment requires SLTB Lion Logo certification.",
+        "oneOf": [
+          { "const": "no", "title": "No — Lion Logo not required" },
+          { "const": "yes", "title": "Yes — Apply for Lion Logo" }
+        ],
+        "default": "no"
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Group",
+        "label": "Exporter & Blend Information",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/exporter_registration_no"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/cusdec_number"
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/warehouse_id"
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "Excel Blendsheet Data Upload",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/blendsheet_file"
+          }
+        ]
+      },
+      {
+        "type": "Group",
+        "label": "Lion Logo Certification",
+        "elements": [
+          {
+            "type": "Control",
+            "scope": "#/properties/lion_logo_requested"
+          }
+        ]
+      }
+    ]
+  }
+}

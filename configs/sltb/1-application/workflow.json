@@ -1,0 +1,79 @@
+{
+  "id": "sltb-submit-blendsheet-flow",
+  "name": "Submit and Review Blend Sheet",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "applicant_submission",
+      "type": "TASK",
+      "task_template_id": "sltb-submit-blendsheet--user-input",
+      "input_mapping": {
+        "rejection_reason?": "rejection_reason"
+      },
+      "output_mapping": {
+        "exporter_registration_no": "userform.exporter_registration_no",
+        "cusdec_number": "userform.cusdec_number",
+        "warehouse_id": "userform.warehouse_id",
+        "blendsheet_file": "userform.blendsheet_file",
+        "lion_logo_requested?": "userform.lion_logo_requested"
+      }
+    },
+    {
+      "id": "officer_review",
+      "type": "TASK",
+      "task_template_id": "sltb-submit-blendsheet--officer-review",
+      "input_mapping": {
+        "userform": "submission"
+      },
+      "output_mapping": {
+        "review_outcome": "reviewerform.review_outcome",
+        "feedback?": "rejection_reason",
+        "levy_amount?": "reviewerform.levy_amount",
+        "collection_method?": "reviewerform.collection_method",
+        "reference_number?": "reviewerform.reference_number"
+      }
+    },
+    {
+      "id": "review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "applicant_submission"
+    },
+    {
+      "id": "e2",
+      "source_id": "applicant_submission",
+      "target_id": "officer_review"
+    },
+    {
+      "id": "e3",
+      "source_id": "officer_review",
+      "target_id": "review_gateway"
+    },
+    {
+      "id": "e_needs_info",
+      "source_id": "review_gateway",
+      "target_id": "applicant_submission",
+      "condition": "reviewerform.review_outcome == 'needs_more_info'"
+    },
+    {
+      "id": "e_approve",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.review_outcome == 'approve'"
+    }
+  ]
+}

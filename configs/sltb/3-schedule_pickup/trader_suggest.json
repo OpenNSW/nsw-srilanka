@@ -1,0 +1,8 @@
+{
+  "id": "sltb-schedule-pickup--suggest",
+  "task_type": "USER_INPUT",
+  "output_namespace": "suggest",
+  "plugin_properties": {
+    "user_jsonforms_id": "sltb-schedule-pickup--suggest-form"
+  }
+}

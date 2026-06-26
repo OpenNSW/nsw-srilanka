@@ -1,0 +1,6 @@
+{
+  "id": "sltb-pay-lab-fee-flow",
+  "type": "APPLICATION",
+  "workflow_id": "sltb-pay-lab-fee-flow",
+  "render_config_id": "sltb-pay-lab-fee-flow:render"
+}

@@ -1,0 +1,41 @@
+{
+  "id": "sltb-schedule-pickup--suggest-form",
+  "title": "Suggest Warehouse Pickup Schedule",
+  "schema": {
+    "type": "object",
+    "required": ["suggested_date", "suggested_time"],
+    "properties": {
+      "suggested_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Suggested Pickup Date",
+        "description": "Select a preferred business day for the Tea Inspector visit.",
+        "example": "2026-07-02"
+      },
+      "suggested_time": {
+        "type": "string",
+        "title": "Suggested Time Range",
+        "description": "Specify preferred hours (e.g. 09:00 AM - 12:00 PM).",
+        "example": "09:00 AM - 12:00 PM"
+      },
+      "trader_notes": {
+        "type": "string",
+        "title": "Warehouse Details / Special Instructions",
+        "description": "Provide contact person, gate numbers, or access requirements.",
+        "example": "Contact: Mr. Perera, Gate 3, Loading Bay B"
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      { "type": "Control", "scope": "#/properties/suggested_date" },
+      { "type": "Control", "scope": "#/properties/suggested_time" },
+      {
+        "type": "Control",
+        "scope": "#/properties/trader_notes",
+        "options": { "multiLine": true }
+      }
+    ]
+  }
+}

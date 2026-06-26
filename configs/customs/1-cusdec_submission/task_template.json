@@ -1,0 +1,6 @@
+{
+  "id": "customs-cusdec-apply-flow",
+  "type": "APPLICATION",
+  "workflow_id": "customs-cusdec-apply-flow",
+  "render_config_id": "customs-cusdec-apply-flow:render"
+}

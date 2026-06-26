@@ -1,0 +1,31 @@
+{
+  "id": "sltb-pay-lion-logo--select-method-form",
+  "title": "Select Payment Gateway",
+  "schema": {
+    "type": "object",
+    "required": ["selected_method"],
+    "properties": {
+      "selected_method": {
+        "type": "string",
+        "title": "Payment Method",
+        "default": "govpay",
+        "oneOf": [
+          {
+            "const": "govpay",
+            "title": "GovPay (Bank/ATM/Online) [Offline Instructions]"
+          }
+        ]
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Label",
+        "text": "Please select the preferred payment method for the Lion Logo certification fee."
+      },
+      { "type": "Control", "scope": "#/properties/selected_method" }
+    ]
+  }
+}

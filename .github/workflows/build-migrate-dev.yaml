@@ -1,0 +1,34 @@
+# Builds the nsw-migrate image when the SQL migrations or the Dockerfile change.
+# The migrate stage bakes migrations/ and pins the external migrator via the
+# Dockerfile's MIGRATE_VERSION arg — it does not compile this repo's Go code,
+# so Go-only changes intentionally do not trigger this build.
+name: Build Migrate Dev Image
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'migrations/**'
+      - 'Dockerfile'
+      - '.github/workflows/build-migrate-dev.yaml'
+      - '.github/workflows/build-image-dev.yaml'
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch when a new commit arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-image-dev.yaml
+    with:
+      service_name: NSW Migrate
+      image_name: nsw-migrate
+      context: .
+      dockerfile: ./Dockerfile
+      # Non-default stage; the backend builds the Dockerfile's default (last) stage.
+      target: migrate
+    permissions:
+      contents: read
+      packages: write

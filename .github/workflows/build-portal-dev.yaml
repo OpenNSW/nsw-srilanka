@@ -1,0 +1,28 @@
+# Builds the onetrade-app (Trader Portal) image when the portals workspace changes.
+name: Build Portal Dev Image
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'portals/**'
+      - '.github/workflows/build-portal-dev.yaml'
+      - '.github/workflows/build-image-dev.yaml'
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch when a new commit arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-image-dev.yaml
+    with:
+      service_name: Trader Portal
+      image_name: onetrade-app
+      context: ./portals
+      dockerfile: ./portals/apps/trader-app/Dockerfile
+    permissions:
+      contents: read
+      packages: write

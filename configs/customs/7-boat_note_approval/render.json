@@ -1,0 +1,18 @@
+{
+  "id": "customs-boat-note-approval-flow:render",
+  "type": "REVIEW",
+  "title": "[Customs] Boat Note Approval Status",
+  "sections": {
+    "status_message": {
+      "templateId": "customs-boat-note-approval--instructions",
+      "title": "Approval Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
+        ]
+      }
+    }
+  }
+}

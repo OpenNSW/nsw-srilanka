@@ -1,0 +1,4 @@
+{
+  "id": "sltb-lab-testing--status",
+  "template": "{{if .result.test_date}}\n### ✅ Lab Testing Complete\n\nThe laboratory testing for your tea sample has been completed.\n\n* **Sample Number**: `{{.sample_number}}`\n* **Test Date**: `{{.result.test_date}}`\n* **Result**: **{{.result.test_result}}**\n{{if .result.test_report_ref}}* **Report Reference**: `{{.result.test_report_ref}}`{{end}}\n{{if .result.test_notes}}* **Notes**: {{.result.test_notes}}{{end}}\n* **Status**: Testing Complete — Proceeding to Final Review\n{{else}}\n### 🔬 Laboratory Testing in Progress\n\nYour representative tea sample is currently undergoing laboratory testing at the SLTB Export Division.\n\n* **Sample Number**: `{{.sample_number}}`\n* **Status**: Testing in Progress\n* **Next Action**: No action required. You will be notified when results are available.\n{{end}}"
+}

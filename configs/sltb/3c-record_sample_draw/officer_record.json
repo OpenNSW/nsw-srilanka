@@ -1,0 +1,11 @@
+{
+  "id": "sltb-record-sample-draw--officer",
+  "task_type": "EXTERNAL_REVIEW",
+  "output_namespace": "draw",
+  "plugin_properties": {
+    "officer_jsonforms_id": "sltb-record-sample-draw--officer-form",
+    "service_id": "sltb",
+    "path": "/api/v1/inject",
+    "task_code": "sltb_sample_draw_v1"
+  }
+}

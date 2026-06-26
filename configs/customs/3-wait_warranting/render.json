@@ -1,0 +1,18 @@
+{
+  "id": "customs-wait-warranting-flow:render",
+  "type": "REVIEW",
+  "title": "[Customs] CusDec Warranting Status",
+  "sections": {
+    "status_message": {
+      "templateId": "customs-wait-warranting--instructions",
+      "title": "Warranting Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY",
+          "COMPLETED"
+        ]
+      }
+    }
+  }
+}
