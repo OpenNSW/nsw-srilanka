@@ -1,0 +1,31 @@
+{
+  "id": "sltb-final-decision-flow:render",
+  "type": "APPLICATION",
+  "title": "[SLTB] Final Application Decision",
+  "sections": {
+    "trader_status": {
+      "templateId": "sltb-final-decision--trader-view",
+      "title": "Application Outcome",
+      "projector": "MARKDOWN",
+      "dataKey": "decision",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    },
+    "status_message": {
+      "templateId": "sltb-final-decision--trader-view",
+      "title": "Application Review Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": [
+          "QUEUED_EXTERNALLY"
+        ]
+      }
+    }
+  },
+  "states": {
+    "COMPLETED": {}
+  }
+}

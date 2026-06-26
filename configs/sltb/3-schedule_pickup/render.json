@@ -1,0 +1,37 @@
+{
+  "id": "sltb-schedule-pickup-flow:render",
+  "type": "APPLICATION",
+  "title": "[SLTB 3.1] Schedule Warehouse Pickup",
+  "sections": {
+    "status_message": {
+      "templateId": "sltb-schedule-pickup--status",
+      "title": "Schedule Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": {
+        "states": ["PENDING_USER", "QUEUED_EXTERNALLY", "COMPLETED"]
+      }
+    },
+    "user_form": {
+      "templateId": "sltb-schedule-pickup--suggest-form",
+      "title": "Suggest Pickup Schedule",
+      "projector": "FORM",
+      "dataKey": "suggest",
+      "visibleWhen": {
+        "states": ["PENDING_USER"]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Submit Suggested Schedule",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [{ "command": "submit" }]
+    },
+    "COMPLETED": {}
+  }
+}

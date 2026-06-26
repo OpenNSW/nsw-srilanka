@@ -1,0 +1,9 @@
+{
+  "id": "sltb-submit-blendsheet--user-input",
+  "task_type": "USER_INPUT",
+  "output_namespace": "userform",
+  "plugin_properties": {
+    "user_jsonforms_id": "sltb-submit-blendsheet--user-form",
+    "reviewer_jsonforms_id": "sltb-submit-blendsheet--officer-review-form"
+  }
+}

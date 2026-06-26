@@ -100,6 +100,21 @@
       "id": "ippc-hub",
       "url": "http://ippc-hub",
       "timeout": "30s"
+    },
+    {
+      "id": "sltb",
+      "url": "http://localhost:8086",
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://localhost:8090/oauth2/token",
+          "client_id": "NSW_TO_SLTB",
+          "client_secret": "env:M2M_NSW_TO_SLTB_SECRET",
+          "scopes": ["agency:application:inject"],
+          "insecure_skip_tls_verify": true
+        }
+      }
     }
   ]
 }

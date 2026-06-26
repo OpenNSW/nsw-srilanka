@@ -1,0 +1,6 @@
+{
+  "id": "sltb-lab-decision-flow",
+  "type": "APPLICATION",
+  "workflow_id": "sltb-lab-decision-flow",
+  "render_config_id": "sltb-lab-decision-flow:render"
+}

@@ -1,0 +1,137 @@
+{
+  "id": "sltb-submit-blendsheet--officer-review-form",
+  "title": "SLTB Officer Blend Sheet Review",
+  "schema": {
+    "type": "object",
+    "required": [
+      "review_outcome"
+    ],
+    "properties": {
+      "reference_number": {
+        "type": "string",
+        "title": "SLTB Blendsheet Reference Number",
+        "example": "REF-SLTB-2026-00001"
+      },
+      "review_outcome": {
+        "type": "string",
+        "title": "Review Outcome",
+        "oneOf": [
+          {
+            "const": "approve",
+            "title": "Approve Blend Sheet & Assess Levy"
+          },
+          {
+            "const": "needs_more_info",
+            "title": "Request Resubmission (Needs More Info)"
+          }
+        ]
+      },
+      "feedback": {
+        "type": "string",
+        "title": "Officer Feedback & Deficiencies",
+        "description": "Provide detail if resubmission is required.",
+        "example": "Blendsheet figures don't reconcile with CUSDEC quantities. Please re-upload with corrected totals."
+      },
+      "levy_amount": {
+        "type": "number",
+        "title": "Assessed SLTB Levy (LKR)",
+        "example": 12500,
+        "description": "Enter the calculated levy fee for the blendsheet consignment."
+      },
+      "collection_method": {
+        "type": "string",
+        "title": "Sample Collection Method",
+        "oneOf": [
+          {
+            "const": "none",
+            "title": "No Sample Required"
+          },
+          {
+            "const": "pickup",
+            "title": "Warehouse Pickup (Tea Inspector visits warehouse)"
+          },
+          {
+            "const": "dropoff",
+            "title": "Trader Drop-off (Trader delivers sample to SLTB Export Division)"
+          }
+        ],
+        "default": "pickup"
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "review_outcome": {
+              "const": "approve"
+            }
+          },
+          "required": [
+            "review_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "reference_number",
+            "levy_amount"
+          ]
+        }
+      }
+    ]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/review_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/reference_number",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/review_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/feedback",
+        "options": {
+          "multiLine": true
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/collection_method",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/review_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/levy_amount",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/review_outcome",
+            "schema": {
+              "const": "approve"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

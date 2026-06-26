@@ -1,0 +1,62 @@
+{
+  "id": "sltb-lab-testing--officer-form",
+  "title": "Record Lab Test Results",
+  "schema": {
+    "type": "object",
+    "required": ["test_result", "test_date"],
+    "properties": {
+      "sample_number": {
+        "type": "string",
+        "title": "Sample Number",
+        "readOnly": true
+      },
+      "test_result": {
+        "type": "string",
+        "title": "Test Result",
+        "oneOf": [
+          { "const": "pass", "title": "Pass — Sample meets SLTB quality standards" }
+        ]
+      },
+      "test_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Date of Testing",
+        "example": "2026-07-05"
+      },
+      "test_report_ref": {
+        "type": "string",
+        "title": "Lab Report Reference Number (Optional)",
+        "example": "SLTB-LAB-2026-00412"
+      },
+      "test_notes": {
+        "type": "string",
+        "title": "Testing Notes / Comments (Optional)",
+        "example": "Moisture content and grade within acceptable SLTB standards."
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/sample_number",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/sample_number",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      { "type": "Control", "scope": "#/properties/test_result" },
+      { "type": "Control", "scope": "#/properties/test_date" },
+      { "type": "Control", "scope": "#/properties/test_report_ref" },
+      {
+        "type": "Control",
+        "scope": "#/properties/test_notes",
+        "options": { "multiLine": true }
+      }
+    ]
+  }
+}

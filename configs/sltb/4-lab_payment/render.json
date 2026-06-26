@@ -1,0 +1,59 @@
+{
+  "id": "sltb-pay-lab-fee-flow:render",
+  "type": "PAYMENT",
+  "title": "[SLTB] Pay Lab Test Fee",
+  "sections": {
+    "workspace": {
+      "templateId": "sltb-pay-lab-fee--select-method-form",
+      "title": "Select Payment Gateway",
+      "projector": "FORM",
+      "dataKey": "payment_method",
+      "visibleWhen": {
+        "states": [
+          "PENDING_USER"
+        ]
+      },
+      "handles": [
+        {
+          "command": "submit",
+          "label": "Proceed to Payment",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "payment_details": {
+      "templateId": "sltb-pay-lab-fee--payment-details-markdown",
+      "title": "Lab Test Fee Payment Details",
+      "projector": "MARKDOWN",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "PENDING_PAYMENT"
+        ]
+      }
+    },
+    "payment_success": {
+      "templateId": "sltb-pay-lab-fee--success-message",
+      "title": "Payment Successful",
+      "projector": "MARKDOWN",
+      "dataKey": "payment",
+      "visibleWhen": {
+        "states": [
+          "COMPLETED"
+        ]
+      }
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "submit"
+        }
+      ]
+    },
+    "PENDING_PAYMENT": {
+      "actions": []
+    }
+  }
+}

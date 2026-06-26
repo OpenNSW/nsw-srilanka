@@ -1,0 +1,141 @@
+{
+  "id": "sltb-schedule-pickup--officer-review-form",
+  "title": "Review Suggested Pickup Schedule",
+  "schema": {
+    "type": "object",
+    "required": ["schedule_outcome"],
+    "properties": {
+      "suggested_date": {
+        "type": "string",
+        "title": "Trader Suggested Date",
+        "readOnly": true
+      },
+      "suggested_time": {
+        "type": "string",
+        "title": "Trader Suggested Time Range",
+        "readOnly": true
+      },
+      "trader_notes": {
+        "type": "string",
+        "title": "Trader Special Instructions",
+        "readOnly": true
+      },
+      "schedule_outcome": {
+        "type": "string",
+        "title": "Schedule Decision",
+        "oneOf": [
+          { "const": "approve", "title": "Approve — Assign Inspector & Confirm Date" },
+          { "const": "request_reschedule", "title": "Request Reschedule" }
+        ]
+      },
+      "visit_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Confirmed Visit Date"
+      },
+      "visit_time": {
+        "type": "string",
+        "title": "Confirmed Time Range (e.g. 10:00 AM - 12:30 PM)",
+        "example": "10:00 AM - 12:30 PM"
+      },
+      "inspector_name": {
+        "type": "string",
+        "title": "Assigned Tea Inspector Name",
+        "example": "K. Perera"
+      },
+      "contact_number": {
+        "type": "string",
+        "title": "Inspector Contact Number",
+        "example": "+94 77 123 4567"
+      },
+      "feedback": {
+        "type": "string",
+        "title": "Reschedule Instructions for Trader",
+        "description": "Explain why the suggested date cannot be accommodated.",
+        "example": "Inspector unavailable that week. Please suggest a date after July 5th."
+      }
+    },
+    "if": {
+      "properties": { "schedule_outcome": { "const": "approve" } }
+    },
+    "then": {
+      "required": ["visit_date", "visit_time", "inspector_name"]
+    },
+    "else": {
+      "if": {
+        "properties": { "schedule_outcome": { "const": "request_reschedule" } }
+      },
+      "then": {
+        "required": ["feedback"]
+      }
+    }
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/suggested_date",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/suggested_date",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/suggested_time",
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/suggested_time",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/trader_notes",
+        "options": { "multiLine": true },
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/trader_notes",
+            "schema": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      { "type": "Control", "scope": "#/properties/schedule_outcome" },
+      {
+        "type": "VerticalLayout",
+        "elements": [
+          { "type": "Control", "scope": "#/properties/visit_date" },
+          { "type": "Control", "scope": "#/properties/visit_time" },
+          { "type": "Control", "scope": "#/properties/inspector_name" },
+          { "type": "Control", "scope": "#/properties/contact_number" }
+        ],
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/schedule_outcome",
+            "schema": { "const": "approve" }
+          }
+        }
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/feedback",
+        "options": { "multiLine": true },
+        "rule": {
+          "effect": "SHOW",
+          "condition": {
+            "scope": "#/properties/schedule_outcome",
+            "schema": { "const": "request_reschedule" }
+          }
+        }
+      }
+    ]
+  }
+}

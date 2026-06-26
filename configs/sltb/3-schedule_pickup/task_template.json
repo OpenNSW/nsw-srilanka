@@ -1,0 +1,6 @@
+{
+  "id": "sltb-schedule-pickup-flow",
+  "type": "APPLICATION",
+  "workflow_id": "sltb-schedule-pickup-flow",
+  "render_config_id": "sltb-schedule-pickup-flow:render"
+}

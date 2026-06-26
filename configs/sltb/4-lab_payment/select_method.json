@@ -1,0 +1,9 @@
+{
+  "id": "sltb-pay-lab-fee--select-method",
+  "task_type": "USER_INPUT",
+  "output_namespace": "payment_method",
+  "plugin_properties": {
+    "user_jsonforms_id": "sltb-pay-lab-fee--select-method-form",
+    "task_code": "sltb_lab_payment_select_method_v1"
+  }
+}

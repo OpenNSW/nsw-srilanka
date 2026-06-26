@@ -23,6 +23,10 @@
               "title": "CDA Coconut Certificate (CDA Flow)"
             },
             {
+              "const": "sltb-blendsheet-approval",
+              "title": "SLTB Tea Export Blendsheet Approval (SLTB Flow)"
+            },
+            {
               "const": "customs-workflow",
               "title": "Customs Declaration & Clearance (Customs Flow)"
             }

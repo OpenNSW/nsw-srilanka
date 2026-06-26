@@ -1,0 +1,6 @@
+{
+  "id": "sltb-record-sample-draw-flow",
+  "type": "APPLICATION",
+  "workflow_id": "sltb-record-sample-draw-flow",
+  "render_config_id": "sltb-record-sample-draw-flow:render"
+}
