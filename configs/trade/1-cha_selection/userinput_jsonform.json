@@ -36,6 +36,10 @@
           {
             "const": "fcau",
             "title": "FCAU Company"
+          },
+          {
+            "const": "sltb",
+            "title": "SLTB Company"
           }
         ]
       }
