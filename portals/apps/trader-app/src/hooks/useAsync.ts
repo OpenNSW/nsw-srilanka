@@ -42,10 +42,25 @@ export function useAsync<T>(asyncFunction: () => Promise<T>, immediate = true): 
   }, [])
 
   useEffect(() => {
-    if (immediate) {
-      execute()
+    if (!immediate) return
+    let cancelled = false
+    void asyncFunction()
+      .then((data) => {
+        if (!cancelled) setState({ data, loading: false, error: null })
+      })
+      .catch((rawError: unknown) => {
+        if (!cancelled) {
+          setState({
+            data: null,
+            loading: false,
+            error: rawError instanceof Error ? rawError : new Error('An error occurred'),
+          })
+        }
+      })
+    return () => {
+      cancelled = true
     }
-  }, [execute, immediate])
+  }, [asyncFunction, immediate])
 
   return {
     ...state,

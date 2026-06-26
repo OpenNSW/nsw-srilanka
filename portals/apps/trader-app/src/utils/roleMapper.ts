@@ -1,5 +1,5 @@
-import { getIdpRoleGroupConfig, type IdpRoleGroupConfig } from '../runtimeConfig'
-import type { Role } from '../services/RoleContext'
+import { getIdpRoleGroupConfig, type IdpRoleGroupConfig } from '@/runtimeConfig'
+import type { Role } from '@/services/RoleContext'
 
 interface ClaimsWithGroups {
   groups?: unknown

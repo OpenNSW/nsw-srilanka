@@ -1,4 +1,4 @@
-import type { ZoneComponent } from '../../types'
+import type { ZoneComponent } from '@/features/zone/types'
 import { FormRenderer } from './FormRenderer'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { RedirectRenderer } from './RedirectRenderer'

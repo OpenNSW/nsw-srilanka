@@ -3,7 +3,7 @@ import { JsonForms } from '@jsonforms/react'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button } from '@radix-ui/themes'
 import type { JsonSchema } from '@jsonforms/core'
-import type { Handle, ZoneRendererProps } from '../../types'
+import type { Handle, ZoneRendererProps } from '@/features/zone/types'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
 
