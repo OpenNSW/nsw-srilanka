@@ -3,14 +3,6 @@
   "type": "APPLICATION",
   "title": "[NPQS] Upload Consignment Documents",
   "sections": {
-    "assessment_outcome": {
-      "templateId": "npqs-upload-docs--status",
-      "title": "Document Review Feedback",
-      "projector": "MARKDOWN",
-      "visibleWhen": {
-        "requireDataKey": "docs_review_outcome"
-      }
-    },
     "status_message": {
       "templateId": "npqs-upload-docs--status",
       "title": "Upload Instructions",
