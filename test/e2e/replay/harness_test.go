@@ -183,7 +183,10 @@ func writeServicesConfig(t *testing.T, agencyURL string, agencies []AgencyConfig
 	t.Helper()
 	services := make([]map[string]any, 0, len(agencies))
 	for _, ac := range agencies {
-		services = append(services, map[string]any{"id": ac.ID, "url": agencyURL, "timeout": "30s"})
+		// Each agency gets a prefixed base URL so the NSW app sends injects to
+		// /<agencyID>/... — the mock registers handlers at those prefixed paths,
+		// allowing multiple agencies to share the same real-world inject path.
+		services = append(services, map[string]any{"id": ac.ID, "url": agencyURL + "/" + ac.ID, "timeout": "30s"})
 	}
 	cfg := map[string]any{"version": "1.0", "services": services}
 	raw, err := json.MarshalIndent(cfg, "", "  ")
