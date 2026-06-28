@@ -56,8 +56,8 @@ failure stops the step; use only if the message is required for completion.)
 
 The recipient is **not** set on the extension. The completing step's form must
 include a field named `notifyRecipient`; its submitted value is used as the
-address. If it's missing or empty, nothing is sent and the workflow continues
-(error logged under `POST_RESUME`).
+address. The field is optional: if it's missing or empty, nothing is sent and
+the workflow continues (logged at `Info` as a skip, not an error).
 
 ## Personalised messages — `template_id`
 

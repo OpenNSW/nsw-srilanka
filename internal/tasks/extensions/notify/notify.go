@@ -66,7 +66,8 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 
 	to, ok := stringLeaf(payload["notifyRecipient"])
 	if !ok {
-		return fmt.Errorf("notification: no recipient (payload[%q] empty)", "notifyRecipient")
+		slog.Info("notification extension: skipped (no recipient provided)", "taskId", record.TaskID)
+		return nil
 	}
 
 	var tmpl renderedTemplate
@@ -145,10 +146,7 @@ func (e *NotificationExtension) renderTemplate(ctx context.Context, id string, r
 		return renderedTemplate{}, fmt.Errorf("notification: invalid template %q: %w", id, err)
 	}
 
-	var data map[string]any
-	if record != nil {
-		data = record.Data
-	}
+	data := record.Data
 
 	var out renderedTemplate
 	if doc.Subject != "" {

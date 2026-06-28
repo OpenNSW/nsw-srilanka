@@ -67,17 +67,15 @@ func TestNotificationExtension_Execute(t *testing.T) {
 			wantBody:   "received",
 		},
 		{
-			name:    "missing notifyRecipient errors",
-			props:   `{"channel":"sms","body":"x"}`,
-			record:  recordWith(nil),
-			wantErr: true,
+			name:   "missing notifyRecipient skips (no error, no send)",
+			props:  `{"channel":"sms","body":"x"}`,
+			record: recordWith(nil),
 		},
 		{
-			name:    "missing notifyRecipient errors even in dev mode",
+			name:    "missing notifyRecipient skips in dev mode too",
 			props:   `{"channel":"sms","body":"x"}`,
 			record:  recordWith(nil),
 			devMode: true,
-			wantErr: true,
 		},
 		{
 			name:    "invalid request fails (empty body)",
