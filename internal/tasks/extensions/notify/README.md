@@ -1,42 +1,27 @@
 # Notifications
 
-A workflow can send an **email or SMS** when a step is completed — for example,
-"trader submits the FCAU application → confirmation email is sent".
+Send an **email or SMS** when a workflow step completes — e.g. "trader submits
+the FCAU application → confirmation email is sent".
 
-You configure two things:
+Two things to configure: **where to send** (gateway credentials) and **when to
+send** (an `extensions` block on a step).
 
-1. **Where to send** — gateway credentials in `notification.json`.
-2. **When to send** — an `extensions` block on a workflow step.
+## 1. Gateway credentials — `notification.json`
 
----
-
-## 1. Gateway credentials: `notification.json`
-
-Copy `notification.example.json` to `notification.json` and fill in real values.
-This file is gitignored, so secrets stay local.
+Copy `notification.example.json` to `notification.json` (gitignored) and fill in
+real values. Restart the server after changing it.
 
 ```json
 {
-  "email": {
-    "baseURL": "https://email.svc.local",
-    "token": "your-token"
-  },
-  "sms": {
-    "baseURL": "https://smsservice.lk",
-    "userName": "your-username",
-    "password": "your-password",
-    "sidCode": "your-sender-id"
-  }
+  "email": { "baseURL": "https://email.svc.local", "token": "your-token" },
+  "sms":   { "baseURL": "https://smsservice.lk", "userName": "...", "password": "...", "sidCode": "..." }
 }
 ```
 
-Restart the server after changing this file.
+The email `token` may be a literal, or a secret reference: `"env:EMAIL_TOKEN"`
+(environment variable) or `"file:/run/secrets/email_token"` (file contents).
 
----
-
-## 2. Sending on a step: the `extensions` block
-
-Add this to the workflow step that should send the message:
+## 2. Sending on a step — the `extensions` block
 
 ```json
 "extensions": [
@@ -45,40 +30,66 @@ Add this to the workflow step that should send the message:
     "phase": "POST_RESUME",
     "properties": {
       "channel": "email",
-      "to_path": "userform.contact_email",
       "subject": "Application received",
-      "body": "Your application has been received and is now under review."
+      "body": "Your application is now under review."
     }
   }
 ]
 ```
 
-### Properties
+| Property      | Required | What it is                                       |
+| ------------- | -------- | ------------------------------------------------ |
+| `channel`     | yes      | `"email"` or `"sms"`.                            |
+| `body`        | yes\*    | Message text. SMS uses only this.                |
+| `subject`     | email    | Email subject.                                   |
+| `html_body`   | no       | HTML body, email only (auto-escaped).            |
+| `template_id` | no       | Personalised template instead of inline text.   |
+| `task_code`   | no       | Label shown in logs.                             |
 
-| Field       | Required | What it is                                          |
-| ----------- | -------- | --------------------------------------------------- |
-| `channel`   | yes      | `"email"` or `"sms"`.                               |
-| `to_path`   | yes      | Where to find the recipient (see below).            |
-| `subject`   | email    | Email subject.                                      |
-| `body`      | yes      | Message text. (email may use `html_body` instead.)  |
-| `html_body` | no       | HTML body, email only.                              |
-| `to`        | no       | Fixed fallback address if `to_path` finds nothing.  |
-| `task_code` | no       | A label shown in the logs.                          |
+\* `body`/`subject`/`html_body` may come from `template_id` instead of inline.
 
-### How `to_path` works
+**`phase`:** use `POST_RESUME` — sends in the background, a failure is logged but
+never blocks the workflow. (`PRE_RESUME` sends before the step finishes and a
+failure stops the step; use only if the message is required for completion.)
 
-The recipient comes from data an **earlier step already saved**. Each step saves
-its data under its `output_namespace`. So `to_path` is that namespace plus the
-field name.
+## Recipient
 
-Example: the FCAU step has `"output_namespace": "userform"` and a `contact_email`
-field, so the email address is at `userform.contact_email`.
+The recipient is **not** set on the extension. The completing step's form must
+include a field named `notifyRecipient`; its submitted value is used as the
+address. If it's missing or empty, nothing is sent and the workflow continues
+(error logged under `POST_RESUME`).
 
-If no recipient is found, nothing is sent — the workflow keeps running.
+## Personalised messages — `template_id`
 
-### `phase`
+Instead of static `subject`/`body`, point `template_id` at a template document
+to weave in data the trader entered. The document is JSON with up to three
+[Go template](https://pkg.go.dev/text/template) fields:
 
-- `POST_RESUME` (recommended) — sends in the background; a failure is logged but
-  never stops the workflow.
-- `PRE_RESUME` — sends before the step finishes; a failure stops the step. Use
-  only if the message must be sent for the step to complete.
+```json
+{
+  "subject":   "Application received — {{.userform.exporter_name}}",
+  "body":      "Dear {{.userform.exporter_name}}, your application is under review.",
+  "html_body": "<p>Dear {{.userform.exporter_name}}, your application is under review.</p>"
+}
+```
+
+- **Data** = accumulated workflow state, namespaced by each step's
+  `output_namespace`. With `"output_namespace": "userform"`,
+  `{{.userform.exporter_name}}` is the applicant's name.
+- **Per field, template wins over the inline fallback.** No `template_id` → the
+  inline fields are used directly.
+- **A missing variable errors** (`{{.userform.typo}}` fails rather than rendering
+  blank) — a broken template is caught, not sent half-empty.
+- **`html_body` is auto-escaped**; `subject` and `body` are plain text.
+
+**Register the document** in `configs/manifest.json` as a `generic_template`
+whose `id` matches `template_id`, then restart the server:
+
+```json
+{
+  "id": "fcau-application-received--notification",
+  "kind": "generic_template",
+  "loader": "local",
+  "path": "fcau/1-application/notification_email.json"
+}
+```

@@ -79,6 +79,12 @@
         "type": "string",
         "title": "Any other Declarations",
         "example": "Non-GMO certified, radiation-free consignment."
+      },
+      "notifyRecipient": {
+        "type": "string",
+        "format": "email",
+        "title": "Contact email for notifications",
+        "example": "exports@acme.lk"
       }
     },
     "required": [
@@ -211,6 +217,10 @@
             "options": {
               "multi": true
             }
+          },
+          {
+            "type": "Control",
+            "scope": "#/properties/notifyRecipient"
           }
         ]
       }

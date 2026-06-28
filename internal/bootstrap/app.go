@@ -18,6 +18,7 @@ import (
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
+	"github.com/OpenNSW/core/notification/providers"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/storage"
@@ -524,7 +525,7 @@ func initTask(
 	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 
 	notifManager, err := notification.NewManager(cfg.Notification,
-		notify.NewEmailProvider(), notify.NewSMSProvider())
+		providers.NewEmailProvider(), providers.NewSMSProvider())
 	if err != nil {
 		return nil, nil, fmt.Errorf("notification manager: %w", err)
 	}

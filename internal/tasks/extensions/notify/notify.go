@@ -1,3 +1,6 @@
+// Package notify provides nsw-srilanka's task-completion notification extension:
+// a send-only side-effect that dispatches an email or SMS through the core
+// notification.Manager when a workflow step completes.
 package notify
 
 import (
