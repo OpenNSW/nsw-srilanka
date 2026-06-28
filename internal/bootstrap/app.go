@@ -530,7 +530,7 @@ func initTask(
 	}
 
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, cfg.Server.Debug); err != nil {
+	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("register task extensions: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)

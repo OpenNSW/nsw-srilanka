@@ -23,70 +23,81 @@ func (f *fakeSender) Send(_ context.Context, req notification.Request) error {
 	return f.err
 }
 
+// fakeLoader returns a canned template document, or an error.
+type fakeLoader struct {
+	doc string
+	err error
+}
+
+func (l fakeLoader) GetTemplate(_ context.Context, _ string) ([]byte, error) {
+	if l.err != nil {
+		return nil, l.err
+	}
+	return []byte(l.doc), nil
+}
+
 func recordWith(data map[string]any) *store.TaskRecord {
 	return &store.TaskRecord{TaskID: "task-1", Data: data}
 }
 
 func TestNotificationExtension_Execute(t *testing.T) {
 	tests := []struct {
-		name       string
-		props      string
-		payload    map[string]any
-		record     *store.TaskRecord
-		sendErr    error
-		devMode    bool
-		wantErr    bool
-		wantCalled bool
-		wantTo     string
-		wantBody   string
+		name        string
+		props       string
+		payload     map[string]any
+		record      *store.TaskRecord
+		loaderDoc   string
+		loaderErr   error
+		sendErr     error
+		devMode     bool
+		wantErr     bool
+		wantCalled  bool
+		wantTo      string
+		wantBody    string
+		wantSubject string
+		wantHTML    string
 	}{
 		{
-			name:       "recipient resolved from record.Data via to_path",
-			props:      `{"channel":"sms","to_path":"applicant.phone","body":"received"}`,
-			record:     recordWith(map[string]any{"applicant": map[string]any{"phone": "+94771234567"}}),
+			name:       "recipient resolved from payload notifyRecipient",
+			props:      `{"channel":"sms","body":"received"}`,
+			payload:    map[string]any{"notifyRecipient": "+94771234567"},
+			record:     recordWith(nil),
 			wantCalled: true,
 			wantTo:     "+94771234567",
 			wantBody:   "received",
 		},
 		{
-			name:       "payload to overrides to_path",
-			props:      `{"channel":"sms","to_path":"applicant.phone","body":"received"}`,
-			payload:    map[string]any{"to": "+94770000000"},
-			record:     recordWith(map[string]any{"applicant": map[string]any{"phone": "+94771234567"}}),
-			wantCalled: true,
-			wantTo:     "+94770000000",
-		},
-		{
-			name:       "payload overrides body and subject",
-			props:      `{"channel":"email","to_path":"applicant.email","subject":"cfg","body":"cfg-body"}`,
-			payload:    map[string]any{"subject": "form-subj", "body": "form-body"},
-			record:     recordWith(map[string]any{"applicant": map[string]any{"email": "a@b.lk"}}),
-			wantCalled: true,
-			wantTo:     "a@b.lk",
-			wantBody:   "form-body",
-		},
-		{
-			name:       "static to fallback when payload and to_path absent",
-			props:      `{"channel":"sms","to_path":"applicant.phone","to":"+94119999999","body":"ops"}`,
-			record:     recordWith(map[string]any{}),
-			wantCalled: true,
-			wantTo:     "+94119999999",
-		},
-		{
-			name:    "all recipient sources empty errors",
-			props:   `{"channel":"sms","to_path":"applicant.phone","body":"x"}`,
-			record:  recordWith(map[string]any{}),
-			wantErr: true,
-		},
-		{
-			name:    "invalid request fails (empty body)",
-			props:   `{"channel":"sms","to":"+94771234567"}`,
+			name:    "missing notifyRecipient errors",
+			props:   `{"channel":"sms","body":"x"}`,
 			record:  recordWith(nil),
 			wantErr: true,
 		},
 		{
+			name:    "missing notifyRecipient errors even in dev mode",
+			props:   `{"channel":"sms","body":"x"}`,
+			record:  recordWith(nil),
+			devMode: true,
+			wantErr: true,
+		},
+		{
+			name:    "invalid request fails (empty body)",
+			props:   `{"channel":"sms"}`,
+			payload: map[string]any{"notifyRecipient": "+94771234567"},
+			record:  recordWith(nil),
+			wantErr: true,
+		},
+		{
+			name:    "invalid request still errors in dev mode",
+			props:   `{"channel":"sms"}`,
+			payload: map[string]any{"notifyRecipient": "+94771234567"},
+			record:  recordWith(nil),
+			devMode: true,
+			wantErr: true,
+		},
+		{
 			name:       "send error surfaces when not dev mode",
-			props:      `{"channel":"sms","to":"+94771234567","body":"x"}`,
+			props:      `{"channel":"sms","body":"x"}`,
+			payload:    map[string]any{"notifyRecipient": "+94771234567"},
 			record:     recordWith(nil),
 			sendErr:    errors.New("gateway down"),
 			wantErr:    true,
@@ -94,18 +105,76 @@ func TestNotificationExtension_Execute(t *testing.T) {
 		},
 		{
 			name:       "send error swallowed in dev mode",
-			props:      `{"channel":"sms","to":"+94771234567","body":"x"}`,
+			props:      `{"channel":"sms","body":"x"}`,
+			payload:    map[string]any{"notifyRecipient": "+94771234567"},
 			record:     recordWith(nil),
 			sendErr:    errors.New("gateway down"),
 			devMode:    true,
 			wantCalled: true,
+		},
+		{
+			name:        "template fields interpolate record.Data",
+			props:       `{"channel":"email","template_id":"t"}`,
+			payload:     map[string]any{"notifyRecipient": "a@b.lk"},
+			loaderDoc:   `{"subject":"Hi {{.userform.name}}","body":"Ref {{.userform.ref}}","html_body":"<p>Hi {{.userform.name}}</p>"}`,
+			record:      recordWith(map[string]any{"userform": map[string]any{"name": "Acme", "ref": "R-9"}}),
+			wantCalled:  true,
+			wantTo:      "a@b.lk",
+			wantSubject: "Hi Acme",
+			wantBody:    "Ref R-9",
+			wantHTML:    "<p>Hi Acme</p>",
+		},
+		{
+			name:      "missing template variable fails (non-dev)",
+			props:     `{"channel":"sms","template_id":"t"}`,
+			payload:   map[string]any{"notifyRecipient": "+94771234567"},
+			loaderDoc: `{"body":"Hi {{.userform.missing}}"}`,
+			record:    recordWith(map[string]any{"userform": map[string]any{"name": "Acme"}}),
+			wantErr:   true,
+		},
+		{
+			name:       "missing template variable swallowed in dev mode",
+			props:      `{"channel":"sms","template_id":"t"}`,
+			payload:    map[string]any{"notifyRecipient": "+94771234567"},
+			loaderDoc:  `{"body":"Hi {{.userform.missing}}"}`,
+			record:     recordWith(map[string]any{"userform": map[string]any{"name": "Acme"}}),
+			devMode:    true,
+			wantErr:    false,
+			wantCalled: false,
+		},
+		{
+			name:      "template_id not found errors",
+			props:     `{"channel":"sms","template_id":"missing"}`,
+			payload:   map[string]any{"notifyRecipient": "+94771234567"},
+			loaderErr: errors.New("template \"missing\" not found"),
+			record:    recordWith(nil),
+			wantErr:   true,
+		},
+		{
+			name:       "inline config falls back when template field empty",
+			props:      `{"channel":"sms","template_id":"t","body":"inline-body"}`,
+			payload:    map[string]any{"notifyRecipient": "+94771234567"},
+			loaderDoc:  `{"subject":"only-subject"}`,
+			record:     recordWith(nil),
+			wantCalled: true,
+			wantBody:   "inline-body",
+		},
+		{
+			name:       "html_body escapes interpolated values",
+			props:      `{"channel":"email","template_id":"t"}`,
+			payload:    map[string]any{"notifyRecipient": "a@b.lk"},
+			loaderDoc:  `{"html_body":"<p>{{.userform.name}}</p>"}`,
+			record:     recordWith(map[string]any{"userform": map[string]any{"name": "<script>x</script>"}}),
+			wantCalled: true,
+			wantTo:     "a@b.lk",
+			wantHTML:   "<p>&lt;script&gt;x&lt;/script&gt;</p>",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := &fakeSender{err: tt.sendErr}
-			ext := NewNotificationExtension(fs, tt.devMode)
+			ext := NewNotificationExtension(fs, fakeLoader{doc: tt.loaderDoc, err: tt.loaderErr}, tt.devMode)
 
 			err := ext.Execute(context.Background(), tt.record, tt.payload, json.RawMessage(tt.props))
 
@@ -124,37 +193,11 @@ func TestNotificationExtension_Execute(t *testing.T) {
 			if tt.wantBody != "" && fs.last.Body != tt.wantBody {
 				t.Errorf("Body = %q, want %q", fs.last.Body, tt.wantBody)
 			}
-		})
-	}
-}
-
-func TestResolvePath(t *testing.T) {
-	data := map[string]any{
-		"applicant": map[string]any{
-			"phone": "+94771234567",
-			"empty": "",
-			"num":   42,
-		},
-	}
-	tests := []struct {
-		name   string
-		path   string
-		want   string
-		wantOk bool
-	}{
-		{"nested hit", "applicant.phone", "+94771234567", true},
-		{"missing top key", "trader.phone", "", false},
-		{"missing leaf key", "applicant.fax", "", false},
-		{"non-string leaf", "applicant.num", "", false},
-		{"empty string leaf", "applicant.empty", "", false},
-		{"intermediate not a map", "applicant.phone.x", "", false},
-		{"empty path", "", "", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := resolvePath(data, tt.path)
-			if ok != tt.wantOk || got != tt.want {
-				t.Errorf("resolvePath(%q) = (%q, %v), want (%q, %v)", tt.path, got, ok, tt.want, tt.wantOk)
+			if tt.wantSubject != "" && fs.last.Subject != tt.wantSubject {
+				t.Errorf("Subject = %q, want %q", fs.last.Subject, tt.wantSubject)
+			}
+			if tt.wantHTML != "" && fs.last.HTMLBody != tt.wantHTML {
+				t.Errorf("HTMLBody = %q, want %q", fs.last.HTMLBody, tt.wantHTML)
 			}
 		})
 	}
