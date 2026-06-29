@@ -68,6 +68,9 @@ services:
     volumes:
       - thunderid-db:/opt/thunderid/repository/database
       - consent-db:/opt/thunderid/consent/repository/database
+      # Project bootstrap: create the admin-cli M2M client (client_id ADMIN_CLI)
+      # so a client_credentials token can be minted for the management API.
+      - ./idp/bootstrap/02-admin-cli.sh:/opt/thunderid/bootstrap/02-admin-cli.sh
     depends_on:
       thunderid-db-init:
         condition: service_completed_successfully
@@ -87,9 +90,52 @@ services:
       - thunderid-db:/opt/thunderid/repository/database
       - consent-db:/opt/thunderid/consent/repository/database
       - ./idp/deployment.yaml:/opt/thunderid/repository/conf/deployment.yaml
+    healthcheck:
+      # curl exits 0 on any HTTP response (incl. 401) -> the server is up.
+      test: ["CMD-SHELL", "curl -k -s -o /dev/null https://localhost:8090/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
     depends_on:
       thunderid-setup:
         condition: service_completed_successfully
+
+  # Stage D (dev only): once thunderid is healthy, mint an ADMIN_CLI management
+  # token and run the data-driven seed (idp/sample-resources.sh). This is NOT a
+  # dependency of the thunderid service, so `docker compose up thunderid` skips
+  # it, while a full `docker compose up` runs it. The seed is idempotent.
+  thunderid-seed:
+    image: alpine:3
+    container_name: thunderid-seed
+    networks:
+      - nsw-network
+    env_file:
+      - ./idp/.env
+    volumes:
+      - ./idp:/idp:ro
+    depends_on:
+      thunderid:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache bash curl jq coreutils >/dev/null 2>&1
+        echo "Fetching ADMIN_CLI management token..."
+        TOKEN=$$(curl -k -s -u "ADMIN_CLI:$${ADMIN_CLI_SECRET:-1234}" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d "grant_type=client_credentials" -d "scope=system" \
+          https://thunderid:8090/oauth2/token | jq -r '.access_token // empty')
+        if [ -z "$$TOKEN" ]; then echo "Failed to obtain ADMIN_CLI token"; exit 1; fi
+        # Copy the seed tree out of the read-only mount and drop .env so the
+        # script does NOT source it: idp/.env "wins" and would reset API_BASE to
+        # localhost (wrong inside this container) and use a stale AUTH_TOKEN.
+        # Secrets/redirect URIs still come from env_file; API_BASE + the fresh
+        # ADMIN_CLI token are passed explicitly below.
+        cp -r /idp /seed && rm -f /seed/.env
+        API_BASE=https://thunderid:8090 AUTH_TOKEN="$$TOKEN" INSECURE=1 bash /seed/sample-resources.sh
+    restart: "no"
 
   # -------------------------------------------------------------------
   # 3. Temporal Workflow Engine Infrastructure
