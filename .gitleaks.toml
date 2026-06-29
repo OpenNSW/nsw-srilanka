@@ -5,8 +5,15 @@ title = "nsw-srilanka gitleaks configuration"
 useDefault = true
 
 [allowlist]
-# Example and template files contain placeholder values only, never real credentials.
-description = "Placeholder values in example config and env template files"
+# Example/template files and documented dev defaults contain placeholder values
+# only, never real credentials. (Conditions are OR'd by default.)
+description = "Placeholder values in example/template files and the admin-cli dev credential"
+regexes = [
+  # The `admin-cli` bootstrap client (idp/bootstrap/02-admin-cli.sh) is created
+  # with the repo's public dev default secret (1234) or an env-var reference;
+  # docs/compose show `curl -u "ADMIN_CLI:<secret>"`. Never a real secret.
+  '''ADMIN_CLI:''',
+]
 paths = [
   '''configs/[^/]+\.example\.json''',
   '''(^|/)\.env\.example$''',

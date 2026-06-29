@@ -67,19 +67,27 @@ Once running, open the developer console at `https://localhost:8090/console`:
 
 ## Bootstrap Scripts
 
-`thunderid-setup` auto-discovers and runs numbered scripts in `/opt/thunderid/bootstrap`
-(sorted by name; `common.sh` — which provides `api_call`, `log_*`, `create_flow`, … — is
-sourced, not executed). The image ships `01-default-resources.sh`, `common.sh`, and the
-`flows/`, `themes/`, `i18n/` assets, all of which we use **as-is**.
+`thunderid-setup` runs the numbered scripts in `/opt/thunderid/bootstrap` (built-in +
+custom, sorted by name; `common.sh` — which provides `api_call`, `log_*`, … — is sourced,
+not executed). The image ships `01-default-resources.sh`, `common.sh`, and the `flows/`,
+`themes/`, `i18n/` assets (used **as-is**); we mount one custom script,
+[`idp/bootstrap/02-admin-cli.sh`](bootstrap/02-admin-cli.sh), into that directory via `compose.yml`.
 
 - **`01-default-resources.sh`** (image default, not overridden) — default OU, `Person`
   user type, default agent type, admin user, system resource server + permissions,
   `Administrators` group, `Administrator` role, default flows, the `Console` application,
   themes, and i18n translations.
+- **`bootstrap/02-admin-cli.sh`** (project, mounted into `thunderid-setup`) — creates the `admin-cli`
+  machine client (`client_id` `ADMIN_CLI`, secret `${ADMIN_CLI_SECRET:-1234}`) in the
+  `default` OU and assigns the built-in `Administrator` role to it. A `client_credentials`
+  call then yields a `system`-scoped **management token** (see *Seeding* below) — the
+  programmatic alternative to copying a token out of the console.
 
-The project's sample resources are **no longer auto-seeded at bootstrap** — they are
-applied by hand with `idp/sample-resources.sh` (see *Seeding sample resources manually*
-below). That script creates:
+The project's sample resources are not created by the bootstrap container. They are seeded
+by `idp/sample-resources.sh` (see *Seeding sample resources* below): **automatically** by
+the `thunderid-seed` service on a full `docker compose up` (after `thunderid` is healthy),
+or **by hand** against any deployment. A bare `docker compose up thunderid` does NOT seed.
+That script creates:
   - **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
   - **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / Customs / SLTB** child OUs
   - **`Private_User`** and **`Government_User`** user types
@@ -93,36 +101,47 @@ below). That script creates:
     `sltb_officer` (government OUs)
   - **SPA applications** and **M2M applications** (see below)
 
-## Seeding sample resources manually
+## Seeding sample resources
 
-The project sample resources (OUs, users, groups, roles, SPA + M2M apps) are seeded by
-`idp/sample-resources.sh`, run by hand against a running deployment. The script is a
-generic **engine**: it reads declarative JSON config from [`idp/resources/`](resources/)
-(see *Resource configuration* below) and reuses idempotent helpers, so it is **idempotent**
-— safe to re-run against a partially-seeded deployment (existing entities are detected via
-HTTP 409 and reused). It is self-contained apart from one tool: **`jq`** must be on `PATH`
-(it parses and merges the config).
+The project sample resources (OUs, users, groups, roles, SPA + M2M apps) are a generic
+**engine** that reads declarative JSON config from [`idp/resources/`](resources/) (see
+*Resource configuration* below). The script is **idempotent** (existing entities are
+detected via HTTP 409 and reused) and needs **`jq`** on `PATH`. The management API requires
+a bearer `AUTH_TOKEN` — **including on localhost** (the running server is not
+security-disabled, only the bootstrap container is).
 
-Against the local compose stack (bootstrap runs security-disabled, self-signed TLS):
+### Automatically (local dev)
 
-```bash
-docker compose up -d                 # wait until `thunderid` is healthy
-API_BASE=https://localhost:8090 ALLOW_NO_AUTH=1 ./idp/sample-resources.sh
-```
+A full `docker compose up` runs the **`thunderid-seed`** service once `thunderid` is
+healthy: it mints an `ADMIN_CLI` token and runs `sample-resources.sh` against the in-network
+IdP (`https://thunderid:8090`). A bare `docker compose up thunderid` brings up only the IdP
+(with the `admin-cli` client created) and does **not** seed.
 
-Against a real deployment (management APIs require auth):
+### By hand (any deployment)
 
-```bash
-API_BASE=https://idp.example.com \
-AUTH_TOKEN=<bearer-token-for-the-management-API> \
-./idp/sample-resources.sh
-```
+1. Mint a management token from the `admin-cli` client created during bootstrap:
 
-- `API_BASE` defaults to `https://localhost:8090`.
-- `AUTH_TOKEN` is required for non-localhost targets; it is sent as `Authorization: Bearer …`.
+   ```bash
+   TOKEN=$(curl -k -s -u "ADMIN_CLI:1234" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "grant_type=client_credentials" -d "scope=system" \
+     https://localhost:8090/oauth2/token | jq -r .access_token)
+   ```
+
+2. Run the seed with that token:
+
+   ```bash
+   API_BASE=https://localhost:8090 AUTH_TOKEN="$TOKEN" ./idp/sample-resources.sh
+   ```
+
+- `API_BASE` defaults to `https://localhost:8090`; point it at a remote deployment as needed
+  (using that deployment's own `ADMIN_CLI` secret).
 - `INSECURE=0` enforces TLS certificate validation (default `1` skips it for self-signed
   localhost certs).
-- Values in `idp/.env` are loaded automatically and take precedence over the command line.
+- Values in `idp/.env` are loaded automatically and **take precedence over the command
+  line** — so if `AUTH_TOKEN` / `API_BASE` are set in `idp/.env` they win; unset them there
+  to pass values on the CLI. (This is why `thunderid-seed` runs the script from a copy with
+  `.env` removed.)
 - `./idp/sample-resources.sh --help` prints the full usage.
 
 ## Resource configuration (`idp/resources/`)
