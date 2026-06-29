@@ -96,10 +96,12 @@ below). That script creates:
 ## Seeding sample resources manually
 
 The project sample resources (OUs, users, groups, roles, SPA + M2M apps) are seeded by
-`idp/sample-resources.sh`, run by hand against a running deployment. The script is
-self-contained (no dependency on the image's `common.sh`) and **idempotent** — safe to
-re-run against a partially-seeded deployment (existing entities are detected via HTTP 409
-and reused).
+`idp/sample-resources.sh`, run by hand against a running deployment. The script is a
+generic **engine**: it reads declarative JSON config from [`idp/resources/`](resources/)
+(see *Resource configuration* below) and reuses idempotent helpers, so it is **idempotent**
+— safe to re-run against a partially-seeded deployment (existing entities are detected via
+HTTP 409 and reused). It is self-contained apart from one tool: **`jq`** must be on `PATH`
+(it parses and merges the config).
 
 Against the local compose stack (bootstrap runs security-disabled, self-signed TLS):
 
@@ -122,6 +124,68 @@ AUTH_TOKEN=<bearer-token-for-the-management-API> \
   localhost certs).
 - Values in `idp/.env` are loaded automatically and take precedence over the command line.
 - `./idp/sample-resources.sh --help` prints the full usage.
+
+## Resource configuration (`idp/resources/`)
+
+**What gets seeded is data, not code.** All entities live as JSON under
+[`idp/resources/`](resources/), grouped by domain. Both `sample-resources.sh` (create) and
+`sample-resources.down.sh` (delete) read the **same** files via the shared
+[`idp/resources-lib.sh`](resources-lib.sh), so the two can never drift — adding an entity to
+config covers both seeding and teardown. **Adding an agency, company, user, resource server,
+role, group, or assignment is a config edit only — no script changes.**
+
+```
+idp/resources/
+  _scopesets.json              named scope sets (reused by roles + apps)
+  shared/
+    resource-servers.json      NSW_API, AGENCY_API (+ nested resources -> actions)
+    m2m-roles.json             AgencyM2M
+  private-sector/
+    ous.json  user-types.json  groups-roles.json  users.json  apps.json
+  government/
+    ous.json  user-types.json  groups-roles.json
+    agencies.json              the OGA agencies (shorthand, see below)
+```
+
+Each file's top-level keys are entity-type buckets (`resourceServers`,
+`organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
+`applications`, `appRoleAssignments`, `agencies`); the engine merges every file by
+concatenating same-named arrays, so a domain file only carries its domain's entities and
+file placement is just for humans. Cross-references use **logical keys** (an OU's `parent`,
+a role's `resourceServer`, a user's `groups`, an assignment's `role`/`group`/`app`), which
+the engine resolves to the server-assigned IDs at provisioning time. The `default` OU and
+the Classic theme / default flows are image-provided and referenced (e.g. `"ou": "default"`)
+without being created.
+
+**Secrets never live in config.** Passwords / M2M secrets / redirect URIs are referenced by
+**env-var name** — e.g. `"passwordEnv": { "override": "SAMPLE_SURESH_PASSWORD", "default":
+"SAMPLE_USER_PASSWORD" }` resolves to `${SAMPLE_SURESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}`
+from `idp/.env` / the environment. Override those variables in `idp/.env` (see
+`.env.example`); the JSON files stay committable.
+
+### Adding an agency (the common case)
+
+Append one block to [`idp/resources/government/agencies.json`](resources/government/agencies.json).
+It expands to a child OU, a `Government_User` officer (joined to *OGA Reviewers*), a portal
+SPA, the `<H>_TO_NSW` + `NSW_TO_<H>` M2M clients, and their role assignments:
+
+```json
+{
+  "handle": "newoga", "name": "NEWOGA", "description": "New OGA description",
+  "officer": { "username": "newoga_officer", "email": "newoga_officer@government.dev",
+               "givenName": "NEWOGA", "familyName": "Officer", "phoneNumber": "+9477...",
+               "passwordEnv": { "override": "SAMPLE_NEWOGA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" } },
+  "portal": { "name": "NEWOGAPortalApp", "clientId": "OGA_PORTAL_APP_NEWOGA", "port": 5180,
+              "redirectUrisEnv": "NEWOGA_REDIRECT_URIS" },
+  "m2m": {
+    "toNsw": { "clientId": "NEWOGA_TO_NSW", "secretEnv": { "override": "M2M_NEWOGA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+    "nswTo": { "clientId": "NSW_TO_NEWOGA", "secretEnv": { "override": "M2M_NSW_TO_NEWOGA_SECRET", "default": "M2M_CLIENT_SECRET" } }
+  }
+}
+```
+
+(Remember to add the new port to `CORS_ORIGINS_*` in `idp/.env` and, for the agency to call
+the NSW backend, to the backend's `AUTH_CLIENT_IDS` in `compose.yml`.)
 
 ## Applications created
 

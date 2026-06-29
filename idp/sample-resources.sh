@@ -121,83 +121,18 @@ elif [[ "$_PROBE_CODE" == "000" || -z "$_PROBE_CODE" ]]; then
 fi
 
 # ============================================================================
-# Sample secrets / passwords (overridable via env / .env)
+# Fallback secrets (overridable via env / .env). Per-entity passwords, M2M
+# client secrets, and per-SPA redirect URIs are referenced BY ENV-VAR NAME from
+# the resources/ config and resolved at provisioning time (resolve_secret /
+# indirect expansion); only these two shared fallbacks live in the script.
 # ============================================================================
 SAMPLE_USER_PASSWORD="${SAMPLE_USER_PASSWORD:-1234}"
-SURESH_PASSWORD="${SAMPLE_SURESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-RAMESH_PASSWORD="${SAMPLE_RAMESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-GOMESH_PASSWORD="${SAMPLE_GOMESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-NARESH_PASSWORD="${SAMPLE_NARESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-NPQS_OFFICER_PASSWORD="${SAMPLE_NPQS_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-FCAU_OFFICER_PASSWORD="${SAMPLE_FCAU_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-CDA_OFFICER_PASSWORD="${SAMPLE_CDA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-SLPA_OFFICER_PASSWORD="${SAMPLE_SLPA_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-CUSTOMS_OFFICER_PASSWORD="${SAMPLE_CUSTOMS_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
-SLTB_OFFICER_PASSWORD="${SAMPLE_SLTB_OFFICER_PASSWORD:-${SAMPLE_USER_PASSWORD}}"
 M2M_CLIENT_SECRET="${M2M_CLIENT_SECRET:-1234}"
-# Outbound (Agency -> NSW) M2M client secrets — one per *_TO_NSW client.
-NPQS_M2M_CLIENT_SECRET="${M2M_NPQS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
-FCAU_M2M_CLIENT_SECRET="${M2M_FCAU_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
-CDA_M2M_CLIENT_SECRET="${M2M_CDA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
-SLPA_M2M_CLIENT_SECRET="${M2M_SLPA_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
-CUSTOMS_M2M_CLIENT_SECRET="${M2M_CUSTOMS_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
-SLTB_M2M_CLIENT_SECRET="${M2M_SLTB_TO_NSW_SECRET:-${M2M_CLIENT_SECRET}}"
-# Inbound (NSW -> Agency) M2M client secrets — one per NSW_TO_* client.
-NSW_TO_NPQS_M2M_CLIENT_SECRET="${M2M_NSW_TO_NPQS_SECRET:-${M2M_CLIENT_SECRET}}"
-NSW_TO_FCAU_M2M_CLIENT_SECRET="${M2M_NSW_TO_FCAU_SECRET:-${M2M_CLIENT_SECRET}}"
-NSW_TO_CDA_M2M_CLIENT_SECRET="${M2M_NSW_TO_CDA_SECRET:-${M2M_CLIENT_SECRET}}"
-NSW_TO_SLPA_M2M_CLIENT_SECRET="${M2M_NSW_TO_SLPA_SECRET:-${M2M_CLIENT_SECRET}}"
-NSW_TO_CUSTOMS_M2M_CLIENT_SECRET="${M2M_NSW_TO_CUSTOMS_SECRET:-${M2M_CLIENT_SECRET}}"
-NSW_TO_SLTB_M2M_CLIENT_SECRET="${M2M_NSW_TO_SLTB_SECRET:-${M2M_CLIENT_SECRET}}"
 
-# ----------------------------------------------------------------------------
-# Per-SPA OAuth redirect URIs (space- or comma-separated; multiple allowed).
-# When unset, each SPA defaults to the local dev pair http(s)://localhost:<port>.
-# Override per app for real deployments, e.g.:
-#   TRADER_REDIRECT_URIS="https://trader.example.lk https://trader.example.lk/callback"
-# ----------------------------------------------------------------------------
-TRADER_REDIRECT_URIS="${TRADER_REDIRECT_URIS:-}"
-NPQS_REDIRECT_URIS="${NPQS_REDIRECT_URIS:-}"
-FCAU_REDIRECT_URIS="${FCAU_REDIRECT_URIS:-}"
-CDA_REDIRECT_URIS="${CDA_REDIRECT_URIS:-}"
-SLPA_REDIRECT_URIS="${SLPA_REDIRECT_URIS:-}"
-CUSTOMS_REDIRECT_URIS="${CUSTOMS_REDIRECT_URIS:-}"
-SLTB_REDIRECT_URIS="${SLTB_REDIRECT_URIS:-}"
-# ----------------------------------------------------------------------------
-# OAuth2 resource servers & scope sets
-# ----------------------------------------------------------------------------
-# Two backends are OAuth2-protected resources. Each gets a resource server
-# whose identifier becomes the access-token audience (aud) its backend
-# validates:
-#   NSW_API    -> OpenNSW/nsw backend        (AUTH_AUDIENCE=NSW_API)
-#   AGENCY_API -> OpenNSW/nsw-agency backend  (AUTH_AUDIENCE=AGENCY_API)
-#
-# Scopes derive from "<resource>:<action>" handles. Because both APIs expose
-# consignment/storage resources, scopes are namespaced per server ("nsw:*" /
-# "agency:*") via a wrapper resource so each scope is globally unique and maps
-# unambiguously to a single audience. The fragments below are reused for BOTH
-# role permissions (what a role grants) and application scopes (what a client
-# may request); keep them in sync with the create_resource/create_action calls.
-NSW_API_IDENTIFIER="NSW_API"
-AGENCY_API_IDENTIFIER="AGENCY_API"
-
-# Traders/CHA (private-sector SPA users via TraderApp -> NSW_API): manage
-# consignments, drive their task steps, read reference data, upload documents.
-TRADER_NSW_SCOPES='"nsw:consignment:read", "nsw:consignment:write", "nsw:task:read", "nsw:task:write", "nsw:hscode:read", "nsw:company:read", "nsw:cha:read", "nsw:storage:read", "nsw:storage:write"'
-
-# External OGA systems (M2M client_credentials -> NSW_API): push task outcomes
-# and read the consignment context for their processing,
-# and read/write storage for document exchange.
-M2M_NSW_SCOPES='"nsw:task:write", "nsw:consignment:read", "nsw:storage:read", "nsw:storage:write"'
-
-# Government reviewers (OGA portal SPA users via *PortalApp -> AGENCY_API):
-# review trader applications and read/write supporting documents.
-AGENCY_REVIEWER_SCOPES='"agency:application:read", "agency:application:review", "agency:application:feedback", "agency:consignment:read", "agency:storage:read", "agency:storage:write"'
-
-# NSW core (M2M client_credentials -> AGENCY_API): inject consignment/task
-# data into an agency's review queue.
-M2M_AGENCY_SCOPES='"agency:application:inject"'
-
+# Shared engine: key->ID registry, config load/merge, agency expansion, secret
+# and scope-set resolution. Sourced after SCRIPT_DIR / log_* / api_call exist.
+# shellcheck source=resources-lib.sh
+source "${SCRIPT_DIR}/resources-lib.sh"
 # ============================================================================
 # Helpers
 # ============================================================================
@@ -411,7 +346,8 @@ JSON
 
 # Create a role granting a resource server's scopes (idempotent). Echoes role ID.
 # Usage: create_role <name> <description> <ou_id> <resource_server_id> <permissions-fragment>
-#   permissions-fragment is the comma-separated quoted scope list, e.g. "$TRADER_NSW_SCOPES"
+#   permissions-fragment is the comma-separated quoted scope list produced by
+#   scopeset_fragment (e.g. '"nsw:task:read", "nsw:task:write"').
 create_role() {
     local NAME="$1" DESCRIPTION="$2" OU_ID="$3" RS_ID="$4" PERMS="$5"
     local RESPONSE HTTP_CODE BODY RID
@@ -1011,381 +947,290 @@ create_action() {
     fi
 }
 
-# Provision one government agency end-to-end: child OU + officer user (joined to
-# the shared OGA Reviewers group) + portal SPA + outbound (<AGENCY>_TO_NSW) and
-# inbound (NSW_TO_<AGENCY>) M2M clients with their role assignments.
-#
-# Requires globals: GOVERNMENT_ORG_OU_ID, DEFAULT_OU_ID, OGA_REVIEWERS_GROUP_ID,
-#   AGENCY_M2M_ROLE_ID, NSW_M2M_ROLE_ID, CLASSIC_THEME_ID/AUTH_FLOW_ID/REG_FLOW_ID,
-#   AGENCY_REVIEWER_SCOPES, M2M_NSW_SCOPES, M2M_AGENCY_SCOPES.
-#
-# Usage: setup_agency <handle> <name> <ou_desc> \
-#          <off_user> <off_email> <off_given> <off_family> <off_pass> <off_phone> \
-#          <portal_name> <portal_client> <portal_port> \
-#          <to_nsw_client> <to_nsw_secret> <nsw_to_client> <nsw_to_secret>
-setup_agency() {
-    local HANDLE="$1" NAME="$2" OU_DESC="$3"
-    local OFF_USER="$4" OFF_EMAIL="$5" OFF_GIVEN="$6" OFF_FAMILY="$7" OFF_PASS="$8" OFF_PHONE="$9"
-    local PORTAL_NAME="${10}" PORTAL_CLIENT="${11}" PORTAL_PORT="${12}"
-    local TO_NSW_CLIENT="${13}" TO_NSW_SECRET="${14}"
-    local NSW_TO_CLIENT="${15}" NSW_TO_SECRET="${16}"
-    local PORTAL_REDIRECT_URIS="${17:-}"
-    # NOTE: declare then assign on separate lines so a failing $(create_ou ...)
-    # subshell (exit 1) still aborts under `set -e` (a `local X=$(...)` would mask it).
-    local ou_id officer_id app_id
+# ============================================================================
+# Engine — bootstrap + one provisioning pass per entity type. All data comes
+# from idp/resources/ (merged into $MERGED by load_config). Each pass resolves
+# cross-entity references via reg_require and reuses the create_* helpers above.
+# bash-3.2 rules: iterate jq arrays with here-strings (never pipes), and
+# declare-then-assign every $(create_*) so `set -e` still aborts on failure.
+# ============================================================================
 
-    echo "" >&2
-    log_info "=== Setting up agency: ${NAME} ==="
+# Resolve image-provided defaults the config references but does not create:
+# the `default` OU (registered as ou:default) plus the Classic theme + default
+# auth/registration flow IDs (globals consumed by create_spa_application).
+bootstrap_registry() {
+    local id RESPONSE HTTP_CODE BODY
+    id="$(get_ou_id_by_handle "default")"
+    [[ -n "$id" ]] || { log_error "Could not determine default organization unit ID"; exit 1; }
+    reg_set "ou:default" "$id"
+    log_info "Default OU ID: $id"
 
-    # 1. Agency child OU under government-organization
-    ou_id=$(create_ou "$HANDLE" "$NAME" "$OU_DESC" "$GOVERNMENT_ORG_OU_ID" "government-organization/${HANDLE}")
+    CLASSIC_THEME_ID=""
+    RESPONSE=$(api_call GET "/design/themes")
+    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
+    if [[ "$HTTP_CODE" == "200" ]]; then
+        CLASSIC_THEME_ID=$(echo "$BODY" | grep -o '{[^}]*"displayName":"Classic"[^}]*}' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        if [[ -n "$CLASSIC_THEME_ID" ]]; then
+            log_success "Found Classic theme ID: $CLASSIC_THEME_ID"
+        else
+            log_warning "Classic theme not found; app creation will continue without theme_id"
+        fi
+    else
+        log_warning "Failed to fetch themes (HTTP $HTTP_CODE); app creation will continue without theme_id"
+    fi
 
-    # 2. Officer user (Government_User) in the agency OU
-    create_user_in_ou "Government_User" "$ou_id" "$OFF_USER" "$OFF_EMAIL" "$OFF_GIVEN" "$OFF_FAMILY" "$OFF_PASS" "$OFF_PHONE"
-    officer_id="$CREATED_USER_ID"
+    AUTH_FLOW_ID=$(get_flow_id_by_handle "AUTHENTICATION" "default-basic-flow")
+    REG_FLOW_ID=$(get_flow_id_by_handle "REGISTRATION" "default-basic-flow")
+    if [[ -n "$AUTH_FLOW_ID" ]]; then
+        log_success "Found default authentication flow ID: $AUTH_FLOW_ID"
+    else
+        log_warning "Default authentication flow not found; app creation will continue without auth_flow_id"
+    fi
+    if [[ -n "$REG_FLOW_ID" ]]; then
+        log_success "Found default registration flow ID: $REG_FLOW_ID"
+    else
+        log_warning "Default registration flow not found; app creation will continue without registration_flow_id"
+    fi
+}
 
-    # 3. Officer joins the shared OGA Reviewers group (grants AGENCY_API via OGA Reviewer role)
-    ensure_user_in_group "$OGA_REVIEWERS_GROUP_ID" "$officer_id" "OGA Reviewers" "$OFF_USER"
+# (1) Resource servers + their nested resources -> actions (depth-first).
+_process_resource_tree() {
+    local rs_id="$1" parent_id="$2" node="$3"
+    local handle name res_id act a_handle a_name kid
+    handle="$(jq -r '.handle' <<< "$node")"
+    name="$(jq -r '.name' <<< "$node")"
+    res_id="$(create_resource "$rs_id" "$handle" "$name" "$parent_id")"
+    while IFS= read -r act; do
+        [[ -z "$act" ]] && continue
+        a_handle="$(jq -r '.handle' <<< "$act")"
+        a_name="$(jq -r '.name' <<< "$act")"
+        create_action "$rs_id" "$res_id" "$a_handle" "$a_name"
+    done <<< "$(jq -c '.actions // [] | .[]' <<< "$node")"
+    while IFS= read -r kid; do
+        [[ -z "$kid" ]] && continue
+        _process_resource_tree "$rs_id" "$res_id" "$kid"
+    done <<< "$(jq -c '.resources // [] | .[]' <<< "$node")"
+}
 
-    # 4. Portal SPA (lives in the agency OU; allowedUserTypes = Government_User)
-    create_spa_application "$PORTAL_NAME" "Application for ${NAME} portal built with React" \
-        "$PORTAL_CLIENT" "$PORTAL_PORT" "Government_User" "$ou_id" "${AGENCY_REVIEWER_SCOPES}" "${PORTAL_REDIRECT_URIS}"
+process_resource_servers() {
+    local obj name identifier ou_key ou_id rs_id res
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        name="$(jq -r '.name' <<< "$obj")"
+        identifier="$(jq -r '.identifier' <<< "$obj")"
+        ou_key="$(jq -r '.ou' <<< "$obj")"
+        ou_id="$(reg_require "ou:${ou_key}")"
+        rs_id="$(create_resource_server "$name" "$identifier" "$ou_id")"
+        reg_set "rs:${identifier}" "$rs_id"
+        log_info "${identifier} resource server ID: $rs_id"
+        while IFS= read -r res; do
+            [[ -z "$res" ]] && continue
+            _process_resource_tree "$rs_id" "" "$res"
+        done <<< "$(jq -c '.resources // [] | .[]' <<< "$obj")"
+    done <<< "$(jq -c '.resourceServers // [] | .[]' <<< "$MERGED")"
+}
 
-    # 5. Outbound M2M (<AGENCY>_TO_NSW): client_credentials -> NSW_API, in default OU,
-    #    AgencyM2M role assigned to the app (so its token carries aud=NSW_API + scopes).
-    create_m2m_application "${TO_NSW_CLIENT}_M2M" "Machine-to-machine integration for ${NAME} to NSW" \
-        "$TO_NSW_CLIENT" "$TO_NSW_SECRET" "$DEFAULT_OU_ID" "${M2M_NSW_SCOPES}"
-    app_id="$CREATED_M2M_APP_ID"
-    assign_role_to_app "$AGENCY_M2M_ROLE_ID" "$app_id" "AgencyM2M" "${TO_NSW_CLIENT}_M2M"
+# (2) Organization units, parents before children (sort by treePath '/'-depth).
+process_ous() {
+    local line obj key handle name desc tree parent_key parent_id ou_id
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        obj="${line#*$'\t'}"
+        key="$(jq -r '.key' <<< "$obj")"
+        handle="$(jq -r '.handle' <<< "$obj")"
+        name="$(jq -r '.name' <<< "$obj")"
+        desc="$(jq -r '.description // .name' <<< "$obj")"
+        tree="$(jq -r '.treePath // .handle' <<< "$obj")"
+        parent_key="$(jq -r '.parent // empty' <<< "$obj")"
+        parent_id=""
+        [[ -n "$parent_key" ]] && parent_id="$(reg_require "ou:${parent_key}")"
+        ou_id="$(create_ou "$handle" "$name" "$desc" "$parent_id" "$tree")"
+        reg_set "ou:${key}" "$ou_id"
+    done <<< "$(jq -r '.organizationUnits // [] | .[] | [ ((.treePath // .handle) | [scan("/")] | length), tojson ] | "\(.[0])\t\(.[1])"' <<< "$MERGED" | sort -n -k1,1 -s)"
+}
 
-    # 6. Inbound M2M (NSW_TO_<AGENCY>): client_credentials -> AGENCY_API, in government OU,
-    #    NswM2M role assigned to the app (token carries aud=AGENCY_API + inject scope).
-    create_m2m_application "${NSW_TO_CLIENT}_M2M" "Machine-to-machine integration for NSW to ${NAME}" \
-        "$NSW_TO_CLIENT" "$NSW_TO_SECRET" "$GOVERNMENT_ORG_OU_ID" "${M2M_AGENCY_SCOPES}"
-    app_id="$CREATED_M2M_APP_ID"
-    assign_role_to_app "$NSW_M2M_ROLE_ID" "$app_id" "NswM2M" "${NSW_TO_CLIENT}_M2M"
+# (3) User types (the schema object is passed through to the API verbatim).
+process_user_types() {
+    local obj name ou_key ou_id payload
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        name="$(jq -r '.name' <<< "$obj")"
+        ou_key="$(jq -r '.ou' <<< "$obj")"
+        ou_id="$(reg_require "ou:${ou_key}")"
+        payload="$(jq -c --arg ou "$ou_id" '{name, ouId: $ou, allowSelfRegistration, schema, systemAttributes}' <<< "$obj")"
+        create_user_type "$name" "$payload"
+    done <<< "$(jq -c '.userTypes // [] | .[]' <<< "$MERGED")"
+}
 
-    log_info "=== Agency ${NAME} complete (OU=${ou_id}) ==="
+# (4) Groups.
+process_groups() {
+    local obj key name desc ou_key ou_id gid
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        key="$(jq -r '.key' <<< "$obj")"
+        name="$(jq -r '.name' <<< "$obj")"
+        desc="$(jq -r '.description // (.name + " group")' <<< "$obj")"
+        ou_key="$(jq -r '.ou' <<< "$obj")"
+        ou_id="$(reg_require "ou:${ou_key}")"
+        gid="$(create_group "$name" "$desc" "$ou_id")"
+        reg_set "group:${key}" "$gid"
+    done <<< "$(jq -c '.groups // [] | .[]' <<< "$MERGED")"
+}
+
+# (5) Roles (resolve resource server + scope set).
+process_roles() {
+    local obj key name desc ou_key ou_id rs_key rs_id scopeset perms rid
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        key="$(jq -r '.key' <<< "$obj")"
+        name="$(jq -r '.name' <<< "$obj")"
+        desc="$(jq -r '.description // .name' <<< "$obj")"
+        ou_key="$(jq -r '.ou' <<< "$obj")"
+        ou_id="$(reg_require "ou:${ou_key}")"
+        rs_key="$(jq -r '.resourceServer' <<< "$obj")"
+        rs_id="$(reg_require "rs:${rs_key}")"
+        scopeset="$(jq -r '.scopeSet' <<< "$obj")"
+        perms="$(scopeset_fragment "$scopeset")"
+        rid="$(create_role "$name" "$desc" "$ou_id" "$rs_id" "$perms")"
+        reg_set "role:${key}" "$rid"
+    done <<< "$(jq -c '.roles // [] | .[]' <<< "$MERGED")"
+}
+
+# (6) Role -> group assignments.
+process_role_group_assignments() {
+    local obj role_key group_key role_id group_id
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        role_key="$(jq -r '.role' <<< "$obj")"
+        group_key="$(jq -r '.group' <<< "$obj")"
+        role_id="$(reg_require "role:${role_key}")"
+        group_id="$(reg_require "group:${group_key}")"
+        assign_role_to_group "$role_id" "$group_id" "$role_key" "$group_key"
+    done <<< "$(jq -c '.roleAssignments // [] | .[]' <<< "$MERGED")"
+}
+
+# (7) Users + inline group memberships.
+process_users() {
+    local obj key utype ou_key ou_id username email given family phone password uid g gid
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        key="$(jq -r '.key' <<< "$obj")"
+        utype="$(jq -r '.type' <<< "$obj")"
+        ou_key="$(jq -r '.ou' <<< "$obj")"
+        ou_id="$(reg_require "ou:${ou_key}")"
+        username="$(jq -r '.username' <<< "$obj")"
+        email="$(jq -r '.email' <<< "$obj")"
+        given="$(jq -r '.givenName' <<< "$obj")"
+        family="$(jq -r '.familyName' <<< "$obj")"
+        phone="$(jq -r '.phoneNumber' <<< "$obj")"
+        password="$(resolve_secret "$(jq -c '.passwordEnv' <<< "$obj")")"
+        create_user_in_ou "$utype" "$ou_id" "$username" "$email" "$given" "$family" "$password" "$phone"
+        uid="$CREATED_USER_ID"
+        reg_set "user:${key}" "$uid"
+        while IFS= read -r g; do
+            [[ -z "$g" ]] && continue
+            gid="$(reg_require "group:${g}")"
+            ensure_user_in_group "$gid" "$uid" "$g" "$username"
+        done <<< "$(jq -r '.groups // [] | .[]' <<< "$obj")"
+    done <<< "$(jq -c '.users // [] | .[]' <<< "$MERGED")"
+}
+
+# (8) Applications (SPA + M2M). M2M app IDs are registered for pass (9).
+process_applications() {
+    local obj kind name desc client_id ou_key ou_id scopeset scopes
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        kind="$(jq -r '.kind' <<< "$obj")"
+        name="$(jq -r '.name' <<< "$obj")"
+        desc="$(jq -r '.description' <<< "$obj")"
+        client_id="$(jq -r '.clientId' <<< "$obj")"
+        ou_key="$(jq -r '.ou' <<< "$obj")"
+        ou_id="$(reg_require "ou:${ou_key}")"
+        scopeset="$(jq -r '.scopeSet // empty' <<< "$obj")"
+        scopes=""
+        [[ -n "$scopeset" ]] && scopes="$(scopeset_fragment "$scopeset")"
+        if [[ "$kind" == "spa" ]]; then
+            local port allowed_type redirect_env redirect_uris
+            port="$(jq -r '.port' <<< "$obj")"
+            allowed_type="$(jq -r '.allowedUserType' <<< "$obj")"
+            redirect_env="$(jq -r '.redirectUrisEnv // empty' <<< "$obj")"
+            redirect_uris=""
+            [[ -n "$redirect_env" ]] && redirect_uris="${!redirect_env:-}"
+            create_spa_application "$name" "$desc" "$client_id" "$port" "$allowed_type" "$ou_id" "$scopes" "$redirect_uris"
+        elif [[ "$kind" == "m2m" ]]; then
+            local secret
+            secret="$(resolve_secret "$(jq -c '.secretEnv' <<< "$obj")")"
+            create_m2m_application "$name" "$desc" "$client_id" "$secret" "$ou_id" "$scopes"
+            reg_set "app:${client_id}" "$CREATED_M2M_APP_ID"
+        else
+            log_error "unknown application kind '$kind' for ${client_id}"
+            exit 1
+        fi
+    done <<< "$(jq -c '.applications // [] | .[]' <<< "$MERGED")"
+}
+
+# (9) Role -> application assignments (makes an M2M token carry the role's
+# resource-server scopes and sets its audience).
+process_app_role_assignments() {
+    local obj role_key app_key role_id app_id
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        role_key="$(jq -r '.role' <<< "$obj")"
+        app_key="$(jq -r '.app' <<< "$obj")"
+        role_id="$(reg_require "role:${role_key}")"
+        app_id="$(reg_require "app:${app_key}")"
+        assign_role_to_app "$role_id" "$app_id" "$role_key" "${app_key}_M2M"
+    done <<< "$(jq -c '.appRoleAssignments // [] | .[]' <<< "$MERGED")"
 }
 
 # ============================================================================
 # Main
 # ============================================================================
-
 log_info "Creating sample Thunder resources (API_BASE=${API_BASE})..."
 
-# ----------------------------------------------------------------------------
-# (A) Global / shared resources
-#     Resource servers + scopes and the AgencyM2M role must exist before any
-#     role grant; theme/flow IDs must exist before any SPA creation.
-# ----------------------------------------------------------------------------
-echo "" >&2
-log_info "Resolving default organization unit for resource servers..."
-DEFAULT_OU_ID=$(get_ou_id_by_handle "default")
-if [[ -z "$DEFAULT_OU_ID" ]]; then
-    log_error "Could not determine default organization unit ID"
-    exit 1
-fi
-log_info "Default OU ID: $DEFAULT_OU_ID"
+load_config
 
-echo "" >&2
-log_info "Creating NSW_API resource server (audience for the OpenNSW/nsw backend)..."
-NSW_RS_ID=$(create_resource_server "NSW API" "${NSW_API_IDENTIFIER}" "${DEFAULT_OU_ID}")
-NSW_ROOT_RES_ID=$(create_resource "$NSW_RS_ID" "nsw" "NSW API")
-RID=$(create_resource "$NSW_RS_ID" "consignment" "Consignment" "$NSW_ROOT_RES_ID")
-create_action "$NSW_RS_ID" "$RID" "read" "Read"; create_action "$NSW_RS_ID" "$RID" "write" "Write"
-RID=$(create_resource "$NSW_RS_ID" "task" "Task" "$NSW_ROOT_RES_ID")
-create_action "$NSW_RS_ID" "$RID" "read" "Read"; create_action "$NSW_RS_ID" "$RID" "write" "Write"
-RID=$(create_resource "$NSW_RS_ID" "hscode" "HS Code" "$NSW_ROOT_RES_ID")
-create_action "$NSW_RS_ID" "$RID" "read" "Read"
-RID=$(create_resource "$NSW_RS_ID" "company" "Company" "$NSW_ROOT_RES_ID")
-create_action "$NSW_RS_ID" "$RID" "read" "Read"
-RID=$(create_resource "$NSW_RS_ID" "cha" "CHA" "$NSW_ROOT_RES_ID")
-create_action "$NSW_RS_ID" "$RID" "read" "Read"
-RID=$(create_resource "$NSW_RS_ID" "storage" "Storage" "$NSW_ROOT_RES_ID")
-create_action "$NSW_RS_ID" "$RID" "read" "Read"; create_action "$NSW_RS_ID" "$RID" "write" "Write"; create_action "$NSW_RS_ID" "$RID" "delete" "Delete"
-log_info "NSW_API resource server ID: $NSW_RS_ID"
+echo "" >&2; log_info "### Bootstrap (image defaults) ###"
+bootstrap_registry
 
-echo "" >&2
-log_info "Creating AGENCY_API resource server (audience for the OpenNSW/nsw-agency backend)..."
-AGENCY_RS_ID=$(create_resource_server "Agency API" "${AGENCY_API_IDENTIFIER}" "${DEFAULT_OU_ID}")
-AGENCY_ROOT_RES_ID=$(create_resource "$AGENCY_RS_ID" "agency" "Agency API")
-RID=$(create_resource "$AGENCY_RS_ID" "application" "Application" "$AGENCY_ROOT_RES_ID")
-create_action "$AGENCY_RS_ID" "$RID" "read" "Read"; create_action "$AGENCY_RS_ID" "$RID" "review" "Review"; create_action "$AGENCY_RS_ID" "$RID" "feedback" "Feedback"; create_action "$AGENCY_RS_ID" "$RID" "inject" "Inject"
-RID=$(create_resource "$AGENCY_RS_ID" "consignment" "Consignment" "$AGENCY_ROOT_RES_ID")
-create_action "$AGENCY_RS_ID" "$RID" "read" "Read"
-RID=$(create_resource "$AGENCY_RS_ID" "storage" "Storage" "$AGENCY_ROOT_RES_ID")
-create_action "$AGENCY_RS_ID" "$RID" "read" "Read"; create_action "$AGENCY_RS_ID" "$RID" "write" "Write"
-log_info "AGENCY_API resource server ID: $AGENCY_RS_ID"
+echo "" >&2; log_info "### Resource servers ###"
+process_resource_servers
 
-# AgencyM2M role: granted to each *_TO_NSW client (type "app") so its
-# client_credentials token carries aud=NSW_API + the NSW_API scopes.
-echo "" >&2
-log_info "Creating AgencyM2M role (NSW_API permissions for machine clients)..."
-AGENCY_M2M_ROLE_ID=$(create_role "AgencyM2M" "Role for agency machine-to-machine clients calling the NSW API" "$DEFAULT_OU_ID" "$NSW_RS_ID" "${M2M_NSW_SCOPES}")
-# (NswM2M role is created in block C — it lives in the government OU.)
+echo "" >&2; log_info "### Organization units ###"
+process_ous
 
-# Theme + default flow IDs — consumed by every create_spa_application below
-# (blocks B and D), so resolve them up-front in the shared section.
-echo "" >&2
-log_info "Fetching Classic theme and default flows..."
-CLASSIC_THEME_ID=""
-RESPONSE=$(api_call GET "/design/themes")
-HTTP_CODE="${RESPONSE: -3}"
-BODY="${RESPONSE%???}"
-if [[ "$HTTP_CODE" == "200" ]]; then
-    CLASSIC_THEME_ID=$(echo "$BODY" | grep -o '{[^}]*"displayName":"Classic"[^}]*}' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-    if [[ -n "$CLASSIC_THEME_ID" ]]; then
-        log_success "Found Classic theme ID: $CLASSIC_THEME_ID"
-    else
-        log_warning "Classic theme not found; app creation will continue without theme_id"
-    fi
-else
-    log_warning "Failed to fetch themes (HTTP $HTTP_CODE); app creation will continue without theme_id"
-fi
+echo "" >&2; log_info "### User types ###"
+process_user_types
 
-AUTH_FLOW_ID=$(get_flow_id_by_handle "AUTHENTICATION" "default-basic-flow")
-REG_FLOW_ID=$(get_flow_id_by_handle "REGISTRATION" "default-basic-flow")
+echo "" >&2; log_info "### Groups ###"
+process_groups
 
-if [[ -n "$AUTH_FLOW_ID" ]]; then
-    log_success "Found default authentication flow ID: $AUTH_FLOW_ID"
-else
-    log_warning "Default authentication flow not found; app creation will continue without auth_flow_id"
-fi
+echo "" >&2; log_info "### Roles ###"
+process_roles
 
-if [[ -n "$REG_FLOW_ID" ]]; then
-    log_success "Found default registration flow ID: $REG_FLOW_ID"
-else
-    log_warning "Default registration flow not found; app creation will continue without registration_flow_id"
-fi
+echo "" >&2; log_info "### Role -> group assignments ###"
+process_role_group_assignments
 
-# ----------------------------------------------------------------------------
-# (B) Private-sector domain
-#     OUs -> Private_User type -> groups -> roles -> role/group assignments ->
-#     users -> group memberships -> TraderApp SPA.
-# ----------------------------------------------------------------------------
-echo "" >&2
-log_info "### Private-sector domain ###"
+echo "" >&2; log_info "### Users + group memberships ###"
+process_users
 
-PRIVATE_SECTOR_OU_ID=$(create_ou "private-sector" "Private Sector" "Organization unit for private sector entities")
-ADAM_PVT_LTD_OU_ID=$(create_ou "adam-pvt-ltd" "ADAM PVT LTD" "Child organization unit for ADAM PVT LTD" "$PRIVATE_SECTOR_OU_ID" "private-sector/adam-pvt-ltd")
-EDWARD_PVT_LTD_OU_ID=$(create_ou "edward-pvt-ltd" "EDWARD PVT LTD" "Child organization unit for EDWARD PVT LTD" "$PRIVATE_SECTOR_OU_ID" "private-sector/edward-pvt-ltd")
+echo "" >&2; log_info "### Applications (SPA + M2M) ###"
+process_applications
 
-echo "" >&2
-log_info "Creating Private_User user type..."
-read -r -d '' PRIVATE_USER_TYPE_PAYLOAD <<JSON || true
-{
-    "name": "Private_User",
-    "ouId": "${PRIVATE_SECTOR_OU_ID}",
-    "allowSelfRegistration": false,
-    "schema": {
-        "username": {
-            "type": "string",
-            "required": true,
-            "unique": true
-        },
-        "password": {
-            "type": "string",
-            "required": true,
-            "credential": true
-        },
-        "email": {
-            "type": "string",
-            "required": true,
-            "unique": true,
-            "regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$"
-        },
-        "phone_number": {
-            "type": "string",
-            "required": false,
-            "regex": "^\\\\+?[1-9]\\\\d{1,14}$"
-        },
-        "given_name": {
-            "type": "string",
-            "required": false
-        },
-        "family_name": {
-            "type": "string",
-            "required": false
-        }
-    },
-    "systemAttributes": {
-        "display": "username"
-    }
-}
-JSON
-create_user_type "Private_User" "$PRIVATE_USER_TYPE_PAYLOAD"
+echo "" >&2; log_info "### Role -> application assignments ###"
+process_app_role_assignments
 
-echo "" >&2
-log_info "Creating private-sector groups and roles..."
-TRADERS_GROUP_ID=$(create_group "Traders" "Trader members group" "$PRIVATE_SECTOR_OU_ID")
-CHA_GROUP_ID=$(create_group "CHA" "CHA members group" "$PRIVATE_SECTOR_OU_ID")
-TRADER_ROLE_ID=$(create_role "Trader" "Role for trader operations" "$PRIVATE_SECTOR_OU_ID" "$NSW_RS_ID" "${TRADER_NSW_SCOPES}")
-CHA_ROLE_ID=$(create_role "CHA" "Role for CHA operations" "$PRIVATE_SECTOR_OU_ID" "$NSW_RS_ID" "${TRADER_NSW_SCOPES}")
-
-log_info "Assigning roles to groups..."
-assign_role_to_group "$TRADER_ROLE_ID" "$TRADERS_GROUP_ID" "Trader" "Traders"
-assign_role_to_group "$CHA_ROLE_ID" "$CHA_GROUP_ID" "CHA" "CHA"
-
-echo "" >&2
-log_info "Creating private-sector sample users..."
-create_user_in_ou "Private_User" "$ADAM_PVT_LTD_OU_ID" "suresh" "suresh@adam-pvt-ltd.private-sector.dev" "Suresh" "Fernando" "$SURESH_PASSWORD" "+94771234567"
-USER_SURESH="$CREATED_USER_ID"
-create_user_in_ou "Private_User" "$ADAM_PVT_LTD_OU_ID" "ramesh" "ramesh@adam-pvt-ltd.private-sector.dev" "Ramesh" "Fernando" "$RAMESH_PASSWORD" "+94771234568"
-USER_RAMESH="$CREATED_USER_ID"
-create_user_in_ou "Private_User" "$ADAM_PVT_LTD_OU_ID" "gomesh" "gomesh@adam-pvt-ltd.private-sector.dev" "Gomesh" "Fernando" "$GOMESH_PASSWORD" "+94771234569"
-USER_GOMESH="$CREATED_USER_ID"
-create_user_in_ou "Private_User" "$EDWARD_PVT_LTD_OU_ID" "naresh" "naresh@edward-pvt-ltd.private-sector.dev" "Naresh" "Fernando" "$NARESH_PASSWORD" "+94771234570"
-USER_NARESH="$CREATED_USER_ID"
-
-log_info "Assigning private-sector users to groups..."
-ensure_user_in_group "$TRADERS_GROUP_ID" "$USER_SURESH" "Traders" "suresh"
-ensure_user_in_group "$CHA_GROUP_ID" "$USER_SURESH" "CHA" "suresh"
-ensure_user_in_group "$CHA_GROUP_ID" "$USER_RAMESH" "CHA" "ramesh"
-ensure_user_in_group "$TRADERS_GROUP_ID" "$USER_GOMESH" "Traders" "gomesh"
-ensure_user_in_group "$CHA_GROUP_ID" "$USER_NARESH" "CHA" "naresh"
-
-echo "" >&2
-log_info "Creating TraderApp SPA (default OU)..."
-create_spa_application "TraderApp" "Application for trader portal built with React" "TRADER_PORTAL_APP" "5173" "Private_User" "${DEFAULT_OU_ID}" "${TRADER_NSW_SCOPES}" "${TRADER_REDIRECT_URIS}"
-
-# ----------------------------------------------------------------------------
-# (C) Government-shared resources
-#     The government root OU, Government_User type, shared OGA Reviewers
-#     group/role, and the NswM2M role — all consumed by every agency below.
-# ----------------------------------------------------------------------------
-echo "" >&2
-log_info "### Government-shared resources ###"
-
-GOVERNMENT_ORG_OU_ID=$(create_ou "government-organization" "Government Organization" "Root organization unit for government entities")
-
-echo "" >&2
-log_info "Creating Government_User user type..."
-read -r -d '' GOVERNMENT_USER_TYPE_PAYLOAD <<JSON || true
-{
-    "name": "Government_User",
-    "ouId": "${GOVERNMENT_ORG_OU_ID}",
-    "allowSelfRegistration": false,
-    "schema": {
-        "username": {
-            "type": "string",
-            "required": true,
-            "unique": true
-        },
-        "password": {
-            "type": "string",
-            "required": true,
-            "credential": true
-        },
-        "email": {
-            "type": "string",
-            "required": true,
-            "unique": true,
-            "regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$"
-        },
-        "phone_number": {
-            "type": "string",
-            "required": false
-        },
-        "given_name": {
-            "type": "string",
-            "required": false
-        },
-        "family_name": {
-            "type": "string",
-            "required": false
-        }
-    },
-    "systemAttributes": {
-        "display": "username"
-    }
-}
-JSON
-create_user_type "Government_User" "$GOVERNMENT_USER_TYPE_PAYLOAD"
-
-# OGA portal reviewers: one shared group/role grants AGENCY_API. Per-agency
-# isolation is enforced by the agency backend via the user's ouHandle, so a
-# single shared group/role suffices; officers join it in setup_agency.
-echo "" >&2
-log_info "Creating shared OGA Reviewers group and role (AGENCY_API permissions)..."
-OGA_REVIEWERS_GROUP_ID=$(create_group "OGA Reviewers" "Government agency reviewers group" "$GOVERNMENT_ORG_OU_ID")
-OGA_REVIEWER_ROLE_ID=$(create_role "OGA Reviewer" "Role for government agency reviewers (AGENCY_API)" "$GOVERNMENT_ORG_OU_ID" "$AGENCY_RS_ID" "${AGENCY_REVIEWER_SCOPES}")
-assign_role_to_group "$OGA_REVIEWER_ROLE_ID" "$OGA_REVIEWERS_GROUP_ID" "OGA Reviewer" "OGA Reviewers"
-
-# NswM2M role: granted to each NSW_TO_* client (type "app") so its
-# client_credentials token carries aud=AGENCY_API + agency:application:inject.
-echo "" >&2
-log_info "Creating NswM2M role (AGENCY_API permissions for machine clients)..."
-NSW_M2M_ROLE_ID=$(create_role "NswM2M" "Role for NSW machine-to-machine clients calling the Agency API" "$GOVERNMENT_ORG_OU_ID" "$AGENCY_RS_ID" "${M2M_AGENCY_SCOPES}")
-
-# ----------------------------------------------------------------------------
-# (D) Per-agency domains — each call provisions the agency's OU, officer,
-#     portal SPA, and both M2M clients (+ role assignments).
-# ----------------------------------------------------------------------------
-echo "" >&2
-log_info "### Per-agency provisioning ###"
-
-setup_agency "npqs" "NPQS" "National Plant Quarantine Service" \
-    "npqs_officer" "npqs_officer@government.dev" "NPQS" "Officer" "$NPQS_OFFICER_PASSWORD" "+94771234560" \
-    "NPQSPortalApp" "OGA_PORTAL_APP_NPQS" "5174" \
-    "NPQS_TO_NSW" "$NPQS_M2M_CLIENT_SECRET" "NSW_TO_NPQS" "$NSW_TO_NPQS_M2M_CLIENT_SECRET" \
-    "$NPQS_REDIRECT_URIS"
-
-setup_agency "fcau" "FCAU" "Food Control Administration Unit" \
-    "fcau_officer" "fcau_officer@government.dev" "FCAU" "Officer" "$FCAU_OFFICER_PASSWORD" "+94771234561" \
-    "FCAUPortalApp" "OGA_PORTAL_APP_FCAU" "5175" \
-    "FCAU_TO_NSW" "$FCAU_M2M_CLIENT_SECRET" "NSW_TO_FCAU" "$NSW_TO_FCAU_M2M_CLIENT_SECRET" \
-    "$FCAU_REDIRECT_URIS"
-
-setup_agency "cda" "CDA" "Coconut Development Authority" \
-    "cda_officer" "cda_officer@government.dev" "CDA" "Officer" "$CDA_OFFICER_PASSWORD" "+94771234563" \
-    "CDAPortalApp" "OGA_PORTAL_APP_CDA" "5176" \
-    "CDA_TO_NSW" "$CDA_M2M_CLIENT_SECRET" "NSW_TO_CDA" "$NSW_TO_CDA_M2M_CLIENT_SECRET" \
-    "$CDA_REDIRECT_URIS"
-
-setup_agency "slpa" "SLPA" "Sri Lanka Ports Authority" \
-    "slpa_officer" "slpa_officer@government.dev" "SLPA" "Officer" "$SLPA_OFFICER_PASSWORD" "+94771234564" \
-    "SLPAPortalApp" "OGA_PORTAL_APP_SLPA" "5177" \
-    "SLPA_TO_NSW" "$SLPA_M2M_CLIENT_SECRET" "NSW_TO_SLPA" "$NSW_TO_SLPA_M2M_CLIENT_SECRET" \
-    "$SLPA_REDIRECT_URIS"
-
-setup_agency "customs" "Customs" "Sri Lanka Customs" \
-    "customs_officer" "customs_officer@government.dev" "Customs" "Officer" "$CUSTOMS_OFFICER_PASSWORD" "+94771234565" \
-    "CustomsPortalApp" "OGA_PORTAL_APP_CUSTOMS" "5178" \
-    "CUSTOMS_TO_NSW" "$CUSTOMS_M2M_CLIENT_SECRET" "NSW_TO_CUSTOMS" "$NSW_TO_CUSTOMS_M2M_CLIENT_SECRET" \
-    "$CUSTOMS_REDIRECT_URIS"
-
-setup_agency "sltb" "SLTB" "Sri Lanka Tea Board" \
-    "sltb_officer" "sltb_officer@government.dev" "SLTB" "Officer" "$SLTB_OFFICER_PASSWORD" "+94771234566" \
-    "SLTBPortalApp" "OGA_PORTAL_APP_SLTB" "5179" \
-    "SLTB_TO_NSW" "$SLTB_M2M_CLIENT_SECRET" "NSW_TO_SLTB" "$NSW_TO_SLTB_M2M_CLIENT_SECRET" \
-    "$SLTB_REDIRECT_URIS"
-
-# ----------------------------------------------------------------------------
-# (E) Summary
-# ----------------------------------------------------------------------------
+# ============================================================================
+# Summary (derived from config)
+# ============================================================================
 echo "" >&2
 log_success "Sample resources setup completed successfully!"
-log_info "Private Sector OU path: private-sector (children: adam-pvt-ltd, edward-pvt-ltd)"
-log_info "Government Organization OU path: government-organization (children: npqs, fcau, cda, slpa, customs, sltb)"
-log_info "Private user type: Private_User; Government user type: Government_User"
-log_info "Traders group -> Trader role (NSW_API scopes)"
-log_info "CHA group -> CHA role (NSW_API scopes)"
-log_info "OGA Reviewers group -> OGA Reviewer role (AGENCY_API scopes)"
-log_info "suresh in groups: Traders, CHA"
-log_info "ramesh in groups: CHA"
-log_info "gomesh in groups: Traders"
-log_info "naresh (EDWARD PVT LTD) in groups: CHA"
-log_info "Government officers: npqs_officer, fcau_officer, cda_officer, slpa_officer, customs_officer, sltb_officer - all in OGA Reviewers group"
-log_info "SPA client IDs: TRADER_PORTAL_APP, OGA_PORTAL_APP_NPQS, OGA_PORTAL_APP_FCAU, OGA_PORTAL_APP_CDA, OGA_PORTAL_APP_SLPA, OGA_PORTAL_APP_CUSTOMS, OGA_PORTAL_APP_SLTB"
-log_info "M2M client IDs (OGA -> NSW): NPQS_TO_NSW, FCAU_TO_NSW, CDA_TO_NSW, SLPA_TO_NSW, CUSTOMS_TO_NSW, SLTB_TO_NSW"
-log_info "M2M client IDs (NSW -> OGA): NSW_TO_NPQS, NSW_TO_FCAU, NSW_TO_CDA, NSW_TO_SLPA, NSW_TO_CUSTOMS, NSW_TO_SLTB"
-log_info "M2M roles: AgencyM2M (clients -> NSW_API), NswM2M (clients -> AGENCY_API)"
-log_info "M2M auth method: client_secret_basic"
-echo "" >&2
-log_info "Resource servers (token audiences):"
-log_info "  NSW_API    -> TraderApp users (Trader/CHA roles) + *_TO_NSW M2M clients (AgencyM2M role on app)"
-log_info "  AGENCY_API -> OGA portal users (OGA Reviewers group / OGA Reviewer role) + NSW_TO_* M2M clients (NswM2M role on app)"
-log_info "NSW_API scopes: nsw:{consignment,task,storage}:{read,write,delete}, nsw:{hscode,company,cha}:read"
-log_info "AGENCY_API scopes: agency:application:{read,review,feedback,inject}, agency:consignment:read, agency:storage:{read,write}"
+log_info "Organization units: $(jq -r '[.organizationUnits[].treePath] | join(", ")' <<< "$MERGED")"
+log_info "User types: $(jq -r '[.userTypes[].name] | join(", ")' <<< "$MERGED")"
+log_info "Groups: $(jq -r '[.groups[].name] | join(", ")' <<< "$MERGED")"
+log_info "Roles: $(jq -r '[.roles[].name] | join(", ")' <<< "$MERGED")"
+log_info "Resource servers (token audiences): $(jq -r '[.resourceServers[].identifier] | join(", ")' <<< "$MERGED")"
+log_info "SPA client IDs: $(jq -r '[.applications[] | select(.kind=="spa") | .clientId] | join(", ")' <<< "$MERGED")"
+log_info "M2M client IDs: $(jq -r '[.applications[] | select(.kind=="m2m") | .clientId] | join(", ")' <<< "$MERGED")"
+log_info "M2M role/app assignments: $(jq -r '[.appRoleAssignments[] | "\(.role)->\(.app)"] | join(", ")' <<< "$MERGED")"
 echo "" >&2

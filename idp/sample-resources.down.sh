@@ -304,71 +304,73 @@ confirm_or_abort() {
     fi
 }
 
+# Shared engine library (load_config + agency expansion) so teardown reads the
+# exact same idp/resources/ config the seed script provisions from — adding an
+# agency/company to config covers both create and delete.
+# shellcheck source=resources-lib.sh
+source "${SCRIPT_DIR}/resources-lib.sh"
+
 # ============================================================================
-# Main — delete in reverse-dependency order
+# Main — delete in reverse-dependency order, all lists derived from the merged
+# idp/resources/ config (no hardcoded entity names).
 # ============================================================================
 log_info "Tearing down NSW sample resources from ${API_BASE}..."
 confirm_or_abort
-
-# OU IDs are resolved up-front (OUs are deleted last, so they still exist now)
-# and are needed to disambiguate group/role lookups by ouId.
-DEFAULT_OU_ID=$(get_ou_id_by_handle "default")
-PRIVATE_SECTOR_OU_ID=$(get_ou_id_by_handle "private-sector")
-GOVERNMENT_ORG_OU_ID=$(get_ou_id_by_handle "government-organization")
+load_config
 
 echo "" >&2
 log_info "### (1) Applications ###"
-for c in \
-    TRADER_PORTAL_APP \
-    OGA_PORTAL_APP_NPQS OGA_PORTAL_APP_FCAU OGA_PORTAL_APP_CDA OGA_PORTAL_APP_SLPA OGA_PORTAL_APP_CUSTOMS OGA_PORTAL_APP_SLTB \
-    NPQS_TO_NSW FCAU_TO_NSW CDA_TO_NSW SLPA_TO_NSW CUSTOMS_TO_NSW SLTB_TO_NSW \
-    NSW_TO_NPQS NSW_TO_FCAU NSW_TO_CDA NSW_TO_SLPA NSW_TO_CUSTOMS NSW_TO_SLTB; do
+while IFS= read -r c; do
+    [[ -z "$c" ]] && continue
     delete_application "$c"
-done
+done <<< "$(jq -r '.applications // [] | .[].clientId' <<< "$MERGED")"
 
 echo "" >&2
 log_info "### (2) Users ###"
-for u in suresh ramesh gomesh naresh \
-         npqs_officer fcau_officer cda_officer slpa_officer customs_officer sltb_officer; do
+while IFS= read -r u; do
+    [[ -z "$u" ]] && continue
     delete_user "$u"
-done
+done <<< "$(jq -r '.users // [] | .[].username' <<< "$MERGED")"
 
 echo "" >&2
 log_info "### (3) Groups ###"
-delete_group "Traders" "$PRIVATE_SECTOR_OU_ID"
-delete_group "CHA" "$PRIVATE_SECTOR_OU_ID"
-delete_group "OGA Reviewers" "$GOVERNMENT_ORG_OU_ID"
+while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    g_name="${line%%$'\t'*}"; g_ou="${line#*$'\t'}"
+    g_ou_id="$(get_ou_id_by_handle "$g_ou")"
+    delete_group "$g_name" "$g_ou_id"
+done <<< "$(jq -r '.groups // [] | .[] | "\(.name)\t\(.ou)"' <<< "$MERGED")"
 
 echo "" >&2
 log_info "### (4) Roles ###"
-delete_role "Trader" "$PRIVATE_SECTOR_OU_ID"
-delete_role "CHA" "$PRIVATE_SECTOR_OU_ID"
-delete_role "AgencyM2M" "$DEFAULT_OU_ID"
-delete_role "OGA Reviewer" "$GOVERNMENT_ORG_OU_ID"
-delete_role "NswM2M" "$GOVERNMENT_ORG_OU_ID"
+while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    r_name="${line%%$'\t'*}"; r_ou="${line#*$'\t'}"
+    r_ou_id="$(get_ou_id_by_handle "$r_ou")"
+    delete_role "$r_name" "$r_ou_id"
+done <<< "$(jq -r '.roles // [] | .[] | "\(.name)\t\(.ou)"' <<< "$MERGED")"
 
 echo "" >&2
 log_info "### (5) User types ###"
-delete_user_type "Private_User"
-delete_user_type "Government_User"
+while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    delete_user_type "$t"
+done <<< "$(jq -r '.userTypes // [] | .[].name' <<< "$MERGED")"
 
 echo "" >&2
 log_info "### (6) Resource servers (resources + actions first) ###"
-delete_resource_server "NSW_API"
-delete_resource_server "AGENCY_API"
+while IFS= read -r rs; do
+    [[ -z "$rs" ]] && continue
+    delete_resource_server "$rs"
+done <<< "$(jq -r '.resourceServers // [] | .[].identifier' <<< "$MERGED")"
 
 echo "" >&2
 log_info "### (7) Organization units (children before parents) ###"
-delete_ou "private-sector/adam-pvt-ltd" "adam-pvt-ltd"
-delete_ou "private-sector/edward-pvt-ltd" "edward-pvt-ltd"
-delete_ou "government-organization/npqs" "npqs"
-delete_ou "government-organization/fcau" "fcau"
-delete_ou "government-organization/cda" "cda"
-delete_ou "government-organization/slpa" "slpa"
-delete_ou "government-organization/customs" "customs"
-delete_ou "government-organization/sltb" "sltb"
-delete_ou "private-sector" "private-sector"
-delete_ou "government-organization" "government-organization"
+while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    ou_tree="${line#*$'\t'}"
+    delete_ou "$ou_tree" "${ou_tree##*/}"
+done <<< "$(jq -r '.organizationUnits // [] | .[] | [ ((.treePath // .handle) | [scan("/")] | length), (.treePath // .handle) ] | "\(.[0])\t\(.[1])"' <<< "$MERGED" | sort -rn -k1,1 -s)"
 
 echo "" >&2
 log_success "Sample resources teardown completed."

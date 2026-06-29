@@ -1,0 +1,94 @@
+{
+  "agencies": [
+    {
+      "handle": "npqs",
+      "name": "NPQS",
+      "description": "National Plant Quarantine Service",
+      "officer": {
+        "username": "npqs_officer", "email": "npqs_officer@government.dev",
+        "givenName": "NPQS", "familyName": "Officer", "phoneNumber": "+94771234560",
+        "passwordEnv": { "override": "SAMPLE_NPQS_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
+      },
+      "portal": { "name": "NPQSPortalApp", "clientId": "OGA_PORTAL_APP_NPQS", "port": 5174, "redirectUrisEnv": "NPQS_REDIRECT_URIS" },
+      "m2m": {
+        "toNsw": { "clientId": "NPQS_TO_NSW", "secretEnv": { "override": "M2M_NPQS_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+        "nswTo": { "clientId": "NSW_TO_NPQS", "secretEnv": { "override": "M2M_NSW_TO_NPQS_SECRET", "default": "M2M_CLIENT_SECRET" } }
+      }
+    },
+    {
+      "handle": "fcau",
+      "name": "FCAU",
+      "description": "Food Control Administration Unit",
+      "officer": {
+        "username": "fcau_officer", "email": "fcau_officer@government.dev",
+        "givenName": "FCAU", "familyName": "Officer", "phoneNumber": "+94771234561",
+        "passwordEnv": { "override": "SAMPLE_FCAU_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
+      },
+      "portal": { "name": "FCAUPortalApp", "clientId": "OGA_PORTAL_APP_FCAU", "port": 5175, "redirectUrisEnv": "FCAU_REDIRECT_URIS" },
+      "m2m": {
+        "toNsw": { "clientId": "FCAU_TO_NSW", "secretEnv": { "override": "M2M_FCAU_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+        "nswTo": { "clientId": "NSW_TO_FCAU", "secretEnv": { "override": "M2M_NSW_TO_FCAU_SECRET", "default": "M2M_CLIENT_SECRET" } }
+      }
+    },
+    {
+      "handle": "cda",
+      "name": "CDA",
+      "description": "Coconut Development Authority",
+      "officer": {
+        "username": "cda_officer", "email": "cda_officer@government.dev",
+        "givenName": "CDA", "familyName": "Officer", "phoneNumber": "+94771234563",
+        "passwordEnv": { "override": "SAMPLE_CDA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
+      },
+      "portal": { "name": "CDAPortalApp", "clientId": "OGA_PORTAL_APP_CDA", "port": 5176, "redirectUrisEnv": "CDA_REDIRECT_URIS" },
+      "m2m": {
+        "toNsw": { "clientId": "CDA_TO_NSW", "secretEnv": { "override": "M2M_CDA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+        "nswTo": { "clientId": "NSW_TO_CDA", "secretEnv": { "override": "M2M_NSW_TO_CDA_SECRET", "default": "M2M_CLIENT_SECRET" } }
+      }
+    },
+    {
+      "handle": "slpa",
+      "name": "SLPA",
+      "description": "Sri Lanka Ports Authority",
+      "officer": {
+        "username": "slpa_officer", "email": "slpa_officer@government.dev",
+        "givenName": "SLPA", "familyName": "Officer", "phoneNumber": "+94771234564",
+        "passwordEnv": { "override": "SAMPLE_SLPA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
+      },
+      "portal": { "name": "SLPAPortalApp", "clientId": "OGA_PORTAL_APP_SLPA", "port": 5177, "redirectUrisEnv": "SLPA_REDIRECT_URIS" },
+      "m2m": {
+        "toNsw": { "clientId": "SLPA_TO_NSW", "secretEnv": { "override": "M2M_SLPA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+        "nswTo": { "clientId": "NSW_TO_SLPA", "secretEnv": { "override": "M2M_NSW_TO_SLPA_SECRET", "default": "M2M_CLIENT_SECRET" } }
+      }
+    },
+    {
+      "handle": "customs",
+      "name": "Customs",
+      "description": "Sri Lanka Customs",
+      "officer": {
+        "username": "customs_officer", "email": "customs_officer@government.dev",
+        "givenName": "Customs", "familyName": "Officer", "phoneNumber": "+94771234565",
+        "passwordEnv": { "override": "SAMPLE_CUSTOMS_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
+      },
+      "portal": { "name": "CustomsPortalApp", "clientId": "OGA_PORTAL_APP_CUSTOMS", "port": 5178, "redirectUrisEnv": "CUSTOMS_REDIRECT_URIS" },
+      "m2m": {
+        "toNsw": { "clientId": "CUSTOMS_TO_NSW", "secretEnv": { "override": "M2M_CUSTOMS_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+        "nswTo": { "clientId": "NSW_TO_CUSTOMS", "secretEnv": { "override": "M2M_NSW_TO_CUSTOMS_SECRET", "default": "M2M_CLIENT_SECRET" } }
+      }
+    },
+    {
+      "handle": "sltb",
+      "name": "SLTB",
+      "description": "Sri Lanka Tea Board",
+      "officer": {
+        "username": "sltb_officer", "email": "sltb_officer@government.dev",
+        "givenName": "SLTB", "familyName": "Officer", "phoneNumber": "+94771234566",
+        "passwordEnv": { "override": "SAMPLE_SLTB_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
+      },
+      "portal": { "name": "SLTBPortalApp", "clientId": "OGA_PORTAL_APP_SLTB", "port": 5179, "redirectUrisEnv": "SLTB_REDIRECT_URIS" },
+      "m2m": {
+        "toNsw": { "clientId": "SLTB_TO_NSW", "secretEnv": { "override": "M2M_SLTB_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
+        "nswTo": { "clientId": "NSW_TO_SLTB", "secretEnv": { "override": "M2M_NSW_TO_SLTB_SECRET", "default": "M2M_CLIENT_SECRET" } }
+      }
+    }
+  ]
+}
