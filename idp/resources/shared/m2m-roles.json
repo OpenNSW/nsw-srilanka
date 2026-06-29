@@ -1,0 +1,12 @@
+{
+  "roles": [
+    {
+      "key": "AgencyM2M",
+      "name": "AgencyM2M",
+      "description": "Role for agency machine-to-machine clients calling the NSW API",
+      "ou": "default",
+      "resourceServer": "NSW_API",
+      "scopeSet": "m2mNsw"
+    }
+  ]
+}

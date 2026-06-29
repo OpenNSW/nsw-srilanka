@@ -1,0 +1,48 @@
+{
+  "resourceServers": [
+    {
+      "name": "NSW API",
+      "identifier": "NSW_API",
+      "ou": "default",
+      "resources": [
+        {
+          "handle": "nsw",
+          "name": "NSW API",
+          "resources": [
+            { "handle": "consignment", "name": "Consignment",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
+            { "handle": "task", "name": "Task",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
+            { "handle": "hscode", "name": "HS Code",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "company", "name": "Company",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "cha", "name": "CHA",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "storage", "name": "Storage",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "delete", "name": "Delete" } ] }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agency API",
+      "identifier": "AGENCY_API",
+      "ou": "default",
+      "resources": [
+        {
+          "handle": "agency",
+          "name": "Agency API",
+          "resources": [
+            { "handle": "application", "name": "Application",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "review", "name": "Review" }, { "handle": "feedback", "name": "Feedback" }, { "handle": "inject", "name": "Inject" } ] },
+            { "handle": "consignment", "name": "Consignment",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "storage", "name": "Storage",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] }
+          ]
+        }
+      ]
+    }
+  ]
+}
