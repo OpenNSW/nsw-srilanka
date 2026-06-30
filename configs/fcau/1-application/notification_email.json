@@ -1,5 +1,0 @@
-{
-  "subject": "FCAU Health Certificate application received — {{.userform.exporter_name}}",
-  "body": "Dear {{.userform.exporter_name}},\n\nYour FCAU Health Certificate application for the consignment to {{.userform.consignee_name}} has been received and is now under review. We will notify you of the outcome.\n\nThank you.",
-  "html_body": "<p>Dear {{.userform.exporter_name}},</p><p>Your FCAU Health Certificate application for the consignment to {{.userform.consignee_name}} has been received and is now under review. We will notify you of the outcome.</p><p>Thank you.</p>"
-}
