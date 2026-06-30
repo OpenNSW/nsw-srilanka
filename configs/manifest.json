@@ -22,6 +22,13 @@
       "path": "trade/1-cha_selection/userinput_jsonform.json"
     },
     {
+      "id": "trade-cha-selection--notification",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "trade/1-cha_selection/notification_email.json"
+    },
+    {
       "id": "trade-cha-selection--summary",
       "kind": "generic_template",
       "version": "",
@@ -1028,13 +1035,6 @@
       "version": "",
       "loader": "local",
       "path": "fcau/1-application/userinput_jsonform.json"
-    },
-    {
-      "id": "fcau-application-received--notification",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "fcau/1-application/notification_email.json"
     },
     {
       "id": "fcau-apply-health-cert-flow",

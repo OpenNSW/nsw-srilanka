@@ -1,0 +1,5 @@
+{
+  "subject": "CHA selection submitted — {{.traderinput.consignment_name}}",
+  "body": "Dear Trader,\n\nYour Customs House Agent selection for {{.traderinput.consignment_name}} has been submitted.\n\nSelected CHA: {{.traderinput.cha_company_id}}\n\nThank you.",
+  "html_body": "<p>Dear Trader,</p><p>Your Customs House Agent selection for <strong>{{.traderinput.consignment_name}}</strong> has been submitted.</p><p>Selected CHA: {{.traderinput.cha_company_id}}</p><p>Thank you.</p>"
+}

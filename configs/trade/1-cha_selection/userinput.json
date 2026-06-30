@@ -4,5 +4,15 @@
   "output_namespace": "traderinput",
   "plugin_properties": {
     "user_jsonforms_id": "trade-cha-selection--form"
-  }
+  },
+  "extensions": [
+    {
+      "id": "notification",
+      "phase": "POST_RESUME",
+      "properties": {
+        "channel": "email",
+        "template_id": "trade-cha-selection--notification"
+      }
+    }
+  ]
 }

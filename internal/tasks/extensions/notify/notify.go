@@ -53,7 +53,6 @@ type notificationConfig struct {
 	// against record.Data; a rendered field is used in preference to the inline
 	// subject/body fallback (see Execute).
 	TemplateID string `json:"template_id,omitempty"`
-	TaskCode   string `json:"task_code,omitempty"`
 }
 
 // Execute resolves the recipient, builds and validates the request, and
@@ -64,6 +63,7 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 		return fmt.Errorf("notification: invalid properties: %w", err)
 	}
 
+	// TODO: make recipient_key configurable (hardcoded to "notifyRecipient" for now).
 	to, ok := stringLeaf(payload["notifyRecipient"])
 	if !ok {
 		slog.Info("notification extension: skipped (no recipient provided)", "taskId", record.TaskID)
@@ -92,14 +92,14 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 	}
 
 	slog.Info("notification extension: dispatching",
-		"taskId", record.TaskID, "channel", req.Channel, "taskCode", cfg.TaskCode)
+		"taskId", record.TaskID, "channel", req.Channel)
 
 	if err := e.sender.Send(ctx, req); err != nil {
 		return e.swallowInDevMode(record, fmt.Errorf("notification: send: %w", err))
 	}
 
 	slog.Info("notification extension: sent",
-		"taskId", record.TaskID, "channel", req.Channel, "taskCode", cfg.TaskCode)
+		"taskId", record.TaskID, "channel", req.Channel)
 	return nil
 }
 

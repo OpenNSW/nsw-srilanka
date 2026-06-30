@@ -38,6 +38,12 @@
             "title": "FCAU Company"
           }
         ]
+      },
+      "notifyRecipient": {
+        "type": "string",
+        "format": "email",
+        "title": "Contact email for notifications",
+        "example": "trader@example.lk"
       }
     },
     "required": [
@@ -55,6 +61,10 @@
       {
         "type": "Control",
         "scope": "#/properties/cha_company_id"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/notifyRecipient"
       }
     ]
   }

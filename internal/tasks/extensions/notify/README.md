@@ -1,7 +1,7 @@
 # Notifications
 
-Send an **email or SMS** when a workflow step completes — e.g. "trader submits
-the FCAU application → confirmation email is sent".
+Send an **email or SMS** when a workflow step completes — e.g. "trader selects
+a customs house agent → confirmation email is sent".
 
 Two things to configure: **where to send** (gateway credentials) and **when to
 send** (an `extensions` block on a step).
@@ -87,9 +87,9 @@ whose `id` matches `template_id`, then restart the server:
 
 ```json
 {
-  "id": "fcau-application-received--notification",
+  "id": "trade-cha-selection--notification",
   "kind": "generic_template",
   "loader": "local",
-  "path": "fcau/1-application/notification_email.json"
+  "path": "trade/1-cha_selection/notification_email.json"
 }
 ```
