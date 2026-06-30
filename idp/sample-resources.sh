@@ -429,7 +429,7 @@ JSON
         USER_ID=$(get_user_id_by_username "$USERNAME")
     else
         log_error "Failed to create user ${USERNAME} (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 
@@ -629,7 +629,7 @@ JSON
         log_warning "${APP_NAME} application already exists, skipping"
     else
         log_error "Failed to create ${APP_NAME} application (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 }
@@ -699,7 +699,7 @@ JSON
         APP_CLIENT_ID="$CLIENT_ID"
     else
         log_error "Failed to create ${APP_NAME} M2M application (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 
@@ -741,7 +741,7 @@ JSON
         log_warning "${USERNAME} is already a member of group ${GROUP_NAME}, skipping"
     else
         log_error "Failed to add ${USERNAME} to group ${GROUP_NAME} (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 }
@@ -789,12 +789,12 @@ JSON
             log_warning "Role ${ROLE_NAME} appears already assigned to group ${GROUP_NAME} (unique constraint), skipping"
         else
             log_error "Failed to assign role ${ROLE_NAME} to group ${GROUP_NAME} (HTTP $HTTP_CODE)"
-            echo "Response: $BODY"
+            echo "Response: $BODY" >&2
             exit 1
         fi
     else
         log_error "Failed to assign role ${ROLE_NAME} to group ${GROUP_NAME} (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 }
@@ -841,7 +841,7 @@ JSON
         log_warning "Role ${ROLE_NAME} appears already assigned to app ${APP_NAME} (unique constraint), skipping"
     else
         log_error "Failed to assign role ${ROLE_NAME} to app ${APP_NAME} (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 }

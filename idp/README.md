@@ -21,12 +21,15 @@ Start the IdP with default credentials (`admin` / `1234`):
 docker compose up
 ```
 
-The stack runs three services in order:
+A full `docker compose up` runs four IdP services in order:
 
 1. **`thunderid-db-init`** — seeds the shared SQLite databases from the image.
 2. **`thunderid-setup`** — one-shot container that starts the server with security
-   disabled, runs the bootstrap scripts, then exits.
+   disabled, runs the bootstrap scripts (incl. `bootstrap/02-admin-cli.sh`), then exits.
 3. **`thunderid`** — the long-running server (listens on `https://localhost:8090`).
+4. **`thunderid-seed`** — dev-only; once `thunderid` is healthy, mints an `ADMIN_CLI`
+   token and seeds the sample resources (see *Seeding sample resources*). A bare
+   `docker compose up thunderid` skips it.
 
 ### Custom Configuration (optional)
 
@@ -166,11 +169,13 @@ idp/resources/
     agencies.json              the OGA agencies (shorthand, see below)
 ```
 
-Each file's top-level keys are entity-type buckets (`resourceServers`,
+Each file's top-level keys are entity-type buckets (`scopeSets`, `resourceServers`,
 `organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
-`applications`, `appRoleAssignments`, `agencies`); the engine merges every file by
-concatenating same-named arrays, so a domain file only carries its domain's entities and
-file placement is just for humans. Cross-references use **logical keys** (an OU's `parent`,
+`applications`, `agencies`); the engine merges every file by concatenating same-named
+arrays, so a domain file only carries its domain's entities and file placement is just for
+humans. (An `agencies` entry is expanded at runtime into the primitive buckets — its OU,
+officer `users`, portal/M2M `applications`, and the role→app assignments — so you never
+author those by hand.) Cross-references use **logical keys** (an OU's `parent`,
 a role's `resourceServer`, a user's `groups`, an assignment's `role`/`group`/`app`), which
 the engine resolves to the server-assigned IDs at provisioning time. The `default` OU and
 the Classic theme / default flows are image-provided and referenced (e.g. `"ou": "default"`)
