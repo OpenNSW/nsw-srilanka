@@ -1,7 +1,8 @@
 // Package scopes defines the NSW API OAuth2 scope constants.
 //
 // These values must stay in sync with the NSW_API resource server defined in
-// idp/02-sample-resources.sh (nsw:* namespace). Each constant corresponds to
+// idp/resources/shared/resource-servers.json (nsw:* namespace), seeded by
+// idp/sample-resources.sh. Each constant corresponds to
 // a permission derived from a resource + action handle in the IdP, following
 // the pattern "nsw:<resource>:<action>".
 //

@@ -148,7 +148,7 @@ JSON
         APP_CLIENT_ID="$CLIENT_ID"
     else
         log_error "Failed to create ${APP_NAME} M2M application (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 
@@ -204,7 +204,7 @@ JSON
         log_warning "Role ${ROLE_NAME} appears already assigned to app ${APP_NAME} (unique constraint), skipping"
     else
         log_error "Failed to assign role ${ROLE_NAME} to app ${APP_NAME} (HTTP $HTTP_CODE)"
-        echo "Response: $BODY"
+        echo "Response: $BODY" >&2
         exit 1
     fi
 }
