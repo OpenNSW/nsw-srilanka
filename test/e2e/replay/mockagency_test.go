@@ -8,76 +8,96 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
-// injectRequest mirrors the payload the EXTERNAL_REVIEW plugin POSTs to an
-// external agency: the parked task's id, the task code, the consignment id,
-// the mapped submission data, and the callback URL.
-type injectRequest struct {
-	TaskID        string         `json:"taskId"`
-	TaskCode      string         `json:"taskCode"`
-	ConsignmentID string         `json:"consignmentId"`
-	Data          map[string]any `json:"data"`
-	ServiceURL    string         `json:"serviceUrl"`
-}
-
 const agencyPollInterval = 300 * time.Millisecond
 
+// storedInject holds the raw inject payload received from the NSW app, tagged
+// with which agency received it so Respond can route the callback correctly.
+type storedInject struct {
+	agencyID string
+	taskID   string
+	body     map[string]any
+}
+
 // mockAgency is a generic controllable stand-in for any external OGA agency.
-// It receives the system's inject and, when a replay `callback` step fires,
-// posts {command, payload} back to the NSW task endpoint to complete the
-// parked EXTERNAL_REVIEW step. It implements replay.Agency.
+// It is driven by []AgencyConfig: each agency registers its own inject endpoint
+// and callback wire format. When a replay `callback` step fires, Respond posts
+// the configured payload back to the NSW task endpoint. It implements replay.Agency.
 //
-// The callback is authenticated with a real agency bearer token (the app runs
-// the production authn middleware). callbackBase and bearer are set by the
-// harness after the app server starts.
+// callbackBase and bearers are set by the harness after the app server starts.
 type mockAgency struct {
 	server *httptest.Server
 	client *http.Client
 
 	mu      sync.Mutex
-	injects map[string]injectRequest // keyed by taskId
+	injects map[string]storedInject // keyed by taskId
+
+	configs map[string]AgencyConfig // agencyID -> config
 
 	// Set by the harness after the app server starts.
-	callbackBase string // the in-process NSW app base URL
-	bearer       string // agency SERVICE token for the callback Authorization header
+	callbackBase string            // the in-process NSW app base URL
+	bearers      map[string]string // agencyID -> SERVICE bearer token
 	logf         func(string, ...any)
 }
 
-// newMockAgency starts the agency HTTP server (so it is reachable before the
-// app's first inject). The harness sets callbackBase/bearer after the app starts.
-func newMockAgency(t *testing.T) *mockAgency {
+// newMockAgency starts the agency HTTP server (reachable before the app's first
+// inject) and registers one inject endpoint per agency config. The harness sets
+// callbackBase and bearers after the app starts.
+func newMockAgency(t *testing.T, configs []AgencyConfig) *mockAgency {
 	t.Helper()
 	a := &mockAgency{
 		client:  &http.Client{Timeout: 10 * time.Second},
-		injects: make(map[string]injectRequest),
+		injects: make(map[string]storedInject),
+		bearers: make(map[string]string),
+		configs: make(map[string]AgencyConfig, len(configs)),
 		logf:    t.Logf,
 	}
+	for _, cfg := range configs {
+		a.configs[cfg.ID] = cfg
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/inject", a.handleInject)
+	for _, cfg := range configs {
+		cfg := cfg // capture
+		// Prefix the path with the agency ID so all agencies can share the same
+		// real-world inject path (e.g. /api/v1/inject) on one mock server.
+		// writeServicesConfig points each agency at agencyURL/<id>, so the NSW
+		// app sends to /<id>/api/v1/inject — matching the pattern below.
+		parts := strings.SplitN(cfg.Inbound.Endpoint, " ", 2)
+		mux.HandleFunc(parts[0]+" /"+cfg.ID+parts[1], func(w http.ResponseWriter, r *http.Request) {
+			a.handleInject(w, r, cfg.ID, cfg.Inbound.TaskIDField)
+		})
+	}
 	a.server = httptest.NewServer(mux)
 	t.Cleanup(a.server.Close)
 	return a
 }
 
-func (a *mockAgency) handleInject(w http.ResponseWriter, r *http.Request) {
-	var req injectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+func (a *mockAgency) handleInject(w http.ResponseWriter, r *http.Request, agencyID, taskIDField string) {
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad inject: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	taskID, _ := body[taskIDField].(string)
+	if taskID == "" {
+		http.Error(w, "missing "+taskIDField, http.StatusBadRequest)
+		return
+	}
 	a.mu.Lock()
-	a.injects[req.TaskID] = req
+	a.injects[taskID] = storedInject{agencyID: agencyID, taskID: taskID, body: body}
 	a.mu.Unlock()
-	a.logf("mock-agency: received inject taskCode=%s taskId=%s consignmentId=%s", req.TaskCode, req.TaskID, req.ConsignmentID)
+	a.logf("mock-agency[%s]: received inject taskId=%s", agencyID, taskID)
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "taskId": req.TaskID})
+	_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "taskId": taskID})
 }
 
-func (a *mockAgency) findInject(taskID string) (injectRequest, bool) {
+func (a *mockAgency) findInject(taskID string) (storedInject, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	inj, ok := a.injects[taskID]
@@ -85,14 +105,13 @@ func (a *mockAgency) findInject(taskID string) (injectRequest, bool) {
 }
 
 // Respond implements replay.Agency: wait (up to timeout) for the inject for
-// taskID, then post {command, payload:content} to the NSW task endpoint to
-// complete the parked EXTERNAL_REVIEW step.
+// taskID, then post the configured callback payload to the NSW task endpoint.
 func (a *mockAgency) Respond(ctx context.Context, taskID, command string, content map[string]any, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(agencyPollInterval)
 	defer ticker.Stop()
 
-	var inj injectRequest
+	var inj storedInject
 	for {
 		var ok bool
 		if inj, ok = a.findInject(taskID); ok {
@@ -108,19 +127,26 @@ func (a *mockAgency) Respond(ctx context.Context, taskID, command string, conten
 		}
 	}
 
-	body, err := json.Marshal(map[string]any{"command": command, "payload": content})
+	cfg, ok := a.configs[inj.agencyID]
+	if !ok {
+		return fmt.Errorf("mock-agency: no config found for agency ID %q", inj.agencyID)
+	}
+	callbackURL := a.callbackBase + strings.Replace(cfg.Outbound.CallbackPath, "{taskId}", taskID, 1)
+	body, err := json.Marshal(map[string]any{
+		cfg.Outbound.CommandField: command,
+		cfg.Outbound.PayloadField: content,
+	})
 	if err != nil {
 		return fmt.Errorf("mock-agency: marshal callback: %w", err)
 	}
 
-	url := a.callbackBase + "/api/v1/tasks/" + inj.TaskID
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, callbackURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if a.bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+a.bearer)
+	if bearer := a.bearers[inj.agencyID]; bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -129,8 +155,8 @@ func (a *mockAgency) Respond(ctx context.Context, taskID, command string, conten
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("mock-agency: callback to %s got status %d: %s", url, resp.StatusCode, string(rb))
+		return fmt.Errorf("mock-agency: callback to %s got status %d: %s", callbackURL, resp.StatusCode, string(rb))
 	}
-	a.logf("mock-agency: callback delivered for task %s command=%s (status %d)", inj.TaskID, command, resp.StatusCode)
+	a.logf("mock-agency[%s]: callback delivered for task %s command=%s (status %d)", inj.agencyID, taskID, command, resp.StatusCode)
 	return nil
 }

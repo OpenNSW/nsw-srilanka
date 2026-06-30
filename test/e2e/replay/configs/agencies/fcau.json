@@ -1,0 +1,22 @@
+{
+  "id": "fcau",
+  "identity": {
+    "clientID": "FCAU_TO_NSW",
+    "roles": ["AgencyM2M"],
+    "scopes": [
+      "nsw:task:write",
+      "nsw:consignment:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ]
+  },
+  "inbound": {
+    "endpoint": "POST /api/v1/inject",
+    "taskIDField": "taskId"
+  },
+  "outbound": {
+    "callbackPath": "/api/v1/tasks/{taskId}",
+    "commandField": "command",
+    "payloadField": "payload"
+  }
+}

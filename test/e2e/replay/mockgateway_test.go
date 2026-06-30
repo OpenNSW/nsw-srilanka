@@ -25,25 +25,38 @@ const gatewayPollInterval = 300 * time.Millisecond
 // The reference is only rendered into the task's markdown view, so the mock
 // reads it from the payment store (GetByTaskID) rather than over HTTP.
 type mockGateway struct {
-	repo   payment.PaymentRepository
-	client *http.Client
-	base   string // the in-process NSW app base URL; set by the harness after start
-	logf   func(string, ...any)
+	repo    payment.PaymentRepository
+	client  *http.Client
+	base    string // the in-process NSW app base URL; set by the harness after start
+	configs map[string]PaymentConfig
+	bearers map[string]string // paymentID -> SERVICE bearer token (empty = unauthenticated)
+	logf    func(string, ...any)
 }
 
-func newMockGateway(t *testing.T, db *gorm.DB) *mockGateway {
+func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig) *mockGateway {
 	t.Helper()
+	cfgMap := make(map[string]PaymentConfig, len(configs))
+	for _, c := range configs {
+		cfgMap[c.ID] = c
+	}
 	return &mockGateway{
-		repo:   payment.NewPaymentRepository(db),
-		client: &http.Client{Timeout: 10 * time.Second},
-		logf:   t.Logf,
+		repo:    payment.NewPaymentRepository(db),
+		client:  &http.Client{Timeout: 10 * time.Second},
+		configs: cfgMap,
+		bearers: make(map[string]string),
+		logf:    t.Logf,
 	}
 }
 
 // Pay implements replay.Gateway: wait for the payment created against taskID,
 // then confirm it by POSTing a GovPay success webhook. amount/currency are read
 // from the payment record so they match (the handler validates them).
-func (g *mockGateway) Pay(ctx context.Context, taskID, status string, timeout time.Duration) error {
+func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, timeout time.Duration) error {
+	cfg, ok := g.configs[method]
+	if !ok {
+		return fmt.Errorf("mock-gateway: no config for payment method %q", method)
+	}
+
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(gatewayPollInterval)
 	defer ticker.Stop()
@@ -67,7 +80,8 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, status string, timeout ti
 		case <-ticker.C:
 		}
 	}
-	g.logf("mock-gateway: confirming payment ref=%s amount=%s %s (task %s)", tx.ReferenceNumber, tx.Amount.String(), tx.Currency, taskID)
+
+	g.logf("mock-gateway[%s]: confirming payment ref=%s amount=%s %s (task %s)", cfg.ID, tx.ReferenceNumber, tx.Amount.String(), tx.Currency, taskID)
 
 	// GovPay webhook envelope (mirrors integration/payment/govpay_test.go's updateBody).
 	body, err := json.Marshal(map[string]any{
@@ -86,13 +100,15 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, status string, timeout ti
 		return fmt.Errorf("mock-gateway: marshal webhook: %w", err)
 	}
 
-	// Public, unauthenticated webhook endpoint.
-	url := g.base + "/api/v1/payments/govpay/webhook"
+	url := g.base + cfg.WebhookPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if bearer := g.bearers[cfg.ID]; bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
 	resp, err := g.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("mock-gateway: webhook POST: %w", err)
