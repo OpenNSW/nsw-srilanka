@@ -23,7 +23,7 @@ export function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-app-surface">
+    <div className="min-h-screen bg-app-bg">
       <TopBar />
 
       <div className="flex">
