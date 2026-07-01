@@ -105,7 +105,7 @@ services:
       - POSTGRES_SEEDS=db
       - DB_NAME=temporal
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/$(hostname -i)/7233' 2>/dev/null"]
+      test: ["CMD-SHELL", "temporal operator cluster health --address $(hostname -i):7233"]
       interval: 10s
       timeout: 5s
       retries: 15
