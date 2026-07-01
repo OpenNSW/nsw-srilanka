@@ -1,12 +1,19 @@
 version: 2
 
 updates:
-  # Go module dependencies
+  # Go module dependencies (root module)
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - go
+    commit-message:
+      prefix: build
+      include: scope
     groups:
       aws-sdk:
         patterns:
@@ -20,7 +27,12 @@ updates:
       opennsw:
         patterns:
           - "github.com/OpenNSW/*"
-    open-pull-requests-limit: 5
+      # Long tail: bundle minor/patch into one PR.
+      # Majors of ungrouped modules still arrive as individual PRs for review.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
 
   # Frontend (pnpm workspace)
   - package-ecosystem: npm
@@ -28,31 +40,38 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - javascript
+    commit-message:
+      prefix: build
+      include: scope
     groups:
+      # Peer-coupled packages — must bump in lockstep, even on majors.
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
       vite-ecosystem:
         patterns:
           - "vite"
           - "@vitejs/*"
           - "@tailwindcss/*"
-      react-ecosystem:
-        patterns:
-          - "react"
-          - "react-dom"
-          - "@types/react*"
-          - "react-*"
       eslint-ecosystem:
         patterns:
           - "eslint*"
           - "@eslint/*"
           - "typescript-eslint"
           - "globals"
-      typescript:
-        patterns:
-          - "typescript"
-      radix-ui:
-        patterns:
-          - "@radix-ui/*"
-    open-pull-requests-limit: 5
+      # Long tail (typescript, radix-ui, zod, i18next, …): one PR for minor/patch.
+      # Majors of ungrouped packages still arrive as individual PRs for review.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
 
   # GitHub Actions
   - package-ecosystem: github-actions
@@ -60,4 +79,42 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - github_actions
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Docker base images
+  #   /                        -> golang:1.26.4-bookworm, debian:bookworm-slim
+  #   /portals/apps/trader-app -> node:22-bookworm-slim, nginxinc/nginx-unprivileged
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /portals/apps/trader-app
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      # Bundle minor/patch base-image bumps; major base-image jumps
+      # (e.g. node 22 -> 24) still arrive individually for review.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
