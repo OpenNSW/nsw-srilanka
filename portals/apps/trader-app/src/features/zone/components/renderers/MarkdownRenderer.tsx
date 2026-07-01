@@ -70,7 +70,9 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 text-foreground-muted">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,
           code: ({ children }) => (
-            <code className="bg-surface-muted text-primary px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>
+            <code className="bg-app-surface-muted text-primary px-1.5 py-0.5 rounded text-xs font-mono">
+              {children}
+            </code>
           ),
           blockquote: ({ children }) => (
             <blockquote className="border-l-4 border-border pl-4 italic text-foreground-muted">{children}</blockquote>

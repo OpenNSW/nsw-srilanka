@@ -19,10 +19,10 @@ export function LoginScreen() {
   const { systemName, appName, logoUrl, description, heroImageUrl, partnerLogos } = appConfig.branding
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-background lg:overflow-hidden overflow-y-auto">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-app-surface lg:overflow-hidden overflow-y-auto">
       {/* Mobile logo strip — full-width box at the very top, hidden on desktop */}
       {logoUrl && (
-        <div className="lg:hidden w-full bg-background px-6 py-4 flex items-center justify-center border-b border-border shadow-sm">
+        <div className="lg:hidden w-full bg-app-surface px-6 py-4 flex items-center justify-center border-b border-border shadow-sm">
           <img src={logoUrl} alt={appName} className="h-16 object-contain" />
         </div>
       )}
@@ -68,7 +68,7 @@ export function LoginScreen() {
       </div>
 
       {/* Identity & Branding */}
-      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 py-12 lg:py-0 relative z-10 bg-background lg:min-h-screen">
+      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 py-12 lg:py-0 relative z-10 bg-app-surface lg:min-h-screen">
         <p className="absolute bottom-4 left-8 lg:left-36 text-xs text-foreground-muted">
           {import.meta.env.VITE_APP_VERSION || 'dev'}
         </p>

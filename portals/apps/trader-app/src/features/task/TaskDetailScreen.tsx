@@ -64,7 +64,7 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-background rounded-lg shadow p-6 text-center">
+        <div className="bg-app-surface rounded-lg shadow p-6 text-center">
           <Text size="4" color="red" weight="medium">
             {error}
           </Text>
@@ -82,7 +82,7 @@ export function TaskDetailScreen() {
   if (!zoneView) {
     return (
       <div className="p-6">
-        <div className="bg-background rounded-lg shadow p-6 text-center">
+        <div className="bg-app-surface rounded-lg shadow p-6 text-center">
           <Text size="4" color="gray" weight="medium">
             {t('tasks.error.notFound')}
           </Text>
@@ -98,8 +98,8 @@ export function TaskDetailScreen() {
   }
 
   return (
-    <div className="bg-surface min-h-full">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
+    <div className="min-h-full">
+      <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
         <Button variant="ghost" color="gray" onClick={goBack}>
           <ArrowLeftIcon />
           {t('tasks.back')}
@@ -117,7 +117,7 @@ export function TaskDetailScreen() {
         </Button>
       </div>
       {submitError && (
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="rounded-lg border border-red-6 bg-red-2 px-4 py-3">
             <Text size="2" color="red" weight="medium">
               {submitError}
