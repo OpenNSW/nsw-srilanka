@@ -1,0 +1,14 @@
+{
+  "groups": [
+    { "key": "OGA Reviewers", "name": "OGA Reviewers", "description": "Government agency reviewers group", "ou": "government-organization" }
+  ],
+  "roles": [
+    { "key": "OGA Reviewer", "name": "OGA Reviewer", "description": "Role for government agency reviewers (AGENCY_API)",
+      "ou": "government-organization", "resourceServer": "AGENCY_API", "scopeSet": "agencyReviewer" },
+    { "key": "NswM2M", "name": "NswM2M", "description": "Role for NSW machine-to-machine clients calling the Agency API",
+      "ou": "government-organization", "resourceServer": "AGENCY_API", "scopeSet": "m2mAgency" }
+  ],
+  "roleAssignments": [
+    { "role": "OGA Reviewer", "group": "OGA Reviewers" }
+  ]
+}

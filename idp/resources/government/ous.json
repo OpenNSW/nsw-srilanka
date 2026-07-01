@@ -1,0 +1,11 @@
+{
+  "organizationUnits": [
+    {
+      "key": "government-organization",
+      "handle": "government-organization",
+      "name": "Government Organization",
+      "description": "Root organization unit for government entities",
+      "treePath": "government-organization"
+    }
+  ]
+}
