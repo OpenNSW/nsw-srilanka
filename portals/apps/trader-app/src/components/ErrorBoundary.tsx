@@ -1,7 +1,7 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { Button, Text } from '@radix-ui/themes'
 import { Translation } from 'react-i18next'
-import { logger } from '../utils/logger'
+import { logger } from '@/utils/logger'
 
 interface Props {
   children: ReactNode

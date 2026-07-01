@@ -14,7 +14,7 @@ import {
   ReaderIcon,
   UpdateIcon,
 } from '@radix-ui/react-icons'
-import type { WorkflowNode, WorkflowNodeState } from '../../types'
+import type { WorkflowNode, WorkflowNodeState } from '@/features/consignment/types'
 
 const nodeTypeIcons: Record<string, React.ReactNode> = {
   SIMPLE_FORM: <FileTextIcon className="w-4 h-4" />,
@@ -87,9 +87,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
   const { t } = useTranslation()
   const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
 
-  const handleOpen = () => {
-    navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
-  }
+  const handleOpen = () => void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
 
   const label = step.workflowNodeTemplate.name || `Step ${step.id.split('-').pop()}`
   const isClickable = step.state !== 'LOCKED'

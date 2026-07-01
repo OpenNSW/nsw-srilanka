@@ -12,7 +12,7 @@ const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 export function TaskDetailScreen() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
-  const goBack = () => navigate(-1)
+  const goBack = () => void navigate(-1)
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -20,40 +20,48 @@ export function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
-
-  useEffect(() => {
+  const [prevTaskId, setPrevTaskId] = useState(taskId)
+  if (taskId !== prevTaskId) {
+    setPrevTaskId(taskId)
     setHasSubmitted(false)
-  }, [taskId])
+  }
 
-  const fetchTask = useCallback(
-    async (mode: 'initial' | 'refresh' = 'initial') => {
-      if (!taskId) {
-        setError(t('tasks.error.missingId'))
-        setLoading(false)
-        return
-      }
-
-      try {
-        if (mode === 'refresh') setRefreshing(true)
-        else setLoading(true)
-        setError(null)
-
-        const zv = await getZoneView(taskId)
-        setZoneView(zv)
-      } catch (err) {
-        setError(t('tasks.error.fetchFailed'))
-        console.error('TaskDetailScreen: failed to fetch task:', err)
-      } finally {
-        if (mode === 'refresh') setRefreshing(false)
-        else setLoading(false)
-      }
-    },
-    [taskId, t],
-  )
+  const fetchTask = useCallback(async () => {
+    if (!taskId) return
+    setRefreshing(true)
+    setError(null)
+    try {
+      const zv = await getZoneView(taskId)
+      setZoneView(zv)
+    } catch (err) {
+      setError(t('tasks.error.fetchFailed'))
+      console.error('TaskDetailScreen: failed to fetch task:', err)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [taskId, t])
 
   useEffect(() => {
-    void fetchTask()
-  }, [fetchTask])
+    if (!taskId) return
+    let cancelled = false
+    void getZoneView(taskId)
+      .then((zv) => {
+        if (!cancelled) {
+          setZoneView(zv)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(t('tasks.error.fetchFailed'))
+          setLoading(false)
+          console.error('TaskDetailScreen: failed to fetch task:', err)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [taskId, t])
 
   if (loading) {
     return (
@@ -113,7 +121,7 @@ export function TaskDetailScreen() {
           variant="soft"
           color="blue"
           size="2"
-          onClick={() => void fetchTask('refresh')}
+          onClick={() => void fetchTask()}
           disabled={refreshing}
           className="cursor-pointer"
         >

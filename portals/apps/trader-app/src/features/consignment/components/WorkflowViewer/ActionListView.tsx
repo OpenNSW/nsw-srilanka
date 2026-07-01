@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { CheckCircledIcon, ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { WorkflowNode } from '../../types'
+import type { WorkflowNode } from '@/features/consignment/types'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
 
@@ -27,26 +27,29 @@ export function ActionListView({
 }: ActionListViewProps) {
   const { t } = useTranslation()
 
-  const filteredSteps = useMemo(() => {
-    return steps.filter((step) => {
-      const type = step.workflowNodeTemplate.type?.toUpperCase()
-      return (
-        type !== 'START' &&
-        type !== 'END' &&
-        type !== 'GATEWAY' &&
-        type !== 'END_NODE' &&
-        type !== 'SYSTEM' &&
-        type !== 'SPLIT_TASK'
-      )
-    })
-  }, [steps])
+  const filteredSteps = useMemo(
+    () =>
+      steps.filter((step) => {
+        const type = step.workflowNodeTemplate.type?.toUpperCase()
+        return (
+          type !== 'START' &&
+          type !== 'END' &&
+          type !== 'GATEWAY' &&
+          type !== 'END_NODE' &&
+          type !== 'SYSTEM' &&
+          type !== 'SPLIT_TASK'
+        )
+      }),
+    [steps],
+  )
 
-  const groups = useMemo(() => {
-    return {
+  const groups = useMemo(
+    () => ({
       active: filteredSteps.filter((s) => s.state === 'READY' || s.state === 'IN_PROGRESS'),
       finished: filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt),
-    }
-  }, [filteredSteps])
+    }),
+    [filteredSteps],
+  )
 
   const isConsignmentTerminal = consignmentState === 'FINISHED' || consignmentState === 'FAILED'
 

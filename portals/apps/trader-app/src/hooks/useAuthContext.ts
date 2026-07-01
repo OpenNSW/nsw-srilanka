@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
-import type { Role } from '../services/RoleContext'
-import { mapClaimsToRoles } from '../utils/roleMapper'
+import type { Role } from '@/services/RoleContext'
+import { mapClaimsToRoles } from '@/utils/roleMapper'
 
 interface UseAuthContextResult {
   isSignedIn: boolean

@@ -1,9 +1,9 @@
 import { BellIcon } from '@radix-ui/react-icons'
 import { type ReactNode } from 'react'
-import { SignedIn, SignedOut, SignInButton, UserDropdown } from '../Auth'
-import { useSignOutHandler } from '../../hooks/useSignOutHandler'
+import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Auth'
+import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 import { RoleSwitcher } from './RoleSwitcher'
-import { appConfig, displayName } from '../../config'
+import { appConfig, displayName } from '@/config'
 
 function TopBarShell({ children }: { children: ReactNode }) {
   return (
