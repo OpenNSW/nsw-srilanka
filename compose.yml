@@ -104,6 +104,12 @@ services:
       - POSTGRES_PWD=${DB_PASSWORD:-changeme}
       - POSTGRES_SEEDS=db
       - DB_NAME=temporal
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health --address $(hostname -i):7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
     depends_on:
       db:
         condition: service_healthy
@@ -210,7 +216,7 @@ services:
       db:
         condition: service_healthy
       temporal:
-        condition: service_started
+        condition: service_healthy
       thunderid:
         condition: service_started
       argus:
