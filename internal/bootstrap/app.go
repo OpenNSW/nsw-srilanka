@@ -42,6 +42,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
+	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
@@ -236,6 +238,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyHandler := company.NewHandler(companyService)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler)
+	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
+	// ownership resolver for the PRE_RESUME authz extension to evaluate.
+	taskAuthzGate := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService})
 
 	// withAuth wraps an individual handler with the authentication middleware.
 	withAuth := authnManager.RequireAuthMiddleware()
@@ -300,8 +305,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (payments, local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(taskHandler.HandleGetTask))))
-	mux.Handle("POST /api/v1/tasks/{id}/commands/{command}", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
-	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(http.HandlerFunc(taskHandler.HandleCompleteTaskStep))))
+	mux.Handle("POST /api/v1/tasks/{id}/commands/{command}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
+	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
@@ -442,6 +447,25 @@ type taskStack struct {
 	Assembler *zoneview.ZoneViewAssembler
 }
 
+// companyIDResolver adapts the company service to authzgate.CompanyResolver. A
+// missing company profile is reported as ("", nil) so it denies cleanly rather
+// than surfacing as a 500.
+type companyIDResolver struct{ svc company.Service }
+
+func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error) {
+	rec, err := r.svc.GetCompanyByOUHandle(ctx, ouHandle)
+	if err != nil {
+		if errors.Is(err, company.ErrCompanyNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	if rec == nil {
+		return "", nil
+	}
+	return rec.ID, nil
+}
+
 // registryTemplateProvider adapts the artifact registry to uiprojector's
 // TemplateProvider contract. Generic templates (JSONForms schemas, markdown
 // bodies, etc.) are resolved through generictemplate.Load.
@@ -532,7 +556,10 @@ func initTask(
 
 	extensionsRegistry := extensions.NewRegistry()
 	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}, cfg.Server.Debug); err != nil {
-		return nil, nil, fmt.Errorf("register task extensions: %w", err)
+		return nil, nil, fmt.Errorf("register notification extension: %w", err)
+	}
+	if err := taskauthz.Register(extensionsRegistry, cfg.Server.TaskAuthzConfigPath); err != nil {
+		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
 
