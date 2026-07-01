@@ -136,7 +136,7 @@ export function ActionListView({
                 py="8"
                 px="6"
                 mb="6"
-                className="text-center bg-app-bg rounded-xl border border-border border-dashed shadow-sm relative"
+                className="text-center bg-app-surface rounded-xl border border-border border-dashed shadow-sm relative"
               >
                 {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
                 <ClockIcon className="w-12 h-12 text-foreground-subtle mx-auto mb-3" />
@@ -164,7 +164,7 @@ export function ActionListView({
           inset="0"
           align="center"
           justify="center"
-          className="bg-app-bg/60 backdrop-blur-sm z-10 rounded-lg"
+          className="bg-app-surface/60 backdrop-blur-sm z-10 rounded-lg"
         >
           <Flex direction="column" align="center" gap="3">
             <UpdateIcon className="animate-spin w-8 h-8 text-info-strong" />

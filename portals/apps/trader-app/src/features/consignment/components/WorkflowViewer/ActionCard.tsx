@@ -78,7 +78,7 @@ const statusStyles: Record<string, string> = {
   green: 'bg-success-subtle text-success-strong border-success-subtle',
   blue: 'bg-info-subtle text-info-strong border-info-subtle',
   orange: 'bg-warning-subtle text-warning-strong border-warning-subtle',
-  gray: 'bg-app-surface text-foreground-muted border-border',
+  gray: 'bg-app-bg text-foreground-muted border-border',
   red: 'bg-error-subtle text-error-strong border-error-subtle',
 }
 
@@ -111,8 +111,8 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
       className={`mb-3 transition-all duration-200 border shadow-sm group
         ${
           isClickable
-            ? 'bg-app-bg border-border hover:border-info/40 hover:bg-info-subtle/40 hover:shadow-md cursor-pointer active:scale-[0.98] active:shadow-sm'
-            : 'bg-app-surface border-border opacity-50 cursor-not-allowed'
+            ? 'bg-app-surface border-border hover:border-info/40 hover:bg-info-subtle/40 hover:shadow-md cursor-pointer active:scale-[0.98] active:shadow-sm'
+            : 'bg-app-bg border-border opacity-50 cursor-not-allowed'
         }`}
     >
       <Flex direction="column" gap="3">

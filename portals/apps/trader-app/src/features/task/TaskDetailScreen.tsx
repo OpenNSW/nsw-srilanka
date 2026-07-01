@@ -77,7 +77,7 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-app-bg rounded-lg shadow p-6 text-center">
+        <div className="bg-app-surface rounded-lg shadow p-6 text-center">
           <Text size="4" color="red" weight="medium">
             {error}
           </Text>
