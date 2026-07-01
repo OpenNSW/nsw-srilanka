@@ -93,6 +93,7 @@ func newHarness(t *testing.T) *harness {
 	// Defaults point at gitignored real config files; redirect to the committed
 	// example (absolute, so it resolves irrespective of cwd).
 	cfg.Server.PaymentMethodsConfigPath = filepath.Join(root, "configs", "payment_methods.example.json")
+	cfg.Server.TaskAuthzConfigPath = filepath.Join(root, "configs", "task_authz.example.json")
 	cfg.Storage.LocalBaseDir = t.TempDir() // keep blob storage out of the repo tree
 
 	// A controllable mock agency stands in for all external OGA services; all

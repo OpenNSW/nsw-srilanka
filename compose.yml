@@ -208,6 +208,7 @@ services:
       - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
+      - TASK_AUTHZ_CONFIG_PATH=${TASK_AUTHZ_CONFIG_PATH:-configs/task_authz.json}
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
     depends_on:

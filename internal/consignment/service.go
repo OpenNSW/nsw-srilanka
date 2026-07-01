@@ -195,6 +195,23 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) 
 	return responseDTO, nil
 }
 
+// GetOwnership returns the trader and CHA company ids of a consignment in a
+// single row read, without assembling the detail DTO or touching the workflow
+// engine. chaCompanyID is empty when no CHA company has been selected yet.
+func (s *Service) GetOwnership(ctx context.Context, consignmentID string) (traderCompanyID, chaCompanyID string, err error) {
+	var consignment Consignment
+	if result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID); result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return "", "", ErrConsignmentNotFound
+		}
+		return "", "", fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
+	}
+	if consignment.CHACompanyID != nil {
+		chaCompanyID = *consignment.CHACompanyID
+	}
+	return consignment.TraderCompanyID, chaCompanyID, nil
+}
+
 // ListConsignments returns consignments scoped to a company. For role=trader the caller passes
 // TraderCompanyID; for role=cha the caller passes CHACompanyID. Exactly one of the two must be set.
 func (s *Service) ListConsignments(ctx context.Context, filter Filter) (*ListResult, error) {

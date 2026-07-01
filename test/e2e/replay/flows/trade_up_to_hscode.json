@@ -40,9 +40,9 @@
       }
     },
     {
-      "name": "trader selects HS codes (FCAU flow)",
+      "name": "cha selects HS codes (FCAU flow)",
       "request": {
-        "actor": "trader",
+        "actor": "cha",
         "method": "POST",
         "path": "/api/v1/tasks/{{hsTask}}",
         "body": { "command": "submit", "payload": { "hs_codes": ["fcau-health-certificate-reg"] } },
