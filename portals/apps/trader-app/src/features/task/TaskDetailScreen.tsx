@@ -19,6 +19,11 @@ export function TaskDetailScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [hasSubmitted, setHasSubmitted] = useState(false)
+
+  useEffect(() => {
+    setHasSubmitted(false)
+  }, [taskId])
 
   const fetchTask = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -127,20 +132,25 @@ export function TaskDetailScreen() {
       )}
       <TraderZoneLayout
         task={zoneView}
-        onSubmitForm={async (command, data) => {
-          if (!taskId) return
-          setSubmitError(null)
-          try {
-            await submitTaskStep(taskId, command, data)
-            await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
-            await fetchTask()
-          } catch (err) {
-            // Use a local error here rather than the screen-level `error`, which
-            // would unmount the layout and discard the user's entered form data.
-            setSubmitError(t('tasks.error.submitFailed'))
-            console.error('TaskDetailScreen: failed to submit task step:', err)
-          }
-        }}
+        onSubmitForm={
+          hasSubmitted
+            ? undefined
+            : async (command, data) => {
+                if (!taskId) return
+                setSubmitError(null)
+                try {
+                  await submitTaskStep(taskId, command, data)
+                  setHasSubmitted(true)
+                  await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
+                  await fetchTask()
+                } catch (err) {
+                  // Use a local error here rather than the screen-level `error`, which
+                  // would unmount the layout and discard the user's entered form data.
+                  setSubmitError(t('tasks.error.submitFailed'))
+                  console.error('TaskDetailScreen: failed to submit task step:', err)
+                }
+              }
+        }
       />
     </div>
   )
