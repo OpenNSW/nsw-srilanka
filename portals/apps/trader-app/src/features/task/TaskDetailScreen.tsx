@@ -20,10 +20,11 @@ export function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
-
-  useEffect(() => {
+  const [prevTaskId, setPrevTaskId] = useState(taskId)
+  if (taskId !== prevTaskId) {
+    setPrevTaskId(taskId)
     setHasSubmitted(false)
-  }, [taskId])
+  }
 
   const fetchTask = useCallback(async () => {
     if (!taskId) return
