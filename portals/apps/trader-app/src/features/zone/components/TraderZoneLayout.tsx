@@ -111,8 +111,8 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
   const { t } = useTranslation()
   const sorted = [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   return (
-    <details className="group rounded-lg border border-border bg-app-bg overflow-hidden">
-      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-app-surface">
+    <details className="group rounded-lg border border-border bg-app-surface overflow-hidden">
+      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-app-bg">
         <span className="flex items-center gap-2">
           <svg
             className="w-4 h-4 text-foreground-subtle transition-transform group-open:rotate-90"

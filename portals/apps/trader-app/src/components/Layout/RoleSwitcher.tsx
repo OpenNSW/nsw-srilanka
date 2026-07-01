@@ -17,7 +17,7 @@ function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel:
 
   return (
     <Flex align="center" gap="3" className="w-60 text-left">
-      <Box className="rounded-md border border-border bg-app-bg p-1.5 shadow-sm">{icon}</Box>
+      <Box className="rounded-md border border-border bg-app-surface p-1.5 shadow-sm">{icon}</Box>
       <Box className="flex-1">
         <Flex align="center" gap="1">
           <Text size="1" weight="bold" className="block leading-none">
@@ -87,7 +87,7 @@ export function RoleSwitcher() {
           </Select.Root>
         </Box>
       ) : (
-        <Box className="h-12 w-full animate-pulse rounded-lg border border-border bg-app-surface" />
+        <Box className="h-12 w-full animate-pulse rounded-lg border border-border bg-app-bg" />
       )}
     </Box>
   )
