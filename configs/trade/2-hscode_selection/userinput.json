@@ -4,5 +4,14 @@
   "output_namespace": "traderinput",
   "plugin_properties": {
     "user_jsonforms_id": "trade-hscode-selection--form"
-  }
+  },
+  "extensions": [
+    {
+      "id": "authz",
+      "phase": "PRE_RESUME",
+      "properties": {
+        "PENDING_USER": { "submit": ["cha"] }
+      }
+    }
+  ]
 }

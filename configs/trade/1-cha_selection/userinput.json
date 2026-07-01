@@ -7,6 +7,13 @@
   },
   "extensions": [
     {
+      "id": "authz",
+      "phase": "PRE_RESUME",
+      "properties": {
+        "PENDING_USER": { "submit": ["trader"] }
+      }
+    },
+    {
       "id": "notification",
       "phase": "POST_RESUME",
       "properties": {

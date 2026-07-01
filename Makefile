@@ -118,7 +118,7 @@ setup: tools ## First-time setup: install tools, configure git hooks, seed confi
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
-	@for f in configs/notification.example.json configs/services.docker.example.json configs/payment_methods.example.json; do \
+	@for f in configs/notification.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/task_authz.example.json; do \
 		target=$$(echo $$f | sed 's/\.example\.json/.json/'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \

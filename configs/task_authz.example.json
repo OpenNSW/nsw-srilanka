@@ -1,0 +1,12 @@
+{
+  "users": {
+    "trader": "Trader",
+    "cha": "CHA"
+  },
+  "clients": {
+    "fcau": "FCAU_TO_NSW",
+    "npqs": "NPQS_TO_NSW",
+    "cda": "CDA_TO_NSW",
+    "slpa": "SLPA_TO_NSW"
+  }
+}
