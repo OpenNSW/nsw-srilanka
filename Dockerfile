@@ -19,10 +19,10 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG BUILD_VERSION=dev
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-    go build -ldflags="-s -w -X 'github.com/OpenNSW/nsw-srilanka/internal/version.Version=${BUILD_VERSION}'" \
+    go build -ldflags="-s -w -X 'github.com/OpenNSW/nsw-srilanka/internal/version.version=${BUILD_VERSION}'" \
     -o /out/server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-    go build -ldflags="-s -w -X 'github.com/OpenNSW/nsw-srilanka/internal/version.Version=${BUILD_VERSION}'" \
+    go build -ldflags="-s -w -X 'github.com/OpenNSW/nsw-srilanka/internal/version.version=${BUILD_VERSION}'" \
     -o /out/otc ./cmd/otc
 
 # -------------------------------------------------------------------
