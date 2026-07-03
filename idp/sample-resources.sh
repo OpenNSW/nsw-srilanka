@@ -68,37 +68,17 @@ INSECURE="${INSECURE:-1}"
 ALLOW_NO_AUTH="${ALLOW_NO_AUTH:-0}"
 
 # ============================================================================
-# Logging — ALWAYS to stderr so helpers can echo IDs on stdout inside $( ... ).
+# Shared engine library — logging, is_localhost, api_call, JSON lookups
+# (get_*/list_*/extract_first_id), key->ID registry, config load/merge, agency
+# expansion, secret + scope-set resolution. Sourced after SCRIPT_DIR and the
+# API_BASE / AUTH_TOKEN / INSECURE config vars are set above (api_call reads them).
+# shellcheck source=resources-lib.sh
 # ============================================================================
-log_info()    { printf '[INFO] %s\n'    "$*" >&2; }
-log_success() { printf '[SUCCESS] %s\n' "$*" >&2; }
-log_warning() { printf '[WARNING] %s\n' "$*" >&2; }
-log_error()   { printf '[ERROR] %s\n'   "$*" >&2; }
-
-# ============================================================================
-# api_call METHOD PATH [BODY]
-# Echoes "<response-body><3-digit-http-code>" to stdout. Callers split it via:
-#   HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-# ============================================================================
-api_call() {
-    local method="$1" path="$2" body="${3:-}"
-    local -a curl_args=(
-        -s -S
-        -X "$method"
-        -H "Content-Type: application/json"
-        -w '%{http_code}'
-    )
-    [[ "$INSECURE" == "1" ]] && curl_args+=(-k)
-    [[ -n "$AUTH_TOKEN" ]] && curl_args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
-    [[ -n "$body" ]] && curl_args+=(-d "$body")
-    curl "${curl_args[@]}" "${API_BASE}${path}"
-}
+source "${SCRIPT_DIR}/resources-lib.sh"
 
 # ============================================================================
 # Auth guard + one-time auth/connectivity probe
 # ============================================================================
-is_localhost() { [[ "$API_BASE" =~ ^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?$ ]]; }
-
 if [[ -z "$AUTH_TOKEN" && "$ALLOW_NO_AUTH" != "1" ]]; then
     if is_localhost; then
         log_warning "No AUTH_TOKEN set and API_BASE is localhost; assuming security-disabled bootstrap mode. Set ALLOW_NO_AUTH=1 to silence, or export AUTH_TOKEN."
@@ -129,111 +109,10 @@ fi
 SAMPLE_USER_PASSWORD="${SAMPLE_USER_PASSWORD:-1234}"
 M2M_CLIENT_SECRET="${M2M_CLIENT_SECRET:-1234}"
 
-# Shared engine: key->ID registry, config load/merge, agency expansion, secret
-# and scope-set resolution. Sourced after SCRIPT_DIR / log_* / api_call exist.
-# shellcheck source=resources-lib.sh
-source "${SCRIPT_DIR}/resources-lib.sh"
 # ============================================================================
-# Helpers
+# Entity create/assign helpers (idempotent). api_call, the get_*/list_* lookups,
+# and extract_first_id are provided by resources-lib.sh (sourced above).
 # ============================================================================
-
-extract_first_id() {
-    echo "$1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_user_id_by_username() {
-    local USERNAME="$1"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/users?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    # Parse one user object per line and locate matching username inside attributes.
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"username\":\"${USERNAME}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_group_id_by_name() {
-    local GROUP_NAME="$1"
-    local OU_ID="$2"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/groups?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"name\":\"${GROUP_NAME}\"" | grep "\"ouId\":\"${OU_ID}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_role_id_by_name() {
-    local ROLE_NAME="$1"
-    local OU_ID="$2"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/roles?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"name\":\"${ROLE_NAME}\"" | grep "\"ouId\":\"${OU_ID}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_flow_id_by_handle() {
-    local FLOW_TYPE="$1"
-    local FLOW_HANDLE="$2"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/flows?limit=30&offset=0&flowType=${FLOW_TYPE}")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    echo "$BODY" | grep -o '{[^}]*"handle":"'"${FLOW_HANDLE}"'"[^}]*}' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_application_id_by_client_id() {
-    local CLIENT_ID="$1"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/applications?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"clientId\":\"${CLIENT_ID}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_ou_id_by_handle() {
-    local OU_HANDLE="$1"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/organization-units/tree/${OU_HANDLE}")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    extract_first_id "$BODY"
-}
 
 # Create an organization unit (idempotent). Echoes the OU ID on stdout.
 # Usage: create_ou <handle> <name> <description> [parent_ou_id] [tree_path]
@@ -400,22 +279,15 @@ create_user_in_ou() {
     local PASSWORD="$7"
     local PHONE_NUMBER="$8"
 
-    local RESPONSE HTTP_CODE BODY USER_ID
+    local RESPONSE HTTP_CODE BODY USER_ID USER_PAYLOAD
 
-    read -r -d '' USER_PAYLOAD <<JSON || true
-{
-    "type": "${USER_TYPE}",
-    "ouId": "${OU_ID}",
-    "attributes": {
-        "username": "${USERNAME}",
-        "password": "${PASSWORD}",
-        "email": "${EMAIL}",
-        "given_name": "${GIVEN_NAME}",
-        "family_name": "${FAMILY_NAME}",
-        "phone_number": "${PHONE_NUMBER}"
-    }
-}
-JSON
+    # Build with jq --arg so any special characters in the attribute values are
+    # safely JSON-encoded (the create_user_in_ou values are the most free-form).
+    USER_PAYLOAD=$(jq -n \
+        --arg type "$USER_TYPE" --arg ou "$OU_ID" \
+        --arg u "$USERNAME" --arg p "$PASSWORD" --arg e "$EMAIL" \
+        --arg gn "$GIVEN_NAME" --arg fn "$FAMILY_NAME" --arg ph "$PHONE_NUMBER" \
+        '{type: $type, ouId: $ou, attributes: {username: $u, password: $p, email: $e, given_name: $gn, family_name: $fn, phone_number: $ph}}')
 
     RESPONSE=$(api_call POST "/users" "${USER_PAYLOAD}")
     HTTP_CODE="${RESPONSE: -3}"
@@ -618,7 +490,7 @@ JSON
     if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]] || [[ "$HTTP_CODE" == "202" ]]; then
         log_success "${APP_NAME} application created successfully"
         APP_ID=$(extract_first_id "$BODY")
-        APP_CLIENT_ID=$(echo "$BODY" | grep -o '"clientId":"[^"]*"' | head -1 | cut -d'"' -f4)
+        APP_CLIENT_ID=$(printf '%s' "$BODY" | jq -r '[.. | objects | .clientId?] | map(select(. != null)) | .[0] // empty')
         if [[ -n "$APP_ID" ]]; then
             log_info "${APP_NAME} app ID: ${APP_ID}"
         fi
@@ -692,7 +564,7 @@ JSON
     if [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "200" ]] || [[ "$HTTP_CODE" == "202" ]]; then
         log_success "${APP_NAME} M2M application created successfully"
         APP_ID=$(extract_first_id "$BODY")
-        APP_CLIENT_ID=$(echo "$BODY" | grep -o '"clientId":"[^"]*"' | head -1 | cut -d'"' -f4)
+        APP_CLIENT_ID=$(printf '%s' "$BODY" | jq -r '[.. | objects | .clientId?] | map(select(. != null)) | .[0] // empty')
     elif [[ "$HTTP_CODE" == "409" ]] || ([[ "$HTTP_CODE" == "400" ]] && [[ "$BODY" =~ (Application\ already\ exists|APP-1022) ]]); then
         log_warning "${APP_NAME} M2M application already exists, retrieving ID..."
         APP_ID=$(get_application_id_by_client_id "$CLIENT_ID")
@@ -754,15 +626,9 @@ assign_role_to_group() {
     local RESPONSE HTTP_CODE BODY
 
     # Check existing assignments first to avoid server-side unique constraint errors
-    RESPONSE=$(api_call GET "/roles/${ROLE_ID}/assignments?type=group")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" == "200" ]]; then
-        if echo "$BODY" | grep -q "\"id\":\"${GROUP_ID}\""; then
-            log_warning "Role ${ROLE_NAME} is already assigned to group ${GROUP_NAME}, skipping"
-            return
-        fi
+    if role_has_assignment "$ROLE_ID" group "$GROUP_ID"; then
+        log_warning "Role ${ROLE_NAME} is already assigned to group ${GROUP_NAME}, skipping"
+        return
     fi
 
     read -r -d '' ROLE_ASSIGNMENT_PAYLOAD <<JSON || true
@@ -810,10 +676,7 @@ assign_role_to_app() {
     # client_credentials token carry the role's resource-server permissions as
     # scopes and sets the token audience (aud) to that resource server.
     # Check existing assignments first to avoid server-side unique constraint errors.
-    RESPONSE=$(api_call GET "/roles/${ROLE_ID}/assignments?type=app")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-    if [[ "$HTTP_CODE" == "200" ]] && echo "$BODY" | grep -q "\"id\":\"${APP_ID}\""; then
+    if role_has_assignment "$ROLE_ID" app "$APP_ID"; then
         log_warning "Role ${ROLE_NAME} is already assigned to app ${APP_NAME}, skipping"
         return
     fi
@@ -844,21 +707,6 @@ JSON
         echo "Response: $BODY" >&2
         exit 1
     fi
-}
-
-get_resource_server_id_by_identifier() {
-    local IDENTIFIER="$1"
-    local RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/resource-servers?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"
-    BODY="${RESPONSE%???}"
-
-    if [[ "$HTTP_CODE" != "200" ]]; then
-        echo ""
-        return
-    fi
-
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"identifier\":\"${IDENTIFIER}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
 }
 
 # Create a resource server (idempotent). Echoes the resource server ID on stdout
@@ -908,11 +756,7 @@ create_resource() {
         log_success "Resource '${R_HANDLE}' created"
     elif [[ "$HTTP_CODE" == "409" ]]; then
         log_warning "Resource '${R_HANDLE}' already exists, retrieving ID..."
-        local Q="/resource-servers/${RS_ID}/resources?limit=100&offset=0"
-        [[ -n "$PARENT" ]] && Q="${Q}&parentId=${PARENT}"
-        RESPONSE=$(api_call GET "$Q")
-        BODY="${RESPONSE%???}"
-        RID=$(echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"handle\":\"${R_HANDLE}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        RID=$(get_resource_id_by_handle "$RS_ID" "$R_HANDLE" "$PARENT")
     else
         log_error "Failed to create resource '${R_HANDLE}' (HTTP $HTTP_CODE)"
         echo "Response: $BODY" >&2
@@ -969,7 +813,7 @@ bootstrap_registry() {
     RESPONSE=$(api_call GET "/design/themes")
     HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
     if [[ "$HTTP_CODE" == "200" ]]; then
-        CLASSIC_THEME_ID=$(echo "$BODY" | grep -o '{[^}]*"displayName":"Classic"[^}]*}' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        CLASSIC_THEME_ID=$(printf '%s' "$BODY" | jq -r '[.themes[]? | select(.displayName == "Classic") | .id] | .[0] // empty')
         if [[ -n "$CLASSIC_THEME_ID" ]]; then
             log_success "Found Classic theme ID: $CLASSIC_THEME_ID"
         else

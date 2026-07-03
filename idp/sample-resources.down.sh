@@ -76,35 +76,17 @@ INSECURE="${INSECURE:-1}"
 ALLOW_NO_AUTH="${ALLOW_NO_AUTH:-0}"
 
 # ============================================================================
-# Logging — ALWAYS to stderr so helpers can echo IDs on stdout inside $( ... ).
+# Shared engine library — logging, is_localhost, api_call, JSON lookups
+# (get_*/list_*/extract_first_id), config load/merge, agency expansion. Sourced
+# after SCRIPT_DIR and the API_BASE/AUTH_TOKEN/INSECURE config vars are set above
+# (api_call reads them). The delete_* helpers below build on these.
+# shellcheck source=resources-lib.sh
 # ============================================================================
-log_info()    { printf '[INFO] %s\n'    "$*" >&2; }
-log_success() { printf '[SUCCESS] %s\n' "$*" >&2; }
-log_warning() { printf '[WARNING] %s\n' "$*" >&2; }
-log_error()   { printf '[ERROR] %s\n'   "$*" >&2; }
-
-# ============================================================================
-# api_call METHOD PATH [BODY]  ->  echoes "<body><3-digit-http-code>" on stdout
-# ============================================================================
-api_call() {
-    local method="$1" path="$2" body="${3:-}"
-    local -a curl_args=(
-        -s -S
-        -X "$method"
-        -H "Content-Type: application/json"
-        -w '%{http_code}'
-    )
-    [[ "$INSECURE" == "1" ]] && curl_args+=(-k)
-    [[ -n "$AUTH_TOKEN" ]] && curl_args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
-    [[ -n "$body" ]] && curl_args+=(-d "$body")
-    curl "${curl_args[@]}" "${API_BASE}${path}"
-}
+source "${SCRIPT_DIR}/resources-lib.sh"
 
 # ============================================================================
 # Auth guard + one-time auth/connectivity probe
 # ============================================================================
-is_localhost() { [[ "$API_BASE" =~ ^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?$ ]]; }
-
 if [[ -z "$AUTH_TOKEN" && "$ALLOW_NO_AUTH" != "1" ]]; then
     if is_localhost; then
         log_warning "No AUTH_TOKEN set and API_BASE is localhost; assuming security-disabled mode. Set ALLOW_NO_AUTH=1 to silence, or export AUTH_TOKEN."
@@ -123,81 +105,6 @@ elif [[ "$_PROBE_CODE" == "000" || -z "$_PROBE_CODE" ]]; then
     log_error "Could not reach the IdP at $API_BASE (connection failed). Check API_BASE / network / TLS (INSECURE=$INSECURE)."
     exit 1
 fi
-
-# ============================================================================
-# Lookup helpers (mirror sample-resources.sh; list endpoints capped at limit=100)
-# ============================================================================
-extract_first_id() {
-    echo "$1" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_user_id_by_username() {
-    local USERNAME="$1" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/users?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"username\":\"${USERNAME}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_group_id_by_name() {
-    local GROUP_NAME="$1" OU_ID="$2" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/groups?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"name\":\"${GROUP_NAME}\"" | grep "\"ouId\":\"${OU_ID}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_role_id_by_name() {
-    local ROLE_NAME="$1" OU_ID="$2" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/roles?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"name\":\"${ROLE_NAME}\"" | grep "\"ouId\":\"${OU_ID}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_application_id_by_client_id() {
-    local CLIENT_ID="$1" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/applications?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"clientId\":\"${CLIENT_ID}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_user_type_id_by_name() {
-    local NAME="$1" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/user-types?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"name\":\"${NAME}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_resource_server_id_by_identifier() {
-    local IDENTIFIER="$1" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/resource-servers?limit=100&offset=0")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    echo "$BODY" | sed 's/},{/}\n{/g' | grep "\"identifier\":\"${IDENTIFIER}\"" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4
-}
-
-get_ou_id_by_handle() {
-    local OU_HANDLE="$1" RESPONSE HTTP_CODE BODY
-    RESPONSE=$(api_call GET "/organization-units/tree/${OU_HANDLE}")
-    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
-    [[ "$HTTP_CODE" != "200" ]] && { echo ""; return; }
-    extract_first_id "$BODY"
-}
-
-# List resource IDs under a resource server. With a parent_id, lists that
-# parent's direct children; without one, lists top-level resources only.
-list_resource_ids() {
-    local RS_ID="$1" PARENT="${2:-}" Q RESPONSE BODY
-    Q="/resource-servers/${RS_ID}/resources?limit=100&offset=0"
-    [[ -n "$PARENT" ]] && Q="${Q}&parentId=${PARENT}"
-    RESPONSE=$(api_call GET "$Q")
-    [[ "${RESPONSE: -3}" != "200" ]] && { echo ""; return; }
-    BODY="${RESPONSE%???}"
-    echo "$BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4
-}
 
 # ============================================================================
 # Delete helpers — "delete if exists" (missing -> skip)
@@ -271,14 +178,6 @@ delete_resource_subtree() {
     delete_by_id "/resource-servers/${rs_id}/resources/${res_id}" "resource ${res_id}"
 }
 
-list_action_ids() {
-    local rs_id="$1" res_id="$2" RESPONSE BODY
-    RESPONSE=$(api_call GET "/resource-servers/${rs_id}/resources/${res_id}/actions?limit=100&offset=0")
-    [[ "${RESPONSE: -3}" != "200" ]] && { echo ""; return; }
-    BODY="${RESPONSE%???}"
-    echo "$BODY" | grep -o '"id":"[^"]*"' | cut -d'"' -f4
-}
-
 delete_resource_server() {
     local identifier="$1" rs_id root
     rs_id=$(get_resource_server_id_by_identifier "$identifier")
@@ -303,12 +202,6 @@ confirm_or_abort() {
         exit 1
     fi
 }
-
-# Shared engine library (load_config + agency expansion) so teardown reads the
-# exact same idp/resources/ config the seed script provisions from — adding an
-# agency/company to config covers both create and delete.
-# shellcheck source=resources-lib.sh
-source "${SCRIPT_DIR}/resources-lib.sh"
 
 # ============================================================================
 # Main — delete in reverse-dependency order, all lists derived from the merged

@@ -31,6 +31,11 @@ ADMIN_CLI_SECRET="${ADMIN_CLI_SECRET:-1234}"
 
 # ============================================================================
 # Helpers (api_call / log_* come from common.sh)
+#
+# NOTE: jq is NOT installed in the ThunderID base/setup container, so this
+# bootstrap script parses API JSON responses with sed/grep/cut (unlike
+# idp/sample-resources.sh, which runs on the host/seed container where jq is
+# available and uses it). Keep it dependency-free — do not introduce jq here.
 # ============================================================================
 
 extract_first_id() {
