@@ -175,18 +175,22 @@ type SPSItem struct {
 // re-export, quantity, then declarations); each is a separate slice so position
 // is preserved. See MarshalXML for why the custom marshaller is required.
 type TradeLine struct {
-	Sequence         string            `xml:"ram:SequenceNumeric"`
-	Descriptions     []LangText        `xml:"ram:Description"` // MANDATORY
-	CommonNames      []LangText        `xml:"ram:CommonName,omitempty"`
-	ScientificName   string            `xml:"ram:ScientificName,omitempty"`
-	IntendedUses     []LangText        `xml:"ram:IntendedUse,omitempty"`
-	NetWeight        *Measure          `xml:"ram:NetWeightMeasure,omitempty"`
-	GrossWeight      *Measure          `xml:"ram:GrossWeightMeasure,omitempty"`
-	NetVolume        *Measure          `xml:"ram:NetVolumeMeasure,omitempty"`
-	GrossVolume      *Measure          `xml:"ram:GrossVolumeMeasure,omitempty"`
-	PackagingNotes   []Note            `xml:"ram:AdditionalInformationSPSNote,omitempty"` // OPTND + RPC* re-export block
-	QuantityNotes    []Note            `xml:"ram:AdditionalInformationSPSNote,omitempty"` // OQV/OQU
-	DeclarationNotes []Note            `xml:"ram:AdditionalInformationSPSNote,omitempty"` // DMTLIL/ADTLIL/ADIPTLIL/ADDITLIL/ADAOTLIL
+	Sequence       string     `xml:"ram:SequenceNumeric"`
+	Descriptions   []LangText `xml:"ram:Description"` // MANDATORY
+	CommonNames    []LangText `xml:"ram:CommonName,omitempty"`
+	ScientificName string     `xml:"ram:ScientificName,omitempty"`
+	IntendedUses   []LangText `xml:"ram:IntendedUse,omitempty"`
+	NetWeight      *Measure   `xml:"ram:NetWeightMeasure,omitempty"`
+	GrossWeight    *Measure   `xml:"ram:GrossWeightMeasure,omitempty"`
+	NetVolume      *Measure   `xml:"ram:NetVolumeMeasure,omitempty"`
+	GrossVolume    *Measure   `xml:"ram:GrossVolumeMeasure,omitempty"`
+	// These three map to the same element (ram:AdditionalInformationSPSNote) at
+	// distinct document positions; MarshalXML emits them explicitly, so they are
+	// excluded from reflection-based marshalling (xml:"-") to keep their order
+	// and avoid duplicate-tag conflicts.
+	PackagingNotes   []Note            `xml:"-"` // OPTND + RPC* re-export block
+	QuantityNotes    []Note            `xml:"-"` // OQV/OQU
+	DeclarationNotes []Note            `xml:"-"` // DMTLIL/ADTLIL/ADIPTLIL/ADDITLIL/ADAOTLIL
 	Classifications  []Classification  `xml:"ram:ApplicableSPSClassification,omitempty"`
 	Packages         []PhysicalPackage `xml:"ram:PhysicalSPSPackage,omitempty"`
 	Origins          []OriginCountry   `xml:"ram:OriginSPSCountry"`
@@ -197,7 +201,7 @@ type TradeLine struct {
 // A custom marshaller is required because three fields map to the same element
 // name (ram:AdditionalInformationSPSNote); Go's reflect-based encoder would
 // treat them as conflicting and drop all three.
-func (t TradeLine) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+func (t TradeLine) MarshalXML(e *xml.Encoder, start xml.StartElement) error { //nolint:gocyclo // linear emitter: one branch per optional SPSCertificate child, in document order
 	if err := e.EncodeToken(start); err != nil {
 		return err
 	}

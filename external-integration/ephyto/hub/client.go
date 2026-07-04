@@ -87,7 +87,7 @@ func (c *Client) Send(ctx context.Context, soapXML string) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("posting to Hub: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -51,7 +51,7 @@ func sampleUserform() map[string]any {
 	}
 }
 
-func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) {
+func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // exhaustive field-by-field assertions on the mapped certificate
 	prev := nowFunc
 	nowFunc = func() time.Time { return time.Date(2026, 7, 3, 10, 30, 0, 0, time.UTC) }
 	defer func() { nowFunc = prev }()

@@ -24,7 +24,7 @@ func textNote(subject, content, lang string) Note {
 	return Note{Subject: subject, Contents: []NoteContent{{Lang: lang, Value: content}}}
 }
 
-func BuildCertificate(in Input) (SPSCertificate, error) {
+func BuildCertificate(in Input) (SPSCertificate, error) { //nolint:gocyclo // linear field-by-field mapping from Input onto the SPSCertificate model
 	c := in.Certificate
 
 	if strings.TrimSpace(c.Number) == "" {
@@ -193,7 +193,7 @@ func buildParty(p PartyInput) Party {
 	return party
 }
 
-func buildTradeLine(tl TradeLineInput) (TradeLine, error) {
+func buildTradeLine(tl TradeLineInput) (TradeLine, error) { //nolint:gocyclo // linear mapping of optional trade-line fields onto the XML model
 	if strings.TrimSpace(tl.Description) == "" {
 		return TradeLine{}, fmt.Errorf("each tradeLine.description is mandatory (UN/CEFACT)")
 	}
