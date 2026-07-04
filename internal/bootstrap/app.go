@@ -34,6 +34,7 @@ import (
 
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
@@ -478,9 +479,16 @@ func initTask(
 		return nil, nil, fmt.Errorf("failed to load remote services from %s: %w", cfg.Server.ServicesConfigPath, err)
 	}
 
+	// IPPC ePhyto Hub configuration (endpoint, mTLS cert/key, timeout) for the
+	// NPQS ePhyto validate/submit/poll plugins, which call the Hub in-process.
+	ephytoCfg, err := ephyto.LoadConfig()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load ephyto config: %w", err)
+	}
+
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, ephytoCfg, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)); err != nil {

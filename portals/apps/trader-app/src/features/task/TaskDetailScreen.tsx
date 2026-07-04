@@ -140,6 +140,8 @@ export function TaskDetailScreen() {
                 setSubmitError(null)
                 try {
                   await submitTaskStep(taskId, command, data)
+                  // Latch the action off during the transition window so the step
+                  // can't be double-submitted while the backend advances.
                   setHasSubmitted(true)
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
                   await fetchTask()
@@ -148,6 +150,13 @@ export function TaskDetailScreen() {
                   // would unmount the layout and discard the user's entered form data.
                   setSubmitError(t('tasks.error.submitFailed'))
                   console.error('TaskDetailScreen: failed to submit task step:', err)
+                } finally {
+                  // Re-arm the action once the task has settled. Looping steps (e.g.
+                  // the ePhyto "Check Status" poll) re-enter the same state, so the
+                  // button must return; terminal states expose no handles and stay
+                  // buttonless regardless. Without this reset the button vanishes
+                  // after one click until a hard refresh.
+                  setHasSubmitted(false)
                 }
               }
         }

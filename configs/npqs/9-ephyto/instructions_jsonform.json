@@ -1,4 +1,0 @@
-{
-  "id": "npqs-ephyto-upload--instructions",
-  "template": "### Transmitting to IPPC ePhyto Hub...\n\nYour phytosanitary certificate is being transmitted to the destination country via the global **IPPC ePhyto Hub**.\n\n- **Reference Number**: `{{ .reference_number }}`\n- **Certificate Number**: `{{ .certificate_id }}`\n- **Status**: `Transmitting...`\n\nClick below to acknowledge and complete the registration process."
-}

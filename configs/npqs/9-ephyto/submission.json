@@ -1,0 +1,8 @@
+{
+  "id": "npqs-ephyto-upload--submission",
+  "task_type": "USER_INPUT",
+  "output_namespace": "traderinput",
+  "plugin_properties": {
+    "user_jsonforms_id": "npqs-ephyto-upload--submit-form"
+  }
+}

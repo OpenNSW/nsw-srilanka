@@ -1,0 +1,19 @@
+{
+  "id": "npqs-ephyto-upload--submit-form",
+  "title": "",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "hub_destination": {
+        "type": "string",
+        "title": "Destination IPPC Hub Connection",
+        "oneOf": [{ "const": "LK2", "title": "Sri Lanka (LK2)" }]
+      }
+    },
+    "required": ["hub_destination"]
+  },
+  "uiSchema": {
+    "type": "VerticalLayout",
+    "elements": [{ "type": "Control", "scope": "#/properties/hub_destination" }]
+  }
+}

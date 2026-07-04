@@ -1,0 +1,4 @@
+{
+  "id": "npqs-ephyto-upload--submission-msg",
+  "template": "### Transmit to the IPPC ePhyto Hub\n\n{{ with .ephyto }}{{ if .error }}⚠️ {{ .error }}\n\n{{ end }}{{ end }}The phytosanitary certificate is ready to be transmitted to the destination country via the global **IPPC ePhyto Hub**. Submitting validates the certificate and delivers it to the Hub.\n\n- **Reference Number**: `{{ .reference_number }}`\n- **Certificate Number**: `{{ .certificate_id }}`\n\nClick **Submit to IPPC Hub** to send the certificate."
+}
