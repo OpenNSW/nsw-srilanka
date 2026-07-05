@@ -3,25 +3,59 @@
   "type": "APPLICATION",
   "title": "[NPQS] IPPC ePhyto Hub Transfer",
   "sections": {
-    "status_message": {
-      "templateId": "npqs-ephyto-upload--instructions",
-      "title": "ePhyto Transmission Status",
+    "submission_msg": {
+      "templateId": "npqs-ephyto-upload--submission-msg",
+      "title": "Transmit to IPPC ePhyto Hub",
       "projector": "MARKDOWN",
-      "visibleWhen": {
-        "states": ["PENDING_USER", "COMPLETED"]
-      },
+      "visibleWhen": { "states": ["PENDING_USER"] }
+    },
+    "submission_action": {
+      "templateId": "npqs-ephyto-upload--submit-form",
+      "title": "Submit",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "visibleWhen": { "states": ["PENDING_USER"] },
       "handles": [
         {
           "command": "submit",
-          "label": "Acknowledge Transfer Complete",
+          "label": "Submit to IPPC Hub",
           "element": "primary_action"
         }
       ]
+    },
+    "polling_msg": {
+      "templateId": "npqs-ephyto-upload--polling-msg",
+      "title": "Delivery Status",
+      "projector": "MARKDOWN",
+      "visibleWhen": { "states": ["POLLING"] }
+    },
+    "polling_action": {
+      "templateId": "npqs-ephyto-upload--action-form",
+      "title": "Status",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "visibleWhen": { "states": ["POLLING"] },
+      "handles": [
+        {
+          "command": "poll",
+          "label": "Check Status",
+          "element": "primary_action"
+        }
+      ]
+    },
+    "completed": {
+      "templateId": "npqs-ephyto-upload--completed-msg",
+      "title": "ePhyto Transmission Complete",
+      "projector": "MARKDOWN",
+      "visibleWhen": { "states": ["COMPLETED"] }
     }
   },
   "states": {
     "PENDING_USER": {
       "actions": [{ "command": "submit" }]
+    },
+    "POLLING": {
+      "actions": [{ "command": "poll" }]
     }
   }
 }
