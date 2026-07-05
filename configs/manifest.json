@@ -946,13 +946,6 @@
       "path": "npqs/8-issue_certificate/status_markdown.json"
     },
     {
-      "id": "npqs-ephyto-upload--instructions",
-      "kind": "generic_template",
-      "version": "",
-      "loader": "local",
-      "path": "npqs/9-ephyto/instructions_jsonform.json"
-    },
-    {
       "id": "npqs-ephyto-upload:render",
       "kind": "generic_template",
       "version": "",
@@ -960,11 +953,67 @@
       "path": "npqs/9-ephyto/render.json"
     },
     {
-      "id": "npqs-ephyto-upload--wait",
+      "id": "npqs-ephyto-upload--action-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/action_form.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--submit-form",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/submit_form.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--submission-msg",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/submission_markdown.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--polling-msg",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/polling_markdown.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--completed-msg",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/completed_markdown.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--submission",
       "kind": "subtask_template",
       "version": "",
       "loader": "local",
-      "path": "npqs/9-ephyto/userinput.json"
+      "path": "npqs/9-ephyto/submission.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--submit",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/submit.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--poll",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/poll.json"
+    },
+    {
+      "id": "npqs-ephyto-upload--status-check",
+      "kind": "subtask_template",
+      "version": "",
+      "loader": "local",
+      "path": "npqs/9-ephyto/status_check.json"
     },
     {
       "id": "npqs-ephyto-upload",

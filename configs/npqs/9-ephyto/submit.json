@@ -1,0 +1,8 @@
+{
+  "id": "npqs-ephyto-upload--submit",
+  "task_type": "NPQS_EPHYTO_HUB",
+  "output_namespace": "ephyto",
+  "plugin_properties": {
+    "operation": "submit"
+  }
+}
