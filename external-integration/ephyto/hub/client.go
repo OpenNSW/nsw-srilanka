@@ -24,15 +24,20 @@ import (
 // (resolved via configuration). No URL is hardcoded here.
 // ===========================================================================
 
+// maxResponseBytes caps how much of a Hub response body we read, so an
+// unexpectedly large or runaway payload cannot exhaust memory.
+const maxResponseBytes = 10 * 1024 * 1024 // 10 MiB
+
 // Client posts a Hub SOAP request and parses the response.
 type Client struct {
 	Endpoint string
 	HTTP     *http.Client
 }
 
-// NewClient builds a Client that authenticates with a PEM cert + key pair.
-func NewClient(endpoint, certPEM, keyPEM string, timeout time.Duration) (*Client, error) {
-	cert, err := tls.LoadX509KeyPair(certPEM, keyPEM)
+// NewClient builds a Client that authenticates with a client certificate and
+// key loaded from disk.
+func NewClient(endpoint, certPath, keyPath string, timeout time.Duration) (*Client, error) {
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading client certificate: %w", err)
 	}
@@ -89,7 +94,8 @@ func (c *Client) Send(ctx context.Context, soapXML string) (*Response, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	// Cap the read so a huge or runaway response body cannot OOM the process.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading Hub response: %w", err)
 	}
