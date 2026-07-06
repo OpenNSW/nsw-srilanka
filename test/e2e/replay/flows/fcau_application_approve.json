@@ -30,9 +30,9 @@
       "wait": { "node": "Select HS Codes", "state": "IN_PROGRESS", "into": "hsTask", "timeout": "45s" }
     },
     {
-      "name": "trader selects the FCAU HS code",
+      "name": "cha selects the FCAU HS code",
       "request": {
-        "actor": "trader",
+        "actor": "cha",
         "method": "POST",
         "path": "/api/v1/tasks/{{hsTask}}",
         "body": { "command": "submit", "payload": { "hs_codes": ["fcau-health-certificate-reg"] } },

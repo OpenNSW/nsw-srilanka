@@ -6,5 +6,14 @@
     "service_id": "fcau",
     "path": "/api/v1/inject",
     "task_code": "fcau_application_review_v1"
-  }
+  },
+  "extensions": [
+    {
+      "id": "authz",
+      "phase": "PRE_RESUME",
+      "properties": {
+        "QUEUED_EXTERNALLY": { "approve": ["fcau"], "reject": ["fcau"] }
+      }
+    }
+  ]
 }

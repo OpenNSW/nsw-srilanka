@@ -13,6 +13,8 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
+
+	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -84,8 +86,16 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	slog.Info("tasks: processing complete step command", "taskId", taskID, "command", command)
 
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
-		slog.Error("tasks: failed to complete task step", "taskId", taskID, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "An internal error occurred while processing the task")
+		switch {
+		case errors.Is(err, taskauthz.ErrUnauthenticated):
+			writeJSONError(w, http.StatusUnauthorized, "authentication required")
+		case errors.Is(err, taskauthz.ErrForbidden):
+			slog.Warn("tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
+			writeJSONError(w, http.StatusForbidden, "you may not perform this action on this task")
+		default:
+			slog.Error("tasks: failed to complete task step", "taskId", taskID, "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "An internal error occurred while processing the task")
+		}
 		return
 	}
 
