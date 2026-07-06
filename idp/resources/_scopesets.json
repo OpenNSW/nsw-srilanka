@@ -1,0 +1,32 @@
+{
+  "scopeSets": {
+    "traderNsw": [
+      "nsw:consignment:read",
+      "nsw:consignment:write",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:hscode:read",
+      "nsw:company:read",
+      "nsw:cha:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "m2mNsw": [
+      "nsw:task:write",
+      "nsw:consignment:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "agencyReviewer": [
+      "agency:application:read",
+      "agency:application:review",
+      "agency:application:feedback",
+      "agency:consignment:read",
+      "agency:storage:read",
+      "agency:storage:write"
+    ],
+    "m2mAgency": [
+      "agency:application:inject"
+    ]
+  }
+}

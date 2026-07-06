@@ -1,0 +1,19 @@
+{
+  "userTypes": [
+    {
+      "key": "Government_User",
+      "name": "Government_User",
+      "ou": "government-organization",
+      "allowSelfRegistration": false,
+      "schema": {
+        "username": { "type": "string", "required": true, "unique": true },
+        "password": { "type": "string", "required": true, "credential": true },
+        "email": { "type": "string", "required": true, "unique": true, "regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" },
+        "phone_number": { "type": "string", "required": false },
+        "given_name": { "type": "string", "required": false },
+        "family_name": { "type": "string", "required": false }
+      },
+      "systemAttributes": { "display": "username" }
+    }
+  ]
+}

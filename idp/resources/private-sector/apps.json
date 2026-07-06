@@ -1,0 +1,16 @@
+{
+  "applications": [
+    {
+      "key": "TRADER_PORTAL_APP",
+      "kind": "spa",
+      "name": "TraderApp",
+      "description": "Application for trader portal built with React",
+      "clientId": "TRADER_PORTAL_APP",
+      "port": 5173,
+      "allowedUserType": "Private_User",
+      "ou": "default",
+      "scopeSet": "traderNsw",
+      "redirectUrisEnv": "TRADER_REDIRECT_URIS"
+    }
+  ]
+}

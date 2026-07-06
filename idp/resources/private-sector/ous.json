@@ -1,0 +1,27 @@
+{
+  "organizationUnits": [
+    {
+      "key": "private-sector",
+      "handle": "private-sector",
+      "name": "Private Sector",
+      "description": "Organization unit for private sector entities",
+      "treePath": "private-sector"
+    },
+    {
+      "key": "private-sector/adam-pvt-ltd",
+      "handle": "adam-pvt-ltd",
+      "name": "ADAM PVT LTD",
+      "description": "Child organization unit for ADAM PVT LTD",
+      "parent": "private-sector",
+      "treePath": "private-sector/adam-pvt-ltd"
+    },
+    {
+      "key": "private-sector/edward-pvt-ltd",
+      "handle": "edward-pvt-ltd",
+      "name": "EDWARD PVT LTD",
+      "description": "Child organization unit for EDWARD PVT LTD",
+      "parent": "private-sector",
+      "treePath": "private-sector/edward-pvt-ltd"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "users": [
+    {
+      "key": "suresh",
+      "type": "Private_User",
+      "ou": "private-sector/adam-pvt-ltd",
+      "username": "suresh",
+      "email": "suresh@adam-pvt-ltd.private-sector.dev",
+      "givenName": "Suresh",
+      "familyName": "Fernando",
+      "phoneNumber": "+94771234567",
+      "passwordEnv": { "override": "SAMPLE_SURESH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "ramesh",
+      "type": "Private_User",
+      "ou": "private-sector/adam-pvt-ltd",
+      "username": "ramesh",
+      "email": "ramesh@adam-pvt-ltd.private-sector.dev",
+      "givenName": "Ramesh",
+      "familyName": "Fernando",
+      "phoneNumber": "+94771234568",
+      "passwordEnv": { "override": "SAMPLE_RAMESH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["CHA"]
+    },
+    {
+      "key": "gomesh",
+      "type": "Private_User",
+      "ou": "private-sector/adam-pvt-ltd",
+      "username": "gomesh",
+      "email": "gomesh@adam-pvt-ltd.private-sector.dev",
+      "givenName": "Gomesh",
+      "familyName": "Fernando",
+      "phoneNumber": "+94771234569",
+      "passwordEnv": { "override": "SAMPLE_GOMESH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders"]
+    },
+    {
+      "key": "naresh",
+      "type": "Private_User",
+      "ou": "private-sector/edward-pvt-ltd",
+      "username": "naresh",
+      "email": "naresh@edward-pvt-ltd.private-sector.dev",
+      "givenName": "Naresh",
+      "familyName": "Fernando",
+      "phoneNumber": "+94771234570",
+      "passwordEnv": { "override": "SAMPLE_NARESH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["CHA"]
+    }
+  ]
+}
