@@ -115,9 +115,8 @@ export const autoFillForm = (schema: JsonSchema, currentValues: any = {}): any =
   const newValues = { ...currentValues }
 
   // Helper to check if a value is empty
-  const isEmpty = (val: unknown): boolean => {
-    return val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)
-  }
+  const isEmpty = (val: unknown): boolean =>
+    val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)
 
   // Helper to recursively auto-fill nested objects
   const fillNestedValues = (

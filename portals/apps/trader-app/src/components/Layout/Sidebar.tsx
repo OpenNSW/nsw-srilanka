@@ -2,7 +2,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { DashboardIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons'
 import { type ReactNode, useEffect, useRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRole, type Role } from '../../services/RoleContext'
+import { useRole } from '@/services/useRole'
+import type { Role } from '@/services/RoleContext'
 
 interface NavItem {
   name: string
@@ -44,24 +45,22 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
     [t],
   )
 
-  const filteredNavStructure = useMemo(() => {
-    return navStructure
-      .filter((item) => {
-        return !(item.roles && !item.roles.includes(role))
-      })
-      .map((item) => {
-        if (isNavGroup(item)) {
-          return {
-            ...item,
-            items: item.items.filter((child) => !child.roles || child.roles.includes(role)),
+  const filteredNavStructure = useMemo(
+    () =>
+      navStructure
+        .filter((item) => !(item.roles && !item.roles.includes(role)))
+        .map((item) => {
+          if (isNavGroup(item)) {
+            return {
+              ...item,
+              items: item.items.filter((child) => !child.roles || child.roles.includes(role)),
+            }
           }
-        }
-        return item
-      })
-      .filter((item) => {
-        return !(isNavGroup(item) && item.items.length === 0)
-      })
-  }, [role, navStructure])
+          return item
+        })
+        .filter((item) => !(isNavGroup(item) && item.items.length === 0)),
+    [role, navStructure],
+  )
 
   const showExpanded = isExpanded || (!isExpanded && isHovered)
 
@@ -77,7 +76,6 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
           }
         }
       })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpandedGroups(groupsToExpand)
     }
   }, [location.pathname, filteredNavStructure])

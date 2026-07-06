@@ -1,4 +1,4 @@
-import { userManager } from '../oidcUserManager'
+import { userManager } from '@/oidcUserManager'
 
 interface RequestConfig {
   url: string
@@ -99,7 +99,9 @@ export const http = {
         try {
           data = JSON.parse(text) as unknown
         } catch (e) {
-          throw new Error(`Failed to parse JSON response body: ${e instanceof Error ? e.message : String(e)}`)
+          throw new Error(`Failed to parse JSON response body: ${e instanceof Error ? e.message : String(e)}`, {
+            cause: e,
+          })
         }
       }
 

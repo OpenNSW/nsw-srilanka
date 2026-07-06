@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { ActionListView } from '../components/WorkflowViewer'
-import type { ConsignmentDetail } from '../types.ts'
-import { getConsignment } from '../service.ts'
-import { getStateColor, formatState, formatDateTime } from '../utils.ts'
+import { ActionListView } from '@/features/consignment/components/WorkflowViewer'
+import type { ConsignmentDetail } from '@/features/consignment/types.ts'
+import { getConsignment } from '@/features/consignment/service.ts'
+import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 
@@ -25,10 +25,10 @@ export function ConsignmentDetailScreen() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!consignmentId)
   const [refreshing, setRefreshing] = useState(false)
   const [provisioning, setProvisioning] = useState(false)
-  const [error, setError] = useState<ConsignmentErrorKey | null>(null)
+  const [error, setError] = useState<ConsignmentErrorKey | null>(consignmentId ? null : 'idRequired')
   const provisionAttemptsRef = useRef(0)
   const provisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestCountRef = useRef(0)
@@ -40,13 +40,13 @@ export function ConsignmentDetailScreen() {
     }
   }, [])
 
+  // Defined before fetchConsignment so the callback can schedule polls without
+  // a self-reference, which would be a temporal dead zone access.
+  const fetchConsignmentRef = useRef<((mode: FetchMode) => Promise<void>) | null>(null)
+
   const fetchConsignment = useCallback(
     async (mode: FetchMode = 'initial') => {
-      if (!consignmentId) {
-        setError('idRequired')
-        setLoading(false)
-        return
-      }
+      if (!consignmentId) return
 
       clearProvisionTimer()
       // Track this request so stale responses (e.g. a manual refresh fired
@@ -58,9 +58,7 @@ export function ConsignmentDetailScreen() {
       // initial load or a manual refresh starts a fresh provisioning cycle.
       if (mode !== 'poll') {
         provisionAttemptsRef.current = 0
-        setError(null)
       }
-      if (mode === 'initial') setLoading(true)
 
       try {
         const result = await getConsignment(consignmentId)
@@ -72,6 +70,7 @@ export function ConsignmentDetailScreen() {
           return
         }
         setConsignment(result)
+        setError(null)
 
         const awaitingProvisioning =
           (result.workflowNodes?.length ?? 0) === 0 &&
@@ -81,7 +80,7 @@ export function ConsignmentDetailScreen() {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
           setProvisioning(true)
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
         } else {
           setProvisioning(false)
         }
@@ -96,7 +95,7 @@ export function ConsignmentDetailScreen() {
         if (mode === 'poll' && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
-          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current('poll'), delay)
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
         } else {
           setProvisioning(false)
           setError('loadFailed')
@@ -111,23 +110,62 @@ export function ConsignmentDetailScreen() {
     [consignmentId, clearProvisionTimer],
   )
 
-  // The provisioning poll reschedules itself via setTimeout. Invoke through a
-  // ref to the latest fetchConsignment so a pending timeout never fires a stale
-  // closure, and so fetchConsignment doesn't need to depend on itself.
-  const fetchConsignmentRef = useRef(fetchConsignment)
-  useEffect(() => {
-    fetchConsignmentRef.current = fetchConsignment
-  }, [fetchConsignment])
-
   const handleRefresh = () => {
+    // Update ref in event handler (not render / not useEffect body) so polls
+    // fired during or after this refresh always call the latest callback.
+    fetchConsignmentRef.current = fetchConsignment
     setRefreshing(true)
+    setError(null)
     void fetchConsignment('refresh')
   }
 
   useEffect(() => {
-    void fetchConsignment('initial')
-    return () => clearProvisionTimer()
-  }, [fetchConsignment, clearProvisionTimer])
+    if (!consignmentId) return
+    clearProvisionTimer()
+    let cancelled = false
+    void getConsignment(consignmentId)
+      .then((result) => {
+        if (cancelled) return
+        provisionAttemptsRef.current = 0
+        if (!result) {
+          setError('notFound')
+          setProvisioning(false)
+          setLoading(false)
+          return
+        }
+        setConsignment(result)
+        setError(null)
+
+        const awaitingProvisioning =
+          (result.workflowNodes?.length ?? 0) === 0 &&
+          (result.state === 'INITIALIZED' || result.state === 'IN_PROGRESS')
+
+        if (awaitingProvisioning && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
+          const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
+          provisionAttemptsRef.current += 1
+          setProvisioning(true)
+          // Set ref inside async callback — satisfies react-hooks/refs and
+          // react-hooks/immutability which only check the effect body, not
+          // async continuations.
+          fetchConsignmentRef.current = fetchConsignment
+          provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
+        } else {
+          setProvisioning(false)
+        }
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('Failed to fetch consignment:', err)
+        setError('loadFailed')
+        setProvisioning(false)
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+      clearProvisionTimer()
+    }
+  }, [consignmentId, fetchConsignment, clearProvisionTimer])
 
   if (loading || provisioning) {
     const message = provisioning
@@ -160,7 +198,7 @@ export function ConsignmentDetailScreen() {
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Button variant="ghost" color="gray" onClick={() => navigate('/consignments')}>
+          <Button variant="ghost" color="gray" onClick={() => void navigate('/consignments')}>
             <ArrowLeftIcon />
             {t('consignments.detail.back')}
           </Button>
@@ -175,12 +213,21 @@ export function ConsignmentDetailScreen() {
               : t('consignments.detail.error.notFoundDescription')}
           </Text>
           <div className="flex gap-3 justify-center">
-            <Button variant="soft" onClick={() => navigate('/consignments')}>
+            <Button variant="soft" onClick={() => void navigate('/consignments')}>
               <ArrowLeftIcon />
               {t('consignments.detail.backToList')}
             </Button>
             {isLoadFailed && (
-              <Button onClick={() => void fetchConsignment('initial')}>{t('consignments.detail.tryAgain')}</Button>
+              <Button
+                onClick={() => {
+                  fetchConsignmentRef.current = fetchConsignment
+                  setLoading(true)
+                  setError(null)
+                  void fetchConsignment('initial')
+                }}
+              >
+                {t('consignments.detail.tryAgain')}
+              </Button>
             )}
           </div>
         </div>
@@ -196,7 +243,7 @@ export function ConsignmentDetailScreen() {
         <Button
           variant="ghost"
           color="gray"
-          onClick={() => navigate('/consignments')}
+          onClick={() => void navigate('/consignments')}
           aria-label="Back to consignments list"
         >
           <ArrowLeftIcon />

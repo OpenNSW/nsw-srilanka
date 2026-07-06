@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
-import { useDebounce } from '../../../hooks/useDebounce.ts'
+import { useDebounce } from '@/hooks/useDebounce.ts'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Select, Spinner, Text, TextField } from '@radix-ui/themes'
 import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '../types.ts'
-import { createConsignment, getAllConsignments } from '../service.ts'
-import { useRole } from '../../../services/RoleContext.tsx'
-import { getStateColor, formatState, formatDateTime } from '../utils.ts'
-import { PaginationControl } from '../../../components/common/PaginationControl.tsx'
+import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
+import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
+import { useRole } from '@/services/useRole'
+import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { PaginationControl } from '@/components/common/PaginationControl.tsx'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -198,47 +198,45 @@ export function ConsignmentScreen() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {consignments.map((consignment) => {
-                    return (
-                      <tr
-                        key={consignment.id}
-                        onClick={() => void navigate(`/consignments/${consignment.id}`)}
-                        className="hover:bg-surface cursor-pointer transition-colors"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {consignment.name ? (
-                            <div className="flex flex-col">
-                              <Text size="2" weight="bold" className="text-info-strong">
-                                {consignment.name}
-                              </Text>
-                              <Text size="1" color="gray" className="font-mono mt-0.5">
-                                {consignment.id}
-                              </Text>
-                            </div>
-                          ) : (
-                            <Text size="2" weight="medium" className="text-info-strong font-mono">
+                  {consignments.map((consignment) => (
+                    <tr
+                      key={consignment.id}
+                      onClick={() => void navigate(`/consignments/${consignment.id}`)}
+                      className="hover:bg-surface cursor-pointer transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {consignment.name ? (
+                          <div className="flex flex-col">
+                            <Text size="2" weight="bold" className="text-info-strong">
+                              {consignment.name}
+                            </Text>
+                            <Text size="1" color="gray" className="font-mono mt-0.5">
                               {consignment.id}
                             </Text>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                            {consignment.flow}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge size="1" color={getStateColor(consignment.state)}>
-                            {formatState(consignment.state)}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Text size="2" color="gray">
-                            {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
+                          </div>
+                        ) : (
+                          <Text size="2" weight="medium" className="text-info-strong font-mono">
+                            {consignment.id}
                           </Text>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
+                          {consignment.flow}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge size="1" color={getStateColor(consignment.state)}>
+                          {formatState(consignment.state)}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Text size="2" color="gray">
+                          {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
+                        </Text>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
