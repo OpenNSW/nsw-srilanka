@@ -95,8 +95,24 @@ func (c *Client) Send(ctx context.Context, soapXML string) (*Response, error) {
 	}
 
 	out := &Response{HTTPStatus: resp.StatusCode, RawBody: string(body)}
-	if err := parseResponse(body, out); err != nil {
-		return out, err
+	parseErr := parseResponse(body, out)
+
+	// A non-2xx status (403 from an mTLS/authorisation problem, 502 from the
+	// gateway, ...) often carries a non-XML body, so surface the HTTP status
+	// rather than a cryptic "XML syntax error on line 1". Prefer a parsed SOAP
+	// fault message, then the parse error, then a bare status.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		switch {
+		case out.ErrorMessage != "":
+			return out, fmt.Errorf("SOAP fault (HTTP %d): %s", resp.StatusCode, out.ErrorMessage)
+		case parseErr != nil:
+			return out, fmt.Errorf("HTTP error %d: %w", resp.StatusCode, parseErr)
+		default:
+			return out, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
+		}
+	}
+	if parseErr != nil {
+		return out, parseErr
 	}
 	return out, nil
 }
