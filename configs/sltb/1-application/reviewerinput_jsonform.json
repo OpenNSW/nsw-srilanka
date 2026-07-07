@@ -23,6 +23,10 @@
           {
             "const": "needs_more_info",
             "title": "Request Resubmission (Needs More Info)"
+          },
+          {
+            "const": "reject",
+            "title": "Reject Application (Blend Sheet Not Reconcilable)"
           }
         ]
       },
@@ -74,6 +78,23 @@
           "required": [
             "reference_number",
             "levy_amount"
+          ]
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "review_outcome": {
+              "const": "reject"
+            }
+          },
+          "required": [
+            "review_outcome"
+          ]
+        },
+        "then": {
+          "required": [
+            "feedback"
           ]
         }
       }

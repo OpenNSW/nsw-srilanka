@@ -1,7 +1,7 @@
 {
   "id": "sltb-submit-blendsheet-flow",
   "name": "Submit and Review Blend Sheet",
-  "version": 1,
+  "version": 2,
   "nodes": [
     {
       "id": "start",
@@ -74,6 +74,12 @@
       "source_id": "review_gateway",
       "target_id": "end",
       "condition": "reviewerform.review_outcome == 'approve'"
+    },
+    {
+      "id": "e_reject",
+      "source_id": "review_gateway",
+      "target_id": "end",
+      "condition": "reviewerform.review_outcome == 'reject'"
     }
   ]
 }
