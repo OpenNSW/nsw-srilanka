@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto/hub"
 )
 
 // The NPQS IPPC ePhyto Hub integration is a single in-process taskflow plugin
@@ -32,14 +34,29 @@ const (
 	ephytoOpPoll   = "poll"
 )
 
-// EphytoHubPlugin performs the SOAP/mTLS IPPC Hub calls (submit or poll).
+// EphytoHubPlugin performs the SOAP/mTLS IPPC Hub calls (submit or poll). The
+// Hub client (and its underlying mTLS connection pool) is built once, lazily, on
+// first use and reused across executions — rebuilding it per call would bypass
+// connection pooling and leak sockets/file descriptors.
 type EphytoHubPlugin struct {
-	cfg *ephyto.Config
+	cfg        *ephyto.Config
+	clientOnce sync.Once
+	client     *hub.Client
+	clientErr  error
 }
 
 // NewEphytoHubPlugin returns a Hub plugin bound to the Hub config.
 func NewEphytoHubPlugin(cfg *ephyto.Config) *EphytoHubPlugin {
 	return &EphytoHubPlugin{cfg: cfg}
+}
+
+// getClient lazily builds the mTLS Hub client on first use and caches it (and
+// any construction error) so every submit/poll reuses the same client.
+func (p *EphytoHubPlugin) getClient() (*hub.Client, error) {
+	p.clientOnce.Do(func() {
+		p.client, p.clientErr = p.cfg.NewHubClient()
+	})
+	return p.client, p.clientErr
 }
 
 type ephytoHubConfig struct {
@@ -83,7 +100,7 @@ func (p *EphytoHubPlugin) submit(ctx pluginContext) error {
 		return nil
 	}
 
-	client, err := p.cfg.NewHubClient()
+	client, err := p.getClient()
 	if err != nil {
 		out["error"] = intro + "\n\n- " + err.Error()
 		writeEphytoOutput(ctx, out)
@@ -132,7 +149,7 @@ func (p *EphytoHubPlugin) poll(ctx pluginContext) error {
 		return nil
 	}
 
-	client, err := p.cfg.NewHubClient()
+	client, err := p.getClient()
 	if err != nil {
 		out["error"] = err.Error()
 		writeEphytoOutput(ctx, out)
