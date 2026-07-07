@@ -203,7 +203,7 @@
       "id": "e_review_approve",
       "source_id": "sltb_1_review_gateway",
       "target_id": "sltb_2_pay_levy",
-      "condition": "sltb.review_outcome != 'reject'"
+      "condition": "sltb.review_outcome == 'approve'"
     },
     { "id": "e_2_split", "source_id": "sltb_2_pay_levy", "target_id": "sltb_3_collection_split" },
     {
