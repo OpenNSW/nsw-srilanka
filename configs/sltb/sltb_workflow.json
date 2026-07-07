@@ -1,7 +1,7 @@
 {
   "id": "sltb-blendsheet-approval",
   "name": "SLTB Tea Blendsheet Approval & Sample Collection Flow",
-  "version": 1,
+  "version": 2,
   "nodes": [
     { "id": "start", "type": "START", "name": "Start" },
     {
@@ -19,6 +19,12 @@
         "reviewerform.collection_method?": "sltb.collection_method",
         "reviewerform.reference_number": "sltb.reference_number"
       }
+    },
+    {
+      "id": "sltb_1_review_gateway",
+      "type": "GATEWAY",
+      "gateway_type": "EXCLUSIVE_SPLIT",
+      "name": "Blend Sheet Reconcilable?"
     },
     {
       "id": "sltb_2_pay_levy",
@@ -181,11 +187,24 @@
         "final_decision_outcome": "sltb.final_decision_outcome"
       }
     },
-    { "id": "end_success", "type": "END", "name": "Application Approved (Certificate Issued)" }
+    { "id": "end_success", "type": "END", "name": "Application Approved (Certificate Issued)" },
+    { "id": "end_rejected", "type": "END", "name": "Application Rejected (Blend Sheet Not Reconcilable)" }
   ],
   "edges": [
     { "id": "e_start", "source_id": "start", "target_id": "sltb_1_submit_blendsheet" },
-    { "id": "e_1_2", "source_id": "sltb_1_submit_blendsheet", "target_id": "sltb_2_pay_levy" },
+    { "id": "e_1_review_gw", "source_id": "sltb_1_submit_blendsheet", "target_id": "sltb_1_review_gateway" },
+    {
+      "id": "e_review_reject",
+      "source_id": "sltb_1_review_gateway",
+      "target_id": "end_rejected",
+      "condition": "sltb.review_outcome == 'reject'"
+    },
+    {
+      "id": "e_review_approve",
+      "source_id": "sltb_1_review_gateway",
+      "target_id": "sltb_2_pay_levy",
+      "condition": "sltb.review_outcome != 'reject'"
+    },
     { "id": "e_2_split", "source_id": "sltb_2_pay_levy", "target_id": "sltb_3_collection_split" },
     {
       "id": "e_split_none",
