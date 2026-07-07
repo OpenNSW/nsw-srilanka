@@ -12,12 +12,12 @@
       "lane": "Trader/CHA & SLTB Officer",
       "input_mapping": {},
       "output_mapping": {
-        "userform": "sltb.userform",
         "userform.lion_logo_requested?": "sltb.lion_logo_requested",
         "reviewerform.review_outcome": "sltb.review_outcome",
-        "reviewerform.levy_amount": "sltb.levy_amount",
+        "reviewerform.levy_amount?": "sltb.levy_amount",
         "reviewerform.collection_method?": "sltb.collection_method",
-        "reviewerform.reference_number": "sltb.reference_number"
+        "reviewerform.reference_number?": "sltb.reference_number",
+        "rejection_reason?": "sltb.rejection_reason"
       }
     },
     {
