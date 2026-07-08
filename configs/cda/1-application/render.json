@@ -46,6 +46,12 @@
           "element": "primary_action"
         }
       ]
+    },
+    "user_form_template": {
+      "templateId": "cda-apply-coconut-cert--bag-template",
+      "title": "DC Bag Details Template",
+      "projector": "MARKDOWN",
+      "dataKey": "userform"
     }
   },
   "states": {

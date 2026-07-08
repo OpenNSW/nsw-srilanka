@@ -189,8 +189,8 @@
       "uploaded_dc_bags_details": {
         "type": "string",
         "format": "file",
-        "title": "Upload Filled DC Bags Details File",
-        "description": "Please download the bag details spreadsheet template from: https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0"
+        "title": "Check below to download the template, then upload the completed sheet here.",
+        "description": "Check below to download the template, then upload the completed sheet here."
       }
     },
     "required": [
@@ -353,10 +353,6 @@
           {
             "type": "Control",
             "scope": "#/properties/uploaded_dc_bags_details"
-          },
-          {
-            "type": "Label",
-            "text": "Please download the bag details spreadsheet template from: https://docs.google.com/spreadsheets/d/1nVT_Q2S59KRUD-JWZy_gnjsYNnswjOsnDHdoJMHKzZ4/edit?gid=0#gid=0"
           }
         ]
       }
