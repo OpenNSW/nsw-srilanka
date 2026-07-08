@@ -1611,6 +1611,13 @@
       "path": "cda/1-application/feedback_jsonform.json"
     },
     {
+      "id": "cda-apply-coconut-cert--bag-template",
+      "kind": "generic_template",
+      "version": "",
+      "loader": "local",
+      "path": "cda/1-application/bag_template_markdown.json"
+    },
+    {
       "id": "cda-apply-coconut-cert--verified-message",
       "kind": "generic_template",
       "version": "",
