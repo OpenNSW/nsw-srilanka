@@ -5,11 +5,12 @@ go 1.26.4
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.0.0-20260616134204-858f4ee608e8
-	github.com/OpenNSW/core v0.0.0-20260630083247-7aadfe7a67a8
+	github.com/OpenNSW/core v0.0.0-20260709101832-02c3f0264e91
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/database v0.1.0
+	github.com/OpenNSW/core/pagination v0.0.0-20260709101832-02c3f0264e91
 	github.com/OpenNSW/core/payment v0.1.0
-	github.com/OpenNSW/core/remote v0.2.0
+	github.com/OpenNSW/core/remote v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/shopspring/decimal v1.4.0

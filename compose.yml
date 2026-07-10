@@ -226,7 +226,8 @@ services:
       # Mount configs from the repo (read-only) instead of baking them into
       # the image — a config change needs no rebuild, just a restart.
       - ./configs:/app/configs:ro
-      # Operator-supplied IPPC Hub mTLS material (git-ignored). Create
+      # Operator-supplied IPPC Hub mTLS material (git-ignored), referenced by
+      # the "ippc-hub" service's tls block in services.docker.json. Create
       # ./certs/ippc/{nppo.crt,nppo.key} from your Hub Admin Console connection.
       - ./certs/ippc:/certs/ippc:ro
       # Persist runtime blob storage written by the storage driver.
@@ -268,13 +269,6 @@ services:
       - TASK_AUTHZ_CONFIG_PATH=${TASK_AUTHZ_CONFIG_PATH:-configs/task_authz.json}
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
-      # IPPC ePhyto Hub delivery. The NPQS ePhyto submit/poll plugins call the
-      # Hub over mTLS in-process; the client cert + key are operator-supplied
-      # under ./certs/ippc (mounted read-only below).
-      - HUB_ENDPOINT=${HUB_ENDPOINT:-https://hub.ephytoexchange.org/hub/DeliveryService}
-      - HUB_TIMEOUT=${HUB_TIMEOUT:-60s}
-      - HUB_CERT_PATH=${HUB_CERT_PATH:-/certs/ippc/nppo.crt}
-      - HUB_KEY_PATH=${HUB_KEY_PATH:-/certs/ippc/nppo.key}
     depends_on:
       migrate:
         condition: service_completed_successfully

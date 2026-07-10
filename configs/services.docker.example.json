@@ -98,8 +98,12 @@
     },
     {
       "id": "ippc-hub",
-      "url": "http://ippc-hub",
-      "timeout": "30s"
+      "url": "https://hub.ephytoexchange.org/hub/DeliveryService",
+      "timeout": "60s",
+      "tls": {
+        "client_cert_file": "/certs/ippc/nppo.crt",
+        "client_key_file": "/certs/ippc/nppo.key"
+      }
     },
     {
       "id": "sltb",
