@@ -10,6 +10,7 @@ import (
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -25,6 +26,14 @@ const (
 	// TaskTypeCustomsCusdecDispatch is the generic AUTH_API_CALL plugin wired
 	// with the Sri Lanka Customs (SLC Edge) CusDec response interpreter.
 	TaskTypeCustomsCusdecDispatch = "CUSTOMS_CUSDEC_DISPATCH"
+
+	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
+	// ePhyto Hub interpreter; the subtask template's plugin_properties select
+	// the service ("ippc_hub") and operation ("submit" or "poll"). The trader
+	// drives the flow through the standard task endpoint; submit validates the
+	// document (locally and at the Hub) before delivery, so there is no
+	// separate validate step.
+	TaskTypeNPQSEphytoHub = "NPQS_EPHYTO_HUB"
 )
 
 // Register installs the taskv2 plugins on reg.
@@ -55,6 +64,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, customs.NewCusdecInterpreter())},
+		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 
 	for _, e := range entries {

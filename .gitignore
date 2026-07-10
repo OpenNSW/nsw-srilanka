@@ -30,6 +30,9 @@ configs/task_authz.json
 # Local bucket files
 bucket/*
 
+# IPPC ePhyto Hub mTLS material (operator-supplied; never commit)
+certs/ippc/
+
 # Intellij Configs
 **/.idea/**
 

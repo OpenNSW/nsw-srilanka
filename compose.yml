@@ -226,6 +226,10 @@ services:
       # Mount configs from the repo (read-only) instead of baking them into
       # the image — a config change needs no rebuild, just a restart.
       - ./configs:/app/configs:ro
+      # Operator-supplied IPPC Hub mTLS material (git-ignored), referenced by
+      # the "ippc-hub" service's tls block in services.docker.json. Create
+      # ./certs/ippc/{nppo.crt,nppo.key} from your Hub Admin Console connection.
+      - ./certs/ippc:/certs/ippc:ro
       # Persist runtime blob storage written by the storage driver.
       - bucket_data:/app/bucket
     environment:
