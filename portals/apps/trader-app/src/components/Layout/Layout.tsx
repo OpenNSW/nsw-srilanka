@@ -36,7 +36,11 @@ export function Layout() {
           <div className="flex-1">
             <Outlet />
           </div>
-          <footer className="py-4 px-6 text-right text-xs text-foreground-muted">{t('common.poweredBy')}</footer>
+          <footer className="py-4 px-6 text-right text-xs text-foreground-muted">
+            <a href="https://github.com/OpenNSW" target="_blank" rel="noreferrer" className="hover:underline">
+              {t('common.poweredBy')}
+            </a>
+          </footer>
         </main>
       </div>
     </div>
