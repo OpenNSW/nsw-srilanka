@@ -1,9 +1,11 @@
 import { Outlet } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useState } from 'react'
 
 export function Layout() {
+  const { t } = useTranslation()
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
     const savedState = localStorage.getItem('sidebarExpanded')
     // Default to true if no saved state is found
@@ -34,9 +36,7 @@ export function Layout() {
           <div className="flex-1">
             <Outlet />
           </div>
-          <footer className="py-4 px-6 text-right text-xs text-foreground-muted">
-            Powered by OpenNSW
-          </footer>
+          <footer className="py-4 px-6 text-right text-xs text-foreground-muted">{t('common.poweredBy')}</footer>
         </main>
       </div>
     </div>

@@ -168,6 +168,7 @@ const en = {
 
   common: {
     dateTimeAt: '{{date}} at {{time}}',
+    poweredBy: 'Powered by OpenNSW',
     pagination: {
       total: 'Total: {{count}}',
       page: 'Page {{page}} of {{totalPages}}',
