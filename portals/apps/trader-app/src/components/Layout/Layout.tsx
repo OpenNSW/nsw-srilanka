@@ -29,9 +29,14 @@ export function Layout() {
 
         <main
           style={{ marginLeft: `${sidebarWidth}px`, width: `calc(100% - ${sidebarWidth}px)` }}
-          className="min-h-[calc(100vh-64px)] transition-all duration-300 mt-16"
+          className="min-h-[calc(100vh-64px)] transition-all duration-300 mt-16 flex flex-col"
         >
-          <Outlet />
+          <div className="flex-1">
+            <Outlet />
+          </div>
+          <footer className="py-4 px-6 text-right text-xs text-foreground-muted">
+            Powered by OpenNSW
+          </footer>
         </main>
       </div>
     </div>
