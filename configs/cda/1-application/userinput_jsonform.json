@@ -26,6 +26,7 @@
       "cusdec_number": {
         "type": "string",
         "title": "CUSDEC Number",
+        "description": "Filled automatically from the Customs workflow",
         "example": "CUSDEC-2026-904821"
       },
       "hs_code": {
@@ -219,7 +220,10 @@
             "elements": [
               {
                 "type": "Control",
-                "scope": "#/properties/cusdec_number"
+                "scope": "#/properties/cusdec_number",
+                "options": {
+                  "readonly": true
+                }
               },
               {
                 "type": "Control",

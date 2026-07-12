@@ -9,12 +9,27 @@
       "name": "Start"
     },
     {
+      "id": "cda_0_wait_cusdec",
+      "type": "TASK",
+      "name": "[CDA 0.0] Wait for CusDec Number from Customs",
+      "task_template_id": "sys:wait_for_signal",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "_iter.input.cusdec_signal": "signal_name"
+      },
+      "output_mapping": {
+        "cusdec_number": "cda.cusdec_number"
+      }
+    },
+    {
       "id": "cda_1_0_apply",
       "type": "TASK",
       "name": "[CDA 1.0] Submit Application",
       "task_template_id": "cda-apply-coconut-cert-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {},
+      "input_mapping": {
+        "cda.cusdec_number": "cusdec_number"
+      },
       "output_mapping": {
         "userform.cusdec_number": "cda.reference_number",
         "userform": "cda.userform"
@@ -104,8 +119,13 @@
   ],
   "edges": [
     {
-      "id": "e_start_to_apply",
+      "id": "e_start_to_wait_cusdec",
       "source_id": "start",
+      "target_id": "cda_0_wait_cusdec"
+    },
+    {
+      "id": "e_wait_cusdec_to_apply",
+      "source_id": "cda_0_wait_cusdec",
       "target_id": "cda_1_0_apply"
     },
     {

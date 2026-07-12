@@ -1,5 +1,16 @@
 {
   "id": "trade-prepare-split-items--transform",
   "task_type": "HSCODE_SPLIT_BUILDER",
-  "plugin_properties": {}
+  "plugin_properties": {
+    "hs_code_flows": {
+      "0801.11.90": [
+        "customs-workflow",
+        "cda-certificate-reg",
+        "fcau-health-certificate-reg"
+      ]
+    },
+    "shared_payload": {
+      "cusdec_signal": "cusdec_ready"
+    }
+  }
 }

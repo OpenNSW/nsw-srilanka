@@ -23,6 +23,18 @@
       }
     },
     {
+      "id": "customs_1b_emit_cusdec_ready",
+      "type": "TASK",
+      "name": "[Customs 1b] Broadcast CusDec Number to Sibling Flows",
+      "task_template_id": "sys:emit_signal",
+      "lane": "Trader/CHA",
+      "input_mapping": {
+        "_iter.input.cusdec_signal": "signal_name",
+        "customs.cusdec_number": "payload.cusdec_number"
+      },
+      "output_mapping": {}
+    },
+    {
       "id": "customs_2_wait_payment",
       "type": "TASK",
       "name": "[Customs 2.0] Wait on Payment",
@@ -130,8 +142,13 @@
       "target_id": "customs_1_cusdec_submission"
     },
     {
-      "id": "e_1_to_2",
+      "id": "e_1_to_1b",
       "source_id": "customs_1_cusdec_submission",
+      "target_id": "customs_1b_emit_cusdec_ready"
+    },
+    {
+      "id": "e_1b_to_2",
+      "source_id": "customs_1b_emit_cusdec_ready",
       "target_id": "customs_2_wait_payment"
     },
     {

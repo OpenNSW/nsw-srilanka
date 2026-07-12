@@ -12,7 +12,8 @@
       "type": "TASK",
       "task_template_id": "cda-apply-coconut-cert--user-input",
       "input_mapping": {
-        "rejection_reason?": "rejection_reason"
+        "rejection_reason?": "rejection_reason",
+        "cusdec_number?": "userform.cusdec_number"
       },
       "output_mapping": {
         "exporter_details": "userform.exporter_details",
