@@ -1,7 +1,7 @@
 {
   "id": "customs-workflow",
   "name": "Customs Declaration & Clearance Process",
-  "version": 1,
+  "version": 2,
   "nodes": [
     {
       "id": "start",
@@ -18,7 +18,6 @@
       "output_mapping": {
         "reviewerform.review_outcome": "customs.cusdec_review_outcome",
         "reviewerform.cusdec_number": "customs.cusdec_number",
-        "reviewerform.amount_to_pay": "customs.amount_to_pay",
         "userform": "customs.userform"
       }
     },
@@ -35,104 +34,9 @@
       "output_mapping": {}
     },
     {
-      "id": "customs_2_wait_payment",
-      "type": "TASK",
-      "name": "[Customs 2.0] Wait on Payment",
-      "task_template_id": "customs-wait-payment-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.amount_to_pay": "amount_to_pay",
-        "customs.cusdec_number": "cusdec_number",
-        "customs.userform": "userform"
-      },
-      "output_mapping": {
-        "payment_status": "customs.payment_status"
-      }
-    },
-    {
-      "id": "customs_3_wait_warranting",
-      "type": "TASK",
-      "name": "[Customs 3.0] Wait on CusDec Warranting",
-      "task_template_id": "customs-wait-warranting-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.cusdec_number": "cusdec_number",
-        "customs.userform": "userform"
-      },
-      "output_mapping": {
-        "warranting_status": "customs.warranting_status"
-      }
-    },
-    {
-      "id": "customs_4_create_cdn",
-      "type": "TASK",
-      "name": "[Customs 4.0] Create CDN",
-      "task_template_id": "customs-create-cdn-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.cusdec_number": "cusdec_number"
-      },
-      "output_mapping": {
-        "userform": "customs.cdn_userform",
-        "userform.cdn_number": "customs.cdn_number"
-      }
-    },
-    {
-      "id": "customs_5_wait_cdn_ack",
-      "type": "TASK",
-      "name": "[Customs 5.0] Wait on CDN Ack",
-      "task_template_id": "customs-wait-cdn-ack-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.cdn_userform": "userform"
-      },
-      "output_mapping": {
-        "ack_status": "customs.cdn_ack_status"
-      }
-    },
-    {
-      "id": "customs_6_create_boat_note",
-      "type": "TASK",
-      "name": "[Customs 6.0] Create Boat Note",
-      "task_template_id": "customs-create-boat-note-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.cdn_number": "cdn_number"
-      },
-      "output_mapping": {
-        "userform": "customs.boat_note_userform"
-      }
-    },
-    {
-      "id": "customs_7_boat_note_approval",
-      "type": "TASK",
-      "name": "[Customs 7.0] Boat Note Approval",
-      "task_template_id": "customs-boat-note-approval-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.boat_note_userform": "userform"
-      },
-      "output_mapping": {
-        "approval_status": "customs.boat_note_approval_status"
-      }
-    },
-    {
-      "id": "customs_8_wait_export_release",
-      "type": "TASK",
-      "name": "[Customs 8.0] Wait on Export Release",
-      "task_template_id": "customs-wait-export-release-flow",
-      "lane": "Trader/CHA",
-      "input_mapping": {
-        "customs.userform": "userform"
-      },
-      "output_mapping": {
-        "release_status": "customs.export_release_status"
-      }
-    },
-    {
       "id": "end",
       "type": "END",
-      "name": "End"
+      "name": "CusDec Issued"
     }
   ],
   "edges": [
@@ -147,43 +51,8 @@
       "target_id": "customs_1b_emit_cusdec_ready"
     },
     {
-      "id": "e_1b_to_2",
+      "id": "e_1b_to_end",
       "source_id": "customs_1b_emit_cusdec_ready",
-      "target_id": "customs_2_wait_payment"
-    },
-    {
-      "id": "e_2_to_3",
-      "source_id": "customs_2_wait_payment",
-      "target_id": "customs_3_wait_warranting"
-    },
-    {
-      "id": "e_3_to_4",
-      "source_id": "customs_3_wait_warranting",
-      "target_id": "customs_4_create_cdn"
-    },
-    {
-      "id": "e_4_to_5",
-      "source_id": "customs_4_create_cdn",
-      "target_id": "customs_5_wait_cdn_ack"
-    },
-    {
-      "id": "e_5_to_6",
-      "source_id": "customs_5_wait_cdn_ack",
-      "target_id": "customs_6_create_boat_note"
-    },
-    {
-      "id": "e_6_to_7",
-      "source_id": "customs_6_create_boat_note",
-      "target_id": "customs_7_boat_note_approval"
-    },
-    {
-      "id": "e_7_to_8",
-      "source_id": "customs_7_boat_note_approval",
-      "target_id": "customs_8_wait_export_release"
-    },
-    {
-      "id": "e_8_to_end",
-      "source_id": "customs_8_wait_export_release",
       "target_id": "end"
     }
   ]

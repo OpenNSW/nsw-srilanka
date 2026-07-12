@@ -1,7 +1,7 @@
 {
   "id": "customs-cusdec-apply-flow",
   "name": "Submit & Review Customs Declaration",
-  "version": 1,
+  "version": 2,
   "nodes": [
     {
       "id": "start",
@@ -12,8 +12,7 @@
       "type": "TASK",
       "task_template_id": "customs-cusdec--user-input",
       "input_mapping": {
-        "reviewerform.rejection_reason?": "rejection_reason",
-        "cig.error?": "cig.error"
+        "reviewerform.rejection_reason?": "rejection_reason"
       },
       "output_mapping": {
         "shipmentType": "userform.shipmentType",
@@ -29,24 +28,6 @@
       }
     },
     {
-      "id": "cig_dispatch",
-      "type": "TASK",
-      "task_template_id": "customs-cusdec--cig-dispatch",
-      "input_mapping": {
-        "userform": "payload"
-      },
-      "output_mapping": {
-        "cig.accepted": "cig.accepted",
-        "cig.edgeId?": "cig.edge_id",
-        "cig.error?": "cig.error"
-      }
-    },
-    {
-      "id": "dispatch_check",
-      "type": "GATEWAY",
-      "gateway_type": "EXCLUSIVE_SPLIT"
-    },
-    {
       "id": "officer_review",
       "type": "TASK",
       "task_template_id": "customs-cusdec--external-review",
@@ -56,8 +37,7 @@
       "output_mapping": {
         "review_outcome": "reviewerform.review_outcome",
         "rejection_reason?": "reviewerform.rejection_reason",
-        "cusdec_number?": "reviewerform.cusdec_number",
-        "amount_to_pay?": "reviewerform.amount_to_pay"
+        "cusdec_number?": "reviewerform.cusdec_number"
       }
     },
     {
@@ -79,24 +59,7 @@
     {
       "id": "e2",
       "source_id": "applicant_submission",
-      "target_id": "cig_dispatch"
-    },
-    {
-      "id": "e_cig_check",
-      "source_id": "cig_dispatch",
-      "target_id": "dispatch_check"
-    },
-    {
-      "id": "e_cig_accepted",
-      "source_id": "dispatch_check",
-      "target_id": "officer_review",
-      "condition": "cig.accepted == true"
-    },
-    {
-      "id": "e_cig_rejected",
-      "source_id": "dispatch_check",
-      "target_id": "applicant_submission",
-      "condition": "cig.accepted != true"
+      "target_id": "officer_review"
     },
     {
       "id": "e3",

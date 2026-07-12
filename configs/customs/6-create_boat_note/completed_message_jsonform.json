@@ -1,4 +1,0 @@
-{
-  "id": "customs-boat-note--completed-message",
-  "template": "### ✅ Boat Note Completed\n\nYour Boat Note has been successfully created and submitted.\n\n* **Linked CDN Number**: `{{.cdn_number}}`\n* **Container Number**: `{{.container_number}}`\n* **Customs Seal Number**: `{{.customs_seal_no}}`\n* **Status**: Completed\n\nPlease proceed to the next step."
-}

@@ -1,4 +1,0 @@
-{
-  "id": "customs-wait-cdn-ack--instructions",
-  "template": "{{if .cdn_ack}}### ✅ CDN Acknowledged\n\nYour Cargo Dispatch Note (CDN) has been acknowledged by Customs.\n\n* **Status**: Acknowledged{{else}}### Wait on CDN Acknowledgement\n\nYour Cargo Dispatch Note (CDN) has been submitted successfully to Customs. It is currently pending acknowledgement.\n\nOnce Customs acknowledges the CDN, the Single Window will receive the confirmation and this step will advance. You do not need to take any action.{{end}}"
-}

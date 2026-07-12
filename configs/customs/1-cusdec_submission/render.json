@@ -3,18 +3,6 @@
   "type": "APPLICATION",
   "title": "[Customs] Customs Declaration (CusDec) Submission & Review",
   "sections": {
-    "cig_rejection": {
-      "templateId": "customs-cusdec--cig-rejection",
-      "title": "Sri Lanka Customs Submission Errors",
-      "projector": "MARKDOWN",
-      "dataKey": "cig",
-      "visibleWhen": {
-        "states": [
-          "PENDING_USER"
-        ],
-        "requireDataKey": "cig"
-      }
-    },
     "assessment_outcome": {
       "templateId": "customs-cusdec--trader-results",
       "title": "CusDec Assessment Outcome",

@@ -1,4 +1,4 @@
 {
   "id": "customs-cusdec--trader-results",
-  "template": "### CusDec Assessment Outcome\n\nThe assessment of your Customs Declaration (CusDec) has been completed.\n\n* **Outcome**: {{if eq .review_outcome \"approve\"}}🟢 Approved{{else if eq .review_outcome \"needs_more_info\"}}🟡 Needs More Information{{else}}{{.review_outcome}}{{end}}\n{{if eq .review_outcome \"approve\"}}* **Customs CusDec Number**: `{{.cusdec_number}}`\n* **Consignment Duty/Payment Amount**: `LKR {{.amount_to_pay}}`{{end}}\n{{if .rejection_reason}}* **Officer Feedback**: {{.rejection_reason}}{{end}}"
+  "template": "### CusDec Assessment Outcome\n\nThe assessment of your Customs Declaration (CusDec) has been completed.\n\n* **Outcome**: {{if eq .review_outcome \"approve\"}}🟢 Approved{{else if eq .review_outcome \"needs_more_info\"}}🟡 Needs More Information{{else}}{{.review_outcome}}{{end}}\n{{if eq .review_outcome \"approve\"}}* **Customs CusDec Number**: `{{.cusdec_number}}`{{end}}\n{{if .rejection_reason}}* **Officer Feedback**: {{.rejection_reason}}{{end}}"
 }

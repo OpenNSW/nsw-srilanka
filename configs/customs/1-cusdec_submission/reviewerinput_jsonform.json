@@ -25,11 +25,6 @@
         "title": "Generated CusDec Reference Number",
         "example": "CUSDEC-2026-89421"
       },
-      "amount_to_pay": {
-        "type": "number",
-        "title": "Amount to Pay for Consignment (LKR)",
-        "example": 25000.00
-      },
       "rejection_reason": {
         "type": "string",
         "title": "Clarification / Correction Feedback (if Needs Info)",
@@ -53,8 +48,7 @@
         },
         "then": {
           "required": [
-            "cusdec_number",
-            "amount_to_pay"
+            "cusdec_number"
           ]
         }
       },
@@ -87,19 +81,6 @@
       {
         "type": "Control",
         "scope": "#/properties/cusdec_number",
-        "rule": {
-          "effect": "SHOW",
-          "condition": {
-            "scope": "#/properties/review_outcome",
-            "schema": {
-              "const": "approve"
-            }
-          }
-        }
-      },
-      {
-        "type": "Control",
-        "scope": "#/properties/amount_to_pay",
         "rule": {
           "effect": "SHOW",
           "condition": {
