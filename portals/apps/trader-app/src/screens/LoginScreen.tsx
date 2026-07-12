@@ -66,7 +66,7 @@ export function LoginScreen() {
           </div>
         </div>
 
-        <p className="absolute bottom-4 right-6 z-10 text-xs text-white/60">Powered by OpenNSW</p>
+        <p className="absolute bottom-4 right-6 z-10 text-xs text-white/60">{t('common.poweredBy')}</p>
       </div>
 
       {/* Identity & Branding */}
