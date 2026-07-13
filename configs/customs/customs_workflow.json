@@ -14,7 +14,9 @@
       "name": "[Customs 1.0] Submit CusDec",
       "task_template_id": "customs-cusdec-apply-flow",
       "lane": "Trader/CHA",
-      "input_mapping": {},
+      "input_mapping": {
+        "_iter.input.trader_company?": "trader_company"
+      },
       "output_mapping": {
         "reviewerform.review_outcome": "customs.cusdec_review_outcome",
         "reviewerform.cusdec_number": "customs.cusdec_number",

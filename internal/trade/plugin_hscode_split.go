@@ -30,6 +30,11 @@ type hscodeSplitConfig struct {
 // first-seen order, and each split item's payload carries the HS codes that
 // triggered that flow.
 //
+// The optional trader_company input (the company record injected into the
+// trade workflow as traderCompany at consignment start) is copied into every
+// split item's payload so spawned agency flows can prefill their forms from
+// the company profile via _iter.input.trader_company.
+//
 // It is synchronous — it returns nil (not ErrSuspended) so the engine advances
 // immediately without waiting for any user or external action. Register it via
 // NewGenericExecutorPlugin.
@@ -78,11 +83,16 @@ func HscodeSplitBuilderFunc(ctx plugins.PluginContext, configRaw json.RawMessage
 		return fmt.Errorf("hscode_split_builder: selected HS codes resolved to no flows")
 	}
 
+	traderCompany := ctx.Inputs["trader_company"]
+
 	splitItems := make([]map[string]any, 0, len(templateIDs))
 	for _, templateID := range templateIDs {
-		payload := make(map[string]any, len(cfg.SharedPayload)+1)
+		payload := make(map[string]any, len(cfg.SharedPayload)+2)
 		for k, v := range cfg.SharedPayload {
 			payload[k] = v
+		}
+		if traderCompany != nil {
+			payload["trader_company"] = traderCompany
 		}
 		if codes := triggeringCodes[templateID]; len(codes) > 0 {
 			payload["hs_codes"] = codes

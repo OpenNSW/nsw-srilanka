@@ -28,7 +28,8 @@
       "task_template_id": "cda-apply-coconut-cert-flow",
       "lane": "Trader/CHA",
       "input_mapping": {
-        "cda.cusdec_number": "cusdec_number"
+        "cda.cusdec_number": "cusdec_number",
+        "_iter.input.trader_company?": "trader_company"
       },
       "output_mapping": {
         "userform.cusdec_number": "cda.reference_number",

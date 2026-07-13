@@ -9,7 +9,8 @@
       "type": "TASK",
       "task_template_id": "trade-prepare-split-items--transform",
       "input_mapping": {
-        "hs_codes": "hs_codes"
+        "hs_codes": "hs_codes",
+        "trader_company?": "trader_company"
       },
       "output_mapping": {
         "split_items": "split_items"

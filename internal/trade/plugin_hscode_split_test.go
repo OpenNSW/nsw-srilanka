@@ -18,10 +18,11 @@ func TestHscodeSplitBuilderFunc(t *testing.T) {
 	}`)
 
 	tests := []struct {
-		name    string
-		config  json.RawMessage
-		hsCodes []any
-		want    []map[string]any
+		name          string
+		config        json.RawMessage
+		hsCodes       []any
+		traderCompany any
+		want          []map[string]any
 	}{
 		{
 			name:    "HS code expands to its configured flow",
@@ -62,6 +63,18 @@ func TestHscodeSplitBuilderFunc(t *testing.T) {
 			},
 		},
 		{
+			name: "trader_company input copied into every split item payload",
+			config: json.RawMessage(`{
+				"hs_code_flows": {"0801.11.90": ["cda-certificate-reg"]}
+			}`),
+			hsCodes:       []any{"0801.11.90", "customs-workflow"},
+			traderCompany: map[string]any{"name": "ADAM PVT LTD"},
+			want: []map[string]any{
+				{"template_id": "cda-certificate-reg", "branch_id": "cda-certificate-reg", "payload": map[string]any{"trader_company": map[string]any{"name": "ADAM PVT LTD"}, "hs_codes": []string{"0801.11.90"}}},
+				{"template_id": "customs-workflow", "branch_id": "customs-workflow", "payload": map[string]any{"trader_company": map[string]any{"name": "ADAM PVT LTD"}}},
+			},
+		},
+		{
 			name:    "no config keeps legacy passthrough behaviour",
 			config:  nil,
 			hsCodes: []any{"sltb-blendsheet-approval"},
@@ -73,8 +86,12 @@ func TestHscodeSplitBuilderFunc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			inputs := map[string]any{"hs_codes": tt.hsCodes}
+			if tt.traderCompany != nil {
+				inputs["trader_company"] = tt.traderCompany
+			}
 			ctx := plugins.PluginContext{
-				Inputs: map[string]any{"hs_codes": tt.hsCodes},
+				Inputs: inputs,
 				Record: &store.TaskRecord{},
 			}
 			if err := HscodeSplitBuilderFunc(ctx, tt.config); err != nil {

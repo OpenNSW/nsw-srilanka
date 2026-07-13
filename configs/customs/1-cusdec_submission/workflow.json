@@ -12,7 +12,9 @@
       "type": "TASK",
       "task_template_id": "customs-cusdec--user-input",
       "input_mapping": {
-        "reviewerform.rejection_reason?": "rejection_reason"
+        "reviewerform.rejection_reason?": "rejection_reason",
+        "trader_company.name?": "userform.traders.exporter.name",
+        "trader_company.data.tin_no?": "userform.traders.exporter.code"
       },
       "output_mapping": {
         "shipmentType": "userform.shipmentType",

@@ -11,7 +11,9 @@
       "id": "applicant_submission",
       "type": "TASK",
       "task_template_id": "fcau-apply-health-cert--user-input",
-      "input_mapping": {},
+      "input_mapping": {
+        "trader_company.name?": "userform.exporter_name"
+      },
       "output_mapping": {
         "exporter_name": "userform.exporter_name",
         "exporter_address": "userform.exporter_address",
