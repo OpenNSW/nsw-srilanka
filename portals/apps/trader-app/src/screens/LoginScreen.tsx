@@ -65,6 +65,15 @@ export function LoginScreen() {
             </div>
           </div>
         </div>
+
+        <a
+          href="https://github.com/OpenNSW"
+          target="_blank"
+          rel="noreferrer"
+          className="absolute bottom-4 right-6 z-10 text-xs text-white/60 hover:underline"
+        >
+          {t('common.poweredBy')}
+        </a>
       </div>
 
       {/* Identity & Branding */}
