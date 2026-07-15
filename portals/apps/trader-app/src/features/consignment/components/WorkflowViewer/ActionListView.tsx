@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
-import { CheckCircledIcon, ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
+import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { WorkflowNode } from '@/features/consignment/types'
 import { ActionCard } from './ActionCard'
@@ -112,24 +112,6 @@ export function ActionListView({
                     <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
                   ))}
                 </Box>
-              </Box>
-            ) : filteredSteps.length > 0 && filteredSteps.every((s) => s.state === 'COMPLETED') ? (
-              <Box
-                py="10"
-                px="6"
-                mb="6"
-                className="text-center bg-success-subtle/50 rounded-xl border border-success-subtle shadow-sm relative"
-              >
-                {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
-                <div className="w-16 h-16 bg-success-subtle rounded-full flex items-center justify-center mx-auto mb-4 border border-success-subtle">
-                  <CheckCircledIcon className="w-10 h-10 text-success-strong" />
-                </div>
-                <Heading size="4" color="green" mb="2">
-                  {t('workflow.processComplete.title')}
-                </Heading>
-                <Text size="3" color="green" className="opacity-80">
-                  {t('workflow.processComplete.description')}
-                </Text>
               </Box>
             ) : filteredSteps.length > 0 ? (
               <Box
