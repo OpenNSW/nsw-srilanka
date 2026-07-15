@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OpenNSW/core/artifact/loaders/github"
+	"github.com/OpenNSW/core/artifact/loaders/local"
+	"github.com/OpenNSW/core/artifact/loaders/s3"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
@@ -16,6 +19,8 @@ import (
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/artifactloader"
 )
 
 // Config holds all configuration for the application.
@@ -28,6 +33,8 @@ type Config struct {
 	Notification notification.Config
 	Temporal     temporal.Config
 	Audit        audit.Config
+
+	ArtifactLoader artifactloader.Config
 }
 
 // ServerConfig holds server configuration.
@@ -106,6 +113,30 @@ func Load() (*Config, error) {
 			BaseURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
 			APIKey:  os.Getenv("ARGUS_API_KEY"),
 		},
+		ArtifactLoader: artifactloader.Config{
+			Type: getEnvOrDefault("ARTIFACT_LOADER_TYPE", artifactloader.TypeLocal),
+			Local: local.Config{
+				Root: getEnvOrDefault("ARTIFACT_LOCAL_ROOT", "configs"),
+			},
+			GitHub: github.Config{
+				Owner:      getEnvOrDefault("ARTIFACT_GITHUB_OWNER", ""),
+				Repo:       getEnvOrDefault("ARTIFACT_GITHUB_REPO", ""),
+				Ref:        getEnvOrDefault("ARTIFACT_GITHUB_REF", ""),
+				BasePath:   getEnvOrDefault("ARTIFACT_GITHUB_BASE_PATH", ""),
+				Token:      os.Getenv("ARTIFACT_GITHUB_TOKEN"),
+				BaseURL:    getEnvOrDefault("ARTIFACT_GITHUB_BASE_URL", ""),
+				UseRawHost: getBoolOrDefault("ARTIFACT_GITHUB_USE_RAW_HOST", false),
+				RawBaseURL: getEnvOrDefault("ARTIFACT_GITHUB_RAW_BASE_URL", ""),
+			},
+			S3: s3.Config{
+				Bucket:    getEnvOrDefault("ARTIFACT_S3_BUCKET", ""),
+				Region:    getEnvOrDefault("ARTIFACT_S3_REGION", ""),
+				Endpoint:  getEnvOrDefault("ARTIFACT_S3_ENDPOINT", ""),
+				AccessKey: getEnvOrDefault("ARTIFACT_S3_ACCESS_KEY", ""),
+				SecretKey: getEnvOrDefault("ARTIFACT_S3_SECRET_KEY", ""),
+				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
+			},
+		},
 	}
 
 	// Validate required fields
@@ -141,6 +172,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Notification.Validate(); err != nil {
 		return fmt.Errorf("invalid notification configuration: %w", err)
+	}
+	if err := c.ArtifactLoader.Validate(); err != nil {
+		return fmt.Errorf("invalid artifact loader configuration: %w", err)
 	}
 	return nil
 }

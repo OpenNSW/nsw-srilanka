@@ -102,11 +102,10 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
 
-	reg := artifact.NewRegistry()
 	loader := &mockLoader{content: make(map[string][]byte)}
-	reg.RegisterLoader("test", loader)
+	reg := artifact.NewRegistry(loader)
 	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export-v1", "workflow", "", "test", "workflows/trade-export-v1")
+	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
 
 	svc := NewService(db, reg, nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))

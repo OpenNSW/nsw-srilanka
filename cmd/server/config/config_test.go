@@ -6,12 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/artifactloader"
 )
 
 // validConfig returns a minimal Config that passes Validate().
@@ -49,6 +52,10 @@ func validConfig() *Config {
 			Host:      "localhost",
 			Port:      7233,
 			Namespace: "default",
+		},
+		ArtifactLoader: artifactloader.Config{
+			Type:  artifactloader.TypeLocal,
+			Local: local.Config{Root: "."},
 		},
 	}
 }
@@ -311,6 +318,7 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 
 	cfg, err := Load()
 	if err != nil {
@@ -335,6 +343,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_CustomPort(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("SERVER_PORT", "9090")
 	t.Setenv("SERVICE_URL", "")
 	t.Setenv("STORAGE_LOCAL_PUBLIC_URL", "")
@@ -356,6 +365,7 @@ func TestLoad_CustomPort(t *testing.T) {
 
 func TestLoad_CustomServiceURL(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("SERVICE_URL", "https://api.example.com")
 
 	cfg, err := Load()
@@ -369,6 +379,7 @@ func TestLoad_CustomServiceURL(t *testing.T) {
 
 func TestLoad_CustomLogLevel(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("SERVER_LOG_LEVEL", "debug")
 
 	cfg, err := Load()
@@ -453,6 +464,15 @@ func TestConfigValidate_StorageError(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid storage configuration") {
 		t.Errorf("expected storage config error, got: %v", err)
+	}
+}
+
+func TestConfigValidate_ArtifactLoaderError(t *testing.T) {
+	cfg := validConfig()
+	cfg.ArtifactLoader = artifactloader.Config{Type: "bogus"} // unsupported type
+	err := cfg.Validate()
+	if err == nil || !containsString(err.Error(), "invalid artifact loader configuration") {
+		t.Errorf("expected artifact loader config error, got: %v", err)
 	}
 }
 

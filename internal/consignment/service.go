@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/artifactadapter/workflowdef"
+	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
