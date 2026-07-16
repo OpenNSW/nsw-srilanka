@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/artifact/loaders/local"
-	"github.com/OpenNSW/core/artifactadapter/generictemplate"
-	"github.com/OpenNSW/core/artifactadapter/workflowdef"
+	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
+	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
+	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
@@ -29,10 +29,9 @@ import (
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 	"github.com/OpenNSW/core/temporal"
+	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
-
-	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -116,9 +115,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry)
 
-	artifactRegistry := artifact.NewRegistry()
-	artifactRegistry.RegisterLoader("local", local.New("configs"))
-	manifestCfg, err := artifact.LoadManifestFile("configs/manifest.json")
+	artifactLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
+	}
+
+	artifactRegistry := artifact.NewRegistry(artifactLoader)
+
+	manifestCfg, err := artifact.LoadManifest(ctx, artifactLoader)
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to load artifact manifest: %w", err)

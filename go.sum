@@ -2,8 +2,8 @@ github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7Oputl
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
 github.com/LSFLK/argus/pkg/audit v0.0.0-20260616134204-858f4ee608e8 h1:d1IUg4PzKxgWnl9UPnQYbMlPaNiwGcZPjq2lXyrY5Y4=
 github.com/LSFLK/argus/pkg/audit v0.0.0-20260616134204-858f4ee608e8/go.mod h1:VPLkj7lPFOPSTNZulUsf+OCWcjz9vdndCRhcc2hfQjM=
-github.com/OpenNSW/core v0.0.0-20260709101832-02c3f0264e91 h1:Fvxgp5MlrACUkG1nJMdLy7zT23F4+to1TUL2sWP0vZo=
-github.com/OpenNSW/core v0.0.0-20260709101832-02c3f0264e91/go.mod h1:O/LfoslFfWNjsAn8iUurFqmTwKZMHDd+njDTD9BYaxc=
+github.com/OpenNSW/core v0.0.0-20260716043628-1b603ee6dde2 h1:7CEuFXCfBTW1hWgIdZNrC4S7CHfZSTMZHBlYpZ7TtT8=
+github.com/OpenNSW/core v0.0.0-20260716043628-1b603ee6dde2/go.mod h1:qahVyVXUOofG/A4zTv55qd9wO3MPU6N2x368mV22arw=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
 github.com/OpenNSW/core/authz v0.1.0/go.mod h1:/LbQLPZtCGJ4DICQvLea8XFtSCe2M3xZCO+0SxTYsog=
 github.com/OpenNSW/core/database v0.1.0 h1:WzVZ2XcqfbdLD3g4+jvpUiHLBVDsi2eR2es+1P/+sRE=
