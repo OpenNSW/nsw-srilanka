@@ -40,6 +40,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [data, setData] = useState<Record<string, unknown>>(payload.data ?? {})
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [showErrors, setShowErrors] = useState(false)
 
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
@@ -56,6 +57,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
+    const isSubmitAction = h.element !== 'secondary_action'
+    if (isSubmitAction && !isValid) {
+      setShowErrors(true)
+      return
+    }
     setSubmitting(true)
     void onAction(h.command, data).finally(() => setSubmitting(false))
   }
@@ -69,6 +75,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           data={data}
           renderers={radixRenderers}
           readonly={!interactive}
+          validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
             setData(next)
@@ -82,7 +89,6 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           onAction={handleAction}
           onAutoFill={showAutoFill ? handleAutoFill : undefined}
           submitting={submitting}
-          canSubmit={isValid}
         />
       )}
     </>
@@ -94,13 +100,11 @@ function FormActionBar({
   onAction,
   onAutoFill,
   submitting,
-  canSubmit,
 }: {
   handles: Handle[]
   onAction: (h: Handle) => void
   onAutoFill?: () => void
   submitting: boolean
-  canSubmit: boolean
 }) {
   return (
     <div className="sticky bottom-0 border-t border-border bg-background/95 backdrop-blur rounded-b-lg shadow-[0_-4px_12px_-8px_rgba(0,0,0,0.08)]">
@@ -112,7 +116,7 @@ function FormActionBar({
         )}
         <div className="flex-1" />
         {handles.map((h) => (
-          <HandleButton key={h.command} handle={h} onClick={onAction} submitting={submitting} canSubmit={canSubmit} />
+          <HandleButton key={h.command} handle={h} onClick={onAction} submitting={submitting} />
         ))}
       </div>
     </div>
@@ -123,15 +127,13 @@ function HandleButton({
   handle,
   onClick,
   submitting,
-  canSubmit,
 }: {
   handle: Handle
   onClick: (h: Handle) => void
   submitting: boolean
-  canSubmit: boolean
 }) {
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
-  const disabled = submitting || !canSubmit
+  const disabled = submitting
   return (
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
       {submitting ? 'Submitting...' : handle.label}
@@ -146,7 +148,10 @@ function allRequiredFilled(schema: JsonSchema | undefined, data: unknown): boole
   const required = (schema as { required?: string[] }).required
   const properties = (schema as { properties?: Record<string, JsonSchema> }).properties
 
-  if (Array.isArray(required) && data && typeof data === 'object') {
+  if (Array.isArray(required)) {
+    if (!data || typeof data !== 'object') {
+      return required.length === 0
+    }
     const obj = data as Record<string, unknown>
     for (const key of required) {
       if (isEmpty(obj[key])) return false
@@ -156,7 +161,9 @@ function allRequiredFilled(schema: JsonSchema | undefined, data: unknown): boole
   if (properties && data && typeof data === 'object') {
     const obj = data as Record<string, unknown>
     for (const key of Object.keys(properties)) {
-      if (!allRequiredFilled(properties[key], obj[key])) return false
+      if (obj[key] !== undefined) {
+        if (!allRequiredFilled(properties[key], obj[key])) return false
+      }
     }
   }
 
