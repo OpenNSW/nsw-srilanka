@@ -50,7 +50,10 @@
         "type": "string",
         "format": "file",
         "title": "Upload Blend Sheet Data (Excel File)",
-        "description": "Please upload the official Excel sheet containing the detailed blend analysis (.xlsx)"
+        "description": "Please upload the official Excel sheet containing the detailed blend analysis (.xlsx)",
+        "x-file": {
+          "accept": ".xlsx"
+        }
       },
       "lion_logo_requested": {
         "type": "string",

@@ -190,7 +190,10 @@
         "type": "string",
         "format": "file",
         "title": "Upload Completed DC Bags Details File",
-        "description": "Check below to download the template, then upload the completed sheet here."
+        "description": "Check below to download the template, then upload the completed Excel sheet here.",
+        "x-file": {
+          "accept": ".xlsx"
+        }
       }
     },
     "required": [
