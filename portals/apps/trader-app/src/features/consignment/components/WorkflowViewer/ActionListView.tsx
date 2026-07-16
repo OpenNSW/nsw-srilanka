@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { WorkflowNode } from '@/features/consignment/types'
+import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
 
@@ -14,7 +14,7 @@ interface ActionListViewProps {
   onRefresh?: () => void
   refreshing?: boolean
   className?: string
-  consignmentState?: string
+  consignmentState?: ConsignmentState
 }
 
 export function ActionListView({
