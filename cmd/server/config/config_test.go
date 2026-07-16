@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
@@ -13,8 +14,6 @@ import (
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
-
-	"github.com/OpenNSW/nsw-srilanka/internal/artifactloader"
 )
 
 // validConfig returns a minimal Config that passes Validate().
@@ -53,8 +52,8 @@ func validConfig() *Config {
 			Port:      7233,
 			Namespace: "default",
 		},
-		ArtifactLoader: artifactloader.Config{
-			Type:  artifactloader.TypeLocal,
+		ArtifactLoader: loaders.Config{
+			Type:  loaders.TypeLocal,
 			Local: local.Config{Root: "."},
 		},
 	}
@@ -469,7 +468,7 @@ func TestConfigValidate_StorageError(t *testing.T) {
 
 func TestConfigValidate_ArtifactLoaderError(t *testing.T) {
 	cfg := validConfig()
-	cfg.ArtifactLoader = artifactloader.Config{Type: "bogus"} // unsupported type
+	cfg.ArtifactLoader = loaders.Config{Type: "bogus"} // unsupported type
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid artifact loader configuration") {
 		t.Errorf("expected artifact loader config error, got: %v", err)

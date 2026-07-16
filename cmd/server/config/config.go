@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/artifact/loaders/github"
 	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/artifact/loaders/s3"
@@ -19,8 +20,6 @@ import (
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
-
-	"github.com/OpenNSW/nsw-srilanka/internal/artifactloader"
 )
 
 // Config holds all configuration for the application.
@@ -34,7 +33,7 @@ type Config struct {
 	Temporal     temporal.Config
 	Audit        audit.Config
 
-	ArtifactLoader artifactloader.Config
+	ArtifactLoader loaders.Config
 }
 
 // ServerConfig holds server configuration.
@@ -113,8 +112,8 @@ func Load() (*Config, error) {
 			BaseURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
 			APIKey:  os.Getenv("ARGUS_API_KEY"),
 		},
-		ArtifactLoader: artifactloader.Config{
-			Type: getEnvOrDefault("ARTIFACT_LOADER_TYPE", artifactloader.TypeLocal),
+		ArtifactLoader: loaders.Config{
+			Type: getEnvOrDefault("ARTIFACT_LOADER_TYPE", loaders.TypeLocal),
 			Local: local.Config{
 				Root: getEnvOrDefault("ARTIFACT_LOCAL_ROOT", "configs"),
 			},
