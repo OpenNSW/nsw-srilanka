@@ -52,7 +52,7 @@
         "title": "Upload Blend Sheet Data (Excel File)",
         "description": "Please upload the official Excel sheet containing the detailed blend analysis (.xlsx)",
         "x-file": {
-          "accept": ".xlsx"
+          "accept": ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         }
       },
       "lion_logo_requested": {

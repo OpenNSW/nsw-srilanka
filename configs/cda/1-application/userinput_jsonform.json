@@ -192,7 +192,7 @@
         "title": "Upload Completed DC Bags Details File",
         "description": "Check below to download the template, then upload the completed Excel sheet here.",
         "x-file": {
-          "accept": ".xlsx"
+          "accept": ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         }
       }
     },
