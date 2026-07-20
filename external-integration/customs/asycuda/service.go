@@ -84,13 +84,14 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		}
 
 		note.Status = DispatchNoteStatusFailed
+		note.Errors = req.Errors
 		if err := s.repo.Update(ctx, note); err != nil {
 			return fmt.Errorf("failed to update dispatch note to FAILED: %w", err)
 		}
 
 		slog.WarnContext(ctx, "dispatch note integration failed",
 			"edg_id", req.EdgID,
-			"errors", req.Errors,
+			"errors", string(req.Errors),
 		)
 	}
 
@@ -124,6 +125,10 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 	if note.Status == DispatchNoteStatusAcknowledged {
 		slog.InfoContext(ctx, "dispatch note already acknowledged, ignoring duplicate callback", "cdn_ref", ref)
 		return nil
+	}
+
+	if note.Status != DispatchNoteStatusIntegrated {
+		return fmt.Errorf("invalid state transition: cannot acknowledge dispatch note in status %s", note.Status)
 	}
 
 	note.Status = DispatchNoteStatusAcknowledged

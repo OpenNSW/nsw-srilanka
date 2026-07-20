@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS dispatch_notes (
 	cdn_office text,
 	cdn_serial text,
 	cdn_number integer,
+	errors jsonb,
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL
 );

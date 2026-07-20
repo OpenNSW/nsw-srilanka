@@ -61,5 +61,7 @@ func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref DocumentRe
 }
 
 func (r *dispatchNoteRepository) Update(ctx context.Context, note *DispatchNote) error {
-	return r.db.WithContext(ctx).Save(note).Error
+	return r.db.WithContext(ctx).Model(note).
+		Select("status", "cdn_year", "cdn_office", "cdn_serial", "cdn_number", "errors").
+		Updates(note).Error
 }

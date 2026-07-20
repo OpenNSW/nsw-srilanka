@@ -7,6 +7,7 @@
 package asycuda
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -74,7 +75,7 @@ type CDNIntegrationResultRequest struct {
 
 	// Errors contains error details when integration fails. Keys and structure
 	// are defined by ASYCUDA and vary by failure mode.
-	Errors map[string]any `json:"errors,omitempty"`
+	Errors json.RawMessage `json:"errors,omitempty"`
 }
 
 // validate checks that a CDNIntegrationResultRequest is well-formed.
@@ -147,6 +148,7 @@ type DispatchNote struct {
 	CDNOffice string             `json:"cdn_office" gorm:"index:idx_cdn_ref"`
 	CDNSerial string             `json:"cdn_serial" gorm:"index:idx_cdn_ref"`
 	CDNNumber int                `json:"cdn_number" gorm:"index:idx_cdn_ref"`
+	Errors    json.RawMessage    `json:"errors" gorm:"type:jsonb"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at"`
 }
