@@ -23,9 +23,6 @@ type DispatchNoteRepository interface {
 
 	// Update persists all changed fields of the given dispatch note.
 	Update(ctx context.Context, note *DispatchNote) error
-
-	// UpdateStatus transitions only the status column for the given record ID.
-	UpdateStatus(ctx context.Context, id string, status DispatchNoteStatus) error
 }
 
 type dispatchNoteRepository struct {
@@ -65,11 +62,4 @@ func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref DocumentRe
 
 func (r *dispatchNoteRepository) Update(ctx context.Context, note *DispatchNote) error {
 	return r.db.WithContext(ctx).Save(note).Error
-}
-
-func (r *dispatchNoteRepository) UpdateStatus(ctx context.Context, id string, status DispatchNoteStatus) error {
-	return r.db.WithContext(ctx).
-		Model(&DispatchNote{}).
-		Where("id = ?", id).
-		Updates(map[string]any{"status": status}).Error
 }

@@ -53,7 +53,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	}
 	if note == nil {
 		slog.WarnContext(ctx, "no dispatch note found for edgId", "edg_id", req.EdgID)
-		return fmt.Errorf("edgId %s: %w", req.EdgID, ErrDispatchNoteNotFound)
+		return fmt.Errorf("edgId %s: %w", req.EdgID, ErrDispatchNoteNotFoundByEdgID)
 	}
 
 	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
@@ -118,7 +118,7 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 			"serial", ref.Serial,
 			"number", ref.Number,
 		)
-		return fmt.Errorf("cdnRef %v: %w", ref, ErrDispatchNoteNotFound)
+		return fmt.Errorf("cdnRef %v: %w", ref, ErrDispatchNoteNotFoundByCDNRef)
 	}
 
 	if note.Status == DispatchNoteStatusAcknowledged {

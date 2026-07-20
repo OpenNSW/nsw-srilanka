@@ -3,7 +3,6 @@ package asycuda
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 )
@@ -33,17 +32,12 @@ func NewHTTPHandler(service CDNWebhookService) *HTTPHandler {
 // service layer, and returns 202 Accepted so ASYCUDA does not retry.
 func (h *HTTPHandler) HandleIntegrationResult(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "asycuda: failed to read integration result body", "error", err)
-		http.Error(w, "request body too large or unreadable", http.StatusBadRequest)
-		return
-	}
+	defer func() { _ = r.Body.Close() }()
 
 	var req CDNIntegrationResultRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		slog.WarnContext(r.Context(), "asycuda: malformed integration result payload", "error", err)
-		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.WarnContext(r.Context(), "asycuda: failed to decode integration result payload", "error", err)
+		http.Error(w, "invalid request payload", http.StatusBadRequest)
 		return
 	}
 
@@ -55,7 +49,7 @@ func (h *HTTPHandler) HandleIntegrationResult(w http.ResponseWriter, r *http.Req
 
 	if err := h.service.ProcessIntegrationResult(r.Context(), req); err != nil {
 		// Unknown dispatch note is a permanent error — stop retries.
-		if errors.Is(err, ErrDispatchNoteNotFound) {
+		if errors.Is(err, ErrDispatchNoteNotFoundByEdgID) {
 			slog.WarnContext(r.Context(), "asycuda: dispatch note not found for integration result",
 				"edg_id", req.EdgID, "error", err)
 			http.Error(w, "dispatch note not found", http.StatusNotFound)
@@ -78,17 +72,12 @@ func (h *HTTPHandler) HandleIntegrationResult(w http.ResponseWriter, r *http.Req
 // delegates to the service layer, and returns 202 Accepted.
 func (h *HTTPHandler) HandleAcknowledgment(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "asycuda: failed to read acknowledgment body", "error", err)
-		http.Error(w, "request body too large or unreadable", http.StatusBadRequest)
-		return
-	}
+	defer func() { _ = r.Body.Close() }()
 
 	var req CDNAcknowledgmentRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		slog.WarnContext(r.Context(), "asycuda: malformed acknowledgment payload", "error", err)
-		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.WarnContext(r.Context(), "asycuda: failed to decode acknowledgment payload", "error", err)
+		http.Error(w, "invalid request payload", http.StatusBadRequest)
 		return
 	}
 
@@ -99,10 +88,13 @@ func (h *HTTPHandler) HandleAcknowledgment(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.service.ProcessAcknowledgment(r.Context(), req); err != nil {
-		if errors.Is(err, ErrDispatchNoteNotFound) {
-			slog.WarnContext(r.Context(), "asycuda: dispatch note not found for acknowledgment",
+		// If the note isn't found by cdnRef yet, it could be a transient race condition
+		// (e.g. acknowledgment arrives before the integration result callback finishes processing).
+		// Return 503 Service Unavailable to trigger an ASYCUDA retry.
+		if errors.Is(err, ErrDispatchNoteNotFoundByCDNRef) {
+			slog.WarnContext(r.Context(), "asycuda: dispatch note not found for acknowledgment (may be transient)",
 				"cdn_ref", req.Payload.CDNRef, "error", err)
-			http.Error(w, "dispatch note not found", http.StatusNotFound)
+			http.Error(w, "dispatch note not found, retry later", http.StatusServiceUnavailable)
 			return
 		}
 		slog.ErrorContext(r.Context(), "asycuda: failed to process acknowledgment",
