@@ -69,7 +69,17 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
         return new Date().toISOString()
       }
       if (property.format === 'file') {
-        return 'sample_document.pdf'
+        // Respect x-file.accept so we don't generate an invalid extension
+        // (e.g. an .xlsx-only field should get a .xlsx sample, not .pdf).
+        const accept: unknown = property['x-file']?.accept
+        const ext =
+          typeof accept === 'string'
+            ? accept
+                .split(',')
+                .map((token) => token.trim())
+                .find((token) => token.startsWith('.'))
+            : undefined
+        return `sample_document${ext ?? '.pdf'}`
       }
       if (property.format === 'data-url') {
         // Return a small base64 pixel image as sample file
