@@ -117,6 +117,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	role := r.URL.Query().Get("role")
+	// TODO: Should consider enforcing that the role matches the user's actual role(s) in the system, rather than trusting the query parameter.
 	if role == "" {
 		role = "trader"
 	}
@@ -172,12 +173,59 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	consignmentIDStr := r.PathValue("id")
-	if consignmentIDStr == "" {
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
 		http.Error(w, "consignment ID is required", http.StatusBadRequest)
 		return
 	}
-	consignmentID := consignmentIDStr
+
+	// Resolve the caller's company. Fail closed on any identity problem: a missing
+	// company profile or an unusable OU handle must not grant access.
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
+	if err != nil {
+		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
+			http.Error(w, "company profile not found for user", http.StatusForbidden)
+			return
+		}
+		slog.Error("failed to resolve user company", "ouHandle", authCtx.User.OUHandle, "error", err)
+		http.Error(w, "failed to resolve user company", http.StatusInternalServerError)
+		return
+	}
+
+	// Authorize on a cheap single-row ownership read before assembling the full DTO
+	// (which touches the task store and workflow engine). This avoids doing that work
+	// for another tenant's record, and lets us deny without ever building the response.
+	traderCompanyID, chaCompanyID, err := c.cs.GetOwnership(ctx, consignmentID)
+	if err != nil {
+		if errors.Is(err, ErrConsignmentNotFound) {
+			http.Error(w, "consignment not found", http.StatusNotFound)
+			return
+		}
+		slog.Error("failed to resolve consignment ownership", "error", err)
+		http.Error(w, "failed to retrieve consignment", http.StatusInternalServerError)
+		return
+	}
+
+	// The empty-ID guard documents (and enforces) the invariant this check relies on:
+	// company.Record.ID is a non-null primary key, so userCompany.ID is never empty on
+	// the success path — but were it ever empty it must not match an unassigned CHA.
+	if userCompany.ID == "" || (userCompany.ID != traderCompanyID && userCompany.ID != chaCompanyID) {
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionRead,
+			TargetType: nswaudit.TargetConsignment,
+			TargetID:   consignmentID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error":           "cross-company access denied",
+				"callerCompanyId": userCompany.ID,
+			},
+		})
+		// Return 404, not 403, so the response is indistinguishable from a non-existent
+		// consignment and cannot be used to probe which IDs exist.
+		http.Error(w, "consignment not found", http.StatusNotFound)
+		return
+	}
 
 	consignment, err := c.cs.GetConsignmentByID(r.Context(), consignmentID)
 	if err != nil {

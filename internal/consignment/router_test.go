@@ -50,27 +50,148 @@ func withAuthContextOU(ctx context.Context, userID, ouHandle string) context.Con
 
 func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
 	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
-	svc := NewService(db, nil, nil, nil, nil, mockTaskStore)
+	svc := NewService(db, nil, nil, mockCompany, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, nil, nswaudit.NewRecorder(nil))
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	consignmentID := uuid.NewString()
+	companyID := "company-trader"
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: companyID, OUHandle: "trader-ou"}, nil)
+
+	// Two consignment reads happen: GetOwnership (authorization) then GetConsignmentByID (DTO build).
+	// The caller's company matches trader_company_id, so authorization passes.
 	sqlMock.MatchExpectationsInOrder(false)
-	sqlMock.ExpectQuery("(?i)SELECT .* FROM \"consignments\"").WillReturnRows(sqlmock.NewRows([]string{"id", "state"}).AddRow(consignmentID, "IN_PROGRESS"))
+	rows := func() *sqlmock.Rows {
+		return sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID)
+	}
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
 
 	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
 	req.SetPathValue("id", consignmentID)
-	req = req.WithContext(withAuthContext(req.Context(), "trader1"))
+	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
 
 	w := httptest.NewRecorder()
 	r.HandleGetConsignmentByID(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+	mockCompany.AssertExpectations(t)
 	mockTaskStore.AssertExpectations(t)
+}
+
+// A CHA whose company is the consignment's cha_company_id may read it, even though it is
+// not the trader company.
+func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	mockWM := new(MockWM)
+	mockTaskStore := new(MockTaskStore)
+	svc := NewService(db, nil, nil, mockCompany, nil, mockTaskStore)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	consignmentID := uuid.NewString()
+	chaCompanyID := "company-cha"
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "cha-ou").Return(&company.Record{ID: chaCompanyID, OUHandle: "cha-ou"}, nil)
+
+	sqlMock.MatchExpectationsInOrder(false)
+	rows := func() *sqlmock.Rows {
+		return sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID)
+	}
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
+
+	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
+	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
+	req.SetPathValue("id", consignmentID)
+	req = req.WithContext(withAuthContextOU(req.Context(), "cha1", "cha-ou"))
+
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentByID(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockCompany.AssertExpectations(t)
+}
+
+// A caller whose company is neither the trader nor the CHA is denied with 404 (not 403, to
+// avoid an existence oracle), the DTO is never built, and the denial is audited.
+func TestConsignmentRouter_HandleGetConsignmentByID_DifferentCompany(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	auditor := &mockAuditor{}
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
+
+	consignmentID := uuid.NewString()
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "outsider-ou").Return(&company.Record{ID: "company-outsider", OUHandle: "outsider-ou"}, nil)
+
+	// Only the ownership lookup runs; no workflow-engine / task-store calls on the denial path.
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+			AddRow(consignmentID, "IN_PROGRESS", "company-trader", "company-cha"))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
+	req.SetPathValue("id", consignmentID)
+	req = req.WithContext(withAuthContextOU(req.Context(), "outsider1", "outsider-ou"))
+
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentByID(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+
+	require.Len(t, auditor.events, 1)
+	assert.Equal(t, string(nswaudit.ActionRead), auditor.events[0].Action)
+	assert.Equal(t, string(nswaudit.TargetConsignment), auditor.events[0].TargetType)
+	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
+	require.NotNil(t, auditor.events[0].TargetID)
+	assert.Equal(t, consignmentID, *auditor.events[0].TargetID)
+}
+
+// A caller with no resolvable company profile is denied (403) before any consignment read.
+func TestConsignmentRouter_HandleGetConsignmentByID_CompanyNotFound(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	id := uuid.NewString()
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
+		Return(nil, company.ErrCompanyNotFound)
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+id, nil)
+	req.SetPathValue("id", id)
+	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentByID(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// An empty/unusable OU handle surfaces as ErrInvalidCompanyID and must fail closed (403), not 500.
+func TestConsignmentRouter_HandleGetConsignmentByID_InvalidCompanyID(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	id := uuid.NewString()
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "").
+		Return(nil, company.ErrInvalidCompanyID)
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+id, nil)
+	req.SetPathValue("id", id)
+	req = req.WithContext(withAuthContext(req.Context(), "trader1")) // withAuthContext leaves OUHandle empty
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentByID(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
 func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
@@ -184,19 +305,19 @@ func TestConsignmentRouter_HandleCreateConsignment_Unauthorized(t *testing.T) {
 
 func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	mockWM := new(MockWM)
-	mockTaskStore := new(MockTaskStore)
-	svc := NewService(db, nil, nil, nil, nil, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, nil, nswaudit.NewRecorder(nil))
+	mockCompany := new(MockCompanyService)
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	id := uuid.NewString()
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "company-1"}, nil)
+	// The ownership lookup (first DB touch) finds no row -> 404.
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+id, nil)
 	req.SetPathValue("id", id)
-	req = req.WithContext(withAuthContext(req.Context(), "trader1"))
+	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignmentByID(w, req)
 
@@ -308,16 +429,19 @@ func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 
 func TestConsignmentRouter_HandleGetConsignmentByID_ServiceError(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
-	r := NewRouter(svc, nil, nil, nswaudit.NewRecorder(nil))
+	mockCompany := new(MockCompanyService)
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	id := uuid.NewString()
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "company-1"}, nil)
+	// The ownership lookup (first DB touch) errors -> 500.
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnError(errors.New("connection refused"))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+id, nil)
 	req.SetPathValue("id", id)
-	req = req.WithContext(withAuthContext(req.Context(), "trader1"))
+	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignmentByID(w, req)
 
