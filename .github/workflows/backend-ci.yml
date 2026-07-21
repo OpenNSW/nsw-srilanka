@@ -75,7 +75,7 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Run gosec
-        uses: securego/gosec@v2.27.1
+        uses: securego/gosec@v2.28.0
         with:
           # -no-fail: upload findings to Security tab without blocking the build.
           # gosec is informational here; govulncheck (stage 3) is the blocking gate.
