@@ -117,6 +117,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	role := r.URL.Query().Get("role")
+	// TODO: Should consider enforcing that the role matches the user's actual role(s) in the system, rather than trusting the query parameter.
 	if role == "" {
 		role = "trader"
 	}
@@ -172,22 +173,55 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	consignmentIDStr := r.PathValue("id")
-	if consignmentIDStr == "" {
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
 		http.Error(w, "consignment ID is required", http.StatusBadRequest)
 		return
 	}
-	consignmentID := consignmentIDStr
 
-	consignment, err := c.cs.GetConsignmentByID(r.Context(), consignmentID)
+	// Resolve the caller's company. Fail closed on any identity problem: a missing
+	// company profile or an unusable OU handle must not grant access.
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
 	if err != nil {
-		if errors.Is(err, ErrConsignmentNotFound) {
-			http.Error(w, "consignment not found", http.StatusNotFound)
+		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
+			http.Error(w, "company profile not found for user", http.StatusForbidden)
 			return
 		}
-		slog.Error("failed to retrieve consignment", "error", err)
-		http.Error(w, "failed to retrieve consignment: "+err.Error(), http.StatusInternalServerError)
+		slog.Error("failed to resolve user company", "ouHandle", authCtx.User.OUHandle, "error", err)
+		http.Error(w, "failed to resolve user company", http.StatusInternalServerError)
 		return
+	}
+
+	// Fetch the consignment scoped to the caller's company. GetConsignmentByID enforces
+	// ownership on the single row read and returns ErrAccessDenied for a cross-company caller
+	// before doing any workflow-engine or task-store work.
+	consignment, err := c.cs.GetConsignmentByID(ctx, consignmentID, userCompany.ID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAccessDenied):
+			c.audit.Record(ctx, nswaudit.Event{
+				EventType:  nswaudit.EventConsignment,
+				Action:     nswaudit.ActionRead,
+				TargetType: nswaudit.TargetConsignment,
+				TargetID:   consignmentID,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error":           "cross-company access denied",
+					"callerCompanyId": userCompany.ID,
+				},
+			})
+			// Return 404, not 403, so a cross-company read is indistinguishable from a
+			// non-existent consignment and cannot be used to probe which IDs exist.
+			http.Error(w, "consignment not found", http.StatusNotFound)
+			return
+		case errors.Is(err, ErrConsignmentNotFound):
+			http.Error(w, "consignment not found", http.StatusNotFound)
+			return
+		default:
+			slog.Error("failed to retrieve consignment", "error", err)
+			http.Error(w, "failed to retrieve consignment", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
