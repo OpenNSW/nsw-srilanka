@@ -18,5 +18,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cusdec_declarations_edge_id ON cusdec_decl
 CREATE INDEX IF NOT EXISTS idx_cusdec_declarations_status ON cusdec_declarations (status);
 CREATE INDEX IF NOT EXISTS idx_cusdec_ref ON cusdec_declarations (cusdec_year, cusdec_office, cusdec_serial, cusdec_number);
 
+-- Indexes to optimize JSONB lookups on task_records_v2 edgeId
+CREATE INDEX IF NOT EXISTS idx_task_records_v2_edge_id ON task_records_v2 ((data->'cig'->>'edgeId'));
+CREATE INDEX IF NOT EXISTS idx_task_records_v2_edge_id_snake ON task_records_v2 ((data->'cig'->>'edge_id'));
+
 -- @DOWN
+DROP INDEX IF EXISTS idx_task_records_v2_edge_id;
+DROP INDEX IF EXISTS idx_task_records_v2_edge_id_snake;
 DROP TABLE IF EXISTS cusdec_declarations;

@@ -2,6 +2,7 @@ package asycuda
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 )
@@ -29,6 +30,12 @@ func (h *HTTPHandler) HandleCusdecIntegrationResult(w http.ResponseWriter, r *ht
 	}
 
 	if err := h.cusdecService.ProcessIntegrationResult(r.Context(), req); err != nil {
+		if errors.Is(err, ErrWorkflowNotFoundByEdgeID) {
+			slog.WarnContext(r.Context(), "asycuda: workflow not found for CusDec integration result",
+				"edge_id", req.EdgeID, "error", err)
+			http.Error(w, "workflow not found", http.StatusNotFound)
+			return
+		}
 		slog.ErrorContext(r.Context(), "asycuda: failed to process CusDec integration result",
 			"edge_id", req.EdgeID, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

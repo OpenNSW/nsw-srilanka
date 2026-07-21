@@ -65,14 +65,14 @@ func (r CusdecIntegrationResultRequest) validate() error {
 // CusdecDeclaration is the domain entity representing a Customs Declaration. It is
 // created/updated when callbacks arrive.
 type CusdecDeclaration struct {
-	ID           string       `json:"id" gorm:"type:text;not null;primaryKey"`
-	EdgeID       string       `json:"edge_id" gorm:"type:text;not null;uniqueIndex"` // Correlation UUID from submission
-	Status       CusdecStatus `json:"status" gorm:"type:text;not null;index"`
-	CusdecYear   string       `json:"cusdec_year" gorm:"index:idx_cusdec_ref"`
-	CusdecOffice string       `json:"cusdec_office" gorm:"index:idx_cusdec_ref"`
-	CusdecSerial string       `json:"cusdec_serial" gorm:"index:idx_cusdec_ref"`
-	CusdecNumber int          `json:"cusdec_number" gorm:"index:idx_cusdec_ref"`
+	ID           string          `json:"id" gorm:"type:text;not null;primaryKey"`
+	EdgeID       string          `json:"edge_id" gorm:"type:text;not null;uniqueIndex"` // Correlation UUID from submission
+	Status       CusdecStatus    `json:"status" gorm:"type:text;not null;index"`
+	CusdecYear   string          `json:"cusdec_year" gorm:"index:idx_cusdec_ref"`
+	CusdecOffice string          `json:"cusdec_office" gorm:"index:idx_cusdec_ref"`
+	CusdecSerial string          `json:"cusdec_serial" gorm:"index:idx_cusdec_ref"`
+	CusdecNumber int             `json:"cusdec_number" gorm:"index:idx_cusdec_ref"`
 	Errors       json.RawMessage `json:"errors" gorm:"type:jsonb"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }

@@ -48,6 +48,6 @@ func (r *cusdecDeclarationRepository) Create(ctx context.Context, decl *CusdecDe
 
 func (r *cusdecDeclarationRepository) Update(ctx context.Context, decl *CusdecDeclaration) error {
 	return r.db.WithContext(ctx).Model(decl).
-		Select("status", "cusdec_year", "cusdec_office", "cusdec_serial", "cusdec_number", "errors").
+		Select("status", "cusdec_year", "cusdec_office", "cusdec_serial", "cusdec_number", "errors", "updated_at").
 		Updates(decl).Error
 }

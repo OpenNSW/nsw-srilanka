@@ -158,3 +158,86 @@ func TestProcessCusdecIntegrationResult_Failure(t *testing.T) {
 	completer.AssertExpectations(t)
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
+
+func TestProcessCusdecIntegrationResult_DuplicateCallback_WorkflowFinished(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	decl := &CusdecDeclaration{
+		EdgeID: "edge-123",
+		Status: CusdecStatusIntegrated,
+	}
+	repo := &mockCusdecRepository{
+		declsByEdgeID: map[string]*CusdecDeclaration{
+			"edge-123": decl,
+		},
+	}
+	completer := &mockTaskCompleter{}
+	service := NewCusdecWebhookService(repo, db, completer)
+
+	req := CusdecIntegrationResultRequest{
+		EdgeID:     "edge-123",
+		Integrated: true,
+		Event:      "INTEGRATION_RESULT",
+		ProcessAt:  time.Now(),
+		Payload: cusdecResultPayload{
+			CusdecRef: DocumentReference{
+				Year:   "2026",
+				Office: "COL",
+				Serial: "C",
+				Number: 9876,
+			},
+		},
+	}
+
+	// Mock DB queries returning ErrRecordNotFound to simulate finished workflow
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-123", "edge-123", 1).
+		WillReturnError(gorm.ErrRecordNotFound)
+
+	err := service.ProcessIntegrationResult(ctx, req)
+	require.NoError(t, err) // Should succeed with nil error, ignoring the duplicate callback
+
+	assert.False(t, repo.updateCalled)
+	completer.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestProcessCusdecIntegrationResult_WorkflowNotFound(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	repo := &mockCusdecRepository{
+		declsByEdgeID: make(map[string]*CusdecDeclaration),
+	}
+	completer := &mockTaskCompleter{}
+	service := NewCusdecWebhookService(repo, db, completer)
+
+	req := CusdecIntegrationResultRequest{
+		EdgeID:     "edge-123",
+		Integrated: true,
+		Event:      "INTEGRATION_RESULT",
+		ProcessAt:  time.Now(),
+		Payload: cusdecResultPayload{
+			CusdecRef: DocumentReference{
+				Year:   "2026",
+				Office: "COL",
+				Serial: "C",
+				Number: 9876,
+			},
+		},
+	}
+
+	// Mock DB query for task workflow returning ErrRecordNotFound
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-123", "edge-123", 1).
+		WillReturnError(gorm.ErrRecordNotFound)
+
+	err := service.ProcessIntegrationResult(ctx, req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+
+	assert.True(t, repo.createCalled)
+	completer.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}

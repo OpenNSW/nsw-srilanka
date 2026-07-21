@@ -2,6 +2,7 @@ package asycuda
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -46,12 +47,30 @@ func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req
 		"event", req.Event,
 	)
 
+	decl, originalStatus, err := s.updateCusdecDeclaration(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	if err := s.completeReviewTask(ctx, decl, originalStatus, req); err != nil {
+		return err
+	}
+
+	slog.InfoContext(ctx, "successfully completed external review task step and advanced workflow",
+		"edge_id", req.EdgeID,
+		"integrated", req.Integrated,
+	)
+	return nil
+}
+
+func (s *cusdecWebhookService) updateCusdecDeclaration(ctx context.Context, req CusdecIntegrationResultRequest) (*CusdecDeclaration, CusdecStatus, error) {
 	// Retrieve or create the CusdecDeclaration tracking record
 	decl, err := s.repo.GetByEdgeID(ctx, req.EdgeID)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve CusDec declaration by edgeId %s: %w", req.EdgeID, err)
+		return nil, "", fmt.Errorf("failed to retrieve CusDec declaration by edgeId %s: %w", req.EdgeID, err)
 	}
 
+	originalStatus := CusdecStatus("")
 	isNew := false
 	if decl == nil {
 		isNew = true
@@ -59,35 +78,39 @@ func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req
 			ID:     uuid.NewString(),
 			EdgeID: req.EdgeID,
 		}
-	}
-
-	if decl.Status == CusdecStatusIntegrated {
-		slog.InfoContext(ctx, "CusDec declaration already integrated, ignoring duplicate callback", "edge_id", req.EdgeID)
-		return nil
-	}
-
-	if req.Integrated {
-		decl.Status = CusdecStatusIntegrated
-		decl.CusdecYear = req.Payload.CusdecRef.Year
-		decl.CusdecOffice = req.Payload.CusdecRef.Office
-		decl.CusdecSerial = req.Payload.CusdecRef.Serial
-		decl.CusdecNumber = req.Payload.CusdecRef.Number
-		decl.Errors = nil
 	} else {
-		decl.Status = CusdecStatusFailed
-		decl.Errors = req.Errors
+		originalStatus = decl.Status
 	}
 
-	if isNew {
-		if err := s.repo.Create(ctx, decl); err != nil {
-			return fmt.Errorf("failed to create CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
+	// Only update database record if it is not already in the target state.
+	// We do not return early if the status is already updated; instead, proceed to locate and complete the task.
+	if decl.Status != CusdecStatusIntegrated && decl.Status != CusdecStatusFailed {
+		if req.Integrated {
+			decl.Status = CusdecStatusIntegrated
+			decl.CusdecYear = req.Payload.CusdecRef.Year
+			decl.CusdecOffice = req.Payload.CusdecRef.Office
+			decl.CusdecSerial = req.Payload.CusdecRef.Serial
+			decl.CusdecNumber = req.Payload.CusdecRef.Number
+			decl.Errors = nil
+		} else {
+			decl.Status = CusdecStatusFailed
+			decl.Errors = req.Errors
 		}
-	} else {
-		if err := s.repo.Update(ctx, decl); err != nil {
-			return fmt.Errorf("failed to update CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
+
+		if isNew {
+			if err := s.repo.Create(ctx, decl); err != nil {
+				return nil, "", fmt.Errorf("failed to create CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
+			}
+		} else {
+			if err := s.repo.Update(ctx, decl); err != nil {
+				return nil, "", fmt.Errorf("failed to update CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
+			}
 		}
 	}
+	return decl, originalStatus, nil
+}
 
+func (s *cusdecWebhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, originalStatus CusdecStatus, req CusdecIntegrationResultRequest) error {
 	// ----------------------------------------------------
 	// Signal/Complete the suspended EXTERNAL_REVIEW task
 	// ----------------------------------------------------
@@ -96,13 +119,20 @@ func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req
 	var record struct {
 		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
 	}
-	err = s.db.WithContext(ctx).
+	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
 		Where("data->'cig'->>'edgeId' = ? OR data->'cig'->>'edge_id' = ?", req.EdgeID, req.EdgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if originalStatus == CusdecStatusIntegrated || originalStatus == CusdecStatusFailed {
+				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID)
+				return nil
+			}
+			return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
+		}
 		slog.ErrorContext(ctx, "failed to locate task workflow by edgeId", "edge_id", req.EdgeID, "error", err)
 		return fmt.Errorf("failed to locate task workflow by edgeId %s: %w", req.EdgeID, err)
 	}
@@ -120,6 +150,12 @@ func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req
 		First(&task).Error
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if originalStatus == CusdecStatusIntegrated || originalStatus == CusdecStatusFailed {
+				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID)
+				return nil
+			}
+		}
 		slog.ErrorContext(ctx, "failed to locate suspended external review task", "workflow_id", record.ParentWorkflowID, "error", err)
 		return fmt.Errorf("failed to locate suspended external review task for workflow %s: %w", record.ParentWorkflowID, err)
 	}
@@ -151,12 +187,6 @@ func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req
 		slog.ErrorContext(ctx, "failed to complete external review task step", "task_id", task.TaskID, "error", err)
 		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
 	}
-
-	slog.InfoContext(ctx, "successfully completed external review task step and advanced workflow",
-		"edge_id", req.EdgeID,
-		"task_id", task.TaskID,
-		"integrated", req.Integrated,
-	)
 
 	return nil
 }
