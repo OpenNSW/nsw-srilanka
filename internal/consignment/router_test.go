@@ -61,14 +61,10 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	companyID := "company-trader"
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: companyID, OUHandle: "trader-ou"}, nil)
 
-	// Two consignment reads happen: GetOwnership (authorization) then GetConsignmentByID (DTO build).
-	// The caller's company matches trader_company_id, so authorization passes.
-	sqlMock.MatchExpectationsInOrder(false)
-	rows := func() *sqlmock.Rows {
-		return sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID)
-	}
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
+	// A single consignment read: GetConsignmentByID enforces ownership on the row it reads.
+	// The caller's company matches trader_company_id, so the DTO is built.
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID))
 
 	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
@@ -99,13 +95,10 @@ func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T)
 	chaCompanyID := "company-cha"
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "cha-ou").Return(&company.Record{ID: chaCompanyID, OUHandle: "cha-ou"}, nil)
 
-	sqlMock.MatchExpectationsInOrder(false)
-	rows := func() *sqlmock.Rows {
-		return sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
-			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID)
-	}
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).WillReturnRows(rows())
+	// Caller's company is the CHA (not the trader) company on the consignment row.
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID))
 
 	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))

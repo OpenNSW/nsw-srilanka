@@ -172,8 +172,11 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	return responseDTO, nil
 }
 
-// GetConsignmentByID retrieves a consignment by its ID from the database.
-func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) (*DetailDTO, error) {
+// GetConsignmentByID retrieves a consignment by its ID from the database, scoped to the
+// caller's company. callerCompanyID must be the consignment's trader or CHA company;
+// otherwise ErrAccessDenied is returned before the workflow engine or task store is touched,
+// so an unauthorized caller triggers no work beyond the single row read.
+func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerCompanyID string) (*DetailDTO, error) {
 	var consignment Consignment
 	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
 	if result.Error != nil {
@@ -181,6 +184,17 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID string) 
 			return nil, ErrConsignmentNotFound
 		}
 		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
+	}
+
+	// Enforce company ownership on the same row we just read. The empty-callerCompanyID guard
+	// documents the invariant the check relies on (a resolved company always has a non-null id)
+	// and ensures an empty caller id can never match an unassigned (empty) CHA company.
+	chaCompanyID := ""
+	if consignment.CHACompanyID != nil {
+		chaCompanyID = *consignment.CHACompanyID
+	}
+	if callerCompanyID == "" || (callerCompanyID != consignment.TraderCompanyID && callerCompanyID != chaCompanyID) {
+		return nil, ErrAccessDenied
 	}
 
 	if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {

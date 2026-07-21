@@ -192,50 +192,36 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Authorize on a cheap single-row ownership read before assembling the full DTO
-	// (which touches the task store and workflow engine). This avoids doing that work
-	// for another tenant's record, and lets us deny without ever building the response.
-	traderCompanyID, chaCompanyID, err := c.cs.GetOwnership(ctx, consignmentID)
+	// Fetch the consignment scoped to the caller's company. GetConsignmentByID enforces
+	// ownership on the single row read and returns ErrAccessDenied for a cross-company caller
+	// before doing any workflow-engine or task-store work.
+	consignment, err := c.cs.GetConsignmentByID(ctx, consignmentID, userCompany.ID)
 	if err != nil {
-		if errors.Is(err, ErrConsignmentNotFound) {
+		switch {
+		case errors.Is(err, ErrAccessDenied):
+			c.audit.Record(ctx, nswaudit.Event{
+				EventType:  nswaudit.EventConsignment,
+				Action:     nswaudit.ActionRead,
+				TargetType: nswaudit.TargetConsignment,
+				TargetID:   consignmentID,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error":           "cross-company access denied",
+					"callerCompanyId": userCompany.ID,
+				},
+			})
+			// Return 404, not 403, so a cross-company read is indistinguishable from a
+			// non-existent consignment and cannot be used to probe which IDs exist.
 			http.Error(w, "consignment not found", http.StatusNotFound)
 			return
-		}
-		slog.Error("failed to resolve consignment ownership", "error", err)
-		http.Error(w, "failed to retrieve consignment", http.StatusInternalServerError)
-		return
-	}
-
-	// The empty-ID guard documents (and enforces) the invariant this check relies on:
-	// company.Record.ID is a non-null primary key, so userCompany.ID is never empty on
-	// the success path — but were it ever empty it must not match an unassigned CHA.
-	if userCompany.ID == "" || (userCompany.ID != traderCompanyID && userCompany.ID != chaCompanyID) {
-		c.audit.Record(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionRead,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   consignmentID,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error":           "cross-company access denied",
-				"callerCompanyId": userCompany.ID,
-			},
-		})
-		// Return 404, not 403, so the response is indistinguishable from a non-existent
-		// consignment and cannot be used to probe which IDs exist.
-		http.Error(w, "consignment not found", http.StatusNotFound)
-		return
-	}
-
-	consignment, err := c.cs.GetConsignmentByID(r.Context(), consignmentID)
-	if err != nil {
-		if errors.Is(err, ErrConsignmentNotFound) {
+		case errors.Is(err, ErrConsignmentNotFound):
 			http.Error(w, "consignment not found", http.StatusNotFound)
 			return
+		default:
+			slog.Error("failed to retrieve consignment", "error", err)
+			http.Error(w, "failed to retrieve consignment", http.StatusInternalServerError)
+			return
 		}
-		slog.Error("failed to retrieve consignment", "error", err)
-		http.Error(w, "failed to retrieve consignment: "+err.Error(), http.StatusInternalServerError)
-		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
