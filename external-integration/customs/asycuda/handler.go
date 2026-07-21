@@ -17,12 +17,16 @@ import (
 // environment (CIG), so no auth middleware is wired here. When OAuth is
 // re-enabled, add token verification middleware in front of these handlers.
 type HTTPHandler struct {
-	service CDNWebhookService
+	service       CDNWebhookService
+	cusdecService CusdecWebhookService
 }
 
-// NewHTTPHandler creates a new handler wired to the given service.
-func NewHTTPHandler(service CDNWebhookService) *HTTPHandler {
-	return &HTTPHandler{service: service}
+// NewHTTPHandler creates a new handler wired to the given services.
+func NewHTTPHandler(service CDNWebhookService, cusdecService CusdecWebhookService) *HTTPHandler {
+	return &HTTPHandler{
+		service:       service,
+		cusdecService: cusdecService,
+	}
 }
 
 // HandleIntegrationResult handles POST /webhooks/asycuda/cdn/result

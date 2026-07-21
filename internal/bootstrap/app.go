@@ -241,10 +241,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Stage 8: HTTP Route & Middleware Registration
 	// -------------------------------------------------------------------
 
-	// ASYCUDA CDN webhook stack.
+	// ASYCUDA webhook stack.
 	cdnRepo := asycuda.NewDispatchNoteRepository(db)
 	cdnWebhookService := asycuda.NewCDNWebhookService(cdnRepo)
-	cdnWebhookHandler := asycuda.NewHTTPHandler(cdnWebhookService)
+	cusdecRepo := asycuda.NewCusdecDeclarationRepository(db)
+	cusdecWebhookService := asycuda.NewCusdecWebhookService(cusdecRepo, db, tm)
+	asycudaHandler := asycuda.NewHTTPHandler(cdnWebhookService, cusdecWebhookService)
 
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
@@ -336,10 +338,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", http.HandlerFunc(paymentHandler.HandleWebhook))
 	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
 
-	// ASYCUDA CDN Webhooks (§7.2 Integration Result, §7.3 Acknowledgment).
+	// ASYCUDA Webhooks (CusDec §5 Integration Result, CDN §7.2 Integration Result, CDN §7.3 Acknowledgment).
 	// OAuth is disabled in the CIG test environment; add auth middleware before go-live.
-	mux.Handle("POST /webhooks/asycuda/cdn/result", http.HandlerFunc(cdnWebhookHandler.HandleIntegrationResult))
-	mux.Handle("POST /webhooks/asycuda/cdn/ack", http.HandlerFunc(cdnWebhookHandler.HandleAcknowledgment))
+	mux.Handle("POST /webhooks/asycuda/cusdec/result", http.HandlerFunc(asycudaHandler.HandleCusdecIntegrationResult))
+	mux.Handle("POST /webhooks/asycuda/cdn/result", http.HandlerFunc(asycudaHandler.HandleIntegrationResult))
+	mux.Handle("POST /webhooks/asycuda/cdn/ack", http.HandlerFunc(asycudaHandler.HandleAcknowledgment))
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
