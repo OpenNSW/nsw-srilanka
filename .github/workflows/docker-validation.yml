@@ -42,7 +42,7 @@ jobs:
             target: migrate
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # BuildKit is required for cache-from/cache-to and multi-stage build optimisations.
       - uses: docker/setup-buildx-action@v4
