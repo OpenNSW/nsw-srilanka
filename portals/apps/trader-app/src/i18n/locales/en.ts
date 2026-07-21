@@ -138,10 +138,6 @@ const en = {
     processHistory: 'Process History',
     updatingList: 'Updating your list...',
     refresh: 'Refresh',
-    processComplete: {
-      title: 'Process Complete',
-      description: 'All workflow steps have been finished successfully. No further actions are required.',
-    },
     waitingForUpdates: {
       title: 'Waiting for Updates',
       description: 'Current steps are being processed. Next tasks will unlock automatically.',
