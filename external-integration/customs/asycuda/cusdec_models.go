@@ -18,7 +18,7 @@ const (
 // cusdecResultPayload is the nested "payload" object inside the §5
 // callback. It carries the assigned CusDec reference on success.
 type cusdecResultPayload struct {
-	CusdecRef DocumentReference `json:"cusdecRef"`
+	CusdecRef DocumentReference `json:"cusDecRef"`
 }
 
 // CusdecIntegrationResultRequest is the inbound DTO for the ASYCUDA §5 callback
@@ -57,7 +57,7 @@ func (r CusdecIntegrationResultRequest) validate() error {
 	}
 	// When integration succeeds the payload MUST carry a complete cusdecRef.
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
-		return errors.New("payload.cusdecRef must be fully populated when integrated is true")
+		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
 	}
 	return nil
 }

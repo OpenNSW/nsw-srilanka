@@ -26,8 +26,9 @@ const (
 // Shared value objects
 // --------------------------------------------------------
 
-// DocumentReference represents the ASYCUDA CDN reference (cdnRef), a composite
-// key that uniquely identifies a Cargo Dispatch Note within the customs system.
+// DocumentReference represents an ASYCUDA document reference (cdnRef or
+// cusDecRef), a composite key that uniquely identifies a document within the
+// customs system.
 type DocumentReference struct {
 	Year   string `json:"year"`
 	Office string `json:"office"`
