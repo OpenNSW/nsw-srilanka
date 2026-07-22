@@ -33,6 +33,7 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
@@ -239,6 +240,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: HTTP Route & Middleware Registration
 	// -------------------------------------------------------------------
+
+	// ASYCUDA CDN webhook stack.
+	cdnRepo := asycuda.NewDispatchNoteRepository(db)
+	cdnWebhookService := asycuda.NewCDNWebhookService(cdnRepo)
+	cdnWebhookHandler := asycuda.NewHTTPHandler(cdnWebhookService)
+
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
@@ -328,6 +335,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// They should use webhook signatures, implemented in the handler directly or via specialized middleware.
 	mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", http.HandlerFunc(paymentHandler.HandleWebhook))
 	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
+
+	// ASYCUDA CDN Webhooks (§7.2 Integration Result, §7.3 Acknowledgment).
+	// OAuth is disabled in the CIG test environment; add auth middleware before go-live.
+	mux.Handle("POST /webhooks/asycuda/cdn/result", http.HandlerFunc(cdnWebhookHandler.HandleIntegrationResult))
+	mux.Handle("POST /webhooks/asycuda/cdn/ack", http.HandlerFunc(cdnWebhookHandler.HandleAcknowledgment))
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
