@@ -20,9 +20,11 @@ type HTTPHandler struct {
 	service CDNWebhookService
 }
 
-// NewHTTPHandler creates a new handler wired to the given service.
+// NewHTTPHandler creates a new handler wired to the given CDN webhook service.
 func NewHTTPHandler(service CDNWebhookService) *HTTPHandler {
-	return &HTTPHandler{service: service}
+	return &HTTPHandler{
+		service: service,
+	}
 }
 
 // HandleIntegrationResult handles POST /webhooks/asycuda/cdn/result
