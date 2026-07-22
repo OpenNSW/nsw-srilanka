@@ -2,7 +2,6 @@ package cusdec
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -25,6 +24,15 @@ type mockCusdecRepository struct {
 
 func (m *mockCusdecRepository) GetByEdgeID(ctx context.Context, edgeID string) (*CusdecDeclaration, error) {
 	return m.declsByEdgeID[edgeID], nil
+}
+
+func (m *mockCusdecRepository) GetByCusdecRef(ctx context.Context, ref asycuda.DocumentReference) (*CusdecDeclaration, error) {
+	for _, d := range m.declsByEdgeID {
+		if d.CusdecOffice == ref.Office && d.CusdecYear == ref.Year && d.CusdecSerial == ref.Serial && d.CusdecNumber == ref.Number {
+			return d, nil
+		}
+	}
+	return nil, nil
 }
 
 func (m *mockCusdecRepository) Create(ctx context.Context, decl *CusdecDeclaration) error {
@@ -85,7 +93,6 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		},
 	}
 
-	// Mock DB queries for unblocking workflow
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-123", "edge-123", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
@@ -114,59 +121,17 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
-func TestProcessCusdecIntegrationResult_Failure(t *testing.T) {
-	ctx := context.Background()
-	db, sqlMock := setupTestDB(t)
-
-	repo := &mockCusdecRepository{
-		declsByEdgeID: make(map[string]*CusdecDeclaration),
-	}
-	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
-
-	rawErrors := json.RawMessage(`{"code":"VAL_ERR","message":"Weight too low"}`)
-	req := CusdecIntegrationResultRequest{
-		EdgeID:     "edge-123",
-		Integrated: false,
-		Event:      "INTEGRATION_RESULT",
-		ProcessAt:  time.Now(),
-		Errors:     rawErrors,
-	}
-
-	// Mock DB queries for unblocking workflow
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", "edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-123", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-abc"))
-
-	expectedPayload := map[string]any{
-		"__command":        "submit",
-		"review_outcome":   "needs_more_info",
-		"rejection_reason": `{"code":"VAL_ERR","message":"Weight too low"}`,
-	}
-	completer.On("CompleteTaskStep", mock.Anything, "task-abc", expectedPayload).Return(nil)
-
-	err := service.ProcessIntegrationResult(ctx, req)
-	require.NoError(t, err)
-
-	assert.True(t, repo.createCalled)
-	assert.Equal(t, CusdecStatusFailed, repo.createdDecl.Status)
-	assert.JSONEq(t, string(rawErrors), string(repo.createdDecl.Errors))
-
-	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
-}
-
-func TestProcessCusdecIntegrationResult_DuplicateCallback_WorkflowFinished(t *testing.T) {
+func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	ctx := context.Background()
 	db, sqlMock := setupTestDB(t)
 
 	decl := &CusdecDeclaration{
-		EdgeID: "edge-123",
-		Status: CusdecStatusIntegrated,
+		EdgeID:       "edge-123",
+		CusdecOffice: "COL",
+		CusdecYear:   "2026",
+		CusdecSerial: "C",
+		CusdecNumber: 9876,
+		Status:       CusdecStatusIntegrated,
 	}
 	repo := &mockCusdecRepository{
 		declsByEdgeID: map[string]*CusdecDeclaration{
@@ -176,12 +141,10 @@ func TestProcessCusdecIntegrationResult_DuplicateCallback_WorkflowFinished(t *te
 	completer := &mockTaskCompleter{}
 	service := NewWebhookService(repo, db, completer)
 
-	req := CusdecIntegrationResultRequest{
-		EdgeID:     "edge-123",
-		Integrated: true,
-		Event:      "INTEGRATION_RESULT",
-		ProcessAt:  time.Now(),
-		Payload: cusdecResultPayload{
+	req := CusdecEventRequest{
+		Event:     "PAYMENT",
+		ProcessAt: time.Now(),
+		Payload: cusdecEventPayload{
 			CusdecRef: asycuda.DocumentReference{
 				Year:   "2026",
 				Office: "COL",
@@ -191,35 +154,98 @@ func TestProcessCusdecIntegrationResult_DuplicateCallback_WorkflowFinished(t *te
 		},
 	}
 
-	// Mock DB queries returning ErrRecordNotFound to simulate finished workflow
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-123", "edge-123", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
+
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("parent-wf-123", "customs-wait-payment", "QUEUED_EXTERNALLY", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-payment-123"))
+
+	expectedPayload := map[string]any{
+		"__command":      "submit",
+		"payment_status": "PAID",
+	}
+	completer.On("CompleteTaskStep", mock.Anything, "task-payment-123", expectedPayload).Return(nil)
+
+	err := service.ProcessEvent(ctx, req)
+	require.NoError(t, err)
+
+	assert.True(t, repo.updateCalled)
+	assert.Equal(t, CusdecStatusPaid, repo.updatedDecl.Status)
+	completer.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestProcessEvent_DuplicateCallback_WorkflowFinished(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	decl := &CusdecDeclaration{
+		EdgeID:       "edge-123",
+		CusdecOffice: "COL",
+		CusdecYear:   "2026",
+		CusdecSerial: "C",
+		CusdecNumber: 9876,
+		Status:       CusdecStatusPaid,
+	}
+	repo := &mockCusdecRepository{
+		declsByEdgeID: map[string]*CusdecDeclaration{
+			"edge-123": decl,
+		},
+	}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, db, completer)
+
+	req := CusdecEventRequest{
+		Event:     "PAYMENT",
+		ProcessAt: time.Now(),
+		Payload: cusdecEventPayload{
+			CusdecRef: asycuda.DocumentReference{
+				Year:   "2026",
+				Office: "COL",
+				Serial: "C",
+				Number: 9876,
+			},
+		},
+	}
+
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-123", "edge-123", 1).
 		WillReturnError(gorm.ErrRecordNotFound)
 
-	err := service.ProcessIntegrationResult(ctx, req)
-	require.NoError(t, err) // Should succeed with nil error, ignoring the duplicate callback
+	err := service.ProcessEvent(ctx, req)
+	require.NoError(t, err)
 
 	assert.False(t, repo.updateCalled)
 	completer.AssertExpectations(t)
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
-func TestProcessCusdecIntegrationResult_WorkflowNotFound(t *testing.T) {
+func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 	ctx := context.Background()
 	db, sqlMock := setupTestDB(t)
 
+	decl := &CusdecDeclaration{
+		EdgeID:       "edge-123",
+		CusdecOffice: "COL",
+		CusdecYear:   "2026",
+		CusdecSerial: "C",
+		CusdecNumber: 9876,
+		Status:       CusdecStatusPaid,
+	}
 	repo := &mockCusdecRepository{
-		declsByEdgeID: make(map[string]*CusdecDeclaration),
+		declsByEdgeID: map[string]*CusdecDeclaration{
+			"edge-123": decl,
+		},
 	}
 	completer := &mockTaskCompleter{}
 	service := NewWebhookService(repo, db, completer)
 
-	req := CusdecIntegrationResultRequest{
-		EdgeID:     "edge-123",
-		Integrated: true,
-		Event:      "INTEGRATION_RESULT",
-		ProcessAt:  time.Now(),
-		Payload: cusdecResultPayload{
+	req := CusdecEventRequest{
+		Event:     "WARRANTING",
+		ProcessAt: time.Now(),
+		Payload: cusdecEventPayload{
 			CusdecRef: asycuda.DocumentReference{
 				Year:   "2026",
 				Office: "COL",
@@ -229,16 +255,81 @@ func TestProcessCusdecIntegrationResult_WorkflowNotFound(t *testing.T) {
 		},
 	}
 
-	// Mock DB query for task workflow returning ErrRecordNotFound
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-123", "edge-123", 1).
-		WillReturnError(gorm.ErrRecordNotFound)
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
 
-	err := service.ProcessIntegrationResult(ctx, req)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("parent-wf-123", "customs-wait-warranting", "QUEUED_EXTERNALLY", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-warranting-123"))
 
-	assert.True(t, repo.createCalled)
+	expectedPayload := map[string]any{
+		"__command":         "submit",
+		"warranting_status": "WARRANTED",
+	}
+	completer.On("CompleteTaskStep", mock.Anything, "task-warranting-123", expectedPayload).Return(nil)
+
+	err := service.ProcessEvent(ctx, req)
+	require.NoError(t, err)
+
+	assert.True(t, repo.updateCalled)
+	assert.Equal(t, CusdecStatusWarranted, repo.updatedDecl.Status)
+	completer.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestProcessEvent_ReleaseSuccess(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	decl := &CusdecDeclaration{
+		EdgeID:       "edge-123",
+		CusdecOffice: "COL",
+		CusdecYear:   "2026",
+		CusdecSerial: "C",
+		CusdecNumber: 9876,
+		Status:       CusdecStatusWarranted,
+	}
+	repo := &mockCusdecRepository{
+		declsByEdgeID: map[string]*CusdecDeclaration{
+			"edge-123": decl,
+		},
+	}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, db, completer)
+
+	req := CusdecEventRequest{
+		Event:     "RELEASE",
+		ProcessAt: time.Now(),
+		Payload: cusdecEventPayload{
+			CusdecRef: asycuda.DocumentReference{
+				Year:   "2026",
+				Office: "COL",
+				Serial: "C",
+				Number: 9876,
+			},
+		},
+	}
+
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-123", "edge-123", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
+
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("parent-wf-123", "customs-wait-release", "QUEUED_EXTERNALLY", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-release-123"))
+
+	expectedPayload := map[string]any{
+		"__command":      "submit",
+		"release_status": "RELEASED",
+	}
+	completer.On("CompleteTaskStep", mock.Anything, "task-release-123", expectedPayload).Return(nil)
+
+	err := service.ProcessEvent(ctx, req)
+	require.NoError(t, err)
+
+	assert.True(t, repo.updateCalled)
+	assert.Equal(t, CusdecStatusReleased, repo.updatedDecl.Status)
 	completer.AssertExpectations(t)
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }

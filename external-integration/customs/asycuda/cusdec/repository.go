@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"gorm.io/gorm"
 )
 
 // DeclarationRepository defines the persistence interface for CusdecDeclaration entities.
 type DeclarationRepository interface {
 	GetByEdgeID(ctx context.Context, edgeID string) (*CusdecDeclaration, error)
+	GetByCusdecRef(ctx context.Context, ref asycuda.DocumentReference) (*CusdecDeclaration, error)
 	Create(ctx context.Context, decl *CusdecDeclaration) error
 	Update(ctx context.Context, decl *CusdecDeclaration) error
 }
@@ -26,6 +28,21 @@ func NewDeclarationRepository(db *gorm.DB) DeclarationRepository {
 func (r *declarationRepository) GetByEdgeID(ctx context.Context, edgeID string) (*CusdecDeclaration, error) {
 	var decl CusdecDeclaration
 	if err := r.db.WithContext(ctx).Where("edge_id = ?", edgeID).First(&decl).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &decl, nil
+}
+
+func (r *declarationRepository) GetByCusdecRef(ctx context.Context, ref asycuda.DocumentReference) (*CusdecDeclaration, error) {
+	var decl CusdecDeclaration
+	err := r.db.WithContext(ctx).
+		Where("cusdec_year = ? AND cusdec_office = ? AND cusdec_serial = ? AND cusdec_number = ?",
+			ref.Year, ref.Office, ref.Serial, ref.Number).
+		First(&decl).Error
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
