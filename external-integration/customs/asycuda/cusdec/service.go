@@ -1,4 +1,4 @@
-package asycuda
+package cusdec
 
 import (
 	"context"
@@ -10,12 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// CusdecWebhookService defines the use-case layer for processing asynchronous
+// WebhookService defines the use-case layer for processing asynchronous
 // ASYCUDA callbacks related to Customs Declarations.
-type CusdecWebhookService interface {
-	// ProcessIntegrationResult handles the §5 callback. It correlates the
-	// callback using the edgeId, updates the declaration status, and unblocks
-	// the workflow task via the task manager.
+type WebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error
 }
 
@@ -25,22 +22,22 @@ type TaskCompleter interface {
 	CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error
 }
 
-type cusdecWebhookService struct {
-	repo        CusdecDeclarationRepository
+type webhookService struct {
+	repo        DeclarationRepository
 	db          *gorm.DB
 	taskManager TaskCompleter
 }
 
-// NewCusdecWebhookService creates a new CusdecWebhookService.
-func NewCusdecWebhookService(repo CusdecDeclarationRepository, db *gorm.DB, taskManager TaskCompleter) CusdecWebhookService {
-	return &cusdecWebhookService{
+// NewWebhookService creates a new WebhookService.
+func NewWebhookService(repo DeclarationRepository, db *gorm.DB, taskManager TaskCompleter) WebhookService {
+	return &webhookService{
 		repo:        repo,
 		db:          db,
 		taskManager: taskManager,
 	}
 }
 
-func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error {
+func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error {
 	slog.InfoContext(ctx, "processing CusDec integration result",
 		"edge_id", req.EdgeID,
 		"integrated", req.Integrated,
@@ -63,8 +60,7 @@ func (s *cusdecWebhookService) ProcessIntegrationResult(ctx context.Context, req
 	return nil
 }
 
-func (s *cusdecWebhookService) updateCusdecDeclaration(ctx context.Context, req CusdecIntegrationResultRequest) (*CusdecDeclaration, CusdecStatus, error) {
-	// Retrieve or create the CusdecDeclaration tracking record
+func (s *webhookService) updateCusdecDeclaration(ctx context.Context, req CusdecIntegrationResultRequest) (*CusdecDeclaration, CusdecStatus, error) {
 	decl, err := s.repo.GetByEdgeID(ctx, req.EdgeID)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to retrieve CusDec declaration by edgeId %s: %w", req.EdgeID, err)
@@ -82,8 +78,6 @@ func (s *cusdecWebhookService) updateCusdecDeclaration(ctx context.Context, req 
 		originalStatus = decl.Status
 	}
 
-	// Only update database record if it is not already in the target state.
-	// We do not return early if the status is already updated; instead, proceed to locate and complete the task.
 	if decl.Status != CusdecStatusIntegrated && decl.Status != CusdecStatusFailed {
 		if req.Integrated {
 			decl.Status = CusdecStatusIntegrated
@@ -110,12 +104,7 @@ func (s *cusdecWebhookService) updateCusdecDeclaration(ctx context.Context, req 
 	return decl, originalStatus, nil
 }
 
-func (s *cusdecWebhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, originalStatus CusdecStatus, req CusdecIntegrationResultRequest) error {
-	// ----------------------------------------------------
-	// Signal/Complete the suspended EXTERNAL_REVIEW task
-	// ----------------------------------------------------
-	// 1. Locate the parent_workflow_id of the completed customs-cusdec--cig-dispatch task
-	//    that matches this edgeID.
+func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, originalStatus CusdecStatus, req CusdecIntegrationResultRequest) error {
 	var record struct {
 		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
 	}
@@ -137,8 +126,6 @@ func (s *cusdecWebhookService) completeReviewTask(ctx context.Context, decl *Cus
 		return fmt.Errorf("failed to locate task workflow by edgeId %s: %w", req.EdgeID, err)
 	}
 
-	// 2. Locate the active task_records_v2 entry with template "customs-cusdec--external-review"
-	//    and state "QUEUED_EXTERNALLY" for this workflow.
 	var task struct {
 		TaskID string `gorm:"column:task_id"`
 	}
@@ -160,7 +147,6 @@ func (s *cusdecWebhookService) completeReviewTask(ctx context.Context, decl *Cus
 		return fmt.Errorf("failed to locate suspended external review task for workflow %s: %w", record.ParentWorkflowID, err)
 	}
 
-	// 3. Complete the task step to advance the workflow
 	var payload map[string]any
 	if req.Integrated {
 		formattedRef := fmt.Sprintf("%s/%s/%s/%d",
@@ -173,7 +159,7 @@ func (s *cusdecWebhookService) completeReviewTask(ctx context.Context, decl *Cus
 			"__command":      "submit",
 			"review_outcome": "approve",
 			"cusdec_number":  formattedRef,
-			"amount_to_pay":  0, // Default for integration approval, subsequent events determine actual payment
+			"amount_to_pay":  0,
 		}
 	} else {
 		payload = map[string]any{

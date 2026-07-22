@@ -1,4 +1,4 @@
-package asycuda
+package cusdec
 
 import (
 	"encoding/json"
@@ -7,12 +7,20 @@ import (
 	"net/http"
 )
 
-// HandleCusdecIntegrationResult handles POST /webhooks/asycuda/cusdec/result
-//
-// This is the §5 callback pushed by ASYCUDA when CusDec integration succeeds or
-// fails. The handler unmarshals and validates the payload, delegates to the
-// service layer, and returns 202 Accepted.
-func (h *HTTPHandler) HandleCusdecIntegrationResult(w http.ResponseWriter, r *http.Request) {
+// HTTPHandler handles inbound HTTP webhook requests from ASYCUDA for Customs Declaration callbacks.
+type HTTPHandler struct {
+	service WebhookService
+}
+
+// NewHTTPHandler creates a new handler for CusDec webhooks.
+func NewHTTPHandler(service WebhookService) *HTTPHandler {
+	return &HTTPHandler{
+		service: service,
+	}
+}
+
+// HandleIntegrationResult handles POST /webhooks/asycuda/cusdec/result.
+func (h *HTTPHandler) HandleIntegrationResult(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
 	defer func() { _ = r.Body.Close() }()
 
@@ -29,7 +37,7 @@ func (h *HTTPHandler) HandleCusdecIntegrationResult(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if err := h.cusdecService.ProcessIntegrationResult(r.Context(), req); err != nil {
+	if err := h.service.ProcessIntegrationResult(r.Context(), req); err != nil {
 		if errors.Is(err, ErrWorkflowNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "asycuda: workflow not found for CusDec integration result",
 				"edge_id", req.EdgeID, "error", err)

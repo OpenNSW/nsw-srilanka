@@ -1,4 +1,4 @@
-package asycuda
+package cusdec
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -67,7 +68,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		declsByEdgeID: make(map[string]*CusdecDeclaration),
 	}
 	completer := &mockTaskCompleter{}
-	service := NewCusdecWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecIntegrationResultRequest{
 		EdgeID:     "edge-123",
@@ -75,7 +76,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		Event:      "INTEGRATION_RESULT",
 		ProcessAt:  time.Now(),
 		Payload: cusdecResultPayload{
-			CusdecRef: DocumentReference{
+			CusdecRef: asycuda.DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",
@@ -121,7 +122,7 @@ func TestProcessCusdecIntegrationResult_Failure(t *testing.T) {
 		declsByEdgeID: make(map[string]*CusdecDeclaration),
 	}
 	completer := &mockTaskCompleter{}
-	service := NewCusdecWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, db, completer)
 
 	rawErrors := json.RawMessage(`{"code":"VAL_ERR","message":"Weight too low"}`)
 	req := CusdecIntegrationResultRequest{
@@ -173,7 +174,7 @@ func TestProcessCusdecIntegrationResult_DuplicateCallback_WorkflowFinished(t *te
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewCusdecWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecIntegrationResultRequest{
 		EdgeID:     "edge-123",
@@ -181,7 +182,7 @@ func TestProcessCusdecIntegrationResult_DuplicateCallback_WorkflowFinished(t *te
 		Event:      "INTEGRATION_RESULT",
 		ProcessAt:  time.Now(),
 		Payload: cusdecResultPayload{
-			CusdecRef: DocumentReference{
+			CusdecRef: asycuda.DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",
@@ -211,7 +212,7 @@ func TestProcessCusdecIntegrationResult_WorkflowNotFound(t *testing.T) {
 		declsByEdgeID: make(map[string]*CusdecDeclaration),
 	}
 	completer := &mockTaskCompleter{}
-	service := NewCusdecWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecIntegrationResultRequest{
 		EdgeID:     "edge-123",
@@ -219,7 +220,7 @@ func TestProcessCusdecIntegrationResult_WorkflowNotFound(t *testing.T) {
 		Event:      "INTEGRATION_RESULT",
 		ProcessAt:  time.Now(),
 		Payload: cusdecResultPayload{
-			CusdecRef: DocumentReference{
+			CusdecRef: asycuda.DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",

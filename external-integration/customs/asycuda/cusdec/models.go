@@ -1,9 +1,11 @@
-package asycuda
+package cusdec
 
 import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 )
 
 // CusdecStatus represents the lifecycle state of a Customs Declaration.
@@ -18,7 +20,7 @@ const (
 // cusdecResultPayload is the nested "payload" object inside the §5
 // callback. It carries the assigned CusDec reference on success.
 type cusdecResultPayload struct {
-	CusdecRef DocumentReference `json:"cusDecRef"`
+	CusdecRef asycuda.DocumentReference `json:"cusDecRef"`
 }
 
 // CusdecIntegrationResultRequest is the inbound DTO for the ASYCUDA §5 callback
@@ -55,7 +57,7 @@ func (r CusdecIntegrationResultRequest) validate() error {
 	if r.ProcessAt.IsZero() {
 		return errors.New("processAt is required")
 	}
-	// When integration succeeds the payload MUST carry a complete cusdecRef.
+	// When integration succeeds the payload MUST carry a complete cusDecRef.
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
 		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
 	}

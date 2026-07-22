@@ -17,15 +17,13 @@ import (
 // environment (CIG), so no auth middleware is wired here. When OAuth is
 // re-enabled, add token verification middleware in front of these handlers.
 type HTTPHandler struct {
-	service       CDNWebhookService
-	cusdecService CusdecWebhookService
+	service CDNWebhookService
 }
 
-// NewHTTPHandler creates a new handler wired to the given services.
-func NewHTTPHandler(service CDNWebhookService, cusdecService CusdecWebhookService) *HTTPHandler {
+// NewHTTPHandler creates a new handler wired to the given CDN webhook service.
+func NewHTTPHandler(service CDNWebhookService) *HTTPHandler {
 	return &HTTPHandler{
-		service:       service,
-		cusdecService: cusdecService,
+		service: service,
 	}
 }
 
