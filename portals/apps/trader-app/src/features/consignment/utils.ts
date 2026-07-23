@@ -15,8 +15,13 @@ export function getStateColor(state: ConsignmentState): 'gray' | 'orange' | 'gre
     case 'IN_PROGRESS':
       return 'orange'
     case 'FINISHED':
+    case 'COMPLETED':
+    case 'APPROVED':
       return 'green'
     case 'FAILED':
+    case 'REJECTED':
+    case 'SLTB_REJECTED':
+    case 'DISAPPROVED':
       return 'red'
     default:
       return 'gray'
@@ -29,7 +34,8 @@ export function getStateColor(state: ConsignmentState): 'gray' | 'orange' | 'gre
  * Example: IN_PROGRESS -> In Progress
  */
 export function formatState(state: ConsignmentState): string {
-  return state.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  if (state === 'SLTB_REJECTED') return 'SLTB Rejected'
+  return state.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 /**

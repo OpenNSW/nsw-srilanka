@@ -56,15 +56,22 @@ const statusConfig: Record<
     label: 'Failed',
     icon: <CrossCircledIcon className="w-4 h-4" />,
   },
+  REJECTED: {
+    color: 'red',
+    label: 'Rejected',
+    icon: <CrossCircledIcon className="w-4 h-4" />,
+  },
 }
 
-const STATUS_KEYS: Record<WorkflowNodeState, 'completed' | 'ready' | 'inProgress' | 'locked' | 'failed'> = {
-  COMPLETED: 'completed',
-  READY: 'ready',
-  IN_PROGRESS: 'inProgress',
-  LOCKED: 'locked',
-  FAILED: 'failed',
-}
+const STATUS_KEYS: Record<WorkflowNodeState, 'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'rejected'> =
+  {
+    COMPLETED: 'completed',
+    READY: 'ready',
+    IN_PROGRESS: 'inProgress',
+    LOCKED: 'locked',
+    FAILED: 'failed',
+    REJECTED: 'rejected',
+  }
 
 export interface ActionCardProps {
   step: WorkflowNode

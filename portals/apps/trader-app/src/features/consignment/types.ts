@@ -49,9 +49,18 @@ export interface CHA {
 
 export type TradeFlow = 'IMPORT' | 'EXPORT'
 
-export type ConsignmentState = 'INITIALIZED' | 'IN_PROGRESS' | 'FAILED' | 'FINISHED'
+export type ConsignmentState =
+  | 'INITIALIZED'
+  | 'IN_PROGRESS'
+  | 'FAILED'
+  | 'FINISHED'
+  | 'REJECTED'
+  | 'SLTB_REJECTED'
+  | 'COMPLETED'
+  | 'APPROVED'
+  | 'DISAPPROVED'
 
-export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
+export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'REJECTED'
 
 export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT' | 'PAYMENT' | 'START' | 'END' | 'GATEWAY' | 'END_NODE'
 
