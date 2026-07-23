@@ -29,7 +29,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-nsw_db}
       POSTGRES_USER: ${DB_USERNAME:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set a strong value; see .env.example}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -155,7 +155,7 @@ services:
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=${DB_USERNAME:-postgres}
-      - POSTGRES_PWD=${DB_PASSWORD:-changeme}
+      - POSTGRES_PWD=${DB_PASSWORD:?set a strong value; see .env.example}
       - POSTGRES_SEEDS=db
       - DB_NAME=temporal
     healthcheck:
@@ -202,7 +202,7 @@ services:
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-nsw_db}
       - DB_USER=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - DB_PASSWORD=${DB_PASSWORD:?set a strong value; see .env.example}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
     # No `command:` — the migrate image's default CMD is ["migrate", "up"].
     depends_on:
@@ -238,7 +238,7 @@ services:
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-nsw_db}
       - DB_USERNAME=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - DB_PASSWORD=${DB_PASSWORD:?set a strong value; see .env.example}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
       # Engine configuration variables
       - TEMPORAL_HOST=temporal
@@ -256,19 +256,19 @@ services:
       - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
       - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
       # NSW -> Agency m2m client secrets, referenced as env:... in services.*.json
-      - M2M_NSW_TO_NPQS_SECRET=${M2M_NSW_TO_NPQS_SECRET:-1234}
-      - M2M_NSW_TO_FCAU_SECRET=${M2M_NSW_TO_FCAU_SECRET:-1234}
-      - M2M_NSW_TO_CDA_SECRET=${M2M_NSW_TO_CDA_SECRET:-1234}
-      - M2M_NSW_TO_SLPA_SECRET=${M2M_NSW_TO_SLPA_SECRET:-1234}
-      - M2M_NSW_TO_CUSTOMS_SECRET=${M2M_NSW_TO_CUSTOMS_SECRET:-1234}
-      - M2M_NSW_TO_SLTB_SECRET=${M2M_NSW_TO_SLTB_SECRET:-1234}
-      - M2M_NSW_TO_ASYCUDA_SECRET=${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
+      - M2M_NSW_TO_NPQS_SECRET=${M2M_NSW_TO_NPQS_SECRET:?set a strong value; see .env.example}
+      - M2M_NSW_TO_FCAU_SECRET=${M2M_NSW_TO_FCAU_SECRET:?set a strong value; see .env.example}
+      - M2M_NSW_TO_CDA_SECRET=${M2M_NSW_TO_CDA_SECRET:?set a strong value; see .env.example}
+      - M2M_NSW_TO_SLPA_SECRET=${M2M_NSW_TO_SLPA_SECRET:?set a strong value; see .env.example}
+      - M2M_NSW_TO_CUSTOMS_SECRET=${M2M_NSW_TO_CUSTOMS_SECRET:?set a strong value; see .env.example}
+      - M2M_NSW_TO_SLTB_SECRET=${M2M_NSW_TO_SLTB_SECRET:?set a strong value; see .env.example}
+      - M2M_NSW_TO_ASYCUDA_SECRET=${M2M_NSW_TO_ASYCUDA_SECRET:?set a strong value; see .env.example}
       - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
       - TASK_AUTHZ_CONFIG_PATH=${TASK_AUTHZ_CONFIG_PATH:-configs/task_authz.json}
       - ARGUS_SERVICE_URL=http://argus:3001
-      - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
+      - ARGUS_API_KEY=${ARGUS_API_KEY:?set a strong value; see .env.example}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -341,9 +341,9 @@ services:
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-nsw_db}
       - DB_USERNAME=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - DB_PASSWORD=${DB_PASSWORD:?set a strong value; see .env.example}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
+      - ARGUS_API_KEY=${ARGUS_API_KEY:?set a strong value; see .env.example}
     depends_on:
       db:
         condition: service_healthy
