@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"gorm.io/gorm"
 )
 
 // DispatchNoteRepository defines the persistence interface for DispatchNote entities.
 type DispatchNoteRepository interface {
 	GetByEdgID(ctx context.Context, edgID string) (*DispatchNote, error)
-	GetByCDNRef(ctx context.Context, ref asycuda.DocumentReference) (*DispatchNote, error)
+	GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error)
 	Update(ctx context.Context, note *DispatchNote) error
 }
 
@@ -35,7 +34,7 @@ func (r *dispatchNoteRepository) GetByEdgID(ctx context.Context, edgID string) (
 	return &note, nil
 }
 
-func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref asycuda.DocumentReference) (*DispatchNote, error) {
+func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error) {
 	var note DispatchNote
 	err := r.db.WithContext(ctx).
 		Where("cdn_year = ? AND cdn_office = ? AND cdn_serial = ? AND cdn_number = ?",

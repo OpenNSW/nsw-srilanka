@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +19,7 @@ func (m *mockRepository) GetByEdgID(ctx context.Context, edgID string) (*Dispatc
 	return m.byEdgID[edgID], nil
 }
 
-func (m *mockRepository) GetByCDNRef(ctx context.Context, ref asycuda.DocumentReference) (*DispatchNote, error) {
+func (m *mockRepository) GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error) {
 	key := ref.Year + "-" + ref.Office + "-" + ref.Serial
 	return m.byCDNRef[key], nil
 }
@@ -43,7 +42,7 @@ func TestProcessIntegrationResult_Success(t *testing.T) {
 		Integrated: true,
 		Event:      "INTEGRATION_RESULT",
 		Payload: integrationResultPayload{
-			CDNRef: asycuda.DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
+			CDNRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
 		},
 	}
 
@@ -96,7 +95,7 @@ func TestProcessAcknowledgment_Success(t *testing.T) {
 	req := CDNAcknowledgmentRequest{
 		Event: "ACKNOWLEDGMENT",
 		Payload: acknowledgmentPayload{
-			CDNRef: asycuda.DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
+			CDNRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
 		},
 	}
 
@@ -116,7 +115,7 @@ func TestProcessAcknowledgment_InvalidState(t *testing.T) {
 	req := CDNAcknowledgmentRequest{
 		Event: "ACKNOWLEDGMENT",
 		Payload: acknowledgmentPayload{
-			CDNRef: asycuda.DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
+			CDNRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
 		},
 	}
 

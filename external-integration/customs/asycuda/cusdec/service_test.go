@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -26,7 +25,7 @@ func (m *mockCusdecRepository) GetByEdgeID(ctx context.Context, edgeID string) (
 	return m.declsByEdgeID[edgeID], nil
 }
 
-func (m *mockCusdecRepository) GetByCusdecRef(ctx context.Context, ref asycuda.DocumentReference) (*CusdecDeclaration, error) {
+func (m *mockCusdecRepository) GetByCusdecRef(ctx context.Context, ref DocumentReference) (*CusdecDeclaration, error) {
 	for _, d := range m.declsByEdgeID {
 		if d.CusdecOffice == ref.Office && d.CusdecYear == ref.Year && d.CusdecSerial == ref.Serial && d.CusdecNumber == ref.Number {
 			return d, nil
@@ -84,7 +83,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		Event:      "INTEGRATION_RESULT",
 		ProcessAt:  time.Now(),
 		Payload: cusdecResultPayload{
-			CusdecRef: asycuda.DocumentReference{
+			CusdecRef: DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",
@@ -145,7 +144,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 		Event:     "PAYMENT",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
-			CusdecRef: asycuda.DocumentReference{
+			CusdecRef: DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",
@@ -201,7 +200,7 @@ func TestProcessEvent_DuplicateCallback_WorkflowFinished(t *testing.T) {
 		Event:     "PAYMENT",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
-			CusdecRef: asycuda.DocumentReference{
+			CusdecRef: DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",
@@ -246,7 +245,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 		Event:     "WARRANTING",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
-			CusdecRef: asycuda.DocumentReference{
+			CusdecRef: DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",
@@ -302,7 +301,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		Event:     "RELEASE",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
-			CusdecRef: asycuda.DocumentReference{
+			CusdecRef: DocumentReference{
 				Year:   "2026",
 				Office: "COL",
 				Serial: "C",

@@ -4,9 +4,20 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
-
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 )
+
+// DocumentReference represents an ASYCUDA document reference (cdnRef or cusDecRef).
+type DocumentReference struct {
+	Year   string `json:"year"`
+	Office string `json:"office"`
+	Serial string `json:"serial"`
+	Number int    `json:"number"`
+}
+
+// IsValid reports whether all fields of the reference are populated and valid.
+func (r DocumentReference) IsValid() bool {
+	return r.Year != "" && r.Office != "" && r.Serial != "" && r.Number > 0
+}
 
 // DispatchNoteStatus represents the lifecycle state of a Cargo Dispatch Note.
 type DispatchNoteStatus string
@@ -23,7 +34,7 @@ const (
 // --------------------------------------------------------
 
 type integrationResultPayload struct {
-	CDNRef asycuda.DocumentReference `json:"cdnRef"`
+	CDNRef DocumentReference `json:"cdnRef"`
 }
 
 // CDNIntegrationResultRequest is the inbound DTO for the ASYCUDA §7.2 callback
@@ -59,7 +70,7 @@ func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r CDNIntegrationResultRequest) validate() error {
+func (r CDNIntegrationResultRequest) Validate() error {
 	if r.EdgID == "" {
 		return errors.New("edgId is required")
 	}
@@ -80,7 +91,7 @@ func (r CDNIntegrationResultRequest) validate() error {
 // --------------------------------------------------------
 
 type acknowledgmentPayload struct {
-	CDNRef asycuda.DocumentReference `json:"cdnRef"`
+	CDNRef DocumentReference `json:"cdnRef"`
 }
 
 // CDNAcknowledgmentRequest is the inbound DTO for the ASYCUDA §7.3 callback
@@ -113,7 +124,7 @@ func (r *CDNAcknowledgmentRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r CDNAcknowledgmentRequest) validate() error {
+func (r CDNAcknowledgmentRequest) Validate() error {
 	if r.Event == "" {
 		return errors.New("event is required")
 	}
