@@ -1,4 +1,4 @@
-FROM golang:1.26.4-bookworm AS builder
+FROM golang:1.26.5-bookworm AS builder
 
 WORKDIR /src
 
@@ -34,7 +34,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
 # `go install`, because `go install` refuses to write the binary when
 # cross-compiling for a non-host GOOS/GOARCH (multi-arch buildx).
 # -------------------------------------------------------------------
-FROM golang:1.26.4-bookworm AS migrate-builder
+FROM golang:1.26.5-bookworm AS migrate-builder
 
 ARG TARGETOS
 ARG TARGETARCH
