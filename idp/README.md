@@ -80,11 +80,13 @@ not executed). The image ships `01-default-resources.sh`, `common.sh`, and the `
   user type, default agent type, admin user, system resource server + permissions,
   `Administrators` group, `Administrator` role, default flows, the `Console` application,
   themes, and i18n translations.
-- **`bootstrap/02-admin-cli.sh`** (project, mounted into `thunderid-setup`) — creates the `admin-cli`
-  machine client (`client_id` `ADMIN_CLI`, secret `${ADMIN_CLI_SECRET:-1234}`) in the
-  `default` OU and assigns the built-in `Administrator` role to it. A `client_credentials`
+- **`bootstrap/02-admin-cli.sh`** (project, mounted into `thunderid-setup`) — **local-dev only.**
+  Creates the `admin-cli` machine client (`client_id` `ADMIN_CLI`, secret `ADMIN_CLI_SECRET`) in
+  the `default` OU and assigns the built-in `Administrator` role to it. A `client_credentials`
   call then yields a `system`-scoped **management token** (see *Seeding* below) — the
-  programmatic alternative to copying a token out of the console.
+  programmatic alternative to copying a token out of the console. It **fails closed** if
+  `ADMIN_CLI_SECRET` is unset (no silent `1234`; override with `ALLOW_DEFAULT_SECRETS=1`). Do
+  not deploy this script to UAT/prod — use an interactively-obtained admin token there instead.
 
 The project's sample resources are not created by the bootstrap container. They are seeded
 by `idp/sample-resources.sh` (see *Seeding sample resources* below): **automatically** by
@@ -120,16 +122,18 @@ healthy: it mints an `ADMIN_CLI` token and runs `sample-resources.sh` against th
 IdP (`https://thunderid:8090`). A bare `docker compose up thunderid` brings up only the IdP
 (with the `admin-cli` client created) and does **not** seed.
 
-### By hand (any deployment)
+### By hand — local dev (via `admin-cli`)
 
 1. Mint a management token from the `admin-cli` client created during bootstrap:
 
    ```bash
-   TOKEN=$(curl -k -s -u "ADMIN_CLI:1234" \
+   TOKEN=$(curl -k -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "grant_type=client_credentials" -d "scope=system" \
      https://localhost:8090/oauth2/token | jq -r .access_token)
    ```
+
+   (`${ADMIN_CLI_SECRET:-1234}` uses your `idp/.env` value if exported, else the dev default.)
 
 2. Run the seed with that token:
 
@@ -137,8 +141,35 @@ IdP (`https://thunderid:8090`). A bare `docker compose up thunderid` brings up o
    API_BASE=https://localhost:8090 AUTH_TOKEN="$TOKEN" ./idp/sample-resources.sh
    ```
 
-- `API_BASE` defaults to `https://localhost:8090`; point it at a remote deployment as needed
-  (using that deployment's own `ADMIN_CLI` secret).
+### By hand — UAT / production (via an admin token)
+
+`admin-cli` is a **local-dev convenience only** — it is created solely by the compose
+`thunderid-setup` service ([`bootstrap/02-admin-cli.sh`](bootstrap/02-admin-cli.sh)) so the
+dev seed can mint a token non-interactively. **Do not deploy that script to UAT/prod.**
+There, the privileged default-secret client is never provisioned; instead:
+
+1. Deploy a **stock ThunderID** with only the image's default resources (admin user, default
+   OU, etc.) — i.e. run the image's built-in bootstrap without mounting `02-admin-cli.sh`.
+   Set a **strong `ADMIN_PASSWORD`** — that admin is your management entry point.
+2. Obtain an admin management token **interactively** (e.g. log in to the console and copy a
+   `system`-scoped token, or use the admin credentials against the token endpoint).
+3. Run the seed with strong secrets set and that token:
+
+   ```bash
+   API_BASE=https://idp.example.com \
+   AUTH_TOKEN="$ADMIN_TOKEN" \
+   SAMPLE_USER_PASSWORD=... M2M_CLIENT_SECRET=... \
+   INSECURE=0 ./idp/sample-resources.sh
+   ```
+
+### Notes on secrets & options
+
+- **Fail-closed secrets.** Against a **non-localhost** target, an UNSET `SAMPLE_USER_PASSWORD`
+  or `M2M_CLIENT_SECRET` aborts the run (naming the missing variable) rather than defaulting
+  to `1234`. Localhost runs keep the `1234` dev default; set `ALLOW_DEFAULT_SECRETS=1` to allow
+  it on a non-localhost target (e.g. throwaway CI). `02-admin-cli.sh` fails the same way for an
+  unset `ADMIN_CLI_SECRET` (gated only by `ALLOW_DEFAULT_SECRETS`, since it has no `API_BASE`).
+- `API_BASE` defaults to `https://localhost:8090`; point it at a remote deployment as needed.
 - `INSECURE=0` enforces TLS certificate validation (default `1` skips it for self-signed
   localhost certs).
 - Values in `idp/.env` are loaded automatically and **take precedence over the command

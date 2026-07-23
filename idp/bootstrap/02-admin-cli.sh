@@ -11,23 +11,41 @@ set -e
 # common.sh for api_call / log_*.
 #
 # It creates one M2M client in the default OU:
-#   name=admin-cli  client_id=ADMIN_CLI  client_secret=${ADMIN_CLI_SECRET:-1234}
+#   name=admin-cli  client_id=ADMIN_CLI  client_secret=$ADMIN_CLI_SECRET
 # and assigns the existing `Administrator` role (created by 01-default-resources)
 # to it. That role grant is what makes the client's client_credentials token
 # carry management ("system") scope + audience, e.g.:
 #
 #   curl -k -X POST https://localhost:8090/oauth2/token \
-#     -u "ADMIN_CLI:1234" -H "Content-Type: application/x-www-form-urlencoded" \
+#     -u "ADMIN_CLI:<secret>" -H "Content-Type: application/x-www-form-urlencoded" \
 #     -d "grant_type=client_credentials" -d "scope=system"
 #
 # The resulting access_token is used as AUTH_TOKEN for idp/sample-resources.sh.
+#
+# NOTE: this admin-cli client is a LOCAL-DEV convenience only — it is mounted
+# into the compose `thunderid-setup` service so the dev seed can mint a token
+# non-interactively. Do NOT deploy this script in UAT/production; there, run a
+# stock ThunderID (image default resources only) and use an admin token obtained
+# interactively as AUTH_TOKEN for idp/sample-resources.sh (see idp/README.md).
 # ============================================================================
 
 # Source common functions from the same directory as this script
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]:-$0}")"
 source "${SCRIPT_DIR}/common.sh"
 
-ADMIN_CLI_SECRET="${ADMIN_CLI_SECRET:-1234}"
+# Fail closed on an unset secret rather than silently provisioning the insecure
+# default "1234" for this privileged (system-scoped) management client. This
+# script has no API_BASE (it targets the in-container server), so the only
+# escape hatch is the explicit ALLOW_DEFAULT_SECRETS=1 dev opt-in.
+if [[ -z "${ADMIN_CLI_SECRET:-}" ]]; then
+    if [[ "${ALLOW_DEFAULT_SECRETS:-0}" == "1" ]]; then
+        ADMIN_CLI_SECRET="1234"
+        log_warning "ADMIN_CLI_SECRET is unset; using INSECURE dev default '1234' (ALLOW_DEFAULT_SECRETS=1)."
+    else
+        log_error "ADMIN_CLI_SECRET is unset. Set it (e.g. in idp/.env) or pass ALLOW_DEFAULT_SECRETS=1 for an insecure dev run."
+        exit 1
+    fi
+fi
 
 # ============================================================================
 # Helpers (api_call / log_* come from common.sh)
