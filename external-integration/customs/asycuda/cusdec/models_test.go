@@ -25,7 +25,7 @@ func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	assert.Equal(t, "INTEGRATION_RESULT", reqLive.Event)
 	assert.Equal(t, "CBEX1", reqLive.Payload.CusdecRef.Office)
 	assert.Equal(t, 43254, reqLive.Payload.CusdecRef.Number)
-	assert.NoError(t, reqLive.validate())
+	assert.NoError(t, reqLive.Validate())
 
 	// Test spec prose format (eventType, processedAt, cusdecRef)
 	specJSON := []byte(`{
@@ -43,7 +43,7 @@ func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	assert.Equal(t, "INTEGRATION_RESULT", reqSpec.Event)
 	assert.Equal(t, "CBEX1", reqSpec.Payload.CusdecRef.Office)
 	assert.Equal(t, 43254, reqSpec.Payload.CusdecRef.Number)
-	assert.NoError(t, reqSpec.validate())
+	assert.NoError(t, reqSpec.Validate())
 }
 
 func TestCusdecEventRequest_DualFieldUnmarshaling(t *testing.T) {
@@ -59,5 +59,5 @@ func TestCusdecEventRequest_DualFieldUnmarshaling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "PAYMENT", req.Event)
 	assert.Equal(t, "CBEX1", req.Payload.CusdecRef.Office)
-	assert.NoError(t, req.validate())
+	assert.NoError(t, req.Validate())
 }

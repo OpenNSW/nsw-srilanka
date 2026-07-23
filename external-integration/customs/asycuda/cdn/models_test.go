@@ -24,7 +24,7 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "INTEGRATION_RESULT", reqLive.Event)
 	assert.False(t, reqLive.ProcessAt.IsZero())
-	assert.NoError(t, reqLive.validate())
+	assert.NoError(t, reqLive.Validate())
 
 	// Test spec prose format (eventType, processedAt)
 	specJSON := []byte(`{
@@ -41,7 +41,7 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "INTEGRATION_RESULT", reqSpec.Event)
 	assert.False(t, reqSpec.ProcessAt.IsZero())
-	assert.NoError(t, reqSpec.validate())
+	assert.NoError(t, reqSpec.Validate())
 }
 
 func TestCDNAcknowledgmentRequest_DualFieldUnmarshaling(t *testing.T) {
@@ -57,5 +57,5 @@ func TestCDNAcknowledgmentRequest_DualFieldUnmarshaling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ACKNOWLEDGMENT", req.Event)
 	assert.Equal(t, 2026, req.ProcessAt.Year())
-	assert.NoError(t, req.validate())
+	assert.NoError(t, req.Validate())
 }

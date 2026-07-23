@@ -4,9 +4,20 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
-
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 )
+
+// DocumentReference represents an ASYCUDA document reference (cdnRef or cusDecRef).
+type DocumentReference struct {
+	Year   string `json:"year"`
+	Office string `json:"office"`
+	Serial string `json:"serial"`
+	Number int    `json:"number"`
+}
+
+// IsValid reports whether all fields of the reference are populated and valid.
+func (r DocumentReference) IsValid() bool {
+	return r.Year != "" && r.Office != "" && r.Serial != "" && r.Number > 0
+}
 
 // CusdecStatus represents the lifecycle state of a Customs Declaration.
 type CusdecStatus string
@@ -21,13 +32,13 @@ const (
 )
 
 type cusdecResultPayload struct {
-	CusdecRef asycuda.DocumentReference `json:"cusDecRef"`
+	CusdecRef DocumentReference `json:"cusDecRef"`
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
 	type Alias cusdecResultPayload
 	aux := &struct {
-		AltRef asycuda.DocumentReference `json:"cusdecRef"`
+		AltRef DocumentReference `json:"cusdecRef"`
 		*Alias
 	}{
 		Alias: (*Alias)(p),
@@ -74,7 +85,7 @@ func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r CusdecIntegrationResultRequest) validate() error {
+func (r CusdecIntegrationResultRequest) Validate() error {
 	if r.EdgeID == "" {
 		return errors.New("edgeId is required")
 	}
@@ -91,13 +102,13 @@ func (r CusdecIntegrationResultRequest) validate() error {
 }
 
 type cusdecEventPayload struct {
-	CusdecRef asycuda.DocumentReference `json:"cusDecRef"`
+	CusdecRef DocumentReference `json:"cusDecRef"`
 }
 
 func (p *cusdecEventPayload) UnmarshalJSON(data []byte) error {
 	type Alias cusdecEventPayload
 	aux := &struct {
-		AltRef asycuda.DocumentReference `json:"cusdecRef"`
+		AltRef DocumentReference `json:"cusdecRef"`
 		*Alias
 	}{
 		Alias: (*Alias)(p),
@@ -141,7 +152,7 @@ func (r *CusdecEventRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r CusdecEventRequest) validate() error {
+func (r CusdecEventRequest) Validate() error {
 	if r.Event == "" {
 		return errors.New("event is required")
 	}

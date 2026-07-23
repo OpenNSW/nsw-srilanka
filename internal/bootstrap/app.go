@@ -33,6 +33,7 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
@@ -245,11 +246,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// ASYCUDA webhook stack.
 	cdnRepo := cdn.NewDispatchNoteRepository(db)
 	cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo)
-	cdnHandler := cdn.NewHTTPHandler(cdnWebhookService)
 
 	cusdecRepo := cusdec.NewDeclarationRepository(db)
 	cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
-	cusdecHandler := cusdec.NewHTTPHandler(cusdecWebhookService)
+
+	slceHandler := asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
@@ -341,14 +342,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", http.HandlerFunc(paymentHandler.HandleWebhook))
 	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
 
-	// ASYCUDA Webhooks (CusDec §5 Integration Result, Event Notifications, CDN §7.2 Integration Result, CDN §7.3 Acknowledgment).
+	// SLCE Webhook Endpoint (single central route handling all ASYCUDA/SLCE events).
 	// OAuth is disabled in the CIG test environment; add auth middleware before go-live.
-	mux.Handle("POST /webhooks/asycuda/cusdec/result", http.HandlerFunc(cusdecHandler.HandleIntegrationResult))
-	mux.Handle("POST /webhooks/asycuda/cusdec/payment", http.HandlerFunc(cusdecHandler.HandlePayment))
-	mux.Handle("POST /webhooks/asycuda/cusdec/warranting", http.HandlerFunc(cusdecHandler.HandleWarranting))
-	mux.Handle("POST /webhooks/asycuda/cusdec/release", http.HandlerFunc(cusdecHandler.HandleRelease))
-	mux.Handle("POST /webhooks/asycuda/cdn/result", http.HandlerFunc(cdnHandler.HandleIntegrationResult))
-	mux.Handle("POST /webhooks/asycuda/cdn/ack", http.HandlerFunc(cdnHandler.HandleAcknowledgment))
+	mux.Handle("POST /webhooks/slce", http.HandlerFunc(slceHandler.HandleWebhook))
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
