@@ -1,4 +1,4 @@
-package asycuda
+package cdn
 
 import (
 	"context"
@@ -9,13 +9,7 @@ import (
 // CDNWebhookService defines the use-case layer for processing asynchronous
 // ASYCUDA callbacks related to Cargo Dispatch Notes.
 type CDNWebhookService interface {
-	// ProcessIntegrationResult handles the §7.2 callback. It correlates the
-	// callback to the original submission using the edgId, then updates the
-	// dispatch note status to INTEGRATED or FAILED.
 	ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error
-
-	// ProcessAcknowledgment handles the §7.3 callback. It correlates using the
-	// cdnRef composite key and updates the dispatch note status to ACKNOWLEDGED.
 	ProcessAcknowledgment(ctx context.Context, req CDNAcknowledgmentRequest) error
 }
 
@@ -23,23 +17,11 @@ type cdnWebhookService struct {
 	repo DispatchNoteRepository
 }
 
-// NewCDNWebhookService creates a new CDNWebhookService backed by the given
-// repository.
+// NewCDNWebhookService creates a new CDNWebhookService backed by the given repository.
 func NewCDNWebhookService(repo DispatchNoteRepository) CDNWebhookService {
 	return &cdnWebhookService{repo: repo}
 }
 
-// ProcessIntegrationResult looks up the dispatch note by edgId (saved during
-// the initial CDN submission) and transitions its status based on the
-// integration outcome.
-//
-// On success (integrated == true):
-//   - Status → INTEGRATED
-//   - Stores the cdnRef assigned by ASYCUDA
-//
-// On failure (integrated == false):
-//   - Status → FAILED
-//   - The errors map is logged for diagnostics
 func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error {
 	slog.InfoContext(ctx, "processing CDN integration result",
 		"edg_id", req.EdgID,
@@ -77,7 +59,6 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 			"cdn_ref", req.Payload.CDNRef,
 		)
 	} else {
-		// If already failed, treat as idempotent success.
 		if note.Status == DispatchNoteStatusFailed {
 			slog.InfoContext(ctx, "dispatch note already failed, ignoring duplicate callback", "edg_id", req.EdgID)
 			return nil
@@ -98,8 +79,6 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	return nil
 }
 
-// ProcessAcknowledgment correlates the §7.3 callback using the composite
-// cdnRef and transitions the dispatch note status to ACKNOWLEDGED.
 func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAcknowledgmentRequest) error {
 	ref := req.Payload.CDNRef
 

@@ -1,4 +1,4 @@
-package asycuda
+package cdn
 
 import "errors"
 
@@ -14,7 +14,3 @@ var ErrDispatchNoteNotFoundByCDNRef = errors.New("dispatch note not found by cdn
 // ErrInvalidCallbackPayload indicates the ASYCUDA callback payload was
 // malformed, missing required fields, or otherwise failed validation.
 var ErrInvalidCallbackPayload = errors.New("invalid callback payload")
-
-// ErrWorkflowNotFoundByEdgeID indicates no task workflow matches the given edgeId.
-// This is a permanent condition — the caller should not retry.
-var ErrWorkflowNotFoundByEdgeID = errors.New("workflow not found by edgeId")

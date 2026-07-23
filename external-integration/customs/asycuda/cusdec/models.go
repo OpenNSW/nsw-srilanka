@@ -15,38 +15,65 @@ const (
 	CusdecStatusSubmitted  CusdecStatus = "SUBMITTED"
 	CusdecStatusIntegrated CusdecStatus = "INTEGRATED"
 	CusdecStatusFailed     CusdecStatus = "FAILED"
+	CusdecStatusPaid       CusdecStatus = "PAID"
+	CusdecStatusWarranted  CusdecStatus = "WARRANTED"
+	CusdecStatusReleased   CusdecStatus = "RELEASED"
 )
 
-// cusdecResultPayload is the nested "payload" object inside the §5
-// callback. It carries the assigned CusDec reference on success.
 type cusdecResultPayload struct {
 	CusdecRef asycuda.DocumentReference `json:"cusDecRef"`
+}
+
+func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
+	type Alias cusdecResultPayload
+	aux := &struct {
+		AltRef asycuda.DocumentReference `json:"cusdecRef"`
+		*Alias
+	}{
+		Alias: (*Alias)(p),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if !p.CusdecRef.IsValid() && aux.AltRef.IsValid() {
+		p.CusdecRef = aux.AltRef
+	}
+	return nil
 }
 
 // CusdecIntegrationResultRequest is the inbound DTO for the ASYCUDA §5 callback
 // pushed when CusDec integration succeeds or fails.
 type CusdecIntegrationResultRequest struct {
-	// EdgeID is the correlation UUID saved when the CusDec was originally submitted.
-	EdgeID string `json:"edgeId"`
-
-	// Integrated is true when ASYCUDA successfully integrated the CusDec.
-	Integrated bool `json:"integrated"`
-
-	// Event is the callback event type: "INTEGRATION_RESULT".
-	Event string `json:"event"`
-
-	// ProcessAt is the timestamp when ASYCUDA processed the CusDec.
-	ProcessAt time.Time `json:"processAt"`
-
-	// Payload carries the CusDec reference assigned by customs on success.
-	Payload cusdecResultPayload `json:"payload"`
-
-	// Errors contains error details when integration fails. Keys and structure
-	// are defined by ASYCUDA and vary by failure mode.
-	Errors json.RawMessage `json:"errors,omitempty"`
+	EdgeID     string              `json:"edgeId"`
+	Integrated bool                `json:"integrated"`
+	Event      string              `json:"event"`
+	ProcessAt  time.Time           `json:"processAt"`
+	Payload    cusdecResultPayload `json:"payload"`
+	Errors     json.RawMessage     `json:"errors,omitempty"`
 }
 
-// validate checks that a CusdecIntegrationResultRequest is well-formed.
+// UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
+func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
+	type Alias CusdecIntegrationResultRequest
+	aux := &struct {
+		EventType   string    `json:"eventType"`
+		ProcessedAt time.Time `json:"processedAt"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if r.Event == "" && aux.EventType != "" {
+		r.Event = aux.EventType
+	}
+	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
+		r.ProcessAt = aux.ProcessedAt
+	}
+	return nil
+}
+
 func (r CusdecIntegrationResultRequest) validate() error {
 	if r.EdgeID == "" {
 		return errors.New("edgeId is required")
@@ -57,18 +84,80 @@ func (r CusdecIntegrationResultRequest) validate() error {
 	if r.ProcessAt.IsZero() {
 		return errors.New("processAt is required")
 	}
-	// When integration succeeds the payload MUST carry a complete cusDecRef.
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
 		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
 	}
 	return nil
 }
 
-// CusdecDeclaration is the domain entity representing a Customs Declaration. It is
-// created/updated when callbacks arrive.
+type cusdecEventPayload struct {
+	CusdecRef asycuda.DocumentReference `json:"cusDecRef"`
+}
+
+func (p *cusdecEventPayload) UnmarshalJSON(data []byte) error {
+	type Alias cusdecEventPayload
+	aux := &struct {
+		AltRef asycuda.DocumentReference `json:"cusdecRef"`
+		*Alias
+	}{
+		Alias: (*Alias)(p),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if !p.CusdecRef.IsValid() && aux.AltRef.IsValid() {
+		p.CusdecRef = aux.AltRef
+	}
+	return nil
+}
+
+// CusdecEventRequest is the inbound DTO for ASYCUDA lifecycle event callbacks
+// (PAYMENT, WARRANTING, RELEASE).
+type CusdecEventRequest struct {
+	Event     string             `json:"event"`
+	ProcessAt time.Time          `json:"processAt"`
+	Payload   cusdecEventPayload `json:"payload"`
+}
+
+// UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
+func (r *CusdecEventRequest) UnmarshalJSON(data []byte) error {
+	type Alias CusdecEventRequest
+	aux := &struct {
+		EventType   string    `json:"eventType"`
+		ProcessedAt time.Time `json:"processedAt"`
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if r.Event == "" && aux.EventType != "" {
+		r.Event = aux.EventType
+	}
+	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
+		r.ProcessAt = aux.ProcessedAt
+	}
+	return nil
+}
+
+func (r CusdecEventRequest) validate() error {
+	if r.Event == "" {
+		return errors.New("event is required")
+	}
+	if r.ProcessAt.IsZero() {
+		return errors.New("processAt is required")
+	}
+	if !r.Payload.CusdecRef.IsValid() {
+		return errors.New("payload.cusDecRef must be fully populated")
+	}
+	return nil
+}
+
+// CusdecDeclaration is the domain entity representing a Customs Declaration.
 type CusdecDeclaration struct {
 	ID           string          `json:"id" gorm:"type:text;not null;primaryKey"`
-	EdgeID       string          `json:"edge_id" gorm:"type:text;not null;uniqueIndex"` // Correlation UUID from submission
+	EdgeID       string          `json:"edge_id" gorm:"type:text;not null;uniqueIndex"`
 	Status       CusdecStatus    `json:"status" gorm:"type:text;not null;index"`
 	CusdecYear   string          `json:"cusdec_year" gorm:"index:idx_cusdec_ref"`
 	CusdecOffice string          `json:"cusdec_office" gorm:"index:idx_cusdec_ref"`

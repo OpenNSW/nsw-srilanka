@@ -14,6 +14,7 @@ import (
 // ASYCUDA callbacks related to Customs Declarations.
 type WebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error
+	ProcessEvent(ctx context.Context, req CusdecEventRequest) error
 }
 
 // TaskCompleter defines the task completion interface needed from the workflow
@@ -174,5 +175,127 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
 	}
 
+	return nil
+}
+
+func (s *webhookService) ProcessEvent(ctx context.Context, req CusdecEventRequest) error {
+	ref := req.Payload.CusdecRef
+	slog.InfoContext(ctx, "processing CusDec event notification",
+		"event", req.Event,
+		"cusdec_ref", ref,
+	)
+
+	decl, err := s.repo.GetByCusdecRef(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve CusDec declaration by ref: %w", err)
+	}
+	if decl == nil {
+		slog.WarnContext(ctx, "no CusDec declaration found for ref", "ref", ref)
+		return fmt.Errorf("cusDecRef %v: %w", ref, ErrCusdecNotFoundByRef)
+	}
+
+	var taskTemplateID string
+	var targetStatus CusdecStatus
+	var payload map[string]any
+
+	switch req.Event {
+	case "PAYMENT":
+		taskTemplateID = "customs-wait-payment"
+		targetStatus = CusdecStatusPaid
+		payload = map[string]any{
+			"__command":      "submit",
+			"payment_status": "PAID",
+		}
+	case "WARRANTING":
+		taskTemplateID = "customs-wait-warranting"
+		targetStatus = CusdecStatusWarranted
+		payload = map[string]any{
+			"__command":         "submit",
+			"warranting_status": "WARRANTED",
+		}
+	case "RELEASE":
+		taskTemplateID = "customs-wait-release"
+		targetStatus = CusdecStatusReleased
+		payload = map[string]any{
+			"__command":      "submit",
+			"release_status": "RELEASED",
+		}
+	default:
+		return fmt.Errorf("unsupported CusDec event type: %s", req.Event)
+	}
+
+	return s.completeEventTaskAndMetadata(ctx, decl, taskTemplateID, targetStatus, payload, req)
+}
+
+func (s *webhookService) completeEventTaskAndMetadata(
+	ctx context.Context,
+	decl *CusdecDeclaration,
+	taskTemplateID string,
+	targetStatus CusdecStatus,
+	payload map[string]any,
+	req CusdecEventRequest,
+) error {
+	var record struct {
+		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
+	}
+	err := s.db.WithContext(ctx).
+		Table("task_records_v2").
+		Where("data->'cig'->>'edgeId' = ? OR data->'cig'->>'edge_id' = ?", decl.EdgeID, decl.EdgeID).
+		Select("parent_workflow_id").
+		First(&record).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if decl.Status == targetStatus {
+				slog.InfoContext(ctx, "workflow record not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
+				return nil
+			}
+			slog.WarnContext(ctx, "workflow record not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
+			decl.Status = targetStatus
+			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
+				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to locate workflow record: %w", err)
+	}
+
+	var task struct {
+		TaskID string `gorm:"column:task_id"`
+	}
+	err = s.db.WithContext(ctx).
+		Table("task_records_v2").
+		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
+			record.ParentWorkflowID, taskTemplateID, "QUEUED_EXTERNALLY").
+		Select("task_id").
+		First(&task).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if decl.Status == targetStatus {
+				slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
+				return nil
+			}
+			slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
+			decl.Status = targetStatus
+			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
+				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to locate event task %s: %w", taskTemplateID, err)
+	}
+
+	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, payload); err != nil {
+		slog.ErrorContext(ctx, "failed to complete event task step", "task_id", task.TaskID, "error", err)
+		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
+	}
+
+	decl.Status = targetStatus
+	if err := s.repo.Update(ctx, decl); err != nil {
+		return fmt.Errorf("failed to update CusDec declaration status to %s: %w", targetStatus, err)
+	}
+
+	slog.InfoContext(ctx, "successfully processed CusDec event notification", "edge_id", decl.EdgeID, "status", targetStatus)
 	return nil
 }
