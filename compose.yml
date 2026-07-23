@@ -57,7 +57,7 @@ services:
   # client. Project sample resources are NOT seeded here: a full `docker compose
   # up` auto-seeds them via the `thunderid-seed` service (Stage D) once thunderid
   # is healthy. To seed by hand, mint a token from admin-cli and run the script:
-  #   TOKEN=$(curl -k -s -u "ADMIN_CLI:1234" -d grant_type=client_credentials \
+  #   TOKEN=$(curl -k -s -u "ADMIN_CLI:$ADMIN_CLI_SECRET" -d grant_type=client_credentials \
   #     -d scope=system https://localhost:8090/oauth2/token | jq -r .access_token)
   #   API_BASE=https://localhost:8090 AUTH_TOKEN="$TOKEN" ./idp/sample-resources.sh
   # (the running server requires auth; only this bootstrap container is security-disabled.)
@@ -127,7 +127,7 @@ services:
         set -e
         apk add --no-cache bash curl jq coreutils >/dev/null 2>&1
         echo "Fetching ADMIN_CLI management token..."
-        TOKEN=$$(curl -k -s -u "ADMIN_CLI:$${ADMIN_CLI_SECRET:-1234}" \
+        TOKEN=$$(curl -k -s -u "ADMIN_CLI:$${ADMIN_CLI_SECRET:?ADMIN_CLI_SECRET must be set (see idp/.env / idp/.env.example)}" \
           -H "Content-Type: application/x-www-form-urlencoded" \
           -d "grant_type=client_credentials" -d "scope=system" \
           https://thunderid:8090/oauth2/token | jq -r '.access_token // empty')

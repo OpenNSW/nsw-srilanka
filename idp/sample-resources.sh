@@ -34,10 +34,16 @@ Environment:
                 target runs with security disabled, e.g. the compose bootstrap).
   INSECURE      "1" (default) skips TLS verification for self-signed localhost
                 certs. Set INSECURE=0 to enforce certificate validation.
+  ALLOW_DEFAULT_SECRETS
+                Set to 1 to allow the insecure "1234" fallback for unset secrets
+                on a NON-localhost target. Default 0: an unset SAMPLE_USER_PASSWORD
+                or M2M_CLIENT_SECRET fails fast (exit non-zero) rather than seeding
+                a default credential. Localhost targets always allow the fallback.
 
   SAMPLE_USER_PASSWORD, M2M_CLIENT_SECRET, and the per-entity overrides documented
   in idp/.env.example tune the seeded secrets. Values in idp/.env are loaded
-  automatically and take precedence.
+  automatically and take precedence. When unset, they fall back to "1234" only for
+  localhost or ALLOW_DEFAULT_SECRETS=1 runs; otherwise the script exits.
 
 Flags:
   -h, --help    Show this help and exit.
@@ -66,6 +72,7 @@ API_BASE="${API_BASE%/}"            # strip a single trailing slash
 AUTH_TOKEN="${AUTH_TOKEN:-}"
 INSECURE="${INSECURE:-1}"
 ALLOW_NO_AUTH="${ALLOW_NO_AUTH:-0}"
+ALLOW_DEFAULT_SECRETS="${ALLOW_DEFAULT_SECRETS:-0}"
 
 # ============================================================================
 # Shared engine library — logging, is_localhost, api_call, JSON lookups
@@ -90,6 +97,18 @@ if [[ -z "$AUTH_TOKEN" && "$ALLOW_NO_AUTH" != "1" ]]; then
     fi
 fi
 
+# ============================================================================
+# Shared fallback secrets (overridable via env / .env). Per-entity passwords,
+# M2M client secrets, and per-SPA redirect URIs are referenced BY ENV-VAR NAME
+# from the resources/ config and resolved at provisioning time (resolve_secret);
+# only these two shared fallbacks live in the script. Guarded here — BEFORE the
+# network probe — so a misconfigured non-localhost run fails fast (naming the
+# missing var) without falling back to the insecure default "1234". Localhost /
+# ALLOW_DEFAULT_SECRETS=1 keep the dev convenience default (see resources-lib.sh).
+# ============================================================================
+require_secret_or_default SAMPLE_USER_PASSWORD "sample user password"
+require_secret_or_default M2M_CLIENT_SECRET   "M2M client secret"
+
 _PROBE=$(api_call GET "/organization-units/tree/default") || true
 _PROBE_CODE="${_PROBE: -3}"
 if [[ "$_PROBE_CODE" == "401" || "$_PROBE_CODE" == "403" ]]; then
@@ -99,15 +118,6 @@ elif [[ "$_PROBE_CODE" == "000" || -z "$_PROBE_CODE" ]]; then
     log_error "Could not reach the IdP at $API_BASE (connection failed). Check API_BASE / network / TLS (INSECURE=$INSECURE)."
     exit 1
 fi
-
-# ============================================================================
-# Fallback secrets (overridable via env / .env). Per-entity passwords, M2M
-# client secrets, and per-SPA redirect URIs are referenced BY ENV-VAR NAME from
-# the resources/ config and resolved at provisioning time (resolve_secret /
-# indirect expansion); only these two shared fallbacks live in the script.
-# ============================================================================
-SAMPLE_USER_PASSWORD="${SAMPLE_USER_PASSWORD:-1234}"
-M2M_CLIENT_SECRET="${M2M_CLIENT_SECRET:-1234}"
 
 # ============================================================================
 # Entity create/assign helpers (idempotent). api_call, the get_*/list_* lookups,

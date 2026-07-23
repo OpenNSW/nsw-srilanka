@@ -50,6 +50,30 @@ log_error()   { printf '[ERROR] %s\n'   "$*" >&2; }
 # ----------------------------------------------------------------------------
 is_localhost() { [[ "$API_BASE" =~ ^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:[0-9]+)?$ ]]; }
 
+# ----------------------------------------------------------------------------
+# Secret guards. Insecure "1234" fallbacks are allowed ONLY for an explicitly
+# local/dev run: a localhost API_BASE, or an explicit ALLOW_DEFAULT_SECRETS=1
+# opt-in. Any other (non-localhost) target fails closed rather than silently
+# provisioning a default credential. See idp/README.md and .env.example.
+# ----------------------------------------------------------------------------
+allow_insecure_defaults() { is_localhost || [[ "${ALLOW_DEFAULT_SECRETS:-0}" == "1" ]]; }
+
+# require_secret_or_default <VAR_NAME> <human label>
+# If VAR is unset/empty: fall back to 1234 (with a warning) when insecure
+# defaults are allowed, otherwise log an error and exit non-zero.
+require_secret_or_default() {
+    local name="$1" label="$2"
+    [[ -n "${!name:-}" ]] && return
+    if allow_insecure_defaults; then
+        printf -v "$name" '%s' '1234'
+        log_warning "${label} (${name}) is unset; using INSECURE dev default '1234' (localhost or ALLOW_DEFAULT_SECRETS=1)."
+    else
+        log_error "${label} (${name}) is unset and the target is not localhost (API_BASE=${API_BASE})."
+        log_error "Set ${name} (e.g. in idp/.env) or pass ALLOW_DEFAULT_SECRETS=1 to force an insecure run."
+        exit 1
+    fi
+}
+
 api_call() {
     local method="$1" path="$2" body="${3:-}"
     local -a curl_args=(
@@ -215,6 +239,15 @@ resolve_secret() {
     val=""
     [[ -n "$ov" ]] && val="${!ov:-}"
     if [[ -z "$val" && -n "$def" ]]; then val="${!def:-}"; fi
+    # An empty secret is never valid: fail closed rather than provisioning a
+    # blank/unusable credential (e.g. an override/default env-var name that
+    # resolves to nothing). The shared SAMPLE_USER_PASSWORD / M2M_CLIENT_SECRET
+    # fallbacks are enforced up front by require_secret_or_default.
+    if [[ -z "$val" ]]; then
+        log_error "Could not resolve a secret from spec ${spec} (override/default env vars are unset)."
+        log_error "Set the referenced variable (see idp/.env.example) and re-run."
+        exit 1
+    fi
     printf '%s' "$val"
 }
 
