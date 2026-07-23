@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -97,12 +98,20 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	db, err := database.New(cfg.Database)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		errStr := err.Error()
+		if cfg.Database.Password != "" {
+			errStr = strings.ReplaceAll(errStr, cfg.Database.Password, "[REDACTED]")
+		}
+		return nil, fmt.Errorf("failed to connect to database: %s", errStr)
 	}
 
 	if err := database.HealthCheck(db); err != nil {
 		_ = database.Close(db)
-		return nil, fmt.Errorf("database health check failed: %w", err)
+		errStr := err.Error()
+		if cfg.Database.Password != "" {
+			errStr = strings.ReplaceAll(errStr, cfg.Database.Password, "[REDACTED]")
+		}
+		return nil, fmt.Errorf("database health check failed: %s", errStr)
 	}
 
 	// -------------------------------------------------------------------
