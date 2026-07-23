@@ -58,7 +58,7 @@ func Load() (*Config, error) {
 			Username:               getEnvOrDefault("DB_USERNAME", "postgres"),
 			Password:               os.Getenv("DB_PASSWORD"), // No default for security
 			Name:                   getEnvOrDefault("DB_NAME", "nsw_db"),
-			SSLMode:                getEnvOrDefault("DB_SSLMODE", "disable"),
+			SSLMode:                getEnvOrDefault("DB_SSLMODE", "require"),
 			MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
 			MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
 			MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),

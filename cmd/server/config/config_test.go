@@ -335,8 +335,25 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Database.Password != "testpassword" {
 		t.Errorf("Database.Password not propagated")
 	}
+	if cfg.Database.SSLMode != "require" {
+		t.Errorf("Database.SSLMode = %q, want require", cfg.Database.SSLMode)
+	}
 	if cfg.Temporal.Namespace != "default" {
 		t.Errorf("Temporal.Namespace = %q, want default", cfg.Temporal.Namespace)
+	}
+}
+
+func TestLoad_DefaultDBSSLModeRequire(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("DB_SSLMODE", "") // Unset/empty -> should default to "require"
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Database.SSLMode != "require" {
+		t.Errorf("expected DB.SSLMode to default to require when unset, got %q", cfg.Database.SSLMode)
 	}
 }
 
