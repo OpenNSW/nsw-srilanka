@@ -29,7 +29,7 @@ func validConfig() *Config {
 			ServiceURL: "http://localhost:8080",
 		},
 		CORS: cors.Config{
-			AllowedOrigins: []string{"*"},
+			AllowedOrigins: []string{"http://localhost:3000"},
 		},
 		Storage: storage.Config{
 			Type:           "local",
@@ -318,6 +318,7 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	t.Setenv("DB_PASSWORD", "testpassword")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 
 	cfg, err := Load()
 	if err != nil {
@@ -340,9 +341,39 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 }
 
+func TestLoad_DefaultFailClosed(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when CORS_ALLOWED_ORIGINS is not set, got nil")
+	}
+	if !containsString(err.Error(), "invalid CORS configuration") {
+		t.Errorf("expected error mentioning 'invalid CORS configuration', got: %v", err)
+	}
+}
+
+func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "*")
+	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for wildcard origin with credentials=true, got nil")
+	}
+	if !containsString(err.Error(), "invalid CORS configuration") {
+		t.Errorf("expected error mentioning 'invalid CORS configuration', got: %v", err)
+	}
+}
+
 func TestLoad_CustomPort(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVER_PORT", "9090")
 	t.Setenv("SERVICE_URL", "")
 	t.Setenv("STORAGE_LOCAL_PUBLIC_URL", "")
@@ -365,6 +396,7 @@ func TestLoad_CustomPort(t *testing.T) {
 func TestLoad_CustomServiceURL(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVICE_URL", "https://api.example.com")
 
 	cfg, err := Load()
@@ -379,6 +411,7 @@ func TestLoad_CustomServiceURL(t *testing.T) {
 func TestLoad_CustomLogLevel(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVER_LOG_LEVEL", "debug")
 
 	cfg, err := Load()
@@ -392,6 +425,8 @@ func TestLoad_CustomLogLevel(t *testing.T) {
 
 func TestLoad_InvalidServiceURL(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVICE_URL", "not-a-url")
 
 	_, err := Load()
@@ -499,6 +534,18 @@ func TestConfigValidate_CORSError(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid CORS configuration") {
 		t.Errorf("expected CORS config error, got: %v", err)
+	}
+}
+
+func TestConfigValidate_CORSWildcardCredentialsError(t *testing.T) {
+	cfg := validConfig()
+	cfg.CORS = cors.Config{
+		AllowedOrigins:   []string{"*"},
+		AllowCredentials: true,
+	}
+	err := cfg.Validate()
+	if err == nil || !containsString(err.Error(), "invalid CORS configuration") {
+		t.Errorf("expected invalid CORS configuration error for wildcard origin with AllowCredentials=true, got: %v", err)
 	}
 }
 
