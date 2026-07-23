@@ -146,10 +146,10 @@ type DispatchNote struct {
 	ID        string             `json:"id" gorm:"type:text;not null;primaryKey"`
 	EdgID     string             `json:"edg_id" gorm:"type:text;not null;uniqueIndex"`
 	Status    DispatchNoteStatus `json:"status" gorm:"type:text;not null;index"`
-	CDNYear   string             `json:"cdn_year" gorm:"index:idx_cdn_ref"`
-	CDNOffice string             `json:"cdn_office" gorm:"index:idx_cdn_ref"`
-	CDNSerial string             `json:"cdn_serial" gorm:"index:idx_cdn_ref"`
-	CDNNumber int                `json:"cdn_number" gorm:"index:idx_cdn_ref"`
+	CDNYear   string             `json:"cdn_year" gorm:"column:cdn_year;index:idx_cdn_ref"`
+	CDNOffice string             `json:"cdn_office" gorm:"column:cdn_office;index:idx_cdn_ref"`
+	CDNSerial string             `json:"cdn_serial" gorm:"column:cdn_serial;index:idx_cdn_ref"`
+	CDNNumber int                `json:"cdn_number" gorm:"column:cdn_number;index:idx_cdn_ref"`
 	Errors    json.RawMessage    `json:"errors" gorm:"type:jsonb"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at"`
