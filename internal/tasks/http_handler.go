@@ -14,7 +14,16 @@ import (
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+)
+
+const (
+	errTaskIDRequired      = "task id is required"
+	errTaskNotFound        = "task not found"
+	errAuthenticationReq   = "authentication required"
+	errForbiddenTaskAction = "you may not perform this action on this task"
+	errInvalidRequestBody  = "invalid request body"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -40,24 +49,23 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	// task's ownership bounds before returning ZoneView.
 	taskID := r.PathValue("id")
 	if taskID == "" {
-		writeJSONError(w, http.StatusBadRequest, "task id is required")
+		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
 
 	record, ok := h.Store.GetTask(r.Context(), taskID)
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "task not found")
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
 
 	zv, err := h.Assembler.Assemble(r.Context(), record)
 	if err != nil {
-		slog.Error("tasks: failed to assemble zone view", "taskId", taskID, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "An internal error occurred while loading the task")
+		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, zv)
+	httputil.JSON(w, http.StatusOK, zv)
 }
 
 // HandleCompleteTaskStep advances a task by submitting a step payload.
@@ -69,8 +77,8 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// task's ownership bounds before completing the step.
 	taskID := r.PathValue("id")
 	if taskID == "" {
-		writeJSONError(w, http.StatusBadRequest, "task id is required")
-		slog.Error("tasks: missing task id in request")
+		slog.Error("tasks: missing task id in request", "traceId", httputil.TraceID(r))
+		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
 
@@ -78,8 +86,8 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	command, payload, status, err := parseCompleteTaskStepRequest(r, pathCommand)
 	if err != nil {
-		writeJSONError(w, status, err.Error())
-		slog.Error("tasks: failed to parse request", "taskId", taskID, "error", err)
+		slog.Error("tasks: failed to parse request", "taskId", taskID, "error", err, "traceId", httputil.TraceID(r))
+		httputil.Error(w, r, status, errInvalidRequestBody)
 		return
 	}
 
@@ -88,13 +96,12 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		switch {
 		case errors.Is(err, taskauthz.ErrUnauthenticated):
-			writeJSONError(w, http.StatusUnauthorized, "authentication required")
+			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
 		case errors.Is(err, taskauthz.ErrForbidden):
-			slog.Warn("tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
-			writeJSONError(w, http.StatusForbidden, "you may not perform this action on this task")
+			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err, "traceId", httputil.TraceID(r))
+			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 		default:
-			slog.Error("tasks: failed to complete task step", "taskId", taskID, "error", err)
-			writeJSONError(w, http.StatusInternalServerError, "An internal error occurred while processing the task")
+			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
 		return
 	}
@@ -108,7 +115,8 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 	if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
 		// An empty body is a valid acknowledge-style completion; only fail on genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
-			return "", nil, http.StatusBadRequest, errors.New("invalid request body: " + err.Error())
+			slog.WarnContext(r.Context(), "tasks: malformed request body", "error", err, "traceId", httputil.TraceID(r))
+			return "", nil, http.StatusBadRequest, errors.New("invalid request body: malformed JSON")
 		}
 	}
 
@@ -155,16 +163,4 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 	payload["__command"] = command
 
 	return command, payload, http.StatusOK, nil
-}
-
-func writeJSONResponse(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		slog.Error("tasks: failed to encode JSON response", "error", err)
-	}
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSONResponse(w, status, map[string]string{"error": message})
 }

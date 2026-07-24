@@ -1,7 +1,6 @@
 package consignment
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,8 +9,17 @@ import (
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/pagination"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+)
+
+const (
+	errUnauthorized          = "unauthorized"
+	errConsignmentIDRequired = "consignment ID is required"
+	errInvalidRole           = "query param role must be trader or cha"
+	errCompanyNotFound       = "company not found"
+	errConsignmentNotFound   = "consignment not found"
 )
 
 type Router struct {
@@ -32,14 +40,13 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.User == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
 
 	traderID := authCtx.User.ID
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID)
 	if err != nil {
-		slog.Error("failed to create and start consignment", "error", err)
 		c.audit.Record(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionCreate,
@@ -49,11 +56,10 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 				"error": err.Error(),
 			},
 		})
-		http.Error(w, "failed to create consignment: "+err.Error(), http.StatusInternalServerError)
+		httputil.InternalServerError(w, r, "failed to create and start consignment", err)
 		return
 	}
 	if consignment == nil {
-		slog.Error("consignment is nil after successful creation")
 		c.audit.Record(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionCreate,
@@ -63,7 +69,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 				"error": "consignment is nil after successful creation",
 			},
 		})
-		http.Error(w, "failed to create consignment: empty response", http.StatusInternalServerError)
+		httputil.InternalServerError(w, r, "consignment is nil after successful creation", nil)
 		return
 	}
 
@@ -80,13 +86,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 			"chaCompanyId":    consignment.ChaCompanyID,
 		},
 	})
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(consignment); err != nil {
-		slog.Error("failed to encode response for consignment", "error", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	httputil.JSON(w, http.StatusCreated, consignment)
 }
 
 // buildConsignmentFilter parses optional query filters (state, flow, q) from the request.
@@ -112,7 +112,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.User == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
 
@@ -123,25 +123,25 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 	offset, limit, err := pagination.ParsePaginationParams(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err, "traceId", httputil.TraceID(r))
+		httputil.Error(w, r, http.StatusBadRequest, "invalid pagination parameters")
 		return
 	}
 	filter := buildConsignmentFilter(r, offset, limit)
 
 	// Role-based identity resolution.
 	if role != "trader" && role != "cha" {
-		http.Error(w, "query param role must be trader or cha", http.StatusBadRequest)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRole)
 		return
 	}
 
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) {
-			http.Error(w, "company profile not found for user", http.StatusForbidden)
+			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
-		slog.Error("failed to resolve user company", "ouHandle", authCtx.User.OUHandle, "error", err)
-		http.Error(w, "failed to resolve user company", http.StatusInternalServerError)
+		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", authCtx.User.OUHandle)
 		return
 	}
 
@@ -153,16 +153,10 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 	consignments, err := c.cs.ListConsignments(ctx, filter)
 	if err != nil {
-		slog.Error("failed to retrieve consignments", "error", err)
-		http.Error(w, "failed to retrieve consignments", http.StatusInternalServerError)
+		httputil.InternalServerError(w, r, "failed to retrieve consignments", err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(consignments); err != nil {
-		slog.Error("failed to encode response", "error", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	httputil.JSON(w, http.StatusOK, consignments)
 }
 
 // HandleGetConsignmentByID handles GET /api/v1/consignments/{id}.
@@ -170,12 +164,12 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.User == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
 	consignmentID := r.PathValue("id")
 	if consignmentID == "" {
-		http.Error(w, "consignment ID is required", http.StatusBadRequest)
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
 		return
 	}
 
@@ -184,11 +178,10 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
-			http.Error(w, "company profile not found for user", http.StatusForbidden)
+			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
-		slog.Error("failed to resolve user company", "ouHandle", authCtx.User.OUHandle, "error", err)
-		http.Error(w, "failed to resolve user company", http.StatusInternalServerError)
+		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", authCtx.User.OUHandle)
 		return
 	}
 
@@ -210,25 +203,19 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 					"callerCompanyId": userCompany.ID,
 				},
 			})
-			// Return 404, not 403, so a cross-company read is indistinguishable from a
+			// Respond with ErrConsignmentNotFound's text, not ErrAccessDenied's, and
+			// 404 (not 403), so a cross-company read is indistinguishable from a
 			// non-existent consignment and cannot be used to probe which IDs exist.
-			http.Error(w, "consignment not found", http.StatusNotFound)
+			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
 			return
 		case errors.Is(err, ErrConsignmentNotFound):
-			http.Error(w, "consignment not found", http.StatusNotFound)
+			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
 			return
 		default:
-			slog.Error("failed to retrieve consignment", "error", err)
-			http.Error(w, "failed to retrieve consignment", http.StatusInternalServerError)
+			httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
 			return
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(consignment); err != nil {
-		slog.Error("failed to encode response", "error", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	httputil.JSON(w, http.StatusOK, consignment)
 }

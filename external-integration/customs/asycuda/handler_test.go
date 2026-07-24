@@ -298,7 +298,7 @@ func TestSLCEHandler_InternalServerErrors(t *testing.T) {
 	handler.HandleWebhook(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "internal server error")
+	assert.Contains(t, w.Body.String(), "An error occurred while processing your request")
 }
 
 func TestSLCEHandler_UnknownEvent(t *testing.T) {

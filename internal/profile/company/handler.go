@@ -1,12 +1,12 @@
 package company
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/OpenNSW/core/pagination"
+	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 )
 
 // Handler exposes company profile endpoints.
@@ -26,7 +26,7 @@ func (h *Handler) HandleGetCompanies(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("has_cha"); v != "" {
 		parsed, err := strconv.ParseBool(v)
 		if err != nil {
-			http.Error(w, "invalid has_cha (expected true or false)", http.StatusBadRequest)
+			httputil.Error(w, r, http.StatusBadRequest, "invalid has_cha (expected true or false)")
 			return
 		}
 		filter.HasCHA = &parsed
@@ -37,8 +37,8 @@ func (h *Handler) HandleGetCompanies(w http.ResponseWriter, r *http.Request) {
 
 	offset, limit, err := pagination.ParsePaginationParams(r)
 	if err != nil {
-		http.Error(w, "invalid pagination parameters", http.StatusBadRequest)
-		slog.Error("invalid pagination parameters", "error", err)
+		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err, "traceId", httputil.TraceID(r))
+		httputil.Error(w, r, http.StatusBadRequest, "invalid pagination parameters")
 		return
 	}
 	filter.Offset = offset
@@ -46,16 +46,9 @@ func (h *Handler) HandleGetCompanies(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.svc.ListCompanies(r.Context(), filter)
 	if err != nil {
-		http.Error(w, "failed to retrieve companies", http.StatusInternalServerError)
-		slog.Error("failed to retrieve companies", "error", err)
+		httputil.InternalServerError(w, r, "failed to retrieve companies", err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		slog.Error("failed to encode company response", "error", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	httputil.JSON(w, http.StatusOK, result)
 }
