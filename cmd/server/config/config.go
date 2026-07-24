@@ -169,11 +169,6 @@ func (c *Config) Validate() error {
 	if err := c.CORS.Validate(); err != nil {
 		return fmt.Errorf("invalid CORS configuration: %w", err)
 	}
-	for _, origin := range c.CORS.AllowedOrigins {
-		if origin == "*" && c.CORS.AllowCredentials {
-			return fmt.Errorf("invalid CORS configuration: wildcard origin '*' is not allowed when AllowCredentials is true")
-		}
-	}
 	if err := c.Notification.Validate(); err != nil {
 		return fmt.Errorf("invalid notification configuration: %w", err)
 	}
