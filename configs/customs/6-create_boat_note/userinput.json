@@ -1,8 +1,0 @@
-{
-  "id": "customs-boat-note--user-input",
-  "task_type": "USER_INPUT",
-  "output_namespace": "userform",
-  "plugin_properties": {
-    "user_jsonforms_id": "customs-boat-note--user-form"
-  }
-}

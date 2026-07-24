@@ -1,6 +1,0 @@
-{
-  "id": "trade-prepare-split-items-flow",
-  "type": "SYSTEM",
-  "workflow_id": "trade-prepare-split-items-flow",
-  "render_config_id": "trade-prepare-split-items-flow:render"
-}

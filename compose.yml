@@ -272,6 +272,17 @@ services:
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
       - TASK_AUTHZ_CONFIG_PATH=${TASK_AUTHZ_CONFIG_PATH:-configs/task_authz.json}
+      # Workflow/form artifacts are no longer baked into the repo/image; they are
+      # fetched at startup from the public OpenNSW/one-trade-artifacts repo under
+      # the tnsw/ base path. `make dev` works with no local clone. Override any of
+      # these in .env (e.g. ARTIFACT_LOADER_TYPE=local with a local clone).
+      - ARTIFACT_LOADER_TYPE=${ARTIFACT_LOADER_TYPE:-github}
+      - ARTIFACT_GITHUB_OWNER=${ARTIFACT_GITHUB_OWNER:-OpenNSW}
+      - ARTIFACT_GITHUB_REPO=${ARTIFACT_GITHUB_REPO:-one-trade-artifacts}
+      - ARTIFACT_GITHUB_REF=${ARTIFACT_GITHUB_REF:-main}
+      - ARTIFACT_GITHUB_BASE_PATH=${ARTIFACT_GITHUB_BASE_PATH:-tnsw}
+      - ARTIFACT_GITHUB_TOKEN=${ARTIFACT_GITHUB_TOKEN:-}
+      - ARTIFACT_LOCAL_ROOT=${ARTIFACT_LOCAL_ROOT:-configs}
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
     depends_on:

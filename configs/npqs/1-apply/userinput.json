@@ -1,8 +1,0 @@
-{
-  "id": "npqs-apply-phyto-cert--user-input",
-  "task_type": "USER_INPUT",
-  "output_namespace": "userform",
-  "plugin_properties": {
-    "user_jsonforms_id": "npqs-apply-phyto-cert--user-form"
-  }
-}

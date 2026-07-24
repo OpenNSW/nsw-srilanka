@@ -1,4 +1,0 @@
-{
-  "id": "npqs-pay-certificate-fee--instructions-wrapper",
-  "template": "{{ .instructions }}"
-}

@@ -27,15 +27,12 @@ nsw-srilanka/
 ├── migrations/                           # PostgreSQL migration files (up/down SQL)
 ├── portals/                              # Trader Portal frontend (React/Vite monorepo)
 ├── idp/                                  # Identity Provider configuration and seed resources
-├── configs/
-│   ├── manifest.json                        # Artifact registry manifest — lists all workflow/form configs
+├── configs/                                 # Runtime configs only (no workflow/form artifacts)
 │   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
 │   ├── services.example.json                # Template for services.json (local/native dev — localhost)
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── notification.example.json            # Template for notification.json
-│   ├── fcau/                                # FCAU health-certificate workflow, JSONForms, render configs
-│   ├── trade/                               # Trade (consignment) workflow and form configs
-│   └── npqs/                               # NPQS workflow and form configs
+│   └── task_authz.example.json             # Template for task_authz.json
 ├── .env.example                          # Template for environment variables
 ├── .gitignore
 ├── Dockerfile
@@ -43,7 +40,7 @@ nsw-srilanka/
 └── go.sum
 ```
 
-The agency-specific workflow definitions live under `configs/<agency_code>/` as JSON files (workflow graphs, JSONForms schemas, render configs). All behaviour is configured through these JSON files — the Go server itself is intentionally thin. The `configs/manifest.json` file is the index that tells the artifact registry which files to load at startup.
+The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured via `ARTIFACT_*` env — see [`.env.example`](.env.example)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which files to load at startup.
 
 For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
 
@@ -164,7 +161,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"nsw-backend"}`.
-- Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations from `configs/manifest.json`.
+- Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)
 
@@ -282,11 +279,9 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 |---------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
 | `.env`                                | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)           | `.env.example`                                |
 | `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/env.example`                             |
-| `configs/manifest.json`               | Artifact registry index — lists every workflow/form/render config file          | Committed to the repository                   |
 | `configs/services.docker.json`        | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json`       |
 | `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
 | `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
 | `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
-| `configs/<agency_code>/`              | Agency workflow definitions, JSONForms schemas, and render configs              | Committed to the repository                   |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

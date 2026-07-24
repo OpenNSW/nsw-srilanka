@@ -107,9 +107,12 @@ WORKDIR /app
 COPY --chown=appuser:appuser --from=builder /out/server /app/server
 COPY --chown=appuser:appuser --from=builder /out/otc /usr/local/bin/otc
 
-# Bake application configs into the image. These files are tracked in git and
-# version with the code (workflow/form definitions, payment_methods.json,
-# manifest, notification, etc.), and the payment registry reads them at boot.
+# Bake runtime configs into the image (services*.json, payment_methods.json,
+# notification.json, task_authz.json, argus/…). Workflow/form artifacts and the
+# manifest are NOT baked here — they are fetched at startup by the pluggable
+# artifact loader (default: the OpenNSW/one-trade-artifacts GitHub repo; see
+# ARTIFACT_* env in compose.yml and .env.example), so the image no longer couples
+# the code to one deployment's workflow content.
 # Environment-specific values (e.g. services.json) are still overlaid at runtime
 # via ConfigMap/bind mount; a host bind mount over /app/configs (docker-compose)
 # also continues to take precedence over what is baked here.

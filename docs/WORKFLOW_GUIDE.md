@@ -6,6 +6,9 @@ This document serves as an exhaustive reference for creating, modifying, and deb
 
 ## 1. Directory Structure: Folder-as-Task Convention
 
+> [!IMPORTANT]
+> These workflow/form artifacts are **not** committed to this application repo. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path (`tnsw/manifest.json` + `tnsw/<agency_code>/…`) and are fetched at startup by the artifact loader (see `ARTIFACT_*` env in [`.env.example`](../.env.example)). Paths below such as `configs/<agency_code>/` are relative to that artifacts base path. To edit them locally, clone that repo and point the local loader at its `tnsw` dir (`ARTIFACT_LOADER_TYPE=local`, `ARTIFACT_LOCAL_ROOT=<path>/tnsw`).
+
 Task definitions are grouped into self-contained folders representing micro-workflows under an agency-specific folder (e.g. `configs/<agency_code>/`). 
 
 > [!NOTE]

@@ -1,4 +1,0 @@
-{
-  "id": "fcau-sample-collection--handover-instructions",
-  "template": "### Action Required: Consignment Sample Delivery\n\nA physical consignment sample is required for this application to proceed with laboratory testing.\n\n**Instructions for Handover:**\n1. Please print your application details or note down the Reference Number: **{{.reference_number}}**.\n2. Deliver the representative physical sample to the nearest **Food Control Administration Unit (FCAU)** reception desk or designated collection center.\n3. Ensure the sample package is clearly labeled with the Reference Number.\n\n*Once the officer receives and verifies the sample package, they will record the receipt and update the status of your application.*"
-}
