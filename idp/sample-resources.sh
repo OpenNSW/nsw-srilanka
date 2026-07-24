@@ -32,8 +32,9 @@ Environment:
                 targets; sent as "Authorization: Bearer <token>".
   ALLOW_NO_AUTH Set to 1 to skip the AUTH_TOKEN requirement (only safe when the
                 target runs with security disabled, e.g. the compose bootstrap).
-  INSECURE      "1" (default) skips TLS verification for self-signed localhost
-                certs. Set INSECURE=0 to enforce certificate validation.
+  INSECURE      TLS verification. Unset (default): skip only for a localhost
+                target (self-signed dev certs), verify for any remote target.
+                INSECURE=1 forces skip; INSECURE=0 forces verify.
   ALLOW_DEFAULT_SECRETS
                 Set to 1 to allow the insecure "1234" fallback for unset secrets
                 on a NON-localhost target. Default 0: an unset SAMPLE_USER_PASSWORD
@@ -70,7 +71,7 @@ fi
 API_BASE="${API_BASE:-https://localhost:8090}"
 API_BASE="${API_BASE%/}"            # strip a single trailing slash
 AUTH_TOKEN="${AUTH_TOKEN:-}"
-INSECURE="${INSECURE:-1}"
+INSECURE="${INSECURE:-}"
 ALLOW_NO_AUTH="${ALLOW_NO_AUTH:-0}"
 ALLOW_DEFAULT_SECRETS="${ALLOW_DEFAULT_SECRETS:-0}"
 
@@ -82,6 +83,14 @@ ALLOW_DEFAULT_SECRETS="${ALLOW_DEFAULT_SECRETS:-0}"
 # shellcheck source=resources-lib.sh
 # ============================================================================
 source "${SCRIPT_DIR}/resources-lib.sh"
+
+# TLS verification: skip only for localhost self-signed dev certs by default;
+# verify for any other (remote) target so a bearer token is never sent over an
+# unvalidated connection. INSECURE=1 forces skip, INSECURE=0 forces verify.
+# (is_localhost is provided by resources-lib.sh, sourced just above.)
+if [[ -z "$INSECURE" ]]; then
+    if is_localhost; then INSECURE=1; else INSECURE=0; fi
+fi
 
 # ============================================================================
 # Auth guard + one-time auth/connectivity probe
