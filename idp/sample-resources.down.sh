@@ -40,7 +40,9 @@ Environment (same as sample-resources.sh):
   AUTH_TOKEN    Bearer token for the management API. REQUIRED for non-localhost
                 targets; sent as "Authorization: Bearer <token>".
   ALLOW_NO_AUTH Set to 1 to skip the AUTH_TOKEN requirement (security-disabled targets).
-  INSECURE      "1" (default) skips TLS verification for self-signed localhost certs.
+  INSECURE      TLS verification. Unset (default): skip only for a localhost target
+                (self-signed dev certs), verify for any remote target. INSECURE=1
+                forces skip; INSECURE=0 forces verify.
 
 Flags:
   -y, --yes     Skip the interactive confirmation (REQUIRED when non-interactive).
@@ -72,7 +74,7 @@ fi
 API_BASE="${API_BASE:-https://localhost:8090}"
 API_BASE="${API_BASE%/}"
 AUTH_TOKEN="${AUTH_TOKEN:-}"
-INSECURE="${INSECURE:-1}"
+INSECURE="${INSECURE:-}"
 ALLOW_NO_AUTH="${ALLOW_NO_AUTH:-0}"
 
 # ============================================================================
@@ -83,6 +85,14 @@ ALLOW_NO_AUTH="${ALLOW_NO_AUTH:-0}"
 # shellcheck source=resources-lib.sh
 # ============================================================================
 source "${SCRIPT_DIR}/resources-lib.sh"
+
+# TLS verification: skip only for localhost self-signed dev certs by default;
+# verify for any other (remote) target so a bearer token is never sent over an
+# unvalidated connection. INSECURE=1 forces skip, INSECURE=0 forces verify.
+# (is_localhost is provided by resources-lib.sh, sourced just above.)
+if [[ -z "$INSECURE" ]]; then
+    if is_localhost; then INSECURE=1; else INSECURE=0; fi
+fi
 
 # ============================================================================
 # Auth guard + one-time auth/connectivity probe
