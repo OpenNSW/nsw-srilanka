@@ -73,7 +73,7 @@ func Load() (*Config, error) {
 			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
 		},
 		CORS: cors.Config{
-			AllowedOrigins:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_ORIGINS", "*")),
+			AllowedOrigins:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_ORIGINS", "")),
 			AllowedMethods:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS")),
 			AllowedHeaders:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_HEADERS", "Content-Type,Authorization")),
 			AllowCredentials: getBoolOrDefault("CORS_ALLOW_CREDENTIALS", true),
