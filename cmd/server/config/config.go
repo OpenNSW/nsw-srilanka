@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,6 +21,8 @@ import (
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/tlsguard"
 )
 
 // Config holds all configuration for the application.
@@ -163,6 +166,18 @@ func (c *Config) Validate() error {
 	if err := c.Authn.Validate(); err != nil {
 		return fmt.Errorf("invalid authn configuration: %w", err)
 	}
+	// Refuse to skip JWKS TLS verification outside development: a forged
+	// signing-key response here means full JWT forgery / auth bypass.
+	if c.Authn.InsecureSkipTLSVerify {
+		if err := tlsguard.Guard("AUTH_JWKS_INSECURE_SKIP_VERIFY"); err != nil {
+			return err
+		}
+	}
+	// Outbound M2M (services.json) may also disable TLS verification per service;
+	// hold it to the same rule so an insecure token endpoint can't ship to prod.
+	if err := guardServicesConfigTLS(c.Server.ServicesConfigPath); err != nil {
+		return err
+	}
 	if err := c.Temporal.Validate(); err != nil {
 		return fmt.Errorf("invalid temporal configuration: %w", err)
 	}
@@ -174,6 +189,47 @@ func (c *Config) Validate() error {
 	}
 	if err := c.ArtifactLoader.Validate(); err != nil {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
+	}
+	return nil
+}
+
+// servicesTLSProbe is a minimal view of the outbound services registry
+// (configs/services*.json) used only to detect per-service TLS-skip flags.
+type servicesTLSProbe struct {
+	Services []struct {
+		ID   string `json:"id"`
+		Auth struct {
+			Options struct {
+				InsecureSkipTLSVerify bool `json:"insecure_skip_tls_verify"`
+			} `json:"options"`
+		} `json:"auth"`
+	} `json:"services"`
+}
+
+// guardServicesConfigTLS enforces the APP_ENV=development gate on any per-service
+// insecure_skip_tls_verify in the outbound services registry. A missing/empty
+// path is not an error here — remote.LoadServices reports that at bootstrap.
+func guardServicesConfigTLS(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // absent config: surfaced later by LoadServices
+		}
+		return fmt.Errorf("read services config %s: %w", path, err)
+	}
+	var probe servicesTLSProbe
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("parse services config %s: %w", path, err)
+	}
+	for _, s := range probe.Services {
+		if s.Auth.Options.InsecureSkipTLSVerify {
+			if err := tlsguard.Guard(fmt.Sprintf("insecure_skip_tls_verify (services.json service %q)", s.ID)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

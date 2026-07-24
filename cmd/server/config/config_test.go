@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -565,6 +567,52 @@ func TestConfigValidate_NotificationError(t *testing.T) {
 	}
 	if !errors.Is(err, notification.ErrConfigPathRequired) && !containsString(err.Error(), "invalid notification configuration") {
 		t.Errorf("expected notification config error, got: %v", err)
+	}
+}
+
+// --- insecure-TLS guard (APP_ENV) ---
+
+func TestConfigValidate_JWKSInsecure_FailsClosedOutsideDev(t *testing.T) {
+	t.Setenv("APP_ENV", "production") // not development
+	cfg := validConfig()
+	cfg.Authn.InsecureSkipTLSVerify = true
+	if err := cfg.Validate(); err == nil || !containsString(err.Error(), "APP_ENV") {
+		t.Fatalf("expected APP_ENV guard error for insecure JWKS, got: %v", err)
+	}
+}
+
+func TestConfigValidate_JWKSInsecure_AllowedInDev(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	cfg := validConfig()
+	cfg.Authn.InsecureSkipTLSVerify = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected no error with insecure JWKS in development, got: %v", err)
+	}
+}
+
+func TestConfigValidate_ServicesInsecure_FailsClosedOutsideDev(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	path := filepath.Join(t.TempDir(), "services.json")
+	if err := os.WriteFile(path, []byte(`{"services":[{"id":"npqs","auth":{"type":"oauth2","options":{"insecure_skip_tls_verify":true}}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := validConfig()
+	cfg.Server.ServicesConfigPath = path
+	if err := cfg.Validate(); err == nil || !containsString(err.Error(), "APP_ENV") {
+		t.Fatalf("expected APP_ENV guard error for insecure services entry, got: %v", err)
+	}
+}
+
+func TestConfigValidate_ServicesInsecure_AllowedInDev(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	path := filepath.Join(t.TempDir(), "services.json")
+	if err := os.WriteFile(path, []byte(`{"services":[{"id":"npqs","auth":{"type":"oauth2","options":{"insecure_skip_tls_verify":true}}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := validConfig()
+	cfg.Server.ServicesConfigPath = path
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected no error with insecure services entry in development, got: %v", err)
 	}
 }
 

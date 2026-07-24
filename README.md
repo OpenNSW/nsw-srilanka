@@ -51,6 +51,14 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 
 ## How to Run Locally
 
+> ⚠️ **This quickstart is for local development only.** The example configs enable
+> insecure TLS (`AUTH_JWKS_INSECURE_SKIP_VERIFY=true`, `insecure_skip_tls_verify`
+> in `services.json`) for the self-signed local IdP. The backend only honors these
+> when `APP_ENV=development` — which `make dev`/`make preview` inject and nothing
+> else does — so a raw `docker compose up` or any real deployment **refuses to
+> start** on them. For non-local environments, trust the IdP/agency certificate
+> chain, keep those flags off, and never set `APP_ENV=development`.
+
 ### 1. Prepare local config files
 
 Copy each example file to its live name (the real files are gitignored and must not be committed):
