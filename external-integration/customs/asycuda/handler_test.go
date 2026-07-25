@@ -140,6 +140,27 @@ func TestSLCEHandler_CusdecEvents(t *testing.T) {
 	}
 }
 
+func TestSLCEHandler_CusdecStatus(t *testing.T) {
+	cusdecSvc := new(mockCusdecService)
+	cdnSvc := new(mockCDNService)
+	handler := NewHandler(cusdecSvc, cdnSvc)
+
+	payload := `{
+		"eventType": "CUSDEC_STATUS",
+		"processedAt": "2026-07-23T10:00:00Z",
+		"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254},
+		"status": "Registered"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleWebhook(w, req)
+
+	assert.Equal(t, http.StatusAccepted, w.Code)
+}
+
 func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cdnSvc := new(mockCDNService)

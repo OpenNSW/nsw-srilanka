@@ -70,6 +70,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	case "EXPORT_RELEASED":
 		h.handleCusdecEvent(w, r, body, "RELEASE")
 
+	case "CUSDEC_STATUS":
+		w.WriteHeader(http.StatusAccepted)
+
 	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
 
