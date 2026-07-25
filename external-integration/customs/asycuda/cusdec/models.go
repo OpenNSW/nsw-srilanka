@@ -103,6 +103,20 @@ func (r CusdecIntegrationResultRequest) Validate() error {
 
 type cusdecEventPayload struct {
 	CusdecRef DocumentReference `json:"cusDecRef"`
+
+	// Payment Notification fields (§6.5.1)
+	AmountPaid    float64 `json:"amountPaid,omitempty"`
+	Currency      string  `json:"currency,omitempty"`
+	BankReference string  `json:"bankReference,omitempty"`
+
+	// Warranting Notification fields (§6.5.2)
+	ReleaseOrderNo      string `json:"releaseOrderNo,omitempty"`
+	ExaminationRequired bool   `json:"examinationRequired,omitempty"`
+
+	// Export Release fields (§6.5.3)
+	VesselName    string `json:"vesselName,omitempty"`
+	VoyageNo      string `json:"voyageNo,omitempty"`
+	PortOfLoading string `json:"portOfLoading,omitempty"`
 }
 
 func (p *cusdecEventPayload) UnmarshalJSON(data []byte) error {

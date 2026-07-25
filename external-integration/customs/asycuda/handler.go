@@ -29,11 +29,10 @@ func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookSe
 
 type payloadEnvelope struct {
 	EventType string `json:"eventType"`
-	Event     string `json:"event"`
 }
 
 // HandleWebhook is the central entry point for POST /webhooks/slce.
-// It inspects the eventType (or event) field in the incoming JSON payload and dispatches
+// It inspects the eventType field in the incoming JSON payload and dispatches
 // execution to the appropriate domain service handler using a switch statement.
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
@@ -53,9 +52,6 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventType := strings.ToUpper(strings.TrimSpace(env.EventType))
-	if eventType == "" {
-		eventType = strings.ToUpper(strings.TrimSpace(env.Event))
-	}
 
 	switch eventType {
 	case "CUSDEC_INTEGRATED":
@@ -69,9 +65,6 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	case "EXPORT_RELEASED":
 		h.handleCusdecEvent(w, r, body, "RELEASE")
-
-	case "CUSDEC_STATUS":
-		w.WriteHeader(http.StatusAccepted)
 
 	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
