@@ -230,6 +230,12 @@ services:
       # the "ippc-hub" service's tls block in services.docker.json. Create
       # ./certs/ippc/{nppo.crt,nppo.key} from your Hub Admin Console connection.
       - ./certs/ippc:/certs/ippc:ro
+      # Host-side artifacts dir for ARTIFACT_LOADER_TYPE=local — the tnsw/ dir of
+      # a OpenNSW/one-trade-artifacts clone. Same .env variable a native run uses,
+      # so one line covers both; the container reads it at the target path below.
+      # Unused by the default GitHub loader (Docker just creates the dir if the
+      # clone is absent).
+      - ${ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/tnsw}:/app/artifacts:ro
       # Persist runtime blob storage written by the storage driver.
       - bucket_data:/app/bucket
     environment:
@@ -282,7 +288,9 @@ services:
       - ARTIFACT_GITHUB_REF=${ARTIFACT_GITHUB_REF:-main}
       - ARTIFACT_GITHUB_BASE_PATH=${ARTIFACT_GITHUB_BASE_PATH:-tnsw}
       - ARTIFACT_GITHUB_TOKEN=${ARTIFACT_GITHUB_TOKEN:-}
-      - ARTIFACT_LOCAL_ROOT=${ARTIFACT_LOCAL_ROOT:-configs}
+      # Pinned to the bind-mount target above, not interpolated: the host path in
+      # .env does not resolve inside the container.
+      - ARTIFACT_LOCAL_ROOT=/app/artifacts
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
     depends_on:
