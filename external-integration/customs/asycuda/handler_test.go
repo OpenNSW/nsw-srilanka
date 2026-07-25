@@ -53,8 +53,8 @@ func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
 	payload := `{
 		"edgeId": "edg-101",
 		"integrated": true,
-		"event": "INTEGRATION_RESULT",
-		"processAt": "2026-07-23T10:00:00Z",
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
@@ -81,54 +81,27 @@ func TestSLCEHandler_CusdecEvents(t *testing.T) {
 		expectedEvent string
 	}{
 		{
-			name: "PAYMENT event",
+			name: "PAYMENT_CONFIRMED canonical event",
 			payload: `{
-				"event": "PAYMENT",
-				"processAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
-			}`,
-			expectedEvent: "PAYMENT",
-		},
-		{
-			name: "PAYMENT_NOTIFICATION event",
-			payload: `{
-				"eventType": "PAYMENT_NOTIFICATION",
+				"eventType": "PAYMENT_CONFIRMED",
 				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
 			}`,
 			expectedEvent: "PAYMENT",
 		},
 		{
-			name: "WARRANTING event",
+			name: "WARRANTING_COMPLETED canonical event",
 			payload: `{
-				"event": "WARRANTING",
-				"processAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
-			}`,
-			expectedEvent: "WARRANTING",
-		},
-		{
-			name: "WARRANTING_NOTIFICATION event",
-			payload: `{
-				"eventType": "WARRANTING_NOTIFICATION",
+				"eventType": "WARRANTING_COMPLETED",
 				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
 			}`,
 			expectedEvent: "WARRANTING",
 		},
 		{
-			name: "RELEASE event",
+			name: "EXPORT_RELEASED canonical event",
 			payload: `{
-				"event": "RELEASE",
-				"processAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
-			}`,
-			expectedEvent: "RELEASE",
-		},
-		{
-			name: "RELEASE_NOTIFICATION event",
-			payload: `{
-				"eventType": "RELEASE_NOTIFICATION",
+				"eventType": "EXPORT_RELEASED",
 				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
 			}`,
@@ -137,7 +110,7 @@ func TestSLCEHandler_CusdecEvents(t *testing.T) {
 		{
 			name: "Case insensitive and trimmed event",
 			payload: `{
-				"eventType": "  payment_notification  ",
+				"eventType": "  payment_confirmed  ",
 				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
 			}`,
@@ -175,8 +148,8 @@ func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
 	payload := `{
 		"edgId": "cdn-edg-99",
 		"integrated": true,
-		"event": "CDN_INTEGRATION_RESULT",
-		"processAt": "2026-07-23T10:00:00Z",
+		"eventType": "CDN_INTEGRATED",
+		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
 			"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 1002}
 		}
@@ -202,17 +175,9 @@ func TestSLCEHandler_CDNAcknowledgment(t *testing.T) {
 		payload string
 	}{
 		{
-			name: "ACKNOWLEDGMENT event",
+			name: "CDN_ACKNOWLEDGED canonical event",
 			payload: `{
-				"event": "ACKNOWLEDGMENT",
-				"processAt": "2026-07-23T10:00:00Z",
-				"payload": {"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 1002}}
-			}`,
-		},
-		{
-			name: "CDN_ACKNOWLEDGMENT event",
-			payload: `{
-				"eventType": "CDN_ACKNOWLEDGMENT",
+				"eventType": "CDN_ACKNOWLEDGED",
 				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 1002}}
 			}`,
@@ -251,8 +216,8 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 			payload: `{
 				"edgeId": "",
 				"integrated": true,
-				"event": "INTEGRATION_RESULT",
-				"processAt": "2026-07-23T10:00:00Z"
+				"eventType": "CUSDEC_INTEGRATED",
+				"processedAt": "2026-07-23T10:00:00Z"
 			}`,
 		},
 		{
@@ -260,16 +225,16 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 			payload: `{
 				"edgeId": "edg-123",
 				"integrated": true,
-				"event": "INTEGRATION_RESULT",
-				"processAt": "2026-07-23T10:00:00Z",
+				"eventType": "CUSDEC_INTEGRATED",
+				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {}
 			}`,
 		},
 		{
 			name: "CusDec event missing cusDecRef",
 			payload: `{
-				"event": "PAYMENT",
-				"processAt": "2026-07-23T10:00:00Z",
+				"eventType": "PAYMENT_CONFIRMED",
+				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {}
 			}`,
 		},
@@ -278,15 +243,15 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 			payload: `{
 				"edgId": "",
 				"integrated": true,
-				"event": "CDN_INTEGRATION_RESULT",
-				"processAt": "2026-07-23T10:00:00Z"
+				"eventType": "CDN_INTEGRATED",
+				"processedAt": "2026-07-23T10:00:00Z"
 			}`,
 		},
 		{
 			name: "CDN ack missing cdnRef",
 			payload: `{
-				"event": "ACKNOWLEDGMENT",
-				"processAt": "2026-07-23T10:00:00Z",
+				"eventType": "CDN_ACKNOWLEDGED",
+				"processedAt": "2026-07-23T10:00:00Z",
 				"payload": {}
 			}`,
 		},
@@ -317,8 +282,8 @@ func TestSLCEHandler_InternalServerErrors(t *testing.T) {
 	payload := `{
 		"edgeId": "edg-err",
 		"integrated": true,
-		"event": "INTEGRATION_RESULT",
-		"processAt": "2026-07-23T10:00:00Z",
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
@@ -341,7 +306,7 @@ func TestSLCEHandler_UnknownEvent(t *testing.T) {
 	cdnSvc := new(mockCDNService)
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
-	payload := `{"event": "UNKNOWN_EVENT_TYPE", "processAt": "2026-07-23T10:00:00Z"}`
+	payload := `{"eventType": "UNKNOWN_EVENT_TYPE", "processedAt": "2026-07-23T10:00:00Z"}`
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
@@ -373,8 +338,8 @@ func TestSLCEHandler_TransientServiceUnavailable(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"event": "PAYMENT",
-		"processAt": "2026-07-23T10:00:00Z",
+		"eventType": "PAYMENT_CONFIRMED",
+		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
 	}`
 
@@ -397,8 +362,8 @@ func TestSLCEHandler_WorkflowNotFound(t *testing.T) {
 	payload := `{
 		"edgeId": "edg-missing",
 		"integrated": true,
-		"event": "INTEGRATION_RESULT",
-		"processAt": "2026-07-23T10:00:00Z",
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}

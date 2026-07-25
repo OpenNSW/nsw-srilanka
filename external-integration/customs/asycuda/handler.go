@@ -58,26 +58,26 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch eventType {
-	case "INTEGRATION_RESULT":
+	case "CUSDEC_INTEGRATED":
 		h.handleCusdecIntegrationResult(w, r, body)
 
-	case "PAYMENT", "PAYMENT_NOTIFICATION":
+	case "PAYMENT_CONFIRMED":
 		h.handleCusdecEvent(w, r, body, "PAYMENT")
 
-	case "WARRANTING", "WARRANTING_NOTIFICATION":
+	case "WARRANTING_COMPLETED":
 		h.handleCusdecEvent(w, r, body, "WARRANTING")
 
-	case "RELEASE", "RELEASE_NOTIFICATION":
+	case "EXPORT_RELEASED":
 		h.handleCusdecEvent(w, r, body, "RELEASE")
 
-	case "CDN_INTEGRATION_RESULT":
+	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
 
-	case "ACKNOWLEDGMENT", "CDN_ACKNOWLEDGMENT":
+	case "CDN_ACKNOWLEDGED":
 		h.handleCDNAcknowledgment(w, r, body)
 
 	default:
-		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType)
+		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event_type", eventType)
 		http.Error(w, "unknown or unsupported event type", http.StatusBadRequest)
 	}
 }
