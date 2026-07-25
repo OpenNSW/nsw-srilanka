@@ -26,7 +26,7 @@ MIGRATE_VERSION := v0.0.0-20260610120959-d981e67a7a47
 
 .PHONY: dev
 dev: ## Start the full stack with hot reload (detached; use `make logs` to watch)
-	$(COMPOSE) up -d
+	APP_ENV=development $(COMPOSE) up -d
 
 .PHONY: logs
 logs: ## Tail logs from all running services
@@ -38,7 +38,7 @@ logs: ## Tail logs from all running services
 
 .PHONY: preview
 preview: ## Build and run the real images locally (detached; use `make logs` to watch)
-	$(COMPOSE_PREVIEW) up --build -d
+	APP_ENV=development $(COMPOSE_PREVIEW) up --build -d
 
 .PHONY: build
 build: ## Build the images without starting anything

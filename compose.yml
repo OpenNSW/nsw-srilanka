@@ -255,6 +255,11 @@ services:
       - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW}
       - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
       - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
+      # APP_ENV gates the insecure-TLS flags above/in services.json: they are only
+      # honored when APP_ENV=development, otherwise the backend refuses to start.
+      # Injected as "development" by `make dev`/`make preview` (dev only); left empty
+      # for a raw `docker compose up` or any deployment, which then fails closed.
+      - APP_ENV=${APP_ENV:-}
       # NSW -> Agency m2m client secrets, referenced as env:... in services.*.json
       - M2M_NSW_TO_NPQS_SECRET=${M2M_NSW_TO_NPQS_SECRET:-1234}
       - M2M_NSW_TO_FCAU_SECRET=${M2M_NSW_TO_FCAU_SECRET:-1234}
