@@ -117,8 +117,8 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if originalStatus == CusdecStatusIntegrated || originalStatus == CusdecStatusFailed {
-				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID)
+			if originalStatus != CusdecStatusSubmitted {
+				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
 				return nil
 			}
 			return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
@@ -139,8 +139,8 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if originalStatus == CusdecStatusIntegrated || originalStatus == CusdecStatusFailed {
-				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID)
+			if originalStatus != CusdecStatusSubmitted {
+				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
 				return nil
 			}
 		}

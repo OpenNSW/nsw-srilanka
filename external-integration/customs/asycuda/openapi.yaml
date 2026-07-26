@@ -121,8 +121,8 @@ paths:
                       serial: "C"
                       number: 28237
       responses:
-        '202':
-          description: Accepted. Callback payload validated and accepted for processing.
+        '200':
+          description: OK. Callback payload validated and processed successfully.
         '400':
           description: Bad Request. Malformed JSON or missing mandatory eventType / validation failure.
           content:
@@ -221,6 +221,7 @@ components:
               $ref: '#/components/schemas/DocumentReference'
             taxes:
               type: array
+              maxItems: 100
               items:
                 $ref: '#/components/schemas/TaxEntry'
         errors:
