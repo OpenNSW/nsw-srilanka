@@ -1,0 +1,374 @@
+openapi: 3.0.3
+info:
+  title: ASYCUDA / SLC Edge Inbound Webhook API
+  description: |
+    OpenAPI 3.0 specification for National Single Window (NSW) inbound ASYCUDA / SLC Edge webhook endpoints.
+    
+    All callback events are delivered through a single central endpoint (`POST /webhooks/slce`) and dynamically routed based on the `eventType` discriminator field.
+  version: 1.2.0
+
+paths:
+  /webhooks/slce:
+    post:
+      summary: Central SLCE Webhook Callback Handler
+      description: |
+        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, and CDN acknowledgments).
+      operationId: processSLCEWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CusdecIntegrationResultRequest'
+                - $ref: '#/components/schemas/CusdecPaymentNotificationRequest'
+                - $ref: '#/components/schemas/CusdecWarrantingNotificationRequest'
+                - $ref: '#/components/schemas/CusdecExportReleaseRequest'
+                - $ref: '#/components/schemas/CDNIntegrationResultRequest'
+                - $ref: '#/components/schemas/CDNAcknowledgmentRequest'
+              discriminator:
+                propertyName: eventType
+                mapping:
+                  CUSDEC_INTEGRATED: '#/components/schemas/CusdecIntegrationResultRequest'
+                  PAYMENT_CONFIRMED: '#/components/schemas/CusdecPaymentNotificationRequest'
+                  WARRANTING_COMPLETED: '#/components/schemas/CusdecWarrantingNotificationRequest'
+                  EXPORT_RELEASED: '#/components/schemas/CusdecExportReleaseRequest'
+                  CDN_INTEGRATED: '#/components/schemas/CDNIntegrationResultRequest'
+                  CDN_ACKNOWLEDGED: '#/components/schemas/CDNAcknowledgmentRequest'
+            examples:
+              cusdecIntegrated:
+                summary: CUSDEC Integration Result (§6.2)
+                value:
+                  edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                  integrated: true
+                  eventType: "CUSDEC_INTEGRATED"
+                  processedAt: "2026-06-26T04:04:52Z"
+                  payload:
+                    cusdecRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "E"
+                      number: 1047
+                    taxes:
+                      - code: "tax1"
+                        rate: 1
+                        amount: 222
+                  errors: {}
+              paymentConfirmed:
+                summary: CUSDEC Payment Notification (§6.5.1)
+                value:
+                  eventType: "PAYMENT_CONFIRMED"
+                  processedAt: "2026-04-26T11:15:22Z"
+                  payload:
+                    cusdecRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "E"
+                      number: 1047
+                    amountPaid: 2035.00
+                    currency: "LKR"
+                    bankReference: "BNK-2026-0098765"
+              warrantingCompleted:
+                summary: CUSDEC Warranting Notification (§6.5.2)
+                value:
+                  eventType: "WARRANTING_COMPLETED"
+                  processedAt: "2026-04-26T11:15:22Z"
+                  payload:
+                    cusdecRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "E"
+                      number: 1047
+                    releaseOrderNo: "RO/2026/004567"
+                    examinationRequired: false
+              exportReleased:
+                summary: CUSDEC Export Release (§6.5.3)
+                value:
+                  eventType: "EXPORT_RELEASED"
+                  processedAt: "2026-04-26T11:15:22Z"
+                  payload:
+                    cusdecRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "E"
+                      number: 1047
+                    vesselName: "EVER GIVEN"
+                    voyageNo: "023W 08/01/2025"
+                    portOfLoading: "LKCMB"
+              cdnIntegrated:
+                summary: CDN Integration Result (§7.2)
+                value:
+                  edgId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                  integrated: true
+                  eventType: "CDN_INTEGRATED"
+                  processedAt: "2026-06-26T04:04:52Z"
+                  payload:
+                    cdnRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "C"
+                      number: 28237
+                  errors: {}
+              cdnAcknowledged:
+                summary: CDN Acknowledgment (§7.3)
+                value:
+                  eventType: "CDN_ACKNOWLEDGED"
+                  processedAt: "2026-04-27T14:30:10Z"
+                  payload:
+                    cdnRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "C"
+                      number: 28237
+      responses:
+        '202':
+          description: Accepted. Callback payload validated and accepted for processing.
+        '400':
+          description: Bad Request. Malformed JSON or missing mandatory eventType / validation failure.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "unknown or unsupported event type"
+        '404':
+          description: Not Found. Integration result edgeId does not match an active submission.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "workflow not found by edgeId"
+        '503':
+          description: Service Unavailable. Referenced declaration or CDN not integrated yet (transient retry).
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "customs declaration not found by reference"
+
+components:
+  schemas:
+    DocumentReference:
+      type: object
+      required:
+        - office
+        - year
+        - serial
+        - number
+      properties:
+        office:
+          type: string
+          example: "CBEX1"
+          description: Customs office code
+        year:
+          type: string
+          example: "2026"
+          description: Registration year
+        serial:
+          type: string
+          example: "E"
+          description: Registration serial
+        number:
+          type: integer
+          example: 1047
+          description: Registration number
+
+    TaxEntry:
+      type: object
+      required:
+        - code
+        - rate
+        - amount
+      properties:
+        code:
+          type: string
+          example: "tax1"
+        rate:
+          type: number
+          example: 1.0
+        amount:
+          type: number
+          example: 222.0
+
+    CusdecIntegrationResultRequest:
+      type: object
+      required:
+        - edgeId
+        - integrated
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        edgeId:
+          type: string
+          format: uuid
+          example: "5516e4c8-a93d-429d-8a18-6a484d331176"
+        integrated:
+          type: boolean
+          example: true
+        eventType:
+          type: string
+          enum: [CUSDEC_INTEGRATED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-06-26T04:04:52Z"
+        payload:
+          type: object
+          required:
+            - cusdecRef
+          properties:
+            cusdecRef:
+              $ref: '#/components/schemas/DocumentReference'
+            taxes:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaxEntry'
+        errors:
+          type: object
+          description: Segment-keyed errors object. Empty object {} on success.
+
+    CusdecPaymentNotificationRequest:
+      type: object
+      required:
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        eventType:
+          type: string
+          enum: [PAYMENT_CONFIRMED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-04-26T11:15:22Z"
+        payload:
+          type: object
+          required:
+            - cusdecRef
+          properties:
+            cusdecRef:
+              $ref: '#/components/schemas/DocumentReference'
+            amountPaid:
+              type: number
+              example: 2035.00
+            currency:
+              type: string
+              example: "LKR"
+            bankReference:
+              type: string
+              example: "BNK-2026-0098765"
+
+    CusdecWarrantingNotificationRequest:
+      type: object
+      required:
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        eventType:
+          type: string
+          enum: [WARRANTING_COMPLETED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-04-26T11:15:22Z"
+        payload:
+          type: object
+          required:
+            - cusdecRef
+          properties:
+            cusdecRef:
+              $ref: '#/components/schemas/DocumentReference'
+            releaseOrderNo:
+              type: string
+              example: "RO/2026/004567"
+            examinationRequired:
+              type: boolean
+              example: false
+
+    CusdecExportReleaseRequest:
+      type: object
+      required:
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        eventType:
+          type: string
+          enum: [EXPORT_RELEASED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-04-26T11:15:22Z"
+        payload:
+          type: object
+          required:
+            - cusdecRef
+          properties:
+            cusdecRef:
+              $ref: '#/components/schemas/DocumentReference'
+            vesselName:
+              type: string
+              example: "EVER GIVEN"
+            voyageNo:
+              type: string
+              example: "023W 08/01/2025"
+            portOfLoading:
+              type: string
+              example: "LKCMB"
+
+    CDNIntegrationResultRequest:
+      type: object
+      required:
+        - edgId
+        - integrated
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        edgId:
+          type: string
+          format: uuid
+          example: "5516e4c8-a93d-429d-8a18-6a484d331176"
+        integrated:
+          type: boolean
+          example: true
+        eventType:
+          type: string
+          enum: [CDN_INTEGRATED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-06-26T04:04:52Z"
+        payload:
+          type: object
+          required:
+            - cdnRef
+          properties:
+            cdnRef:
+              $ref: '#/components/schemas/DocumentReference'
+        errors:
+          type: object
+          description: Segment-keyed errors object. Empty object {} on success.
+
+    CDNAcknowledgmentRequest:
+      type: object
+      required:
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        eventType:
+          type: string
+          enum: [CDN_ACKNOWLEDGED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-04-27T14:30:10Z"
+        payload:
+          type: object
+          required:
+            - cdnRef
+          properties:
+            cdnRef:
+              $ref: '#/components/schemas/DocumentReference'

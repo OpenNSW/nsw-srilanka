@@ -29,11 +29,10 @@ func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookSe
 
 type payloadEnvelope struct {
 	EventType string `json:"eventType"`
-	Event     string `json:"event"`
 }
 
 // HandleWebhook is the central entry point for POST /webhooks/slce.
-// It inspects the eventType (or event) field in the incoming JSON payload and dispatches
+// It inspects the eventType field in the incoming JSON payload and dispatches
 // execution to the appropriate domain service handler using a switch statement.
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
@@ -53,31 +52,28 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	eventType := strings.ToUpper(strings.TrimSpace(env.EventType))
-	if eventType == "" {
-		eventType = strings.ToUpper(strings.TrimSpace(env.Event))
-	}
 
 	switch eventType {
-	case "INTEGRATION_RESULT":
+	case "CUSDEC_INTEGRATED":
 		h.handleCusdecIntegrationResult(w, r, body)
 
-	case "PAYMENT", "PAYMENT_NOTIFICATION":
+	case "PAYMENT_CONFIRMED":
 		h.handleCusdecEvent(w, r, body, "PAYMENT")
 
-	case "WARRANTING", "WARRANTING_NOTIFICATION":
+	case "WARRANTING_COMPLETED":
 		h.handleCusdecEvent(w, r, body, "WARRANTING")
 
-	case "RELEASE", "RELEASE_NOTIFICATION":
+	case "EXPORT_RELEASED":
 		h.handleCusdecEvent(w, r, body, "RELEASE")
 
-	case "CDN_INTEGRATION_RESULT":
+	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
 
-	case "ACKNOWLEDGMENT", "CDN_ACKNOWLEDGMENT":
+	case "CDN_ACKNOWLEDGED":
 		h.handleCDNAcknowledgment(w, r, body)
 
 	default:
-		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType)
+		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event_type", eventType)
 		http.Error(w, "unknown or unsupported event type", http.StatusBadRequest)
 	}
 }
