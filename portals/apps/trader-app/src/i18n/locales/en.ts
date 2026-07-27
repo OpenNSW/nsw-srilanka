@@ -148,6 +148,11 @@ const en = {
         subtext:
           'This consignment was rejected during review. Please inspect the process history below for rejection comments and details.',
       },
+      failed: {
+        title: 'Process Failed',
+        subtext:
+          'The consignment process encountered an error or failed. Please inspect the process history below for details.',
+      },
     },
     waitingForUpdates: {
       title: 'Waiting for Updates',

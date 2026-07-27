@@ -56,12 +56,10 @@ export function ActionListView({
 
   const isSuccessTerminal =
     consignmentState === 'FINISHED' || consignmentState === 'COMPLETED' || consignmentState === 'APPROVED'
+  const isFailedTerminal = consignmentState === 'FAILED'
   const isRejectedTerminal =
-    consignmentState === 'REJECTED' ||
-    consignmentState === 'SLTB_REJECTED' ||
-    consignmentState === 'FAILED' ||
-    consignmentState === 'DISAPPROVED'
-  const isConsignmentTerminal = isSuccessTerminal || isRejectedTerminal
+    consignmentState === 'REJECTED' || consignmentState === 'SLTB_REJECTED' || consignmentState === 'DISAPPROVED'
+  const isConsignmentTerminal = isSuccessTerminal || isRejectedTerminal || isFailedTerminal
 
   const displaySteps = useMemo(() => {
     if (isConsignmentTerminal) {
