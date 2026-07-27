@@ -1,4 +1,0 @@
-{
-  "id": "customs-cdn--completed-message",
-  "template": "### ✅ Cargo Dispatch Note (CDN) Completed\n\nYour Cargo Dispatch Note has been successfully created and submitted.\n\n* **CDN Number**: `{{.cdn_number}}`\n* **Cusdec Number**: `{{.cusdec_numbers}}`\n* **Status**: Completed\n\nPlease proceed to the next step."
-}

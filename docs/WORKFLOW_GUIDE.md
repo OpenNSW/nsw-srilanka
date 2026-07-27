@@ -6,15 +6,18 @@ This document serves as an exhaustive reference for creating, modifying, and deb
 
 ## 1. Directory Structure: Folder-as-Task Convention
 
-Task definitions are grouped into self-contained folders representing micro-workflows under an agency-specific folder (e.g. `configs/<agency_code>/`). 
+> [!IMPORTANT]
+> These workflow/form artifacts are **not** committed to this application repo. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path (`tnsw/manifest.json` + `tnsw/<agency_code>/…`) and are fetched at startup by the artifact loader (see `ARTIFACT_*` env in [`.env.example`](../.env.example)). Every path below is relative to that base path, so `<agency_code>/…` here means `tnsw/<agency_code>/…` in the artifacts repo. To edit them locally, clone that repo and point the local loader at its `tnsw` dir (`ARTIFACT_LOADER_TYPE=local`, `ARTIFACT_LOCAL_ROOT=<path>/tnsw`).
+
+Task definitions are grouped into self-contained folders representing micro-workflows under an agency-specific folder (e.g. `<agency_code>/`). 
 
 > [!NOTE]
 > `fcau` (Food Control Administration Unit) is used as the reference example throughout this guide. For each agency process in our NSW system, we will write a similar set of configs (e.g. Coconut Development Authority (`cda`), National Plant Quarantine Service (`npqs`), etc.).
 
 Each task folder is recognized by the `config_loader.go` registry scanner and must conform to the following file layout:
 
-```
-configs/<agency_code>/
+```text
+<agency_code>/
 ├── <agency_code>_workflow.json       # Parent (top-level) workflow definition (e.g. fcau_workflow.json)
 └── <task-folder>/                    # E.g. "3-1-warehouse_scheduling/" or "2-payment_app_fee/"
     ├── workflow.json                 # Micro-workflow graph definition (Required)

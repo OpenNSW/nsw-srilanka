@@ -1,4 +1,0 @@
-{
-  "id": "cda-apply-coconut-cert--submitted-message",
-  "template": "### Application Submitted Successfully\n\nYour CDA Export Coconut Certificate Application has been submitted. The application is now undergoing review/verification by a CDA Quality Assurance Officer.\n\n* **CUSDEC Reference**: `{{.cusdec_number}}`\n* **Status**: Awaiting Officer Verification"
-}

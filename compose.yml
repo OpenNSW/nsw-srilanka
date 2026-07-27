@@ -230,6 +230,12 @@ services:
       # the "ippc-hub" service's tls block in services.docker.json. Create
       # ./certs/ippc/{nppo.crt,nppo.key} from your Hub Admin Console connection.
       - ./certs/ippc:/certs/ippc:ro
+      # Host-side artifacts dir for ARTIFACT_LOADER_TYPE=local — the tnsw/ dir of
+      # a OpenNSW/one-trade-artifacts clone. Same .env variable a native run uses,
+      # so one line covers both; the container reads it at the target path below.
+      # Unused by the default GitHub loader (Docker just creates the dir if the
+      # clone is absent).
+      - ${ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/tnsw}:/app/artifacts:ro
       # Persist runtime blob storage written by the storage driver.
       - bucket_data:/app/bucket
     environment:
@@ -272,6 +278,19 @@ services:
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
       - TASK_AUTHZ_CONFIG_PATH=${TASK_AUTHZ_CONFIG_PATH:-configs/task_authz.json}
+      # Workflow/form artifacts are no longer baked into the repo/image; they are
+      # fetched at startup from the public OpenNSW/one-trade-artifacts repo under
+      # the tnsw/ base path. `make dev` works with no local clone. Override any of
+      # these in .env (e.g. ARTIFACT_LOADER_TYPE=local with a local clone).
+      - ARTIFACT_LOADER_TYPE=${ARTIFACT_LOADER_TYPE:-github}
+      - ARTIFACT_GITHUB_OWNER=${ARTIFACT_GITHUB_OWNER:-OpenNSW}
+      - ARTIFACT_GITHUB_REPO=${ARTIFACT_GITHUB_REPO:-one-trade-artifacts}
+      - ARTIFACT_GITHUB_REF=${ARTIFACT_GITHUB_REF:-main}
+      - ARTIFACT_GITHUB_BASE_PATH=${ARTIFACT_GITHUB_BASE_PATH:-tnsw}
+      - ARTIFACT_GITHUB_TOKEN=${ARTIFACT_GITHUB_TOKEN:-}
+      # Pinned to the bind-mount target above, not interpolated: the host path in
+      # .env does not resolve inside the container.
+      - ARTIFACT_LOCAL_ROOT=/app/artifacts
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
     depends_on:

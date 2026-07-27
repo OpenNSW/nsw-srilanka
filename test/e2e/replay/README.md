@@ -52,6 +52,8 @@ make test-e2e   # stops the api container, then runs E2E=1 GOWORK=off go test ./
 
 `make test-e2e` sources `.env` automatically — ensure `GOWORK` is not set (or set to `off`) in `.env` so the go workspace does not interfere with module resolution.
 
+The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `ARTIFACT_*` from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. `.env.example` defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). To run offline, clone that repo and set `ARTIFACT_LOADER_TYPE=local` / `ARTIFACT_LOCAL_ROOT=<path>/tnsw` in `.env`.
+
 Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task queues.
 
 ## Config schema
@@ -246,7 +248,7 @@ The mock agency waits until the app sends the inject for that task id, then post
 
 ## How to add a new flow
 
-1. **Identify node display names** — the `wait` `node` selector is the root `title` in the task's `configs/<agency>/<step>/render.json`.
+1. **Identify node display names** — the `wait` `node` selector is the root `title` in the task's `render.json`. Artifact configs (workflow/render/mapping JSON) live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/<agency>/<step>/`, not in this repo.
 
 2. **Identify required payload fields** — for USER_INPUT tasks: every field in `output_mapping.json` without `?`, plus JSONForm required fields. For EXTERNAL_REVIEW (agency callback): every field in the reviewer task's `output_mapping.json` without `?`.
 

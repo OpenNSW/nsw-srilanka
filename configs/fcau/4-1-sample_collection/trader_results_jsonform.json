@@ -1,4 +1,0 @@
-{
-  "id": "fcau-sample-collection--trader-results",
-  "template": "### Sample Handover Confirmed\n\nThe physical consignment sample has been received and registered by the FCAU officer.\n\n* **Issued Sample Number**: `{{.initial_sample}}`\n* **Received At**: {{.received_at}}\n* **Notes**: {{if .notes}}{{.notes}}{{else}}*No notes provided.*{{end}}"
-}

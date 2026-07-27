@@ -1,4 +1,0 @@
-{
-  "id": "customs-wait-payment--instructions",
-  "template": "{{if .payment}}### ✅ Customs Payment Completed\n\nThe consignment duty payment has been successfully settled.\n\n* **Receipt Number**: `{{.payment.receipt_number}}`\n* **CusDec Number**: `{{.cusdec_number}}`\n* **Amount Paid**: **LKR {{.amount_to_pay}}**{{else}}### Wait on Customs Payment\n\nPlease make the duty/consignment payment of **LKR {{.amount_to_pay}}** to the Customs Account.\n\n* **Customs Account**: 1000-2026-9042 (Bank of Ceylon)\n* **CusDec Number**: `{{.cusdec_number}}`\n\nOnce the payment is settled, Customs will notify the Single Window, and this task will automatically mark as completed. You do not need to upload any receipt.{{end}}"
-}

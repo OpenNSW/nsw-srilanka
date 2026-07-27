@@ -1,4 +1,0 @@
-{
-  "id": "fcau-visual-assessment--reviewer-instructions",
-  "template": "### Visual Assessment in Progress\n\nFCAU officers will perform a physical visual inspection of the consignment sample and record the outcome.\n\n* **Reference Number**: {{.reference_number}}\n\nThis page will be updated automatically once the results of the review are received."
-}

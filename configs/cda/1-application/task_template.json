@@ -1,6 +1,0 @@
-{
-  "id": "cda-apply-coconut-cert-flow",
-  "type": "APPLICATION",
-  "workflow_id": "cda-apply-coconut-cert-flow",
-  "render_config_id": "cda-apply-coconut-cert-flow:render"
-}
