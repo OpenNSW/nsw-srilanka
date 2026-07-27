@@ -109,10 +109,12 @@ COPY --chown=appuser:appuser --from=builder /out/otc /usr/local/bin/otc
 
 # Bake runtime configs into the image (services*.json, payment_methods.json,
 # notification.json, task_authz.json, argus/…). Workflow/form artifacts and the
-# manifest are NOT baked here — they are fetched at startup by the pluggable
-# artifact loader (default: the OpenNSW/one-trade-artifacts GitHub repo; see
-# ARTIFACT_* env in compose.yml and .env.example), so the image no longer couples
-# the code to one deployment's workflow content.
+# manifest are NOT baked here — they are resolved at startup by the pluggable
+# artifact loader, so the image no longer couples the code to one deployment's
+# workflow content. The code default is the local loader reading /app/configs
+# (ARTIFACT_LOADER_TYPE=local), i.e. a bare container expects the artifacts to be
+# bind-mounted; compose.yml and .env.example override this to the GitHub loader
+# pointed at OpenNSW/one-trade-artifacts (see the ARTIFACT_* env there).
 # Environment-specific values (e.g. services.json) are still overlaid at runtime
 # via ConfigMap/bind mount; a host bind mount over /app/configs (docker-compose)
 # also continues to take precedence over what is baked here.

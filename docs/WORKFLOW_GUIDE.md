@@ -16,7 +16,7 @@ Task definitions are grouped into self-contained folders representing micro-work
 
 Each task folder is recognized by the `config_loader.go` registry scanner and must conform to the following file layout:
 
-```
+```text
 <agency_code>/
 ├── <agency_code>_workflow.json       # Parent (top-level) workflow definition (e.g. fcau_workflow.json)
 └── <task-folder>/                    # E.g. "3-1-warehouse_scheduling/" or "2-payment_app_fee/"
