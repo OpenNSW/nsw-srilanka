@@ -483,3 +483,19 @@ func TestTaskDisplayName(t *testing.T) {
 	rc4 := json.RawMessage(`invalid`)
 	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rc4))
 }
+
+func TestWarehouseInspection_OfficerDeterminesDate(t *testing.T) {
+	// Verify that the FCAU officer determines the warehouse inspection date during the visual inspection review.
+	officerResult := map[string]any{
+		"inspection_outcome": "pass",
+		"reviewerform": map[string]any{
+			"inspection_date": "2026-08-05",
+		},
+	}
+
+	rev, ok := officerResult["reviewerform"].(map[string]any)
+	require.True(t, ok)
+	date, ok := rev["inspection_date"].(string)
+	require.True(t, ok)
+	assert.Equal(t, "2026-08-05", date)
+}

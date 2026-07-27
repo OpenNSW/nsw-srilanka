@@ -13,7 +13,6 @@
       "task_template_id": "fcau-warehouse-scheduling--trader-input",
       "input_mapping": {},
       "output_mapping": {
-        "inspection_date": "traderinput.inspection_date",
         "warehouse_location": "traderinput.warehouse_location"
       }
     },

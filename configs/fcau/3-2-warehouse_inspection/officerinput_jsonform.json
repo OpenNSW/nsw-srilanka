@@ -28,10 +28,17 @@
         "type": "string",
         "title": "Inspection Notes / Observations",
         "example": "Visual inspection of storage area completed. Food containers intact and temperature controlled."
+      },
+      "inspection_date": {
+        "type": "string",
+        "format": "date",
+        "title": "Confirmed Inspection Date",
+        "description": "Warehouse inspection date decided or confirmed by FCAU officer"
       }
     },
     "required": [
-      "inspection_outcome"
+      "inspection_outcome",
+      "inspection_date"
     ]
   },
   "uiSchema": {
@@ -40,6 +47,10 @@
       {
         "type": "Control",
         "scope": "#/properties/inspection_outcome"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/inspection_date"
       },
       {
         "type": "Control",

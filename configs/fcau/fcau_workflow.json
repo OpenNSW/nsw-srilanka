@@ -61,7 +61,6 @@
         "fcau.userform": "userform"
       },
       "output_mapping": {
-        "traderinput.inspection_date": "fcau.warehouse_inspection_date",
         "traderinput.warehouse_location": "fcau.warehouse_location"
       }
     },
@@ -73,10 +72,12 @@
       "lane": "FCAU Officer/NSW System",
       "input_mapping": {
         "fcau.reference_number": "reference_number",
-        "fcau.userform": "userform"
+        "fcau.userform": "userform",
+        "fcau.warehouse_location": "warehouse_location"
       },
       "output_mapping": {
-        "inspection_outcome": "fcau.warehouse_inspection_outcome"
+        "inspection_outcome": "fcau.warehouse_inspection_outcome",
+        "inspection_date": "fcau.warehouse_inspection_date"
       }
     },
     {

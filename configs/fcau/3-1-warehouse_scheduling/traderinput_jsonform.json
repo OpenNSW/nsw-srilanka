@@ -4,11 +4,6 @@
   "schema": {
     "type": "object",
     "properties": {
-      "inspection_date": {
-        "type": "string",
-        "format": "date",
-        "title": "Preferred Inspection Date"
-      },
       "warehouse_location": {
         "type": "string",
         "title": "Warehouse Address / Location",
@@ -16,17 +11,12 @@
       }
     },
     "required": [
-      "inspection_date",
       "warehouse_location"
     ]
   },
   "uiSchema": {
     "type": "VerticalLayout",
     "elements": [
-      {
-        "type": "Control",
-        "scope": "#/properties/inspection_date"
-      },
       {
         "type": "Control",
         "scope": "#/properties/warehouse_location"

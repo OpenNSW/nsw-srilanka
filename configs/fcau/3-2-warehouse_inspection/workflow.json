@@ -13,10 +13,12 @@
       "task_template_id": "fcau-warehouse-inspection--officer-review",
       "input_mapping": {
         "reference_number": "submission.reference_number",
-        "userform": "submission"
+        "userform": "submission",
+        "warehouse_location": "submission.warehouse_location"
       },
       "output_mapping": {
-        "inspection_outcome": "inspection_outcome"
+        "inspection_outcome": "inspection_outcome",
+        "inspection_date": "reviewerform.inspection_date"
       }
     },
     {
