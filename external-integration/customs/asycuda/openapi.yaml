@@ -3,7 +3,7 @@ info:
   title: ASYCUDA / SLC Edge Inbound Webhook API
   description: |
     OpenAPI 3.0 specification for National Single Window (NSW) inbound ASYCUDA / SLC Edge webhook endpoints.
-    
+
     All callback events are delivered through a single central endpoint (`POST /webhooks/slce`) and dynamically routed based on the `eventType` discriminator field.
   version: 1.2.0
 
@@ -98,7 +98,7 @@ paths:
               cdnIntegrated:
                 summary: CDN Integration Result (§7.2)
                 value:
-                  edgId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                  edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
                   integrated: true
                   eventType: "CDN_INTEGRATED"
                   processedAt: "2026-06-26T04:04:52Z"
@@ -321,13 +321,13 @@ components:
     CDNIntegrationResultRequest:
       type: object
       required:
-        - edgId
+        - edgeId
         - integrated
         - eventType
         - processedAt
         - payload
       properties:
-        edgId:
+        edgeId:
           type: string
           format: uuid
           example: "5516e4c8-a93d-429d-8a18-6a484d331176"

@@ -24,22 +24,22 @@ func NewCDNWebhookService(repo DispatchNoteRepository) CDNWebhookService {
 
 func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error {
 	slog.InfoContext(ctx, "processing CDN integration result",
-		"edg_id", req.EdgID,
+		"edge_id", req.EdgeID,
 		"integrated", req.Integrated,
 		"event", req.Event,
 	)
 
-	note, err := s.repo.GetByEdgID(ctx, req.EdgID)
+	note, err := s.repo.GetByEdgeID(ctx, req.EdgeID)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve dispatch note by edgId %s: %w", req.EdgID, err)
+		return fmt.Errorf("failed to retrieve dispatch note by edgeId %s: %w", req.EdgeID, err)
 	}
 	if note == nil {
-		slog.WarnContext(ctx, "no dispatch note found for edgId", "edg_id", req.EdgID)
-		return fmt.Errorf("edgId %s: %w", req.EdgID, ErrDispatchNoteNotFoundByEdgID)
+		slog.WarnContext(ctx, "no dispatch note found for edgeId", "edge_id", req.EdgeID)
+		return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrDispatchNoteNotFoundByEdgeID)
 	}
 
 	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
-		slog.InfoContext(ctx, "dispatch note already processed, ignoring integration result", "edg_id", req.EdgID, "status", note.Status)
+		slog.InfoContext(ctx, "dispatch note already processed, ignoring integration result", "edge_id", req.EdgeID, "status", note.Status)
 		return nil
 	}
 
@@ -55,12 +55,12 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		}
 
 		slog.InfoContext(ctx, "dispatch note integrated successfully",
-			"edg_id", req.EdgID,
+			"edge_id", req.EdgeID,
 			"cdn_ref", req.Payload.CDNRef,
 		)
 	} else {
 		if note.Status == DispatchNoteStatusFailed {
-			slog.InfoContext(ctx, "dispatch note already failed, ignoring duplicate callback", "edg_id", req.EdgID)
+			slog.InfoContext(ctx, "dispatch note already failed, ignoring duplicate callback", "edge_id", req.EdgeID)
 			return nil
 		}
 
@@ -71,7 +71,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		}
 
 		slog.WarnContext(ctx, "dispatch note integration failed",
-			"edg_id", req.EdgID,
+			"edge_id", req.EdgeID,
 			"errors", string(req.Errors),
 		)
 	}

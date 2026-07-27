@@ -2,9 +2,9 @@ package cdn
 
 import "errors"
 
-// ErrDispatchNoteNotFoundByEdgID indicates no dispatch note matches the given edgId.
+// ErrDispatchNoteNotFoundByEdgeID indicates no dispatch note matches the given edgeId.
 // This is a permanent condition — the caller should not retry.
-var ErrDispatchNoteNotFoundByEdgID = errors.New("dispatch note not found by edgId")
+var ErrDispatchNoteNotFoundByEdgeID = errors.New("dispatch note not found by edgeId")
 
 // ErrDispatchNoteNotFoundByCDNRef indicates no dispatch note matches the given cdnRef.
 // This can be a transient condition if the acknowledgment callback arrives before
