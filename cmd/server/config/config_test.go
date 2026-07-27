@@ -616,6 +616,28 @@ func TestConfigValidate_ServicesInsecure_AllowedInDev(t *testing.T) {
 	}
 }
 
+func TestIsDevEnvironment(t *testing.T) {
+	cases := []struct {
+		val  string
+		want bool
+	}{
+		{"development", true},
+		{"Development", true},
+		{" development ", true},
+		{"production", false},
+		{"", false},
+		{"staging", false},
+	}
+	for _, c := range cases {
+		t.Run(c.val, func(t *testing.T) {
+			t.Setenv("APP_ENV", c.val)
+			if got := isDevEnvironment(); got != c.want {
+				t.Fatalf("isDevEnvironment() with APP_ENV=%q = %v, want %v", c.val, got, c.want)
+			}
+		})
+	}
+}
+
 // containsString is a helper to check if s contains substr.
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
