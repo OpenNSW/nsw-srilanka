@@ -70,7 +70,7 @@ func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
 
 	handler.HandleWebhook(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 	cusdecSvc.AssertExpectations(t)
 }
 
@@ -134,7 +134,7 @@ func TestSLCEHandler_CusdecEvents(t *testing.T) {
 
 			handler.HandleWebhook(w, req)
 
-			assert.Equal(t, http.StatusAccepted, w.Code)
+			assert.Equal(t, http.StatusOK, w.Code)
 			cusdecSvc.AssertExpectations(t)
 		})
 	}
@@ -165,7 +165,7 @@ func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
 
 	handler.HandleWebhook(w, req)
 
-	assert.Equal(t, http.StatusAccepted, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 	cdnSvc.AssertExpectations(t)
 }
 
@@ -200,7 +200,7 @@ func TestSLCEHandler_CDNAcknowledgment(t *testing.T) {
 
 			handler.HandleWebhook(w, req)
 
-			assert.Equal(t, http.StatusAccepted, w.Code)
+			assert.Equal(t, http.StatusOK, w.Code)
 			cdnSvc.AssertExpectations(t)
 		})
 	}

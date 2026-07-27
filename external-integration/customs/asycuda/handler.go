@@ -105,7 +105,7 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body []byte, expectedEvent string) {
@@ -144,7 +144,7 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Request, body []byte) {
@@ -174,7 +174,7 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request, body []byte) {
@@ -204,5 +204,5 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusOK)
 }

@@ -69,6 +69,7 @@ func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		EventType   string    `json:"eventType"`
 		ProcessedAt time.Time `json:"processedAt"`
+		AltEdgeID   string    `json:"edgId"`
 		*Alias
 	}{
 		Alias: (*Alias)(r),
@@ -81,6 +82,9 @@ func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	}
 	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
 		r.ProcessAt = aux.ProcessedAt
+	}
+	if r.EdgeID == "" && aux.AltEdgeID != "" {
+		r.EdgeID = aux.AltEdgeID
 	}
 	return nil
 }
