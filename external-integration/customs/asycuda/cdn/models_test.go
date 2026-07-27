@@ -11,7 +11,7 @@ import (
 func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	// Test live API format (event, processAt)
 	liveJSON := []byte(`{
-		"edgeId": "edg-123",
+		"edgeId": "edge-123",
 		"integrated": true,
 		"event": "INTEGRATION_RESULT",
 		"processAt": "2026-07-20T05:46:05Z",
@@ -28,7 +28,7 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 
 	// Test spec prose format (eventType, processedAt)
 	specJSON := []byte(`{
-		"edgeId": "edg-123",
+		"edgeId": "edge-123",
 		"integrated": true,
 		"eventType": "INTEGRATION_RESULT",
 		"processedAt": "2026-07-20T05:46:05Z",

@@ -199,21 +199,21 @@ func (s *webhookService) ProcessEvent(ctx context.Context, req CusdecEventReques
 	var payload map[string]any
 
 	switch req.Event {
-	case "PAYMENT_CONFIRMED", "PAYMENT":
+	case "PAYMENT_CONFIRMED":
 		taskTemplateID = "customs-wait-payment"
 		targetStatus = CusdecStatusPaid
 		payload = map[string]any{
 			"__command":      "submit",
 			"payment_status": "PAID",
 		}
-	case "WARRANTING_COMPLETED", "WARRANTING":
+	case "WARRANTING_COMPLETED":
 		taskTemplateID = "customs-wait-warranting"
 		targetStatus = CusdecStatusWarranted
 		payload = map[string]any{
 			"__command":         "submit",
 			"warranting_status": "WARRANTED",
 		}
-	case "EXPORT_RELEASED", "RELEASE":
+	case "EXPORT_RELEASED":
 		taskTemplateID = "customs-wait-release"
 		targetStatus = CusdecStatusReleased
 		payload = map[string]any{

@@ -141,7 +141,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecEventRequest{
-		Event:     "PAYMENT",
+		Event:     "PAYMENT_CONFIRMED",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
 			CusdecRef: DocumentReference{
@@ -197,7 +197,7 @@ func TestProcessEvent_DuplicateCallback_WorkflowFinished(t *testing.T) {
 	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecEventRequest{
-		Event:     "PAYMENT",
+		Event:     "PAYMENT_CONFIRMED",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
 			CusdecRef: DocumentReference{
@@ -242,7 +242,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecEventRequest{
-		Event:     "WARRANTING",
+		Event:     "WARRANTING_COMPLETED",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
 			CusdecRef: DocumentReference{
@@ -298,7 +298,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 	service := NewWebhookService(repo, db, completer)
 
 	req := CusdecEventRequest{
-		Event:     "RELEASE",
+		Event:     "EXPORT_RELEASED",
 		ProcessAt: time.Now(),
 		Payload: cusdecEventPayload{
 			CusdecRef: DocumentReference{

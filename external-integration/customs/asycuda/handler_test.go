@@ -51,7 +51,7 @@ func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "edg-101",
+		"edgeId": "edge-101",
 		"integrated": true,
 		"eventType": "CUSDEC_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",
@@ -61,7 +61,7 @@ func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
 	}`
 
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecIntegrationResultRequest) bool {
-		return r.EdgeID == "edg-101" && r.Integrated && r.Payload.CusdecRef.Office == "CBEX1"
+		return r.EdgeID == "edge-101" && r.Integrated && r.Payload.CusdecRef.Office == "CBEX1"
 	})).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
@@ -146,7 +146,7 @@ func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "cdn-edg-99",
+		"edgeId": "cdn-edge-99",
 		"integrated": true,
 		"eventType": "CDN_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",
@@ -156,7 +156,7 @@ func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
 	}`
 
 	cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cdn.CDNIntegrationResultRequest) bool {
-		return r.EdgeID == "cdn-edg-99" && r.Payload.CDNRef.Office == "CBEX1"
+		return r.EdgeID == "cdn-edge-99" && r.Payload.CDNRef.Office == "CBEX1"
 	})).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
@@ -223,7 +223,7 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 		{
 			name: "CusDec result integrated true but missing cusDecRef",
 			payload: `{
-				"edgeId": "edg-123",
+				"edgeId": "edge-123",
 				"integrated": true,
 				"eventType": "CUSDEC_INTEGRATED",
 				"processedAt": "2026-07-23T10:00:00Z",
@@ -280,7 +280,7 @@ func TestSLCEHandler_InternalServerErrors(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "edg-err",
+		"edgeId": "edge-err",
 		"integrated": true,
 		"eventType": "CUSDEC_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",
@@ -360,7 +360,7 @@ func TestSLCEHandler_WorkflowNotFound(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "edg-missing",
+		"edgeId": "edge-missing",
 		"integrated": true,
 		"eventType": "CUSDEC_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",

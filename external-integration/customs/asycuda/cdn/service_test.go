@@ -32,13 +32,13 @@ func (m *mockRepository) Update(ctx context.Context, note *DispatchNote) error {
 func TestProcessIntegrationResult_Success(t *testing.T) {
 	repo := &mockRepository{
 		byEdgeID: map[string]*DispatchNote{
-			"edg-123": {ID: "1", EdgeID: "edg-123", Status: DispatchNoteStatusSubmitted},
+			"edge-123": {ID: "1", EdgeID: "edge-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
 	svc := NewCDNWebhookService(repo)
 
 	req := CDNIntegrationResultRequest{
-		EdgeID:     "edg-123",
+		EdgeID:     "edge-123",
 		Integrated: true,
 		Event:      "INTEGRATION_RESULT",
 		Payload: integrationResultPayload{
@@ -55,14 +55,14 @@ func TestProcessIntegrationResult_Success(t *testing.T) {
 func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 	repo := &mockRepository{
 		byEdgeID: map[string]*DispatchNote{
-			"edg-123": {ID: "1", EdgeID: "edg-123", Status: DispatchNoteStatusSubmitted},
+			"edge-123": {ID: "1", EdgeID: "edge-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
 	svc := NewCDNWebhookService(repo)
 
 	rawErrors := json.RawMessage(`{"code":"ERR_VAL_01","message":"Invalid weight value"}`)
 	req := CDNIntegrationResultRequest{
-		EdgeID:     "edg-123",
+		EdgeID:     "edge-123",
 		Integrated: false,
 		Event:      "INTEGRATION_RESULT",
 		Errors:     rawErrors,
