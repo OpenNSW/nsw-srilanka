@@ -10,13 +10,13 @@ import (
 )
 
 type mockRepository struct {
-	byEdgID  map[string]*DispatchNote
+	byEdgeID map[string]*DispatchNote
 	byCDNRef map[string]*DispatchNote
 	updated  *DispatchNote
 }
 
-func (m *mockRepository) GetByEdgID(ctx context.Context, edgID string) (*DispatchNote, error) {
-	return m.byEdgID[edgID], nil
+func (m *mockRepository) GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error) {
+	return m.byEdgeID[edgeID], nil
 }
 
 func (m *mockRepository) GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error) {
@@ -31,14 +31,14 @@ func (m *mockRepository) Update(ctx context.Context, note *DispatchNote) error {
 
 func TestProcessIntegrationResult_Success(t *testing.T) {
 	repo := &mockRepository{
-		byEdgID: map[string]*DispatchNote{
-			"edg-123": {ID: "1", EdgID: "edg-123", Status: DispatchNoteStatusSubmitted},
+		byEdgeID: map[string]*DispatchNote{
+			"edg-123": {ID: "1", EdgeID: "edg-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
 	svc := NewCDNWebhookService(repo)
 
 	req := CDNIntegrationResultRequest{
-		EdgID:      "edg-123",
+		EdgeID:     "edg-123",
 		Integrated: true,
 		Event:      "INTEGRATION_RESULT",
 		Payload: integrationResultPayload{
@@ -54,15 +54,15 @@ func TestProcessIntegrationResult_Success(t *testing.T) {
 
 func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 	repo := &mockRepository{
-		byEdgID: map[string]*DispatchNote{
-			"edg-123": {ID: "1", EdgID: "edg-123", Status: DispatchNoteStatusSubmitted},
+		byEdgeID: map[string]*DispatchNote{
+			"edg-123": {ID: "1", EdgeID: "edg-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
 	svc := NewCDNWebhookService(repo)
 
 	rawErrors := json.RawMessage(`{"code":"ERR_VAL_01","message":"Invalid weight value"}`)
 	req := CDNIntegrationResultRequest{
-		EdgID:      "edg-123",
+		EdgeID:     "edg-123",
 		Integrated: false,
 		Event:      "INTEGRATION_RESULT",
 		Errors:     rawErrors,
@@ -75,13 +75,13 @@ func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 }
 
 func TestProcessIntegrationResult_NotFound(t *testing.T) {
-	repo := &mockRepository{byEdgID: map[string]*DispatchNote{}}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
 	svc := NewCDNWebhookService(repo)
 
-	req := CDNIntegrationResultRequest{EdgID: "non-existent-edg"}
+	req := CDNIntegrationResultRequest{EdgeID: "non-existent-edg"}
 	err := svc.ProcessIntegrationResult(context.Background(), req)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrDispatchNoteNotFoundByEdgID)
+	assert.ErrorIs(t, err, ErrDispatchNoteNotFoundByEdgeID)
 }
 
 func TestProcessAcknowledgment_Success(t *testing.T) {

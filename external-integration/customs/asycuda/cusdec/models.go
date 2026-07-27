@@ -31,8 +31,18 @@ const (
 	CusdecStatusReleased   CusdecStatus = "RELEASED"
 )
 
+// TaxEntry represents an assessed tax line item on a declaration (§6.2).
+type TaxEntry struct {
+	Code   string  `json:"code"`
+	Rate   float64 `json:"rate"`
+	Amount float64 `json:"amount"`
+}
+
 type cusdecResultPayload struct {
-	CusdecRef DocumentReference `json:"cusDecRef"`
+	CusdecRef  DocumentReference `json:"cusDecRef"`
+	EdgeID     string            `json:"edgeId"`
+	Integrated *bool             `json:"integrated"`
+	Taxes      []TaxEntry        `json:"taxes,omitempty"`
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
@@ -69,7 +79,6 @@ func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		EventType   string    `json:"eventType"`
 		ProcessedAt time.Time `json:"processedAt"`
-		AltEdgeID   string    `json:"edgId"`
 		*Alias
 	}{
 		Alias: (*Alias)(r),
@@ -83,8 +92,11 @@ func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
 		r.ProcessAt = aux.ProcessedAt
 	}
-	if r.EdgeID == "" && aux.AltEdgeID != "" {
-		r.EdgeID = aux.AltEdgeID
+	if r.EdgeID == "" && r.Payload.EdgeID != "" {
+		r.EdgeID = r.Payload.EdgeID
+	}
+	if !r.Integrated && r.Payload.Integrated != nil && *r.Payload.Integrated {
+		r.Integrated = true
 	}
 	return nil
 }

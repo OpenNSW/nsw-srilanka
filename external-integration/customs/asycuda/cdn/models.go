@@ -40,7 +40,7 @@ type integrationResultPayload struct {
 // CDNIntegrationResultRequest is the inbound DTO for the ASYCUDA §7.2 callback
 // pushed when CDN integration succeeds or fails.
 type CDNIntegrationResultRequest struct {
-	EdgID      string                   `json:"edgId"`
+	EdgeID     string                   `json:"edgeId"`
 	Integrated bool                     `json:"integrated"`
 	Event      string                   `json:"event"`
 	ProcessAt  time.Time                `json:"processAt"`
@@ -54,7 +54,6 @@ func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		EventType   string    `json:"eventType"`
 		ProcessedAt time.Time `json:"processedAt"`
-		AltEdgeID   string    `json:"edgeId"`
 		*Alias
 	}{
 		Alias: (*Alias)(r),
@@ -68,15 +67,12 @@ func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
 		r.ProcessAt = aux.ProcessedAt
 	}
-	if r.EdgID == "" && aux.AltEdgeID != "" {
-		r.EdgID = aux.AltEdgeID
-	}
 	return nil
 }
 
 func (r CDNIntegrationResultRequest) Validate() error {
-	if r.EdgID == "" {
-		return errors.New("edgId is required")
+	if r.EdgeID == "" {
+		return errors.New("edgeId is required")
 	}
 	if r.Event == "" {
 		return errors.New("event is required")
@@ -148,7 +144,7 @@ func (r CDNAcknowledgmentRequest) Validate() error {
 // DispatchNote is the domain entity representing a Cargo Dispatch Note.
 type DispatchNote struct {
 	ID        string             `json:"id" gorm:"type:text;not null;primaryKey"`
-	EdgID     string             `json:"edg_id" gorm:"type:text;not null;uniqueIndex"`
+	EdgeID    string             `json:"edge_id" gorm:"type:text;not null;uniqueIndex"`
 	Status    DispatchNoteStatus `json:"status" gorm:"type:text;not null;index"`
 	CDNYear   string             `json:"cdn_year" gorm:"column:cdn_year;index:idx_cdn_ref"`
 	CDNOffice string             `json:"cdn_office" gorm:"column:cdn_office;index:idx_cdn_ref"`

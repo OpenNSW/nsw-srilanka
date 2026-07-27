@@ -9,7 +9,7 @@ import (
 
 // DispatchNoteRepository defines the persistence interface for DispatchNote entities.
 type DispatchNoteRepository interface {
-	GetByEdgID(ctx context.Context, edgID string) (*DispatchNote, error)
+	GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error)
 	GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error)
 	Update(ctx context.Context, note *DispatchNote) error
 }
@@ -23,9 +23,9 @@ func NewDispatchNoteRepository(db *gorm.DB) DispatchNoteRepository {
 	return &dispatchNoteRepository{db: db}
 }
 
-func (r *dispatchNoteRepository) GetByEdgID(ctx context.Context, edgID string) (*DispatchNote, error) {
+func (r *dispatchNoteRepository) GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error) {
 	var note DispatchNote
-	if err := r.db.WithContext(ctx).Where("edg_id = ?", edgID).First(&note).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("edge_id = ?", edgeID).First(&note).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}

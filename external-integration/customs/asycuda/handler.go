@@ -58,13 +58,13 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		h.handleCusdecIntegrationResult(w, r, body)
 
 	case "PAYMENT_CONFIRMED":
-		h.handleCusdecEvent(w, r, body, "PAYMENT")
+		h.handleCusdecEvent(w, r, body, "PAYMENT_CONFIRMED")
 
 	case "WARRANTING_COMPLETED":
-		h.handleCusdecEvent(w, r, body, "WARRANTING")
+		h.handleCusdecEvent(w, r, body, "WARRANTING_COMPLETED")
 
 	case "EXPORT_RELEASED":
-		h.handleCusdecEvent(w, r, body, "RELEASE")
+		h.handleCusdecEvent(w, r, body, "EXPORT_RELEASED")
 
 	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
@@ -162,14 +162,14 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
-		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgID) {
+		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for integration result",
-				"edg_id", req.EdgID, "error", err)
+				"edge_id", req.EdgeID, "error", err)
 			http.Error(w, "dispatch note not found", http.StatusNotFound)
 			return
 		}
 		slog.ErrorContext(r.Context(), "slce: failed to process CDN integration result",
-			"edg_id", req.EdgID, "error", err)
+			"edge_id", req.EdgeID, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
