@@ -235,6 +235,8 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockWM.On("StartWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return(nil)
 
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).

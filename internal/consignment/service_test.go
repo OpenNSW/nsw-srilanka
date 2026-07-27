@@ -284,6 +284,8 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	mockWM.On("StartWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return(nil)
 
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
@@ -327,6 +329,8 @@ func TestConsignmentService_CreateAndStartConsignment_CompanyLookupFails(t *test
 }
 
 func TestConsignmentService_CreateAndStartConsignment_StartWorkflowFails(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "FCAU")
+	t.Setenv("AGENCY_REF_PREFIX", "")
 	db, sqlMock := setupTestDB(t)
 	mockUser := new(MockUserService)
 	mockCompany := new(MockCompanyService)
@@ -346,6 +350,8 @@ func TestConsignmentService_CreateAndStartConsignment_StartWorkflowFails(t *test
 		Return(errors.New("workflow engine unavailable"))
 
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectRollback()
 
@@ -485,6 +491,8 @@ func TestTaskDisplayName(t *testing.T) {
 }
 
 func TestGenerateReferenceNumber_FCAU(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "FCAU")
+	t.Setenv("AGENCY_REF_PREFIX", "")
 	db, sqlMock := setupTestDB(t)
 	svc := NewService(db, nil, nil, nil, nil, nil)
 
@@ -499,6 +507,8 @@ func TestGenerateReferenceNumber_FCAU(t *testing.T) {
 }
 
 func TestGenerateReferenceNumber_FCAU_SequencePadded(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "FCAU")
+	t.Setenv("AGENCY_REF_PREFIX", "")
 	db, sqlMock := setupTestDB(t)
 	svc := NewService(db, nil, nil, nil, nil, nil)
 
@@ -512,29 +522,91 @@ func TestGenerateReferenceNumber_FCAU_SequencePadded(t *testing.T) {
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
-func TestGenerateReferenceNumber_NonFCAUAgencies(t *testing.T) {
+func TestGenerateReferenceNumber_FCAU_Boundary100000(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "FCAU")
+	t.Setenv("AGENCY_REF_PREFIX", "")
 	db, sqlMock := setupTestDB(t)
 	svc := NewService(db, nil, nil, nil, nil, nil)
 
-	// NPQS should use NPQS/ prefix, NOT 034/
+	// Mock sequence nextval return 100000
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(100000)))
+
+	refNum, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "034/100000", refNum)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestGenerateReferenceNumber_NonFCAUAgencies(t *testing.T) {
 	t.Setenv("AGENCY_CODE", "NPQS")
+	t.Setenv("AGENCY_REF_PREFIX", "")
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	// NPQS without AGENCY_REF_PREFIX should NOT get 034/ prefix
 	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
 		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
 
 	refNumNPQS, err := svc.generateReferenceNumber(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, "NPQS/00001", refNumNPQS)
+	assert.Equal(t, "00001", refNumNPQS)
 	assert.NotContains(t, refNumNPQS, "034/")
 
-	// CDA should use CDA/ prefix, NOT 034/
-	t.Setenv("AGENCY_CODE", "CDA")
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestGenerateReferenceNumber_FCAU_ScalesPast99999(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "FCAU")
+	t.Setenv("AGENCY_REF_PREFIX", "")
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	// 100,000 sequence -> 034/100000 (expands dynamically to 6 digits)
 	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
-		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(2)))
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(100000)))
 
-	refNumCDA, err := svc.generateReferenceNumber(context.Background(), nil)
+	refNum6, err := svc.generateReferenceNumber(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Equal(t, "CDA/00002", refNumCDA)
-	assert.NotContains(t, refNumCDA, "034/")
+	assert.Equal(t, "034/100000", refNum6)
 
+	// 1,000,000 sequence -> 034/1000000 (expands dynamically to 7 digits into millions)
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1000000)))
+
+	refNum7, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "034/1000000", refNum7)
+
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestGenerateReferenceNumber_DefaultEmptyAgency(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "")
+	t.Setenv("AGENCY_REF_PREFIX", "")
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
+
+	refNum, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "034/00001", refNum)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestGenerateReferenceNumber_CustomPrefixOverride(t *testing.T) {
+	t.Setenv("AGENCY_CODE", "CDA")
+	t.Setenv("AGENCY_REF_PREFIX", "CDA-REF/")
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
+
+	refNum, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "CDA-REF/00001", refNum)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }

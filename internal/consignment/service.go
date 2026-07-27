@@ -144,7 +144,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 
 	refNum, err := s.generateReferenceNumber(ctx, tx)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to generate reference number", "error", err)
+		return nil, fmt.Errorf("failed to generate reference number: %w", err)
 	}
 
 	consignment := &Consignment{
@@ -153,9 +153,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		TraderID:        traderID,
 		TraderCompanyID: traderCompany.ID,
 		State:           InProgress,
-	}
-	if refNum != "" {
-		consignment.ReferenceNumber = &refNum
+		ReferenceNumber: &refNum,
 	}
 
 	if err := tx.Create(consignment).Error; err != nil {
@@ -351,11 +349,8 @@ func (s *Service) generateReferenceNumber(ctx context.Context, tx *gorm.DB) (str
 	agencyCode := strings.ToUpper(strings.TrimSpace(os.Getenv("AGENCY_CODE")))
 	if prefix == "" {
 		if agencyCode == "FCAU" || agencyCode == "" {
-			// Prefix 034/ applies ONLY to FCAU applications
+			// Prefix 034/ applies to FCAU applications
 			prefix = "034/"
-		} else {
-			// Non-FCAU agencies (e.g. NPQS, CDA) use their own agency code prefix
-			prefix = agencyCode + "/"
 		}
 	}
 
@@ -366,12 +361,11 @@ func (s *Service) generateReferenceNumber(ctx context.Context, tx *gorm.DB) (str
 			ID int64 `gorm:"primaryKey;autoIncrement"`
 		}
 		counter := RefCounter{}
-		if createErr := tx.WithContext(ctx).Table("consignment_ref_counters").Create(&counter).Error; createErr == nil && counter.ID > 0 {
+		createErr := tx.WithContext(ctx).Table("consignment_ref_counters").Create(&counter).Error
+		if createErr == nil && counter.ID > 0 {
 			seqVal = counter.ID
 		} else {
-			var count int64
-			_ = tx.WithContext(ctx).Model(&Consignment{}).Count(&count)
-			seqVal = count + 1
+			return "", fmt.Errorf("failed to allocate reference sequence number: %w", err)
 		}
 	}
 
