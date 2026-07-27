@@ -30,8 +30,8 @@ import (
 func withAuthContext(ctx context.Context, userID string) context.Context {
 	authCtx := &authn.AuthContext{
 		User: &authn.UserContext{
-			ID:    userID,
-			Email: userID + "@example.com",
+			ID:          userID,
+			ExtraClaims: authn.ExtraClaims{"email": userID + "@example.com"},
 		},
 	}
 	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
@@ -40,9 +40,11 @@ func withAuthContext(ctx context.Context, userID string) context.Context {
 func withAuthContextOU(ctx context.Context, userID, ouHandle string) context.Context {
 	authCtx := &authn.AuthContext{
 		User: &authn.UserContext{
-			ID:       userID,
-			Email:    userID + "@example.com",
-			OUHandle: ouHandle,
+			ID: userID,
+			ExtraClaims: authn.ExtraClaims{
+				"email":    userID + "@example.com",
+				"ouHandle": ouHandle,
+			},
 		},
 	}
 	return context.WithValue(ctx, authn.AuthContextKey, authCtx)

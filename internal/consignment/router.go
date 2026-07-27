@@ -134,13 +134,14 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
+	ouHandle := authCtx.User.ExtraClaims.String("ouHandle")
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, ouHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) {
 			http.Error(w, "company profile not found for user", http.StatusForbidden)
 			return
 		}
-		slog.Error("failed to resolve user company", "ouHandle", authCtx.User.OUHandle, "error", err)
+		slog.Error("failed to resolve user company", "ouHandle", ouHandle, "error", err)
 		http.Error(w, "failed to resolve user company", http.StatusInternalServerError)
 		return
 	}
@@ -181,13 +182,14 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 
 	// Resolve the caller's company. Fail closed on any identity problem: a missing
 	// company profile or an unusable OU handle must not grant access.
-	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
+	ouHandle := authCtx.User.ExtraClaims.String("ouHandle")
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, ouHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
 			http.Error(w, "company profile not found for user", http.StatusForbidden)
 			return
 		}
-		slog.Error("failed to resolve user company", "ouHandle", authCtx.User.OUHandle, "error", err)
+		slog.Error("failed to resolve user company", "ouHandle", ouHandle, "error", err)
 		http.Error(w, "failed to resolve user company", http.StatusInternalServerError)
 		return
 	}

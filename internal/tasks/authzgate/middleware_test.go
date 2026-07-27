@@ -178,5 +178,8 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 }
 
 func userCtx(ouHandle string, roles ...string) *authn.AuthContext {
-	return &authn.AuthContext{User: &authn.UserContext{OUHandle: ouHandle, Roles: roles}}
+	return &authn.AuthContext{User: &authn.UserContext{
+		Roles:       roles,
+		ExtraClaims: authn.ExtraClaims{"ouHandle": ouHandle},
+	}}
 }

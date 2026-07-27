@@ -102,6 +102,8 @@ func Load() (*Config, error) {
 			Audience:              getEnvOrDefault("AUTH_AUDIENCE", "NSW_API"),
 			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW")),
 			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
+			RequiredUserClaims:    []string{"email", "ouId", "ouHandle"},
+			OptionalUserClaims:    []string{"phone_number"},
 		},
 		Notification: notification.Config{
 			Path: getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"),

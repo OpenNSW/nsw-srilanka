@@ -221,7 +221,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
 	// -------------------------------------------------------------------
-	authnManager, err := authn.NewManager(userProfileService, cfg.Authn)
+	authnManager, err := authn.NewManager(&authUserProfileAdapter{svc: userProfileService}, cfg.Authn)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
