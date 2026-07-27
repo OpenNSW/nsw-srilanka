@@ -483,3 +483,58 @@ func TestTaskDisplayName(t *testing.T) {
 	rc4 := json.RawMessage(`invalid`)
 	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rc4))
 }
+
+func TestGenerateReferenceNumber_FCAU(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	// Mock sequence nextval return 1
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
+
+	refNum, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "034/00001", refNum)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestGenerateReferenceNumber_FCAU_SequencePadded(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	// Mock sequence nextval return 42
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(42)))
+
+	refNum, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "034/00042", refNum)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestGenerateReferenceNumber_NonFCAUAgencies(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := NewService(db, nil, nil, nil, nil, nil)
+
+	// NPQS should use NPQS/ prefix, NOT 034/
+	t.Setenv("AGENCY_CODE", "NPQS")
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(1)))
+
+	refNumNPQS, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "NPQS/00001", refNumNPQS)
+	assert.NotContains(t, refNumNPQS, "034/")
+
+	// CDA should use CDA/ prefix, NOT 034/
+	t.Setenv("AGENCY_CODE", "CDA")
+	sqlMock.ExpectQuery(`SELECT nextval\('consignment_ref_seq'\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"nextval"}).AddRow(int64(2)))
+
+	refNumCDA, err := svc.generateReferenceNumber(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "CDA/00002", refNumCDA)
+	assert.NotContains(t, refNumCDA, "034/")
+
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -135,6 +136,17 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		return nil, fmt.Errorf("failed to get workflow template: %w", err)
 	}
 
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
+	}
+	defer tx.Rollback()
+
+	refNum, err := s.generateReferenceNumber(ctx, tx)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to generate reference number", "error", err)
+	}
+
 	consignment := &Consignment{
 		ID:              uuid.NewString(),
 		Flow:            FlowExport,
@@ -142,12 +154,9 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		TraderCompanyID: traderCompany.ID,
 		State:           InProgress,
 	}
-
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
+	if refNum != "" {
+		consignment.ReferenceNumber = &refNum
 	}
-	defer tx.Rollback()
 
 	if err := tx.Create(consignment).Error; err != nil {
 		return nil, fmt.Errorf("failed to create consignment: %w", err)
@@ -263,7 +272,7 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			escaped = strings.ReplaceAll(escaped, "%", "\\%")
 			escaped = strings.ReplaceAll(escaped, "_", "\\_")
 			queryVal := "%" + strings.ToLower(escaped) + "%"
-			q = q.Where("LOWER(id) LIKE ? ESCAPE '\\' OR LOWER(name) LIKE ? ESCAPE '\\'", queryVal, queryVal)
+			q = q.Where("LOWER(id) LIKE ? ESCAPE '\\' OR LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(reference_number) LIKE ? ESCAPE '\\'", queryVal, queryVal, queryVal)
 		}
 		return q
 	}
@@ -310,9 +319,14 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 		if c.Name != nil {
 			name = *c.Name
 		}
+		refNum := ""
+		if c.ReferenceNumber != nil {
+			refNum = *c.ReferenceNumber
+		}
 
 		consignmentDTOs = append(consignmentDTOs, SummaryDTO{
 			ID:              c.ID,
+			ReferenceNumber: refNum,
 			Name:            name,
 			Flow:            c.Flow,
 			State:           c.State,
@@ -327,6 +341,41 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 
 	result := pagination.NewPageResult(consignmentDTOs, totalCount, finalOffset, finalLimit)
 	return &result, nil
+}
+
+func (s *Service) generateReferenceNumber(ctx context.Context, tx *gorm.DB) (string, error) {
+	if tx == nil {
+		tx = s.db
+	}
+	prefix := os.Getenv("AGENCY_REF_PREFIX")
+	agencyCode := strings.ToUpper(strings.TrimSpace(os.Getenv("AGENCY_CODE")))
+	if prefix == "" {
+		if agencyCode == "FCAU" || agencyCode == "" {
+			// Prefix 034/ applies ONLY to FCAU applications
+			prefix = "034/"
+		} else {
+			// Non-FCAU agencies (e.g. NPQS, CDA) use their own agency code prefix
+			prefix = agencyCode + "/"
+		}
+	}
+
+	var seqVal int64
+	err := tx.WithContext(ctx).Raw("SELECT nextval('consignment_ref_seq')").Scan(&seqVal).Error
+	if err != nil {
+		type RefCounter struct {
+			ID int64 `gorm:"primaryKey;autoIncrement"`
+		}
+		counter := RefCounter{}
+		if createErr := tx.WithContext(ctx).Table("consignment_ref_counters").Create(&counter).Error; createErr == nil && counter.ID > 0 {
+			seqVal = counter.ID
+		} else {
+			var count int64
+			_ = tx.WithContext(ctx).Model(&Consignment{}).Count(&count)
+			seqVal = count + 1
+		}
+	}
+
+	return fmt.Sprintf("%s%05d", prefix, seqVal), nil
 }
 
 // markConsignmentAsFinished updates the consignment state to FINISHED.
@@ -365,9 +414,14 @@ func (s *Service) buildConsignmentDetailDTO(
 	if consignment.Name != nil {
 		name = *consignment.Name
 	}
+	refNum := ""
+	if consignment.ReferenceNumber != nil {
+		refNum = *consignment.ReferenceNumber
+	}
 
 	return &DetailDTO{
 		ID:              consignment.ID,
+		ReferenceNumber: refNum,
 		Name:            name,
 		Flow:            consignment.Flow,
 		State:           consignment.State,

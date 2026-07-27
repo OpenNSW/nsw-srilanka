@@ -31,9 +31,10 @@ const (
 
 // Consignment represents a consignment in the system.
 type Consignment struct {
-	ID        string    `gorm:"type:text;column:id;primaryKey;not null" json:"id"`
-	CreatedAt time.Time `gorm:"type:timestamptz;column:created_at;not null;autoCreateTime" json:"createdAt"`
-	UpdatedAt time.Time `gorm:"type:timestamptz;column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
+	ID              string    `gorm:"type:text;column:id;primaryKey;not null" json:"id"`
+	ReferenceNumber *string   `gorm:"type:varchar(100);column:reference_number" json:"referenceNumber,omitempty"`
+	CreatedAt       time.Time `gorm:"type:timestamptz;column:created_at;not null;autoCreateTime" json:"createdAt"`
+	UpdatedAt       time.Time `gorm:"type:timestamptz;column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
 
 	// Core attributes
 	Name  *string `gorm:"type:varchar(255);column:name" json:"name,omitempty"`
@@ -75,16 +76,17 @@ func (d *CreateConsignmentDTO) Validate() error {
 
 // SummaryDTO represents the consignment data returned in list responses.
 type SummaryDTO struct {
-	ID              string `json:"id"`              // Consignment ID
-	Name            string `json:"name,omitempty"`  // Consignment Name
-	Flow            Flow   `json:"flow"`            // e.g., IMPORT, EXPORT
-	State           State  `json:"state"`           // State of the consignment
-	TraderID        string `json:"traderId"`        // Trader user who created the consignment
-	TraderCompanyID string `json:"traderCompanyId"` // Company the trader belongs to
-	ChaCompanyID    string `json:"chaCompanyId"`    // CHA company selected at Stage 1
-	ChaID           string `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
-	CreatedAt       string `json:"createdAt"`       // Timestamp of consignment creation
-	UpdatedAt       string `json:"updatedAt"`       // Timestamp of last consignment update
+	ID              string `json:"id"`                        // Consignment ID
+	ReferenceNumber string `json:"referenceNumber,omitempty"` // Application Reference Number (e.g. 034/00001)
+	Name            string `json:"name,omitempty"`            // Consignment Name
+	Flow            Flow   `json:"flow"`                      // e.g., IMPORT, EXPORT
+	State           State  `json:"state"`                     // State of the consignment
+	TraderID        string `json:"traderId"`                  // Trader user who created the consignment
+	TraderCompanyID string `json:"traderCompanyId"`           // Company the trader belongs to
+	ChaCompanyID    string `json:"chaCompanyId"`              // CHA company selected at Stage 1
+	ChaID           string `json:"chaId,omitempty"`           // CHA assigned at Stage 2 (empty until claimed)
+	CreatedAt       string `json:"createdAt"`                 // Timestamp of consignment creation
+	UpdatedAt       string `json:"updatedAt"`                 // Timestamp of last consignment update
 }
 
 // ListResult is the pagination envelope returned by the list consignments endpoint.
@@ -92,17 +94,18 @@ type ListResult = pagination.Page[SummaryDTO]
 
 // DetailDTO represents the full consignment data returned in detailed responses.
 type DetailDTO struct {
-	ID              string                    `json:"id"`              // Consignment ID
-	Name            string                    `json:"name,omitempty"`  // Consignment Name
-	Flow            Flow                      `json:"flow"`            // e.g., IMPORT, EXPORT
-	State           State                     `json:"state"`           // State of the consignment
-	TraderID        string                    `json:"traderId"`        // Trader user who created the consignment
-	TraderCompanyID string                    `json:"traderCompanyId"` // Company the trader belongs to
-	ChaCompanyID    string                    `json:"chaCompanyId"`    // CHA company selected at Stage 1
-	ChaID           string                    `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
-	CreatedAt       string                    `json:"createdAt"`       // Timestamp of consignment creation
-	UpdatedAt       string                    `json:"updatedAt"`       // Timestamp of last consignment update
-	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details
+	ID              string                    `json:"id"`                        // Consignment ID
+	ReferenceNumber string                    `json:"referenceNumber,omitempty"` // Application Reference Number (e.g. 034/00001)
+	Name            string                    `json:"name,omitempty"`            // Consignment Name
+	Flow            Flow                      `json:"flow"`                      // e.g., IMPORT, EXPORT
+	State           State                     `json:"state"`                     // State of the consignment
+	TraderID        string                    `json:"traderId"`                  // Trader user who created the consignment
+	TraderCompanyID string                    `json:"traderCompanyId"`           // Company the trader belongs to
+	ChaCompanyID    string                    `json:"chaCompanyId"`              // CHA company selected at Stage 1
+	ChaID           string                    `json:"chaId,omitempty"`           // CHA assigned at Stage 2 (empty until claimed)
+	CreatedAt       string                    `json:"createdAt"`                 // Timestamp of consignment creation
+	UpdatedAt       string                    `json:"updatedAt"`                 // Timestamp of last consignment update
+	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`             // Associated workflow nodes with template details
 }
 
 // WorkflowNodeResponseDTO represents a workflow node in the response.
