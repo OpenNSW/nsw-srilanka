@@ -254,6 +254,28 @@ components:
             errors:
               type: object
               description: Segment-keyed errors (§4.4). Empty object {} on success.
+          oneOf:
+            - title: Integrated
+              required:
+                - cusdecRef
+              properties:
+                integrated:
+                  enum: [true]
+                errors:
+                  type: object
+                  maxProperties: 0
+            - title: Rejected
+              required:
+                - errors
+              properties:
+                integrated:
+                  enum: [false]
+                errors:
+                  type: object
+                  minProperties: 1
+                taxes:
+                  type: array
+                  maxItems: 0
 
     CusdecPaymentNotificationRequest:
       type: object
@@ -350,6 +372,9 @@ components:
       description: |
         §7.2 CDN Integration Result. Single shape: `edgeId`, `integrated`, and
         `errors` are top-level; `payload` carries only `cdnRef`.
+
+        Same success/failure conditions as the declaration result (§6.2), with no
+        taxes block for CDN.
       required:
         - edgeId
         - integrated
@@ -384,6 +409,27 @@ components:
         errors:
           type: object
           description: Segment-keyed errors (§4.4). Empty object {} on success.
+      oneOf:
+        - title: Integrated
+          properties:
+            integrated:
+              enum: [true]
+            payload:
+              type: object
+              required:
+                - cdnRef
+            errors:
+              type: object
+              maxProperties: 0
+        - title: Rejected
+          required:
+            - errors
+          properties:
+            integrated:
+              enum: [false]
+            errors:
+              type: object
+              minProperties: 1
 
     CDNAcknowledgmentRequest:
       type: object

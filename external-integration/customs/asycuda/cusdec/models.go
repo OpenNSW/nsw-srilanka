@@ -47,6 +47,8 @@ type cusdecResultPayload struct {
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
+	*p = cusdecResultPayload{}
+
 	type Alias cusdecResultPayload
 	aux := &struct {
 		AltRef DocumentReference `json:"cusdecRef"`
@@ -80,6 +82,9 @@ type CusdecIntegrationResultRequest struct {
 
 // UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
 func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
+	// Clear the receiver so a reused value cannot retain fields the new document omits.
+	*r = CusdecIntegrationResultRequest{}
+
 	type Alias CusdecIntegrationResultRequest
 	aux := &struct {
 		EventType   string    `json:"eventType"`
@@ -142,6 +147,8 @@ type cusdecEventPayload struct {
 }
 
 func (p *cusdecEventPayload) UnmarshalJSON(data []byte) error {
+	*p = cusdecEventPayload{}
+
 	type Alias cusdecEventPayload
 	aux := &struct {
 		AltRef DocumentReference `json:"cusdecRef"`
@@ -168,6 +175,9 @@ type CusdecEventRequest struct {
 
 // UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
 func (r *CusdecEventRequest) UnmarshalJSON(data []byte) error {
+	// Clear the receiver so a reused value cannot retain fields the new document omits.
+	*r = CusdecEventRequest{}
+
 	type Alias CusdecEventRequest
 	aux := &struct {
 		EventType   string    `json:"eventType"`

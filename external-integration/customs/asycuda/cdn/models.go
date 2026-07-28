@@ -50,6 +50,9 @@ type CDNIntegrationResultRequest struct {
 
 // UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
 func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
+	// Clear the receiver so a reused value cannot retain fields the new document omits.
+	*r = CDNIntegrationResultRequest{}
+
 	type Alias CDNIntegrationResultRequest
 	aux := &struct {
 		EventType   string    `json:"eventType"`
@@ -104,6 +107,9 @@ type CDNAcknowledgmentRequest struct {
 
 // UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
 func (r *CDNAcknowledgmentRequest) UnmarshalJSON(data []byte) error {
+	// Clear the receiver so a reused value cannot retain fields the new document omits.
+	*r = CDNAcknowledgmentRequest{}
+
 	type Alias CDNAcknowledgmentRequest
 	aux := &struct {
 		EventType   string    `json:"eventType"`

@@ -129,6 +129,73 @@ func TestCusdecIntegrationResultRequest_NestedPayloadFields(t *testing.T) {
 	})
 }
 
+// Decoding into a reused value must not carry fields the second document omits.
+func TestCusdecIntegrationResultRequest_ReusedReceiverIsReset(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+
+	first := []byte(`{
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-06-26T04:04:52Z",
+		"payload": {
+			"edgeId": "edge-first",
+			"integrated": true,
+			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047},
+			"taxes": [{"code": "tax1", "rate": 1, "amount": 222}],
+			"errors": {}
+		}
+	}`)
+	require.NoError(t, json.Unmarshal(first, &req))
+	require.Equal(t, "edge-first", req.EdgeID)
+	require.True(t, req.Integrated)
+	require.Len(t, req.Payload.Taxes, 1)
+
+	second := []byte(`{
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-06-27T04:04:52Z",
+		"payload": {
+			"edgeId": "edge-second",
+			"integrated": false,
+			"errors": {"Declaration.HSCode": ["Invalid HS code"]}
+		}
+	}`)
+	require.NoError(t, json.Unmarshal(second, &req))
+
+	assert.Equal(t, "edge-second", req.EdgeID)
+	assert.False(t, req.Integrated)
+	assert.Empty(t, req.Payload.Taxes, "taxes from the first document must not survive")
+	assert.False(t, req.Payload.CusdecRef.IsValid(), "cusdecRef from the first document must not survive")
+	assert.JSONEq(t, `{"Declaration.HSCode": ["Invalid HS code"]}`, string(req.Errors))
+}
+
+func TestCusdecEventRequest_ReusedReceiverIsReset(t *testing.T) {
+	var req CusdecEventRequest
+
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"eventType": "PAYMENT_CONFIRMED",
+		"processedAt": "2026-04-26T11:15:22Z",
+		"payload": {
+			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047},
+			"amountPaid": 2035.00,
+			"currency": "LKR"
+		}
+	}`), &req))
+	require.Equal(t, 2035.00, req.Payload.AmountPaid)
+
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"eventType": "EXPORT_RELEASED",
+		"processedAt": "2026-04-26T11:15:22Z",
+		"payload": {
+			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047},
+			"vesselName": "EVER GIVEN"
+		}
+	}`), &req))
+
+	assert.Equal(t, "EXPORT_RELEASED", req.Event)
+	assert.Equal(t, "EVER GIVEN", req.Payload.VesselName)
+	assert.Zero(t, req.Payload.AmountPaid, "amountPaid from the payment document must not survive")
+	assert.Empty(t, req.Payload.Currency, "currency from the payment document must not survive")
+}
+
 func TestCusdecEventRequest_DualFieldUnmarshaling(t *testing.T) {
 	specJSON := []byte(`{
 		"eventType": "PAYMENT",
