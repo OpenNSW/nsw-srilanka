@@ -21,8 +21,6 @@ import (
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
-
-	"github.com/OpenNSW/nsw-srilanka/internal/tlsguard"
 )
 
 // Config holds all configuration for the application.
@@ -168,10 +166,8 @@ func (c *Config) Validate() error {
 	}
 	// Refuse to skip JWKS TLS verification outside development: a forged
 	// signing-key response here means full JWT forgery / auth bypass.
-	if c.Authn.InsecureSkipTLSVerify {
-		if err := tlsguard.Guard("AUTH_JWKS_INSECURE_SKIP_VERIFY"); err != nil {
-			return err
-		}
+	if c.Authn.InsecureSkipTLSVerify && !isDevEnvironment() {
+		return fmt.Errorf("AUTH_JWKS_INSECURE_SKIP_VERIFY: insecure TLS verification requested but APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start — provide a trusted certificate chain, or set APP_ENV=development for a non-production run")
 	}
 	// Outbound M2M (services.json) may also disable TLS verification per service;
 	// hold it to the same rule so an insecure token endpoint can't ship to prod.
@@ -225,10 +221,8 @@ func guardServicesConfigTLS(path string) error {
 		return fmt.Errorf("parse services config %s: %w", path, err)
 	}
 	for _, s := range probe.Services {
-		if s.Auth.Options.InsecureSkipTLSVerify {
-			if err := tlsguard.Guard(fmt.Sprintf("insecure_skip_tls_verify (services.json service %q)", s.ID)); err != nil {
-				return err
-			}
+		if s.Auth.Options.InsecureSkipTLSVerify && !isDevEnvironment() {
+			return fmt.Errorf("insecure_skip_tls_verify (services.json service %q): APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start", s.ID)
 		}
 	}
 	return nil
@@ -273,6 +267,15 @@ func getDurationOrDefault(key string, defaultValue time.Duration) time.Duration 
 		}
 	}
 	return defaultValue
+}
+
+// isDevEnvironment reports whether APP_ENV explicitly designates a development
+// run (case-insensitive "development"). Unset or any other value is treated as
+// production. This is the only place APP_ENV is read; it exists solely to gate
+// the insecure-TLS escape hatches above, which must never be honored outside an
+// explicit development run.
+func isDevEnvironment() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "development")
 }
 
 // parseCommaSeparated splits a comma-separated string into a slice of trimmed strings.
