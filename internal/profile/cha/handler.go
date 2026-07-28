@@ -1,9 +1,9 @@
 package cha
 
 import (
-	"encoding/json"
-	"log/slog"
 	"net/http"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 )
 
 // Handler exposes CHA profile endpoints.
@@ -20,15 +20,9 @@ func NewHandler(svc Service) *Handler {
 func (h *Handler) HandleGetCHAs(w http.ResponseWriter, r *http.Request) {
 	chas, err := h.svc.List(r.Context())
 	if err != nil {
-		http.Error(w, "failed to retrieve CHAs", http.StatusInternalServerError)
+		httputil.InternalServerError(w, r, "failed to retrieve CHAs", err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(chas); err != nil {
-		slog.Error("failed to encode CHA response", "error", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	httputil.JSON(w, http.StatusOK, chas)
 }
