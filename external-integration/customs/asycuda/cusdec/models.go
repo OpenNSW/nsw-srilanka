@@ -43,6 +43,7 @@ type cusdecResultPayload struct {
 	EdgeID     string            `json:"edgeId"`
 	Integrated *bool             `json:"integrated"`
 	Taxes      []TaxEntry        `json:"taxes,omitempty"`
+	Errors     json.RawMessage   `json:"errors,omitempty"`
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
@@ -62,15 +63,19 @@ func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// CusdecIntegrationResultRequest is the inbound DTO for the ASYCUDA §5 callback
+// CusdecIntegrationResultRequest is the inbound DTO for the ASYCUDA §6.2 callback
 // pushed when CusDec integration succeeds or fails.
+//
+// Per §6.2, edgeId, integrated and errors travel inside payload; the fields below
+// are hoisted out of it for the service layer and are never read from the top
+// level of the request.
 type CusdecIntegrationResultRequest struct {
-	EdgeID     string              `json:"edgeId"`
-	Integrated bool                `json:"integrated"`
+	EdgeID     string              `json:"-"`
+	Integrated bool                `json:"-"`
 	Event      string              `json:"event"`
 	ProcessAt  time.Time           `json:"processAt"`
 	Payload    cusdecResultPayload `json:"payload"`
-	Errors     json.RawMessage     `json:"errors,omitempty"`
+	Errors     json.RawMessage     `json:"-"`
 }
 
 // UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
@@ -92,12 +97,13 @@ func (r *CusdecIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
 		r.ProcessAt = aux.ProcessedAt
 	}
-	if r.EdgeID == "" && r.Payload.EdgeID != "" {
-		r.EdgeID = r.Payload.EdgeID
+	// §6.2 carries edgeId, integrated and errors inside payload, unlike the §6.5
+	// notifications whose payload holds only cusdecRef and event-specific fields.
+	r.EdgeID = r.Payload.EdgeID
+	if r.Payload.Integrated != nil {
+		r.Integrated = *r.Payload.Integrated
 	}
-	if !r.Integrated && r.Payload.Integrated != nil && *r.Payload.Integrated {
-		r.Integrated = true
-	}
+	r.Errors = r.Payload.Errors
 	return nil
 }
 

@@ -44,6 +44,46 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	assert.NoError(t, reqSpec.Validate())
 }
 
+// §7.2: edgeId, integrated, and errors are top-level; payload carries only cdnRef.
+func TestCDNIntegrationResultRequest_CanonicalShape(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		body := []byte(`{
+			"eventType": "CDN_INTEGRATED",
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": true,
+			"processedAt": "2026-06-26T04:04:52Z",
+			"payload": {
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 333}
+			},
+			"errors": {}
+		}`)
+		var req CDNIntegrationResultRequest
+		require.NoError(t, json.Unmarshal(body, &req))
+		assert.Equal(t, "CDN_INTEGRATED", req.Event)
+		assert.Equal(t, "5516e4c8-a93d-429d-8a18-6a484d331176", req.EdgeID)
+		assert.True(t, req.Integrated)
+		assert.Equal(t, 333, req.Payload.CDNRef.Number)
+		assert.JSONEq(t, `{}`, string(req.Errors))
+		assert.NoError(t, req.Validate())
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		body := []byte(`{
+			"eventType": "CDN_INTEGRATED",
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": false,
+			"processedAt": "2026-06-26T04:04:52Z",
+			"payload": {},
+			"errors": {"CDN.Package": ["Missing package count"]}
+		}`)
+		var req CDNIntegrationResultRequest
+		require.NoError(t, json.Unmarshal(body, &req))
+		assert.False(t, req.Integrated)
+		assert.JSONEq(t, `{"CDN.Package": ["Missing package count"]}`, string(req.Errors))
+		assert.NoError(t, req.Validate())
+	})
+}
+
 func TestCDNAcknowledgmentRequest_DualFieldUnmarshaling(t *testing.T) {
 	specJSON := []byte(`{
 		"eventType": "ACKNOWLEDGMENT",
