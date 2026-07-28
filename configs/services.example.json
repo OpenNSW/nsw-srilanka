@@ -83,8 +83,8 @@
       "auth": {
         "type": "oauth2",
         "options": {
-          "token_url": "https://idp.example.com/oauth2/token",
-          "client_id": "NSW_TO_ASYCUDA_CLIENT_ID",
+          "token_url": "https://cig.customs.gov.lk/auth/realms/SLC-EDGE/protocol/openid-connect/token",
+          "client_id": "SW-SLC",
           "client_secret": "env:M2M_NSW_TO_ASYCUDA_SECRET",
           "scopes": [],
           "insecure_skip_tls_verify": false
