@@ -51,11 +51,11 @@ func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "edge-101",
-		"integrated": true,
 		"eventType": "CUSDEC_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
+			"edgeId": "edge-101",
+			"integrated": true,
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
 	}`
@@ -214,20 +214,17 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 		{
 			name: "CusDec result missing edgeId",
 			payload: `{
-				"edgeId": "",
-				"integrated": true,
 				"eventType": "CUSDEC_INTEGRATED",
-				"processedAt": "2026-07-23T10:00:00Z"
+				"processedAt": "2026-07-23T10:00:00Z",
+				"payload": {"edgeId": "", "integrated": true}
 			}`,
 		},
 		{
 			name: "CusDec result integrated true but missing cusDecRef",
 			payload: `{
-				"edgeId": "edge-123",
-				"integrated": true,
 				"eventType": "CUSDEC_INTEGRATED",
 				"processedAt": "2026-07-23T10:00:00Z",
-				"payload": {}
+				"payload": {"edgeId": "edge-123", "integrated": true}
 			}`,
 		},
 		{
@@ -280,11 +277,11 @@ func TestSLCEHandler_InternalServerErrors(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "edge-err",
-		"integrated": true,
 		"eventType": "CUSDEC_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
+			"edgeId": "edge-err",
+			"integrated": true,
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
 	}`
@@ -360,11 +357,11 @@ func TestSLCEHandler_WorkflowNotFound(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "edge-missing",
-		"integrated": true,
 		"eventType": "CUSDEC_INTEGRATED",
 		"processedAt": "2026-07-23T10:00:00Z",
 		"payload": {
+			"edgeId": "edge-missing",
+			"integrated": true,
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
 	}`

@@ -37,13 +37,13 @@ paths:
                   CDN_ACKNOWLEDGED: '#/components/schemas/CDNAcknowledgmentRequest'
             examples:
               cusdecIntegrated:
-                summary: CUSDEC Integration Result (§6.2)
+                summary: CUSDEC Integration Result — success (§6.2)
                 value:
-                  edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
-                  integrated: true
                   eventType: "CUSDEC_INTEGRATED"
                   processedAt: "2026-06-26T04:04:52Z"
                   payload:
+                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    integrated: true
                     cusdecRef:
                       office: "CBEX1"
                       year: "2026"
@@ -53,7 +53,20 @@ paths:
                       - code: "tax1"
                         rate: 1
                         amount: 222
-                  errors: {}
+                      - code: "tax2"
+                        rate: 1
+                        amount: 1022
+                    errors: {}
+              cusdecIntegrationFailed:
+                summary: CUSDEC Integration Result — failure (§6.2)
+                value:
+                  eventType: "CUSDEC_INTEGRATED"
+                  processedAt: "2026-06-26T04:04:52Z"
+                  payload:
+                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    integrated: false
+                    errors:
+                      Declaration.HSCode: ["Invalid HS code for the declared item"]
               paymentConfirmed:
                 summary: CUSDEC Payment Notification (§6.5.1)
                 value:
@@ -98,16 +111,16 @@ paths:
               cdnIntegrated:
                 summary: CDN Integration Result (§7.2)
                 value:
+                  eventType: "CDN_INTEGRATED"
                   edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
                   integrated: true
-                  eventType: "CDN_INTEGRATED"
                   processedAt: "2026-06-26T04:04:52Z"
                   payload:
                     cdnRef:
                       office: "CBEX1"
                       year: "2026"
-                      serial: "C"
-                      number: 28237
+                      serial: "E"
+                      number: 333
                   errors: {}
               cdnAcknowledged:
                 summary: CDN Acknowledgment (§7.3)
@@ -191,42 +204,78 @@ components:
 
     CusdecIntegrationResultRequest:
       type: object
+      description: |
+        §6.2 Declaration Integration Result. Carries the outcome of processing the
+        submission identified by `edgeId`.
+
+        On success: `integrated` = true; `cusdecRef` present; `taxes` populated; `errors` = {}.
+        On failure: `integrated` = false; `cusdecRef` absent/null; `taxes` empty; `errors` populated
+        and keyed by segment. Success and errors are mutually exclusive.
       required:
-        - edgeId
-        - integrated
         - eventType
         - processedAt
         - payload
+      additionalProperties: false
       properties:
-        edgeId:
-          type: string
-          format: uuid
-          example: "5516e4c8-a93d-429d-8a18-6a484d331176"
-        integrated:
-          type: boolean
-          example: true
         eventType:
           type: string
           enum: [CUSDEC_INTEGRATED]
         processedAt:
           type: string
           format: date-time
+          description: Processing time.
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
           required:
-            - cusdecRef
+            - edgeId
+            - integrated
           properties:
+            edgeId:
+              type: string
+              format: uuid
+              description: Correlation ID from the 202 acknowledgement.
+              example: "5516e4c8-a93d-429d-8a18-6a484d331176"
+            integrated:
+              type: boolean
+              description: true on success, false on failure.
+              example: true
             cusdecRef:
-              $ref: '#/components/schemas/DocumentReference'
+              allOf:
+                - $ref: '#/components/schemas/DocumentReference'
+              nullable: true
+              description: Registered reference (§4.1). Present on success; absent/null on failure.
             taxes:
               type: array
               maxItems: 100
+              description: Assessed taxes (code, rate, amount). Declaration only.
               items:
                 $ref: '#/components/schemas/TaxEntry'
-        errors:
-          type: object
-          description: Segment-keyed errors object. Empty object {} on success.
+            errors:
+              type: object
+              description: Segment-keyed errors (§4.4). Empty object {} on success.
+          oneOf:
+            - title: Integrated
+              required:
+                - cusdecRef
+              properties:
+                integrated:
+                  enum: [true]
+                errors:
+                  type: object
+                  maxProperties: 0
+            - title: Rejected
+              required:
+                - errors
+              properties:
+                integrated:
+                  enum: [false]
+                errors:
+                  type: object
+                  minProperties: 1
+                taxes:
+                  type: array
+                  maxItems: 0
 
     CusdecPaymentNotificationRequest:
       type: object
@@ -320,6 +369,12 @@ components:
 
     CDNIntegrationResultRequest:
       type: object
+      description: |
+        §7.2 CDN Integration Result. Single shape: `edgeId`, `integrated`, and
+        `errors` are top-level; `payload` carries only `cdnRef`.
+
+        Same success/failure conditions as the declaration result (§6.2), with no
+        taxes block for CDN.
       required:
         - edgeId
         - integrated
@@ -330,9 +385,11 @@ components:
         edgeId:
           type: string
           format: uuid
+          description: Correlation ID from the 202 acknowledgement.
           example: "5516e4c8-a93d-429d-8a18-6a484d331176"
         integrated:
           type: boolean
+          description: true on success, false on failure.
           example: true
         eventType:
           type: string
@@ -343,14 +400,36 @@ components:
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
-          required:
-            - cdnRef
           properties:
             cdnRef:
-              $ref: '#/components/schemas/DocumentReference'
+              allOf:
+                - $ref: '#/components/schemas/DocumentReference'
+              nullable: true
+              description: Registered reference. Present on success; absent/null on failure.
         errors:
           type: object
-          description: Segment-keyed errors object. Empty object {} on success.
+          description: Segment-keyed errors (§4.4). Empty object {} on success.
+      oneOf:
+        - title: Integrated
+          properties:
+            integrated:
+              enum: [true]
+            payload:
+              type: object
+              required:
+                - cdnRef
+            errors:
+              type: object
+              maxProperties: 0
+        - title: Rejected
+          required:
+            - errors
+          properties:
+            integrated:
+              enum: [false]
+            errors:
+              type: object
+              minProperties: 1
 
     CDNAcknowledgmentRequest:
       type: object
