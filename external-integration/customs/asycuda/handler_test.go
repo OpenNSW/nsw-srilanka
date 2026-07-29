@@ -45,23 +45,34 @@ func (m *mockCDNService) ProcessAcknowledgment(ctx context.Context, req cdn.CDNA
 	return args.Error(0)
 }
 
-func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
+// TestSLCEHandler_CusdecIntegrationResultSuccess tests CusDec integration result success (v1.2 §6.2).
+func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cdnSvc := new(mockCDNService)
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
 		"eventType": "CUSDEC_INTEGRATED",
-		"processedAt": "2026-07-23T10:00:00Z",
+		"processedAt": "2026-07-23T11:00:00Z",
 		"payload": {
-			"edgeId": "edge-101",
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
 			"integrated": true,
-			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
+			"taxes": [
+				{ "code": "tax1", "rate": 1, "amount": 222 },
+				{ "code": "tax2", "rate": 1, "amount": 1022 }
+			],
+			"errors": {}
 		}
 	}`
 
 	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecIntegrationResultRequest) bool {
-		return r.EdgeID == "edge-101" && r.Integrated && r.Payload.CusdecRef.Office == "CBEX1"
+		return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" &&
+			r.Integrated &&
+			r.Event == "CUSDEC_INTEGRATED" &&
+			r.Payload.CusdecRef.Office == "CMB" &&
+			r.Payload.CusdecRef.Number == 1001 &&
+			len(r.Payload.Taxes) == 2
 	})).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
@@ -74,47 +85,94 @@ func TestSLCEHandler_CusdecIntegrationResult(t *testing.T) {
 	cusdecSvc.AssertExpectations(t)
 }
 
-func TestSLCEHandler_CusdecEvents(t *testing.T) {
+// TestSLCEHandler_CusdecEventsSuccess tests CusDec status event notifications success paths (v1.2 §6.5).
+func TestSLCEHandler_CusdecEventsSuccess(t *testing.T) {
 	tests := []struct {
-		name          string
-		payload       string
-		expectedEvent string
+		name      string
+		eventType string
+		payload   string
+		setupMock func(cusdecSvc *mockCusdecService)
 	}{
 		{
-			name: "PAYMENT_CONFIRMED canonical event",
+			name:      "2. PAYMENT_CONFIRMED (§6.5.1)",
+			eventType: "PAYMENT_CONFIRMED",
 			payload: `{
 				"eventType": "PAYMENT_CONFIRMED",
-				"processedAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
+				"processedAt": "2026-07-23T11:05:00Z",
+				"payload": {
+					"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
+					"amountPaid": 2035.00,
+					"currency": "LKR",
+					"bankReference": "BNK-2026-0098765"
+				}
 			}`,
-			expectedEvent: "PAYMENT_CONFIRMED",
+			setupMock: func(cusdecSvc *mockCusdecService) {
+				cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
+					return r.Event == "PAYMENT_CONFIRMED" &&
+						r.Payload.CusdecRef.Office == "CMB" &&
+						r.Payload.CusdecRef.Number == 1001 &&
+						r.Payload.AmountPaid == 2035.00 &&
+						r.Payload.Currency == "LKR"
+				})).Return(nil)
+			},
 		},
 		{
-			name: "WARRANTING_COMPLETED canonical event",
+			name:      "3. WARRANTING_COMPLETED (§6.5.2)",
+			eventType: "WARRANTING_COMPLETED",
 			payload: `{
 				"eventType": "WARRANTING_COMPLETED",
-				"processedAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
+				"processedAt": "2026-07-23T11:10:00Z",
+				"payload": {
+					"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
+					"releaseOrderNo": "RO/2026/004567",
+					"examinationRequired": false
+				}
 			}`,
-			expectedEvent: "WARRANTING_COMPLETED",
+			setupMock: func(cusdecSvc *mockCusdecService) {
+				cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
+					return r.Event == "WARRANTING_COMPLETED" &&
+						r.Payload.CusdecRef.Office == "CMB" &&
+						r.Payload.CusdecRef.Number == 1001 &&
+						r.Payload.ReleaseOrderNo == "RO/2026/004567"
+				})).Return(nil)
+			},
 		},
 		{
-			name: "EXPORT_RELEASED canonical event",
+			name:      "4. EXPORT_RELEASED (§6.5.3)",
+			eventType: "EXPORT_RELEASED",
 			payload: `{
 				"eventType": "EXPORT_RELEASED",
-				"processedAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
+				"processedAt": "2026-07-23T11:15:00Z",
+				"payload": {
+					"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
+					"vesselName": "EVER GIVEN",
+					"voyageNo": "023W",
+					"portOfLoading": "LKCMB"
+				}
 			}`,
-			expectedEvent: "EXPORT_RELEASED",
+			setupMock: func(cusdecSvc *mockCusdecService) {
+				cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
+					return r.Event == "EXPORT_RELEASED" &&
+						r.Payload.CusdecRef.Office == "CMB" &&
+						r.Payload.CusdecRef.Number == 1001 &&
+						r.Payload.VesselName == "EVER GIVEN" &&
+						r.Payload.PortOfLoading == "LKCMB"
+				})).Return(nil)
+			},
 		},
 		{
-			name: "Case insensitive and trimmed event",
+			name:      "Case insensitive event type handling",
+			eventType: "  payment_confirmed  ",
 			payload: `{
 				"eventType": "  payment_confirmed  ",
-				"processedAt": "2026-07-23T10:00:00Z",
-				"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
+				"processedAt": "2026-07-23T11:05:00Z",
+				"payload": { "cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 } }
 			}`,
-			expectedEvent: "PAYMENT_CONFIRMED",
+			setupMock: func(cusdecSvc *mockCusdecService) {
+				cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
+					return r.Event == "PAYMENT_CONFIRMED"
+				})).Return(nil)
+			},
 		},
 	}
 
@@ -124,9 +182,7 @@ func TestSLCEHandler_CusdecEvents(t *testing.T) {
 			cdnSvc := new(mockCDNService)
 			handler := NewHandler(cusdecSvc, cdnSvc)
 
-			cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
-				return r.Event == tt.expectedEvent && r.Payload.CusdecRef.Office == "CBEX1"
-			})).Return(nil)
+			tt.setupMock(cusdecSvc)
 
 			req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
@@ -140,73 +196,73 @@ func TestSLCEHandler_CusdecEvents(t *testing.T) {
 	}
 }
 
-func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+// TestSLCEHandler_CDNSuccessEvents tests all Cargo Dispatch Note webhook event success paths (v1.2 §7).
+func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
+	t.Run("5. CDN_INTEGRATED (§7.2)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
 
-	payload := `{
-		"eventType": "CDN_INTEGRATED",
-		"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-		"integrated": true,
-		"processedAt": "2026-07-23T11:20:00Z",
-		"payload": {
-			"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
-		},
-		"errors": {}
-	}`
+		payload := `{
+			"eventType": "CDN_INTEGRATED",
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": true,
+			"processedAt": "2026-07-23T11:20:00Z",
+			"payload": {
+				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
+			},
+			"errors": {}
+		}`
 
-	cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cdn.CDNIntegrationResultRequest) bool {
-		return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" && r.Payload.CDNRef.Office == "CMB" && r.Payload.CDNRef.Number == 2002
-	})).Return(nil)
+		cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cdn.CDNIntegrationResultRequest) bool {
+			return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" &&
+				r.Integrated &&
+				r.Event == "CDN_INTEGRATED" &&
+				r.Payload.CDNRef.Office == "CMB" &&
+				r.Payload.CDNRef.Number == 2002
+		})).Return(nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	handler.HandleWebhook(w, req)
+		handler.HandleWebhook(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	cdnSvc.AssertExpectations(t)
+		assert.Equal(t, http.StatusOK, w.Code)
+		cdnSvc.AssertExpectations(t)
+	})
+
+	t.Run("6. CDN_ACKNOWLEDGED (§7.3)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
+
+		payload := `{
+			"eventType": "CDN_ACKNOWLEDGED",
+			"processedAt": "2026-07-23T11:25:00Z",
+			"payload": {
+				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
+			}
+		}`
+
+		cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.MatchedBy(func(r cdn.CDNAcknowledgmentRequest) bool {
+			return r.Event == "CDN_ACKNOWLEDGED" &&
+				r.Payload.CDNRef.Office == "CMB" &&
+				r.Payload.CDNRef.Number == 2002
+		})).Return(nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler.HandleWebhook(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		cdnSvc.AssertExpectations(t)
+	})
 }
 
-func TestSLCEHandler_CDNAcknowledgment(t *testing.T) {
-	tests := []struct {
-		name    string
-		payload string
-	}{
-		{
-			name: "CDN_ACKNOWLEDGED canonical event",
-			payload: `{
-				"eventType": "CDN_ACKNOWLEDGED",
-				"processedAt": "2026-07-23T10:00:00Z",
-				"payload": {"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 1002}}
-			}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cusdecSvc := new(mockCusdecService)
-			cdnSvc := new(mockCDNService)
-			handler := NewHandler(cusdecSvc, cdnSvc)
-
-			cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.MatchedBy(func(r cdn.CDNAcknowledgmentRequest) bool {
-				return r.Payload.CDNRef.Office == "CBEX1"
-			})).Return(nil)
-
-			req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tt.payload))
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-
-			handler.HandleWebhook(w, req)
-
-			assert.Equal(t, http.StatusOK, w.Code)
-			cdnSvc.AssertExpectations(t)
-		})
-	}
-}
-
+// TestSLCEHandler_ValidationFailures tests request validation failure paths for all event types.
 func TestSLCEHandler_ValidationFailures(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -272,108 +328,111 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 	}
 }
 
-func TestSLCEHandler_InternalServerErrors(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+// TestSLCEHandler_ErrorResponses tests error propagation and HTTP status code mapping.
+func TestSLCEHandler_ErrorResponses(t *testing.T) {
+	t.Run("Unknown event type", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
 
-	payload := `{
-		"eventType": "CUSDEC_INTEGRATED",
-		"processedAt": "2026-07-23T10:00:00Z",
-		"payload": {
-			"edgeId": "edge-err",
-			"integrated": true,
-			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
-		}
-	}`
+		payload := `{"eventType": "UNKNOWN_EVENT_TYPE", "processedAt": "2026-07-23T10:00:00Z"}`
 
-	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(errors.New("db connection failure"))
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		handler.HandleWebhook(w, req)
 
-	handler.HandleWebhook(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "unknown or unsupported event type")
+	})
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "An error occurred while processing your request")
-}
+	t.Run("Invalid JSON body", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
 
-func TestSLCEHandler_UnknownEvent(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(`{invalid-json`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	payload := `{"eventType": "UNKNOWN_EVENT_TYPE", "processedAt": "2026-07-23T10:00:00Z"}`
+		handler.HandleWebhook(w, req)
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
 
-	handler.HandleWebhook(w, req)
+	t.Run("Workflow not found by edgeId (404 Not Found)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "unknown or unsupported event type")
-}
+		payload := `{
+			"eventType": "CUSDEC_INTEGRATED",
+			"processedAt": "2026-07-23T10:00:00Z",
+			"payload": {
+				"edgeId": "edge-missing",
+				"integrated": true,
+				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+			}
+		}`
 
-func TestSLCEHandler_InvalidJSON(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+		cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrWorkflowNotFoundByEdgeID)
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(`{invalid-json`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	handler.HandleWebhook(w, req)
+		handler.HandleWebhook(w, req)
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
 
-func TestSLCEHandler_TransientServiceUnavailable(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+	t.Run("Cusdec not found by reference (503 Service Unavailable)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
 
-	payload := `{
-		"eventType": "PAYMENT_CONFIRMED",
-		"processedAt": "2026-07-23T10:00:00Z",
-		"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
-	}`
+		payload := `{
+			"eventType": "PAYMENT_CONFIRMED",
+			"processedAt": "2026-07-23T10:00:00Z",
+			"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
+		}`
 
-	cusdecSvc.On("ProcessEvent", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef)
+		cusdecSvc.On("ProcessEvent", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef)
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	handler.HandleWebhook(w, req)
+		handler.HandleWebhook(w, req)
 
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
-}
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	})
 
-func TestSLCEHandler_WorkflowNotFound(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+	t.Run("Internal DB failure (500 Internal Server Error)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
 
-	payload := `{
-		"eventType": "CUSDEC_INTEGRATED",
-		"processedAt": "2026-07-23T10:00:00Z",
-		"payload": {
-			"edgeId": "edge-missing",
-			"integrated": true,
-			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
-		}
-	}`
+		payload := `{
+			"eventType": "CUSDEC_INTEGRATED",
+			"processedAt": "2026-07-23T10:00:00Z",
+			"payload": {
+				"edgeId": "edge-err",
+				"integrated": true,
+				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+			}
+		}`
 
-	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrWorkflowNotFoundByEdgeID)
+		cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(errors.New("db connection failure"))
 
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
 
-	handler.HandleWebhook(w, req)
+		handler.HandleWebhook(w, req)
 
-	assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Contains(t, w.Body.String(), "An error occurred while processing your request")
+	})
 }
