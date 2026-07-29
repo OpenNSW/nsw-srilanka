@@ -45,7 +45,7 @@ func (m *mockCDNService) ProcessAcknowledgment(ctx context.Context, req cdn.CDNA
 	return args.Error(0)
 }
 
-// TestSLCEHandler_CusdecIntegrationResultSuccess tests CusDec integration result success (v1.2 §6.2).
+// Tests CusDec integration result success (v1.2 §6.2).
 func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cdnSvc := new(mockCDNService)
@@ -85,7 +85,7 @@ func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 	cusdecSvc.AssertExpectations(t)
 }
 
-// TestSLCEHandler_CusdecEventsSuccess tests CusDec status event notifications success paths (v1.2 §6.5).
+// Tests CusDec status event notifications success paths (v1.2 §6.5).
 func TestSLCEHandler_CusdecEventsSuccess(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -196,7 +196,7 @@ func TestSLCEHandler_CusdecEventsSuccess(t *testing.T) {
 	}
 }
 
-// TestSLCEHandler_CDNSuccessEvents tests all Cargo Dispatch Note webhook event success paths (v1.2 §7).
+// Tests all Cargo Dispatch Note webhook event success paths (v1.2 §7).
 func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 	t.Run("5. CDN_INTEGRATED (§7.2)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
@@ -262,7 +262,7 @@ func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 	})
 }
 
-// TestSLCEHandler_ValidationFailures tests request validation failure paths for all event types.
+// Tests request validation failure paths for all event types.
 func TestSLCEHandler_ValidationFailures(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -328,7 +328,7 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 	}
 }
 
-// TestSLCEHandler_ErrorResponses tests error propagation and HTTP status code mapping.
+// Tests error propagation and HTTP status code mapping.
 func TestSLCEHandler_ErrorResponses(t *testing.T) {
 	t.Run("Unknown event type", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
