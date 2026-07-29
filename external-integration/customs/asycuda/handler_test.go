@@ -146,17 +146,18 @@ func TestSLCEHandler_CDNIntegrationResult(t *testing.T) {
 	handler := NewHandler(cusdecSvc, cdnSvc)
 
 	payload := `{
-		"edgeId": "cdn-edge-99",
-		"integrated": true,
 		"eventType": "CDN_INTEGRATED",
-		"processedAt": "2026-07-23T10:00:00Z",
+		"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+		"integrated": true,
+		"processedAt": "2026-07-23T11:20:00Z",
 		"payload": {
-			"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 1002}
-		}
+			"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
+		},
+		"errors": {}
 	}`
 
 	cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cdn.CDNIntegrationResultRequest) bool {
-		return r.EdgeID == "cdn-edge-99" && r.Payload.CDNRef.Office == "CBEX1"
+		return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" && r.Payload.CDNRef.Office == "CMB" && r.Payload.CDNRef.Number == 2002
 	})).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))

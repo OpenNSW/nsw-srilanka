@@ -236,6 +236,8 @@ components:
           required:
             - edgeId
             - integrated
+            - errors
+          additionalProperties: false
           properties:
             edgeId:
               type: string
@@ -246,6 +248,14 @@ components:
               type: boolean
               description: true on success, false on failure.
               example: true
+            cusdecRef:
+              description: Registered reference (§4.1). Present on success; absent/null on failure.
+            taxes:
+              type: array
+              maxItems: 100
+              description: Assessed taxes (code, rate, amount). Declaration only.
+              items:
+                $ref: '#/components/schemas/TaxEntry'
             errors:
               type: object
               description: Segment-keyed errors (§4.4). Empty object {} on success.
@@ -254,6 +264,7 @@ components:
               required:
                 - cusdecRef
                 - taxes
+                - errors
               properties:
                 integrated:
                   enum: [true]
@@ -385,13 +396,14 @@ components:
         `errors` are top-level; `payload` carries only `cdnRef`.
 
         Same success/failure conditions as the declaration result (§6.2), with no
-        taxes block for CDN.
+        taxes block for CDN. Present on success; absent/null on failure.
       required:
         - edgeId
         - integrated
         - eventType
         - processedAt
         - payload
+        - errors
       additionalProperties: false
       properties:
         edgeId:
@@ -412,12 +424,18 @@ components:
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
-          description: Payload carrying cdnRef on success or null on failure.
+          additionalProperties: false
+          description: Payload carrying cdnRef on success or absent/null on failure.
+          properties:
+            cdnRef:
+              description: Registered CDN reference. Present on success; absent/null on failure.
         errors:
           type: object
           description: Segment-keyed errors (§4.4). Empty object {} on success.
       oneOf:
         - title: Integrated
+          required:
+            - errors
           properties:
             integrated:
               enum: [true]
