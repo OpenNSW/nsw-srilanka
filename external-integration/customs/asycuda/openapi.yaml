@@ -137,26 +137,32 @@ paths:
         '200':
           description: OK. Callback payload validated and processed successfully.
         '400':
-          description: Bad Request. Malformed JSON or missing mandatory eventType / validation failure.
+          description: Bad Request. Malformed JSON, missing mandatory fields, or validation failure.
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: "unknown or unsupported event type"
-        '404':
-          description: Not Found. Integration result edgeId does not match an active submission.
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                    example: "invalid request payload"
+                  correlationId:
+                    type: string
+                    example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+        '401':
+          description: Unauthorized. Missing or invalid OAuth 2.0 Bearer token.
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: "workflow not found by edgeId"
-        '503':
-          description: Service Unavailable. Referenced declaration or CDN not integrated yet (transient retry).
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: "customs declaration not found by reference"
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                    example: "unauthorized"
 
 components:
   schemas:
@@ -240,17 +246,6 @@ components:
               type: boolean
               description: true on success, false on failure.
               example: true
-            cusdecRef:
-              allOf:
-                - $ref: '#/components/schemas/DocumentReference'
-              nullable: true
-              description: Registered reference (§4.1). Present on success; absent/null on failure.
-            taxes:
-              type: array
-              maxItems: 100
-              description: Assessed taxes (code, rate, amount). Declaration only.
-              items:
-                $ref: '#/components/schemas/TaxEntry'
             errors:
               type: object
               description: Segment-keyed errors (§4.4). Empty object {} on success.
@@ -258,9 +253,19 @@ components:
             - title: Integrated
               required:
                 - cusdecRef
+                - taxes
               properties:
                 integrated:
                   enum: [true]
+                cusdecRef:
+                  $ref: '#/components/schemas/DocumentReference'
+                taxes:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  description: Assessed taxes (code, rate, amount). Declaration only.
+                  items:
+                    $ref: '#/components/schemas/TaxEntry'
                 errors:
                   type: object
                   maxProperties: 0
@@ -270,12 +275,18 @@ components:
               properties:
                 integrated:
                   enum: [false]
-                errors:
+                cusdecRef:
                   type: object
-                  minProperties: 1
+                  nullable: true
+                  enum: [null]
+                  description: Registered reference (§4.1). Present on success; absent/null on failure.
                 taxes:
                   type: array
                   maxItems: 0
+                  description: Empty array on failure.
+                errors:
+                  type: object
+                  minProperties: 1
 
     CusdecPaymentNotificationRequest:
       type: object
@@ -381,6 +392,7 @@ components:
         - eventType
         - processedAt
         - payload
+      additionalProperties: false
       properties:
         edgeId:
           type: string
@@ -400,12 +412,7 @@ components:
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
-          properties:
-            cdnRef:
-              allOf:
-                - $ref: '#/components/schemas/DocumentReference'
-              nullable: true
-              description: Registered reference. Present on success; absent/null on failure.
+          description: Payload carrying cdnRef on success or null on failure.
         errors:
           type: object
           description: Segment-keyed errors (§4.4). Empty object {} on success.
@@ -418,6 +425,10 @@ components:
               type: object
               required:
                 - cdnRef
+              additionalProperties: false
+              properties:
+                cdnRef:
+                  $ref: '#/components/schemas/DocumentReference'
             errors:
               type: object
               maxProperties: 0
@@ -427,6 +438,15 @@ components:
           properties:
             integrated:
               enum: [false]
+            payload:
+              type: object
+              additionalProperties: false
+              properties:
+                cdnRef:
+                  type: object
+                  nullable: true
+                  enum: [null]
+                  description: Registered reference. Present on success; absent/null on failure.
             errors:
               type: object
               minProperties: 1
