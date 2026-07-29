@@ -7,6 +7,14 @@
       "ou": "default",
       "resourceServer": "NSW_API",
       "scopeSet": "m2mNsw"
+    },
+    {
+      "key": "SLCEWebhookM2M",
+      "name": "SLCE Webhook",
+      "description": "Role for SLCE webhook clients",
+      "ou": "default",
+      "resourceServer": "NSW_API",
+      "scopeSet": "slceWebhook"
     }
   ]
 }

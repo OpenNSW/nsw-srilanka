@@ -29,4 +29,7 @@ const (
 	StorageRead   = "nsw:storage:read"
 	StorageWrite  = "nsw:storage:write"
 	StorageDelete = "nsw:storage:delete"
+
+	// SLCE webhook resource.
+	SLCEWebhooksWrite = "nsw:slce-webhooks:write"
 )
