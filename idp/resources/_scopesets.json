@@ -27,6 +27,9 @@
     ],
     "m2mAgency": [
       "agency:application:inject"
+    ],
+    "slceWebhook": [
+      "nsw:slce-webhooks:write"
     ]
   }
 }

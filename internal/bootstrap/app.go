@@ -343,8 +343,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", http.HandlerFunc(paymentHandler.HandleValidateReference))
 
 	// SLCE Webhook Endpoint (single central route handling all ASYCUDA/SLCE events).
-	// OAuth is disabled in the CIG test environment; add auth middleware before go-live.
-	mux.Handle("POST /webhooks/slce", http.HandlerFunc(slceHandler.HandleWebhook))
+	mux.Handle("POST /webhooks/slce", withAuth(withScope(scopes.SLCEWebhooksWrite)(http.HandlerFunc(slceHandler.HandleWebhook))))
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {

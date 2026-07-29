@@ -1,0 +1,17 @@
+{
+  "applications": [
+    {
+      "key": "SLCE_TO_NSW",
+      "kind": "m2m",
+      "name": "SLCE to NSW",
+      "description": "Machine-to-machine client for SLC Edge (ASYCUDA) to call the NSW SLCE webhook endpoint",
+      "clientId": "SLCE_TO_NSW",
+      "secretEnv": { "override": "M2M_SLCE_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "slceWebhook"
+    }
+  ],
+  "appRoleAssignments": [
+    { "role": "SLCEWebhookM2M", "app": "SLCE_TO_NSW" }
+  ]
+}
