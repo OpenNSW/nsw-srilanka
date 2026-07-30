@@ -28,9 +28,8 @@ Templates are grouped by component under `templates/backend/` and `templates/fro
 
 ```
 deployments/helm/
-├── values-example.yaml # complete example override for this chart
-└── nsw-srilanka/        # this chart (templates + neutral defaults only —
-                          #   not bundled into the packaged chart)
+├── values-example.yaml # complete example override; not bundled in chart packages
+└── nsw-srilanka/        # this chart (templates + neutral defaults)
 ```
 
 The example override lives one level up, outside the chart directory, so

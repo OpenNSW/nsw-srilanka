@@ -62,15 +62,25 @@ jobs:
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Determine chart version
-        id: chart
+        # RELEASE_VERSION_INPUT is passed via `env`, not interpolated directly
+        # into the script, so a malicious workflow_dispatch version input
+        # can't inject shell commands (CodeRabbit/zizmor: template-injection).
+        # The regex check below then rejects anything that isn't a plain
+        # SemVer string before it's trusted by later steps.
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$RELEASE_VERSION_INPUT"
           else
             VERSION="${GITHUB_REF#refs/tags/chart-v}"
           fi
           VERSION="${VERSION#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid chart version: $VERSION"
+            exit 1
+          fi
+          printf 'CHART_VERSION=%s\n' "$VERSION" >> "$GITHUB_ENV"
 
       - name: Lint chart
         run: helm lint ${{ env.CHART_DIR }} -f ${{ env.VALUES_EXAMPLE }}
@@ -79,17 +89,18 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
 
       - name: Package chart
-        # VERSION comes from the tag; appVersion is taken from Chart.yaml (no
-        # --app-version override), so the maintainer controls which app image
-        # the chart ships with by editing Chart.yaml.
+        # CHART_VERSION comes from the previous step's validated $GITHUB_ENV
+        # write; appVersion is taken from Chart.yaml (no --app-version
+        # override), so the maintainer controls which app image the chart
+        # ships with by editing Chart.yaml.
         run: |
           helm package ${{ env.CHART_DIR }} \
-            --version "${{ steps.chart.outputs.version }}" \
+            --version "${CHART_VERSION}" \
             --destination .
 
       - name: Push chart to GHCR
         run: |
-          helm push ${{ env.CHART_NAME }}-${{ steps.chart.outputs.version }}.tgz \
+          helm push "${CHART_NAME}-${CHART_VERSION}.tgz" \
             oci://${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/charts
 
       - name: Summary
@@ -98,5 +109,5 @@ jobs:
             echo "## Helm Chart Released"
             echo ""
             echo "- Chart: \`oci://${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/charts/${{ env.CHART_NAME }}\`"
-            echo "- Version: ${{ steps.chart.outputs.version }} (appVersion taken from Chart.yaml)"
+            echo "- Version: ${CHART_VERSION} (appVersion taken from Chart.yaml)"
           } >> "$GITHUB_STEP_SUMMARY"
