@@ -1,0 +1,240 @@
+# Example override values for the NSW Single Window platform chart (Backend
+# API + Trader Portal frontend, one release).
+#   helm install nsw-srilanka ./nsw-srilanka -f ./values-example.yaml
+#
+# This chart deploys the app only. Infra dependencies (Postgres, Temporal,
+# Thunder ID, Argus) are separate deployments — the env below just points at
+# their in-cluster Service names / external URLs.
+#
+# Mirrors .env.example. NON-secret config lives here in plain text; SECRETS
+# (DB_PASSWORD, M2M_*_SECRET, ARGUS_API_KEY, etc.) are referenced from a
+# Kubernetes Secret and must NEVER be written here. Create the Secret
+# out-of-band, e.g.:
+#   kubectl create secret generic nsw-secrets \
+#     --from-literal=db-password=... \
+#     --from-literal=m2m-npqs-secret=... \
+#     --from-literal=m2m-fcau-secret=... \
+#     --from-literal=m2m-cda-secret=... \
+#     --from-literal=m2m-slpa-secret=... \
+#     --from-literal=m2m-customs-secret=... \
+#     --from-literal=m2m-sltb-secret=... \
+#     --from-literal=m2m-asycuda-secret=... \
+#     --from-literal=argus-api-key=...
+#
+# The https:// URLs and client IDs below are placeholders — replace them with
+# your environment's real IdP, Temporal, and Argus endpoints.
+
+backend:
+  image:
+    # Required — pick the app version to deploy. There is no default; the
+    # chart fails to render if this is unset.
+    tag: "0.1.0"
+
+  containerPort: 8080
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  env:
+    SERVER_PORT: "8080"
+    SERVER_DEBUG: "false"
+    SERVER_LOG_LEVEL: "info"
+    SERVICE_URL: "https://nsw-api.example.com"
+
+    # --- Database (PostgreSQL) ---
+    DB_HOST: "nsw-db"            # Postgres Service name in the cluster
+    DB_PORT: "5432"
+    DB_USERNAME: "postgres"
+    DB_NAME: "nsw_db"
+    DB_SSLMODE: "require"        # "disable" only for local/dev
+    DB_MAX_IDLE_CONNS: "10"
+    DB_MAX_OPEN_CONNS: "100"
+    DB_MAX_CONN_LIFETIME_SECONDS: "3600"
+    # SECRET — pulled from a Kubernetes Secret, never inlined.
+    DB_PASSWORD:
+      valueFrom:
+        secretKeyRef:
+          name: nsw-secrets
+          key: db-password
+
+    # --- Config file paths, relative to the image's /app working directory ---
+    # (services*.json, payment_methods.json, notification.json, task_authz.json
+    # are baked into the image — see the root Dockerfile.)
+    SERVICES_CONFIG_PATH: "configs/services.json"
+    PAYMENT_METHODS_CONFIG_PATH: "configs/payment_methods.json"
+    NOTIFICATIONS_CONFIG_PATH: "configs/notification.json"
+    TASK_AUTHZ_CONFIG_PATH: "configs/task_authz.json"
+
+    # --- Artifact loader: workflow/form definitions and manifest.json, fetched
+    # at startup from OpenNSW/one-trade-artifacts (tnsw/ base path) rather than
+    # baked into the image. ---
+    ARTIFACT_LOADER_TYPE: "github"
+    ARTIFACT_GITHUB_OWNER: "OpenNSW"
+    ARTIFACT_GITHUB_REPO: "one-trade-artifacts"
+    ARTIFACT_GITHUB_REF: "main"         # prefer an immutable tag/SHA in production
+    ARTIFACT_GITHUB_BASE_PATH: "tnsw"
+
+    # --- CORS (trader/agency portals calling this API) ---
+    CORS_ALLOWED_ORIGINS: "https://trader.example.com"
+    CORS_ALLOWED_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+    CORS_ALLOWED_HEADERS: "Content-Type,Authorization"
+    CORS_ALLOW_CREDENTIALS: "true"
+    CORS_MAX_AGE: "3600"
+
+    # --- Storage (uploaded document blobs) ---
+    STORAGE_TYPE: "s3"
+    STORAGE_S3_BUCKET: "nsw-uploads"
+    STORAGE_S3_REGION: "auto"
+    STORAGE_S3_ENDPOINT: "https://<accountid>.r2.cloudflarestorage.com"
+    STORAGE_S3_USE_SSL: "true"
+
+    # --- Inbound auth: tokens this backend accepts ---
+    AUTH_JWKS_URL: "https://idp.example.com/oauth2/jwks"
+    AUTH_ISSUER: "https://idp.example.com"
+    AUTH_AUDIENCE: "NSW_API"
+    AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW"
+    AUTH_JWKS_INSECURE_SKIP_VERIFY: "false"
+
+    # Gates AUTH_JWKS_INSECURE_SKIP_VERIFY and services.json's per-service
+    # insecure_skip_tls_verify. Leave unset in any real deployment — the
+    # backend then fails closed rather than trusting an unverified cert.
+    APP_ENV: ""
+
+    # --- Temporal workflow engine ---
+    TEMPORAL_HOST: "temporal"
+    TEMPORAL_PORT: "7233"
+    TEMPORAL_NAMESPACE: "default"
+
+    # --- Outbound M2M (NSW -> Agency): client secrets referenced as
+    # env:M2M_NSW_TO_<AGENCY>_SECRET in configs/services*.json. ---
+    M2M_NSW_TO_NPQS_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-npqs-secret }
+    M2M_NSW_TO_FCAU_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-fcau-secret }
+    M2M_NSW_TO_CDA_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-cda-secret }
+    M2M_NSW_TO_SLPA_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-slpa-secret }
+    M2M_NSW_TO_CUSTOMS_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-customs-secret }
+    M2M_NSW_TO_SLTB_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-sltb-secret }
+    # Outbound (NSW -> Sri Lanka Customs ASYCUDA/CIG declarations API).
+    M2M_NSW_TO_ASYCUDA_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: m2m-asycuda-secret }
+
+    # --- Audit service (Argus) ---
+    ARGUS_SERVICE_URL: "http://argus:3001"
+    ARGUS_API_KEY:
+      valueFrom:
+        secretKeyRef:
+          name: nsw-secrets
+          key: argus-api-key
+
+  # Run database migrations as a pre-upgrade hook before the server rolls out.
+  # Uses the separate nsw-migrate image (see values.yaml comments); note its
+  # env uses DB_USER, not DB_USERNAME like the server above — that mismatch
+  # comes from the external nsw-agency migrate tool's own variable naming.
+  migration:
+    enabled: true
+    env:
+      DB_DRIVER: "postgres"
+      DB_HOST: "nsw-db"
+      DB_PORT: "5432"
+      DB_NAME: "nsw_db"
+      DB_USER: "postgres"
+      DB_SSLMODE: "require"
+      DB_PASSWORD:
+        valueFrom:
+          secretKeyRef:
+            name: nsw-secrets
+            key: db-password
+
+  # Expose the backend API. Enable the one that matches your platform.
+  #
+  # OpenShift Route (default):
+  route:
+    enabled: true
+    host: "nsw-api.example.com"
+    tls:
+      enabled: true
+      termination: edge
+
+  # Standard Kubernetes Ingress (use instead of route on non-OpenShift clusters):
+  ingress:
+    enabled: false
+    className: "nginx"
+    hosts:
+      - host: "nsw-api.example.com"
+        paths:
+          - path: "/"
+            pathType: Prefix
+    # TLS termination at the ingress. secretName must reference a
+    # kubernetes.io/tls Secret you create out-of-band, e.g.:
+    #   kubectl create secret tls nsw-backend-tls --cert=tls.crt --key=tls.key
+    tls: []
+    #  - secretName: nsw-backend-tls
+    #    hosts:
+    #      - nsw-api.example.com
+
+frontend:
+  image:
+    # Required — pick the app version to deploy. There is no default; the
+    # chart fails to render if this is unset.
+    tag: "0.1.0"
+
+  containerPort: 8080
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  # Mirrors the TRADER_PORTAL_*/VITE_* vars in .env.example. These are all
+  # public SPA config injected into runtime-env.js at container start (see
+  # apps/trader-app/docker-entrypoint.sh) and read by the browser — none of
+  # these are secrets, and they must point at the host-exposed URLs the
+  # browser will actually use (not in-cluster Service names).
+  env:
+    VITE_API_BASE_URL: "https://nsw-api.example.com"
+    VITE_IDP_BASE_URL: "https://idp.example.com"
+    VITE_IDP_CLIENT_ID: "TRADER_PORTAL_APP"
+    VITE_APP_URL: "https://trader.example.com"
+    VITE_IDP_SCOPES: "openid,profile,email,group,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write"
+    VITE_IDP_TRADER_GROUP_NAME: "Traders"
+    VITE_IDP_CHA_GROUP_NAME: "CHA"
+    VITE_SHOW_AUTOFILL_BUTTON: "false"
+
+  # Expose the portal. Enable the one that matches your platform.
+  #
+  # OpenShift Route (default):
+  route:
+    enabled: true
+    host: "trader.example.com"
+    tls:
+      enabled: true
+      termination: edge
+
+  # Standard Kubernetes Ingress (use instead of route on non-OpenShift clusters):
+  ingress:
+    enabled: false
+    className: "nginx"
+    hosts:
+      - host: "trader.example.com"
+        paths:
+          - path: "/"
+            pathType: Prefix
+    # TLS termination at the ingress. secretName must reference a
+    # kubernetes.io/tls Secret you create out-of-band, e.g.:
+    #   kubectl create secret tls trader-portal-tls --cert=tls.crt --key=tls.key
+    tls: []
+    #  - secretName: trader-portal-tls
+    #    hosts:
+    #      - trader.example.com

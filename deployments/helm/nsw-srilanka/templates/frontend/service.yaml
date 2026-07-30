@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nsw-srilanka.frontend.fullname" . }}
+  labels:
+    {{- include "nsw-srilanka.frontend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.frontend.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ .Values.frontend.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "nsw-srilanka.frontend.selectorLabels" . | nindent 4 }}

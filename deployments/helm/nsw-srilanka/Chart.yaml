@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nsw-srilanka
+description: Helm chart for the NSW Single Window platform (Backend API + Trader Portal frontend)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

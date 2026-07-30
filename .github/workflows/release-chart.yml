@@ -1,0 +1,118 @@
+name: Release - Publish Helm Chart
+# Publishes a released Helm chart to GHCR, on its OWN cadence — decoupled from
+# app image releases (release.yml, tag v*.*.*). Cut a chart release with a
+# chart-v* tag, e.g.:
+#   git tag chart-v0.3.0 && git push origin chart-v0.3.0
+#
+# The chart VERSION comes from the tag. The chart's appVersion comes from
+# Chart.yaml and is validated against the latest app release (v*.*.* tag)
+# before publishing — so a chart release always ships pointing at the current
+# app version. Bump appVersion in a PR to match the app release you're
+# shipping.
+
+on:
+  push:
+    tags:
+      - 'chart-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart version to release (without leading v), e.g. 0.3.0'
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: nsw-srilanka
+  CHART_DIR: deployments/helm/nsw-srilanka
+  VALUES_EXAMPLE: deployments/helm/values-example.yaml
+
+jobs:
+  publish-chart:
+    name: Package & Push Release Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags so the appVersion check can find the latest
+          # app release tag (v*.*.*).
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Validate appVersion matches the latest app release
+        uses: ./.github/actions/chart-appversion-check
+        with:
+          chart-dir: ${{ env.CHART_DIR }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Convert repository owner to lowercase
+        id: repo_owner
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Determine chart version
+        # RELEASE_VERSION_INPUT is passed via `env`, not interpolated directly
+        # into the script, so a malicious workflow_dispatch version input
+        # can't inject shell commands (CodeRabbit/zizmor: template-injection).
+        # The regex check below then rejects anything that isn't a plain
+        # SemVer string before it's trusted by later steps.
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$RELEASE_VERSION_INPUT"
+          else
+            VERSION="${GITHUB_REF#refs/tags/chart-v}"
+          fi
+          VERSION="${VERSION#v}"
+          # Full SemVer 2 grammar (semver.org), rewritten for POSIX ERE (no
+          # non-capturing groups): accepts prerelease + build metadata
+          # together (e.g. 1.2.3-rc.1+build.7), rejects leading-zero numeric
+          # identifiers (e.g. 01.2.3, 1.2.3-01).
+          SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\+[0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*)?$'
+          if ! [[ "$VERSION" =~ $SEMVER_RE ]]; then
+            echo "::error::Invalid chart version: $VERSION"
+            exit 1
+          fi
+          printf 'CHART_VERSION=%s\n' "$VERSION" >> "$GITHUB_ENV"
+
+      - name: Lint chart
+        run: helm lint ${{ env.CHART_DIR }} -f ${{ env.VALUES_EXAMPLE }}
+
+      - name: Log in to GHCR (Helm)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      - name: Package chart
+        # CHART_VERSION comes from the previous step's validated $GITHUB_ENV
+        # write; appVersion is taken from Chart.yaml (no --app-version
+        # override), so the maintainer controls which app image the chart
+        # ships with by editing Chart.yaml.
+        run: |
+          helm package ${{ env.CHART_DIR }} \
+            --version "${CHART_VERSION}" \
+            --destination .
+
+      - name: Push chart to GHCR
+        run: |
+          helm push "${CHART_NAME}-${CHART_VERSION}.tgz" \
+            oci://${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/charts
+
+      - name: Summary
+        run: |
+          {
+            echo "## Helm Chart Released"
+            echo ""
+            echo "- Chart: \`oci://${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/charts/${{ env.CHART_NAME }}\`"
+            echo "- Version: ${CHART_VERSION} (appVersion taken from Chart.yaml)"
+          } >> "$GITHUB_STEP_SUMMARY"
