@@ -43,6 +43,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
+	storagesvc "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -216,7 +217,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	storageService := storage.NewService(storageDriver)
-	storageHandler := storage.NewHTTPHandler(storageService)
+	ownershipService := storagesvc.NewOwnershipService(db, consignmentService)
+	storageHandler := storage.NewHTTPHandler(storageService).
+		WithAccessValidator(ownershipService.ValidateAccess).
+		WithOnUploadHook(ownershipService.OnUpload)
 
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
