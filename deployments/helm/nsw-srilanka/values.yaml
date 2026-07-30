@@ -1,0 +1,194 @@
+# Neutral defaults for the NSW Single Window platform: the Backend API
+# (cmd/server) and the Trader Portal frontend (portals/apps/trader-app), as
+# two components of one chart/release. Their infra dependencies (Postgres,
+# Temporal, Thunder ID, Argus) are separate deployments — component env just
+# points at their in-cluster Service names or external URLs.
+#
+# Everything below is intentionally left as neutral defaults and is filled in
+# by an override file, e.g.:
+#
+#   helm install nsw-srilanka ./nsw-srilanka -f ../values-example.yaml
+
+nameOverride: ""
+fullnameOverride: ""
+
+backend:
+  replicaCount: 1
+
+  image:
+    # Published image (see .github/workflows/release.yml).
+    repository: ghcr.io/opennsw/nsw-backend
+    # REQUIRED — no default. Set the app version to deploy per environment or
+    # at install (--set backend.image.tag=1.4.0). Chart rendering fails if
+    # this is empty. appVersion is metadata only and is deliberately NOT used
+    # as the tag.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  imagePullSecrets: []
+
+  # Pod-level security context (applies to the server and migration pods), e.g.
+  #   runAsNonRoot: true
+  #   runAsUser: 1000
+  #   fsGroup: 1000
+  podSecurityContext: {}
+
+  # Container-level security context (applies to the server and migration
+  # containers), e.g.
+  #   allowPrivilegeEscalation: false
+  #   readOnlyRootFilesystem: true
+  #   capabilities:
+  #     drop: ["ALL"]
+  securityContext: {}
+
+  # Port the server listens on (must match SERVER_PORT in env below and the
+  # Dockerfile's EXPOSE).
+  containerPort: 8080
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  # Server environment variables (key-value map). Supports raw values and
+  # valueFrom maps. See .env.example for the full set this backend reads.
+  env: {}
+
+  # Load server environment from existing ConfigMaps or Secrets
+  envFrom: []
+
+  # Database migration Job, run as a Helm pre-install/pre-upgrade hook so the
+  # schema is migrated before the new server rolls out. This runs a DIFFERENT
+  # image from the server (see templates/backend/migration-job.yaml) — the
+  # external nsw-agency migrate binary, published from this repo's Dockerfile
+  # `migrate` stage as nsw-migrate. Off by default; enabled via the example
+  # override file.
+  migration:
+    enabled: false
+    image:
+      repository: ghcr.io/opennsw/nsw-migrate
+      # Defaults to backend.image.tag above when left empty.
+      tag: ""
+      pullPolicy: IfNotPresent
+    # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
+    command: []
+    backoffLimit: 1
+    # Migrate-specific env — kept separate from backend.env above because the
+    # external migrator uses different variable names than this backend
+    # (DB_USER, not DB_USERNAME; see ../values-example.yaml).
+    env: {}
+    envFrom: []
+
+  # Configuration for OpenShift Routes
+  route:
+    enabled: false
+    host: ""
+    tls:
+      enabled: true
+      termination: edge
+
+  # Configuration for standard Kubernetes Ingress
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    # TLS termination at the ingress. Each entry: {secretName, hosts: []}. The
+    # secretName must reference a kubernetes.io/tls Secret you create out-of-band.
+    tls: []
+
+  resources: {}
+
+  # Defaults match the server's /health endpoint (internal/bootstrap/app.go),
+  # which returns 503 while its database or authn dependency is unhealthy.
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  volumes: []
+  volumeMounts: []
+
+frontend:
+  replicaCount: 1
+
+  image:
+    # Published image (see .github/workflows/release.yml).
+    repository: ghcr.io/opennsw/onetrade-app
+    # REQUIRED — no default. Set the app version to deploy per environment or
+    # at install (--set frontend.image.tag=1.4.0). Chart rendering fails if
+    # this is empty.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  imagePullSecrets: []
+
+  # Pod-level security context, e.g.
+  #   runAsNonRoot: true
+  #   runAsUser: 101   # the image's nginx-unprivileged user
+  #   fsGroup: 101
+  podSecurityContext: {}
+
+  # Container-level security context, e.g.
+  #   allowPrivilegeEscalation: false
+  #   readOnlyRootFilesystem: true
+  #   capabilities:
+  #     drop: ["ALL"]
+  securityContext: {}
+
+  # Port nginx listens on inside the image (nginx-unprivileged, not 80).
+  containerPort: 8080
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  # Runtime (VITE_*) environment variables, written into runtime-env.js for
+  # the browser to read. See ../values-example.yaml for the full set. No
+  # secrets here — see the chart README.
+  env: {}
+
+  # Load environment from existing ConfigMaps or Secrets
+  envFrom: []
+
+  # Configuration for OpenShift Routes
+  route:
+    enabled: false
+    host: ""
+    tls:
+      enabled: true
+      termination: edge
+
+  # Configuration for standard Kubernetes Ingress
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+
+  resources: {}
+
+  # Defaults match nginx.conf's /health location (returns 200 'OK').
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  volumes: []
+  volumeMounts: []

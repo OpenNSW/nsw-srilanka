@@ -1,0 +1,22 @@
+{{- if .Values.backend.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "nsw-srilanka.backend.fullname" . }}
+  labels:
+    {{- include "nsw-srilanka.backend.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.backend.route.host }}
+  host: {{ .Values.backend.route.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "nsw-srilanka.backend.fullname" . }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- if and .Values.backend.route.tls .Values.backend.route.tls.enabled }}
+  tls:
+    termination: {{ .Values.backend.route.tls.termination | default "edge" | quote }}
+  {{- end }}
+{{- end }}

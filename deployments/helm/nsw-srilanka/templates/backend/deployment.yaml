@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nsw-srilanka.backend.fullname" . }}
+  labels:
+    {{- include "nsw-srilanka.backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nsw-srilanka.backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nsw-srilanka.backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.backend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          {{- with .Values.backend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.backend.image.repository }}:{{ required "backend.image.tag is required — set it per environment or at install (e.g. --set backend.image.tag=1.4.0)" .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.containerPort }}
+              protocol: TCP
+          {{- if .Values.backend.env }}
+          env:
+            {{- range $key, $value := .Values.backend.env }}
+            - name: {{ $key }}
+              {{- if kindIs "map" $value }}
+              {{- toYaml $value | nindent 14 }}
+              {{- else }}
+              value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.backend.envFrom }}
+          envFrom:
+            {{- toYaml .Values.backend.envFrom | nindent 12 }}
+          {{- end }}
+          {{- if .Values.backend.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.backend.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.backend.resources }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          {{- end }}
+          {{- if .Values.backend.volumeMounts }}
+          volumeMounts:
+            {{- toYaml .Values.backend.volumeMounts | nindent 12 }}
+          {{- end }}
+      {{- if .Values.backend.volumes }}
+      volumes:
+        {{- toYaml .Values.backend.volumes | nindent 8 }}
+      {{- end }}
