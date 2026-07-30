@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -89,6 +91,32 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// redactDBPassword redacts raw and URL-escaped passwords from an error string.
+func redactDBPassword(errStr, password string) string {
+	if password == "" {
+		return errStr
+	}
+
+	// Match the userinfo escaping used by database.Config.DSN.
+	userinfoEscaped := strings.TrimPrefix(url.UserPassword("", password).String(), ":")
+
+	// Avoid replacing the same encoding more than once.
+	redacted := make(map[string]bool, 4)
+	for _, encoding := range []string{
+		password,
+		userinfoEscaped,
+		url.QueryEscape(password),
+		url.PathEscape(password),
+	} {
+		if redacted[encoding] {
+			continue
+		}
+		redacted[encoding] = true
+		errStr = strings.ReplaceAll(errStr, encoding, "[REDACTED]")
+	}
+	return errStr
+}
+
 // Build initializes dependencies and returns a fully wired application server.
 // The initialization flow is structured in distinct stages to ensure readability.
 func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:gocyclo
@@ -97,12 +125,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	db, err := database.New(cfg.Database)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to connect to database: %s", redactDBPassword(err.Error(), cfg.Database.Password))
 	}
 
 	if err := database.HealthCheck(db); err != nil {
 		_ = database.Close(db)
-		return nil, fmt.Errorf("database health check failed: %w", err)
+		return nil, fmt.Errorf("database health check failed: %s", redactDBPassword(err.Error(), cfg.Database.Password))
 	}
 
 	// -------------------------------------------------------------------

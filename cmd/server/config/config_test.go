@@ -297,30 +297,50 @@ func TestParseLogLevel(t *testing.T) {
 
 // --- Load ---
 
-func TestLoad_Defaults(t *testing.T) {
-	// DB_PASSWORD has no default and is required — set it explicitly.
-	// All other env vars are cleared so defaults apply.
-	envsToClear := []string{
-		"SERVER_PORT", "SERVICE_URL", "DB_HOST", "DB_PORT", "DB_USERNAME",
-		"DB_NAME", "DB_SSLMODE", "DB_MAX_IDLE_CONNS", "DB_MAX_OPEN_CONNS",
-		"DB_MAX_CONN_LIFETIME_SECONDS", "SERVICES_CONFIG_PATH",
-		"PAYMENT_METHODS_CONFIG_PATH", "SERVER_DEBUG", "SERVER_LOG_LEVEL",
-		"CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_METHODS", "CORS_ALLOWED_HEADERS",
-		"CORS_ALLOW_CREDENTIALS", "CORS_MAX_AGE", "STORAGE_TYPE",
-		"STORAGE_LOCAL_BASE_DIR", "STORAGE_LOCAL_PUBLIC_URL", "STORAGE_S3_ENDPOINT",
-		"STORAGE_S3_BUCKET", "STORAGE_S3_REGION", "STORAGE_S3_ACCESS_KEY",
-		"STORAGE_S3_SECRET_KEY", "STORAGE_S3_USE_SSL", "STORAGE_S3_PUBLIC_URL",
-		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
-		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
-		"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
-		"TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE",
-	}
-	for _, k := range envsToClear {
+// loadEnvKeys lists every environment variable read by Load.
+var loadEnvKeys = []string{
+	"SERVER_PORT", "SERVICE_URL", "DB_HOST", "DB_PORT", "DB_USERNAME",
+	"DB_PASSWORD", "DB_NAME", "DB_SSLMODE", "DB_MAX_IDLE_CONNS",
+	"DB_MAX_OPEN_CONNS", "DB_MAX_CONN_LIFETIME_SECONDS",
+	"SERVICES_CONFIG_PATH", "PAYMENT_METHODS_CONFIG_PATH",
+	"TASK_AUTHZ_CONFIG_PATH", "SERVER_DEBUG", "SERVER_LOG_LEVEL",
+	"CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_METHODS", "CORS_ALLOWED_HEADERS",
+	"CORS_ALLOW_CREDENTIALS", "CORS_MAX_AGE", "STORAGE_TYPE",
+	"STORAGE_LOCAL_BASE_DIR", "STORAGE_LOCAL_PUBLIC_URL", "STORAGE_S3_ENDPOINT",
+	"STORAGE_S3_BUCKET", "STORAGE_S3_REGION", "STORAGE_S3_ACCESS_KEY",
+	"STORAGE_S3_SECRET_KEY", "STORAGE_S3_USE_SSL", "STORAGE_S3_PUBLIC_URL",
+	"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
+	"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
+	"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
+	"TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE",
+	"ARGUS_SERVICE_URL", "ARGUS_API_KEY", "ARTIFACT_LOADER_TYPE",
+	"ARTIFACT_LOCAL_ROOT", "ARTIFACT_GITHUB_OWNER", "ARTIFACT_GITHUB_REPO",
+	"ARTIFACT_GITHUB_REF", "ARTIFACT_GITHUB_BASE_PATH", "ARTIFACT_GITHUB_TOKEN",
+	"ARTIFACT_GITHUB_BASE_URL", "ARTIFACT_GITHUB_USE_RAW_HOST",
+	"ARTIFACT_GITHUB_RAW_BASE_URL", "ARTIFACT_S3_BUCKET", "ARTIFACT_S3_REGION",
+	"ARTIFACT_S3_ENDPOINT", "ARTIFACT_S3_ACCESS_KEY", "ARTIFACT_S3_SECRET_KEY",
+	"ARTIFACT_S3_PREFIX", "APP_ENV",
+}
+
+// clearLoadEnv prevents inherited values from affecting tests.
+func clearLoadEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range loadEnvKeys {
 		t.Setenv(k, "")
 	}
+}
+
+// setMinimalLoadEnv sets the values required for Load to succeed.
+func setMinimalLoadEnv(t *testing.T) {
+	t.Helper()
+	clearLoadEnv(t)
 	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+}
+
+func TestLoad_Defaults(t *testing.T) {
+	setMinimalLoadEnv(t)
 
 	cfg, err := Load()
 	if err != nil {
@@ -338,6 +358,9 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Database.Password != "testpassword" {
 		t.Errorf("Database.Password not propagated")
 	}
+	if cfg.Database.SSLMode != "require" {
+		t.Errorf("Database.SSLMode = %q, want require", cfg.Database.SSLMode)
+	}
 	if cfg.Temporal.Namespace != "default" {
 		t.Errorf("Temporal.Namespace = %q, want default", cfg.Temporal.Namespace)
 	}
@@ -350,8 +373,7 @@ func TestLoad_Defaults(t *testing.T) {
 }
 
 func TestLoad_DefaultFailClosed(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	setMinimalLoadEnv(t)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
 
@@ -365,8 +387,7 @@ func TestLoad_DefaultFailClosed(t *testing.T) {
 }
 
 func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	setMinimalLoadEnv(t)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*")
 	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
 
@@ -379,13 +400,22 @@ func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
 	}
 }
 
+func TestLoad_DefaultDBSSLModeRequire(t *testing.T) {
+	setMinimalLoadEnv(t)
+	t.Setenv("DB_SSLMODE", "") // Unset/empty -> should default to "require"
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Database.SSLMode != "require" {
+		t.Errorf("expected DB.SSLMode to default to require when unset, got %q", cfg.Database.SSLMode)
+	}
+}
+
 func TestLoad_CustomPort(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	setMinimalLoadEnv(t)
 	t.Setenv("SERVER_PORT", "9090")
-	t.Setenv("SERVICE_URL", "")
-	t.Setenv("STORAGE_LOCAL_PUBLIC_URL", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -403,9 +433,7 @@ func TestLoad_CustomPort(t *testing.T) {
 }
 
 func TestLoad_CustomServiceURL(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	setMinimalLoadEnv(t)
 	t.Setenv("SERVICE_URL", "https://api.example.com")
 
 	cfg, err := Load()
@@ -418,9 +446,7 @@ func TestLoad_CustomServiceURL(t *testing.T) {
 }
 
 func TestLoad_CustomLogLevel(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	setMinimalLoadEnv(t)
 	t.Setenv("SERVER_LOG_LEVEL", "debug")
 
 	cfg, err := Load()
@@ -433,9 +459,7 @@ func TestLoad_CustomLogLevel(t *testing.T) {
 }
 
 func TestLoad_InvalidServiceURL(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	setMinimalLoadEnv(t)
 	t.Setenv("SERVICE_URL", "not-a-url")
 
 	_, err := Load()
@@ -446,6 +470,7 @@ func TestLoad_InvalidServiceURL(t *testing.T) {
 
 func TestLoad_DatabaseValidationError(t *testing.T) {
 	// DB_PASSWORD not set (no default) → database.Validate returns error
+	setMinimalLoadEnv(t)
 	t.Setenv("DB_PASSWORD", "")
 
 	_, err := Load()
