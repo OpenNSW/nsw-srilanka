@@ -233,10 +233,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	storageService := storage.NewService(storageDriver)
-	ownershipService := storagesvc.NewOwnershipService(db, consignmentService)
+	metadataService := storagesvc.NewObjectMetadataService(db, nil)
 	storageHandler := storage.NewHTTPHandler(storageService).
-		WithAccessValidator(ownershipService.ValidateAccess).
-		WithOnUploadHook(ownershipService.OnUpload)
+		WithAccessValidator(metadataService.ValidateAccess).
+		WithOnUploadHook(metadataService.OnUpload)
 
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
