@@ -98,14 +98,13 @@ backend:
 
   resources: {}
 
-  # Defaults match the server's /health endpoint (internal/bootstrap/app.go),
-  # which returns 503 while its database or authn dependency is unhealthy.
-  livenessProbe:
-    httpGet:
-      path: /health
-      port: http
-    initialDelaySeconds: 5
-    periodSeconds: 10
+  # No default liveness probe: /health returns 503 while the database or authn
+  # dependency is unhealthy (internal/bootstrap/app.go), which is a readiness
+  # concern, not a liveness one — restarting an otherwise healthy server won't
+  # fix an external DB/authn outage. Set one explicitly (e.g. a tcpSocket
+  # check on `http`) if you want liveness restarts for hung/deadlocked
+  # processes.
+  livenessProbe: {}
   readinessProbe:
     httpGet:
       path: /health

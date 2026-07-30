@@ -28,7 +28,14 @@ runs:
           exit 1
         fi
 
-        LATEST_APP_TAG=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n1)
+        # 'v*.*.*' would also match prerelease tags like v1.2.3-rc.1, so
+        # filter to exact numeric SemVer (vMAJOR.MINOR.PATCH) before sorting.
+        LATEST_APP_TAG=$(
+          git tag --list |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+            sort -V -r |
+            head -n1
+        )
         if [ -z "$LATEST_APP_TAG" ]; then
           echo "::error::No app release tag (v*.*.*) found — release the app images (release.yml) before releasing the chart."
           exit 1

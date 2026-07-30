@@ -26,7 +26,7 @@ Templates are grouped by component under `templates/backend/` and `templates/fro
 
 ## Layout
 
-```
+```text
 deployments/helm/
 ├── values-example.yaml # complete example override; not bundled in chart packages
 └── nsw-srilanka/        # this chart (templates + neutral defaults)
