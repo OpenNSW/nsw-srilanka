@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "nsw-srilanka.backend.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
   replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "nsw-srilanka.backend.selectorLabels" . | nindent 6 }}
