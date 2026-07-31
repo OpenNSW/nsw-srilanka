@@ -16,7 +16,7 @@ func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
-			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
 	}`)
 	var reqLive CusdecIntegrationResultRequest
@@ -108,6 +108,20 @@ func TestCusdecIntegrationResultRequest_NestedPayloadFields(t *testing.T) {
 		assert.False(t, req.Integrated)
 		assert.JSONEq(t, `{"Declaration.HSCode": ["Invalid HS code"]}`, string(req.Errors))
 		assert.NoError(t, req.Validate())
+	})
+
+	t.Run("omitted payload.integrated is rejected", func(t *testing.T) {
+		body := []byte(`{
+			"eventType": "CUSDEC_INTEGRATED",
+			"processedAt": "2026-06-26T04:04:52Z",
+			"payload": {
+				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047}
+			}
+		}`)
+		var req CusdecIntegrationResultRequest
+		require.NoError(t, json.Unmarshal(body, &req))
+		assert.EqualError(t, req.Validate(), "integrated is required")
 	})
 
 	t.Run("top-level only payload is rejected", func(t *testing.T) {

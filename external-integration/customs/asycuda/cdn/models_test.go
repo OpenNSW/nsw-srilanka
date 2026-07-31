@@ -11,11 +11,11 @@ import (
 func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	// Test live API format (event, processAt)
 	liveJSON := []byte(`{
-		"edgeId": "edge-123",
-		"integrated": true,
 		"event": "INTEGRATION_RESULT",
 		"processAt": "2026-07-20T05:46:05Z",
 		"payload": {
+			"edgeId": "edge-123",
+			"integrated": true,
 			"cdnRef": {"year": "2026", "office": "COL", "serial": "C", "number": 4567}
 		}
 	}`)
@@ -28,11 +28,11 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 
 	// Test spec prose format (eventType, processedAt)
 	specJSON := []byte(`{
-		"edgeId": "edge-123",
-		"integrated": true,
 		"eventType": "INTEGRATION_RESULT",
 		"processedAt": "2026-07-20T05:46:05Z",
 		"payload": {
+			"edgeId": "edge-123",
+			"integrated": true,
 			"cdnRef": {"year": "2026", "office": "COL", "serial": "C", "number": 4567}
 		}
 	}`)
@@ -44,18 +44,18 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 	assert.NoError(t, reqSpec.Validate())
 }
 
-// §7.2: edgeId, integrated, and errors are top-level; payload carries only cdnRef.
+// §7.2 v1.3: edgeId, integrated, cdnRef, and errors travel inside payload.
 func TestCDNIntegrationResultRequest_CanonicalShape(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("v1.3 spec success inside payload", func(t *testing.T) {
 		body := []byte(`{
 			"eventType": "CDN_INTEGRATED",
-			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-			"integrated": true,
 			"processedAt": "2026-06-26T04:04:52Z",
 			"payload": {
-				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 333}
-			},
-			"errors": {}
+				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+				"integrated": true,
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 333},
+				"errors": {}
+			}
 		}`)
 		var req CDNIntegrationResultRequest
 		require.NoError(t, json.Unmarshal(body, &req))
@@ -67,20 +67,54 @@ func TestCDNIntegrationResultRequest_CanonicalShape(t *testing.T) {
 		assert.NoError(t, req.Validate())
 	})
 
-	t.Run("failure", func(t *testing.T) {
+	t.Run("v1.3 spec failure inside payload", func(t *testing.T) {
 		body := []byte(`{
 			"eventType": "CDN_INTEGRATED",
-			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-			"integrated": false,
 			"processedAt": "2026-06-26T04:04:52Z",
-			"payload": {},
-			"errors": {"CDN.Package": ["Missing package count"]}
+			"payload": {
+				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+				"integrated": false,
+				"errors": {"CDN.Package": ["Missing package count"]}
+			}
 		}`)
 		var req CDNIntegrationResultRequest
 		require.NoError(t, json.Unmarshal(body, &req))
 		assert.False(t, req.Integrated)
+		assert.Equal(t, "5516e4c8-a93d-429d-8a18-6a484d331176", req.EdgeID)
 		assert.JSONEq(t, `{"CDN.Package": ["Missing package count"]}`, string(req.Errors))
 		assert.NoError(t, req.Validate())
+	})
+
+	t.Run("omitted payload.integrated is rejected", func(t *testing.T) {
+		body := []byte(`{
+			"eventType": "CDN_INTEGRATED",
+			"processedAt": "2026-06-26T04:04:52Z",
+			"payload": {
+				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 333}
+			}
+		}`)
+		var req CDNIntegrationResultRequest
+		require.NoError(t, json.Unmarshal(body, &req))
+		assert.EqualError(t, req.Validate(), "integrated is required")
+	})
+
+	t.Run("top-level only payload is rejected", func(t *testing.T) {
+		body := []byte(`{
+			"edgeId": "edge-legacy",
+			"integrated": true,
+			"eventType": "CDN_INTEGRATED",
+			"processedAt": "2026-06-26T04:04:52Z",
+			"errors": {},
+			"payload": {
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 333}
+			}
+		}`)
+		var req CDNIntegrationResultRequest
+		require.NoError(t, json.Unmarshal(body, &req))
+		assert.Empty(t, req.EdgeID)
+		assert.False(t, req.Integrated)
+		assert.EqualError(t, req.Validate(), "edgeId is required")
 	})
 }
 

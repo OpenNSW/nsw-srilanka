@@ -39,30 +39,11 @@ type TaxEntry struct {
 }
 
 type cusdecResultPayload struct {
-	CusdecRef  DocumentReference `json:"cusDecRef"`
+	CusdecRef  DocumentReference `json:"cusdecRef"`
 	EdgeID     string            `json:"edgeId"`
 	Integrated *bool             `json:"integrated"`
 	Taxes      []TaxEntry        `json:"taxes,omitempty"`
 	Errors     json.RawMessage   `json:"errors,omitempty"`
-}
-
-func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
-	*p = cusdecResultPayload{}
-
-	type Alias cusdecResultPayload
-	aux := &struct {
-		AltRef DocumentReference `json:"cusdecRef"`
-		*Alias
-	}{
-		Alias: (*Alias)(p),
-	}
-	if err := json.Unmarshal(data, aux); err != nil {
-		return err
-	}
-	if !p.CusdecRef.IsValid() && aux.AltRef.IsValid() {
-		p.CusdecRef = aux.AltRef
-	}
-	return nil
 }
 
 // CusdecIntegrationResultRequest is the inbound DTO for the ASYCUDA §6.2 callback
@@ -122,6 +103,9 @@ func (r CusdecIntegrationResultRequest) Validate() error {
 	if r.ProcessAt.IsZero() {
 		return errors.New("processAt is required")
 	}
+	if r.Payload.Integrated == nil {
+		return errors.New("integrated is required")
+	}
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
 		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
 	}
@@ -129,7 +113,7 @@ func (r CusdecIntegrationResultRequest) Validate() error {
 }
 
 type cusdecEventPayload struct {
-	CusdecRef DocumentReference `json:"cusDecRef"`
+	CusdecRef DocumentReference `json:"cusdecRef"`
 
 	// Payment Notification fields (§6.5.1)
 	AmountPaid    float64 `json:"amountPaid,omitempty"`
@@ -144,25 +128,6 @@ type cusdecEventPayload struct {
 	VesselName    string `json:"vesselName,omitempty"`
 	VoyageNo      string `json:"voyageNo,omitempty"`
 	PortOfLoading string `json:"portOfLoading,omitempty"`
-}
-
-func (p *cusdecEventPayload) UnmarshalJSON(data []byte) error {
-	*p = cusdecEventPayload{}
-
-	type Alias cusdecEventPayload
-	aux := &struct {
-		AltRef DocumentReference `json:"cusdecRef"`
-		*Alias
-	}{
-		Alias: (*Alias)(p),
-	}
-	if err := json.Unmarshal(data, aux); err != nil {
-		return err
-	}
-	if !p.CusdecRef.IsValid() && aux.AltRef.IsValid() {
-		p.CusdecRef = aux.AltRef
-	}
-	return nil
 }
 
 // CusdecEventRequest is the inbound DTO for ASYCUDA lifecycle event callbacks

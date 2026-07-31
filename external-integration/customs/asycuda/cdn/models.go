@@ -34,21 +34,27 @@ const (
 // --------------------------------------------------------
 
 type integrationResultPayload struct {
-	CDNRef DocumentReference `json:"cdnRef"`
+	CDNRef     DocumentReference `json:"cdnRef"`
+	EdgeID     string            `json:"edgeId"`
+	Integrated *bool             `json:"integrated"`
+	Errors     json.RawMessage   `json:"errors,omitempty"`
 }
 
 // CDNIntegrationResultRequest is the inbound DTO for the ASYCUDA §7.2 callback
 // pushed when CDN integration succeeds or fails.
+//
+// Per §7.2 v1.3 spec, edgeId, integrated, and errors travel inside payload.
 type CDNIntegrationResultRequest struct {
-	EdgeID     string                   `json:"edgeId"`
-	Integrated bool                     `json:"integrated"`
+	EdgeID     string                   `json:"-"`
+	Integrated bool                     `json:"-"`
 	Event      string                   `json:"event"`
 	ProcessAt  time.Time                `json:"processAt"`
 	Payload    integrationResultPayload `json:"payload"`
-	Errors     json.RawMessage          `json:"errors,omitempty"`
+	Errors     json.RawMessage          `json:"-"`
 }
 
-// UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
+// UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt),
+// and hoists edgeId, integrated, and errors from payload per v1.3 §7.2.
 func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	// Clear the receiver so a reused value cannot retain fields the new document omits.
 	*r = CDNIntegrationResultRequest{}
@@ -70,6 +76,14 @@ func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 	if r.ProcessAt.IsZero() && !aux.ProcessedAt.IsZero() {
 		r.ProcessAt = aux.ProcessedAt
 	}
+
+	// Per §7.2, edgeId, integrated, and errors travel inside payload.
+	r.EdgeID = r.Payload.EdgeID
+	if r.Payload.Integrated != nil {
+		r.Integrated = *r.Payload.Integrated
+	}
+	r.Errors = r.Payload.Errors
+
 	return nil
 }
 
@@ -82,6 +96,9 @@ func (r CDNIntegrationResultRequest) Validate() error {
 	}
 	if r.ProcessAt.IsZero() {
 		return errors.New("processAt is required")
+	}
+	if r.Payload.Integrated == nil {
+		return errors.New("integrated is required")
 	}
 	if r.Integrated && !r.Payload.CDNRef.IsValid() {
 		return errors.New("payload.cdnRef must be fully populated when integrated is true")
