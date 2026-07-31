@@ -46,6 +46,37 @@ type ServerConfig struct {
 	TaskAuthzConfigPath      string
 	Debug                    bool
 	LogLevel                 slog.Level
+	MaxRequestBytes          int64
+	ReadHeaderTimeout        time.Duration
+	ReadTimeout              time.Duration
+	WriteTimeout             time.Duration
+	IdleTimeout              time.Duration
+}
+
+// Validate checks that the server configuration is valid.
+func (s ServerConfig) Validate() error {
+	if s.ServiceURL == "" {
+		return fmt.Errorf("SERVICE_URL is required")
+	}
+	if err := HTTPURL("SERVICE_URL", s.ServiceURL); err != nil {
+		return err
+	}
+	if s.MaxRequestBytes <= 0 {
+		return fmt.Errorf("SERVER_MAX_REQUEST_BYTES must be greater than zero")
+	}
+	if s.ReadHeaderTimeout <= 0 {
+		return fmt.Errorf("SERVER_READ_HEADER_TIMEOUT must be greater than zero")
+	}
+	if s.ReadTimeout <= 0 {
+		return fmt.Errorf("SERVER_READ_TIMEOUT must be greater than zero")
+	}
+	if s.WriteTimeout <= 0 {
+		return fmt.Errorf("SERVER_WRITE_TIMEOUT must be greater than zero")
+	}
+	if s.IdleTimeout <= 0 {
+		return fmt.Errorf("SERVER_IDLE_TIMEOUT must be greater than zero")
+	}
+	return nil
 }
 
 // Load reads configuration from environment variables.
@@ -72,6 +103,11 @@ func Load() (*Config, error) {
 			TaskAuthzConfigPath:      getEnvOrDefault("TASK_AUTHZ_CONFIG_PATH", "configs/task_authz.json"),
 			Debug:                    getBoolOrDefault("SERVER_DEBUG", true),
 			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
+			MaxRequestBytes:          int64(getIntEnvOrDefault("SERVER_MAX_REQUEST_BYTES", 33554432)), // 32 MiB
+			ReadHeaderTimeout:        getDurationOrDefault("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
+			ReadTimeout:              getDurationOrDefault("SERVER_READ_TIMEOUT", 15*time.Second),
+			WriteTimeout:             getDurationOrDefault("SERVER_WRITE_TIMEOUT", 30*time.Second),
+			IdleTimeout:              getDurationOrDefault("SERVER_IDLE_TIMEOUT", 60*time.Second),
 		},
 		CORS: cors.Config{
 			AllowedOrigins:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_ORIGINS", "")),
@@ -149,11 +185,8 @@ func Load() (*Config, error) {
 
 // Validate checks that all required configuration is present.
 func (c *Config) Validate() error {
-	if c.Server.ServiceURL == "" {
-		return fmt.Errorf("SERVICE_URL is required")
-	}
-	if err := HTTPURL("SERVICE_URL", c.Server.ServiceURL); err != nil {
-		return err
+	if err := c.Server.Validate(); err != nil {
+		return fmt.Errorf("invalid server configuration: %w", err)
 	}
 	if err := c.Database.Validate(); err != nil {
 		return fmt.Errorf("invalid database configuration: %w", err)

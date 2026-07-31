@@ -28,7 +28,12 @@ func validConfig() *Config {
 			Name:     "testdb",
 		},
 		Server: ServerConfig{
-			ServiceURL: "http://localhost:8080",
+			ServiceURL:        "http://localhost:8080",
+			MaxRequestBytes:   33554432,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
 		},
 		CORS: cors.Config{
 			AllowedOrigins: []string{"http://localhost:3000"},
@@ -91,6 +96,40 @@ func TestHTTPURL(t *testing.T) {
 				}
 			} else if err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// --- ServerConfig.Validate ---
+
+func TestServerConfigValidate_NonPositiveLimits(t *testing.T) {
+	base := func() ServerConfig {
+		return validConfig().Server
+	}
+	tests := []struct {
+		name   string
+		mutate func(*ServerConfig)
+		errMsg string
+	}{
+		{"zero MaxRequestBytes", func(s *ServerConfig) { s.MaxRequestBytes = 0 }, "SERVER_MAX_REQUEST_BYTES must be greater than zero"},
+		{"negative MaxRequestBytes", func(s *ServerConfig) { s.MaxRequestBytes = -1 }, "SERVER_MAX_REQUEST_BYTES must be greater than zero"},
+		{"zero ReadHeaderTimeout", func(s *ServerConfig) { s.ReadHeaderTimeout = 0 }, "SERVER_READ_HEADER_TIMEOUT must be greater than zero"},
+		{"negative ReadHeaderTimeout", func(s *ServerConfig) { s.ReadHeaderTimeout = -1 * time.Second }, "SERVER_READ_HEADER_TIMEOUT must be greater than zero"},
+		{"zero ReadTimeout", func(s *ServerConfig) { s.ReadTimeout = 0 }, "SERVER_READ_TIMEOUT must be greater than zero"},
+		{"negative ReadTimeout", func(s *ServerConfig) { s.ReadTimeout = -1 * time.Second }, "SERVER_READ_TIMEOUT must be greater than zero"},
+		{"zero WriteTimeout", func(s *ServerConfig) { s.WriteTimeout = 0 }, "SERVER_WRITE_TIMEOUT must be greater than zero"},
+		{"negative WriteTimeout", func(s *ServerConfig) { s.WriteTimeout = -1 * time.Second }, "SERVER_WRITE_TIMEOUT must be greater than zero"},
+		{"zero IdleTimeout", func(s *ServerConfig) { s.IdleTimeout = 0 }, "SERVER_IDLE_TIMEOUT must be greater than zero"},
+		{"negative IdleTimeout", func(s *ServerConfig) { s.IdleTimeout = -1 * time.Second }, "SERVER_IDLE_TIMEOUT must be greater than zero"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := base()
+			tc.mutate(&s)
+			err := s.Validate()
+			if err == nil || !containsString(err.Error(), tc.errMsg) {
+				t.Errorf("expected error containing %q, got %v", tc.errMsg, err)
 			}
 		})
 	}
@@ -305,6 +344,8 @@ func TestLoad_Defaults(t *testing.T) {
 		"DB_NAME", "DB_SSLMODE", "DB_MAX_IDLE_CONNS", "DB_MAX_OPEN_CONNS",
 		"DB_MAX_CONN_LIFETIME_SECONDS", "SERVICES_CONFIG_PATH",
 		"PAYMENT_METHODS_CONFIG_PATH", "SERVER_DEBUG", "SERVER_LOG_LEVEL",
+		"SERVER_MAX_REQUEST_BYTES", "SERVER_READ_HEADER_TIMEOUT",
+		"SERVER_READ_TIMEOUT", "SERVER_WRITE_TIMEOUT", "SERVER_IDLE_TIMEOUT",
 		"CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_METHODS", "CORS_ALLOWED_HEADERS",
 		"CORS_ALLOW_CREDENTIALS", "CORS_MAX_AGE", "STORAGE_TYPE",
 		"STORAGE_LOCAL_BASE_DIR", "STORAGE_LOCAL_PUBLIC_URL", "STORAGE_S3_ENDPOINT",
@@ -326,26 +367,31 @@ func TestLoad_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.Server.Port != 8080 {
-		t.Errorf("Server.Port = %d, want 8080", cfg.Server.Port)
+
+	for _, tc := range []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"Server.Port", cfg.Server.Port, 8080},
+		{"Server.ServiceURL", cfg.Server.ServiceURL, "http://localhost:8080"},
+		{"Server.MaxRequestBytes", cfg.Server.MaxRequestBytes, int64(33554432)},
+		{"Server.ReadHeaderTimeout", cfg.Server.ReadHeaderTimeout, 5 * time.Second},
+		{"Server.ReadTimeout", cfg.Server.ReadTimeout, 15 * time.Second},
+		{"Server.WriteTimeout", cfg.Server.WriteTimeout, 30 * time.Second},
+		{"Server.IdleTimeout", cfg.Server.IdleTimeout, 60 * time.Second},
+		{"Database.Host", cfg.Database.Host, "localhost"},
+		{"Database.Password", cfg.Database.Password, "testpassword"},
+		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
+		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
+		}
 	}
-	if cfg.Server.ServiceURL != "http://localhost:8080" {
-		t.Errorf("Server.ServiceURL = %q, want http://localhost:8080", cfg.Server.ServiceURL)
-	}
-	if cfg.Database.Host != "localhost" {
-		t.Errorf("Database.Host = %q, want localhost", cfg.Database.Host)
-	}
-	if cfg.Database.Password != "testpassword" {
-		t.Errorf("Database.Password not propagated")
-	}
-	if cfg.Temporal.Namespace != "default" {
-		t.Errorf("Temporal.Namespace = %q, want default", cfg.Temporal.Namespace)
-	}
+
 	if len(cfg.CORS.AllowedOrigins) != 1 || cfg.CORS.AllowedOrigins[0] != "http://localhost:3000" {
 		t.Errorf("CORS.AllowedOrigins = %v, want [http://localhost:3000]", cfg.CORS.AllowedOrigins)
-	}
-	if !cfg.CORS.AllowCredentials {
-		t.Errorf("CORS.AllowCredentials = %v, want true", cfg.CORS.AllowCredentials)
 	}
 }
 
@@ -432,6 +478,37 @@ func TestLoad_CustomLogLevel(t *testing.T) {
 	}
 }
 
+func TestLoad_CustomServerLimits(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("SERVER_MAX_REQUEST_BYTES", "262144")
+	t.Setenv("SERVER_READ_HEADER_TIMEOUT", "2s")
+	t.Setenv("SERVER_READ_TIMEOUT", "7s")
+	t.Setenv("SERVER_WRITE_TIMEOUT", "9s")
+	t.Setenv("SERVER_IDLE_TIMEOUT", "11s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Server.MaxRequestBytes != 262144 {
+		t.Errorf("Server.MaxRequestBytes = %d, want 262144", cfg.Server.MaxRequestBytes)
+	}
+	if cfg.Server.ReadHeaderTimeout != 2*time.Second {
+		t.Errorf("Server.ReadHeaderTimeout = %v, want 2s", cfg.Server.ReadHeaderTimeout)
+	}
+	if cfg.Server.ReadTimeout != 7*time.Second {
+		t.Errorf("Server.ReadTimeout = %v, want 7s", cfg.Server.ReadTimeout)
+	}
+	if cfg.Server.WriteTimeout != 9*time.Second {
+		t.Errorf("Server.WriteTimeout = %v, want 9s", cfg.Server.WriteTimeout)
+	}
+	if cfg.Server.IdleTimeout != 11*time.Second {
+		t.Errorf("Server.IdleTimeout = %v, want 11s", cfg.Server.IdleTimeout)
+	}
+}
+
 func TestLoad_InvalidServiceURL(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
@@ -441,6 +518,18 @@ func TestLoad_InvalidServiceURL(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Fatal("expected error for invalid SERVICE_URL, got nil")
+	}
+}
+
+func TestLoad_ZeroReadTimeoutRejected(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("SERVER_READ_TIMEOUT", "0")
+
+	_, err := Load()
+	if err == nil || !containsString(err.Error(), "SERVER_READ_TIMEOUT must be greater than zero") {
+		t.Fatalf("expected SERVER_READ_TIMEOUT validation error, got: %v", err)
 	}
 }
 

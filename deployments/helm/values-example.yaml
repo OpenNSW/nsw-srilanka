@@ -42,6 +42,13 @@ backend:
     SERVER_LOG_LEVEL: "info"
     SERVICE_URL: "https://nsw-api.example.com"
 
+    # Request-body size cap and server timeouts (Slowloris/DoS hardening).
+    SERVER_MAX_REQUEST_BYTES: "33554432"   # 32 MiB
+    SERVER_READ_HEADER_TIMEOUT: "5s"
+    SERVER_READ_TIMEOUT: "15s"
+    SERVER_WRITE_TIMEOUT: "30s"
+    SERVER_IDLE_TIMEOUT: "60s"
+
     # --- Database (PostgreSQL) ---
     DB_HOST: "nsw-db"            # Postgres Service name in the cluster
     DB_PORT: "5432"
