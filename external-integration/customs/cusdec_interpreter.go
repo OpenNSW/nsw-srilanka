@@ -14,6 +14,7 @@ import (
 const (
 	statusQueued   = "QUEUED"
 	statusAccepted = "ACCEPTED"
+	statusReceived = "RECEIVED"
 )
 
 // capturedFields are the SLC Edge response fields surfaced to the workflow
@@ -24,16 +25,20 @@ var capturedFields = []string{
 }
 
 // CusdecInterpreter adapts the generic API-call plugin to the SLC Edge Customs
-// Declaration submission API: it builds the request (injecting a fresh nswId)
-// and interprets the response into an acceptance flag plus the SLC fields to
-// record (with a trader-facing error message on rejection).
+// Declaration submission API: it builds the request (injecting a fresh nswId
+// as a submission correlation identifier) and interprets the response into an
+// acceptance flag plus the SLC fields to record (with a trader-facing error
+// message on rejection).
+//
+// Note: the Idempotency-Key HTTP header is not used (dropped per v1.3
+// clarification). Deduplication is handled at the database level via edgeId.
 type CusdecInterpreter struct{}
 
 // NewCusdecInterpreter returns the SLC Edge CusDec interpreter.
 func NewCusdecInterpreter() *CusdecInterpreter { return &CusdecInterpreter{} }
 
 // BuildRequest sends the mapped "payload" and injects a freshly generated,
-// time-ordered, unique nswId (the SLC Edge idempotency key).
+// time-ordered, unique nswId (NSW submission correlation identifier).
 func (CusdecInterpreter) BuildRequest(inputs map[string]any) any {
 	body, ok := inputs["payload"]
 	if !ok {
@@ -83,7 +88,7 @@ func statusIsAccepted(resp map[string]any) bool {
 	if !ok {
 		return false
 	}
-	return s == statusQueued || s == statusAccepted
+	return s == statusQueued || s == statusAccepted || s == statusReceived
 }
 
 // describeFailure builds a trader-facing, markdown message for a rejected

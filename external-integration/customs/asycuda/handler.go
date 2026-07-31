@@ -24,6 +24,9 @@ const (
 
 // Handler handles central inbound HTTP webhook requests from SLCE / ASYCUDA
 // routed to POST /webhooks/slce.
+//
+// Retry Mechanism (§2): Webhook delivery retries up to 4 times: immediately,
+// then after 30 seconds, 2 minutes, and 10 minutes, before failing permanently.
 type Handler struct {
 	cusdecService cusdec.WebhookService
 	cdnService    cdn.CDNWebhookService

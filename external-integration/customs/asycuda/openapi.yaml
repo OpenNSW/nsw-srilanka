@@ -5,7 +5,10 @@ info:
     OpenAPI 3.0 specification for National Single Window (NSW) inbound ASYCUDA / SLC Edge webhook endpoints.
 
     All callback events are delivered through a single central endpoint (`POST /webhooks/slce`) and dynamically routed based on the `eventType` discriminator field.
-  version: 1.2.0
+
+    ### Retry Policy (§2)
+    Webhook delivery retries up to 4 times: immediately, then after 30 seconds, 2 minutes, and 10 minutes, before failing permanently.
+  version: 1.3.0
 
 paths:
   /webhooks/slce:
@@ -109,19 +112,29 @@ paths:
                     voyageNo: "023W 08/01/2025"
                     portOfLoading: "LKCMB"
               cdnIntegrated:
-                summary: CDN Integration Result (§7.2)
+                summary: CDN Integration Result — success (§7.2)
                 value:
                   eventType: "CDN_INTEGRATED"
-                  edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
-                  integrated: true
                   processedAt: "2026-06-26T04:04:52Z"
                   payload:
+                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    integrated: true
                     cdnRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
                       number: 333
-                  errors: {}
+                    errors: {}
+              cdnIntegrationFailed:
+                summary: CDN Integration Result — failure (§7.2)
+                value:
+                  eventType: "CDN_INTEGRATED"
+                  processedAt: "2026-06-26T04:04:52Z"
+                  payload:
+                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    integrated: false
+                    errors:
+                      CDN.Package: ["Missing package count"]
               cdnAcknowledged:
                 summary: CDN Acknowledgment (§7.3)
                 value:
@@ -231,6 +244,29 @@ components:
           format: date-time
           description: Processing time.
           example: "2026-06-26T04:04:52Z"
+    CusdecIntegrationResultRequest:
+      type: object
+      description: |
+        §6.2 Declaration Integration Result. Carries the outcome of processing the
+        submission identified by `edgeId`.
+
+        On success: `integrated` = true; `cusdecRef` present; `taxes` populated; `errors` = {}.
+        On failure: `integrated` = false; `cusdecRef` absent/null; `taxes` empty; `errors` populated
+        and keyed by segment. Success and errors are mutually exclusive.
+      required:
+        - eventType
+        - processedAt
+        - payload
+      additionalProperties: false
+      properties:
+        eventType:
+          type: string
+          enum: [CUSDEC_INTEGRATED]
+        processedAt:
+          type: string
+          format: date-time
+          description: Processing time.
+          example: "2026-06-26T04:04:52Z"
         payload:
           type: object
           required:
@@ -250,6 +286,7 @@ components:
               example: true
             cusdecRef:
               description: Registered reference (§4.1). Present on success; absent/null on failure.
+              $ref: '#/components/schemas/DocumentReference'
             taxes:
               type: array
               maxItems: 100
@@ -392,29 +429,18 @@ components:
     CDNIntegrationResultRequest:
       type: object
       description: |
-        §7.2 CDN Integration Result. Single shape: `edgeId`, `integrated`, and
-        `errors` are top-level; `payload` carries only `cdnRef`.
+        §7.2 CDN Integration Result. Carries the outcome of processing the CDN
+        submission identified by `edgeId`.
 
-        Same success/failure conditions as the declaration result (§6.2), with no
+        `edgeId`, `integrated`, and `errors` travel inside `payload`. Same
+        success/failure conditions as the declaration result (§6.2), with no
         taxes block for CDN. Present on success; absent/null on failure.
       required:
-        - edgeId
-        - integrated
         - eventType
         - processedAt
         - payload
-        - errors
       additionalProperties: false
       properties:
-        edgeId:
-          type: string
-          format: uuid
-          description: Correlation ID from the 202 acknowledgement.
-          example: "5516e4c8-a93d-429d-8a18-6a484d331176"
-        integrated:
-          type: boolean
-          description: true on success, false on failure.
-          example: true
         eventType:
           type: string
           enum: [CDN_INTEGRATED]
@@ -424,50 +450,54 @@ components:
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
-          additionalProperties: false
-          description: Payload carrying cdnRef on success or absent/null on failure.
-          properties:
-            cdnRef:
-              description: Registered CDN reference. Present on success; absent/null on failure.
-        errors:
-          type: object
-          description: Segment-keyed errors (§4.4). Empty object {} on success.
-      oneOf:
-        - title: Integrated
           required:
+            - edgeId
+            - integrated
             - errors
+          additionalProperties: false
           properties:
+            edgeId:
+              type: string
+              format: uuid
+              description: Correlation ID from the 202 acknowledgement.
+              example: "5516e4c8-a93d-429d-8a18-6a484d331176"
             integrated:
-              enum: [true]
-            payload:
-              type: object
-              required:
-                - cdnRef
-              additionalProperties: false
-              properties:
-                cdnRef:
-                  $ref: '#/components/schemas/DocumentReference'
+              type: boolean
+              description: true on success, false on failure.
+              example: true
+            cdnRef:
+              description: Registered CDN reference (§4.1). Present on success; absent/null on failure.
+              $ref: '#/components/schemas/DocumentReference'
             errors:
               type: object
-              maxProperties: 0
-        - title: Rejected
-          required:
-            - errors
-          properties:
-            integrated:
-              enum: [false]
-            payload:
-              type: object
-              additionalProperties: false
+              description: Segment-keyed errors (§4.4). Empty object {} on success.
+          oneOf:
+            - title: Integrated
+              required:
+                - cdnRef
+                - errors
               properties:
+                integrated:
+                  enum: [true]
+                cdnRef:
+                  $ref: '#/components/schemas/DocumentReference'
+                errors:
+                  type: object
+                  maxProperties: 0
+            - title: Rejected
+              required:
+                - errors
+              properties:
+                integrated:
+                  enum: [false]
                 cdnRef:
                   type: object
                   nullable: true
                   enum: [null]
-                  description: Registered reference. Present on success; absent/null on failure.
-            errors:
-              type: object
-              minProperties: 1
+                  description: Registered reference (§4.1). Present on success; absent/null on failure.
+                errors:
+                  type: object
+                  minProperties: 1
 
     CDNAcknowledgmentRequest:
       type: object
