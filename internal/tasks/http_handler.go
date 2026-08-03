@@ -95,12 +95,11 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	command, payload, status, err := parseCompleteTaskStepRequest(r, pathCommand)
 	if err != nil {
 		slog.Error("tasks: failed to parse request", "taskId", taskID, "error", err, "traceId", httputil.TraceID(r))
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			httputil.Error(w, r, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge)
-			return
+		responseMessage := errInvalidRequestBody
+		if status == http.StatusRequestEntityTooLarge {
+			responseMessage = errRequestBodyTooLarge
 		}
-		httputil.Error(w, r, status, errInvalidRequestBody)
+		httputil.Error(w, r, status, responseMessage)
 		return
 	}
 
