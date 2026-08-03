@@ -88,13 +88,9 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	pathCommand := r.PathValue("command")
 
-	command, payload, status, err := parseCompleteTaskStepRequest(r, pathCommand)
+	command, payload, status, responseMessage, err := parseCompleteTaskStepRequest(r, pathCommand)
 	if err != nil {
 		slog.Error("tasks: failed to parse request", "taskId", taskID, "error", err, "traceId", httputil.TraceID(r))
-		responseMessage := errInvalidRequestBody
-		if status == http.StatusRequestEntityTooLarge {
-			responseMessage = errRequestBodyTooLarge
-		}
 		httputil.Error(w, r, status, responseMessage)
 		return
 	}
@@ -120,29 +116,29 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 // parseCompleteTaskStepRequest extracts and validates the command and payload from either the URL path or the JSON body.
 // The body must contain at most one JSON value: json.Decoder.Decode only parses the first value and
 // silently ignores anything after it, so a second Decode call is required to confirm nothing trails it.
-func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[string]any, int, error) {
+func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[string]any, int, string, error) {
 	var rawBody map[string]any
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&rawBody); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			return "", nil, http.StatusRequestEntityTooLarge, err
+			return "", nil, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err
 		}
 
 		// An empty body is a valid acknowledge-style completion; only fail on genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
 			slog.WarnContext(r.Context(), "tasks: malformed request body", "error", err, "traceId", httputil.TraceID(r))
-			return "", nil, http.StatusBadRequest, errors.New("invalid request body: malformed JSON")
+			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON")
 		}
 
 		// If unexpected data follows the first JSON value, reject the request.
 	} else if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			return "", nil, http.StatusRequestEntityTooLarge, err
+			return "", nil, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err
 		}
 		slog.WarnContext(r.Context(), "tasks: unexpected data after JSON body", "error", err, "traceId", httputil.TraceID(r))
-		return "", nil, http.StatusBadRequest, errors.New("invalid request body: unexpected data after JSON value")
+		return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value")
 	}
 
 	var payload map[string]any
@@ -153,12 +149,12 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 	} else {
 		// Body-based route: body must be the nested envelope containing "command" and "payload"
 		if rawBody == nil {
-			return "", nil, http.StatusBadRequest, errors.New("request body is required for body-based command route")
+			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("request body is required for body-based command route")
 		}
 
 		cmd, hasCmd := rawBody["command"].(string)
 		if !hasCmd {
-			return "", nil, http.StatusBadRequest, errors.New("invalid request body: must contain 'command' (string)")
+			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: must contain 'command' (string)")
 		}
 
 		var p map[string]any
@@ -166,7 +162,7 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 			var ok bool
 			p, ok = rawBody["payload"].(map[string]any)
 			if !ok {
-				return "", nil, http.StatusBadRequest, errors.New("invalid request body: 'payload' must be an object")
+				return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: 'payload' must be an object")
 			}
 		}
 
@@ -177,7 +173,7 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 	// Validate system metadata collision
 	if payload != nil {
 		if _, exists := payload["__command"]; exists {
-			return "", nil, http.StatusBadRequest, errors.New("invalid request payload: '__command' is a reserved system key")
+			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request payload: '__command' is a reserved system key")
 		}
 	}
 
@@ -187,5 +183,5 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 
 	payload["__command"] = command
 
-	return command, payload, http.StatusOK, nil
+	return command, payload, http.StatusOK, "", nil
 }

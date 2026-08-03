@@ -51,7 +51,7 @@ func TestHandleCompleteTaskStep_RejectsTrailingDataAfterJSON(t *testing.T) {
 func TestParseCompleteTaskStepRequest_AllowsTrailingWhitespace(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/commands/approve", strings.NewReader(`{"key":"value"}`+"\n"))
 
-	command, payload, _, err := parseCompleteTaskStepRequest(req, "approve")
+	command, payload, _, _, err := parseCompleteTaskStepRequest(req, "approve")
 	if err != nil {
 		t.Fatalf("unexpected error for trailing whitespace: %v", err)
 	}
