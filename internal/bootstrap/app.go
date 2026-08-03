@@ -255,10 +255,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
-	taskHandler, err := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task HTTP handler: %w", err)
-	}
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
 	taskAuthzGate := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService})

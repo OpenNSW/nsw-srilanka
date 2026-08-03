@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -40,11 +39,8 @@ type HTTPHandler struct {
 	MaxRequestBytes int64
 }
 
-func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64) (*HTTPHandler, error) {
-	if maxRequestBytes <= 0 {
-		return nil, fmt.Errorf("maxRequestBytes must be greater than zero")
-	}
-	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes}, nil
+func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64) *HTTPHandler {
+	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes}
 }
 
 // HandleGetTask returns the ZoneView payload for a single task.

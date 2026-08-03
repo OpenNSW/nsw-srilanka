@@ -7,21 +7,12 @@ import (
 	"testing"
 )
 
-func TestNewHTTPHandler_RejectsNonPositiveMaxRequestBytes(t *testing.T) {
-	for _, v := range []int64{0, -1, -33554432} {
-		if _, err := NewHTTPHandler(nil, nil, nil, v); err == nil {
-			t.Errorf("expected error for maxRequestBytes=%d, got nil", v)
+func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
+	for _, v := range []int64{1024, 0, -1, -33554432} {
+		handler := NewHTTPHandler(nil, nil, nil, v)
+		if handler.MaxRequestBytes != v {
+			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
-	}
-}
-
-func TestNewHTTPHandler_AcceptsPositiveMaxRequestBytes(t *testing.T) {
-	handler, err := NewHTTPHandler(nil, nil, nil, 1024)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if handler.MaxRequestBytes != 1024 {
-		t.Errorf("MaxRequestBytes = %d, want 1024", handler.MaxRequestBytes)
 	}
 }
 
