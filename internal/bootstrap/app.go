@@ -268,7 +268,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
-	taskAuthzGate := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService})
+	taskAuthzGate, err := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+	if err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = authnManager.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to build task authz gate: %w", err)
+	}
 
 	// withAuth wraps an individual handler with the authentication middleware.
 	withAuth := authnManager.RequireAuthMiddleware()
