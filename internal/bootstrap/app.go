@@ -255,7 +255,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
 	taskAuthzGate := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService})
@@ -355,12 +355,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Stage 9: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
 	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(mux))
-
-	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
 		var closeErrs []error
@@ -394,6 +389,17 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		Server: server,
 		close:  closeFn,
 	}, nil
+}
+
+func newHTTPServer(cfg config.ServerConfig, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+	}
 }
 
 // parentWorkflowQueue is the Temporal task queue the macro/parent workflow

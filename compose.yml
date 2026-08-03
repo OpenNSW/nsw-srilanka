@@ -255,6 +255,12 @@ services:
       - SERVER_DEBUG=${SERVER_DEBUG:-true}
       - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
       - SERVICE_URL=${SERVICE_URL:-http://localhost:${BACKEND_PORT:-8080}}
+      # Request-body size cap and server timeouts (Slowloris/DoS hardening).
+      - SERVER_MAX_REQUEST_BYTES=${SERVER_MAX_REQUEST_BYTES:-33554432}
+      - SERVER_READ_HEADER_TIMEOUT=${SERVER_READ_HEADER_TIMEOUT:-5s}
+      - SERVER_READ_TIMEOUT=${SERVER_READ_TIMEOUT:-15s}
+      - SERVER_WRITE_TIMEOUT=${SERVER_WRITE_TIMEOUT:-30s}
+      - SERVER_IDLE_TIMEOUT=${SERVER_IDLE_TIMEOUT:-60s}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178,http://localhost:5179}
       - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
       - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
