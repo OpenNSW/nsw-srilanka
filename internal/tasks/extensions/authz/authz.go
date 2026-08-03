@@ -5,8 +5,9 @@
 // It is a pure evaluator. The API layer resolves the caller's identity and
 // attaches it — together with a lazy ownership resolver — to the request context
 // (see Input); this extension only matches that against the per-task policy and
-// the catalog. It resolves ownership only when a user rule actually needs it, and
-// never touches domain services directly.
+// the catalog it is handed at construction. It reads no configuration file,
+// resolves ownership only when a user rule actually needs it, and never touches
+// domain services directly.
 package authz
 
 import (
@@ -14,7 +15,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/OpenNSW/core/taskflow/store"
 )
@@ -35,7 +35,7 @@ const (
 )
 
 // OwnedRolesFunc lazily resolves which logical owner roles the caller satisfies
-// for the task's root workflow (keyed by the catalog's logical user names, e.g.
+// for the task's root workflow (keyed by the catalog's logical role names, e.g.
 // "trader"/"cha"). It performs the DB work, so the extension calls it only when a
 // user rule actually needs it. It is nil for client principals.
 type OwnedRolesFunc func(ctx context.Context, rootWorkflowID string) (map[string]bool, error)
@@ -64,60 +64,24 @@ func InputFromContext(ctx context.Context) (Input, bool) {
 	return in, ok
 }
 
-// Catalog is the global principal catalog (configs/task_authz.json). Per-task
-// rules reference the logical names resolved here: users to a token role,
-// clients to an OAuth2 client id.
+// Catalog is the slice of the global catalog this extension needs: the logical
+// principal names that per-task rules reference, resolved to a token role or an
+// OAuth2 client id. The composition root loads the catalog (internal/catalog) and
+// injects it, so this package performs no file I/O and knows no on-disk format.
 type Catalog struct {
-	Users   map[string]string `json:"users"`   // logical name -> token role
-	Clients map[string]string `json:"clients"` // logical name -> client id
-}
-
-// Validate reports whether the catalog is internally consistent.
-func (c *Catalog) Validate() error {
-	if c == nil {
-		return errors.New("task authz: nil catalog")
-	}
-	if len(c.Users) == 0 && len(c.Clients) == 0 {
-		return errors.New("task authz: catalog defines no users or clients")
-	}
-	for name, role := range c.Users {
-		if role == "" {
-			return fmt.Errorf("task authz: user %q is missing a token role", name)
-		}
-	}
-	for name, clientID := range c.Clients {
-		if clientID == "" {
-			return fmt.Errorf("task authz: client %q is missing a client id", name)
-		}
-	}
-	return nil
-}
-
-// LoadCatalog reads and validates the catalog file at path.
-func LoadCatalog(path string) (*Catalog, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("task authz: read catalog %s: %w", path, err)
-	}
-	var c Catalog
-	if err := json.Unmarshal(raw, &c); err != nil {
-		return nil, fmt.Errorf("task authz: parse catalog %s: %w", path, err)
-	}
-	if err := c.Validate(); err != nil {
-		return nil, err
-	}
-	return &c, nil
+	Roles   map[string]string // logical name -> token role
+	Clients map[string]string // logical name -> client id
 }
 
 // Extension is the PRE_RESUME task extension enforcing, per task state and
 // command, which principals may advance a task: users by token role + resolved
 // ownership, M2M clients by client id. It is deny-by-default.
 type Extension struct {
-	catalog *Catalog
+	catalog Catalog
 }
 
 // NewExtension builds the extension. The catalog is its only dependency.
-func NewExtension(catalog *Catalog) *Extension {
+func NewExtension(catalog Catalog) *Extension {
 	return &Extension{catalog: catalog}
 }
 
@@ -170,7 +134,7 @@ func (e *Extension) authorizeUser(ctx context.Context, record *store.TaskRecord,
 
 	var candidates []string
 	for _, name := range allowed {
-		if role, isUser := e.catalog.Users[name]; isUser && held[role] {
+		if role, isRole := e.catalog.Roles[name]; isRole && held[role] {
 			candidates = append(candidates, name)
 		}
 	}

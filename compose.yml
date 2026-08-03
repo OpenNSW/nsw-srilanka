@@ -277,7 +277,7 @@ services:
       - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
       - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
       - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
-      - TASK_AUTHZ_CONFIG_PATH=${TASK_AUTHZ_CONFIG_PATH:-configs/task_authz.json}
+      - CATALOG_CONFIG_PATH=${CATALOG_CONFIG_PATH:-configs/catalog.json}
       # Workflow/form artifacts are no longer baked into the repo/image; they are
       # fetched at startup from the public OpenNSW/one-trade-artifacts repo under
       # the tnsw/ base path. `make dev` works with no local clone. Override any of

@@ -31,16 +31,19 @@ with no rule is rejected):
 
 ## Catalog
 
-The logical names resolve through the global catalog (`configs/task_authz.json`,
-`TASK_AUTHZ_CONFIG_PATH`): `users` maps a name to a token role, `clients` maps a
+The logical names resolve through the global catalog (`configs/catalog.json`,
+`CATALOG_CONFIG_PATH`): `roles` maps a name to an IdP token role, `clients` maps a
 name to an OAuth2 client id.
 
 ```json
 {
-  "users":   { "trader": "Trader", "cha": "CHA" },
+  "roles":   { "trader": "Trader", "cha": "CHA" },
   "clients": { "fcau": "FCAU_TO_NSW", "npqs": "NPQS_TO_NSW" }
 }
 ```
+
+The composition root loads the file once (`internal/catalog`) and injects the
+`roles`/`clients` slice of it here, so this package reads no configuration file.
 
 ## Decision
 

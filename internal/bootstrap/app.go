@@ -38,6 +38,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -108,6 +109,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 2: Domain Core Repositories & Base Services
 	// -------------------------------------------------------------------
+	// The global catalog resolves the logical names used across configuration
+	// (task-authz rule principals today) to this deployment's token roles and
+	// client ids. Loaded once here and injected; no consumer reads the file.
+	globalCatalog, err := catalog.Load(cfg.Server.CatalogConfigPath)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to load catalog: %w", err)
+	}
+
 	paymentRepo := payment.NewPaymentRepository(db)
 	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
 		"govpay": govpay.NewGovPayGateway,
@@ -161,7 +171,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.TaskDone(context.Background(), parentWorkflowID, parentRunID, parentNodeID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, paymentService, companyService, artifactRegistry, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, paymentService, companyService, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -514,6 +524,7 @@ func initTask(
 	paymentService payment.PaymentService,
 	companyService company.Service,
 	artifactRegistry *artifact.Registry,
+	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
 ) (*taskStack, func() error, error) {
@@ -579,7 +590,10 @@ func initTask(
 	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("register notification extension: %w", err)
 	}
-	if err := taskauthz.Register(extensionsRegistry, cfg.Server.TaskAuthzConfigPath); err != nil {
+	if err := taskauthz.Register(extensionsRegistry, taskauthz.Catalog{
+		Roles:   globalCatalog.Roles,
+		Clients: globalCatalog.Clients,
+	}); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)

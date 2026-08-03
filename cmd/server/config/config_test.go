@@ -313,7 +313,8 @@ func TestLoad_Defaults(t *testing.T) {
 		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
 		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
 		"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
-		"TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE",
+		"CATALOG_CONFIG_PATH", "TEMPORAL_HOST", "TEMPORAL_PORT",
+		"TEMPORAL_NAMESPACE",
 	}
 	for _, k := range envsToClear {
 		t.Setenv(k, "")
@@ -340,6 +341,9 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.Temporal.Namespace != "default" {
 		t.Errorf("Temporal.Namespace = %q, want default", cfg.Temporal.Namespace)
+	}
+	if cfg.Server.CatalogConfigPath != "configs/catalog.json" {
+		t.Errorf("Server.CatalogConfigPath = %q, want configs/catalog.json", cfg.Server.CatalogConfigPath)
 	}
 	if len(cfg.CORS.AllowedOrigins) != 1 || cfg.CORS.AllowedOrigins[0] != "http://localhost:3000" {
 		t.Errorf("CORS.AllowedOrigins = %v, want [http://localhost:3000]", cfg.CORS.AllowedOrigins)

@@ -104,6 +104,11 @@ func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 		if err != nil {
 			return nil, err
 		}
+		// These keys are logical role names from the global catalog
+		// (configs/catalog.json): the extension matches them against the same
+		// catalog's roles, so they must stay in step with its "roles" keys.
+		// They are hardcoded because each maps to a specific ownership column,
+		// not because they are arbitrary. TestOwnedRoleKeysMatchCatalog pins them.
 		owned["trader"] = userCompanyID == traderCompanyID
 		owned["cha"] = chaCompanyID != "" && userCompanyID == chaCompanyID
 		return owned, nil

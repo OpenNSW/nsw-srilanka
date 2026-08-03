@@ -4,10 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/OpenNSW/core/authn"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
 
@@ -175,6 +177,23 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 			t.Errorf("ownership lookup should be skipped when the caller has no company, got %d", own.calls)
 		}
 	})
+}
+
+// TestOwnedRoleKeysMatchCatalog pins the logical names ownedRolesFor hardcodes to
+// the shipped catalog. The authz extension looks up the same names in the
+// catalog's roles, so a rename there would leave the role match succeeding while
+// ownership silently resolved false for every candidate — a blanket 403 with no
+// obvious cause. Fail here instead.
+func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
+	c, err := catalog.Load(filepath.Join("..", "..", "..", "configs", "catalog.example.json"))
+	if err != nil {
+		t.Fatalf("load catalog: %v", err)
+	}
+	for _, name := range []string{"trader", "cha"} {
+		if _, ok := c.Roles[name]; !ok {
+			t.Errorf("catalog defines no roles[%q], but ownedRolesFor sets owned[%q]", name, name)
+		}
+	}
 }
 
 func userCtx(ouHandle string, roles ...string) *authn.AuthContext {

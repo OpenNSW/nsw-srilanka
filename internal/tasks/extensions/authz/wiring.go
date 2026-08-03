@@ -10,17 +10,17 @@ import (
 // the SubTaskTemplate JSON configs.
 const ExtAuthz = "authz"
 
-// Register loads and validates the catalog at configPath and installs the
-// task-step authorization extension on reg.
-func Register(reg *extensions.Registry, configPath string) error {
+// Register installs the task-step authorization extension on reg. cat is the
+// slice of the global catalog loaded at the composition root; per-task rule names
+// resolve through it.
+func Register(reg *extensions.Registry, cat Catalog) error {
 	if reg == nil {
 		return fmt.Errorf("authz: registry is nil")
 	}
-	catalog, err := LoadCatalog(configPath)
-	if err != nil {
-		return err
+	if len(cat.Roles) == 0 && len(cat.Clients) == 0 {
+		return fmt.Errorf("authz: catalog defines no roles or clients")
 	}
-	if err := reg.Register(ExtAuthz, NewExtension(catalog)); err != nil {
+	if err := reg.Register(ExtAuthz, NewExtension(cat)); err != nil {
 		return fmt.Errorf("authz: register %s: %w", ExtAuthz, err)
 	}
 	return nil

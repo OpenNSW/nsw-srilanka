@@ -59,12 +59,13 @@ backend:
           key: db-password
 
     # --- Config file paths, relative to the image's /app working directory ---
-    # (services*.json, payment_methods.json, notification.json, task_authz.json
-    # are baked into the image — see the root Dockerfile.)
+    # (Only the *.example.json templates ship in the image — see the root
+    # Dockerfile. The live files below are gitignored, so supply them via a
+    # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
     SERVICES_CONFIG_PATH: "configs/services.json"
     PAYMENT_METHODS_CONFIG_PATH: "configs/payment_methods.json"
     NOTIFICATIONS_CONFIG_PATH: "configs/notification.json"
-    TASK_AUTHZ_CONFIG_PATH: "configs/task_authz.json"
+    CATALOG_CONFIG_PATH: "configs/catalog.json"
 
     # --- Artifact loader: workflow/form definitions and manifest.json, fetched
     # at startup from OpenNSW/one-trade-artifacts (tnsw/ base path) rather than

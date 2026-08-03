@@ -32,7 +32,7 @@ nsw-srilanka/
 │   ├── services.example.json                # Template for services.json (local/native dev — localhost)
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── notification.example.json            # Template for notification.json
-│   └── task_authz.example.json             # Template for task_authz.json
+│   └── catalog.example.json                 # Template for catalog.json
 ├── .env.example                          # Template for environment variables
 ├── .gitignore
 ├── Dockerfile
@@ -69,6 +69,7 @@ cp configs/services.docker.example.json configs/services.docker.json
 # config with localhost references instead of container hostnames.
 cp configs/payment_methods.example.json configs/payment_methods.json
 cp configs/notification.example.json configs/notification.json
+cp configs/catalog.example.json configs/catalog.json
 ```
 
 Edit each seeded file for your environment before starting the stack.
@@ -283,5 +284,6 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
 | `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
 | `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
+| `configs/catalog.json`                | Global catalog — logical names → IdP token roles and OAuth2 client ids          | `configs/catalog.example.json`                |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
