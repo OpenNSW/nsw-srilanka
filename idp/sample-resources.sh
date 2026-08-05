@@ -391,6 +391,7 @@ create_spa_application() {
     "description": "${APP_DESCRIPTION}",${ADDITIONAL_FIELDS}
     "ouId": "${OU_ID}",
     "isRegistrationFlowEnabled": false,
+    "type": "browser",
     "template": "react",
     "logoUrl": "https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png",
     "assertion": {
@@ -402,6 +403,9 @@ create_spa_application() {
             "config": {
                 "clientId": "${CLIENT_ID}",
                 "redirectUris": [
+                    ${REDIRECT_URIS_JSON}
+                ],
+                "postLogoutRedirectUris": [
                     ${REDIRECT_URIS_JSON}
                 ],
                 "grantTypes": [
@@ -416,19 +420,21 @@ create_spa_application() {
                 "publicClient": true,
                 "token": {
                     "accessToken": {
-                        "validityPeriod": 3600,
-                        "userAttributes": [
-                            "email",
-                            "phone_number",
-                            "family_name",
-                            "given_name",
-                            "groups",
-                            "roles",
-                            "ouHandle",
-                            "ouId",
-                            "ouName",
-                            "username"
-                        ]
+                        "userConfig": {
+                            "validityPeriod": 3600,
+                            "attributes": [
+                                "email",
+                                "phone_number",
+                                "family_name",
+                                "given_name",
+                                "groups",
+                                "roles",
+                                "ouHandle",
+                                "ouId",
+                                "ouName",
+                                "username"
+                            ]
+                        }
                     },
                     "idToken": {
                         "validityPeriod": 3600,
@@ -516,7 +522,10 @@ JSON
         if [[ -n "$APP_CLIENT_ID" ]]; then
             log_info "${APP_NAME} client ID: ${APP_CLIENT_ID}"
         fi
-    elif [[ "$HTTP_CODE" == "409" ]] || ([[ "$HTTP_CODE" == "400" ]] && [[ "$BODY" =~ (Application\ already\ exists|APP-1022) ]]); then
+    # Duplicate application: APP-1020 (name taken) / APP-1021 (clientId taken).
+    # NOT APP-1022 — that is "Invalid JWKS URI scheme", and matching it here would
+    # silently swallow a genuine config error as "already exists".
+    elif [[ "$HTTP_CODE" == "409" ]] || ([[ "$HTTP_CODE" == "400" ]] && [[ "$BODY" =~ (APP-1020|APP-1021) ]]); then
         log_warning "${APP_NAME} application already exists, skipping"
     else
         log_error "Failed to create ${APP_NAME} application (HTTP $HTTP_CODE)"
@@ -549,6 +558,7 @@ create_m2m_application() {
     "description": "${APP_DESCRIPTION}",
     "ouId": "${OU_ID}",
     "isRegistrationFlowEnabled": false,
+    "type": "m2m",
     "assertion": {
         "validityPeriod": 3600
     },
@@ -566,7 +576,9 @@ create_m2m_application() {
                 "publicClient": false,${M2M_SCOPES_FRAGMENT}
                 "token": {
                     "accessToken": {
-                        "validityPeriod": 3600
+                        "clientConfig": {
+                            "validityPeriod": 3600
+                        }
                     }
                 }
             }
@@ -584,7 +596,10 @@ JSON
         log_success "${APP_NAME} M2M application created successfully"
         APP_ID=$(extract_first_id "$BODY")
         APP_CLIENT_ID=$(printf '%s' "$BODY" | jq -r '[.. | objects | .clientId?] | map(select(. != null)) | .[0] // empty')
-    elif [[ "$HTTP_CODE" == "409" ]] || ([[ "$HTTP_CODE" == "400" ]] && [[ "$BODY" =~ (Application\ already\ exists|APP-1022) ]]); then
+    # Duplicate application: APP-1020 (name taken) / APP-1021 (clientId taken).
+    # NOT APP-1022 — that is "Invalid JWKS URI scheme", and matching it here would
+    # silently swallow a genuine config error as "already exists".
+    elif [[ "$HTTP_CODE" == "409" ]] || ([[ "$HTTP_CODE" == "400" ]] && [[ "$BODY" =~ (APP-1020|APP-1021) ]]); then
         log_warning "${APP_NAME} M2M application already exists, retrieving ID..."
         APP_ID=$(get_application_id_by_client_id "$CLIENT_ID")
         APP_CLIENT_ID="$CLIENT_ID"
@@ -735,7 +750,9 @@ create_resource_server() {
     local RS_NAME="$1" RS_IDENTIFIER="$2" RS_OU="$3"
     local RESPONSE HTTP_CODE BODY RID
 
-    RESPONSE=$(api_call POST "/resource-servers" "{\"name\":\"${RS_NAME}\",\"description\":\"${RS_NAME} resource server\",\"identifier\":\"${RS_IDENTIFIER}\",\"ouId\":\"${RS_OU}\"}")
+    # `type` is metadata only but immutable after creation, so set it up front —
+    # changing it later means recreating the RS and orphaning its permission grants.
+    RESPONSE=$(api_call POST "/resource-servers" "{\"name\":\"${RS_NAME}\",\"description\":\"${RS_NAME} resource server\",\"type\":\"API\",\"identifier\":\"${RS_IDENTIFIER}\",\"ouId\":\"${RS_OU}\"}")
     HTTP_CODE="${RESPONSE: -3}"
     BODY="${RESPONSE%???}"
 
@@ -842,8 +859,10 @@ bootstrap_registry() {
         log_warning "Failed to fetch themes (HTTP $HTTP_CODE); app creation will continue without theme_id"
     fi
 
-    AUTH_FLOW_ID=$(get_flow_id_by_handle "AUTHENTICATION" "default-basic-flow")
-    REG_FLOW_ID=$(get_flow_id_by_handle "REGISTRATION" "default-basic-flow")
+    # Five shipped flows share the handle `default-flow`, so the flowType filter in
+    # get_flow_id_by_handle is what actually selects the right one.
+    AUTH_FLOW_ID=$(get_flow_id_by_handle "AUTHENTICATION" "default-flow")
+    REG_FLOW_ID=$(get_flow_id_by_handle "REGISTRATION" "default-flow")
     if [[ -n "$AUTH_FLOW_ID" ]]; then
         log_success "Found default authentication flow ID: $AUTH_FLOW_ID"
     else
@@ -880,6 +899,9 @@ process_resource_servers() {
     while IFS= read -r obj; do
         [[ -z "$obj" ]] && continue
         name="$(jq -r '.name' <<< "$obj")"
+        # The identifier is both the registry key other resource files reference via
+        # "resourceServer" and the value that becomes the token `aud`, so it must be an
+        # absolute URI.
         identifier="$(jq -r '.identifier' <<< "$obj")"
         ou_key="$(jq -r '.ou' <<< "$obj")"
         ou_id="$(reg_require "ou:${ou_key}")"
@@ -960,6 +982,56 @@ process_roles() {
 }
 
 # (6) Role -> group assignments.
+# Server-level runtime configuration (PUT /server-config/<name>).
+#
+# Only `cors` for now. It lives here rather than in bootstrap/03-nsw-resources.yaml
+# because it configures the origins of the SPAs this script registers, and because a
+# bad value here fails only the seed — a failure in the bootstrap bundle would take the
+# image's own default resources (admin user, Console app, flows, themes) down with it.
+#
+# `allowedOriginsEnv` names an indexed env list: NAME_0, NAME_1, ... read until the
+# first gap, matching the convention in idp/.env.example.
+process_server_configs() {
+    local obj name origins_env origins i v
+    while IFS= read -r obj; do
+        [[ -z "$obj" ]] && continue
+        name="$(jq -r '.name' <<< "$obj")"
+        origins_env="$(jq -r '.allowedOriginsEnv // empty' <<< "$obj")"
+        [[ -z "$origins_env" ]] && { log_warning "server config '${name}' has no allowedOriginsEnv; skipping"; continue; }
+
+        origins=""; i=0
+        while true; do
+            v="${origins_env}_${i}"; v="${!v:-}"
+            [[ -z "$v" ]] && break
+            origins="${origins}${origins:+,}${v}"
+            i=$((i + 1))
+        done
+        if [[ -z "$origins" ]]; then
+            log_error "No origins found for server config '${name}': set ${origins_env}_0.. in idp/.env"
+            exit 1
+        fi
+        set_server_config "$name" "{\"allowedOrigins\":[$(json_str_list "$origins")]}" "$i origin(s)"
+    done <<< "$(jq -c '.serverConfigs // [] | .[]' <<< "$MERGED")"
+}
+
+# PUT a server config by name. Usage: set_server_config <name> <json-value> <label>
+set_server_config() {
+    local NAME="$1" VALUE="$2" LABEL="$3"
+    local RESPONSE HTTP_CODE BODY
+
+    RESPONSE=$(api_call PUT "/server-config/${NAME}" "$VALUE")
+    HTTP_CODE="${RESPONSE: -3}"
+    BODY="${RESPONSE%???}"
+
+    if [[ "$HTTP_CODE" == "200" ]] || [[ "$HTTP_CODE" == "201" ]] || [[ "$HTTP_CODE" == "204" ]]; then
+        log_success "Server config '${NAME}' updated (${LABEL})"
+    else
+        log_error "Failed to update server config '${NAME}' (HTTP $HTTP_CODE)"
+        echo "Response: $BODY" >&2
+        exit 1
+    fi
+}
+
 process_role_group_assignments() {
     local obj role_key group_key role_id group_id
     while IFS= read -r obj; do
@@ -1082,6 +1154,9 @@ process_applications
 
 echo "" >&2; log_info "### Role -> application assignments ###"
 process_app_role_assignments
+
+echo "" >&2; log_info "### Server configuration (CORS) ###"
+process_server_configs
 
 # ============================================================================
 # Summary (derived from config)

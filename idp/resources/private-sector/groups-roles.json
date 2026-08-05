@@ -5,9 +5,9 @@
   ],
   "roles": [
     { "key": "Trader", "name": "Trader", "description": "Role for trader operations",
-      "ou": "private-sector", "resourceServer": "NSW_API", "scopeSet": "traderNsw" },
+      "ou": "private-sector", "resourceServer": "https://api.nsw-srilanka.local", "scopeSet": "traderNsw" },
     { "key": "CHA", "name": "CHA", "description": "Role for CHA operations",
-      "ou": "private-sector", "resourceServer": "NSW_API", "scopeSet": "traderNsw" }
+      "ou": "private-sector", "resourceServer": "https://api.nsw-srilanka.local", "scopeSet": "traderNsw" }
   ],
   "roleAssignments": [
     { "role": "Trader", "group": "Traders" },

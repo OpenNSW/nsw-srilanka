@@ -1,0 +1,74 @@
+# Project bootstrap resources, mounted into /opt/thunderid/bootstrap/.
+#
+# Every .yaml/.yml/.json in that directory is imported in sorted filename order as one
+# payload, so this file lands after the image's own 01-/02- documents and can rely on
+# what they create (the `default` OU, the System resource server). Replaces the
+# pre-1.0.0 bootstrap/02-admin-cli.sh — shell scripts here are now skipped silently.
+#
+# Placeholders are resolved from ./.env before parsing; an unset variable is a hard
+# error, and resolution covers comments too. Requires ADMIN_CLI_SECRET. UUIDs are pinned
+# so re-imports update in place, using an 019c prefix to stay clear of the 01900000
+# range the image reserves for itself.
+#
+# Deliberately limited to the admin-cli client: it is the only resource that must exist
+# before the seed can authenticate. Everything else, CORS included, is seeded by
+# idp/sample-resources.sh, where a bad value cannot take the image's own default
+# resources down with it.
+#
+# LOCAL-DEV ONLY: this provisions a management-scoped client from a file-supplied
+# secret. Do not mount it into a shared or production deployment.
+
+# admin-cli: the M2M client used to obtain a management API token.
+#
+#   curl -k -u "ADMIN_CLI:<secret>" -d grant_type=client_credentials \
+#     -d scope=system -d resource=https://localhost:8090/mcp \
+#     https://localhost:8090/oauth2/token
+#
+# No requestable `scopes`: for client_credentials the scopes come from the role granted
+# to the application, which is the next document.
+resource_type: application
+id: 019c0000-0000-7000-8000-000000000001
+name: admin-cli
+description: Admin CLI machine client for management API access
+type: m2m
+ouHandle: default
+isRegistrationFlowEnabled: false
+allowedUserTypes: []
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: ADMIN_CLI
+      clientSecret: "{{ .ADMIN_CLI_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      token:
+        accessToken:
+          # A client_credentials token's subject is the client, so clientConfig applies
+          # here rather than userConfig.
+          clientConfig:
+            validityPeriod: 3600
+---
+# The management-scope grant for admin-cli.
+#
+# A NEW role rather than a re-declaration of the built-in `Administrator`: the importer's
+# role upsert writes only the fields present in the document, so re-declaring
+# `Administrator` to append an `app` assignment would drop its `permissions` block and
+# silently revoke the management scope console login depends on.
+#
+# resourceServerId is the System resource server from 01-default-resources.yaml —
+# permissions must reference a resource server by ID, not by handle.
+resource_type: role
+id: 019c0000-0000-7000-8000-000000000002
+name: NSW Admin CLI
+description: Grants admin-cli the system scope for management API access
+ouHandle: default
+permissions:
+  - resourceServerId: 01900000-0000-7000-8000-000000000020
+    permissions:
+      - system
+assignments:
+  - id: 019c0000-0000-7000-8000-000000000001
+    type: app

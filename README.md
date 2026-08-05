@@ -62,7 +62,7 @@ Copy each example file to its live name (the real files are gitignored and must 
 
 ```bash
 cp .env.example .env
-cp idp/env.example idp/.env
+cp idp/.env.example idp/.env
 cp configs/services.docker.example.json configs/services.docker.json
 # cp configs/services.example.json configs/services.json
 # For local development with direct host DB access, use the non-docker
@@ -84,7 +84,7 @@ make help     # list all targets
 
 This spins up:
 * **`nsw-postgres`** (Port `5432`): Database populated with base tables/schemas.
-* **`nsw-idp`** (Port `8090`): Thunder Identity Provider.
+* **`thunderid`** (Port `8090`): ThunderID Identity Provider.
 * **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
 * **`nsw-backend-api`** (Port `8080`): The Go backend server.
 * **`nsw-trader-portal`** (Port `5173`): The React Trader Portal frontend.
@@ -278,7 +278,7 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | File                                  | Purpose                                                                         | Source of truth                               |
 |---------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
 | `.env`                                | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)           | `.env.example`                                |
-| `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/env.example`                             |
+| `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/.env.example`                             |
 | `configs/services.docker.json`        | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json`       |
 | `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
 | `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
