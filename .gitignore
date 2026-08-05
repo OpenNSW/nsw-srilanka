@@ -25,7 +25,7 @@ configs/notification.json
 configs/services.json
 configs/services.docker.json
 configs/payment_methods.json
-configs/task_authz.json
+configs/catalog.json
 
 # Local bucket files
 bucket/*

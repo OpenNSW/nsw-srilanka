@@ -43,7 +43,7 @@ type ServerConfig struct {
 	ServiceURL               string
 	ServicesConfigPath       string
 	PaymentMethodsConfigPath string
-	TaskAuthzConfigPath      string
+	CatalogConfigPath        string
 	Debug                    bool
 	LogLevel                 slog.Level
 	MaxRequestBytes          int64
@@ -100,7 +100,7 @@ func Load() (*Config, error) {
 			ServiceURL:               getEnvOrDefault("SERVICE_URL", fmt.Sprintf("http://localhost:%d", serverPort)),
 			ServicesConfigPath:       getEnvOrDefault("SERVICES_CONFIG_PATH", "configs/services.json"),
 			PaymentMethodsConfigPath: getEnvOrDefault("PAYMENT_METHODS_CONFIG_PATH", "configs/payment_methods.json"),
-			TaskAuthzConfigPath:      getEnvOrDefault("TASK_AUTHZ_CONFIG_PATH", "configs/task_authz.json"),
+			CatalogConfigPath:        getEnvOrDefault("CATALOG_CONFIG_PATH", "configs/catalog.json"),
 			Debug:                    getBoolOrDefault("SERVER_DEBUG", true),
 			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
 			MaxRequestBytes:          int64(getIntEnvOrDefault("SERVER_MAX_REQUEST_BYTES", 33554432)), // 32 MiB

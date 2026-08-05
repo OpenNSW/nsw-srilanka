@@ -354,7 +354,8 @@ func TestLoad_Defaults(t *testing.T) {
 		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
 		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
 		"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
-		"TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE",
+		"CATALOG_CONFIG_PATH", "TEMPORAL_HOST", "TEMPORAL_PORT",
+		"TEMPORAL_NAMESPACE",
 	}
 	for _, k := range envsToClear {
 		t.Setenv(k, "")
@@ -380,6 +381,7 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Server.ReadTimeout", cfg.Server.ReadTimeout, 15 * time.Second},
 		{"Server.WriteTimeout", cfg.Server.WriteTimeout, 30 * time.Second},
 		{"Server.IdleTimeout", cfg.Server.IdleTimeout, 60 * time.Second},
+		{"Server.CatalogConfigPath", cfg.Server.CatalogConfigPath, "configs/catalog.json"},
 		{"Database.Host", cfg.Database.Host, "localhost"},
 		{"Database.Password", cfg.Database.Password, "testpassword"},
 		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},

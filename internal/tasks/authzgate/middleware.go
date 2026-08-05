@@ -13,12 +13,43 @@ package authzgate
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/OpenNSW/core/authn"
 
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
+
+// Logical role names ownedRolesFor resolves ownership for. The global catalog
+// must define both — see validateCatalogRoles.
+const (
+	roleTrader = "trader"
+	roleCHA    = "cha"
+)
+
+// requiredCatalogRoles are the catalog role keys ownedRolesFor depends on.
+var requiredCatalogRoles = []string{roleTrader, roleCHA}
+
+// validateCatalogRoles reports an error if roles (the global catalog's Roles
+// map) omits any role ownedRolesFor requires. A missing key doesn't fail to
+// load — the authz extension's role match against it still succeeds — but
+// ownership resolution for that name silently returns false, denying every
+// caller in that role. NewMiddleware calls this so a misconfigured catalog
+// fails at construction instead of failing every request.
+func validateCatalogRoles(roles map[string]string) error {
+	var missing []string
+	for _, name := range requiredCatalogRoles {
+		if _, ok := roles[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("authzgate: catalog is missing required role(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
 
 // OwnershipResolver returns the trader and CHA company ids that own a
 // consignment. *consignment.Service satisfies it via GetOwnership.
@@ -40,9 +71,15 @@ type Middleware struct {
 	company   CompanyResolver
 }
 
-// NewMiddleware builds the middleware. All dependencies are required.
-func NewMiddleware(ownership OwnershipResolver, company CompanyResolver) *Middleware {
-	return &Middleware{ownership: ownership, company: company}
+// NewMiddleware builds the middleware. ownership and company are required;
+// roles is the global catalog's Roles map, validated here so a catalog missing
+// a role ownedRolesFor depends on fails construction instead of silently
+// denying every request in that role.
+func NewMiddleware(ownership OwnershipResolver, company CompanyResolver, roles map[string]string) (*Middleware, error) {
+	if err := validateCatalogRoles(roles); err != nil {
+		return nil, err
+	}
+	return &Middleware{ownership: ownership, company: company}, nil
 }
 
 // Handler wraps next (the task-write handler), attaching the authz Input.
@@ -104,8 +141,11 @@ func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 		if err != nil {
 			return nil, err
 		}
-		owned["trader"] = userCompanyID == traderCompanyID
-		owned["cha"] = chaCompanyID != "" && userCompanyID == chaCompanyID
+		// roleTrader/roleCHA are hardcoded because each maps to a specific
+		// ownership column here, not because they are arbitrary; NewMiddleware's
+		// validateCatalogRoles call enforces that the catalog defines both.
+		owned[roleTrader] = userCompanyID == traderCompanyID
+		owned[roleCHA] = chaCompanyID != "" && userCompanyID == chaCompanyID
 		return owned, nil
 	}
 }

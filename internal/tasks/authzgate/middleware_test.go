@@ -4,10 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/OpenNSW/core/authn"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
 
@@ -33,6 +36,21 @@ func (f *fakeCompany) CompanyIDByOUHandle(context.Context, string) (string, erro
 	return f.id, f.err
 }
 
+// validCatalogRoles satisfies validateCatalogRoles; tests unrelated to that
+// check use it so NewMiddleware always succeeds.
+var validCatalogRoles = map[string]string{roleTrader: "Trader", roleCHA: "CHA"}
+
+// mustNewMiddleware builds a Middleware with validCatalogRoles, failing the
+// test immediately if construction errors.
+func mustNewMiddleware(t *testing.T, ownership OwnershipResolver, company CompanyResolver) *Middleware {
+	t.Helper()
+	mw, err := NewMiddleware(ownership, company, validCatalogRoles)
+	if err != nil {
+		t.Fatalf("NewMiddleware: %v", err)
+	}
+	return mw
+}
+
 // attachedInput drives the middleware with an auth context and returns the Input
 // the downstream handler observes.
 func attachedInput(mw *Middleware, ac *authn.AuthContext) (taskauthz.Input, bool) {
@@ -52,7 +70,7 @@ func attachedInput(mw *Middleware, ac *authn.AuthContext) (taskauthz.Input, bool
 func TestMiddleware_Client(t *testing.T) {
 	own := &fakeOwnership{}
 	comp := &fakeCompany{}
-	in, ok := attachedInput(NewMiddleware(own, comp), &authn.AuthContext{Client: &authn.ClientContext{ClientID: "FCAU_TO_NSW"}})
+	in, ok := attachedInput(mustNewMiddleware(t, own, comp), &authn.AuthContext{Client: &authn.ClientContext{ClientID: "FCAU_TO_NSW"}})
 
 	if !ok || in.Kind != taskauthz.KindClient || in.ClientID != "FCAU_TO_NSW" {
 		t.Fatalf("got %+v ok=%v", in, ok)
@@ -66,7 +84,7 @@ func TestMiddleware_Client(t *testing.T) {
 }
 
 func TestMiddleware_Unauthenticated(t *testing.T) {
-	if _, ok := attachedInput(NewMiddleware(&fakeOwnership{}, &fakeCompany{}), nil); ok {
+	if _, ok := attachedInput(mustNewMiddleware(t, &fakeOwnership{}, &fakeCompany{}), nil); ok {
 		t.Fatal("want no Input for unauthenticated request")
 	}
 }
@@ -74,7 +92,7 @@ func TestMiddleware_Unauthenticated(t *testing.T) {
 func TestMiddleware_UserResolverIsLazy(t *testing.T) {
 	own := &fakeOwnership{trader: "adam-pvt-ltd", cha: "edward-pvt-ltd"}
 	comp := &fakeCompany{id: "adam-pvt-ltd"}
-	in, ok := attachedInput(NewMiddleware(own, comp), userCtx("adam-pvt-ltd", "Trader"))
+	in, ok := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))
 
 	if !ok || in.Kind != taskauthz.KindUser || in.OwnedRoles == nil {
 		t.Fatalf("got %+v ok=%v", in, ok)
@@ -113,7 +131,7 @@ func TestMiddleware_UserResolverCases(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			in, _ := attachedInput(NewMiddleware(tc.ownership, tc.company), userCtx("adam-pvt-ltd", "CHA"))
+			in, _ := attachedInput(mustNewMiddleware(t, tc.ownership, tc.company), userCtx("adam-pvt-ltd", "CHA"))
 			owned, err := in.OwnedRoles(context.Background(), "c1")
 			if tc.wantErr {
 				if err == nil {
@@ -140,7 +158,7 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	t.Run("empty ou handle skips all lookups", func(t *testing.T) {
 		own := &fakeOwnership{trader: "adam-pvt-ltd"}
 		comp := &fakeCompany{id: "adam-pvt-ltd"}
-		in, _ := attachedInput(NewMiddleware(own, comp), userCtx("", "Trader"))
+		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "c1")
 		if err != nil || len(owned) != 0 {
 			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
@@ -153,7 +171,7 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	t.Run("empty root workflow id skips all lookups", func(t *testing.T) {
 		own := &fakeOwnership{trader: "adam-pvt-ltd"}
 		comp := &fakeCompany{id: "adam-pvt-ltd"}
-		in, _ := attachedInput(NewMiddleware(own, comp), userCtx("adam-pvt-ltd", "Trader"))
+		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "")
 		if err != nil || len(owned) != 0 {
 			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
@@ -166,7 +184,7 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	t.Run("no company profile skips ownership lookup", func(t *testing.T) {
 		own := &fakeOwnership{trader: "adam-pvt-ltd"}
 		comp := &fakeCompany{id: ""} // no profile
-		in, _ := attachedInput(NewMiddleware(own, comp), userCtx("ghost", "Trader"))
+		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("ghost", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "c1")
 		if err != nil || len(owned) != 0 {
 			t.Fatalf("owned=%v err=%v, want empty/nil", owned, err)
@@ -175,6 +193,51 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 			t.Errorf("ownership lookup should be skipped when the caller has no company, got %d", own.calls)
 		}
 	})
+}
+
+func TestValidateCatalogRoles(t *testing.T) {
+	tests := []struct {
+		name    string
+		roles   map[string]string
+		wantErr string // substring expected in the error; "" means no error
+	}{
+		{name: "both present", roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
+		{name: "extra roles ignored", roles: map[string]string{"trader": "Trader", "cha": "CHA", "fcau": "FCAU_TO_NSW"}},
+		{name: "missing cha", roles: map[string]string{"trader": "Trader"}, wantErr: "cha"},
+		{name: "missing trader", roles: map[string]string{"cha": "CHA"}, wantErr: "trader"},
+		{name: "missing both", roles: map[string]string{}, wantErr: "trader, cha"},
+		{name: "nil map", roles: nil, wantErr: "trader, cha"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateCatalogRoles(tc.roles)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateCatalogRoles(%v) = %v, want nil", tc.roles, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validateCatalogRoles(%v) = %v, want error containing %q", tc.roles, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestOwnedRoleKeysMatchCatalog pins the logical names ownedRolesFor hardcodes to
+// the shipped catalog by running the exact check NewMiddleware runs at
+// construction. The authz extension looks up the same names in the catalog's
+// roles, so a rename there would leave the role match succeeding while
+// ownership silently resolved false for every candidate — a blanket 403 with no
+// obvious cause. Fail here instead.
+func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
+	c, err := catalog.Load(filepath.Join("..", "..", "..", "configs", "catalog.example.json"))
+	if err != nil {
+		t.Fatalf("load catalog: %v", err)
+	}
+	if err := validateCatalogRoles(c.Roles); err != nil {
+		t.Error(err)
+	}
 }
 
 func userCtx(ouHandle string, roles ...string) *authn.AuthContext {

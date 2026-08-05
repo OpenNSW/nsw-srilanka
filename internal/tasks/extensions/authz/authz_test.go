@@ -4,16 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/OpenNSW/core/taskflow/store"
 )
 
-func testCatalog() *Catalog {
-	return &Catalog{
-		Users:   map[string]string{"trader": "Trader", "cha": "CHA"},
+func testCatalog() Catalog {
+	return Catalog{
+		Roles:   map[string]string{"trader": "Trader", "cha": "CHA"},
 		Clients: map[string]string{"fcau": "FCAU_TO_NSW"},
 	}
 }
@@ -197,59 +195,5 @@ func TestExtension_EmptyProperties(t *testing.T) {
 		if !errors.Is(err, ErrForbidden) {
 			t.Fatalf("properties %q: want ErrForbidden, got %v", string(props), err)
 		}
-	}
-}
-
-func TestCatalog_Validate(t *testing.T) {
-	tests := []struct {
-		name    string
-		catalog *Catalog
-		wantErr bool
-	}{
-		{name: "nil", catalog: nil, wantErr: true},
-		{name: "empty", catalog: &Catalog{}, wantErr: true},
-		{name: "user missing role", catalog: &Catalog{Users: map[string]string{"trader": ""}}, wantErr: true},
-		{name: "client missing id", catalog: &Catalog{Clients: map[string]string{"fcau": ""}}, wantErr: true},
-		{name: "valid users only", catalog: &Catalog{Users: map[string]string{"trader": "Trader"}}, wantErr: false},
-		{name: "valid full", catalog: testCatalog(), wantErr: false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.catalog.Validate(); (err != nil) != tc.wantErr {
-				t.Fatalf("Validate() err = %v, wantErr %v", err, tc.wantErr)
-			}
-		})
-	}
-}
-
-func TestLoadCatalog(t *testing.T) {
-	dir := t.TempDir()
-
-	valid := filepath.Join(dir, "ok.json")
-	if err := os.WriteFile(valid, []byte(`{"users":{"trader":"Trader"},"clients":{"fcau":"FCAU_TO_NSW"}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if c, err := LoadCatalog(valid); err != nil || c == nil || c.Users["trader"] != "Trader" {
-		t.Fatalf("LoadCatalog(valid) = %v, %v", c, err)
-	}
-
-	bad := filepath.Join(dir, "bad.json")
-	if err := os.WriteFile(bad, []byte(`{not json`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := LoadCatalog(bad); err == nil {
-		t.Fatal("LoadCatalog(malformed) want error, got nil")
-	}
-
-	if _, err := LoadCatalog(filepath.Join(dir, "missing.json")); err == nil {
-		t.Fatal("LoadCatalog(missing) want error, got nil")
-	}
-
-	invalid := filepath.Join(dir, "invalid.json")
-	if err := os.WriteFile(invalid, []byte(`{"users":{},"clients":{}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := LoadCatalog(invalid); err == nil {
-		t.Fatal("LoadCatalog(empty catalog) want validation error, got nil")
 	}
 }
