@@ -10,6 +10,8 @@ github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2
 github.com/OpenNSW/core/authz v0.1.0/go.mod h1:/LbQLPZtCGJ4DICQvLea8XFtSCe2M3xZCO+0SxTYsog=
 github.com/OpenNSW/core/database v0.1.0 h1:WzVZ2XcqfbdLD3g4+jvpUiHLBVDsi2eR2es+1P/+sRE=
 github.com/OpenNSW/core/database v0.1.0/go.mod h1:NkTGtw6OfTlpcFrcwj8hrRv7tTCC5xgfql3wmFilfD0=
+github.com/OpenNSW/core/httputil v0.1.0 h1:IEkr9sHOh065+pubjlPShqmW3X2GPB9+wlHoeNDsGiU=
+github.com/OpenNSW/core/httputil v0.1.0/go.mod h1:kZyjhx9ckd54vYxH/R65KW++X2Lrvt1N13ZvhMupk7M=
 github.com/OpenNSW/core/pagination v0.0.0-20260709101832-02c3f0264e91 h1:x/8eLbBUW9fGlR4AQbsRnoGk+x+axlt8Mh+slHCk6qQ=
 github.com/OpenNSW/core/pagination v0.0.0-20260709101832-02c3f0264e91/go.mod h1:Vv9hw1Z/iBOIMY7m0/M/qTPRZydcSEzo4lTqc5nx3Kc=
 github.com/OpenNSW/core/payment v0.1.0 h1:T6Z9IZPJeOYFdFRvbRJCk0vW4gzM65mSAElphKhaoC4=

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
-	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 )
 
 const (
@@ -48,7 +48,7 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to read request body", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: failed to read request body", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -56,7 +56,7 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	var env payloadEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to decode JSON envelope", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: failed to decode JSON envelope", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -83,7 +83,7 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		h.handleCDNAcknowledgment(w, r, body)
 
 	default:
-		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType)
 		httputil.Error(w, r, http.StatusBadRequest, errUnknownEventType)
 	}
 }
@@ -91,13 +91,13 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req cusdec.CusdecIntegrationResultRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to decode CusDec integration result payload", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: failed to decode CusDec integration result payload", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		slog.WarnContext(r.Context(), "slce: CusDec integration result validation failed", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: CusDec integration result validation failed", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -105,7 +105,7 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 	if err := h.cusdecService.ProcessIntegrationResult(r.Context(), req); err != nil {
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: workflow not found for CusDec integration result",
-				"edge_id", req.EdgeID, "error", err, "traceId", httputil.TraceID(r))
+				"edge_id", req.EdgeID, "error", err)
 			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
 			return
 		}
@@ -119,7 +119,7 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body []byte, expectedEvent string) {
 	var req cusdec.CusdecEventRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to decode CusDec event payload", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: failed to decode CusDec event payload", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -128,7 +128,7 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 	req.Event = expectedEvent
 
 	if err := req.Validate(); err != nil {
-		slog.WarnContext(r.Context(), "slce: CusDec event validation failed", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: CusDec event validation failed", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -136,13 +136,13 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 	if err := h.cusdecService.ProcessEvent(r.Context(), req); err != nil {
 		if errors.Is(err, cusdec.ErrCusdecNotFoundByRef) {
 			slog.WarnContext(r.Context(), "slce: CusDec declaration not found for event (may be transient)",
-				"cusdec_ref", req.Payload.CusdecRef, "error", err, "traceId", httputil.TraceID(r))
+				"cusdec_ref", req.Payload.CusdecRef, "error", err)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errDeclarationNotFoundRetry)
 			return
 		}
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: workflow not found for CusDec event",
-				"cusdec_ref", req.Payload.CusdecRef, "error", err, "traceId", httputil.TraceID(r))
+				"cusdec_ref", req.Payload.CusdecRef, "error", err)
 			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
 			return
 		}
@@ -156,13 +156,13 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req cdn.CDNIntegrationResultRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to decode CDN integration result payload", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: failed to decode CDN integration result payload", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		slog.WarnContext(r.Context(), "slce: CDN integration result validation failed", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: CDN integration result validation failed", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -170,7 +170,7 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for integration result",
-				"edge_id", req.EdgeID, "error", err, "traceId", httputil.TraceID(r))
+				"edge_id", req.EdgeID, "error", err)
 			httputil.Error(w, r, http.StatusNotFound, errDispatchNoteNotFound)
 			return
 		}
@@ -184,13 +184,13 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req cdn.CDNAcknowledgmentRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to decode CDN acknowledgment payload", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: failed to decode CDN acknowledgment payload", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
 
 	if err := req.Validate(); err != nil {
-		slog.WarnContext(r.Context(), "slce: CDN acknowledgment validation failed", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "slce: CDN acknowledgment validation failed", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
@@ -198,7 +198,7 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 	if err := h.cdnService.ProcessAcknowledgment(r.Context(), req); err != nil {
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByCDNRef) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for acknowledgment (may be transient)",
-				"cdn_ref", req.Payload.CDNRef, "error", err, "traceId", httputil.TraceID(r))
+				"cdn_ref", req.Payload.CDNRef, "error", err)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errDispatchNoteNotFoundRetry)
 			return
 		}
