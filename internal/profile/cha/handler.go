@@ -3,7 +3,7 @@ package cha
 import (
 	"net/http"
 
-	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
+	"github.com/OpenNSW/core/httputil"
 )
 
 // Handler exposes CHA profile endpoints.

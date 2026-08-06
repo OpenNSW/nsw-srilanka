@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/trace"
+	"github.com/OpenNSW/core/trace/logging"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/bootstrap"
 )
@@ -26,7 +29,8 @@ func main() {
 		Level:     cfg.Server.LogLevel,
 	}
 	logHandler := slog.NewTextHandler(os.Stdout, opts)
-	slog.SetDefault(slog.New(logHandler))
+	slog.SetDefault(slog.New(logging.NewHandler(logHandler)))
+	httputil.CorrelationIDFunc = trace.GetTraceID
 
 	slog.Info("configuration loaded successfully",
 		"db_host", cfg.Database.Host,

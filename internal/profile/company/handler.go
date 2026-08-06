@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
-	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 )
 
 // Handler exposes company profile endpoints.
@@ -37,7 +37,7 @@ func (h *Handler) HandleGetCompanies(w http.ResponseWriter, r *http.Request) {
 
 	offset, limit, err := pagination.ParsePaginationParams(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, "invalid pagination parameters")
 		return
 	}

@@ -10,11 +10,10 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
-
-	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
 
@@ -79,7 +78,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	// task's ownership bounds before completing the step.
 	taskID := r.PathValue("id")
 	if taskID == "" {
-		slog.Error("tasks: missing task id in request", "traceId", httputil.TraceID(r))
+		slog.ErrorContext(r.Context(), "tasks: missing task id in request")
 		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
@@ -90,7 +89,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	command, payload, status, responseMessage, err := parseCompleteTaskStepRequest(r, pathCommand)
 	if err != nil {
-		slog.Error("tasks: failed to parse request", "taskId", taskID, "error", err, "traceId", httputil.TraceID(r))
+		slog.ErrorContext(r.Context(), "tasks: failed to parse request", "taskId", taskID, "error", err)
 		httputil.Error(w, r, status, responseMessage)
 		return
 	}
@@ -102,7 +101,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		case errors.Is(err, taskauthz.ErrUnauthenticated):
 			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
 		case errors.Is(err, taskauthz.ErrForbidden):
-			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err, "traceId", httputil.TraceID(r))
+			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
 			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 		default:
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
@@ -127,7 +126,7 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 
 		// An empty body is a valid acknowledge-style completion; only fail on genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
-			slog.WarnContext(r.Context(), "tasks: malformed request body", "error", err, "traceId", httputil.TraceID(r))
+			slog.WarnContext(r.Context(), "tasks: malformed request body", "error", err)
 			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON")
 		}
 
@@ -137,7 +136,7 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 		if errors.As(err, &maxBytesErr) {
 			return "", nil, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err
 		}
-		slog.WarnContext(r.Context(), "tasks: unexpected data after JSON body", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "tasks: unexpected data after JSON body", "error", err)
 		return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value")
 	}
 
