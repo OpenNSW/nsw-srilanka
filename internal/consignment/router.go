@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/authn"
+	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	"github.com/OpenNSW/nsw-srilanka/internal/httputil"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
@@ -123,7 +123,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 	offset, limit, err := pagination.ParsePaginationParams(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err, "traceId", httputil.TraceID(r))
+		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, "invalid pagination parameters")
 		return
 	}
