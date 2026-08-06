@@ -188,7 +188,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	recorder := nswaudit.NewRecorder(auditClient)
 
 	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
-	consignmentRouter := consignment.NewRouter(consignmentService, chaService, companyService, recorder)
+	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
+	if err != nil {
+		_ = stopTask()
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to build consignment router: %w", err)
+	}
 
 	pr, stopParentRunner, err := wireParentRunner(temporalClient, tm, consignmentService)
 	if err != nil {
