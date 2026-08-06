@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"io"
 	"log/slog"
 	"os"
 
@@ -15,11 +16,16 @@ import (
 // the correlationId returned in error responses matches the traceId written
 // to server logs. Must be called before any request is served.
 func ConfigureLogging(cfg *config.Config) {
+	configureLogging(cfg, os.Stdout)
+}
+
+// configureLogging is ConfigureLogging with an injectable log destination.
+func configureLogging(cfg *config.Config, dest io.Writer) {
 	opts := &slog.HandlerOptions{
 		AddSource: cfg.Server.Debug,
 		Level:     cfg.Server.LogLevel,
 	}
-	logHandler := slog.NewTextHandler(os.Stdout, opts)
+	logHandler := slog.NewTextHandler(dest, opts)
 	slog.SetDefault(slog.New(logging.NewHandler(logHandler)))
 	httputil.CorrelationIDFunc = trace.GetTraceID
 }
