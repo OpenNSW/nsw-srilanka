@@ -94,7 +94,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	slog.Info("tasks: processing complete step command", "taskId", taskID, "command", command)
+	slog.InfoContext(r.Context(), "tasks: processing complete step command", "taskId", taskID, "command", command)
 
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		switch {
