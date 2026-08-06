@@ -23,9 +23,25 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
+
+// testCatalogRoles satisfies validateRoles; tests unrelated to that check use it
+// so NewRouter (and, from #272, NewService) always succeeds.
+var testCatalogRoles = map[string]string{"trader": "Trader", "cha": "CHA"}
+
+// mustNewRouter builds a Router with testCatalogRoles, failing the test
+// immediately if construction errors.
+func mustNewRouter(t *testing.T, cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder) *Router {
+	t.Helper()
+	r, err := NewRouter(cs, chaService, companyService, recorder, testCatalogRoles)
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	return r
+}
 
 func withAuthContext(ctx context.Context, userID string) context.Context {
 	authCtx := &authn.AuthContext{
@@ -48,6 +64,20 @@ func withAuthContextOU(ctx context.Context, userID, ouHandle string) context.Con
 	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
 }
 
+// withAuthContextRoles is withAuthContextOU plus the caller's JWT roles, for
+// tests exercising role-entitlement checks.
+func withAuthContextRoles(ctx context.Context, userID, ouHandle string, roles ...string) context.Context {
+	authCtx := &authn.AuthContext{
+		User: &authn.UserContext{
+			ID:       userID,
+			Email:    userID + "@example.com",
+			OUHandle: ouHandle,
+			Roles:    roles,
+		},
+	}
+	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+}
+
 func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
@@ -55,7 +85,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
 	svc := NewService(db, nil, nil, mockCompany, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	consignmentID := uuid.NewString()
 	companyID := "company-trader"
@@ -89,7 +119,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T)
 	mockTaskStore := new(MockTaskStore)
 	svc := NewService(db, nil, nil, mockCompany, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	consignmentID := uuid.NewString()
 	chaCompanyID := "company-cha"
@@ -120,7 +150,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_DifferentCompany(t *testing.
 	mockCompany := new(MockCompanyService)
 	auditor := &mockAuditor{}
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
 
 	consignmentID := uuid.NewString()
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "outsider-ou").Return(&company.Record{ID: "company-outsider", OUHandle: "outsider-ou"}, nil)
@@ -152,7 +182,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_CompanyNotFound(t *testing.T
 	db, _ := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	id := uuid.NewString()
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
@@ -172,7 +202,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_InvalidCompanyID(t *testing.
 	db, _ := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	id := uuid.NewString()
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "").
@@ -191,7 +221,7 @@ func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	traderID := "trader1"
 	companyID := "company-trader"
@@ -202,7 +232,7 @@ func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
 	sqlMock.ExpectQuery("(?i)SELECT .* FROM \"consignments\"").WillReturnRows(sqlmock.NewRows([]string{"id", "trader_id", "trader_company_id"}).AddRow(uuid.NewString(), traderID, companyID))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&state=IN_PROGRESS&flow=IMPORT", nil)
-	req = req.WithContext(withAuthContextOU(req.Context(), traderID, "trader-ou"))
+	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -224,7 +254,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	svc := NewService(db, reg, nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 	auditor := &mockAuditor{}
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
 
 	traderID := "trader1"
 	traderCompanyID := uuid.NewString()
@@ -268,7 +298,7 @@ func TestConsignmentRouter_HandleGetConsignments_WithSearch(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	traderID := "trader1"
 	companyID := "company-trader"
@@ -279,7 +309,7 @@ func TestConsignmentRouter_HandleGetConsignments_WithSearch(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "trader_id", "trader_company_id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&q=abc123", nil)
-	req = req.WithContext(withAuthContextOU(req.Context(), traderID, "trader-ou"))
+	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -287,7 +317,7 @@ func TestConsignmentRouter_HandleGetConsignments_WithSearch(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleCreateConsignment_Unauthorized(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
 
 	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
 	w := httptest.NewRecorder()
@@ -300,7 +330,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	id := uuid.NewString()
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "company-1"}, nil)
@@ -318,7 +348,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleGetConsignmentByID_MissingID(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/", nil)
 	req = req.WithContext(withAuthContext(req.Context(), "trader1"))
@@ -329,7 +359,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_MissingID(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleGetConsignments_Unauthorized(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
 	w := httptest.NewRecorder()
@@ -339,7 +369,7 @@ func TestConsignmentRouter_HandleGetConsignments_Unauthorized(t *testing.T) {
 }
 
 func TestConsignmentRouter_HandleGetConsignments_InvalidRole(t *testing.T) {
-	r := NewRouter(NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, NewService(nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=superadmin", nil)
 	req = req.WithContext(withAuthContextOU(req.Context(), "user1", "ou1"))
@@ -353,7 +383,7 @@ func TestConsignmentRouter_HandleGetConsignments_DefaultRole(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
@@ -361,7 +391,7 @@ func TestConsignmentRouter_HandleGetConsignments_DefaultRole(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil) // no ?role param
-	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 
@@ -373,13 +403,13 @@ func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(nil, company.ErrCompanyNotFound)
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader", nil)
-	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 
@@ -390,7 +420,7 @@ func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
@@ -398,17 +428,97 @@ func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
 		WillReturnError(errors.New("db error"))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader", nil)
-	req = req.WithContext(withAuthContextOU(req.Context(), "trader1", "trader-ou"))
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+// A CHA-role caller requesting role=cha is allowed — there is no coverage of the
+// cha branch elsewhere in this file.
+func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := NewService(db, nil, nil, mockCompany, nil, nil)
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "cha-ou").
+		Return(&company.Record{ID: "company-cha"}, nil)
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=cha", nil)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "cha1", "cha-ou", "CHA"))
+	w := httptest.NewRecorder()
+	r.HandleGetConsignments(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockCompany.AssertExpectations(t)
+}
+
+// A Trader-only caller asserting role=cha via the query param is denied before
+// any company lookup — the entitlement check must short-circuit ahead of it.
+func TestConsignmentRouter_HandleGetConsignments_RoleNotHeld(t *testing.T) {
+	mockCompany := new(MockCompanyService)
+	r := mustNewRouter(t, NewService(nil, nil, nil, nil, nil, nil), nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=cha", nil)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
+	w := httptest.NewRecorder()
+	r.HandleGetConsignments(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	mockCompany.AssertNotCalled(t, "GetCompanyByOUHandle", mock.Anything, mock.Anything)
+}
+
+// An empty/unusable OU handle surfaces as ErrInvalidCompanyID and must fail
+// closed (403), not 500 — mirrors
+// TestConsignmentRouter_HandleGetConsignmentByID_InvalidCompanyID.
+func TestConsignmentRouter_HandleGetConsignments_InvalidCompanyID(t *testing.T) {
+	mockCompany := new(MockCompanyService)
+	svc := NewService(nil, nil, nil, mockCompany, nil, nil)
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "").
+		Return(nil, company.ErrInvalidCompanyID)
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader", nil)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "", "Trader")) // empty OU handle
+	w := httptest.NewRecorder()
+	r.HandleGetConsignments(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestNewRouter_ValidatesRoles(t *testing.T) {
+	tests := []struct {
+		name    string
+		roles   map[string]string
+		wantErr bool
+	}{
+		{name: "both present", roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
+		{name: "extra roles ignored", roles: map[string]string{"trader": "Trader", "cha": "CHA", "fcau": "FCAU_TO_NSW"}},
+		{name: "missing cha", roles: map[string]string{"trader": "Trader"}, wantErr: true},
+		{name: "missing trader", roles: map[string]string{"cha": "CHA"}, wantErr: true},
+		{name: "cha present but empty", roles: map[string]string{"trader": "Trader", "cha": ""}, wantErr: true},
+		{name: "missing both", roles: map[string]string{}, wantErr: true},
+		{name: "nil map", roles: nil, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewRouter(nil, nil, nil, nswaudit.NewRecorder(nil), tc.roles)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("NewRouter(...) err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 	mockUser := new(MockUserService)
 	svc := NewService(nil, nil, nil, nil, mockUser, nil)
-	r := NewRouter(svc, nil, nil, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, nil, nswaudit.NewRecorder(nil))
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(nil, errors.New("lookup failed"))
 
@@ -424,7 +534,7 @@ func TestConsignmentRouter_HandleGetConsignmentByID_ServiceError(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := NewService(db, nil, nil, mockCompany, nil, nil)
-	r := NewRouter(svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
 
 	id := uuid.NewString()
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "company-1"}, nil)

@@ -2,8 +2,10 @@ package consignment
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/OpenNSW/core/authn"
@@ -18,6 +20,7 @@ const (
 	errUnauthorized          = "unauthorized"
 	errConsignmentIDRequired = "consignment ID is required"
 	errInvalidRole           = "query param role must be trader or cha"
+	errForbiddenRole         = "caller does not hold the requested role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
 )
@@ -27,10 +30,36 @@ type Router struct {
 	cha     cha.Service
 	company company.Service
 	audit   *nswaudit.Recorder
+	roles   map[string]string // logical name ("trader"/"cha") -> IdP token role
 }
 
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder) *Router {
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder}
+// NewRouter builds the router. roles is the global catalog's Roles map; it must
+// define "trader" and "cha" — HandleGetConsignments resolves a caller's ?role=
+// query param through it.
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string) (*Router, error) {
+	if err := validateRoles(roles); err != nil {
+		return nil, err
+	}
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles}, nil
+}
+
+// validateRoles reports an error if roles (the global catalog's Roles map) omits
+// "trader" or "cha", or maps either to an empty string. An empty mapping is
+// treated as missing: it can never match a real JWT role claim, so honoring it
+// would let slices.Contains(callerRoles, "") wrongly succeed if a caller's roles
+// ever contained an empty string. Package-private; internal/consignment's
+// Service.NewService also calls this (same package, no import needed).
+func validateRoles(roles map[string]string) error {
+	var missing []string
+	for _, name := range []string{"trader", "cha"} {
+		if role, ok := roles[name]; !ok || role == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("consignment: catalog is missing required role(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // HandleCreateConsignment handles POST /api/v1/consignments
@@ -107,7 +136,8 @@ func buildConsignmentFilter(r *http.Request, offset, limit *int) Filter {
 }
 
 // HandleGetConsignments handles GET /api/v1/consignments
-// Query params: role=trader | role=cha (defaults to trader).
+// Query params: role=trader | role=cha (defaults to trader). The caller must hold
+// the JWT role that maps to the requested role, or the request is forbidden.
 func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
@@ -117,7 +147,6 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	role := r.URL.Query().Get("role")
-	// TODO: Should consider enforcing that the role matches the user's actual role(s) in the system, rather than trusting the query parameter.
 	if role == "" {
 		role = "trader"
 	}
@@ -135,9 +164,23 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The caller must actually hold the role they're asserting via the query
+	// param — resolved through the global catalog, not hardcoded, so it stays in
+	// step with the same "trader"/"cha" -> token-role mapping the task-authz
+	// layer (internal/tasks/extensions/authz) uses.
+	requiredTokenRole, ok := c.roles[role]
+	if !ok {
+		httputil.InternalServerError(w, r, "role not configured in catalog", fmt.Errorf("catalog has no mapping for role %q", role))
+		return
+	}
+	if !slices.Contains(authCtx.User.Roles, requiredTokenRole) {
+		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
+		return
+	}
+
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
 	if err != nil {
-		if errors.Is(err, company.ErrCompanyNotFound) {
+		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
