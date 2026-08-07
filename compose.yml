@@ -264,7 +264,7 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178,http://localhost:5179}
       - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
       - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
-      - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW,SLCE_TO_NSW}
+      - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW}
       - AUTH_AUDIENCE=${AUTH_AUDIENCE:-NSW_API}
       - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
       # APP_ENV gates the insecure-TLS flags above/in services.json: they are only

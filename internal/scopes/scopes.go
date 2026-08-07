@@ -32,4 +32,8 @@ const (
 
 	// SLCE webhook resource.
 	SLCEWebhooksWrite = "nsw:slce-webhooks:write"
+
+	// Payment webhook resource.
+	PaymentWebhooksValidate = "nsw:payment-webhooks:validate"
+	PaymentWebhooksProcess  = "nsw:payment-webhooks:process"
 )

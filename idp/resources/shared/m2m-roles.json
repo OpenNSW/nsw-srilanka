@@ -15,6 +15,14 @@
       "ou": "default",
       "resourceServer": "NSW_API",
       "scopeSet": "slceWebhook"
+    },
+    {
+      "key": "PaymentWebhookM2M",
+      "name": "Payment Webhook",
+      "description": "Role for Payment webhook clients",
+      "ou": "default",
+      "resourceServer": "NSW_API",
+      "scopeSet": "paymentWebhook"
     }
   ]
 }

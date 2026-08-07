@@ -9,9 +9,20 @@
       "secretEnv": { "override": "M2M_SLCE_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
       "ou": "default",
       "scopeSet": "slceWebhook"
+    },
+    {
+      "key": "GOVPAY_TO_NSW",
+      "kind": "m2m",
+      "name": "GOVPAY to NSW",
+      "description": "Machine-to-machine client for GOVPAY to call the NSW payment webhook and validate endpoints",
+      "clientId": "GOVPAY_TO_NSW",
+      "secretEnv": { "override": "M2M_GOVPAY_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "paymentWebhook"
     }
   ],
   "appRoleAssignments": [
-    { "role": "SLCEWebhookM2M", "app": "SLCE_TO_NSW" }
+    { "role": "SLCEWebhookM2M", "app": "SLCE_TO_NSW" },
+    { "role": "PaymentWebhookM2M", "app": "GOVPAY_TO_NSW" }
   ]
 }
