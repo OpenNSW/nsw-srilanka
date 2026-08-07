@@ -63,7 +63,7 @@ func (m *MockCompanyService) CreateCompany(ctx context.Context, record *company.
 
 func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
 	db, _ := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	mockWM := new(MockWM)
 
 	// Test registration
@@ -76,7 +76,7 @@ func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
 	assert.Contains(t, err.Error(), "already registered")
 
 	// Test nil manager
-	svc2 := NewService(db, nil, nil, nil, nil, nil)
+	svc2 := mustNewService(t, db, nil, nil, nil, nil, nil)
 	err = svc2.RegisterWorkflowManager(nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot be nil")
@@ -84,7 +84,7 @@ func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
 
 func TestConsignmentService_CompletionHandler(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	consignmentID := uuid.NewString()
 
 	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1`).
@@ -104,7 +104,7 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
-	svc := NewService(db, nil, nil, nil, nil, mockTaskStore)
+	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
@@ -119,7 +119,7 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
-	result, err := svc.GetConsignmentByID(ctx, consignmentID, companyID)
+	result, err := svc.GetConsignmentByID(ctx, consignmentID, companyID, []string{"Trader"})
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, consignmentID, result.ID)
@@ -131,7 +131,7 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 
 func TestConsignmentService_GetConsignmentByID_AccessDenied(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
 	// The row belongs to other companies and the caller matches neither, so ErrAccessDenied is
@@ -141,14 +141,100 @@ func TestConsignmentService_GetConsignmentByID_AccessDenied(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", "trader-co", "cha-co"))
 
-	_, err := svc.GetConsignmentByID(context.Background(), id, "outsider-co")
+	_, err := svc.GetConsignmentByID(context.Background(), id, "outsider-co", []string{"Trader", "CHA"})
 	assert.ErrorIs(t, err, ErrAccessDenied)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
+// Regression test for #272: matching a company slot is not sufficient — the caller's
+// JWT role must correspond to whichever slot (trader/CHA) their company matched. A
+// caller whose company happens to be the CHA company on this consignment, but who
+// holds only the Trader role (no CHA role), must be denied exactly as if their
+// company matched nothing at all.
+func TestConsignmentService_GetConsignmentByID_CompanyMatchesCHASlot_TraderRoleOnly(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+
+	id := uuid.NewString()
+	callerCompanyID := "company-cha"
+	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+		WithArgs(id, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+			AddRow(id, "IN_PROGRESS", "company-trader", callerCompanyID))
+
+	_, err := svc.GetConsignmentByID(context.Background(), id, callerCompanyID, []string{"Trader"})
+	assert.ErrorIs(t, err, ErrAccessDenied)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// Symmetric case: caller's company is the trader company, but they hold only the CHA
+// role (no Trader role). Must be denied.
+func TestConsignmentService_GetConsignmentByID_CompanyMatchesTraderSlot_CHARoleOnly(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+
+	id := uuid.NewString()
+	callerCompanyID := "company-trader"
+	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+		WithArgs(id, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(id, "IN_PROGRESS", callerCompanyID))
+
+	_, err := svc.GetConsignmentByID(context.Background(), id, callerCompanyID, []string{"CHA"})
+	assert.ErrorIs(t, err, ErrAccessDenied)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// A company that is BOTH the trader and CHA company on the same row (e.g. a trader
+// acting as its own CHA) is granted access via whichever slot matches a role the
+// caller actually holds — holding only one of the two roles is sufficient.
+func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots_SingleRoleGranted(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockWM := new(MockWM)
+	mockTaskStore := new(MockTaskStore)
+	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	id := uuid.NewString()
+	companyID := "company-both"
+	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+		WithArgs(id, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
+			AddRow(id, "IN_PROGRESS", companyID, companyID))
+	mockWM.On("GetStatus", mock.Anything, id).Return((*workflow.WorkflowInstance)(nil), nil)
+	mockTaskStore.On("GetAllTasks", mock.Anything, id).Return(([]store.TaskRecord)(nil))
+
+	result, err := svc.GetConsignmentByID(context.Background(), id, companyID, []string{"CHA"})
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestNewService_ValidatesRoles(t *testing.T) {
+	tests := []struct {
+		name    string
+		roles   map[string]string
+		wantErr bool
+	}{
+		{name: "both present", roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
+		{name: "extra roles ignored", roles: map[string]string{"trader": "Trader", "cha": "CHA", "fcau": "FCAU_TO_NSW"}},
+		{name: "missing cha", roles: map[string]string{"trader": "Trader"}, wantErr: true},
+		{name: "missing trader", roles: map[string]string{"cha": "CHA"}, wantErr: true},
+		{name: "cha present but empty", roles: map[string]string{"trader": "Trader", "cha": ""}, wantErr: true},
+		{name: "missing both", roles: map[string]string{}, wantErr: true},
+		{name: "nil map", roles: nil, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewService(nil, nil, nil, nil, nil, nil, tc.roles)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("NewService(...) err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestConsignmentService_ListConsignments_WithQuery(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 	companyID := "company-1"
 	query := "abc123"
@@ -165,7 +251,7 @@ func TestConsignmentService_ListConsignments_WithQuery(t *testing.T) {
 
 func TestConsignmentService_ListConsignments_EmptyQuery(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 	companyID := "company-1"
 	emptyQuery := ""
@@ -183,7 +269,7 @@ func TestConsignmentService_ListConsignments_EmptyQuery(t *testing.T) {
 
 func TestConsignmentService_ListConsignments_TraderCompany_Empty(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 	companyID := "company-1"
 
@@ -199,7 +285,7 @@ func TestConsignmentService_ListConsignments_TraderCompany_Empty(t *testing.T) {
 }
 
 func TestConsignmentService_ListConsignments_NoFilter(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
 
 	_, err := svc.ListConsignments(context.Background(), Filter{})
 	assert.Error(t, err)
@@ -208,7 +294,7 @@ func TestConsignmentService_ListConsignments_NoFilter(t *testing.T) {
 
 func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 	chaCompanyID := "cha-company-1"
 	consignmentID := uuid.NewString()
@@ -228,7 +314,7 @@ func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {
 
 func TestConsignmentService_ListConsignments_WithFilters(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 	traderCompanyID := "trader-company-1"
 	state := InProgress
@@ -249,14 +335,14 @@ func TestConsignmentService_ListConsignments_WithFilters(t *testing.T) {
 
 func TestConsignmentService_GetConsignmentByID_NotFound(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
 	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
-	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1")
+	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", nil)
 	assert.ErrorIs(t, err, ErrConsignmentNotFound)
 }
 
@@ -272,7 +358,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
 	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
 
-	svc := NewService(db, reg, nil, mockCompany, mockUser, mockTaskStore)
+	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	traderID := "trader1"
@@ -304,7 +390,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 }
 
 func TestConsignmentService_CreateAndStartConsignment_UserLookupFails(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, new(MockUserService), nil)
+	svc := mustNewService(t, nil, nil, nil, nil, new(MockUserService), nil)
 	mockUser := svc.userService.(*MockUserService)
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(nil, errors.New("user not found"))
 
@@ -316,7 +402,7 @@ func TestConsignmentService_CreateAndStartConsignment_UserLookupFails(t *testing
 func TestConsignmentService_CreateAndStartConsignment_CompanyLookupFails(t *testing.T) {
 	mockUser := new(MockUserService)
 	mockCompany := new(MockCompanyService)
-	svc := NewService(nil, nil, nil, mockCompany, mockUser, nil)
+	svc := mustNewService(t, nil, nil, nil, mockCompany, mockUser, nil)
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(nil, errors.New("company not found"))
@@ -337,7 +423,7 @@ func TestConsignmentService_CreateAndStartConsignment_StartWorkflowFails(t *test
 	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
 	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
 
-	svc := NewService(db, reg, nil, mockCompany, mockUser, nil)
+	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
@@ -357,27 +443,27 @@ func TestConsignmentService_CreateAndStartConsignment_StartWorkflowFails(t *test
 
 func TestConsignmentService_GetConsignmentByID_DBError(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
 	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnError(errors.New("connection refused"))
 
-	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1")
+	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", nil)
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, ErrConsignmentNotFound)
 	assert.Contains(t, err.Error(), "failed to retrieve consignment")
 }
 
 func TestConsignmentService_OnWorkflowStatusChanged_Default(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
 	err := svc.OnWorkflowStatusChanged(context.Background(), nil, "wf-1", WorkflowStatus("UNKNOWN"))
 	assert.NoError(t, err)
 }
 
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
 	_, err := svc.buildNodeDTOsFromTaskRecords(context.Background(), "id")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "task store not initialized")
@@ -385,7 +471,7 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) 
 
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
-	svc := NewService(nil, nil, nil, nil, nil, mockTaskStore)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, mockTaskStore)
 	ctx := context.Background()
 	consignmentID := "cons-1"
 	now := time.Now()
@@ -414,21 +500,21 @@ func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {
 	// nil taskStore → buildNodeDTOsFromTaskRecords fails → buildConsignmentDetailDTO returns error.
 	// Also covers the getWorkflowStatus no-wm-registered warning path (s.wm == nil).
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil) // no taskStore, no wm
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil) // no taskStore, no wm
 	id := uuid.NewString()
 
 	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(id, "IN_PROGRESS", "company-1"))
 
-	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1")
+	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", []string{"Trader"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "task store not initialized")
 }
 
 func TestConsignmentService_CompletionHandler_SaveFails(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	svc := NewService(db, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	id := uuid.NewString()
 
 	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1`).
@@ -446,14 +532,14 @@ func TestConsignmentService_CompletionHandler_SaveFails(t *testing.T) {
 }
 
 func TestConsignmentService_startWorkflow_NoWM(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
 	err := svc.startWorkflow(context.Background(), "id", workflow.WorkflowDefinition{}, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no workflow manager registered")
 }
 
 func TestConsignmentService_getWorkflowStatus_NoWM(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil, nil, nil)
+	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
 	err := svc.getWorkflowStatus(context.Background(), "id")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no workflow manager registered")

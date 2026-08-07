@@ -11,9 +11,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
+	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
 
@@ -94,6 +97,17 @@ func (m *MockUserService) UpdateUserData(ctx context.Context, id string, data []
 
 func (m *MockUserService) Health(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
+}
+
+// mustNewService builds a Service with testCatalogRoles, failing the test
+// immediately if construction errors.
+func mustNewService(t *testing.T, db *gorm.DB, artifactRegistry *artifact.Registry, chaService cha.Service, companyService company.Service, userService user.Service, taskStore TaskStore) *Service {
+	t.Helper()
+	svc, err := NewService(db, artifactRegistry, chaService, companyService, userService, taskStore, testCatalogRoles)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	return svc
 }
 
 func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
