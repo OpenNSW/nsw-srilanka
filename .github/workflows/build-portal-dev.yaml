@@ -1,4 +1,4 @@
-# Builds the onetrade-app (Trader Portal) image when the portals workspace changes.
+# Builds the tnsw-web (Trader Portal) image when the portals workspace changes.
 name: Build Portal Dev Image
 
 on:
@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/build-image-dev.yaml
     with:
       service_name: Trader Portal
-      image_name: onetrade-app
+      image_name: tnsw-web
       context: ./portals
       dockerfile: ./portals/apps/trader-app/Dockerfile
     permissions:

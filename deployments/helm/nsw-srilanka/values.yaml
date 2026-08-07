@@ -17,7 +17,7 @@ backend:
 
   image:
     # Published image (see .github/workflows/release.yml).
-    repository: ghcr.io/opennsw/nsw-backend
+    repository: ghcr.io/opennsw/tnsw-api
     # REQUIRED — no default. Set the app version to deploy per environment or
     # at install (--set backend.image.tag=1.4.0). Chart rendering fails if
     # this is empty. appVersion is metadata only and is deliberately NOT used
@@ -60,12 +60,12 @@ backend:
   # schema is migrated before the new server rolls out. This runs a DIFFERENT
   # image from the server (see templates/backend/migration-job.yaml) — the
   # external nsw-agency migrate binary, published from this repo's Dockerfile
-  # `migrate` stage as nsw-migrate. Off by default; enabled via the example
+  # `migrate` stage as tnsw-migrate. Off by default; enabled via the example
   # override file.
   migration:
     enabled: false
     image:
-      repository: ghcr.io/opennsw/nsw-migrate
+      repository: ghcr.io/opennsw/tnsw-migrate
       # Defaults to backend.image.tag above when left empty.
       tag: ""
       pullPolicy: IfNotPresent
@@ -120,7 +120,7 @@ frontend:
 
   image:
     # Published image (see .github/workflows/release.yml).
-    repository: ghcr.io/opennsw/onetrade-app
+    repository: ghcr.io/opennsw/tnsw-web
     # REQUIRED — no default. Set the app version to deploy per environment or
     # at install (--set frontend.image.tag=1.4.0). Chart rendering fails if
     # this is empty.

@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/build-image-dev.yaml
     with:
       service_name: NSW Migrate
-      image_name: nsw-migrate
+      image_name: tnsw-migrate
       context: .
       dockerfile: ./Dockerfile
       # Non-default stage; the backend builds the Dockerfile's default (last) stage.
