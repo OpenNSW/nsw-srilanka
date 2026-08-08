@@ -228,10 +228,10 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Fetch the consignment scoped to the caller's company. GetConsignmentByID enforces
-	// ownership on the single row read and returns ErrAccessDenied for a cross-company caller
-	// before doing any workflow-engine or task-store work.
-	consignment, err := c.cs.GetConsignmentByID(ctx, consignmentID, userCompany.ID)
+	// Fetch the consignment scoped to the caller's company and JWT role. GetConsignmentByID
+	// enforces role-tied ownership on the single row read and returns ErrAccessDenied for a
+	// cross-company or wrong-role caller before doing any workflow-engine or task-store work.
+	consignment, err := c.cs.GetConsignmentByID(ctx, consignmentID, userCompany.ID, authCtx.User.Roles)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccessDenied):
