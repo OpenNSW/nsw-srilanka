@@ -30,6 +30,10 @@
     ],
     "slceWebhook": [
       "nsw:slce-webhooks:write"
+    ],
+    "paymentWebhook": [
+      "nsw:payment-webhooks:validate",
+      "nsw:payment-webhooks:process"
     ]
   }
 }

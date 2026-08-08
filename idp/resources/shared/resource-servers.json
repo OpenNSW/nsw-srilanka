@@ -22,7 +22,9 @@
             { "handle": "storage", "name": "Storage",
               "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "delete", "name": "Delete" } ] },
             { "handle": "slce-webhooks", "name": "SLCE Webhooks",
-              "actions": [{ "handle": "write", "name": "Write" } ] }
+              "actions": [{ "handle": "write", "name": "Write" } ] },
+            { "handle": "payment-webhooks", "name": "Payment Webhooks",
+              "actions": [{ "handle": "validate", "name": "Validate" }, { "handle": "process", "name": "Process" }] }
           ]
         }
       ]
