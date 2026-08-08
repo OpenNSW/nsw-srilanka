@@ -42,7 +42,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           # A separate image from the server (see the Dockerfile's `migrate`
-          # stage, published as nsw-migrate) — it runs the standalone
+          # stage, published as tnsw-migrate) — it runs the standalone
           # nsw-agency migrate binary, not this backend's code. Defaults its
           # tag to the server's image.tag when unset, since release.yml
           # publishes both images from the same git tag.

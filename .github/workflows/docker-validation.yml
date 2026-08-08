@@ -28,17 +28,17 @@ jobs:
           - name: trader-portal
             context: ./portals
             dockerfile: ./portals/apps/trader-app/Dockerfile
-            tags: onetrade-app:validate
+            tags: tnsw-web:validate
             target: ''
           - name: nsw-backend
             context: .
             dockerfile: ./Dockerfile
-            tags: nsw-backend:validate
+            tags: tnsw-api:validate
             target: ''
           - name: nsw-migrate
             context: .
             dockerfile: ./Dockerfile
-            tags: nsw-migrate:validate
+            tags: tnsw-migrate:validate
             target: migrate
 
     steps:

@@ -27,7 +27,7 @@ jobs:
     uses: ./.github/workflows/build-image-dev.yaml
     with:
       service_name: NSW Backend API
-      image_name: nsw-backend
+      image_name: tnsw-api
       context: .
       dockerfile: ./Dockerfile
     permissions:
