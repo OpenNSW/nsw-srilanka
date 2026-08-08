@@ -1,0 +1,29 @@
+{{- if and .Values.backend.podDisruptionBudget .Values.backend.podDisruptionBudget.enabled }}
+{{- $effectiveMin := .Values.backend.replicaCount }}
+{{- if and .Values.backend.autoscaling .Values.backend.autoscaling.enabled }}
+  {{- $effectiveMin = .Values.backend.autoscaling.minReplicas }}
+{{- end }}
+{{- $minAvailStr := toString .Values.backend.podDisruptionBudget.minAvailable }}
+{{- if hasSuffix "%" $minAvailStr }}
+  {{- $pct := int (trimSuffix "%" $minAvailStr) }}
+  {{- if ge $pct 100 }}
+    {{- fail (printf "podDisruptionBudget minAvailable (%s) results in disruptionsAllowed: 0 when effective minimum replicas is %d" $minAvailStr (int $effectiveMin)) }}
+  {{- end }}
+{{- else }}
+  {{- $minAvailInt := int $minAvailStr }}
+  {{- if ge $minAvailInt (int $effectiveMin) }}
+    {{- fail (printf "podDisruptionBudget minAvailable (%d) must be strictly less than effective minimum replicas (%d) to allow pod eviction during node drains" $minAvailInt (int $effectiveMin)) }}
+  {{- end }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "nsw-srilanka.backend.fullname" . }}
+  labels:
+    {{- include "nsw-srilanka.backend.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.backend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "nsw-srilanka.backend.selectorLabels" . | nindent 6 }}
+{{- end }}
