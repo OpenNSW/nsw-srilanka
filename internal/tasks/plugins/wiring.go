@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -66,6 +67,17 @@ type FileFetcher interface {
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager.
+// requiredFeeMetadata declares the gateway_metadata keys each payment method
+// cannot operate without. The PAYMENT plugin enforces them when a fee is
+// registered, without knowing what any of them mean.
+//
+// GovPay+ checks the sub-institution and service ids on both of its callbacks
+// against what the fee was registered under, so a fee omitting either could
+// never be settled. Other methods need nothing and are simply absent here.
+var requiredFeeMetadata = map[string][]string{
+	govpay.MethodID: {govpay.MetadataSubInstID, govpay.MetadataServiceID},
+}
+
 func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string, devMode bool) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
@@ -83,7 +95,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
 		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, devMode)},
-		{TaskTypePayment, NewPaymentPlugin(paymentService)},
+		{TaskTypePayment, NewPaymentPlugin(paymentService, requiredFeeMetadata)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},

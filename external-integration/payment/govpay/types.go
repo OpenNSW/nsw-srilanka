@@ -1,5 +1,7 @@
 package govpay
 
+import "errors"
+
 // -----------------------------------------------------------------------------
 // GovPay+ wire types
 //
@@ -14,6 +16,21 @@ package govpay
 type Config struct {
 	BaseURL string
 }
+
+// MethodID is the payment method this gateway is registered under. The
+// identity requirements below apply to GovPay+ only; other methods are
+// unaffected.
+const MethodID = "govpay"
+
+// ErrIdentityMismatch reports a GovPay+ call whose sub-institution or service
+// id is not the one the reference number was registered under.
+var ErrIdentityMismatch = errors.New("govpay identity mismatch")
+
+// ErrIdentityNotConfigured reports a GovPay+ fee whose artifact did not declare
+// both ids. They are mandatory for GovPay+, so a transaction missing them
+// cannot be settled — a callback would have nothing trustworthy to be checked
+// against.
+var ErrIdentityNotConfigured = errors.New("govpay identity not configured")
 
 // govPayParam is a single data[] item in a GovPay+ presentment/update request.
 type govPayParam struct {
