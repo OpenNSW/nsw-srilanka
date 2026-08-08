@@ -58,7 +58,7 @@ func updateBody(refNo, status, amount, currency string) []byte {
 }
 
 func TestGovPay_ParseWebhook_NormalizesStatus(t *testing.T) {
-	g := &GovPayGateway{}
+	g := configuredGateway()
 
 	p, _, err := g.ParseWebhook(context.Background(), updateBody("TNSW1", "paid", "1500.00", "LKR"), nil)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestGovPay_ParseWebhook_NormalizesStatus(t *testing.T) {
 }
 
 func TestGovPay_ParseWebhook_UnknownStatus(t *testing.T) {
-	g := &GovPayGateway{}
+	g := configuredGateway()
 	_, _, err := g.ParseWebhook(context.Background(), updateBody("TNSW1", "weird", "1500.00", "LKR"), nil)
 	require.ErrorIs(t, err, corepayment.ErrUnsupportedWebhookStatus)
 }
@@ -90,7 +90,7 @@ func TestGovPay_ParseWebhook_InvalidJSON(t *testing.T) {
 }
 
 func TestGovPay_ParseWebhook_Acknowledgement(t *testing.T) {
-	g := &GovPayGateway{}
+	g := configuredGateway()
 	body := updateBody("TNSW1", "paid", "1500.00", "LKR")
 
 	_, resp, err := g.ParseWebhook(context.Background(), body, nil)
@@ -129,6 +129,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 			ReferenceNumber: "TNSW1",
 			Amount:          decimal.RequireFromString("1500.00"),
 			Currency:        "LKR",
+			Metadata:        configured(wantSubInst, wantService),
 		}
 		resp, err := g.HandleValidateReference(context.Background(), tx, true, reqData)
 		require.NoError(t, err)
@@ -156,7 +157,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 	})
 
 	t.Run("not payable", func(t *testing.T) {
-		resp, err := g.HandleValidateReference(context.Background(), &corepayment.ValidationTransaction{ReferenceNumber: "TNSW1"}, false, reqData)
+		resp, err := g.HandleValidateReference(context.Background(), &corepayment.ValidationTransaction{ReferenceNumber: "TNSW1", Metadata: configured(wantSubInst, wantService)}, false, reqData)
 		require.NoError(t, err)
 		assert.Equal(t, 409, resp.HTTPStatus)
 
