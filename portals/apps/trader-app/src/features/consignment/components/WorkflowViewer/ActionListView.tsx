@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
+import { ConsignmentStatusBanner } from '@/features/consignment/components/ConsignmentStatusBanner'
 
 const sortByUpdatedAt = (a: WorkflowNode, b: WorkflowNode) => b.updatedAt.localeCompare(a.updatedAt)
 
@@ -46,16 +47,25 @@ export function ActionListView({
   const groups = useMemo(
     () => ({
       active: filteredSteps.filter((s) => s.state === 'READY' || s.state === 'IN_PROGRESS'),
-      finished: filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt),
+      finished: filteredSteps
+        .filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'REJECTED')
+        .sort(sortByUpdatedAt),
     }),
     [filteredSteps],
   )
 
-  const isConsignmentTerminal = consignmentState === 'FINISHED' || consignmentState === 'FAILED'
+  const isSuccessTerminal =
+    consignmentState === 'FINISHED' || consignmentState === 'COMPLETED' || consignmentState === 'APPROVED'
+  const isFailedTerminal = consignmentState === 'FAILED'
+  const isRejectedTerminal =
+    consignmentState === 'REJECTED' || consignmentState === 'SLTB_REJECTED' || consignmentState === 'DISAPPROVED'
+  const isConsignmentTerminal = isSuccessTerminal || isRejectedTerminal || isFailedTerminal
 
   const displaySteps = useMemo(() => {
     if (isConsignmentTerminal) {
-      return filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt)
+      return filteredSteps
+        .filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'REJECTED')
+        .sort(sortByUpdatedAt)
     }
     return filteredSteps
   }, [filteredSteps, isConsignmentTerminal])
@@ -73,24 +83,24 @@ export function ActionListView({
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-0">
         {isConsignmentTerminal ? (
           <Box mb="6">
-            <Flex align="center" justify="between" my="4" px="3">
-              <Flex align="center" gap="2">
-                <div
-                  className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-success' : 'bg-error'} rounded-full`}
-                />
-                <Heading size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
-                  {t('workflow.taskHistory')}
-                </Heading>
-                <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
-                  {displaySteps.length}
-                </Badge>
-              </Flex>
-            </Flex>
-            <Box px="0.5">
+            {consignmentState && (
+              <ConsignmentStatusBanner
+                state={consignmentState}
+                onRefresh={onRefresh}
+                refreshing={refreshing}
+                className="mb-6"
+              />
+            )}
+            <CollapsibleSection
+              title={t('workflow.processHistory')}
+              count={displaySteps.length}
+              color={isSuccessTerminal ? 'green' : 'red'}
+              defaultOpen={true}
+            >
               {displaySteps.map((step) => (
                 <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
               ))}
-            </Box>
+            </CollapsibleSection>
           </Box>
         ) : (
           <>

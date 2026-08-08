@@ -138,6 +138,22 @@ const en = {
     processHistory: 'Process History',
     updatingList: 'Updating your list...',
     refresh: 'Refresh',
+    banner: {
+      complete: {
+        title: 'Process Complete',
+        subtext: 'All workflow steps have been finished successfully. No further actions are required.',
+      },
+      rejected: {
+        title: 'Consignment Rejected',
+        subtext:
+          'This consignment was rejected during review. Please inspect the process history below for rejection comments and details.',
+      },
+      failed: {
+        title: 'Process Failed',
+        subtext:
+          'The consignment process encountered an error or failed. Please inspect the process history below for details.',
+      },
+    },
     waitingForUpdates: {
       title: 'Waiting for Updates',
       description: 'Current steps are being processed. Next tasks will unlock automatically.',
@@ -148,6 +164,7 @@ const en = {
       inProgress: 'In Progress',
       locked: 'Locked',
       failed: 'Failed',
+      rejected: 'Rejected',
     },
   },
 

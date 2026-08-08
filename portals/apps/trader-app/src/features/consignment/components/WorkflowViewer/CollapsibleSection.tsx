@@ -7,7 +7,7 @@ export interface CollapsibleSectionProps {
   count: number
   children: React.ReactNode
   defaultOpen?: boolean
-  color?: 'gray' | 'blue' | 'green'
+  color?: 'gray' | 'blue' | 'green' | 'red'
 }
 
 export const CollapsibleSection = ({
