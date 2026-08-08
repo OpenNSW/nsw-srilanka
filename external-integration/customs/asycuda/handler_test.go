@@ -196,7 +196,7 @@ func TestSLCEHandler_CusdecEventsSuccess(t *testing.T) {
 	}
 }
 
-// Tests all Cargo Dispatch Note webhook event success paths (v1.2 §7).
+// Tests all Cargo Dispatch Note webhook event success paths (v1.3 §7).
 func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 	t.Run("5. CDN_INTEGRATED (§7.2)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
@@ -205,48 +205,19 @@ func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 
 		payload := `{
 			"eventType": "CDN_INTEGRATED",
-			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-			"integrated": true,
 			"processedAt": "2026-07-23T11:20:00Z",
 			"payload": {
-				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
-			},
-			"errors": {}
+				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+				"integrated": true,
+				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 },
+				"errors": {}
+			}
 		}`
 
 		cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cdn.CDNIntegrationResultRequest) bool {
 			return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" &&
 				r.Integrated &&
 				r.Event == "CDN_INTEGRATED" &&
-				r.Payload.CDNRef.Office == "CMB" &&
-				r.Payload.CDNRef.Number == 2002
-		})).Return(nil)
-
-		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		handler.HandleWebhook(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-		cdnSvc.AssertExpectations(t)
-	})
-
-	t.Run("6. CDN_ACKNOWLEDGED (§7.3)", func(t *testing.T) {
-		cusdecSvc := new(mockCusdecService)
-		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
-
-		payload := `{
-			"eventType": "CDN_ACKNOWLEDGED",
-			"processedAt": "2026-07-23T11:25:00Z",
-			"payload": {
-				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
-			}
-		}`
-
-		cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.MatchedBy(func(r cdn.CDNAcknowledgmentRequest) bool {
-			return r.Event == "CDN_ACKNOWLEDGED" &&
 				r.Payload.CDNRef.Office == "CMB" &&
 				r.Payload.CDNRef.Number == 2002
 		})).Return(nil)
@@ -277,7 +248,7 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 			}`,
 		},
 		{
-			name: "CusDec result integrated true but missing cusDecRef",
+			name: "CusDec result integrated true but missing cusdecRef",
 			payload: `{
 				"eventType": "CUSDEC_INTEGRATED",
 				"processedAt": "2026-07-23T10:00:00Z",
@@ -285,7 +256,7 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 			}`,
 		},
 		{
-			name: "CusDec event missing cusDecRef",
+			name: "CusDec event missing cusdecRef",
 			payload: `{
 				"eventType": "PAYMENT_CONFIRMED",
 				"processedAt": "2026-07-23T10:00:00Z",
@@ -293,12 +264,27 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 			}`,
 		},
 		{
-			name: "CDN result missing edgeId",
+			name: "CDN result missing edgeId inside payload",
 			payload: `{
-				"edgeId": "",
-				"integrated": true,
 				"eventType": "CDN_INTEGRATED",
-				"processedAt": "2026-07-23T10:00:00Z"
+				"processedAt": "2026-07-23T10:00:00Z",
+				"payload": {"edgeId": "", "integrated": true}
+			}`,
+		},
+		{
+			name: "CDN result missing payload.integrated",
+			payload: `{
+				"eventType": "CDN_INTEGRATED",
+				"processedAt": "2026-07-23T10:00:00Z",
+				"payload": {"edgeId": "edge-123"}
+			}`,
+		},
+		{
+			name: "CusDec result missing payload.integrated",
+			payload: `{
+				"eventType": "CUSDEC_INTEGRATED",
+				"processedAt": "2026-07-23T10:00:00Z",
+				"payload": {"edgeId": "edge-123"}
 			}`,
 		},
 		{
@@ -372,7 +358,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-missing",
 				"integrated": true,
-				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 			}
 		}`
 
@@ -395,7 +381,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 		payload := `{
 			"eventType": "PAYMENT_CONFIRMED",
 			"processedAt": "2026-07-23T10:00:00Z",
-			"payload": {"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
+			"payload": {"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}
 		}`
 
 		cusdecSvc.On("ProcessEvent", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef)
@@ -420,7 +406,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-err",
 				"integrated": true,
-				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 			}
 		}`
 
