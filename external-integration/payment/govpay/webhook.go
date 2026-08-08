@@ -30,6 +30,14 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 		return nil, nil, fmt.Errorf("refNo is required in webhook payload")
 	}
 
+	// Confirm the notification is for the service this reference was registered
+	// under before anything is derived from it. Rejecting here means the caller
+	// never reaches the status mapping, so a receipt issued against a different
+	// GovPay+ service cannot settle this transaction.
+	if err := g.verifyWebhookIdentity(ctx, refNo, req); err != nil {
+		return nil, nil, err
+	}
+
 	// Status is required and is normalized against GovPay's vocabulary; an
 	// absent or unknown status is rejected rather than assumed successful.
 	status, err := mapGovPayStatus(stringParam(params, "status", "paymentstatus"))
