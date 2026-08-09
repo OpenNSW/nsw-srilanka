@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	corepayment "github.com/OpenNSW/core/payment"
 )
 
 // GovPay+ posts a sub-institution and a service id on both the presentment
@@ -52,11 +54,39 @@ func (e ExpectedIdentity) complete() bool {
 type IdentityResolver func(ctx context.Context, referenceNumber string) (identity ExpectedIdentity, found bool, err error)
 
 // identityFromMetadata reads the expected identity off a transaction's gateway
-// metadata.
+// metadata. The single place metadata keys are turned into an identity, so the
+// presentment and update paths cannot drift apart on how they read them.
 func identityFromMetadata(metadata map[string]string) ExpectedIdentity {
 	return ExpectedIdentity{
 		SubInstID: strings.TrimSpace(metadata[MetadataSubInstID]),
 		ServiceID: strings.TrimSpace(metadata[MetadataServiceID]),
+	}
+}
+
+// ReferenceLookup is the single read this gateway needs to recover a fee's
+// identity: fetch a transaction by its reference number. Narrower than the full
+// payment repository on purpose — the gateway has no business creating or
+// updating transactions, and a one-method interface is trivial to fake in a
+// test.
+type ReferenceLookup interface {
+	GetByReferenceNumber(ctx context.Context, referenceNumber string) (*corepayment.PaymentTransaction, error)
+}
+
+// NewRepositoryIdentityResolver builds the resolver the update (webhook)
+// callback needs, backed by stored transactions.
+//
+// A reference with no matching transaction resolves to found=false; the service
+// layer looks it up straight afterwards and owns that failure.
+func NewRepositoryIdentityResolver(repo ReferenceLookup) IdentityResolver {
+	return func(ctx context.Context, referenceNumber string) (ExpectedIdentity, bool, error) {
+		tx, err := repo.GetByReferenceNumber(ctx, referenceNumber)
+		if err != nil {
+			return ExpectedIdentity{}, false, err
+		}
+		if tx == nil {
+			return ExpectedIdentity{}, false, nil
+		}
+		return identityFromMetadata(tx.GatewayMetadata), true, nil
 	}
 }
 

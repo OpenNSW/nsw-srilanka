@@ -121,7 +121,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	paymentRepo := payment.NewPaymentRepository(db)
 	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
-		"govpay": govpay.NewGovPayGatewayFactory(govPayIdentityResolver(paymentRepo)),
+		"govpay": govpay.NewGovPayGatewayFactory(govpay.NewRepositoryIdentityResolver(paymentRepo)),
 	})
 	if err != nil {
 		_ = database.Close(db)
@@ -539,30 +539,6 @@ func (p registryTemplateProvider) GetTemplate(ctx context.Context, id string) ([
 		return nil, fmt.Errorf("template %q not found: %w", id, err)
 	}
 	return []byte(raw), nil
-}
-
-// govPayIdentityResolver lets the GovPay+ gateway recover, by reference number,
-// the sub-institution and service id a fee was registered under (declared in the
-// artifact's PAYMENT plugin_properties and stored on the transaction).
-//
-// The update (webhook) callback arrives with only a raw body — no transaction —
-// so without this the gateway has nothing to check the caller's claimed identity
-// against. The presentment (validate) callback needs no resolver; it is handed
-// the transaction directly.
-func govPayIdentityResolver(repo payment.PaymentRepository) govpay.IdentityResolver {
-	return func(ctx context.Context, referenceNumber string) (govpay.ExpectedIdentity, bool, error) {
-		tx, err := repo.GetByReferenceNumber(ctx, referenceNumber)
-		if err != nil {
-			return govpay.ExpectedIdentity{}, false, err
-		}
-		if tx == nil {
-			return govpay.ExpectedIdentity{}, false, nil
-		}
-		return govpay.ExpectedIdentity{
-			SubInstID: tx.GatewayMetadata[govpay.MetadataSubInstID],
-			ServiceID: tx.GatewayMetadata[govpay.MetadataServiceID],
-		}, true, nil
-	}
 }
 
 // initTask consolidates the task-orchestration engine registrations, remote

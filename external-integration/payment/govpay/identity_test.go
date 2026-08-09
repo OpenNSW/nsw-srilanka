@@ -240,6 +240,76 @@ func TestGovPay_ParseWebhook_IdentityMatching(t *testing.T) {
 	})
 }
 
+// -----------------------------------------------------------------------------
+// Resolver backed by stored transactions
+// -----------------------------------------------------------------------------
+
+// fakeLookup is all NewRepositoryIdentityResolver needs — the point of the
+// one-method ReferenceLookup interface.
+type fakeLookup struct {
+	tx  *corepayment.PaymentTransaction
+	err error
+}
+
+func (f fakeLookup) GetByReferenceNumber(context.Context, string) (*corepayment.PaymentTransaction, error) {
+	return f.tx, f.err
+}
+
+func TestNewRepositoryIdentityResolver(t *testing.T) {
+	t.Run("reads the identity off the stored transaction", func(t *testing.T) {
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: &corepayment.PaymentTransaction{
+			ReferenceNumber: "TNSW1",
+			GatewayMetadata: configured(wantSubInst, wantService),
+		}})
+
+		got, found, err := resolve(context.Background(), "TNSW1")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, got)
+	})
+
+	t.Run("stored values are trimmed", func(t *testing.T) {
+		// Shares identityFromMetadata with the presentment path, so both
+		// callbacks read stored metadata the same way and cannot drift.
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: &corepayment.PaymentTransaction{
+			GatewayMetadata: configured("  "+wantSubInst+" ", "\t"+wantService+"\n"),
+		}})
+
+		got, found, err := resolve(context.Background(), "TNSW1")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, got)
+	})
+
+	t.Run("an unknown reference is not found", func(t *testing.T) {
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: nil})
+
+		_, found, err := resolve(context.Background(), "TNSW-nope")
+		require.NoError(t, err)
+		assert.False(t, found, "the service layer owns the unknown-reference failure")
+	})
+
+	t.Run("a lookup failure is surfaced", func(t *testing.T) {
+		boom := errors.New("db down")
+		resolve := NewRepositoryIdentityResolver(fakeLookup{err: boom})
+
+		_, found, err := resolve(context.Background(), "TNSW1")
+		require.ErrorIs(t, err, boom)
+		assert.False(t, found)
+	})
+
+	t.Run("a fee stored without its ids resolves incomplete", func(t *testing.T) {
+		// found, but unusable — the gateway reports it as not configured
+		// rather than letting the callback through.
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: &corepayment.PaymentTransaction{}})
+
+		got, found, err := resolve(context.Background(), "TNSW1")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.False(t, got.complete())
+	})
+}
+
 func TestGovPay_NewGovPayGatewayFactory_WiresResolver(t *testing.T) {
 	factory := NewGovPayGatewayFactory(staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: "other"}, true, nil))
 	gw, err := factory(json.RawMessage(`{}`))
