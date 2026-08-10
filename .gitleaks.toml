@@ -9,7 +9,7 @@ useDefault = true
 # only, never real credentials. (Conditions are OR'd by default.)
 description = "Placeholder values in example/template files and the admin-cli dev credential"
 regexes = [
-  # The `admin-cli` bootstrap client (idp/bootstrap/02-admin-cli.sh) is created
+  # The `admin-cli` bootstrap client (idp/bootstrap/03-nsw-resources.yaml) is created
   # with the repo's public dev default secret (1234), an env-var reference
   # ($ADMIN_CLI_SECRET / $$...), or a `<secret>` placeholder in docs/compose —
   # never a real value. Anchored to those forms so a real ADMIN_CLI credential

@@ -1,53 +1,16 @@
+# Minimal override of the image's config/default.json. Keep it small: the decoder uses
+# KnownFields(true), so any key upstream renames or drops becomes a startup error.
+#
+# Placeholders resolve from ./.env before parsing. An unset variable is a hard error,
+# and resolution covers comments too — never write placeholder syntax in a comment.
 server:
   hostname: {{.HOSTNAME}}
   public_url: {{.PUBLIC_URL}}
   port: {{.PORT}}
-
-tls:
-  min_version: "1.3"
-  cert_file: "repository/resources/security/server.cert"
-  key_file: "repository/resources/security/server.key"
-
-database:
-  config:
-    type: "sqlite"
-    sqlite:
-      path: "repository/database/configdb.db"
-      options: "_journal_mode=WAL&_busy_timeout=5000&_pragma=foreign_keys(1)"
-      max_open_conns: 500
-      max_idle_conns: 100
-      conn_max_lifetime: 3600
-
-  runtime:
-    type: "sqlite"
-    sqlite:
-      path: "repository/database/runtimedb.db"
-      options: "_journal_mode=WAL&_busy_timeout=5000&_pragma=foreign_keys(1)"
-      max_open_conns: 500
-      max_idle_conns: 100
-      conn_max_lifetime: 3600
-
-  user:
-    type: "sqlite"
-    sqlite:
-      path: "repository/database/userdb.db"
-      options: "_journal_mode=WAL&_busy_timeout=5000&_pragma=foreign_keys(1)"
-      max_open_conns: 500
-      max_idle_conns: 100
-      conn_max_lifetime: 3600
-
-crypto:
-  encryption:
-    key: "file://repository/resources/security/crypto.key"
-  password_hashing:
-    algorithm: "PBKDF2"
-  keys:
-    - id: "default-key"
-      cert_file: "repository/resources/security/signing.cert"
-      key_file: "repository/resources/security/signing.key"
-
-jwt:
-  preferred_key_id: "default-key"
+  security:
+    # Gates the Direct API endpoints, which we do not use. setup.sh generates the
+    # value; an empty secret blocks those endpoints rather than failing boot.
+    direct_auth_secret: "file://config/secrets/direct_auth_secret"
 
 email:
   smtp:
@@ -59,15 +22,7 @@ email:
     enable_start_tls: {{.SMTP_ENABLE_START_TLS}}
     enable_authentication: {{.SMTP_ENABLE_AUTHENTICATION}}
 
-cors:
-  allowed_origins:
-{{- range .CORS_ORIGINS }}
-    - {{.}}
-{{- end }}
-
 passkey:
   allowed_origins:
     - {{.PUBLIC_URL}}
 
-consent:
-  enabled: false

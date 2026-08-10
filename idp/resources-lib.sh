@@ -27,8 +27,8 @@
 # so the filters below target the specific wrapper key. `extract_first_id` uses
 # a recursive "first id in document order" match — equivalent to the previous
 # `grep -o '"id":"…"' | head -1` — so it is robust to bare vs. wrapped create
-# responses. (NOTE: idp/bootstrap/02-admin-cli.sh runs inside the setup
-# container, which has NO jq, so it keeps sed/grep/cut — it does not use this.)
+# responses. (These helpers are for the seed scripts only — the setup container has no
+# jq; its bootstrap resources are declarative YAML instead.)
 #
 # bash-3.2 safe: NO associative arrays (the dev machine runs bash 3.2.57). The
 # registry uses dynamic scalar variables; jq arrays are iterated with

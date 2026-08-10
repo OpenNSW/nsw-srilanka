@@ -12,7 +12,8 @@
           "client_id": "NSW_TO_NPQS",
           "client_secret": "env:M2M_NSW_TO_NPQS_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"]
+          "scopes": ["agency:application:inject"],
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -27,7 +28,8 @@
           "client_id": "NSW_TO_FCAU",
           "client_secret": "env:M2M_NSW_TO_FCAU_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"]
+          "scopes": ["agency:application:inject"],
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -42,7 +44,8 @@
           "client_id": "NSW_TO_CDA",
           "client_secret": "env:M2M_NSW_TO_CDA_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"]
+          "scopes": ["agency:application:inject"],
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -57,7 +60,8 @@
           "client_id": "NSW_TO_SLPA",
           "client_secret": "env:M2M_NSW_TO_SLPA_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"]
+          "scopes": ["agency:application:inject"],
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -72,7 +76,8 @@
           "client_id": "NSW_TO_CUSTOMS",
           "client_secret": "env:M2M_NSW_TO_CUSTOMS_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"]
+          "scopes": ["agency:application:inject"],
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -118,7 +123,8 @@
           "insecure_skip_tls_verify": true,
           "scopes": [
             "agency:application:inject"
-          ]
+          ],
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     }

@@ -12,7 +12,8 @@
           "client_id": "NSW_TO_NPQS",
           "client_secret": "env:M2M_NSW_TO_NPQS_SECRET",
           "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -27,7 +28,8 @@
           "client_id": "NSW_TO_FCAU",
           "client_secret": "env:M2M_NSW_TO_FCAU_SECRET",
           "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -42,7 +44,8 @@
           "client_id": "NSW_TO_CDA",
           "client_secret": "env:M2M_NSW_TO_CDA_SECRET",
           "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -57,7 +60,8 @@
           "client_id": "NSW_TO_SLPA",
           "client_secret": "env:M2M_NSW_TO_SLPA_SECRET",
           "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -72,7 +76,8 @@
           "client_id": "NSW_TO_CUSTOMS",
           "client_secret": "env:M2M_NSW_TO_CUSTOMS_SECRET",
           "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     },
@@ -116,7 +121,8 @@
           "client_id": "NSW_TO_SLTB",
           "client_secret": "env:M2M_NSW_TO_SLTB_SECRET",
           "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
         }
       }
     }

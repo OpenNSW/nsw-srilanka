@@ -100,7 +100,7 @@ backend:
     # --- Inbound auth: tokens this backend accepts ---
     AUTH_JWKS_URL: "https://idp.example.com/oauth2/jwks"
     AUTH_ISSUER: "https://idp.example.com"
-    AUTH_AUDIENCE: "NSW_API"
+    AUTH_AUDIENCE: "https://api.nsw-srilanka.local"
     AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW"
     AUTH_JWKS_INSECURE_SKIP_VERIFY: "false"
 
@@ -214,8 +214,11 @@ frontend:
     VITE_API_BASE_URL: "https://nsw-api.example.com"
     VITE_IDP_BASE_URL: "https://idp.example.com"
     VITE_IDP_CLIENT_ID: "TRADER_PORTAL_APP"
+    # Extra /authorize parameters, query-string encoded (use "&" for more than one).
+    # The `resource` value must equal AUTH_AUDIENCE / the NSW_API resource-server identifier.
+    VITE_IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     VITE_APP_URL: "https://trader.example.com"
-    VITE_IDP_SCOPES: "openid,profile,email,group,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write"
+    VITE_IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write"
     VITE_IDP_TRADER_GROUP_NAME: "Traders"
     VITE_IDP_CHA_GROUP_NAME: "CHA"
     VITE_SHOW_AUTOFILL_BUTTON: "false"
