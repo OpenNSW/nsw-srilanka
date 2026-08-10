@@ -329,7 +329,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		if len(unhealthy) > 0 {
 			writeJSON(w, http.StatusServiceUnavailable, healthResponse{
 				Status:              "error",
-				Service:             "nsw-backend",
+				Service:             "tnsw-api",
 				Version:             version.Get(),
 				UnhealthyComponents: unhealthy,
 			})
@@ -338,7 +338,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 		writeJSON(w, http.StatusOK, healthResponse{
 			Status:  "ok",
-			Service: "nsw-backend",
+			Service: "tnsw-api",
 			Version: version.Get(),
 		})
 	})

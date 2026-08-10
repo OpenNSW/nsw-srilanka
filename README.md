@@ -87,8 +87,8 @@ This spins up:
 * **`nsw-postgres`** (Port `5432`): Database populated with base tables/schemas.
 * **`nsw-idp`** (Port `8090`): Thunder Identity Provider.
 * **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
-* **`nsw-backend-api`** (Port `8080`): The Go backend server.
-* **`nsw-trader-portal`** (Port `5173`): The React Trader Portal frontend.
+* **`tnsw-api`** (Port `8080`): The Go backend server.
+* **`tnsw-web`** (Port `5173`): The React Trader Portal frontend.
 
 > [!IMPORTANT]
 > **`docker compose up` gives you the *development* stack.**
@@ -161,7 +161,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 
 ### 4. Verify
 
-- Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"nsw-backend"}`.
+- Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
 - Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)

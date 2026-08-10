@@ -1,4 +1,4 @@
-# Builds the nsw-migrate image when the SQL migrations or the Dockerfile change.
+# Builds the tnsw-migrate image when the SQL migrations or the Dockerfile change.
 # The migrate stage bakes migrations/ and pins the external migrator via the
 # Dockerfile's MIGRATE_VERSION arg — it does not compile this repo's Go code,
 # so Go-only changes intentionally do not trigger this build.
@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/build-image-dev.yaml
     with:
       service_name: NSW Migrate
-      image_name: nsw-migrate
+      image_name: tnsw-migrate
       context: .
       dockerfile: ./Dockerfile
       # Non-default stage; the backend builds the Dockerfile's default (last) stage.

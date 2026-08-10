@@ -58,9 +58,9 @@ same version for all three):
 
 | Image                          | Built from                                    | Deployed by                  |
 |--------------------------------|-----------------------------------------------|------------------------------|
-| `ghcr.io/opennsw/nsw-backend`  | root `Dockerfile`, `runtime` (default) target | `backend/deployment.yaml`    |
-| `ghcr.io/opennsw/nsw-migrate`  | root `Dockerfile`, `migrate` target           | `backend/migration-job.yaml` |
-| `ghcr.io/opennsw/onetrade-app` | `portals/apps/trader-app/Dockerfile`          | `frontend/deployment.yaml`   |
+| `ghcr.io/opennsw/tnsw-api`  | root `Dockerfile`, `runtime` (default) target | `backend/deployment.yaml`    |
+| `ghcr.io/opennsw/tnsw-migrate`  | root `Dockerfile`, `migrate` target           | `backend/migration-job.yaml` |
+| `ghcr.io/opennsw/tnsw-web` | `portals/apps/trader-app/Dockerfile`          | `frontend/deployment.yaml`   |
 
 The migration Job (`backend.migration.enabled: true`) uses a **different
 image** from the backend Deployment — see `backend.migration.image` in

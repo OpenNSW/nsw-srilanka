@@ -1,4 +1,4 @@
-# Builds the nsw-backend (runtime) image when backend sources change.
+# Builds the tnsw-api (runtime) image when backend sources change.
 # The runtime stage compiles the Go source and bakes in configs/.
 name: Build Backend Dev Image
 
@@ -27,7 +27,7 @@ jobs:
     uses: ./.github/workflows/build-image-dev.yaml
     with:
       service_name: NSW Backend API
-      image_name: nsw-backend
+      image_name: tnsw-api
       context: .
       dockerfile: ./Dockerfile
     permissions:
