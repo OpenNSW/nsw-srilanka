@@ -1,7 +1,7 @@
 apiVersion: openchoreo.dev/v1alpha1
 
 metadata:
-  name: nsw-trader-portal
+  name: tnsw-web
 
 endpoints:
   - name: web

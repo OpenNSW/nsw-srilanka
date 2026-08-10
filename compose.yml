@@ -193,7 +193,7 @@ services:
         #   MIGRATE_VERSION=<pseudo-version> docker compose build migrate
         # Falls back to the Dockerfile's pinned default when unset.
         MIGRATE_VERSION: ${MIGRATE_VERSION:-v0.0.0-20260610120959-d981e67a7a47}
-    container_name: nsw-migrate
+    container_name: tnsw-migrate
     networks:
       - nsw-network
     environment:
@@ -217,7 +217,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: nsw-backend-api
+    container_name: tnsw-api
     networks:
       - nsw-network
     ports:
@@ -320,7 +320,7 @@ services:
       # the root pnpm files and apps/trader-app, then builds with pnpm.
       context: ./portals
       dockerfile: apps/trader-app/Dockerfile
-    container_name: nsw-trader-portal
+    container_name: tnsw-web
     networks:
       - nsw-network
     ports:

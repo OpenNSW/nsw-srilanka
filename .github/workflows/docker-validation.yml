@@ -25,17 +25,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: trader-portal
+          - name: tnsw-web
             context: ./portals
             dockerfile: ./portals/apps/trader-app/Dockerfile
             tags: tnsw-web:validate
             target: ''
-          - name: nsw-backend
+          - name: tnsw-api
             context: .
             dockerfile: ./Dockerfile
             tags: tnsw-api:validate
             target: ''
-          - name: nsw-migrate
+          - name: tnsw-migrate
             context: .
             dockerfile: ./Dockerfile
             tags: tnsw-migrate:validate

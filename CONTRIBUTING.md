@@ -71,7 +71,7 @@ Triggers on `portals/**` changes.
 
 ### Docker Validation (`docker-validation.yml`)
 Triggers on `portals/**`, `Dockerfile`, Go source, or migration changes.
-Builds all three images (trader-portal, nsw-backend, nsw-migrate) without pushing.
+Builds all three images (tnsw-web, tnsw-api, tnsw-migrate) without pushing.
 
 All stages must pass before a PR can merge.
 

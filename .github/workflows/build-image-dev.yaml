@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       image_name:
-        description: GHCR image repository name (e.g. nsw-backend).
+        description: GHCR image repository name (e.g. tnsw-api).
         required: true
         type: string
       context:
