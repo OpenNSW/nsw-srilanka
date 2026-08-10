@@ -9,14 +9,15 @@ import (
 )
 
 func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
-	// Test live API format (event, processAt, cusDecRef)
+	// Test live API format (event, processAt, cusdecRef)
 	liveJSON := []byte(`{
 		"event": "INTEGRATION_RESULT",
 		"processAt": "2026-07-20T05:46:05Z",
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
-			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254},
+			"errors": {}
 		}
 	}`)
 	var reqLive CusdecIntegrationResultRequest
@@ -34,7 +35,8 @@ func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
-			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254},
+			"errors": {}
 		}
 	}`)
 	var reqSpec CusdecIntegrationResultRequest

@@ -107,7 +107,22 @@ func (r CusdecIntegrationResultRequest) Validate() error {
 		return errors.New("integrated is required")
 	}
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
-		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
+		return errors.New("payload.cusdecRef must be fully populated when integrated is true")
+	}
+
+	// Validate payload.errors per §6.2 contract.
+	if len(r.Payload.Errors) == 0 {
+		return errors.New("payload.errors is required")
+	}
+	var errObj map[string]json.RawMessage
+	if err := json.Unmarshal(r.Payload.Errors, &errObj); err != nil {
+		return errors.New("payload.errors must be a JSON object")
+	}
+	if r.Integrated && len(errObj) != 0 {
+		return errors.New("payload.errors must be empty ({}) when integrated is true")
+	}
+	if !r.Integrated && len(errObj) == 0 {
+		return errors.New("payload.errors must contain at least one entry when integrated is false")
 	}
 	return nil
 }
@@ -171,7 +186,7 @@ func (r CusdecEventRequest) Validate() error {
 		return errors.New("processAt is required")
 	}
 	if !r.Payload.CusdecRef.IsValid() {
-		return errors.New("payload.cusDecRef must be fully populated")
+		return errors.New("payload.cusdecRef must be fully populated")
 	}
 	return nil
 }

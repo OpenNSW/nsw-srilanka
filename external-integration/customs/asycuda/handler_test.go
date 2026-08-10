@@ -358,7 +358,8 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-missing",
 				"integrated": true,
-				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254},
+				"errors": {}
 			}
 		}`
 
@@ -406,7 +407,8 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-err",
 				"integrated": true,
-				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
+				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254},
+				"errors": {}
 			}
 		}`
 

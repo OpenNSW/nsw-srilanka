@@ -221,29 +221,7 @@ components:
           type: number
           example: 222.0
 
-    CusdecIntegrationResultRequest:
-      type: object
-      description: |
-        §6.2 Declaration Integration Result. Carries the outcome of processing the
-        submission identified by `edgeId`.
 
-        On success: `integrated` = true; `cusdecRef` present; `taxes` populated; `errors` = {}.
-        On failure: `integrated` = false; `cusdecRef` absent/null; `taxes` empty; `errors` populated
-        and keyed by segment. Success and errors are mutually exclusive.
-      required:
-        - eventType
-        - processedAt
-        - payload
-      additionalProperties: false
-      properties:
-        eventType:
-          type: string
-          enum: [CUSDEC_INTEGRATED]
-        processedAt:
-          type: string
-          format: date-time
-          description: Processing time.
-          example: "2026-06-26T04:04:52Z"
     CusdecIntegrationResultRequest:
       type: object
       description: |

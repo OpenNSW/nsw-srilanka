@@ -16,7 +16,8 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
-			"cdnRef": {"year": "2026", "office": "COL", "serial": "C", "number": 4567}
+			"cdnRef": {"year": "2026", "office": "COL", "serial": "C", "number": 4567},
+			"errors": {}
 		}
 	}`)
 	var reqLive CDNIntegrationResultRequest
@@ -33,7 +34,8 @@ func TestCDNIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
-			"cdnRef": {"year": "2026", "office": "COL", "serial": "C", "number": 4567}
+			"cdnRef": {"year": "2026", "office": "COL", "serial": "C", "number": 4567},
+			"errors": {}
 		}
 	}`)
 	var reqSpec CDNIntegrationResultRequest
