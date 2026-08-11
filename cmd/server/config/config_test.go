@@ -10,12 +10,13 @@ import (
 
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/artifact/loaders/local"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 // validConfig returns a minimal Config that passes Validate().

@@ -18,11 +18,11 @@ import (
 
 	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
@@ -43,39 +43,34 @@ func mustNewRouter(t *testing.T, cs *Service, chaService cha.Service, companySer
 	return r
 }
 
-func withAuthContext(ctx context.Context, userID string) context.Context {
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:    userID,
-			Email: userID + "@example.com",
-		},
+// userPrincipal builds the authenticated user principal these tests run as. The
+// three withAuthContext* helpers layer onto it, so a new identity field only
+// needs adding in one place.
+func userPrincipal(userID, ouHandle string, roles ...string) *authn.Principal {
+	return &authn.Principal{
+		Kind:     authn.KindUser,
+		UserID:   userID,
+		Email:    userID + "@example.com",
+		OUHandle: ouHandle,
+		Roles:    roles,
 	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
 }
 
+// withAuthContext authenticates as userID, with no OU handle and no roles.
+func withAuthContext(ctx context.Context, userID string) context.Context {
+	return authn.ContextWithPrincipal(ctx, userPrincipal(userID, ""))
+}
+
+// withAuthContextOU is withAuthContext plus the caller's OU handle, which the
+// handlers resolve to a company.
 func withAuthContextOU(ctx context.Context, userID, ouHandle string) context.Context {
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:       userID,
-			Email:    userID + "@example.com",
-			OUHandle: ouHandle,
-		},
-	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	return authn.ContextWithPrincipal(ctx, userPrincipal(userID, ouHandle))
 }
 
 // withAuthContextRoles is withAuthContextOU plus the caller's JWT roles, for
 // tests exercising role-entitlement checks.
 func withAuthContextRoles(ctx context.Context, userID, ouHandle string, roles ...string) context.Context {
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:       userID,
-			Email:    userID + "@example.com",
-			OUHandle: ouHandle,
-			Roles:    roles,
-		},
-	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	return authn.ContextWithPrincipal(ctx, userPrincipal(userID, ouHandle, roles...))
 }
 
 func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
