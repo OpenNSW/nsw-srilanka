@@ -1,19 +1,147 @@
 package tasks
 
 import (
+	"context"
+	"crypto"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+
+	argus "github.com/LSFLK/argus/pkg/audit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
+
+type mockTaskStepCompleter struct {
+	err error
+}
+
+func (m *mockTaskStepCompleter) CompleteTaskStep(_ context.Context, _ string, _ map[string]any) error {
+	return m.err
+}
+
+type mockAuditor struct {
+	mu     sync.Mutex
+	events []*argus.AuditLogRequest
+}
+
+func (m *mockAuditor) LogEvent(_ context.Context, event *argus.AuditLogRequest) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, event)
+	return true
+}
+
+func (m *mockAuditor) IsEnabled() bool { return true }
+
+func (m *mockAuditor) SignEvent(context.Context, *argus.AuditLogRequest) error { return nil }
+
+func (m *mockAuditor) SignMessageBytes(context.Context, []byte) (string, error) { return "", nil }
+
+func (m *mockAuditor) LogSignedEvent(context.Context, *argus.AuditLogRequest) {}
+
+func (m *mockAuditor) VerifyIntegrity(*argus.AuditLogRequest, crypto.PublicKey) (bool, error) {
+	return true, nil
+}
+
+func (m *mockAuditor) Close(context.Context) error { return nil }
+
+func (m *mockAuditor) eventsCopy() []*argus.AuditLogRequest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*argus.AuditLogRequest, len(m.events))
+	copy(out, m.events)
+	return out
+}
+
+func newEnabledTaskRecorder() (*nswaudit.Recorder, *mockAuditor) {
+	auditor := &mockAuditor{}
+	return nswaudit.NewRecorder(auditor), auditor
+}
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, v, nil)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
 	}
+}
+
+func TestHandleCompleteTaskStep_AuditSuccess(t *testing.T) {
+	recorder, auditor := newEnabledTaskRecorder()
+	handler := NewHTTPHandler(&mockTaskStepCompleter{}, nil, nil, 1024, recorder)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/commands/approve", strings.NewReader(`{"key":"value"}`))
+	req.SetPathValue("id", "task-123")
+	req.SetPathValue("command", "approve")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	events := auditor.eventsCopy()
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, string(nswaudit.EventTask), event.EventType)
+	assert.Equal(t, string(nswaudit.ActionUpdate), event.Action)
+	assert.Equal(t, string(nswaudit.TargetTask), event.TargetType)
+	require.NotNil(t, event.TargetID)
+	assert.Equal(t, "task-123", *event.TargetID)
+	assert.Equal(t, argus.StatusSuccess, event.Status)
+	assert.Equal(t, "approve", event.Metadata["command"])
+	assert.Equal(t, http.StatusNoContent, event.Metadata["status"])
+}
+
+func TestHandleCompleteTaskStep_AuditParseFailurePreservesPathCommand(t *testing.T) {
+	recorder, auditor := newEnabledTaskRecorder()
+	handler := NewHTTPHandler(nil, nil, nil, 1024, recorder)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/commands/approve", strings.NewReader(`{invalid`))
+	req.SetPathValue("id", "task-123")
+	req.SetPathValue("command", "approve")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	events := auditor.eventsCopy()
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, string(nswaudit.EventTask), event.EventType)
+	assert.Equal(t, argus.StatusFailure, event.Status)
+	require.NotNil(t, event.TargetID)
+	assert.Equal(t, "task-123", *event.TargetID)
+	assert.Equal(t, "approve", event.Metadata["command"])
+	assert.Equal(t, http.StatusBadRequest, event.Metadata["status"])
+}
+
+func TestHandleCompleteTaskStep_AuditCompleteFailure(t *testing.T) {
+	recorder, auditor := newEnabledTaskRecorder()
+	handler := NewHTTPHandler(&mockTaskStepCompleter{err: taskauthz.ErrForbidden}, nil, nil, 1024, recorder)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-456", strings.NewReader(`{"command":"reject","payload":{}}`))
+	req.SetPathValue("id", "task-456")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	events := auditor.eventsCopy()
+	require.Len(t, events, 1)
+	event := events[0]
+	assert.Equal(t, string(nswaudit.EventTask), event.EventType)
+	assert.Equal(t, argus.StatusFailure, event.Status)
+	require.NotNil(t, event.TargetID)
+	assert.Equal(t, "task-456", *event.TargetID)
+	assert.Equal(t, "reject", event.Metadata["command"])
+	assert.Equal(t, http.StatusForbidden, event.Metadata["status"])
+	assert.Equal(t, taskauthz.ErrForbidden.Error(), event.Metadata["error"])
 }
 
 func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {

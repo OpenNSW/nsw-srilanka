@@ -11,9 +11,9 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/httputil"
-	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
 
@@ -31,15 +31,21 @@ type TaskFetcher interface {
 	GetTask(ctx context.Context, taskID string) (store.TaskRecord, bool)
 }
 
+// TaskStepCompleter completes a task step. *orchestrator.TaskManager satisfies this interface.
+type TaskStepCompleter interface {
+	CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error
+}
+
 type HTTPHandler struct {
-	Manager         *orchestrator.TaskManager
+	Completer       TaskStepCompleter
 	Store           TaskFetcher
 	Assembler       *zoneview.ZoneViewAssembler
 	MaxRequestBytes int64
+	audit           *nswaudit.Recorder
 }
 
-func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64) *HTTPHandler {
-	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes}
+func NewHTTPHandler(completer TaskStepCompleter, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64, recorder *nswaudit.Recorder) *HTTPHandler {
+	return &HTTPHandler{Completer: completer, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes, audit: recorder}
 }
 
 // HandleGetTask returns the ZoneView payload for a single task.
@@ -76,9 +82,10 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
 	// TODO: retrieve the authenticated context and validate it against the
 	// task's ownership bounds before completing the step.
+	ctx := r.Context()
 	taskID := r.PathValue("id")
 	if taskID == "" {
-		slog.ErrorContext(r.Context(), "tasks: missing task id in request")
+		slog.ErrorContext(ctx, "tasks: missing task id in request")
 		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
@@ -89,26 +96,69 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	command, payload, status, responseMessage, err := parseCompleteTaskStepRequest(r, pathCommand)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "tasks: failed to parse request", "taskId", taskID, "error", err)
+		slog.ErrorContext(ctx, "tasks: failed to parse request", "taskId", taskID, "error", err)
+		auditCommand := command
+		if auditCommand == "" {
+			auditCommand = pathCommand
+		}
+		h.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  status,
+				"command": auditCommand,
+				"error":   responseMessage,
+			},
+		})
 		httputil.Error(w, r, status, responseMessage)
 		return
 	}
 
-	slog.InfoContext(r.Context(), "tasks: processing complete step command", "taskId", taskID, "command", command)
+	slog.InfoContext(ctx, "tasks: processing complete step command", "taskId", taskID, "command", command)
 
-	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
+	if err := h.Completer.CompleteTaskStep(ctx, taskID, payload); err != nil {
+		var httpStatus int
 		switch {
 		case errors.Is(err, taskauthz.ErrUnauthenticated):
-			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+			httpStatus = http.StatusUnauthorized
+			httputil.Error(w, r, httpStatus, errAuthenticationReq)
 		case errors.Is(err, taskauthz.ErrForbidden):
-			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
-			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
+			httpStatus = http.StatusForbidden
+			slog.WarnContext(ctx, "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
+			httputil.Error(w, r, httpStatus, errForbiddenTaskAction)
 		default:
+			httpStatus = http.StatusInternalServerError
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
+		h.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  httpStatus,
+				"command": command,
+				"error":   err.Error(),
+			},
+		})
 		return
 	}
 
+	h.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventTask,
+		Action:     nswaudit.ActionUpdate,
+		TargetType: nswaudit.TargetTask,
+		TargetID:   taskID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"command": command,
+			"status":  http.StatusNoContent,
+		},
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

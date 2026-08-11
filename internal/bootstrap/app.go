@@ -40,10 +40,12 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
+	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
+	storagesvc "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -238,7 +240,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	storageService := storage.NewService(storageDriver)
-	storageHandler := storage.NewHTTPHandler(storageService)
+	storageHandler := storagesvc.NewAuditedHandler(storage.NewHTTPHandler(storageService), recorder)
 
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
@@ -272,12 +274,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	cusdecRepo := cusdec.NewDeclarationRepository(db)
 	cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
 
-	slceHandler := asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
+	slceHandler := asycuda.NewHandler(cusdecWebhookService, cdnWebhookService, recorder)
 
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
-	paymentHandler := payment.NewHTTPHandler(paymentService)
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
+	paymentHandler := nswpayment.NewAuditedHandler(payment.NewHTTPHandler(paymentService), recorder)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes, recorder)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
 	taskAuthzGate, err := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService}, globalCatalog.Roles)
