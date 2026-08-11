@@ -140,15 +140,28 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
+	ctx := r.Context()
+	var req completeTaskStepRequest
 	fail := func(status int, message string, err error) {
-		slog.ErrorContext(r.Context(), "tasks: failed to parse request", "taskId", taskID, "error", err)
+		slog.ErrorContext(ctx, "tasks: failed to parse request", "taskId", taskID, "error", err)
+		h.Audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  status,
+				"command": req.Command,
+				"error":   message,
+			},
+		})
 		httputil.Error(w, r, status, message)
 	}
 
 	// The body must contain at most one JSON value: json.Decoder.Decode only parses the
 	// first value and silently ignores anything after it, so a second Decode call is
 	// required to confirm nothing trails it.
-	var req completeTaskStepRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
@@ -197,21 +210,48 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	command := req.Command
 	payload["__command"] = command
 
-	slog.InfoContext(r.Context(), "tasks: processing complete step command", "taskId", taskID, "command", command)
+	slog.InfoContext(ctx, "tasks: processing complete step command", "taskId", taskID, "command", command)
 
-	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
+	if err := h.Manager.CompleteTaskStep(ctx, taskID, payload); err != nil {
+		var httpStatus int
 		switch {
 		case errors.Is(err, taskauthzext.ErrUnauthenticated):
-			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+			httpStatus = http.StatusUnauthorized
+			httputil.Error(w, r, httpStatus, errAuthenticationReq)
 		case errors.Is(err, taskauthzext.ErrForbidden):
-			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
-			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
+			httpStatus = http.StatusForbidden
+			slog.WarnContext(ctx, "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
+			httputil.Error(w, r, httpStatus, errForbiddenTaskAction)
 		default:
+			httpStatus = http.StatusInternalServerError
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
+		h.Audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  httpStatus,
+				"command": command,
+				"error":   err.Error(),
+			},
+		})
 		return
 	}
 
+	h.Audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventTask,
+		Action:     nswaudit.ActionUpdate,
+		TargetType: nswaudit.TargetTask,
+		TargetID:   taskID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"command": command,
+			"status":  http.StatusNoContent,
+		},
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
