@@ -62,6 +62,26 @@ func TestHandleCompleteTaskStep_RejectsTrailingDataAfterJSON(t *testing.T) {
 	}
 }
 
+func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
+	auditor := &mockAuditor{}
+	handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nswaudit.NewRecorder(auditor), 1024)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123", strings.NewReader(`{invalid`))
+	req.SetPathValue("id", "task-123")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Len(t, auditor.events, 1)
+	event := auditor.events[0]
+	assert.Equal(t, string(nswaudit.EventTask), event.EventType)
+	assert.Equal(t, argus.StatusFailure, event.Status)
+	require.NotNil(t, event.TargetID)
+	assert.Equal(t, "task-123", *event.TargetID)
+	assert.Equal(t, http.StatusBadRequest, event.Metadata["status"])
+}
+
 // --- HandleGetTask ---------------------------------------------------------
 
 const (
