@@ -95,10 +95,10 @@ func newSignedAuth(t *testing.T, issuer, audience string, memberUserIDs map[stri
 		a.tokens[ag.ID] = a.sign(t, a.serviceClaims(ag.Identity))
 	}
 	for _, p := range payments {
-		// TODO: when the gateway webhook is made protected, enforce non-nil identity.
-		if p.Identity != nil {
-			a.tokens[p.ID] = a.sign(t, a.serviceClaims(*p.Identity))
+		if p.Identity == nil {
+			t.Fatalf("payment gateway config %q has no identity: its webhook is a protected endpoint and needs an M2M identity to authenticate", p.ID)
 		}
+		a.tokens[p.ID] = a.sign(t, a.serviceClaims(*p.Identity))
 	}
 	return a
 }
