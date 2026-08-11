@@ -242,13 +242,14 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 				TargetID:   consignmentID,
 				Failure:    true,
 				Metadata: map[string]any{
-					"error":           "cross-company access denied",
+					"error":           "consignment access denied",
 					"callerCompanyId": userCompany.ID,
 				},
 			})
 			// Respond with ErrConsignmentNotFound's text, not ErrAccessDenied's, and
-			// 404 (not 403), so a cross-company read is indistinguishable from a
-			// non-existent consignment and cannot be used to probe which IDs exist.
+			// 404 (not 403), so a denied read — whether cross-company or company-matched
+			// with the wrong role — is indistinguishable from a non-existent consignment
+			// and cannot be used to probe which IDs exist.
 			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
 			return
 		case errors.Is(err, ErrConsignmentNotFound):
