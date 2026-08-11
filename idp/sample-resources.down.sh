@@ -6,11 +6,14 @@ set -e
 # Tear down (delete) the NSW sample resources from a ThunderID deployment.
 #
 # This is the inverse of sample-resources.sh. It deletes ONLY the project's own
-# entities — applications, users, groups, roles, user types, the NSW_API /
-# AGENCY_API resource servers (and their resources/actions), and the
-# private-sector / government organization units — in reverse-dependency order.
+# entities — applications, users, groups, roles, user types, the declared
+# resource servers (and their resources/actions), and the
+# private-sector / government organization units — in reverse-dependency order,
+# and clears the server config sections the seed applied (CORS).
 # It NEVER touches image defaults (the `default` OU, the `Person` user type, the
-# admin user, the system resource server, default flows/themes).
+# admin user, the system resource server, default flows/themes), nor the
+# bootstrap-provisioned `admin-cli` client and its role — those come from
+# bootstrap/03-nsw-resources.yaml, not from the seed.
 #
 # "Delete if exists": entities that are already gone are skipped, so the script
 # is idempotent and safe to re-run.
@@ -200,6 +203,19 @@ delete_resource_server() {
     delete_by_id "/resource-servers/${rs_id}" "resource server ${identifier}"
 }
 
+# Clear a server configuration section. There is no DELETE; a PUT replaces only the
+# writable layer, so this removes exactly what the seed applied and nothing else.
+reset_server_config() {
+    local name="$1" RESPONSE HTTP_CODE BODY
+    RESPONSE=$(api_call PUT "/server-config/${name}" '{}')
+    HTTP_CODE="${RESPONSE: -3}"; BODY="${RESPONSE%???}"
+    case "$HTTP_CODE" in
+        200|201|204) log_success "Cleared server config '${name}' (writable layer)" ;;
+        404)         log_warning "Server config '${name}' not found, skipping" ;;
+        *)           log_error "Failed to clear server config '${name}' (HTTP $HTTP_CODE)"; echo "Response: $BODY" >&2; exit 1 ;;
+    esac
+}
+
 confirm_or_abort() {
     [[ "$YES" == "1" ]] && return
     if [[ -t 0 ]]; then
@@ -276,6 +292,14 @@ while IFS= read -r line; do
 done <<< "$(jq -r '.organizationUnits // [] | .[] | [ ((.treePath // .handle) | [scan("/")] | length), (.treePath // .handle) ] | "\(.[0])\t\(.[1])"' <<< "$MERGED" | sort -rn -k1,1 -s)"
 
 echo "" >&2
+log_info "### (8) Server configuration ###"
+while IFS= read -r sc; do
+    [[ -z "$sc" ]] && continue
+    reset_server_config "$sc"
+done <<< "$(jq -r '.serverConfigs // [] | .[].name' <<< "$MERGED")"
+
+echo "" >&2
 log_success "Sample resources teardown completed."
-log_info "Note: image defaults (default OU, Person type, admin, system resource server) were left untouched."
+log_info "Note: image defaults (default OU, Person type, admin, system resource server) and the"
+log_info "bootstrap-provisioned admin-cli client + its role were left untouched."
 echo "" >&2

@@ -1,0 +1,46 @@
+# LOCAL-DEV ONLY: provisions a management-scoped client from a file-supplied secret.
+# Do not mount into a shared or production deployment. Requires ADMIN_CLI_SECRET.
+# See idp/README.md ("Bootstrap Resources").
+
+# The M2M client used to obtain a management API token. No requestable `scopes`: for
+# client_credentials they come from the role granted below.
+resource_type: application
+id: 019c0000-0000-7000-8000-000000000001
+name: admin-cli
+description: Admin CLI machine client for management API access
+type: m2m
+ouHandle: default
+isRegistrationFlowEnabled: false
+allowedUserTypes: []
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: ADMIN_CLI
+      clientSecret: "{{ .ADMIN_CLI_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      token:
+        accessToken:
+          # A client_credentials subject is the client, so clientConfig applies, not userConfig.
+          clientConfig:
+            validityPeriod: 3600
+---
+# A NEW role, not a re-declaration of the built-in `Administrator`: the importer's role
+# upsert writes only the fields present here, so re-declaring `Administrator` would drop
+# its `permissions` block and revoke the scope console login depends on.
+resource_type: role
+id: 019c0000-0000-7000-8000-000000000002
+name: NSW Admin CLI
+description: Grants admin-cli the system scope for management API access
+ouHandle: default
+permissions:
+  # The System resource server, referenced by ID — handles are not accepted here.
+  - resourceServerId: 01900000-0000-7000-8000-000000000020
+    permissions:
+      - system
+assignments:
+  - id: 019c0000-0000-7000-8000-000000000001
+    type: app

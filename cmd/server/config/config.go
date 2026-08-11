@@ -133,7 +133,7 @@ func Load() (*Config, error) {
 		Authn: authn.Config{
 			JWKSURL:               getEnvOrDefault("AUTH_JWKS_URL", "https://localhost:8090/oauth2/jwks"),
 			Issuer:                getEnvOrDefault("AUTH_ISSUER", "https://localhost:8090"),
-			Audience:              getEnvOrDefault("AUTH_AUDIENCE", "NSW_API"),
+			Audience:              getEnvOrDefault("AUTH_AUDIENCE", "https://api.nsw-srilanka.local"),
 			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW")),
 			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
 		},

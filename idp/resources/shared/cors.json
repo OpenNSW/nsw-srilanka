@@ -1,0 +1,8 @@
+{
+  "serverConfigs": [
+    {
+      "name": "cors",
+      "allowedOriginsEnv": "CORS_ORIGINS"
+    }
+  ]
+}
