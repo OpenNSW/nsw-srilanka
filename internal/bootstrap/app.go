@@ -13,7 +13,6 @@ import (
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
@@ -38,6 +37,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -237,7 +237,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
 	// -------------------------------------------------------------------
-	authnManager, err := authn.NewManager(userProfileService, cfg.Authn)
+	authnManager, err := nswauthn.NewManager(&authUserProfileAdapter{svc: userProfileService}, cfg.Authn)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
@@ -288,14 +288,16 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	withAuth := authnManager.RequireAuthMiddleware()
 
 	// authzr gates routes by the OAuth2 scopes carried on the token.
-	// The extractor bridges the authn layer (authn.GetAuthContext) into the
-	// generic authz.Principal interface — authz imports nothing from core/authn.
+	// The extractor bridges the authn layer (internal/authn) into the generic
+	// authz.Principal interface, which nswauthn.ScopePrincipal satisfies
+	// structurally — so authz imports nothing from the authn layer, and
+	// core/authn stays confined to internal/authn.
 	authzr, err := authz.New(func(ctx context.Context) (authz.Principal, bool) {
-		ac := authn.GetAuthContext(ctx)
-		if ac == nil || ac.Type() == "" {
+		p, ok := nswauthn.ScopePrincipalFromContext(ctx)
+		if !ok {
 			return nil, false
 		}
-		return ac, true
+		return p, true
 	})
 	if err != nil {
 		_ = stopParentRunner()

@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OpenNSW/core/authn"
-
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
@@ -51,12 +50,13 @@ func mustNewMiddleware(t *testing.T, ownership OwnershipResolver, company Compan
 	return mw
 }
 
-// attachedInput drives the middleware with an auth context and returns the Input
-// the downstream handler observes.
-func attachedInput(mw *Middleware, ac *authn.AuthContext) (taskauthz.Input, bool) {
+// attachedInput drives the middleware as the given principal and returns the
+// Input the downstream handler observes. A nil principal stands for an
+// unauthenticated request.
+func attachedInput(mw *Middleware, p *authn.Principal) (taskauthz.Input, bool) {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-1", nil)
-	if ac != nil {
-		r = r.WithContext(context.WithValue(r.Context(), authn.AuthContextKey, ac))
+	if p != nil {
+		r = r.WithContext(authn.ContextWithPrincipal(r.Context(), p))
 	}
 	var got taskauthz.Input
 	var present bool
@@ -70,7 +70,7 @@ func attachedInput(mw *Middleware, ac *authn.AuthContext) (taskauthz.Input, bool
 func TestMiddleware_Client(t *testing.T) {
 	own := &fakeOwnership{}
 	comp := &fakeCompany{}
-	in, ok := attachedInput(mustNewMiddleware(t, own, comp), &authn.AuthContext{Client: &authn.ClientContext{ClientID: "FCAU_TO_NSW"}})
+	in, ok := attachedInput(mustNewMiddleware(t, own, comp), &authn.Principal{Kind: authn.KindClient, ClientID: "FCAU_TO_NSW"})
 
 	if !ok || in.Kind != taskauthz.KindClient || in.ClientID != "FCAU_TO_NSW" {
 		t.Fatalf("got %+v ok=%v", in, ok)
@@ -240,6 +240,10 @@ func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
 	}
 }
 
-func userCtx(ouHandle string, roles ...string) *authn.AuthContext {
-	return &authn.AuthContext{User: &authn.UserContext{OUHandle: ouHandle, Roles: roles}}
+func userCtx(ouHandle string, roles ...string) *authn.Principal {
+	return &authn.Principal{
+		Kind:     authn.KindUser,
+		Roles:    roles,
+		OUHandle: ouHandle,
+	}
 }

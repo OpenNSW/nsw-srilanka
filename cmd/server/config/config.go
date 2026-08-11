@@ -13,7 +13,6 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders/github"
 	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/artifact/loaders/s3"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
@@ -21,6 +20,8 @@ import (
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 // Config holds all configuration for the application.
