@@ -4,9 +4,9 @@
   ],
   "roles": [
     { "key": "OGA Reviewer", "name": "OGA Reviewer", "description": "Role for government agency reviewers",
-      "ou": "government-organization", "resourceServer": "https://api.nsw-agency.local", "scopeSet": "agencyReviewer" },
+      "ou": "government-organization", "resourceServer": "https://tnsw-agency-dev.apps.sovecloud1.akaza.lk", "scopeSet": "agencyReviewer" },
     { "key": "NswM2M", "name": "NswM2M", "description": "Role for NSW machine-to-machine clients calling the Agency API",
-      "ou": "government-organization", "resourceServer": "https://api.nsw-agency.local", "scopeSet": "m2mAgency" }
+      "ou": "government-organization", "resourceServer": "https://tnsw-agency-dev.apps.sovecloud1.akaza.lk", "scopeSet": "m2mAgency" }
   ],
   "roleAssignments": [
     { "role": "OGA Reviewer", "group": "OGA Reviewers" }

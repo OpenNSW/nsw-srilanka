@@ -2,7 +2,7 @@
   "resourceServers": [
     {
       "name": "NSW API",
-      "identifier": "https://api.nsw-srilanka.local",
+      "identifier": "https://tnsw-api-dev.apps.sovecloud1.akaza.lk",
       "ou": "default",
       "resources": [
         {
@@ -31,7 +31,7 @@
     },
     {
       "name": "Agency API",
-      "identifier": "https://api.nsw-agency.local",
+      "identifier": "https://tnsw-agency-dev.apps.sovecloud1.akaza.lk",
       "ou": "default",
       "resources": [
         {

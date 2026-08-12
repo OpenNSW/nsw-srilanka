@@ -47,6 +47,102 @@
       "phoneNumber": "+94771234570",
       "passwordEnv": { "override": "SAMPLE_NARESH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
       "groups": ["CHA"]
+    },
+    {
+      "key": "fcau_user",
+      "type": "Private_User",
+      "ou": "private-sector/fcau-company",
+      "username": "fcau_user",
+      "email": "fcau_user@fcau-company.private-sector.dev",
+      "givenName": "FCAU",
+      "familyName": "User",
+      "phoneNumber": "+94771234571",
+      "passwordEnv": { "override": "SAMPLE_FCAU_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "cda_user",
+      "type": "Private_User",
+      "ou": "private-sector/cda-company",
+      "username": "cda_user",
+      "email": "cda_user@cda-company.private-sector.dev",
+      "givenName": "CDA",
+      "familyName": "User",
+      "phoneNumber": "+94771234572",
+      "passwordEnv": { "override": "SAMPLE_CDA_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "npqs_user",
+      "type": "Private_User",
+      "ou": "private-sector/npqs-company",
+      "username": "npqs_user",
+      "email": "npqs_user@npqs-company.private-sector.dev",
+      "givenName": "NPQS",
+      "familyName": "User",
+      "phoneNumber": "+94771234573",
+      "passwordEnv": { "override": "SAMPLE_NPQS_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "slpa_user",
+      "type": "Private_User",
+      "ou": "private-sector/sltb-company",
+      "username": "slpa_user",
+      "email": "slpa_user@sltb-company.private-sector.dev",
+      "givenName": "SLTB",
+      "familyName": "User",
+      "phoneNumber": "+94771234574",
+      "passwordEnv": { "override": "SAMPLE_SLPB_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "customs_user",
+      "type": "Private_User",
+      "ou": "private-sector/customs-company",
+      "username": "customs_user",
+      "email": "customs_user@customs-company.private-sector.dev",
+      "givenName": "CUSTOMS",
+      "familyName": "User",
+      "phoneNumber": "+94771234577",
+      "passwordEnv": { "override": "SAMPLE_CUSTOMS_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "sltb_user",
+      "type": "Private_User",
+      "ou": "private-sector/slpa-company",
+      "username": "sltb_user",
+      "email": "sltb_user@slpa-company.private-sector.dev",
+      "givenName": "SLTB",
+      "familyName": "User",
+      "phoneNumber": "+94771234574",
+      "passwordEnv": { "override": "SAMPLE_SLPB_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "govtech_user",
+      "type": "Private_User",
+      "ou": "private-sector/govtech-company",
+      "username": "govtech_user",
+      "email": "govtech_user@govtech-company.private-sector.dev",
+      "givenName": "GOVTECH",
+      "familyName": "User",
+      "phoneNumber": "+94771234575",
+      "passwordEnv": { "override": "SAMPLE_GOVTECH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
+    },
+    {
+      "key": "piu_user",
+      "type": "Private_User",
+      "ou": "private-sector/piu-company",
+      "username": "piu_user",
+      "email": "piu_user@piu-company.private-sector.dev",
+      "givenName": "PIU",
+      "familyName": "User",
+      "phoneNumber": "+94771234576",
+      "passwordEnv": { "override": "SAMPLE_PIU_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Traders", "CHA"]
     }
   ]
 }

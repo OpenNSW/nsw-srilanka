@@ -22,6 +22,70 @@
       "description": "Child organization unit for EDWARD PVT LTD",
       "parent": "private-sector",
       "treePath": "private-sector/edward-pvt-ltd"
+    },
+    {
+      "key": "private-sector/cda-company",
+      "handle": "cda-company",
+      "name": "CDA COMPANY",
+      "description": "Child organization unit for CDA COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/cda-company"
+    },
+    {
+      "key": "private-sector/fcau-company",
+      "handle": "fcau-company",
+      "name": "FCAU COMPANY",
+      "description": "Child organization unit for FCAU COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/fcau-company"
+    },
+    {
+      "key": "private-sector/npqs-company",
+      "handle": "npqs-company",
+      "name": "NPQS COMPANY",
+      "description": "Child organization unit for NPQS COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/npqs-company"
+    },
+    {
+      "key": "private-sector/customs-company",
+      "handle": "customs-company",
+      "name": "CUSTOMS COMPANY",
+      "description": "Child organization unit for CUSTOMS COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/customs-company"
+    },
+    {
+      "key": "private-sector/sltb-company",
+      "handle": "sltb-company",
+      "name": "SLTB COMPANY",
+      "description": "Child organization unit for SLTB COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/sltb-company"
+    },
+    {
+      "key": "private-sector/slpa-company",
+      "handle": "slpa-company",
+      "name": "SLPA COMPANY",
+      "description": "Child organization unit for SLPA COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/slpa-company"
+    },
+    {
+      "key": "private-sector/govtech-company",
+      "handle": "govtech-company",
+      "name": "GOVTECH COMPANY",
+      "description": "Child organization unit for GOVTECH COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/govtech-company"
+    },
+    {
+      "key": "private-sector/piu-company",
+      "handle": "piu-company",
+      "name": "PIU COMPANY",
+      "description": "Child organization unit for PIU COMPANY",
+      "parent": "private-sector",
+      "treePath": "private-sector/piu-company"
     }
   ]
 }
