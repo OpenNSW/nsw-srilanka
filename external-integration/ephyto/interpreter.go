@@ -30,10 +30,11 @@ import (
 //	    number once and set ephyto.delivered / ephyto.tracking_info.
 //
 // It is an auto plugin (the generic plugin returns nil to advance
-// immediately). The workflow's gateways branch on the flags recorded here,
-// and the trader-driven status-check USER_INPUT node re-enters poll on each
-// "Check Status" click, so the poll only runs when the trader asks for it and
-// never spins on its own.
+// immediately). The workflow's gateways branch on the flags recorded here.
+// The trader only submits; polling then runs unattended, driven by a TIMER
+// node that waits between attempts and a gateway that caps the loop on the
+// timer's fire count, so the flow holds no worker slot while it waits and
+// falls through to a timeout task once the cap is reached.
 
 // Hub operations selected via plugin_properties.operation.
 const (
@@ -119,9 +120,11 @@ func (HubInterpreter) interpretSubmit(callErr error, resp *remote.RawResponse) (
 }
 
 // interpretPoll records whether a previously submitted envelope has been
-// delivered to the importing NPPO. The trader triggers each poll by clicking
-// "Check Status"; the workflow gateway loops back to the status-check screen
-// while ephyto.delivered is false and ends the flow once it is true.
+// delivered to the importing NPPO. Each poll is driven by the workflow's TIMER
+// loop rather than by the trader: while ephyto.delivered is false the gateway
+// returns to the timer for another attempt, and once it is true the flow ends.
+// A transport failure records an error but leaves delivered false, so a failed
+// check costs one attempt rather than aborting the loop.
 func (HubInterpreter) interpretPoll(callErr error, resp *remote.RawResponse) (string, map[string]any) {
 	out := map[string]any{"delivered": false, "error": ""}
 
@@ -138,7 +141,7 @@ func (HubInterpreter) interpretPoll(callErr error, resp *remote.RawResponse) (st
 	delivered := callErr == nil && hubResp != nil && IsDelivered(hubResp.HUBTrackingInfo)
 	out["delivered"] = delivered
 	if callErr != nil {
-		out["error"] = "Could not fetch the delivery status from the IPPC ePhyto Hub. Please check again."
+		out["error"] = "Could not fetch the delivery status from the IPPC ePhyto Hub. The next automatic check will retry."
 	}
 	return "EPHYTO_POLLING", out
 }
