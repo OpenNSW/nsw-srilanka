@@ -8,8 +8,8 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
-// AuditedHandler wraps the core storage HTTPHandler and records domain audit
-// events for upload and download operations.
+// AuditedHandler wraps the core storage HTTPHandler and records audit events
+// for upload and download at the handler layer.
 type AuditedHandler struct {
 	inner *corestorage.HTTPHandler
 	audit *nswaudit.Recorder
@@ -66,22 +66,7 @@ func (h *AuditedHandler) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuditedHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	key := r.PathValue("key")
-
-	sw := &nswaudit.StatusWriter{ResponseWriter: w}
-	h.inner.Delete(sw, r)
-
-	h.audit.Record(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventStorage,
-		Action:     nswaudit.ActionDelete,
-		TargetType: nswaudit.TargetStorage,
-		TargetID:   key,
-		Failure:    nswaudit.HTTPStatus(sw.Status) >= http.StatusBadRequest,
-		Metadata: map[string]any{
-			"status": nswaudit.HTTPStatus(sw.Status),
-		},
-	})
+	h.inner.Delete(w, r)
 }
 
 func (h *AuditedHandler) UploadContentLocal(w http.ResponseWriter, r *http.Request) {

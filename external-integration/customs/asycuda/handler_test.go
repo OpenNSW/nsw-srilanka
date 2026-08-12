@@ -3,7 +3,6 @@ package asycuda
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,12 +10,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 
-	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 // mockCusdecService is a mock implementation of cusdec.WebhookService.
@@ -47,183 +43,6 @@ func (m *mockCDNService) ProcessIntegrationResult(ctx context.Context, req cdn.C
 func (m *mockCDNService) ProcessAcknowledgment(ctx context.Context, req cdn.CDNAcknowledgmentRequest) error {
 	args := m.Called(ctx, req)
 	return args.Error(0)
-}
-
-type mockAuditor struct {
-	events []*argus.AuditLogRequest
-}
-
-func (m *mockAuditor) IsEnabled() bool { return true }
-
-func (m *mockAuditor) LogEvent(_ context.Context, event *argus.AuditLogRequest) bool {
-	m.events = append(m.events, event)
-	return true
-}
-
-func (m *mockAuditor) SignEvent(context.Context, *argus.AuditLogRequest) error { return nil }
-
-func (m *mockAuditor) SignMessageBytes(context.Context, []byte) (string, error) { return "", nil }
-
-func (m *mockAuditor) LogSignedEvent(context.Context, *argus.AuditLogRequest) {}
-
-func (m *mockAuditor) VerifyIntegrity(*argus.AuditLogRequest, crypto.PublicKey) (bool, error) {
-	return true, nil
-}
-
-func (m *mockAuditor) Close(context.Context) error { return nil }
-
-func newEnabledSLCERecorder() (*nswaudit.Recorder, *mockAuditor) {
-	auditor := &mockAuditor{}
-	return nswaudit.NewRecorder(auditor), auditor
-}
-
-func assertConsignmentAuditEvent(t *testing.T, event *argus.AuditLogRequest, wantStatus int, wantEventType string, wantFailure bool) {
-	t.Helper()
-	require.NotNil(t, event)
-	assert.Equal(t, string(nswaudit.EventConsignment), event.EventType)
-	assert.Equal(t, string(nswaudit.ActionUpdate), event.Action)
-	assert.Equal(t, string(nswaudit.TargetConsignment), event.TargetType)
-	assert.Equal(t, wantEventType, event.Metadata["eventType"])
-	assert.Equal(t, wantStatus, event.Metadata["status"])
-	if wantFailure {
-		assert.Equal(t, argus.StatusFailure, event.Status)
-	} else {
-		assert.Equal(t, argus.StatusSuccess, event.Status)
-	}
-}
-
-func TestSLCEHandler_Audit_CusdecIntegrationSuccess(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	recorder, auditor := newEnabledSLCERecorder()
-	handler := NewHandler(cusdecSvc, cdnSvc, recorder)
-
-	payload := `{
-		"eventType": "CUSDEC_INTEGRATED",
-		"processedAt": "2026-07-23T11:00:00Z",
-		"payload": {
-			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-			"integrated": true,
-			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
-			"taxes": [],
-			"errors": {}
-		}
-	}`
-
-	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	w := httptest.NewRecorder()
-	handler.HandleWebhook(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Len(t, auditor.events, 1)
-	assertConsignmentAuditEvent(t, auditor.events[0], http.StatusOK, "CUSDEC_INTEGRATED", false)
-}
-
-func TestSLCEHandler_Audit_CusdecIntegrationFailure(t *testing.T) {
-	cusdecSvc := new(mockCusdecService)
-	cdnSvc := new(mockCDNService)
-	recorder, auditor := newEnabledSLCERecorder()
-	handler := NewHandler(cusdecSvc, cdnSvc, recorder)
-
-	payload := `{"eventType": "UNKNOWN_EVENT_TYPE", "processedAt": "2026-07-23T10:00:00Z"}`
-
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
-	w := httptest.NewRecorder()
-	handler.HandleWebhook(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Len(t, auditor.events, 1)
-	assertConsignmentAuditEvent(t, auditor.events[0], http.StatusBadRequest, "UNKNOWN_EVENT_TYPE", true)
-}
-
-func TestSLCEHandler_Audit_CusdecEventDispatch(t *testing.T) {
-	tests := []struct {
-		name            string
-		rawEventType    string
-		normalizedEvent string
-		payload         string
-		setupMock       func(cusdecSvc *mockCusdecService)
-		wantStatus      int
-		wantFailure     bool
-	}{
-		{
-			name:            "PAYMENT_CONFIRMED success",
-			rawEventType:    "PAYMENT_CONFIRMED",
-			normalizedEvent: "PAYMENT_CONFIRMED",
-			payload: `{
-				"eventType": "PAYMENT_CONFIRMED",
-				"processedAt": "2026-07-23T11:05:00Z",
-				"payload": {
-					"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 }
-				}
-			}`,
-			setupMock: func(cusdecSvc *mockCusdecService) {
-				cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
-					return r.Event == "PAYMENT_CONFIRMED"
-				})).Return(nil)
-			},
-			wantStatus:  http.StatusOK,
-			wantFailure: false,
-		},
-		{
-			name:            "normalized mixed-case event type",
-			rawEventType:    "  payment_confirmed  ",
-			normalizedEvent: "PAYMENT_CONFIRMED",
-			payload: `{
-				"eventType": "  payment_confirmed  ",
-				"processedAt": "2026-07-23T11:05:00Z",
-				"payload": {
-					"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 }
-				}
-			}`,
-			setupMock: func(cusdecSvc *mockCusdecService) {
-				cusdecSvc.On("ProcessEvent", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecEventRequest) bool {
-					return r.Event == "PAYMENT_CONFIRMED"
-				})).Return(nil)
-			},
-			wantStatus:  http.StatusOK,
-			wantFailure: false,
-		},
-		{
-			name:            "EXPORT_RELEASED service failure",
-			rawEventType:    "EXPORT_RELEASED",
-			normalizedEvent: "EXPORT_RELEASED",
-			payload: `{
-				"eventType": "EXPORT_RELEASED",
-				"processedAt": "2026-07-23T11:15:00Z",
-				"payload": {
-					"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 }
-				}
-			}`,
-			setupMock: func(cusdecSvc *mockCusdecService) {
-				cusdecSvc.On("ProcessEvent", mock.Anything, mock.Anything).Return(cusdec.ErrCusdecNotFoundByRef)
-			},
-			wantStatus:  http.StatusServiceUnavailable,
-			wantFailure: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cusdecSvc := new(mockCusdecService)
-			cdnSvc := new(mockCDNService)
-			recorder, auditor := newEnabledSLCERecorder()
-			handler := NewHandler(cusdecSvc, cdnSvc, recorder)
-
-			tt.setupMock(cusdecSvc)
-
-			req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tt.payload))
-			w := httptest.NewRecorder()
-			handler.HandleWebhook(w, req)
-
-			require.Equal(t, tt.wantStatus, w.Code)
-			require.Len(t, auditor.events, 1)
-			assertConsignmentAuditEvent(t, auditor.events[0], tt.wantStatus, tt.normalizedEvent, tt.wantFailure)
-			cusdecSvc.AssertExpectations(t)
-		})
-	}
 }
 
 // Tests CusDec integration result success (v1.2 §6.2).

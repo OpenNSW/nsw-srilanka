@@ -7,8 +7,8 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
-// AuditedHandler wraps the core payment HTTPHandler and records domain audit
-// events for webhook and reference-validation operations.
+// AuditedHandler wraps the core payment HTTPHandler and records audit events
+// at the handler layer.
 type AuditedHandler struct {
 	inner *corepayment.HTTPHandler
 	audit *nswaudit.Recorder
