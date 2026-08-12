@@ -234,9 +234,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 	storageService := storage.NewService(storageDriver)
 	metadataService := storagesvc.NewObjectMetadataService(db, nil)
-	storageHandler := storage.NewHTTPHandler(storageService).
-		WithAccessValidator(metadataService.ValidateAccess).
-		WithOnUploadHook(metadataService.OnUpload)
+	storageHandler := storagesvc.NewSecureHTTPHandler(storage.NewHTTPHandler(storageService), metadataService)
 
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
