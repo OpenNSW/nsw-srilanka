@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -31,21 +32,16 @@ type TaskFetcher interface {
 	GetTask(ctx context.Context, taskID string) (store.TaskRecord, bool)
 }
 
-// TaskStepCompleter completes a task step. *orchestrator.TaskManager satisfies this interface.
-type TaskStepCompleter interface {
-	CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error
-}
-
 type HTTPHandler struct {
-	Completer       TaskStepCompleter
+	Manager         *orchestrator.TaskManager
 	Store           TaskFetcher
 	Assembler       *zoneview.ZoneViewAssembler
 	MaxRequestBytes int64
 	audit           *nswaudit.Recorder
 }
 
-func NewHTTPHandler(completer TaskStepCompleter, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64, recorder *nswaudit.Recorder) *HTTPHandler {
-	return &HTTPHandler{Completer: completer, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes, audit: recorder}
+func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64, recorder *nswaudit.Recorder) *HTTPHandler {
+	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes, audit: recorder}
 }
 
 // HandleGetTask returns the ZoneView payload for a single task.
@@ -119,7 +115,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	slog.InfoContext(ctx, "tasks: processing complete step command", "taskId", taskID, "command", command)
 
-	if err := h.Completer.CompleteTaskStep(ctx, taskID, payload); err != nil {
+	if err := h.Manager.CompleteTaskStep(ctx, taskID, payload); err != nil {
 		var httpStatus int
 		switch {
 		case errors.Is(err, taskauthz.ErrUnauthenticated):

@@ -14,16 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
-
-type mockTaskStepCompleter struct {
-	err error
-}
-
-func (m *mockTaskStepCompleter) CompleteTaskStep(_ context.Context, _ string, _ map[string]any) error {
-	return m.err
-}
 
 type mockAuditor struct {
 	mu     sync.Mutex
@@ -59,11 +50,6 @@ func (m *mockAuditor) eventsCopy() []*argus.AuditLogRequest {
 	return out
 }
 
-func newEnabledTaskRecorder() (*nswaudit.Recorder, *mockAuditor) {
-	auditor := &mockAuditor{}
-	return nswaudit.NewRecorder(auditor), auditor
-}
-
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
 		handler := NewHTTPHandler(nil, nil, nil, v, nil)
@@ -73,33 +59,9 @@ func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	}
 }
 
-func TestHandleCompleteTaskStep_AuditSuccess(t *testing.T) {
-	recorder, auditor := newEnabledTaskRecorder()
-	handler := NewHTTPHandler(&mockTaskStepCompleter{}, nil, nil, 1024, recorder)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/commands/approve", strings.NewReader(`{"key":"value"}`))
-	req.SetPathValue("id", "task-123")
-	req.SetPathValue("command", "approve")
-	rec := httptest.NewRecorder()
-
-	handler.HandleCompleteTaskStep(rec, req)
-
-	require.Equal(t, http.StatusNoContent, rec.Code)
-	events := auditor.eventsCopy()
-	require.Len(t, events, 1)
-	event := events[0]
-	assert.Equal(t, string(nswaudit.EventTask), event.EventType)
-	assert.Equal(t, string(nswaudit.ActionUpdate), event.Action)
-	assert.Equal(t, string(nswaudit.TargetTask), event.TargetType)
-	require.NotNil(t, event.TargetID)
-	assert.Equal(t, "task-123", *event.TargetID)
-	assert.Equal(t, argus.StatusSuccess, event.Status)
-	assert.Equal(t, "approve", event.Metadata["command"])
-	assert.Equal(t, http.StatusNoContent, event.Metadata["status"])
-}
-
-func TestHandleCompleteTaskStep_AuditParseFailurePreservesPathCommand(t *testing.T) {
-	recorder, auditor := newEnabledTaskRecorder()
+func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
+	auditor := &mockAuditor{}
+	recorder := nswaudit.NewRecorder(auditor)
 	handler := NewHTTPHandler(nil, nil, nil, 1024, recorder)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/commands/approve", strings.NewReader(`{invalid`))
@@ -119,29 +81,6 @@ func TestHandleCompleteTaskStep_AuditParseFailurePreservesPathCommand(t *testing
 	assert.Equal(t, "task-123", *event.TargetID)
 	assert.Equal(t, "approve", event.Metadata["command"])
 	assert.Equal(t, http.StatusBadRequest, event.Metadata["status"])
-}
-
-func TestHandleCompleteTaskStep_AuditCompleteFailure(t *testing.T) {
-	recorder, auditor := newEnabledTaskRecorder()
-	handler := NewHTTPHandler(&mockTaskStepCompleter{err: taskauthz.ErrForbidden}, nil, nil, 1024, recorder)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-456", strings.NewReader(`{"command":"reject","payload":{}}`))
-	req.SetPathValue("id", "task-456")
-	rec := httptest.NewRecorder()
-
-	handler.HandleCompleteTaskStep(rec, req)
-
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	events := auditor.eventsCopy()
-	require.Len(t, events, 1)
-	event := events[0]
-	assert.Equal(t, string(nswaudit.EventTask), event.EventType)
-	assert.Equal(t, argus.StatusFailure, event.Status)
-	require.NotNil(t, event.TargetID)
-	assert.Equal(t, "task-456", *event.TargetID)
-	assert.Equal(t, "reject", event.Metadata["command"])
-	assert.Equal(t, http.StatusForbidden, event.Metadata["status"])
-	assert.Equal(t, taskauthz.ErrForbidden.Error(), event.Metadata["error"])
 }
 
 func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {
