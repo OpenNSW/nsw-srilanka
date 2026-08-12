@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,9 +40,13 @@ type Service struct {
 	companyService   company.Service
 	userService      user.Service
 	taskStore        TaskStore
+	roles            map[string]string // logical name ("trader"/"cha") -> IdP token role
 }
 
-// NewService creates a new instance of Service.
+// NewService creates a new instance of Service. roles is the global catalog's Roles
+// map; it must define "trader" and "cha" (validated via validateRoles, the same
+// function NewRouter uses) so GetConsignmentByID can tie a caller's matched company
+// slot to the JWT role required for that slot.
 func NewService(
 	db *gorm.DB,
 	artifactRegistry *artifact.Registry,
@@ -49,7 +54,11 @@ func NewService(
 	companyService company.Service,
 	userService user.Service,
 	taskStore TaskStore,
-) *Service {
+	roles map[string]string,
+) (*Service, error) {
+	if err := validateRoles(roles); err != nil {
+		return nil, err
+	}
 	return &Service{
 		db:               db,
 		artifactRegistry: artifactRegistry,
@@ -57,7 +66,8 @@ func NewService(
 		companyService:   companyService,
 		userService:      userService,
 		taskStore:        taskStore,
-	}
+		roles:            roles,
+	}, nil
 }
 
 // RegisterWorkflowManager registers the workflow manager.
@@ -173,10 +183,16 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 }
 
 // GetConsignmentByID retrieves a consignment by its ID from the database, scoped to the
-// caller's company. callerCompanyID must be the consignment's trader or CHA company;
-// otherwise ErrAccessDenied is returned before the workflow engine or task store is touched,
-// so an unauthorized caller triggers no work beyond the single row read.
-func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerCompanyID string) (*DetailDTO, error) {
+// caller's company AND the JWT role tied to whichever slot that company matched: a caller
+// whose company is the trader company must also hold the "trader" role, and a caller whose
+// company is the CHA company must also hold the "cha" role. Matching a company alone is not
+// enough (#272) — e.g. a Trader-only user whose company happens to be the CHA company on some
+// other consignment must not be granted access through that slot. If a company is both the
+// trader and CHA company on the same row, holding either role is sufficient. callerRoles may
+// be nil; slices.Contains on a nil slice reports false, so a caller with no roles is denied,
+// never panics. Otherwise ErrAccessDenied is returned before the workflow engine or task store
+// is touched, so an unauthorized caller triggers no work beyond the single row read.
+func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerCompanyID string, callerRoles []string) (*DetailDTO, error) {
 	var consignment Consignment
 	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
 	if result.Error != nil {
@@ -186,14 +202,19 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
 	}
 
-	// Enforce company ownership on the same row we just read. The empty-callerCompanyID guard
-	// documents the invariant the check relies on (a resolved company always has a non-null id)
-	// and ensures an empty caller id can never match an unassigned (empty) CHA company.
+	// The empty-callerCompanyID guard documents the invariant the check relies on (a
+	// resolved company always has a non-null id) and ensures an empty caller id can never
+	// match an unassigned (empty) CHA company.
+	if callerCompanyID == "" {
+		return nil, ErrAccessDenied
+	}
 	chaCompanyID := ""
 	if consignment.CHACompanyID != nil {
 		chaCompanyID = *consignment.CHACompanyID
 	}
-	if callerCompanyID == "" || (callerCompanyID != consignment.TraderCompanyID && callerCompanyID != chaCompanyID) {
+	isTraderMatch := callerCompanyID == consignment.TraderCompanyID && slices.Contains(callerRoles, s.roles["trader"])
+	isCHAMatch := callerCompanyID == chaCompanyID && slices.Contains(callerRoles, s.roles["cha"])
+	if !isTraderMatch && !isCHAMatch {
 		return nil, ErrAccessDenied
 	}
 

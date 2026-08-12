@@ -187,7 +187,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	audit.InitializeGlobalAudit(auditClient)
 	recorder := nswaudit.NewRecorder(auditClient)
 
-	consignmentService := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store)
+	consignmentService, err := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles)
+	if err != nil {
+		_ = stopTask()
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to build consignment service: %w", err)
+	}
 	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
 	if err != nil {
 		_ = stopTask()
