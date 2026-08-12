@@ -5,7 +5,7 @@
       "name": "AgencyM2M",
       "description": "Role for agency machine-to-machine clients calling the NSW API",
       "ou": "default",
-      "resourceServer": "https://api.nsw-srilanka.local",
+      "resourceServer": "https://tnsw-api-staging.apps.sovecloud1.akaza.lk",
       "scopeSet": "m2mNsw"
     },
     {
@@ -13,7 +13,7 @@
       "name": "SLCE Webhook",
       "description": "Role for SLCE webhook clients",
       "ou": "default",
-      "resourceServer": "https://api.nsw-srilanka.local",
+      "resourceServer": "https://tnsw-api-staging.apps.sovecloud1.akaza.lk",
       "scopeSet": "slceWebhook"
     },
     {
@@ -21,7 +21,7 @@
       "name": "Payment Webhook",
       "description": "Role for Payment webhook clients",
       "ou": "default",
-      "resourceServer": "https://api.nsw-srilanka.local",
+      "resourceServer": "https://tnsw-api-staging.apps.sovecloud1.akaza.lk",
       "scopeSet": "paymentWebhook"
     }
   ]
