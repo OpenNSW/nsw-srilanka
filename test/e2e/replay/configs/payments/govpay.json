@@ -1,4 +1,9 @@
 {
   "id": "govpay",
-  "webhookPath": "/api/v1/payments/govpay/webhook"
+  "webhookPath": "/api/v1/payments/govpay/webhook",
+  "identity": {
+    "clientID": "GOVPAY_TO_NSW",
+    "roles": ["PaymentWebhookM2M"],
+    "scopes": ["nsw:payment-webhooks:validate", "nsw:payment-webhooks:process"]
+  }
 }

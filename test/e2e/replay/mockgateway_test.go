@@ -19,8 +19,9 @@ const gatewayPollInterval = 300 * time.Millisecond
 
 // mockGateway is a controllable stand-in for the GovPay payment gateway. GovPay
 // is an offline (INSTRUCTION-flow) gateway: NSW generates a TNSW reference and
-// the real gateway later confirms payment via a PUBLIC, unauthenticated webhook.
-// This mock simulates that webhook. It implements replay.PaymentGateway.
+// the real gateway later confirms payment via a webhook protected by an M2M
+// bearer token (see PaymentConfig.Identity / signedAuth.tokens). This mock
+// simulates that webhook. It implements replay.PaymentGateway.
 //
 // The reference is only rendered into the task's markdown view, so the mock
 // reads it from the payment store (GetByTaskID) rather than over HTTP.
