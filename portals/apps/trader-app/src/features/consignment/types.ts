@@ -83,6 +83,7 @@ export interface WorkflowNode {
   updatedAt: string
   workflowNodeTemplate: WorkflowNodeTemplate
   state: WorkflowNodeState
+  outcome?: string
   extendedState?: string
   depends_on: string[]
 }

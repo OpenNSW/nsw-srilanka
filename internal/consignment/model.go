@@ -112,6 +112,7 @@ type WorkflowNodeResponseDTO struct {
 	UpdatedAt            string                          `json:"updatedAt"`            // Timestamp of last node update
 	WorkflowNodeTemplate WorkflowNodeTemplateResponseDTO `json:"workflowNodeTemplate"` // Workflow node template details
 	State                WorkflowNodeState               `json:"state"`                // State of the workflow node
+	Outcome              string                          `json:"outcome,omitempty"`    // Officer review outcome when present (approve/reject/needs_more_info)
 }
 
 type WorkflowNodeState string

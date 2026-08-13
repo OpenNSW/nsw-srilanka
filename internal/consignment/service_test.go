@@ -484,16 +484,38 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 			RenderConfig: json.RawMessage(`{"title":"My Step"}`),
 		},
 		{TaskID: "t4", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
+		{
+			TaskID: "t5", TaskType: "EXTERNAL_REVIEW", State: "COMPLETED", ActiveTaskTemplateID: "officer-review",
+			CreatedAt: now, UpdatedAt: now,
+			Data: map[string]any{
+				"reviewerform": map[string]any{"review_outcome": "reject", "feedback": "blend sheet mismatch"},
+			},
+		},
 	}
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(tasks)
 
 	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID)
 	assert.NoError(t, err)
-	assert.Len(t, dtos, 3) // SYSTEM task filtered out
+	assert.Len(t, dtos, 4) // SYSTEM task filtered out
 	assert.Equal(t, WorkflowNodeStateCompleted, dtos[0].State)
 	assert.Equal(t, WorkflowNodeStateFailed, dtos[1].State)
 	assert.Equal(t, WorkflowNodeStateInProgress, dtos[2].State)
 	assert.Equal(t, "My Step", dtos[2].WorkflowNodeTemplate.Name)
+	assert.Equal(t, "reject", dtos[3].Outcome)
+	assert.Empty(t, dtos[0].Outcome)
+}
+
+func TestTaskReviewOutcome(t *testing.T) {
+	assert.Equal(t, "reject", taskReviewOutcome(map[string]any{
+		"reviewerform": map[string]any{"review_outcome": "reject"},
+	}))
+	assert.Equal(t, "approve", taskReviewOutcome(map[string]any{
+		"review_outcome": "approve",
+	}))
+	assert.Equal(t, "", taskReviewOutcome(map[string]any{
+		"userform": map[string]any{"cusdec_number": "C1"},
+	}))
+	assert.Equal(t, "", taskReviewOutcome(nil))
 }
 
 func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {

@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
 import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
-import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
+import { CheckCircledIcon, ClockIcon, CrossCircledIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
 
 const sortByUpdatedAt = (a: WorkflowNode, b: WorkflowNode) => b.updatedAt.localeCompare(a.updatedAt)
+
+// Use outcome only — a FINISHED consignment may still include FAILED steps.
+const isOfficerRejectedStep = (step: WorkflowNode) => step.outcome?.toLowerCase() === 'reject'
 
 interface ActionListViewProps {
   steps: WorkflowNode[]
@@ -52,6 +55,9 @@ export function ActionListView({
   )
 
   const isConsignmentTerminal = consignmentState === 'FINISHED' || consignmentState === 'FAILED'
+  const isRejected =
+    consignmentState === 'FAILED' || (isConsignmentTerminal && filteredSteps.some(isOfficerRejectedStep))
+  const isFinished = isConsignmentTerminal && !isRejected
 
   const displaySteps = useMemo(() => {
     if (isConsignmentTerminal) {
@@ -73,15 +79,49 @@ export function ActionListView({
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-0">
         {isConsignmentTerminal ? (
           <Box mb="6">
+            {isRejected ? (
+              <Box
+                py="6"
+                px="6"
+                mb="6"
+                className="text-center bg-error-subtle/50 rounded-xl border border-error-subtle shadow-sm relative"
+              >
+                <div className="w-14 h-14 bg-error-subtle rounded-full flex items-center justify-center mx-auto mb-3 border border-error-subtle">
+                  <CrossCircledIcon className="w-8 h-8 text-error-strong" />
+                </div>
+                <Heading size="4" color="red" mb="2">
+                  {t('workflow.consignmentRejected.title')}
+                </Heading>
+                <Text size="2" color="red" className="opacity-90">
+                  {t('workflow.consignmentRejected.description')}
+                </Text>
+              </Box>
+            ) : (
+              <Box
+                py="6"
+                px="6"
+                mb="6"
+                className="text-center bg-success-subtle/50 rounded-xl border border-success-subtle shadow-sm relative"
+              >
+                <div className="w-14 h-14 bg-success-subtle rounded-full flex items-center justify-center mx-auto mb-3 border border-success-subtle">
+                  <CheckCircledIcon className="w-8 h-8 text-success-strong" />
+                </div>
+                <Heading size="4" color="green" mb="2">
+                  {t('workflow.processComplete.title')}
+                </Heading>
+                <Text size="2" color="green" className="opacity-90">
+                  {t('workflow.processComplete.description')}
+                </Text>
+              </Box>
+            )}
+
             <Flex align="center" justify="between" my="4" px="3">
               <Flex align="center" gap="2">
-                <div
-                  className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-success' : 'bg-error'} rounded-full`}
-                />
-                <Heading size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
-                  {t('workflow.taskHistory')}
+                <div className={`w-1.5 h-5 ${isFinished ? 'bg-success' : 'bg-error'} rounded-full`} />
+                <Heading size="4" color={isFinished ? 'green' : 'red'} weight="bold">
+                  {t('workflow.processHistory')}
                 </Heading>
-                <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
+                <Badge color={isFinished ? 'green' : 'red'} variant="solid" radius="full">
                   {displaySteps.length}
                 </Badge>
               </Flex>

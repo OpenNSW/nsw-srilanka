@@ -437,10 +437,32 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 				Name: taskDisplayName(t.ActiveTaskTemplateID, t.RenderConfig),
 				Type: t.TaskType,
 			},
-			State: nodeState,
+			State:   nodeState,
+			Outcome: taskReviewOutcome(t.Data),
 		})
 	}
 	return dtos, nil
+}
+
+// taskReviewOutcome extracts review_outcome from task data when present
+// (top-level or nested under an output namespace such as reviewerform).
+func taskReviewOutcome(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	if outcome, ok := data["review_outcome"].(string); ok && outcome != "" {
+		return outcome
+	}
+	for _, v := range data {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		if outcome, ok := m["review_outcome"].(string); ok && outcome != "" {
+			return outcome
+		}
+	}
+	return ""
 }
 
 // taskDisplayName extracts the human-readable title from a task's render config root level,

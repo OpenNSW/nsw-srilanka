@@ -85,7 +85,13 @@ const statusStyles: Record<string, string> = {
 export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
+  const isOfficerRejected = step.outcome?.toLowerCase() === 'reject'
+  const config = isOfficerRejected
+    ? statusConfig.FAILED
+    : statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
+  const statusLabel = isOfficerRejected
+    ? t('workflow.status.rejected')
+    : t(`workflow.status.${STATUS_KEYS[step.state]}`)
 
   const handleOpen = () => void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
 
@@ -129,7 +135,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
                 <Badge color={config.color} variant="soft" size="1">
                   <Flex align="center" gap="1">
                     {config.icon}
-                    {t(`workflow.status.${STATUS_KEYS[step.state]}`)}
+                    {statusLabel}
                   </Flex>
                 </Badge>
               </Flex>
