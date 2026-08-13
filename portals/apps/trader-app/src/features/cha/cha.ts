@@ -1,5 +1,6 @@
 import { http } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
+import type { PaginatedResponse } from '@/services/types/common'
 import type { SearchService } from '@opennsw/jsonforms-renderers'
 
 const LIMIT = 20
@@ -10,15 +11,10 @@ interface CompanySummary {
   hasCha: boolean
 }
 
-interface CompanyListResult {
-  items: CompanySummary[]
-  total: number
-}
-
 export const chaSearchService: SearchService = {
   async search({ query, cursor, signal }) {
     const offset = (cursor as number) ?? 0
-    const { data } = await http.request<CompanyListResult>({
+    const { data } = await http.request<PaginatedResponse<CompanySummary>>({
       url: `${API_BASE_URL}/api/v1/companies`,
       params: { has_cha: true, name: query || undefined, offset, limit: LIMIT },
       attachToken: true,
