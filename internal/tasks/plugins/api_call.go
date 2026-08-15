@@ -1,8 +1,10 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/OpenNSW/core/remote"
@@ -22,6 +24,35 @@ type Interpreter interface {
 	// transport/HTTP error (nil on success); resp is the decoded response body,
 	// which the remote client populates even on a 4xx/5xx JSON error.
 	Interpret(callErr error, resp map[string]any) (accepted bool, captured map[string]any)
+}
+
+// MultipartInterpreter is implemented by interpreters whose service expects a
+// multipart/form-data body — a JSON document alongside file uploads — rather
+// than a JSON body. The plugin routes such an interpreter through the
+// multipart transport and never calls BuildRequest for it.
+//
+// BuildParts takes a context because assembling the body may need to fetch the
+// attachments from storage. An error is passed to Interpret as callErr, so a
+// failure to assemble the request is reported through the same path as a
+// failure to send it.
+type MultipartInterpreter interface {
+	Interpreter
+
+	BuildParts(ctx context.Context, inputs map[string]any) ([]remote.Part, error)
+}
+
+// FileFetcher retrieves an uploaded file's content by storage key, returning
+// the content and its MIME type. It is the slice of the storage service an
+// interpreter needs to attach a trader's uploads to an outbound call.
+//
+// Declared here rather than taken as *storage.Service so registration stays
+// testable, and so no single domain owns what any file-attaching interpreter
+// needs. Interpreters declare their own matching interface rather than
+// importing this one — they are imported by this package, so depending back on
+// it would be a cycle; Go's structural typing means the same value satisfies
+// both without the two being coupled.
+type FileFetcher interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 }
 
 // passthroughInterpreter sends the "payload" input as-is and treats any
@@ -82,12 +113,16 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return fmt.Errorf("api_call: service_id and path are required")
 	}
 
-	body := p.interpreter.BuildRequest(ctx.Inputs)
 	ctx.Record.State = "DISPATCHED"
 
 	var resp map[string]any
-	req := remote.Request{Method: "POST", Path: cfg.Path, Body: body}
-	callErr := p.manager.Call(ctx.Context, cfg.ServiceID, req, &resp)
+	var callErr error
+	if mp, ok := p.interpreter.(MultipartInterpreter); ok {
+		callErr = p.callMultipart(ctx, mp, cfg, &resp)
+	} else {
+		req := remote.Request{Method: "POST", Path: cfg.Path, Body: p.interpreter.BuildRequest(ctx.Inputs)}
+		callErr = p.manager.Call(ctx.Context, cfg.ServiceID, req, &resp)
+	}
 
 	accepted, out := p.interpreter.Interpret(callErr, resp)
 	if out == nil {
@@ -106,4 +141,20 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		slog.Warn("api_call: request not accepted", "taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "callErr", callErr, "result", out)
 	}
 	return nil
+}
+
+// callMultipart assembles and sends a multipart/form-data submission. A
+// failure to assemble the body is returned rather than sent, so the
+// interpreter reports it to the trader through the same path as a rejection —
+// nothing reaches the service in that case.
+func (p *APICallPlugin) callMultipart(ctx pluginContext, mp MultipartInterpreter, cfg apiCallConfig, resp *map[string]any) error {
+	parts, err := mp.BuildParts(ctx.Context, ctx.Inputs)
+	if err != nil {
+		return err
+	}
+	return p.manager.CallMultipart(ctx.Context, cfg.ServiceID, remote.MultipartRequest{
+		Method: "POST",
+		Path:   cfg.Path,
+		Parts:  parts,
+	}, resp)
 }
