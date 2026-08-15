@@ -214,7 +214,7 @@ func (s *webhookService) ProcessEvent(ctx context.Context, req CusdecEventReques
 			"warranting_status": "WARRANTED",
 		}
 	case "EXPORT_RELEASED":
-		taskTemplateID = "customs-wait-release"
+		taskTemplateID = "customs-wait-export-release"
 		targetStatus = CusdecStatusReleased
 		payload = map[string]any{
 			"__command":      "submit",
