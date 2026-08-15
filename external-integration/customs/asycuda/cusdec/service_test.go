@@ -89,6 +89,12 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 				Serial: "C",
 				Number: 9876,
 			},
+			// §6.2 returns the assessed duty alongside the reference; its total
+			// is what the trader is asked to settle on the payment step.
+			Taxes: []TaxEntry{
+				{Code: "tax1", Rate: 1, Amount: 222},
+				{Code: "tax2", Rate: 1, Amount: 1022},
+			},
 		},
 	}
 
@@ -104,7 +110,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		"__command":      "submit",
 		"review_outcome": "approve",
 		"cusdec_number":  "COL/2026/C/9876",
-		"amount_to_pay":  0,
+		"amount_to_pay":  float64(1244),
 	}
 	completer.On("CompleteTaskStep", mock.Anything, "task-abc", expectedPayload).Return(nil)
 
@@ -150,6 +156,9 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 				Serial: "C",
 				Number: 9876,
 			},
+			AmountPaid:    2035.00,
+			Currency:      "LKR",
+			BankReference: "84004328",
 		},
 	}
 
@@ -164,6 +173,11 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	expectedPayload := map[string]any{
 		"__command":      "submit",
 		"payment_status": "PAID",
+		// §6.5.1 fields reach the trader's receipt, so they must survive the
+		// hop from callback to task rather than being parsed and dropped.
+		"amount_paid":    2035.00,
+		"currency":       "LKR",
+		"bank_reference": "84004328",
 	}
 	completer.On("CompleteTaskStep", mock.Anything, "task-payment-123", expectedPayload).Return(nil)
 
@@ -176,7 +190,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
-func TestProcessEvent_DuplicateCallback_WorkflowFinished(t *testing.T) {
+func TestProcessEvent_DuplicateEventIsAcknowledgedWithoutAction(t *testing.T) {
 	ctx := context.Background()
 	db, sqlMock := setupTestDB(t)
 
@@ -209,12 +223,12 @@ func TestProcessEvent_DuplicateCallback_WorkflowFinished(t *testing.T) {
 		},
 	}
 
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", "edge-123", 1).
-		WillReturnError(gorm.ErrRecordNotFound)
-
 	err := service.ProcessEvent(ctx, req)
-	require.NoError(t, err)
+
+	// The declaration is already PAID, so this PAYMENT_CONFIRMED has been
+	// applied before: acknowledged without touching the declaration or its
+	// workflow, and without so much as a lookup.
+	require.ErrorIs(t, err, ErrDuplicateEvent)
 
 	assert.False(t, repo.updateCalled)
 	completer.AssertExpectations(t)
@@ -265,6 +279,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 	expectedPayload := map[string]any{
 		"__command":         "submit",
 		"warranting_status": "WARRANTED",
+		"release_order_no":  "",
 	}
 	completer.On("CompleteTaskStep", mock.Anything, "task-warranting-123", expectedPayload).Return(nil)
 
@@ -307,6 +322,9 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 				Serial: "C",
 				Number: 9876,
 			},
+			VesselName:    "EVER GIVEN",
+			VoyageNo:      "023W 08/01/2025",
+			PortOfLoading: "LKCMB",
 		},
 	}
 
@@ -319,8 +337,11 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-release-123"))
 
 	expectedPayload := map[string]any{
-		"__command":      "submit",
-		"release_status": "RELEASED",
+		"__command":       "submit",
+		"release_status":  "RELEASED",
+		"vessel_name":     "EVER GIVEN",
+		"voyage_no":       "023W 08/01/2025",
+		"port_of_loading": "LKCMB",
 	}
 	completer.On("CompleteTaskStep", mock.Anything, "task-release-123", expectedPayload).Return(nil)
 
