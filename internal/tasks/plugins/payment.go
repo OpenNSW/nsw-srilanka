@@ -20,7 +20,9 @@ type PaymentPlugin struct {
 
 // NewPaymentPlugin creates a new PaymentPlugin.
 func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
-	return &PaymentPlugin{paymentService: paymentService}
+	return &PaymentPlugin{
+		paymentService: paymentService,
+	}
 }
 
 type paymentConfig struct {
