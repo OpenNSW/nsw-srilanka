@@ -326,3 +326,45 @@ func TestGovPay_NewGovPayGatewayFactory_WiresResolver(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrIdentityNotConfigured)
 }
+
+// TestValidateMetadata covers the check that keeps an undeclared fee from ever
+// reaching a reference number: the callbacks above compare the posted identity
+// against what the fee declared, so a fee that declared nothing is unsettleable
+// and must be refused at checkout rather than at settlement.
+func TestValidateMetadata(t *testing.T) {
+	g := &GovPayGateway{}
+
+	t.Run("both ids declared", func(t *testing.T) {
+		require.NoError(t, g.ValidateMetadata(map[string]string{
+			MetadataSubInstID: wantSubInst,
+			MetadataServiceID: wantService,
+		}))
+	})
+
+	t.Run("names both keys when neither is declared", func(t *testing.T) {
+		err := g.ValidateMetadata(map[string]string{"task_id": "t1"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+		assert.Contains(t, err.Error(), MetadataSubInstID)
+		assert.Contains(t, err.Error(), MetadataServiceID)
+	})
+
+	t.Run("rejects a partly declared fee", func(t *testing.T) {
+		err := g.ValidateMetadata(map[string]string{MetadataSubInstID: wantSubInst})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("rejects whitespace as undeclared", func(t *testing.T) {
+		err := g.ValidateMetadata(map[string]string{
+			MetadataSubInstID: "  ",
+			MetadataServiceID: wantService,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("rejects nil metadata", func(t *testing.T) {
+		require.Error(t, g.ValidateMetadata(nil))
+	})
+}

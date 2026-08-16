@@ -16,23 +16,11 @@ import (
 // the task record state to PENDING_PAYMENT.
 type PaymentPlugin struct {
 	paymentService payment.PaymentService
-
-	// requiredFeeMetadata lists, per payment method id, the gateway_metadata
-	// keys a fee must declare. Supplied by the caller that wires the gateways,
-	// so this plugin needs no knowledge of any of them.
-	requiredFeeMetadata map[string][]string
 }
 
 // NewPaymentPlugin creates a new PaymentPlugin.
-//
-// requiredFeeMetadata declares the gateway_metadata keys each payment method
-// cannot operate without; methods absent from the map require none. Keeping it
-// a parameter is what lets a new gateway be added without touching this file.
-func NewPaymentPlugin(paymentService payment.PaymentService, requiredFeeMetadata map[string][]string) *PaymentPlugin {
-	return &PaymentPlugin{
-		paymentService:      paymentService,
-		requiredFeeMetadata: requiredFeeMetadata,
-	}
+func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
+	return &PaymentPlugin{paymentService: paymentService}
 }
 
 type paymentConfig struct {
@@ -46,10 +34,10 @@ type paymentConfig struct {
 	// time — by then the artifact that declared them is out of reach.
 	//
 	// This plugin attaches no meaning to the keys; each gateway defines its
-	// own. GovPay+, for instance, expects govpay_subinst_id and
-	// govpay_service_id, the ids identifying the service a fee is registered
-	// under. Which keys a gateway requires is declared where the gateways are
-	// wired, not here (see PaymentPlugin.requiredFeeMetadata).
+	// own, and each gateway enforces its own requirements via
+	// corepayment.PaymentGateway.ValidateMetadata — which the payment service
+	// calls before it persists anything, so a fee that omitted a required key
+	// fails on this Execute rather than at callback time.
 	GatewayMetadata map[string]string `json:"gateway_metadata"`
 }
 
@@ -81,10 +69,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		selectedMethod = "lankapay" // Default fallback
 	}
 
-	if err := p.requireFeeMetadata(selectedMethod, cfg); err != nil {
-		return err
-	}
-
 	// 2. Transition task state to PENDING_PAYMENT
 	ctx.Record.State = "PENDING_PAYMENT"
 
@@ -97,7 +81,10 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// 3. Create the checkout session via core/payment. The selected gateway is
 	// passed as GatewayID; the service generates the TNSW- reference and (for
 	// instruction-flow gateways) returns the instructions to display. An unknown
-	// gateway surfaces here as an error.
+	// gateway surfaces here as an error, as does a fee whose gateway_metadata
+	// omits something the selected gateway requires — the service asks the
+	// gateway to vet the metadata before it persists anything, so the task_code
+	// wrapped in below still names the artifact that has to be fixed.
 	resp, err := p.paymentService.CreateCheckoutSession(ctx.Context, payment.CreateCheckoutRequest{
 		GatewayID: selectedMethod,
 		Amount:    amount,
@@ -106,7 +93,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		Metadata:  buildPaymentMetadata(ctx.Record.TaskID, cfg, selectedMethod),
 	})
 	if err != nil {
-		return fmt.Errorf("payment: failed to create checkout session: %w", err)
+		return fmt.Errorf("payment: failed to create checkout session (task_code %q): %w", cfg.TaskCode, err)
 	}
 
 	slog.Info("task payment: checkout session registered",
@@ -141,29 +128,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 
 	// Suspend the workflow until LankaPay/webhook callback arrives
 	return ErrSuspended
-}
-
-// requireFeeMetadata enforces the gateway_metadata keys the selected gateway
-// cannot operate without.
-//
-// A gateway that checks a value on its callbacks can never settle a fee that
-// omitted it, so the omission is caught here — while the artifact responsible
-// is still named in the error — rather than at callback time, when it is long
-// out of reach. Which keys matter is supplied at construction, so this plugin
-// stays ignorant of any particular gateway.
-func (p *PaymentPlugin) requireFeeMetadata(selectedMethod string, cfg paymentConfig) error {
-	missing := make([]string, 0, len(p.requiredFeeMetadata[selectedMethod]))
-	for _, key := range p.requiredFeeMetadata[selectedMethod] {
-		if strings.TrimSpace(cfg.GatewayMetadata[key]) == "" {
-			missing = append(missing, key)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf(
-			"payment: plugin_properties.gateway_metadata is missing %s, required for %s payments (task_code %q)",
-			strings.Join(missing, " and "), selectedMethod, cfg.TaskCode)
-	}
-	return nil
 }
 
 // buildPaymentMetadata assembles the gateway metadata persisted with the

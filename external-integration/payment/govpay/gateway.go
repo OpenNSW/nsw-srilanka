@@ -7,6 +7,7 @@ package govpay
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	corepayment "github.com/OpenNSW/core/payment"
 )
@@ -50,6 +51,25 @@ func NewGovPayGatewayFactory(resolveIdentity IdentityResolver) corepayment.Facto
 
 func (g *GovPayGateway) GetFlowType() corepayment.InteractionType {
 	return corepayment.FlowTypeInstruction
+}
+
+// ValidateMetadata rejects a fee that did not declare the GovPay+ identity it
+// is registered under.
+//
+// Both callbacks check the posted sub-institution and service ids against what
+// the fee declared, so a fee missing either could never be settled — it would
+// fail at presentment, by which time the artifact responsible is out of reach.
+// Enforcing it here means the misconfiguration surfaces the first time the fee
+// is charged, before any reference number or transaction row exists.
+//
+// Whether the declared ids are the *right* ones is a separate question,
+// answered on the callback paths against the values GovPay+ actually posts.
+func (g *GovPayGateway) ValidateMetadata(metadata map[string]string) error {
+	if identityFromMetadata(metadata).complete() {
+		return nil
+	}
+	return fmt.Errorf("%w: gateway_metadata must declare %s and %s",
+		ErrIdentityNotConfigured, MetadataSubInstID, MetadataServiceID)
 }
 
 func (g *GovPayGateway) CreateSession(ctx context.Context, req corepayment.SessionRequest) (*corepayment.SessionResponse, error) {
