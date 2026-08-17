@@ -35,10 +35,13 @@
   --color-info: #2563eb;
   --color-info-strong: #1e40af;
 
-  /* Neutrals / surfaces */
-  --color-background: #ffffff;
-  --color-surface: #f8fafc;
-  --color-surface-muted: #f1f5f9;
+  /* Neutrals / surfaces. NOTE: renamed from --color-background/-surface to
+   * avoid a name collision with Radix Themes' own --color-background and
+   * --color-surface variables (defined on .radix-themes), which were
+   * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted. */
+  --color-app-bg: #f8fafc;
+  --color-app-surface: #ffffff;
+  --color-app-surface-muted: #f1f5f9;
 
   /* Neutrals / text */
   --color-foreground: #0f172a;

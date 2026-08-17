@@ -203,7 +203,7 @@ export function ConsignmentDetailScreen() {
             {t('consignments.detail.back')}
           </Button>
         </div>
-        <div className="bg-background rounded-lg shadow p-8 text-center">
+        <div className="bg-app-surface rounded-lg shadow p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
             {errorTitle}
           </Text>
@@ -287,10 +287,10 @@ export function ConsignmentDetailScreen() {
         </div>
       </div>
 
-      <div className="bg-background rounded-lg shadow flex flex-col flex-1 min-h-0 relative">
+      <div className="bg-app-surface rounded-lg shadow flex flex-col flex-1 min-h-0 relative">
         {refreshing && (
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
-            <div className="flex items-center gap-3 bg-background px-6 py-4 rounded-lg shadow-lg">
+          <div className="absolute inset-0 bg-app-surface/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
+            <div className="flex items-center gap-3 bg-app-surface px-6 py-4 rounded-lg shadow-lg">
               <Spinner size="3" />
               <Text size="3" weight="medium" color="gray">
                 {t('consignments.detail.refreshing')}
