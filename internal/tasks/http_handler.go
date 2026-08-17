@@ -41,7 +41,7 @@ type HTTPHandler struct {
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
 	AuthzCatalog    taskauthz.Catalog
-	Audit           *nswaudit.Recorder
+	Audit           nswaudit.Auditor
 	MaxRequestBytes int64
 }
 
@@ -50,7 +50,7 @@ func NewHTTPHandler(
 	store TaskFetcher,
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
-	audit *nswaudit.Recorder,
+	audit nswaudit.Auditor,
 	maxRequestBytes int64,
 ) *HTTPHandler {
 	return &HTTPHandler{
@@ -104,7 +104,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		// indistinguishable from a task that does not exist and cannot be used to
 		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
 		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
-		h.Audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventTask,
 			Action:     nswaudit.ActionRead,
 			TargetType: nswaudit.TargetTask,
@@ -144,7 +144,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	var req completeTaskStepRequest
 	fail := func(status int, message string, err error) {
 		slog.ErrorContext(ctx, "tasks: failed to parse request", "taskId", taskID, "error", err)
-		h.Audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventTask,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetTask,
@@ -226,7 +226,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 			httpStatus = http.StatusInternalServerError
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
-		h.Audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventTask,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetTask,
@@ -241,7 +241,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.Audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventTask,
 		Action:     nswaudit.ActionUpdate,
 		TargetType: nswaudit.TargetTask,
@@ -253,6 +253,12 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		},
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) auditEvent(ctx context.Context, e nswaudit.Event) {
+	if h.Audit != nil {
+		h.Audit.Audit(ctx, e)
+	}
 }
 
 // completeTaskStepRequest is the JSON envelope HandleCompleteTaskStep accepts:
