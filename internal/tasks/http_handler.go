@@ -37,11 +37,11 @@ type HTTPHandler struct {
 	Store           TaskFetcher
 	Assembler       *zoneview.ZoneViewAssembler
 	MaxRequestBytes int64
-	audit           *nswaudit.Recorder
+	audit           nswaudit.Auditor
 }
 
-func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64, recorder *nswaudit.Recorder) *HTTPHandler {
-	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes, audit: recorder}
+func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64, auditor nswaudit.Auditor) *HTTPHandler {
+	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes, audit: auditor}
 }
 
 // HandleGetTask returns the ZoneView payload for a single task.
@@ -97,7 +97,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		if auditCommand == "" {
 			auditCommand = pathCommand
 		}
-		h.audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventTask,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetTask,
@@ -129,7 +129,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 			httpStatus = http.StatusInternalServerError
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
-		h.audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventTask,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetTask,
@@ -144,7 +144,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.audit.Record(ctx, nswaudit.Event{
+	h.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventTask,
 		Action:     nswaudit.ActionUpdate,
 		TargetType: nswaudit.TargetTask,
@@ -156,6 +156,12 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		},
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) auditEvent(ctx context.Context, e nswaudit.Event) {
+	if h.audit != nil {
+		h.audit.Audit(ctx, e)
+	}
 }
 
 // parseCompleteTaskStepRequest extracts and validates the command and payload from either the URL path or the JSON body.

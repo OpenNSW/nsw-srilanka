@@ -277,11 +277,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
-	paymentHandler := nswpayment.NewAuditedHandler(payment.NewHTTPHandler(paymentService), recorder)
+	paymentService.SetAuditor(nswpayment.NewAuditAdapter(recorder))
+	paymentHandler := payment.NewHTTPHandler(paymentService)
 	// The storage driver and service behind this handler are built in Stage 2 —
 	// task plugins that attach uploaded files to an outbound call read through
 	// the service, so it has to exist before the task stack (Stage 4).
-	storageHandler := storagesvc.NewAuditedHandler(storage.NewHTTPHandler(storageService), recorder)
+	storageService.Auditor = storagesvc.NewAuditAdapter(recorder)
+	storageHandler := storage.NewHTTPHandler(storageService)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes, recorder)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
