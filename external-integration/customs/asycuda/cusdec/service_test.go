@@ -315,7 +315,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-123", "customs-wait-release", "QUEUED_EXTERNALLY", 1).
+		WithArgs("parent-wf-123", "customs-wait-export-release", "QUEUED_EXTERNALLY", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-release-123"))
 
 	expectedPayload := map[string]any{
