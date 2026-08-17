@@ -8,8 +8,9 @@ import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { RoleProvider } from './services/RoleContext'
-import { UploadProvider } from '@opennsw/jsonforms-renderers'
+import { SearchServiceProvider, UploadProvider } from '@opennsw/jsonforms-renderers'
 import { uploadFile, getDownloadUrl } from './services/storage'
+import { searchServices } from './services/searchService'
 import { useAuthContext } from './hooks/useAuthContext'
 import { UnauthorizedScreen } from './screens/UnauthorizedScreen.tsx'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
@@ -18,9 +19,11 @@ import { useEffect } from 'react'
 
 function UploadWrapper({ children }: { children: ReactNode }) {
   return (
-    <UploadProvider onUpload={(file) => uploadFile(file)} getDownloadUrl={(key) => getDownloadUrl(key)}>
-      {children}
-    </UploadProvider>
+    <SearchServiceProvider services={searchServices}>
+      <UploadProvider onUpload={(file) => uploadFile(file)} getDownloadUrl={(key) => getDownloadUrl(key)}>
+        {children}
+      </UploadProvider>
+    </SearchServiceProvider>
   )
 }
 

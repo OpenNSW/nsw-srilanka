@@ -24,8 +24,8 @@ importers:
         specifier: ^3.8.0
         version: 3.8.0(@jsonforms/core@3.8.0)(react@19.2.7)
       '@opennsw/jsonforms-renderers':
-        specifier: ^0.3.1
-        version: 0.3.1(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.3.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^0.4.0
+        version: 0.4.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.3.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-icons':
         specifier: ^1.3.2
         version: 1.3.2(react@19.2.7)
@@ -300,8 +300,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@opennsw/jsonforms-renderers@0.3.1':
-    resolution: {integrity: sha512-Megua+I9JsfpYbp4zmo1YjOsGOMbLKzO90tIkqxTobtc0MdXqNnRvm8oYWYk5rj82d/E/uWfaR2sKWS57Q/Ljw==}
+  '@opennsw/jsonforms-renderers@0.4.0':
+    resolution: {integrity: sha512-bI+3wGeKEMKgVHLkiPn2jy0dAJNx8ksWzoA5MW7vZQEZFPa5yTx7f0gVK+pEyGL3E8CxXI0aNEdz9y0Op+U7fQ==}
     peerDependencies:
       '@jsonforms/core': ^3.2.1
       '@jsonforms/react': ^3.2.1
@@ -2640,7 +2640,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@opennsw/jsonforms-renderers@0.3.1(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.3.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@opennsw/jsonforms-renderers@0.4.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.2.7))(@radix-ui/react-icons@1.3.2(react@19.2.7))(@radix-ui/themes@3.3.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@jsonforms/core': 3.8.0
       '@jsonforms/react': 3.8.0(@jsonforms/core@3.8.0)(react@19.2.7)
