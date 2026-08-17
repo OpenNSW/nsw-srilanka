@@ -1,19 +1,55 @@
 package tasks
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
+
+// mockAuditRecorder implements nswaudit.Auditor and collects events for assertions.
+type mockAuditRecorder struct {
+	events []nswaudit.Event
+}
+
+func (m *mockAuditRecorder) Audit(_ context.Context, e nswaudit.Event) {
+	m.events = append(m.events, e)
+}
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, v, nil)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
 	}
+}
+
+func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
+	auditor := &mockAuditRecorder{}
+	handler := NewHTTPHandler(nil, nil, nil, 1024, auditor)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/commands/approve", strings.NewReader(`{invalid`))
+	req.SetPathValue("id", "task-123")
+	req.SetPathValue("command", "approve")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Len(t, auditor.events, 1)
+	event := auditor.events[0]
+	assert.Equal(t, nswaudit.EventTask, event.EventType)
+	assert.True(t, event.Failure)
+	assert.Equal(t, "task-123", event.TargetID)
+	assert.Equal(t, "approve", event.Metadata["command"])
+	assert.Equal(t, http.StatusBadRequest, event.Metadata["status"])
 }
 
 func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {
