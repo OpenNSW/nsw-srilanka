@@ -240,7 +240,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	storageService := storage.NewService(storageDriver)
-	storageHandler := storagesvc.NewAuditedHandler(storage.NewHTTPHandler(storageService), recorder)
+	storageService.Auditor = storagesvc.NewAuditAdapter(recorder)
+	storageHandler := storage.NewHTTPHandler(storageService)
 
 	// -------------------------------------------------------------------
 	// Stage 7: Identity Provider (IDP) Authentication Manager
@@ -278,7 +279,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
-	paymentHandler := nswpayment.NewAuditedHandler(payment.NewHTTPHandler(paymentService), recorder)
+	paymentService.SetAuditor(nswpayment.NewAuditAdapter(recorder))
+	paymentHandler := payment.NewHTTPHandler(paymentService)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes, recorder)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.

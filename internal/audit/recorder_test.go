@@ -68,7 +68,7 @@ func TestRecorder_Record_Member(t *testing.T) {
 	ctx := context.WithValue(context.Background(), authn.AuthContextKey, userCtx)
 	ctx = trace.ContextWithTraceID(ctx, "trace-1")
 
-	recorder.Record(ctx, Event{
+	recorder.Audit(ctx, Event{
 		EventType:  EventConsignment,
 		Action:     ActionCreate,
 		TargetType: TargetConsignment,
@@ -108,7 +108,7 @@ func TestRecorder_Record_Admin(t *testing.T) {
 		},
 	}
 	ctx := context.WithValue(context.Background(), authn.AuthContextKey, adminCtx)
-	recorder.Record(ctx, Event{
+	recorder.Audit(ctx, Event{
 		EventType:  EventConsignment,
 		Action:     ActionCreate,
 		TargetType: TargetConsignment,
@@ -139,7 +139,7 @@ func TestRecorder_Record_Service(t *testing.T) {
 		},
 	}
 	ctx := context.WithValue(context.Background(), authn.AuthContextKey, clientCtx)
-	recorder.Record(ctx, Event{
+	recorder.Audit(ctx, Event{
 		EventType:  EventTask,
 		Action:     ActionUpdate,
 		TargetType: TargetTask,
@@ -162,7 +162,7 @@ func TestRecorder_Record_System(t *testing.T) {
 	client := &mockAuditor{enabled: true}
 	recorder := NewRecorder(client)
 
-	recorder.Record(context.Background(), Event{
+	recorder.Audit(context.Background(), Event{
 		EventType:  EventStorage,
 		Action:     ActionDelete,
 		TargetType: TargetStorage,
@@ -185,7 +185,7 @@ func TestRecorder_Disabled(t *testing.T) {
 	client := &mockAuditor{enabled: false}
 	recorder := NewRecorder(client)
 
-	recorder.Record(context.Background(), Event{
+	recorder.Audit(context.Background(), Event{
 		EventType:  EventConsignment,
 		Action:     ActionCreate,
 		TargetType: TargetConsignment,
