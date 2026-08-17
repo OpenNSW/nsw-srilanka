@@ -1,0 +1,95 @@
+issuers:
+  - issuer: RTA
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "RTA-APP-"
+          - type: list
+            list: office_location
+            param: officeCode
+          - type: literal
+            value: "-"
+          - type: date
+            layout: "20060102"
+          - type: literal
+            value: "-"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}:{officeCode}:{yyyyMMdd}"
+            padding: 6
+
+      - idType: permit_id
+        segments:
+          - type: literal
+            value: "RTA-PMT-"
+          - type: list
+            list: office_location
+            param: officeCode
+          - type: literal
+            value: "-"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}:{officeCode}"
+            padding: 8
+
+  - issuer: FCAU
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "034/"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}"
+            padding: 5
+
+  - issuer: NPQS
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "045/"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}"
+            padding: 5
+
+  - issuer: CDA
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "012/"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}"
+            padding: 5
+
+  - issuer: SLPA
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "088/"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}"
+            padding: 5
+
+  - issuer: CUSTOMS
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "055/"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}"
+            padding: 5
+
+  - issuer: IRD
+    formats:
+      - idType: application_id
+        segments:
+          - type: literal
+            value: "066/"
+          - type: sequence
+            scopeKey: "{issuer}:{idType}"
+            padding: 5
+
+lists:
+  office_location: [COL, GAL, KAN, KAT, JAF]

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -38,6 +39,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/autogen"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -47,6 +49,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	taskautogen "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/autogen"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
@@ -621,6 +624,18 @@ func initTask(
 		Clients: globalCatalog.Clients,
 	}); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
+	}
+
+	refRegistry := autogen.NewRegistry()
+	if fmtData, err := os.ReadFile("configs/reference_formats.yaml"); err == nil {
+		if err := refRegistry.LoadFromYAML(fmtData); err != nil {
+			return nil, nil, fmt.Errorf("load reference_formats.yaml: %w", err)
+		}
+	}
+
+	refSeqService := autogen.NewSequenceService(db, refRegistry)
+	if err := taskautogen.Register(extensionsRegistry, refSeqService); err != nil {
+		return nil, nil, fmt.Errorf("register autogen extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
 

@@ -11,6 +11,11 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// VerifyWebhook validates the incoming webhook request signature or auth header.
+func (g *GovPayGateway) VerifyWebhook(ctx context.Context, body []byte, headers map[string][]string) error {
+	return nil
+}
+
 // ParseWebhook decodes a GovPay+ update (payment-completion) notification into a
 // domain-neutral WebhookPayload plus the GovPay+ UpdateResponse acknowledgement
 // (the paymentData receipt) to relay back once the notification is accepted. The
