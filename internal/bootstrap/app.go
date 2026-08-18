@@ -150,6 +150,16 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyService := company.NewService(db)
 	userProfileService := user.NewService(db)
 
+	// Storage is built here rather than alongside its HTTP handler further
+	// down: task plugins that attach uploaded files to an outbound call read
+	// through this service, so it has to exist before the task stack (Stage 4).
+	storageDriver, err := storage.NewStorageFromConfig(ctx, cfg.Storage)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to initialize storage: %w", err)
+	}
+	storageService := storage.NewService(storageDriver)
+
 	// -------------------------------------------------------------------
 	// Stage 3: Temporal Orchestration Engine Client
 	// -------------------------------------------------------------------
@@ -171,7 +181,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.TaskDone(context.Background(), parentWorkflowID, parentRunID, parentNodeID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, paymentService, companyService, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, paymentService, companyService, storageService, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -227,21 +237,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 
 	// -------------------------------------------------------------------
-	// Stage 6: File Storage Provider Setup
-	// -------------------------------------------------------------------
-	storageDriver, err := storage.NewStorageFromConfig(ctx, cfg.Storage)
-	if err != nil {
-		_ = stopParentRunner()
-		_ = stopTask()
-		temporalClient.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to initialize storage: %w", err)
-	}
-	storageService := storage.NewService(storageDriver)
-	storageHandler := storage.NewHTTPHandler(storageService)
-
-	// -------------------------------------------------------------------
-	// Stage 7: Identity Provider (IDP) Authentication Manager
+	// Stage 6: Identity Provider (IDP) Authentication Manager
 	// -------------------------------------------------------------------
 	authnManager, err := authn.NewManager(userProfileService, cfg.Authn)
 	if err != nil {
@@ -262,7 +258,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 
 	// -------------------------------------------------------------------
-	// Stage 8: HTTP Route & Middleware Registration
+	// Stage 7: HTTP Route & Middleware Registration
 	// -------------------------------------------------------------------
 
 	// ASYCUDA webhook stack.
@@ -277,6 +273,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
+	// The storage driver and service behind this handler are built in Stage 2 —
+	// task plugins that attach uploaded files to an outbound call read through
+	// the service, so it has to exist before the task stack (Stage 4).
+	storageHandler := storage.NewHTTPHandler(storageService)
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
@@ -382,7 +382,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 
 	// -------------------------------------------------------------------
-	// Stage 9: Server Instantiation & Close Hook
+	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
 	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(mux))
 	server := newHTTPServer(cfg.Server, handler)
@@ -549,6 +549,7 @@ func initTask(
 	temporalClient client.Client,
 	paymentService payment.PaymentService,
 	companyService company.Service,
+	storageService *storage.Service,
 	artifactRegistry *artifact.Registry,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -562,7 +563,7 @@ func initTask(
 
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)); err != nil {

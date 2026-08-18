@@ -4,12 +4,14 @@
 package plugins
 
 import (
+	"context"
 	"fmt"
+	"io"
 
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
 )
 
@@ -36,6 +38,20 @@ const (
 	TaskTypeNPQSEphytoHub = "NPQS_EPHYTO_HUB"
 )
 
+// FileFetcher retrieves an uploaded file's content by storage key, returning
+// the content and its MIME type. It is the slice of the storage service an
+// interpreter needs to attach a trader's uploads to an outbound call.
+//
+// Declared here rather than taking *storage.Service so registration stays
+// testable, and so no single domain owns what any file-attaching interpreter
+// needs. Interpreters declare their own matching interface rather than
+// importing this one — they are imported by this package, so depending back on
+// it would be a cycle; Go's structural typing means the same value satisfies
+// both without the two being coupled.
+type FileFetcher interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
+}
+
 // Register installs the taskv2 plugins on reg.
 //
 // EXTERNAL_REVIEW uses our local plugin (ExternalReviewPlugin) that resolves
@@ -43,7 +59,7 @@ const (
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, backendBaseURL string, devMode bool) error {
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string, devMode bool) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -63,7 +79,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
-		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, customs.NewCusdecInterpreter())},
+		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 
