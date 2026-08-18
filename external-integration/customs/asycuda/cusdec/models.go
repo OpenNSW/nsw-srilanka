@@ -31,6 +31,29 @@ const (
 	CusdecStatusReleased   CusdecStatus = "RELEASED"
 )
 
+// eventStatusOrder ranks the statuses a §6.5 event notification moves a
+// declaration through. It answers one question: has this declaration already
+// reached the state the incoming event would put it in?
+//
+// FAILED is deliberately absent — it is a terminal outcome of integration, not
+// a step on this path, so it ranks 0 like any unknown value and never makes an
+// event look already-applied.
+var eventStatusOrder = map[CusdecStatus]int{
+	CusdecStatusSubmitted:  1,
+	CusdecStatusIntegrated: 2,
+	CusdecStatusPaid:       3,
+	CusdecStatusWarranted:  4,
+	CusdecStatusReleased:   5,
+}
+
+// hasReached reports whether the declaration is already at or past target.
+// Comparing rank rather than equality matters in both directions: a repeat of
+// an event is ignored, and an event that arrives late — after a later one has
+// already landed — cannot drag the status backwards.
+func (s CusdecStatus) hasReached(target CusdecStatus) bool {
+	return eventStatusOrder[s] >= eventStatusOrder[target]
+}
+
 // TaxEntry represents an assessed tax line item on a declaration (§6.2).
 type TaxEntry struct {
 	Code   string  `json:"code"`

@@ -103,6 +103,15 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 	}
 
 	if err := h.cusdecService.ProcessIntegrationResult(r.Context(), req); err != nil {
+		// A repeat delivery is acknowledged rather than re-run. 202 tells SLC
+		// Edge the callback landed — ending the §2 retry schedule — while
+		// staying distinguishable from the 200 that means work was done.
+		if errors.Is(err, cusdec.ErrDuplicateIntegrationResult) {
+			slog.InfoContext(r.Context(), "slce: duplicate CusDec integration result acknowledged",
+				"edge_id", req.EdgeID)
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: workflow not found for CusDec integration result",
 				"edge_id", req.EdgeID, "error", err)
@@ -134,6 +143,15 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 	}
 
 	if err := h.cusdecService.ProcessEvent(r.Context(), req); err != nil {
+		// An event already applied to this declaration is acknowledged with a
+		// plain 200 and nothing else: the delivery succeeded, there was simply
+		// no work left to do.
+		if errors.Is(err, cusdec.ErrDuplicateEvent) {
+			slog.InfoContext(r.Context(), "slce: duplicate CusDec event acknowledged",
+				"cusdec_ref", req.Payload.CusdecRef, "event", req.Event)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if errors.Is(err, cusdec.ErrCusdecNotFoundByRef) {
 			slog.WarnContext(r.Context(), "slce: CusDec declaration not found for event (may be transient)",
 				"cusdec_ref", req.Payload.CusdecRef, "error", err)
