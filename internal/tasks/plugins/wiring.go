@@ -4,7 +4,9 @@
 package plugins
 
 import (
+	"context"
 	"fmt"
+	"io"
 
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
@@ -35,6 +37,20 @@ const (
 	// separate validate step.
 	TaskTypeNPQSEphytoHub = "NPQS_EPHYTO_HUB"
 )
+
+// FileFetcher retrieves an uploaded file's content by storage key, returning
+// the content and its MIME type. It is the slice of the storage service an
+// interpreter needs to attach a trader's uploads to an outbound call.
+//
+// Declared here rather than taking *storage.Service so registration stays
+// testable, and so no single domain owns what any file-attaching interpreter
+// needs. Interpreters declare their own matching interface rather than
+// importing this one — they are imported by this package, so depending back on
+// it would be a cycle; Go's structural typing means the same value satisfies
+// both without the two being coupled.
+type FileFetcher interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
+}
 
 // Register installs the taskv2 plugins on reg.
 //
