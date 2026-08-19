@@ -43,6 +43,22 @@ func TestCDNSplitBuilder_OneBranchPerContainer(t *testing.T) {
 	}
 }
 
+// One container is the common case, not an edge case: the guard is count < 1,
+// not count < 2. A single-container declaration must still raise its note.
+func TestCDNSplitBuilder_SingleContainerRaisesOneNote(t *testing.T) {
+	ctx := splitCtx(map[string]any{
+		"container_count": float64(1),
+		"cusdec_ref":      "CBEX1/2026/E/1047",
+	})
+	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+
+	items := ctx.Record.Data["split_items"].([]map[string]any)
+	require.Len(t, items, 1)
+	payload := items[0]["payload"].(map[string]any)
+	assert.Equal(t, 1, payload["container_sequence"])
+	assert.Equal(t, "Container 1 of 1", payload["container_label"])
+}
+
 func TestCDNSplitBuilder_RejectsUnusableCounts(t *testing.T) {
 	for name, inputs := range map[string]map[string]any{
 		"missing":       {},

@@ -69,8 +69,9 @@ func CDNSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error
 }
 
 // containerCount reads the declared container count from the task inputs. The
-// value originates in the CusDec form, so it arrives as decoded JSON — a
-// float64, or a string when the form widget round-tripped it as one.
+// form declares it as a number and the value reaches this plugin as decoded
+// JSON, so it is a float64; int is accepted for a caller that builds the inputs
+// in Go rather than through a workflow.
 func containerCount(inputs map[string]any) (int, error) {
 	raw, ok := inputs["container_count"]
 	if !ok {
@@ -83,12 +84,6 @@ func containerCount(inputs map[string]any) (int, error) {
 		count = int(v)
 	case int:
 		count = v
-	case json.Number:
-		n, err := v.Int64()
-		if err != nil {
-			return 0, fmt.Errorf("cdn_split_builder: container_count %q is not a whole number", v)
-		}
-		count = int(n)
 	default:
 		return 0, fmt.Errorf("cdn_split_builder: container_count is not a number (got %T)", raw)
 	}
