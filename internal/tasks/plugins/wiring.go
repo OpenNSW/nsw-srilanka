@@ -11,6 +11,7 @@ import (
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/remote"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
 )
@@ -28,6 +29,12 @@ const (
 	// TaskTypeCustomsCusdecDispatch is the generic AUTH_API_CALL plugin wired
 	// with the Sri Lanka Customs (SLC Edge) CusDec response interpreter.
 	TaskTypeCustomsCusdecDispatch = "CUSTOMS_CUSDEC_DISPATCH"
+
+	// TaskTypeCustomsCDNDispatch is the generic AUTH_API_CALL plugin wired with
+	// the Sri Lanka Customs (SLC Edge) Cargo Dispatch Note interpreter. One
+	// dispatch note covers one container, so a consignment fans out to this task
+	// once per container (see TaskTypeCDNSplitBuilder).
+	TaskTypeCustomsCDNDispatch = "CUSTOMS_CDN_DISPATCH"
 
 	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
 	// ePhyto Hub interpreter; the subtask template's plugin_properties select
@@ -80,6 +87,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
+		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 
