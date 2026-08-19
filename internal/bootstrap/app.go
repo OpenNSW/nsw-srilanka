@@ -263,7 +263,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	// ASYCUDA webhook stack.
 	cdnRepo := cdn.NewDispatchNoteRepository(db)
-	cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo)
+	cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, tm)
 
 	cusdecRepo := cusdec.NewDeclarationRepository(db)
 	cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
