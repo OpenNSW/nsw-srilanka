@@ -569,6 +569,12 @@ func initTask(
 	if err := pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register HSCODE_SPLIT_BUILDER plugin: %w", err)
 	}
+	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.CDNSplitBuilderFunc)); err != nil {
+		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNSplitBuilder, err)
+	}
+	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)); err != nil {
+		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNResultsCollector, err)
+	}
 	if err := pluginsRegistry.Register("CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register CHA_PERSIST_WRITER plugin: %w", err)
 	}
