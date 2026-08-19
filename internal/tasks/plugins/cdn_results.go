@@ -45,15 +45,13 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 
 		accepted, _ := cig["accepted"].(bool)
 
-		// Prefer the reference Customs registered on the §7.2 result over the
-		// trader's own note number: downstream steps quote this to Customs, so
-		// the registered one is the only reference they will recognize.
+		// Only the reference Customs registered counts. Downstream steps quote it
+		// back to Customs, so the trader's own note number — which the form also
+		// collects, for the printed note — would be a reference they cannot
+		// resolve. A branch with no registered number has no dispatch note at
+		// Customs, and contributes nothing here.
 		if num := userform["registeredCdnNumber"]; num != nil && num != "" {
 			numbers = append(numbers, num)
-		} else if note, _ := userform["noteDetails"].(map[string]any); note != nil {
-			if num := note["cdnNumber"]; num != nil {
-				numbers = append(numbers, num)
-			}
 		}
 		if accepted && firstOK == nil {
 			firstOK = userform
