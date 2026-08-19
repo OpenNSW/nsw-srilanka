@@ -38,11 +38,11 @@ func TestProcessIntegrationResult_Success(t *testing.T) {
 	svc := NewCDNWebhookService(repo)
 
 	req := CDNIntegrationResultRequest{
-		EdgeID:     "edge-123",
-		Integrated: true,
-		Event:      "INTEGRATION_RESULT",
+		Event: "INTEGRATION_RESULT",
 		Payload: integrationResultPayload{
-			CDNRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
+			EdgeID:     "edge-123",
+			Integrated: true,
+			CDNRef:     DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567},
 		},
 	}
 
@@ -62,10 +62,12 @@ func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 
 	rawErrors := json.RawMessage(`{"code":"ERR_VAL_01","message":"Invalid weight value"}`)
 	req := CDNIntegrationResultRequest{
-		EdgeID:     "edge-123",
-		Integrated: false,
-		Event:      "INTEGRATION_RESULT",
-		Errors:     rawErrors,
+		Event: "INTEGRATION_RESULT",
+		Payload: integrationResultPayload{
+			EdgeID:     "edge-123",
+			Integrated: false,
+			Errors:     rawErrors,
+		},
 	}
 
 	err := svc.ProcessIntegrationResult(context.Background(), req)
@@ -78,7 +80,7 @@ func TestProcessIntegrationResult_NotFound(t *testing.T) {
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
 	svc := NewCDNWebhookService(repo)
 
-	req := CDNIntegrationResultRequest{EdgeID: "non-existent-edg"}
+	req := CDNIntegrationResultRequest{Payload: integrationResultPayload{EdgeID: "non-existent-edg"}}
 	err := svc.ProcessIntegrationResult(context.Background(), req)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrDispatchNoteNotFoundByEdgeID)

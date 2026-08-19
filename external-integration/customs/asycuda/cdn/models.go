@@ -34,18 +34,22 @@ const (
 // --------------------------------------------------------
 
 type integrationResultPayload struct {
-	CDNRef DocumentReference `json:"cdnRef"`
+	EdgeID     string            `json:"edgeId"`
+	Integrated bool              `json:"integrated"`
+	CDNRef     DocumentReference `json:"cdnRef"`
+	Errors     json.RawMessage   `json:"errors,omitempty"`
 }
 
 // CDNIntegrationResultRequest is the inbound DTO for the ASYCUDA §7.2 callback
 // pushed when CDN integration succeeds or fails.
+//
+// Per §7.2, edgeId, integrated and errors travel inside payload, so Payload is
+// the only place they are read from — the top level of the document carries just
+// the event discriminator and its timestamp.
 type CDNIntegrationResultRequest struct {
-	EdgeID     string                   `json:"edgeId"`
-	Integrated bool                     `json:"integrated"`
-	Event      string                   `json:"event"`
-	ProcessAt  time.Time                `json:"processAt"`
-	Payload    integrationResultPayload `json:"payload"`
-	Errors     json.RawMessage          `json:"errors,omitempty"`
+	Event     string                   `json:"event"`
+	ProcessAt time.Time                `json:"processAt"`
+	Payload   integrationResultPayload `json:"payload"`
 }
 
 // UnmarshalJSON supports both live API fields (event, processAt) and spec fields (eventType, processedAt).
@@ -74,8 +78,8 @@ func (r *CDNIntegrationResultRequest) UnmarshalJSON(data []byte) error {
 }
 
 func (r CDNIntegrationResultRequest) Validate() error {
-	if r.EdgeID == "" {
-		return errors.New("edgeId is required")
+	if r.Payload.EdgeID == "" {
+		return errors.New("payload.edgeId is required")
 	}
 	if r.Event == "" {
 		return errors.New("event is required")
@@ -83,7 +87,7 @@ func (r CDNIntegrationResultRequest) Validate() error {
 	if r.ProcessAt.IsZero() {
 		return errors.New("processAt is required")
 	}
-	if r.Integrated && !r.Payload.CDNRef.IsValid() {
+	if r.Payload.Integrated && !r.Payload.CDNRef.IsValid() {
 		return errors.New("payload.cdnRef must be fully populated when integrated is true")
 	}
 	return nil
