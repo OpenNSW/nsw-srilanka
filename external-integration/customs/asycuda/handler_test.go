@@ -205,18 +205,18 @@ func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 
 		payload := `{
 			"eventType": "CDN_INTEGRATED",
-			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-			"integrated": true,
 			"processedAt": "2026-07-23T11:20:00Z",
 			"payload": {
-				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 }
-			},
-			"errors": {}
+				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+				"integrated": true,
+				"cdnRef": { "year": "2026", "office": "CMB", "serial": "D", "number": 2002 },
+				"errors": {}
+			}
 		}`
 
 		cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cdn.CDNIntegrationResultRequest) bool {
-			return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" &&
-				r.Integrated &&
+			return r.Payload.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" &&
+				r.Payload.Integrated &&
 				r.Event == "CDN_INTEGRATED" &&
 				r.Payload.CDNRef.Office == "CMB" &&
 				r.Payload.CDNRef.Number == 2002
@@ -295,10 +295,9 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 		{
 			name: "CDN result missing edgeId",
 			payload: `{
-				"edgeId": "",
-				"integrated": true,
 				"eventType": "CDN_INTEGRATED",
-				"processedAt": "2026-07-23T10:00:00Z"
+				"processedAt": "2026-07-23T10:00:00Z",
+				"payload": { "edgeId": "", "integrated": true }
 			}`,
 		},
 		{

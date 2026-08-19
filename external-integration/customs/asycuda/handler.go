@@ -188,11 +188,11 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for integration result",
-				"edge_id", req.EdgeID, "error", err)
+				"edge_id", req.Payload.EdgeID, "error", err)
 			httputil.Error(w, r, http.StatusNotFound, errDispatchNoteNotFound)
 			return
 		}
-		httputil.InternalServerError(w, r, "slce: failed to process CDN integration result", err, "edge_id", req.EdgeID)
+		httputil.InternalServerError(w, r, "slce: failed to process CDN integration result", err, "edge_id", req.Payload.EdgeID)
 		return
 	}
 
