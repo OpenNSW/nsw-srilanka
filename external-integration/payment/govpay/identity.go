@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/OpenNSW/core/authn"
 	corepayment "github.com/OpenNSW/core/payment"
 )
 
@@ -144,6 +145,43 @@ func matchField(field, expected, got string) error {
 	if !strings.EqualFold(strings.TrimSpace(got), expected) {
 		return fmt.Errorf("%w: %s %q does not match the %q this reference is registered under",
 			ErrIdentityMismatch, field, got, expected)
+	}
+	return nil
+}
+
+// VerifyWebhook authenticates an inbound GovPay+ call — presentment or update —
+// as genuinely coming from GovPay+, by the OAuth2 client the request was
+// authenticated as.
+//
+// Both callback routes already sit behind the IdP and a payment webhook scope,
+// so this is not the first check the request passes. What it adds is which
+// gateway the caller is entitled to act for: the scopes are held per client, not
+// per gateway, so without this any machine client granted them could settle a
+// GovPay+ transaction. Pinning the caller to the configured client is the
+// narrowing the scope check cannot express.
+//
+// The identity carried *inside* the payload is a separate question — which
+// sub-institution and service a reference was registered under — and is checked
+// by verifyWebhookIdentity once the body has been parsed.
+func (g *GovPayGateway) VerifyWebhook(ctx context.Context, _ []byte, _ map[string][]string) error {
+	if g.cfg.WebhookClientID == "" {
+		// Operational: a deployment that has not named its client cannot judge
+		// this caller either way, so this must not claim the caller is invalid.
+		return fmt.Errorf("govpay: cannot verify callback: %w", ErrWebhookClientNotConfigured)
+	}
+
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.Client == nil {
+		// The routes are authenticated, so a call arriving with no machine
+		// principal is either unauthenticated or a user token — neither is
+		// GovPay+.
+		return corepayment.NewWebhookVerificationError("govpay: callback carries no authenticated client")
+	}
+
+	if authCtx.Client.ClientID != g.cfg.WebhookClientID {
+		return corepayment.NewWebhookVerificationError(
+			fmt.Sprintf("govpay: callback authenticated as client %q, expected %q",
+				authCtx.Client.ClientID, g.cfg.WebhookClientID))
 	}
 	return nil
 }

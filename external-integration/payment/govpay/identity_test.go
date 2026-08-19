@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/OpenNSW/core/authn"
 	corepayment "github.com/OpenNSW/core/payment"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
@@ -366,5 +367,57 @@ func TestValidateMetadata(t *testing.T) {
 
 	t.Run("rejects nil metadata", func(t *testing.T) {
 		require.Error(t, g.ValidateMetadata(nil))
+	})
+}
+
+// clientCtx builds the request context the authn middleware leaves behind for a
+// machine caller.
+func clientCtx(clientID string) context.Context {
+	return context.WithValue(context.Background(), authn.AuthContextKey,
+		&authn.AuthContext{Client: &authn.ClientContext{ClientID: clientID}})
+}
+
+// TestVerifyWebhook covers the check that keeps a machine client holding the
+// payment webhook scopes from acting for a gateway it is not GovPay+ for.
+func TestVerifyWebhook(t *testing.T) {
+	g := &GovPayGateway{cfg: Config{WebhookClientID: "GOVPAY_TO_NSW"}}
+
+	t.Run("the configured client is accepted", func(t *testing.T) {
+		require.NoError(t, g.VerifyWebhook(clientCtx("GOVPAY_TO_NSW"), nil, nil))
+	})
+
+	// The scopes are granted per client, not per gateway, so another client
+	// holding them must not be able to settle a GovPay+ transaction.
+	t.Run("another authenticated client is rejected", func(t *testing.T) {
+		err := g.VerifyWebhook(clientCtx("SLCE_TO_NSW"), nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed,
+			"a wrong caller is a rejection, so it must map to 401 rather than a retryable 500")
+		assert.Contains(t, err.Error(), "SLCE_TO_NSW")
+	})
+
+	t.Run("a call with no machine principal is rejected", func(t *testing.T) {
+		err := g.VerifyWebhook(context.Background(), nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
+	})
+
+	t.Run("a user token is rejected", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), authn.AuthContextKey,
+			&authn.AuthContext{User: &authn.UserContext{IDPUserID: "u1"}})
+		err := g.VerifyWebhook(ctx, nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
+	})
+
+	// Missing configuration is not evidence about the caller. Reporting it as a
+	// verification failure would answer 401, burning the gateway's retry budget
+	// on a request that could succeed once the deployment is fixed.
+	t.Run("an unconfigured client id is operational, not a rejection", func(t *testing.T) {
+		unconfigured := &GovPayGateway{}
+		err := unconfigured.VerifyWebhook(clientCtx("GOVPAY_TO_NSW"), nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrWebhookClientNotConfigured)
+		assert.NotErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
 	})
 }

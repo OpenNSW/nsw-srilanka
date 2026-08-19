@@ -19,7 +19,9 @@
         "description": "Offline payment instructions",
         "display_order": 2
       },
-      "config": {}
+      "config": {
+        "webhook_client_id": "GOVPAY_TO_NSW"
+      }
     }
   ]
 }
