@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type mockRepository struct {
@@ -146,6 +150,21 @@ func TestProcessAcknowledgment_InvalidState(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot acknowledge dispatch note in status SUBMITTED")
 }
 
+// setupTestDB builds a gorm handle over a stubbed Postgres connection, matching
+// the pattern used by the service tests elsewhere in this repo.
+func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	mockDB, sqlMock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		Conn:       mockDB,
+		DriverName: "postgres",
+	}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+
+	return db, sqlMock
+}
+
 // resumeRecorder captures the task steps a callback completes.
 type resumeRecorder struct{ completed map[string]map[string]any }
 
@@ -207,4 +226,70 @@ func TestStoredResult_PrefersTheRecordedReference(t *testing.T) {
 	assert.True(t, out.Payload.Integrated, "a stored INTEGRATED note is integrated regardless of the replayed flag")
 	assert.Equal(t, 28237, out.Payload.CDNRef.Number)
 	assert.Equal(t, "CBEX1", out.Payload.CDNRef.Office)
+}
+
+// The whole point of the §7.2 callback is that it releases the task parked on the
+// dispatch note: the workflow is located by the edgeId the dispatch step
+// recorded, then the task parked against the integration wait is completed.
+func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
+	svc := NewCDNWebhookService(repo, db, recorder)
+
+	// 1. the workflow carrying this edgeId, 2. the task parked inside it.
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("create_cdn:abc"))
+
+	req := CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED",
+		Payload: integrationResultPayload{
+			EdgeID:     "edge-1",
+			Integrated: true,
+			CDNRef:     DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28242},
+		},
+	}
+	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), req))
+
+	payload, ok := recorder.completed["create_cdn:abc"]
+	require.True(t, ok, "the parked task was not completed; the trader would wait forever")
+	assert.Equal(t, "submit", payload["__command"])
+	assert.Equal(t, true, payload["integrated"])
+	// The workflow is handed the registered reference, which is what the trader
+	// sees and what the acknowledgment is later correlated by.
+	assert.Equal(t, "CBEX1/2026/C/28242", payload["cdn_number"])
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// A failed integration releases the same wait, but carries the reasons instead
+// of a reference so the trader is returned to the form knowing why.
+func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
+	svc := NewCDNWebhookService(repo, db, recorder)
+
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("create_cdn:abc"))
+
+	req := CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED",
+		Payload: integrationResultPayload{
+			EdgeID:     "edge-2",
+			Integrated: false,
+			Errors:     json.RawMessage(`{"0":[{"code":331,"description":"Missing office Code"}]}`),
+		},
+	}
+	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), req))
+
+	payload := recorder.completed["create_cdn:abc"]
+	require.NotNil(t, payload)
+	assert.Equal(t, false, payload["integrated"])
+	assert.NotContains(t, payload, "cdn_number")
+	assert.Contains(t, payload["error"], "Missing office Code")
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
