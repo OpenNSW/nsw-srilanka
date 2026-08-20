@@ -11,6 +11,7 @@ import (
 type DispatchNoteRepository interface {
 	GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error)
 	GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error)
+	Create(ctx context.Context, note *DispatchNote) error
 	Update(ctx context.Context, note *DispatchNote) error
 }
 
@@ -47,6 +48,10 @@ func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref DocumentRe
 		return nil, err
 	}
 	return &note, nil
+}
+
+func (r *dispatchNoteRepository) Create(ctx context.Context, note *DispatchNote) error {
+	return r.db.WithContext(ctx).Create(note).Error
 }
 
 func (r *dispatchNoteRepository) Update(ctx context.Context, note *DispatchNote) error {
