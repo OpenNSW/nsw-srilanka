@@ -17,11 +17,12 @@ import (
 
 const gatewayPollInterval = 300 * time.Millisecond
 
-// mockGateway is a controllable stand-in for the GovPay payment gateway. GovPay
-// is an offline (INSTRUCTION-flow) gateway: NSW generates a TNSW reference and
-// the real gateway later confirms payment via a webhook protected by an M2M
-// bearer token (see PaymentConfig.Identity / signedAuth.tokens). This mock
-// simulates that webhook. It implements replay.PaymentGateway.
+// mockGateway is a controllable stand-in for an offline (INSTRUCTION-flow)
+// payment gateway: NSW generates a TNSW reference and the real gateway later
+// confirms payment via a webhook protected by an M2M bearer token (see
+// PaymentConfig.Identity / signedAuth.tokens). This mock simulates that
+// webhook, driven entirely by configs/payments/<id>.json — it carries no
+// knowledge of any specific gateway. It implements replay.PaymentGateway.
 //
 // The reference is only rendered into the task's markdown view, so the mock
 // reads it from the payment store (GetByTaskID) rather than over HTTP.
@@ -50,45 +51,32 @@ func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig) *mockGat
 }
 
 // Pay implements replay.Gateway: wait for the payment created against taskID,
-// then confirm it by POSTing a GovPay success webhook. amount/currency are read
-// from the payment record so they match (the handler validates them).
+// then confirm it by POSTing a success webhook. amount/currency are read from
+// the payment record so they match (the handler validates them).
 func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, timeout time.Duration) error {
 	cfg, ok := g.configs[method]
 	if !ok {
 		return fmt.Errorf("mock-gateway: no config for payment method %q", method)
 	}
 
-	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(gatewayPollInterval)
-	defer ticker.Stop()
-
-	var tx *payment.PaymentTransaction
-	for {
-		got, err := g.repo.GetByTaskID(ctx, taskID)
-		if err != nil {
-			return fmt.Errorf("mock-gateway: lookup payment for task %s: %w", taskID, err)
-		}
-		if got != nil && got.ReferenceNumber != "" {
-			tx = got
-			break
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("mock-gateway: no payment with a reference for task %s within %s", taskID, timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
+	tx, err := g.awaitReference(ctx, taskID, timeout)
+	if err != nil {
+		return err
 	}
 
 	g.logf("mock-gateway[%s]: confirming payment ref=%s amount=%s %s (task %s)", cfg.ID, tx.ReferenceNumber, tx.Amount.String(), tx.Currency, taskID)
 
-	// GovPay webhook envelope (mirrors integration/payment/govpay_test.go's updateBody).
-	body, err := json.Marshal(map[string]any{
+	identityFields, err := resolveIdentityFields(cfg, tx)
+	if err != nil {
+		return err
+	}
+
+	// GovPay-shaped webhook envelope (mirrors integration/payment/govpay_test.go's
+	// updateBody) — the only wire format this harness's mock speaks today.
+	// cfg.IdentityFields overlays whatever extra fields this gateway's webhook
+	// needs to prove which of its own services the payment belongs to.
+	fields := map[string]any{
 		"transactionID": "e2e-gw-tx",
-		"subinstId":     "e2e",
-		"serviceid":     "e2e",
 		"serviceName":   "Application Fee",
 		"data": []map[string]any{
 			{"seq": "1", "paramName": "refNo", "value": tx.ReferenceNumber},
@@ -96,7 +84,12 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, ti
 			{"seq": "3", "paramName": "amount", "value": tx.Amount.String()},
 			{"seq": "4", "paramName": "currency", "value": tx.Currency},
 		},
-	})
+	}
+	for wireField, value := range identityFields {
+		fields[wireField] = value
+	}
+
+	body, err := json.Marshal(fields)
 	if err != nil {
 		return fmt.Errorf("mock-gateway: marshal webhook: %w", err)
 	}
@@ -121,4 +114,54 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, ti
 	}
 	g.logf("mock-gateway: payment confirmed for task %s (status %d)", taskID, resp.StatusCode)
 	return nil
+}
+
+// awaitReference polls the payment store until taskID's transaction has been
+// assigned a gateway reference number (set when the checkout session is
+// created), or timeout elapses.
+func (g *mockGateway) awaitReference(ctx context.Context, taskID string, timeout time.Duration) (*payment.PaymentTransaction, error) {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(gatewayPollInterval)
+	defer ticker.Stop()
+
+	for {
+		tx, err := g.repo.GetByTaskID(ctx, taskID)
+		if err != nil {
+			return nil, fmt.Errorf("mock-gateway: lookup payment for task %s: %w", taskID, err)
+		}
+		if tx != nil && tx.ReferenceNumber != "" {
+			return tx, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("mock-gateway: no payment with a reference for task %s within %s", taskID, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// resolveIdentityFields looks up, for each wire field cfg.IdentityFields
+// declares, the expected value from the transaction's own gateway metadata —
+// the same metadata the fee's plugin_properties.gateway_metadata declared when
+// the checkout session was created (see internal/tasks/plugins/payment.go).
+// Echoing these back proves the mock is confirming the payment as the service
+// it actually belongs to, whatever identity scheme this gateway uses. A
+// gateway with no such scheme (cfg.IdentityFields empty) needs none of this.
+func resolveIdentityFields(cfg PaymentConfig, tx *payment.PaymentTransaction) (map[string]string, error) {
+	if len(cfg.IdentityFields) == 0 {
+		return nil, nil
+	}
+	fields := make(map[string]string, len(cfg.IdentityFields))
+	for wireField, metadataKey := range cfg.IdentityFields {
+		value := tx.GatewayMetadata[metadataKey]
+		if value == "" {
+			return nil, fmt.Errorf("mock-gateway[%s]: payment %s has no %q in gateway metadata (required by configs/payments/%s.json's identityFields)",
+				cfg.ID, tx.ReferenceNumber, metadataKey, cfg.ID)
+		}
+		fields[wireField] = value
+	}
+	return fields, nil
 }
