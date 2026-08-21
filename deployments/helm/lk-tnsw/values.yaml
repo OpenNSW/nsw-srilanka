@@ -7,7 +7,7 @@
 # Everything below is intentionally left as neutral defaults and is filled in
 # by an override file, e.g.:
 #
-#   helm install nsw-srilanka ./nsw-srilanka -f ../values-example.yaml
+#   helm install lk-tnsw ./lk-tnsw -f ../values-example.yaml
 
 nameOverride: ""
 fullnameOverride: ""

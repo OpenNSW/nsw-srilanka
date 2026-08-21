@@ -1,6 +1,6 @@
-# Example override values for the NSW Single Window platform chart (Backend
-# API + Trader Portal frontend, one release).
-#   helm install nsw-srilanka ./nsw-srilanka -f ./values-example.yaml
+# Example override values for the Trade National Single Window (TNSW) platform
+# chart (Backend API + Trader Portal frontend, one release).
+#   helm install lk-tnsw ./lk-tnsw -f ./values-example.yaml
 #
 # This chart deploys the app only. Infra dependencies (Postgres, Temporal,
 # Thunder ID, Argus) are separate deployments — the env below just points at
@@ -25,7 +25,7 @@
 # your environment's real IdP, Temporal, and Argus endpoints.
 
 # Drives the backend/frontend resource names via
-# nsw-srilanka.{backend,frontend}.fullname (templates/_helpers.tpl) — with
+# lk-tnsw.{backend,frontend}.fullname (templates/_helpers.tpl) — with
 # "tnsw" below, resources are named tnsw-api / tnsw-web.
 fullnameOverride: "tnsw"
 

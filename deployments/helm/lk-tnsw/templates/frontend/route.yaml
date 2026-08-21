@@ -2,16 +2,16 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: {{ include "nsw-srilanka.frontend.fullname" . }}
+  name: {{ include "lk-tnsw.frontend.fullname" . }}
   labels:
-    {{- include "nsw-srilanka.frontend.labels" . | nindent 4 }}
+    {{- include "lk-tnsw.frontend.labels" . | nindent 4 }}
 spec:
   {{- if .Values.frontend.route.host }}
   host: {{ .Values.frontend.route.host }}
   {{- end }}
   to:
     kind: Service
-    name: {{ include "nsw-srilanka.frontend.fullname" . }}
+    name: {{ include "lk-tnsw.frontend.fullname" . }}
     weight: 100
   port:
     targetPort: http
