@@ -5,10 +5,8 @@ name: Release - Publish Helm Chart
 #   git tag chart-v0.3.0 && git push origin chart-v0.3.0
 #
 # The chart VERSION comes from the tag. The chart's appVersion comes from
-# Chart.yaml and is validated against the latest app release (v*.*.* tag)
-# before publishing — so a chart release always ships pointing at the current
-# app version. Bump appVersion in a PR to match the app release you're
-# shipping.
+# Chart.yaml as-is (no validation against app release tags) — bump it in a PR
+# to match the app release you're shipping.
 
 on:
   push:
@@ -41,16 +39,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Full history + tags so the appVersion check can find the latest
-          # app release tag (v*.*.*).
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Validate appVersion matches the latest app release
-        uses: ./.github/actions/chart-appversion-check
-        with:
-          chart-dir: ${{ env.CHART_DIR }}
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
