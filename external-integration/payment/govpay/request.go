@@ -32,13 +32,24 @@ func parseGovPayRequest(raw json.RawMessage) (govPayRequest, error) {
 		return govPayRequest{}, fmt.Errorf("transactionID is missing in request")
 	}
 
-	subInstID, _, err := getStringField(payload, "subinstId", "suinstId")
+	// Both identity fields are mandatory on the presentment and update calls
+	// alike: they say which service the caller believes it is transacting
+	// against, and a call that omits them cannot be checked against the service
+	// the reference was registered under. Treated exactly like transactionID
+	// above rather than defaulted to empty.
+	subInstID, ok, err := getStringField(payload, "subinstId", "suinstId")
 	if err != nil {
 		return govPayRequest{}, err
 	}
-	serviceID, _, err := getStringField(payload, "serviceid", "serviceId", "serviced")
+	if !ok || strings.TrimSpace(subInstID) == "" {
+		return govPayRequest{}, fmt.Errorf("subinstId is missing in request")
+	}
+	serviceID, ok, err := getStringField(payload, "serviceid", "serviceId", "serviced")
 	if err != nil {
 		return govPayRequest{}, err
+	}
+	if !ok || strings.TrimSpace(serviceID) == "" {
+		return govPayRequest{}, fmt.Errorf("serviceid is missing in request")
 	}
 	serviceName, _, err := getStringField(payload, "serviceName")
 	if err != nil {

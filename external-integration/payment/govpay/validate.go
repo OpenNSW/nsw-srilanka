@@ -3,7 +3,9 @@ package govpay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -26,6 +28,35 @@ func (g *GovPayGateway) HandleValidateReference(ctx context.Context, tx *corepay
 			Message: "invalid reference number",
 		})
 	}
+
+	// The reference exists, but check it belongs to the service this call
+	// claims to be for before saying anything else about it.
+	if err := identityFromMetadata(tx.Metadata).verify(req.SubInstID, req.ServiceID); err != nil {
+		// A fee that never declared its ids is our own misconfiguration, not a
+		// bad request. Saying so plainly — and loudly — keeps it from being
+		// chased as a mystery "unknown reference".
+		if errors.Is(err, ErrIdentityNotConfigured) {
+			slog.ErrorContext(ctx, "govpay presentment rejected: fee is missing its govpay identity",
+				"reference", tx.ReferenceNumber, "error", err)
+			return jsonValidationResponse(500, ErrorResponse{
+				Error:   "configuration_error",
+				Message: "this service is not configured for GovPay payments",
+			})
+		}
+
+		// A genuine mismatch gets exactly what an unknown reference gets, so a
+		// caller aimed at the wrong service learns nothing about whether this
+		// reference exists or is payable.
+		slog.WarnContext(ctx, "govpay presentment rejected: identity mismatch",
+			"reference", tx.ReferenceNumber,
+			"gotSubInstId", req.SubInstID, "gotServiceId", req.ServiceID,
+			"error", err)
+		return jsonValidationResponse(404, ErrorResponse{
+			Error:   "invalid_reference",
+			Message: "invalid reference number",
+		})
+	}
+
 	if !isPayable {
 		return jsonValidationResponse(409, ErrorResponse{
 			Error:   "not_payable",

@@ -1,0 +1,423 @@
+package govpay
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/OpenNSW/core/authn"
+	corepayment "github.com/OpenNSW/core/payment"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// The shared bodies in govpay_test.go post subinstId "s1" and serviceid "sv1".
+
+const (
+	wantSubInst = "s1"
+	wantService = "sv1"
+)
+
+func payableTx(metadata map[string]string) *corepayment.ValidationTransaction {
+	return &corepayment.ValidationTransaction{
+		ReferenceNumber: "TNSW1",
+		Amount:          decimal.RequireFromString("1500.00"),
+		Currency:        "LKR",
+		Metadata:        metadata,
+	}
+}
+
+func configured(subInstID, serviceID string) map[string]string {
+	return map[string]string{MetadataSubInstID: subInstID, MetadataServiceID: serviceID}
+}
+
+func staticResolver(identity ExpectedIdentity, found bool, err error) IdentityResolver {
+	return func(context.Context, string) (ExpectedIdentity, bool, error) {
+		return identity, found, err
+	}
+}
+
+// configuredGateway is a gateway wired the way production wires it: able to
+// resolve the identity the shared test bodies are posted under. Tests that are
+// not about the identity check use this so they exercise the happy path.
+func configuredGateway() *GovPayGateway {
+	return &GovPayGateway{
+		resolveIdentity: staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, true, nil),
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Presence: both ids are mandatory on the wire, for both endpoints.
+// -----------------------------------------------------------------------------
+
+func TestGovPay_RequiresIdentityFieldsOnTheWire(t *testing.T) {
+	bodies := map[string]string{
+		"both missing":     `{"transactionID":"gw-1","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"subinstId absent": `{"transactionID":"gw-1","serviceid":"sv1","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"serviceid absent": `{"transactionID":"gw-1","subinstId":"s1","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"subinstId blank":  `{"transactionID":"gw-1","subinstId":"  ","serviceid":"sv1","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"serviceid blank":  `{"transactionID":"gw-1","subinstId":"s1","serviceid":"","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+	}
+
+	for name, body := range bodies {
+		t.Run("presentment/"+name, func(t *testing.T) {
+			g := &GovPayGateway{}
+			_, err := g.HandleValidateReference(context.Background(), payableTx(configured(wantSubInst, wantService)), true, json.RawMessage(body))
+			require.Error(t, err, "a call without both ids must not be processed")
+		})
+
+		t.Run("update/"+name, func(t *testing.T) {
+			g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, true, nil)}
+			_, _, err := g.ParseWebhook(context.Background(), []byte(body), nil)
+			require.Error(t, err)
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Presentment (validate)
+// -----------------------------------------------------------------------------
+
+func TestGovPay_HandleValidateReference_IdentityMatching(t *testing.T) {
+	reqData := presentmentBody("TNSW1")
+
+	tests := []struct {
+		name       string
+		metadata   map[string]string
+		wantStatus int
+		wantError  string
+	}{
+		{
+			name:       "both ids match",
+			metadata:   configured(wantSubInst, wantService),
+			wantStatus: 200,
+		},
+		{
+			// The ids are onboarding-time constants typed into configuration by
+			// hand, so casing and stray spaces must not reject a valid call.
+			name:       "match ignores case and surrounding space",
+			metadata:   configured("  S1 ", "SV1"),
+			wantStatus: 200,
+		},
+		{
+			name:       "wrong sub-institution",
+			metadata:   configured("other", wantService),
+			wantStatus: 404,
+			wantError:  "invalid_reference",
+		},
+		{
+			name:       "wrong service",
+			metadata:   configured(wantSubInst, "other"),
+			wantStatus: 404,
+			wantError:  "invalid_reference",
+		},
+		{
+			// Configuration is mandatory: an undeclared fee is refused, not
+			// waved through unchecked.
+			name:       "fee declared neither id",
+			metadata:   nil,
+			wantStatus: 500,
+			wantError:  "configuration_error",
+		},
+		{
+			name:       "fee declared only the service id",
+			metadata:   map[string]string{MetadataServiceID: wantService},
+			wantStatus: 500,
+			wantError:  "configuration_error",
+		},
+		{
+			name:       "fee declared only the sub-institution id",
+			metadata:   map[string]string{MetadataSubInstID: wantSubInst},
+			wantStatus: 500,
+			wantError:  "configuration_error",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &GovPayGateway{}
+			resp, err := g.HandleValidateReference(context.Background(), payableTx(tc.metadata), true, reqData)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantStatus, resp.HTTPStatus)
+
+			if tc.wantError == "" {
+				return
+			}
+			var out ErrorResponse
+			require.NoError(t, json.Unmarshal(resp.Payload, &out))
+			assert.Equal(t, tc.wantError, out.Error)
+			// Neither response reveals anything about the reference itself.
+			assert.NotContains(t, out.Message, "TNSW1")
+		})
+	}
+}
+
+// A mismatched identity must be rejected before payability is considered, so
+// the response cannot reveal that the reference exists and is already settled.
+func TestGovPay_HandleValidateReference_MismatchOutranksPayability(t *testing.T) {
+	g := &GovPayGateway{}
+	tx := payableTx(configured("other", wantService))
+
+	resp, err := g.HandleValidateReference(context.Background(), tx, false, presentmentBody("TNSW1"))
+	require.NoError(t, err)
+	assert.Equal(t, 404, resp.HTTPStatus, "identity is checked before payability")
+
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &out))
+	assert.Equal(t, "invalid_reference", out.Error, "must not disclose not_payable")
+}
+
+// -----------------------------------------------------------------------------
+// Update (webhook)
+// -----------------------------------------------------------------------------
+
+func TestGovPay_ParseWebhook_IdentityMatching(t *testing.T) {
+	body := updateBody("TNSW1", "paid", "1500.00", "LKR")
+
+	t.Run("matching identity is accepted", func(t *testing.T) {
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, true, nil)}
+		p, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.NoError(t, err)
+		assert.Equal(t, corepayment.WebhookStatusSuccess, p.Status)
+	})
+
+	t.Run("mismatched identity is rejected", func(t *testing.T) {
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: "other"}, true, nil)}
+		_, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityMismatch)
+		assert.Contains(t, err.Error(), "TNSW1")
+	})
+
+	t.Run("an undeclared fee cannot be settled", func(t *testing.T) {
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{}, true, nil)}
+		_, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("a partly declared fee cannot be settled", func(t *testing.T) {
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{ServiceID: wantService}, true, nil)}
+		_, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("a gateway with no resolver refuses to settle", func(t *testing.T) {
+		// Without a resolver the identity cannot be checked at all, so the
+		// notification is refused rather than accepted unverified.
+		g := &GovPayGateway{}
+		_, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("unknown reference passes through to the service", func(t *testing.T) {
+		// The service looks the reference up immediately afterwards and owns
+		// that failure; reporting it here too would surface it two ways.
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{}, false, nil)}
+		_, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("resolver failure is surfaced", func(t *testing.T) {
+		boom := errors.New("db down")
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{}, false, boom)}
+		_, _, err := g.ParseWebhook(context.Background(), body, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, boom)
+	})
+
+	t.Run("identity is checked before the status is trusted", func(t *testing.T) {
+		// An unparseable status would normally be the reported failure; the
+		// identity check must fire first so a receipt for another service can
+		// never reach the status mapping.
+		g := &GovPayGateway{resolveIdentity: staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: "other"}, true, nil)}
+		_, _, err := g.ParseWebhook(context.Background(), updateBody("TNSW1", "weird", "1500.00", "LKR"), nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityMismatch)
+	})
+}
+
+// -----------------------------------------------------------------------------
+// Resolver backed by stored transactions
+// -----------------------------------------------------------------------------
+
+// fakeLookup is all NewRepositoryIdentityResolver needs — the point of the
+// one-method ReferenceLookup interface.
+type fakeLookup struct {
+	tx  *corepayment.PaymentTransaction
+	err error
+}
+
+func (f fakeLookup) GetByReferenceNumber(context.Context, string) (*corepayment.PaymentTransaction, error) {
+	return f.tx, f.err
+}
+
+func TestNewRepositoryIdentityResolver(t *testing.T) {
+	t.Run("reads the identity off the stored transaction", func(t *testing.T) {
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: &corepayment.PaymentTransaction{
+			ReferenceNumber: "TNSW1",
+			GatewayMetadata: configured(wantSubInst, wantService),
+		}})
+
+		got, found, err := resolve(context.Background(), "TNSW1")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, got)
+	})
+
+	t.Run("stored values are trimmed", func(t *testing.T) {
+		// Shares identityFromMetadata with the presentment path, so both
+		// callbacks read stored metadata the same way and cannot drift.
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: &corepayment.PaymentTransaction{
+			GatewayMetadata: configured("  "+wantSubInst+" ", "\t"+wantService+"\n"),
+		}})
+
+		got, found, err := resolve(context.Background(), "TNSW1")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, ExpectedIdentity{SubInstID: wantSubInst, ServiceID: wantService}, got)
+	})
+
+	t.Run("an unknown reference is not found", func(t *testing.T) {
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: nil})
+
+		_, found, err := resolve(context.Background(), "TNSW-nope")
+		require.NoError(t, err)
+		assert.False(t, found, "the service layer owns the unknown-reference failure")
+	})
+
+	t.Run("a lookup failure is surfaced", func(t *testing.T) {
+		boom := errors.New("db down")
+		resolve := NewRepositoryIdentityResolver(fakeLookup{err: boom})
+
+		_, found, err := resolve(context.Background(), "TNSW1")
+		require.ErrorIs(t, err, boom)
+		assert.False(t, found)
+	})
+
+	t.Run("a fee stored without its ids resolves incomplete", func(t *testing.T) {
+		// found, but unusable — the gateway reports it as not configured
+		// rather than letting the callback through.
+		resolve := NewRepositoryIdentityResolver(fakeLookup{tx: &corepayment.PaymentTransaction{}})
+
+		got, found, err := resolve(context.Background(), "TNSW1")
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.False(t, got.complete())
+	})
+}
+
+func TestGovPay_NewGovPayGatewayFactory_WiresResolver(t *testing.T) {
+	factory := NewGovPayGatewayFactory(staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: "other"}, true, nil))
+	gw, err := factory(json.RawMessage(`{}`))
+	require.NoError(t, err)
+
+	_, _, err = gw.ParseWebhook(context.Background(), updateBody("TNSW1", "paid", "1500.00", "LKR"), nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrIdentityMismatch)
+
+	// The bare constructor wires no resolver, so it cannot settle a webhook.
+	plain, err := NewGovPayGateway(json.RawMessage(`{}`))
+	require.NoError(t, err)
+	_, _, err = plain.ParseWebhook(context.Background(), updateBody("TNSW1", "paid", "1500.00", "LKR"), nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+}
+
+// TestValidateMetadata covers the check that keeps an undeclared fee from ever
+// reaching a reference number: the callbacks above compare the posted identity
+// against what the fee declared, so a fee that declared nothing is unsettleable
+// and must be refused at checkout rather than at settlement.
+func TestValidateMetadata(t *testing.T) {
+	g := &GovPayGateway{}
+
+	t.Run("both ids declared", func(t *testing.T) {
+		require.NoError(t, g.ValidateMetadata(map[string]string{
+			MetadataSubInstID: wantSubInst,
+			MetadataServiceID: wantService,
+		}))
+	})
+
+	t.Run("names both keys when neither is declared", func(t *testing.T) {
+		err := g.ValidateMetadata(map[string]string{"task_id": "t1"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+		assert.Contains(t, err.Error(), MetadataSubInstID)
+		assert.Contains(t, err.Error(), MetadataServiceID)
+	})
+
+	t.Run("rejects a partly declared fee", func(t *testing.T) {
+		err := g.ValidateMetadata(map[string]string{MetadataSubInstID: wantSubInst})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("rejects whitespace as undeclared", func(t *testing.T) {
+		err := g.ValidateMetadata(map[string]string{
+			MetadataSubInstID: "  ",
+			MetadataServiceID: wantService,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrIdentityNotConfigured)
+	})
+
+	t.Run("rejects nil metadata", func(t *testing.T) {
+		require.Error(t, g.ValidateMetadata(nil))
+	})
+}
+
+// clientCtx builds the request context the authn middleware leaves behind for a
+// machine caller.
+func clientCtx(clientID string) context.Context {
+	return context.WithValue(context.Background(), authn.AuthContextKey,
+		&authn.AuthContext{Client: &authn.ClientContext{ClientID: clientID}})
+}
+
+// TestVerifyWebhook covers the check that keeps a machine client holding the
+// payment webhook scopes from acting for a gateway it is not GovPay+ for.
+func TestVerifyWebhook(t *testing.T) {
+	g := &GovPayGateway{cfg: Config{WebhookClientID: "GOVPAY_TO_NSW"}}
+
+	t.Run("the configured client is accepted", func(t *testing.T) {
+		require.NoError(t, g.VerifyWebhook(clientCtx("GOVPAY_TO_NSW"), nil, nil))
+	})
+
+	// The scopes are granted per client, not per gateway, so another client
+	// holding them must not be able to settle a GovPay+ transaction.
+	t.Run("another authenticated client is rejected", func(t *testing.T) {
+		err := g.VerifyWebhook(clientCtx("SLCE_TO_NSW"), nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed,
+			"a wrong caller is a rejection, so it must map to 401 rather than a retryable 500")
+		assert.Contains(t, err.Error(), "SLCE_TO_NSW")
+	})
+
+	t.Run("a call with no machine principal is rejected", func(t *testing.T) {
+		err := g.VerifyWebhook(context.Background(), nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
+	})
+
+	t.Run("a user token is rejected", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), authn.AuthContextKey,
+			&authn.AuthContext{User: &authn.UserContext{IDPUserID: "u1"}})
+		err := g.VerifyWebhook(ctx, nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
+	})
+
+	// Missing configuration is not evidence about the caller. Reporting it as a
+	// verification failure would answer 401, burning the gateway's retry budget
+	// on a request that could succeed once the deployment is fixed.
+	t.Run("an unconfigured client id is operational, not a rejection", func(t *testing.T) {
+		unconfigured := &GovPayGateway{}
+		err := unconfigured.VerifyWebhook(clientCtx("GOVPAY_TO_NSW"), nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrWebhookClientNotConfigured)
+		assert.NotErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
+	})
+}

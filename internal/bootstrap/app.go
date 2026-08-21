@@ -121,7 +121,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	paymentRepo := payment.NewPaymentRepository(db)
 	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
-		"govpay": govpay.NewGovPayGateway,
+		"govpay": govpay.NewGovPayGatewayFactory(govpay.NewRepositoryIdentityResolver(paymentRepo)),
 	})
 	if err != nil {
 		_ = database.Close(db)
@@ -371,7 +371,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
 
 	// Payment webhook endpoints. Requires valid JWT issued from nsw-srilanka's IDP with the appropriate scope. The gatewayId path param is used to resolve the correct payment gateway configuration for the webhook.
-	// TODO: Need to Verify the signature of the webhook payload to ensure it is from the payment gateway and not a malicious actor. This will be implemented in the paymentHandler.HandleWebhook and paymentHandler.HandleValidateReference methods.
+	// Authenticating the caller as the gateway itself is the gateway's own job:
+	// core/payment calls PaymentGateway.VerifyWebhook before any reference lookup
+	// or settlement, so each gateway checks the scheme it actually uses.
 	mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", withAuth(withScope(scopes.PaymentWebhooksProcess)(http.HandlerFunc(paymentHandler.HandleWebhook))))
 	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", withAuth(withScope(scopes.PaymentWebhooksValidate)(http.HandlerFunc(paymentHandler.HandleValidateReference))))
 

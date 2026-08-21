@@ -1,5 +1,7 @@
 package govpay
 
+import "errors"
+
 // -----------------------------------------------------------------------------
 // GovPay+ wire types
 //
@@ -13,7 +15,34 @@ package govpay
 // Config holds the GovPay+ gateway configuration.
 type Config struct {
 	BaseURL string
+
+	// WebhookClientID is the OAuth2 client GovPay+ authenticates its callbacks
+	// as. Both callback routes already require a token carrying the payment
+	// webhook scopes, but any machine client holding those scopes could
+	// otherwise post against any gateway — so the gateway pins the caller to its
+	// own client. Required: without it a callback cannot be judged either way.
+	WebhookClientID string `json:"webhook_client_id"`
 }
+
+// MethodID is the payment method this gateway is registered under. The
+// identity requirements below apply to GovPay+ only; other methods are
+// unaffected.
+const MethodID = "govpay"
+
+// ErrIdentityMismatch reports a GovPay+ call whose sub-institution or service
+// id is not the one the reference number was registered under.
+var ErrIdentityMismatch = errors.New("govpay identity mismatch")
+
+// ErrWebhookClientNotConfigured reports a deployment that has not named the
+// OAuth2 client GovPay+ calls back as. It is an operational fault, not evidence
+// about the caller, so it must never be reported as a verification failure.
+var ErrWebhookClientNotConfigured = errors.New("govpay webhook client not configured")
+
+// ErrIdentityNotConfigured reports a GovPay+ fee whose artifact did not declare
+// both ids. They are mandatory for GovPay+, so a transaction missing them
+// cannot be settled — a callback would have nothing trustworthy to be checked
+// against.
+var ErrIdentityNotConfigured = errors.New("govpay identity not configured")
 
 // govPayParam is a single data[] item in a GovPay+ presentment/update request.
 type govPayParam struct {
