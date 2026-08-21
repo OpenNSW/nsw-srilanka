@@ -68,7 +68,11 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// 1. Determine selected payment gateway
 	selectedMethod, _ := ctx.Inputs["selected_method"].(string)
 	if selectedMethod == "" {
-		selectedMethod = "lankapay" // Default fallback
+		// Fallback for a fee whose form does not offer a choice. It has to name a
+		// method the registry actually carries, or checkout fails on a method that
+		// does not exist; kept as a literal so this package stays unaware of any
+		// particular gateway's package.
+		selectedMethod = "govpay"
 	}
 
 	// 2. Transition task state to PENDING_PAYMENT
