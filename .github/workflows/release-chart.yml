@@ -30,8 +30,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  CHART_NAME: nsw-srilanka
-  CHART_DIR: deployments/helm/nsw-srilanka
+  CHART_NAME: lk-tnsw
+  CHART_DIR: deployments/helm/lk-tnsw
   VALUES_EXAMPLE: deployments/helm/values-example.yaml
 
 jobs:

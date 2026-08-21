@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "nsw-srilanka.frontend.fullname" . }}
+  name: {{ include "lk-tnsw.frontend.fullname" . }}
   labels:
-    {{- include "nsw-srilanka.frontend.labels" . | nindent 4 }}
+    {{- include "lk-tnsw.frontend.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
   selector:
     matchLabels:
-      {{- include "nsw-srilanka.frontend.selectorLabels" . | nindent 6 }}
+      {{- include "lk-tnsw.frontend.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "nsw-srilanka.frontend.selectorLabels" . | nindent 8 }}
+        {{- include "lk-tnsw.frontend.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.frontend.podSecurityContext }}
       securityContext:

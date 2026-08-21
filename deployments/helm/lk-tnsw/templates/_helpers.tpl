@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "nsw-srilanka.name" -}}
+{{- define "lk-tnsw.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "nsw-srilanka.fullname" -}}
+{{- define "lk-tnsw.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -24,26 +24,26 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "nsw-srilanka.chart" -}}
+{{- define "lk-tnsw.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Backend component: fullname, selector labels, labels.
 */}}
-{{- define "nsw-srilanka.backend.fullname" -}}
-{{- printf "%s-api" (include "nsw-srilanka.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "lk-tnsw.backend.fullname" -}}
+{{- printf "%s-api" (include "lk-tnsw.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
-{{- define "nsw-srilanka.backend.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "nsw-srilanka.name" . }}
+{{- define "lk-tnsw.backend.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "lk-tnsw.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: backend
 {{- end }}
 
-{{- define "nsw-srilanka.backend.labels" -}}
-helm.sh/chart: {{ include "nsw-srilanka.chart" . }}
-{{ include "nsw-srilanka.backend.selectorLabels" . }}
+{{- define "lk-tnsw.backend.labels" -}}
+helm.sh/chart: {{ include "lk-tnsw.chart" . }}
+{{ include "lk-tnsw.backend.selectorLabels" . }}
 {{- if .Values.backend.image.tag }}
 app.kubernetes.io/version: {{ .Values.backend.image.tag | quote }}
 {{- else if .Chart.AppVersion }}
@@ -55,19 +55,19 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Frontend component: fullname, selector labels, labels.
 */}}
-{{- define "nsw-srilanka.frontend.fullname" -}}
-{{- printf "%s-web" (include "nsw-srilanka.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "lk-tnsw.frontend.fullname" -}}
+{{- printf "%s-web" (include "lk-tnsw.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
-{{- define "nsw-srilanka.frontend.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "nsw-srilanka.name" . }}
+{{- define "lk-tnsw.frontend.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "lk-tnsw.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: frontend
 {{- end }}
 
-{{- define "nsw-srilanka.frontend.labels" -}}
-helm.sh/chart: {{ include "nsw-srilanka.chart" . }}
-{{ include "nsw-srilanka.frontend.selectorLabels" . }}
+{{- define "lk-tnsw.frontend.labels" -}}
+helm.sh/chart: {{ include "lk-tnsw.chart" . }}
+{{ include "lk-tnsw.frontend.selectorLabels" . }}
 {{- if .Values.frontend.image.tag }}
 app.kubernetes.io/version: {{ .Values.frontend.image.tag | quote }}
 {{- else if .Chart.AppVersion }}
