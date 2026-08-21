@@ -19,6 +19,8 @@
               "actions": [ { "handle": "read", "name": "Read" } ] },
             { "handle": "cha", "name": "CHA",
               "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "profile", "name": "Profile",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
             { "handle": "storage", "name": "Storage",
               "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "delete", "name": "Delete" } ] },
             { "handle": "slce-webhooks", "name": "SLCE Webhooks",

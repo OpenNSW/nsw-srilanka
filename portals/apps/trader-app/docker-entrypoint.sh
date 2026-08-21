@@ -31,7 +31,7 @@ window.__APP_CONFIG__ = {
   "VITE_IDP_CLIENT_ID": "$(escape_js "${VITE_IDP_CLIENT_ID:-TRADER_PORTAL_APP}")",
   "VITE_IDP_EXTRA_QUERY_PARAMS": "$(escape_js "${VITE_IDP_EXTRA_QUERY_PARAMS:-resource=https://api.nsw-srilanka.local}")",
   "VITE_APP_URL": "$(escape_js "${VITE_APP_URL:-http://localhost:5173}")",
-  "VITE_IDP_SCOPES": "$(escape_js "${VITE_IDP_SCOPES:-openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write}")",
+  "VITE_IDP_SCOPES": "$(escape_js "${VITE_IDP_SCOPES:-openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read}")",
   "VITE_IDP_TRADER_GROUP_NAME": "$(escape_js "${VITE_IDP_TRADER_GROUP_NAME:-Traders}")",
   "VITE_IDP_CHA_GROUP_NAME": "$(escape_js "${VITE_IDP_CHA_GROUP_NAME:-CHA}")",
   "VITE_SHOW_AUTOFILL_BUTTON": "$(escape_js "${VITE_SHOW_AUTOFILL_BUTTON:-true}")"
