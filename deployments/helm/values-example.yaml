@@ -24,6 +24,11 @@
 # The https:// URLs and client IDs below are placeholders — replace them with
 # your environment's real IdP, Temporal, and Argus endpoints.
 
+# Drives the backend/frontend resource names via
+# nsw-srilanka.{backend,frontend}.fullname (templates/_helpers.tpl) — with
+# "tnsw" below, resources are named tnsw-api / tnsw-web.
+fullnameOverride: "tnsw"
+
 backend:
   image:
     # Required — pick the app version to deploy. There is no default; the
