@@ -8,6 +8,7 @@
       "nsw:hscode:read",
       "nsw:company:read",
       "nsw:cha:read",
+      "nsw:profile:read",
       "nsw:storage:read",
       "nsw:storage:write"
     ],

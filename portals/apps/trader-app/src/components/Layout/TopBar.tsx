@@ -4,15 +4,28 @@ import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Au
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 import { RoleSwitcher } from './RoleSwitcher'
 import { appConfig, displayName } from '@/config'
+import { useProfile } from '@/services/useProfile'
 
 function TopBarShell({ children }: { children: ReactNode }) {
+  const { profile } = useProfile()
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-app-surface border-b border-border flex items-center justify-between px-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         {appConfig.branding.systemLogoUrl && (
           <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
         )}
         <span className="text-xl font-bold text-foreground">{displayName}</span>
+        {profile?.company?.name && (
+          <div className="flex items-center pl-4 ml-1 border-l border-border h-6 min-w-0">
+            <span
+              className="inline-flex items-center max-w-72 truncate rounded-full bg-primary-subtle px-3 py-1 text-sm font-medium text-primary border border-primary-subtle"
+              title={profile.company.name}
+            >
+              {profile.company.name}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">{children}</div>

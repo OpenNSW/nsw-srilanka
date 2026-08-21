@@ -25,6 +25,9 @@ const (
 	CompanyRead = "nsw:company:read"
 	CHARead     = "nsw:cha:read"
 
+	// Profile resource (the caller's own user profile).
+	ProfileRead = "nsw:profile:read"
+
 	// Storage resource.
 	StorageRead   = "nsw:storage:read"
 	StorageWrite  = "nsw:storage:write"

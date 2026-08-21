@@ -8,6 +8,7 @@ import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { RoleProvider } from './services/RoleContext'
+import { ProfileProvider } from './services/ProfileContext'
 import { SearchServiceProvider, UploadProvider } from '@opennsw/jsonforms-renderers'
 import { uploadFile, getDownloadUrl } from './services/storage'
 import { searchServices } from './services/searchService'
@@ -36,9 +37,11 @@ function ProtectedLayout() {
 
   return (
     <RoleProvider availableGroups={availableRoles} isLoading={isResolvingRoles}>
-      <UploadWrapper>
-        <Layout />
-      </UploadWrapper>
+      <ProfileProvider>
+        <UploadWrapper>
+          <Layout />
+        </UploadWrapper>
+      </ProfileProvider>
     </RoleProvider>
   )
 }
