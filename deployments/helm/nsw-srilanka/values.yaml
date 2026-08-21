@@ -96,7 +96,28 @@ backend:
     # secretName must reference a kubernetes.io/tls Secret you create out-of-band.
     tls: []
 
+  # Resource requests/limits. When HPA is enabled, CPU requests must be defined
+  # for the HPA to calculate utilization. Example:
+  #   resources:
+  #     requests:
+  #       cpu: 100m
+  #       memory: 256Mi
   resources: {}
+
+  # Horizontal Pod Autoscaler. When enabled, Deployment spec.replicas is omitted
+  # so Helm upgrades do not override the HPA-managed replica count.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+
+  # Pod Disruption Budget. Requires at least 2 running/minReplicas to allow
+  # voluntary eviction without blocking node drains.
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
 
   # No default liveness probe: /health returns 503 while the database or authn
   # dependency is unhealthy (internal/bootstrap/app.go), which is a readiness
@@ -104,7 +125,12 @@ backend:
   # fix an external DB/authn outage. Set one explicitly (e.g. a tcpSocket
   # check on `http`) if you want liveness restarts for hung/deadlocked
   # processes.
-  livenessProbe: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 20
   readinessProbe:
     httpGet:
       path: /health
@@ -173,15 +199,36 @@ frontend:
     hosts: []
     tls: []
 
+  # Resource requests/limits. When HPA is enabled, CPU requests must be defined
+  # for the HPA to calculate utilization. Example:
+  #   resources:
+  #     requests:
+  #       cpu: 50m
+  #       memory: 128Mi
   resources: {}
+
+  # Horizontal Pod Autoscaler. When enabled, Deployment spec.replicas is omitted
+  # so Helm upgrades do not override the HPA-managed replica count.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+
+  # Pod Disruption Budget. Requires at least 2 running/minReplicas to allow
+  # voluntary eviction without blocking node drains.
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
 
   # Defaults match nginx.conf's /health location (returns 200 'OK').
   livenessProbe:
     httpGet:
       path: /health
       port: http
-    initialDelaySeconds: 5
-    periodSeconds: 10
+    initialDelaySeconds: 15
+    periodSeconds: 20
   readinessProbe:
     httpGet:
       path: /health
