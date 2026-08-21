@@ -32,7 +32,7 @@ Create chart name and version as used by the chart label.
 Backend component: fullname, selector labels, labels.
 */}}
 {{- define "nsw-srilanka.backend.fullname" -}}
-{{- printf "%s-backend" (include "nsw-srilanka.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-api" (include "nsw-srilanka.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
 {{- define "nsw-srilanka.backend.selectorLabels" -}}
@@ -56,7 +56,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 Frontend component: fullname, selector labels, labels.
 */}}
 {{- define "nsw-srilanka.frontend.fullname" -}}
-{{- printf "%s-frontend" (include "nsw-srilanka.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-web" (include "nsw-srilanka.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
 {{- define "nsw-srilanka.frontend.selectorLabels" -}}
