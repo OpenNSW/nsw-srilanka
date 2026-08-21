@@ -2,14 +2,14 @@ name: Build and Push Development Helm Chart
 # Publishes a prerelease Helm chart to GHCR when the chart itself changes, so
 # chart changes can be tested before a release. Does NOT run on ordinary code
 # merges (dev images are handled by the build-*-dev.yaml workflows). Release
-# charts are handled by release-chart.yml.
+# charts are handled by chart-release.yml.
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'deployments/helm/**'
-      - '.github/workflows/build-dev-chart.yml'
+      - '.github/workflows/chart-build-dev.yml'
   workflow_dispatch:
 
 concurrency:
@@ -22,8 +22,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  CHART_NAME: nsw-srilanka
-  CHART_DIR: deployments/helm/nsw-srilanka
+  CHART_NAME: lk-tnsw
+  CHART_DIR: deployments/helm/lk-tnsw
   VALUES_EXAMPLE: deployments/helm/values-example.yaml
 
 jobs:

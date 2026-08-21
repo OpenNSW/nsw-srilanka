@@ -1,6 +1,7 @@
-# NSW Single Window Helm Chart
+# Trade National Single Window (TNSW) Helm Chart
 
-Helm chart for the NSW Single Window platform: the **Backend API**
+Helm chart for Sri Lanka's Trade National Single Window platform: the
+**Backend API**
 (`cmd/server`) and the **Trader Portal** frontend
 ([`portals/apps/trader-app`](../../../portals/apps/trader-app)), deployed
 together as one release with `backend`/`frontend` sections in values. Infra
@@ -29,16 +30,16 @@ Templates are grouped by component under `templates/backend/` and `templates/fro
 ```text
 deployments/helm/
 ├── values-example.yaml # complete example override; not bundled in chart packages
-└── nsw-srilanka/        # this chart (templates + neutral defaults)
+└── lk-tnsw/             # this chart (templates + neutral defaults)
 ```
 
 The example override lives one level up, outside the chart directory, so
-`helm package nsw-srilanka` doesn't bundle it into the published chart artifact.
+`helm package lk-tnsw` doesn't bundle it into the published chart artifact.
 
 ## Usage
 
 ```bash
-helm install nsw-srilanka ./nsw-srilanka -f ../values-example.yaml
+helm install lk-tnsw ./lk-tnsw -f ../values-example.yaml
 ```
 
 `values.yaml` holds only neutral defaults, split into `backend:` and

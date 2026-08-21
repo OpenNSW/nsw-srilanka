@@ -2,9 +2,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ printf "%s-migrate" (include "nsw-srilanka.backend.fullname" .) | trunc 63 | trimSuffix "-" }}
+  name: {{ printf "%s-migrate" (include "lk-tnsw.backend.fullname" .) | trunc 63 | trimSuffix "-" }}
   labels:
-    {{- include "nsw-srilanka.backend.labels" . | nindent 4 }}
+    {{- include "lk-tnsw.backend.labels" . | nindent 4 }}
     app.kubernetes.io/component: migrate
   annotations:
     # Run as a Helm hook BEFORE the Deployment rolls out, on every install and
@@ -22,7 +22,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "nsw-srilanka.backend.selectorLabels" . | nindent 8 }}
+        {{- include "lk-tnsw.backend.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: migrate
     spec:
       # A Job pod must not be restarted forever; run once and stop.

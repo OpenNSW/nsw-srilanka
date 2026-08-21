@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "nsw-srilanka.frontend.fullname" . }}
+  name: {{ include "lk-tnsw.frontend.fullname" . }}
   labels:
-    {{- include "nsw-srilanka.frontend.labels" . | nindent 4 }}
+    {{- include "lk-tnsw.frontend.labels" . | nindent 4 }}
   {{- with .Values.frontend.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -27,7 +27,7 @@ spec:
             pathType: {{ .pathType | default "ImplementationSpecific" }}
             backend:
               service:
-                name: {{ include "nsw-srilanka.frontend.fullname" $ }}
+                name: {{ include "lk-tnsw.frontend.fullname" $ }}
                 port:
                   number: {{ $.Values.frontend.service.port }}
           {{- end }}
