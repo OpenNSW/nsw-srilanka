@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/taskflow/extensions"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // ExtAuthz is the extension id; it must match the ExtensionConfig.id declared in
@@ -13,7 +14,7 @@ const ExtAuthz = "authz"
 // Register installs the task-step authorization extension on reg. cat is the
 // slice of the global catalog loaded at the composition root; per-task rule names
 // resolve through it.
-func Register(reg *extensions.Registry, cat Catalog) error {
+func Register(reg *extensions.Registry, cat taskauthz.Catalog) error {
 	if reg == nil {
 		return fmt.Errorf("stepauthz: registry is nil")
 	}

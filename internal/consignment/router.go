@@ -161,7 +161,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	// The caller must actually hold the role they're asserting via the query
 	// param — resolved through the global catalog, not hardcoded, so it stays in
 	// step with the same "trader"/"cha" -> token-role mapping the task-authz
-	// layer (internal/tasks/extensions/stepauthz) uses.
+	// layer (internal/tasks/taskauthz) uses.
 	requiredTokenRole, ok := c.roles[role]
 	if !ok {
 		httputil.InternalServerError(w, r, "role not configured in catalog", fmt.Errorf("catalog has no mapping for role %q", role))

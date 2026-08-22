@@ -48,9 +48,11 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
 
@@ -279,9 +281,21 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// task plugins that attach uploaded files to an outbound call read through
 	// the service, so it has to exist before the task stack (Stage 4).
 	storageHandler := storage.NewHTTPHandler(storageService)
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
-	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
-	// ownership resolver for the PRE_RESUME authz extension to evaluate.
+	// Layer 2 of task authorization on the read path: decides access from the
+	// role-tied ownership of the task's consignment.
+	taskReadAuthz, err := readauthz.NewEvaluator(taskCatalog(globalCatalog))
+	if err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = authnManager.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to build task read authz: %w", err)
+	}
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskReadAuthz, recorder, cfg.Server.MaxRequestBytes)
+	// Layer 1 of task authorization, shared by the read and write routes: attach
+	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
+	// extension and the read evaluator to consume.
 	taskAuthzGate, err := authzgate.NewMiddleware(ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
 	if err != nil {
 		_ = stopParentRunner()
@@ -354,7 +368,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// API routes. Each handler is wrapped with authn (JWT validation) then a
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (local-dev storage) are below.
-	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(taskHandler.HandleGetTask))))
+	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleGetTask)))))
 	mux.Handle("POST /api/v1/tasks/{id}/commands/{command}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
@@ -509,25 +523,6 @@ type taskStack struct {
 	Assembler *zoneview.ZoneViewAssembler
 }
 
-// companyIDResolver adapts the company service to authzgate.CompanyResolver. A
-// missing company profile is reported as ("", nil) so it denies cleanly rather
-// than surfacing as a 500.
-type companyIDResolver struct{ svc company.Service }
-
-func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error) {
-	rec, err := r.svc.GetCompanyByOUHandle(ctx, ouHandle)
-	if err != nil {
-		if errors.Is(err, company.ErrCompanyNotFound) {
-			return "", nil
-		}
-		return "", err
-	}
-	if rec == nil {
-		return "", nil
-	}
-	return rec.ID, nil
-}
-
 // ownershipResolver adapts the consignment service to
 // authzgate.OwnershipResolver. A consignment that does not exist is reported as
 // ("", "", nil) — the caller then owns neither side and is denied cleanly, the
@@ -547,6 +542,32 @@ func (r ownershipResolver) GetOwnership(ctx context.Context, consignmentID strin
 		return "", "", err
 	}
 	return traderCompanyID, chaCompanyID, nil
+}
+
+// taskCatalog narrows the global catalog to the slice task authorization needs.
+// Both Layer-2 evaluators take the same value, so the mapping lives here rather
+// than at each call site.
+func taskCatalog(c *catalog.Catalog) taskauthz.Catalog {
+	return taskauthz.Catalog{Roles: c.Roles, Clients: c.Clients}
+}
+
+// companyIDResolver adapts the company service to authzgate.CompanyResolver. A
+// missing company profile is reported as ("", nil) so it denies cleanly rather
+// than surfacing as a 500.
+type companyIDResolver struct{ svc company.Service }
+
+func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error) {
+	rec, err := r.svc.GetCompanyByOUHandle(ctx, ouHandle)
+	if err != nil {
+		if errors.Is(err, company.ErrCompanyNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	if rec == nil {
+		return "", nil
+	}
+	return rec.ID, nil
 }
 
 // registryTemplateProvider adapts the artifact registry to uiprojector's
@@ -649,10 +670,7 @@ func initTask(
 	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("register notification extension: %w", err)
 	}
-	if err := taskauthz.Register(extensionsRegistry, taskauthz.Catalog{
-		Roles:   globalCatalog.Roles,
-		Clients: globalCatalog.Clients,
-	}); err != nil {
+	if err := stepauthz.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)

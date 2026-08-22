@@ -2,12 +2,16 @@
 // PRE_RESUME policy gate that decides whether the caller may run a command on a
 // task at its current state.
 //
-// It is a pure evaluator. The API layer resolves the caller's identity and
-// attaches it — together with a lazy ownership resolver — to the request context
-// (see Input); this extension only matches that against the per-task policy and
-// the catalog it is handed at construction. It reads no configuration file,
-// resolves ownership only when a user rule actually needs it, and never touches
-// domain services directly.
+// It is a pure evaluator. Layer 1 (internal/tasks/authzgate) resolves the
+// caller's identity and attaches it — together with a lazy ownership resolver —
+// to the request context as a taskauthz.Input; this extension only matches that
+// against the per-task policy and the catalog it is handed at construction. It
+// reads no configuration file, resolves ownership only when a user rule actually
+// needs it, and never touches domain services directly.
+//
+// Reads are guarded separately, by internal/tasks/readauthz — core has no read
+// hook, so only the write path can be an extension. Both share the principal
+// types and the eligibility rule in internal/tasks/taskauthz.
 package stepauthz
 
 import (
@@ -17,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/taskflow/store"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // Sentinel errors mapped to HTTP status by the task handler. errors.Is still
@@ -26,62 +31,15 @@ var (
 	ErrForbidden       = errors.New("task authz: forbidden")
 )
 
-// PrincipalKind distinguishes a portal user from an M2M service client.
-type PrincipalKind string
-
-const (
-	KindUser   PrincipalKind = "user"
-	KindClient PrincipalKind = "client"
-)
-
-// OwnedRolesFunc lazily resolves which logical owner roles the caller satisfies
-// for the task's root workflow (keyed by the catalog's logical role names, e.g.
-// "trader"/"cha"). It performs the DB work, so the extension calls it only when a
-// user rule actually needs it. It is nil for client principals.
-type OwnedRolesFunc func(ctx context.Context, rootWorkflowID string) (map[string]bool, error)
-
-// Input is the authorization context the API layer resolves and attaches for the
-// extension to evaluate. It carries no domain detail — only the caller's kind,
-// token roles, client id, and a lazy ownership resolver.
-type Input struct {
-	Kind       PrincipalKind
-	Roles      []string
-	ClientID   string
-	OwnedRoles OwnedRolesFunc
-}
-
-type ctxKey struct{}
-
-// WithInput returns a context carrying in for the extension to read.
-func WithInput(ctx context.Context, in Input) context.Context {
-	return context.WithValue(ctx, ctxKey{}, in)
-}
-
-// InputFromContext returns the Input attached by WithInput; ok is false when none
-// is present (an unauthenticated request).
-func InputFromContext(ctx context.Context) (Input, bool) {
-	in, ok := ctx.Value(ctxKey{}).(Input)
-	return in, ok
-}
-
-// Catalog is the slice of the global catalog this extension needs: the logical
-// principal names that per-task rules reference, resolved to a token role or an
-// OAuth2 client id. The composition root loads the catalog (internal/catalog) and
-// injects it, so this package performs no file I/O and knows no on-disk format.
-type Catalog struct {
-	Roles   map[string]string // logical name -> token role
-	Clients map[string]string // logical name -> client id
-}
-
 // Extension is the PRE_RESUME task extension enforcing, per task state and
 // command, which principals may advance a task: users by token role + resolved
 // ownership, M2M clients by client id. It is deny-by-default.
 type Extension struct {
-	catalog Catalog
+	catalog taskauthz.Catalog
 }
 
 // NewExtension builds the extension. The catalog is its only dependency.
-func NewExtension(catalog Catalog) *Extension {
+func NewExtension(catalog taskauthz.Catalog) *Extension {
 	return &Extension{catalog: catalog}
 }
 
@@ -110,68 +68,54 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 		return fmt.Errorf("%w: command %q is not permitted in state %q", ErrForbidden, command, record.State)
 	}
 
-	in, ok := InputFromContext(ctx)
+	in, ok := taskauthz.InputFromContext(ctx)
 	if !ok {
 		return ErrUnauthenticated
 	}
 
 	switch in.Kind {
-	case KindUser:
+	case taskauthz.KindUser:
 		return e.authorizeUser(ctx, record, in, allowed)
-	case KindClient:
+	case taskauthz.KindClient:
 		return e.authorizeClient(in, allowed)
 	default:
 		return ErrUnauthenticated
 	}
 }
 
-// authorizeUser allows the call iff some allowed name is a catalog user whose
-// token role the caller holds and whose company owns the task's root workflow in
-// that role. Ownership is resolved lazily and only after a role first matches, so
-// a caller whose roles match no allowed user is denied with no ownership lookup.
-func (e *Extension) authorizeUser(ctx context.Context, record *store.TaskRecord, in Input, allowed []string) error {
-	held := roleSet(in.Roles)
-
-	var candidates []string
-	for _, name := range allowed {
-		if role, isRole := e.catalog.Roles[name]; isRole && held[role] {
-			candidates = append(candidates, name)
-		}
+// authorizeUser allows the call iff the caller may act as some allowed name —
+// they hold its token role and their company owns the task's root workflow in
+// that role. Because a write is one yes/no decision, any single match suffices;
+// the read path, which selects content rather than deciding, instead resolves a
+// single acting role.
+func (e *Extension) authorizeUser(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, allowed []string) error {
+	// Eligible resolves ownership only if the caller holds one of the allowed
+	// roles, so the common denial below costs no database lookup.
+	eligible, err := e.catalog.Eligible(ctx, in, record.RootWorkflowID, allowed)
+	if err != nil {
+		return fmt.Errorf("task authz: %w", err)
 	}
-	if len(candidates) == 0 {
+	if !eligible.HoldsAny(allowed) {
 		return fmt.Errorf("%w: caller holds no role allowed for this command", ErrForbidden)
 	}
+	// A user principal reaching here with no resolver means Layer 1 attached none
+	// — a wiring bug. Say so rather than reporting it as "does not own".
 	if in.OwnedRoles == nil {
 		return fmt.Errorf("%w: ownership could not be resolved", ErrForbidden)
 	}
-
-	owned, err := in.OwnedRoles(ctx, record.RootWorkflowID)
-	if err != nil {
-		return fmt.Errorf("task authz: resolve ownership: %w", err)
-	}
-	for _, name := range candidates {
-		if owned[name] {
-			return nil
-		}
+	if eligible.Any(allowed) {
+		return nil
 	}
 	return fmt.Errorf("%w: caller's company does not own this task in the required role", ErrForbidden)
 }
 
 // authorizeClient allows the call iff some allowed name is a catalog client whose
 // mapped client id equals the caller's client id.
-func (e *Extension) authorizeClient(in Input, allowed []string) error {
+func (e *Extension) authorizeClient(in taskauthz.Input, allowed []string) error {
 	for _, name := range allowed {
 		if want, isClient := e.catalog.Clients[name]; isClient && want != "" && want == in.ClientID {
 			return nil
 		}
 	}
 	return fmt.Errorf("%w: client %q is not permitted for this command", ErrForbidden, in.ClientID)
-}
-
-func roleSet(roles []string) map[string]bool {
-	m := make(map[string]bool, len(roles))
-	for _, r := range roles {
-		m[r] = true
-	}
-	return m
 }

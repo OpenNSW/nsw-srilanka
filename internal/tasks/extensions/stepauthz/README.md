@@ -4,11 +4,15 @@ A `PRE_RESUME` task extension that decides whether the caller may run a command 
 a task at its current state. It is the enforcement point behind
 `POST /api/v1/tasks/{id}`.
 
-It is a **pure evaluator**: the API layer (a task-write middleware) resolves the
-caller's identity and their ownership of the task's consignment and attaches an
-`Input` to the request context. This extension only matches that `Input` against
-the per-task policy and the global catalog — it never touches the consignment or
-company services.
+It is a **pure evaluator**: Layer 1 ([`internal/tasks/authzgate`](../../authzgate))
+resolves the caller's identity and a lazy resolver for their ownership of the
+task's consignment, and attaches a `taskauthz.Input` to the request context. This
+extension only matches that `Input` against the per-task policy and the global
+catalog — it never touches the consignment or company services.
+
+The principal types, the catalog slice, and the eligibility rule all live in
+[`internal/tasks/taskauthz`](../../taskauthz), shared with the read path. This
+package holds only the write policy.
 
 ## Per-task config
 
@@ -54,3 +58,31 @@ The composition root loads the file once (`internal/catalog`) and injects the
   layer, tied to the required role — holding the role is not enough).
 - **Client (M2M)** — allowed iff an allowed name maps to the caller's client id.
 - Otherwise `403`; no principal ⇒ `401`.
+
+## Reads are a separate evaluator
+
+This extension only guards `POST` (running a command). `GET /api/v1/tasks/{id}` is
+guarded by [`internal/tasks/readauthz`](../../readauthz) — a separate package
+because core has no read hook: extensions only fire on `CompleteTaskStep`.
+
+The two share Layer 1 (`authzgate` attaches the same `Input` to both routes) and
+the same role-tied ownership rule, but differ in where the policy lives and what
+denial means:
+
+|            | write (this package)                     | read (`readauthz`)                          |
+|------------|------------------------------------------|---------------------------------------------|
+| policy in  | subtask template `extensions[].authz`    | `render.json` `read.roles`                   |
+| keyed on   | `[state, command]`                       | the task as a whole                          |
+| default    | deny (no rule ⇒ forbidden)               | any role owning the consignment              |
+| denial     | `403`                                    | `404`, so task ids cannot be probed          |
+
+`readauthz` additionally resolves a `role:<name>` claim per catalog role, which
+render configs use to decide which sections a given role sees.
+
+Both ask `taskauthz` the same question — which roles is this caller eligible for
+on this task — and differ only in what they do with several answers. This
+extension allows the write if **any** allowed role matches, because it is making
+one yes/no decision. A read selects *content*, so two matches would render two
+contradictory sections at once; `read.roles` is therefore an ordered precedence
+list and the reader acts as exactly one role. See the read authorization section
+of [`docs/WORKFLOW_GUIDE.md`](../../../../docs/WORKFLOW_GUIDE.md).

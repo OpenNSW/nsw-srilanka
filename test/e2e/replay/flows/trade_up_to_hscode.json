@@ -8,7 +8,9 @@
         "method": "POST",
         "path": "/api/v1/consignments",
         "expectStatus": 201,
-        "extract": { "consignmentId": "id" }
+        "extract": {
+          "consignmentId": "id"
+        }
       }
     },
     {
@@ -21,12 +23,36 @@
       }
     },
     {
+      "name": "trader reads the pending CHA-selection task",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectStatus": 200
+      }
+    },
+    {
+      "name": "cha cannot read the CHA-selection task before being appointed",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectStatus": 404
+      }
+    },
+    {
       "name": "trader initializes consignment (name + CHA)",
       "request": {
         "actor": "trader",
         "method": "POST",
         "path": "/api/v1/tasks/{{initTask}}",
-        "body": { "command": "submit", "payload": { "consignment_name": "E2E Replay Consignment", "cha_company_id": "adam-pvt-ltd" } },
+        "body": {
+          "command": "submit",
+          "payload": {
+            "consignment_name": "E2E Replay Consignment",
+            "cha_company_id": "adam-pvt-ltd"
+          }
+        },
         "expectStatus": 204
       }
     },
@@ -40,12 +66,37 @@
       }
     },
     {
+      "name": "cha reads the HS-code task once appointed",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectStatus": 200
+      }
+    },
+    {
+      "name": "trader still reads it too \u2014 both own the consignment",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectStatus": 200
+      }
+    },
+    {
       "name": "cha selects HS codes (FCAU flow)",
       "request": {
         "actor": "cha",
         "method": "POST",
         "path": "/api/v1/tasks/{{hsTask}}",
-        "body": { "command": "submit", "payload": { "hs_codes": ["fcau-health-certificate-reg"] } },
+        "body": {
+          "command": "submit",
+          "payload": {
+            "hs_codes": [
+              "fcau-health-certificate-reg"
+            ]
+          }
+        },
         "expectStatus": 204
       }
     },
