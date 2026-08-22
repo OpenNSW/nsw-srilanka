@@ -67,16 +67,22 @@ const (
 	testTaskID        = "task-1"
 )
 
-// hsCodeTaskRenderConfig mirrors the shipped trade/2-hscode_selection render
-// config, reduced to what this package can observe today: one state-gated
-// workspace with a submit affordance.
-const hsCodeTaskRenderConfig = `{
+// hsCodeRenderConfig mirrors the shipped trade/2-hscode_selection render config:
+// the same PENDING_USER state offers the CHA an interactive workspace and the
+// trader a read-only notice, each gated on that role's ownership claim.
+const hsCodeRenderConfig = `{
   "id": "trade-hscode-selection-flow:render",
+  "read": { "roles": ["cha", "trader"] },
   "sections": {
+    "status_message": {
+      "templateId": "waiting",
+      "projector": "MARKDOWN",
+      "visibleWhen": { "states": ["PENDING_USER"], "requireClaim": "role:trader" }
+    },
     "workspace": {
       "templateId": "form",
       "projector": "MARKDOWN",
-      "visibleWhen": { "states": ["PENDING_USER"] },
+      "visibleWhen": { "states": ["PENDING_USER"], "requireClaim": "role:cha" },
       "handles": [{ "command": "submit", "label": "Complete Selection", "element": "primary_action" }]
     }
   },
@@ -101,8 +107,8 @@ func (s *stubTemplates) GetTemplate(context.Context, string) ([]byte, error) {
 	return []byte(`{"template":"body"}`), nil
 }
 
-// getTaskHandler builds a handler over a real uiprojector assembler, so an
-// authorized read is asserted through the same rendering path production uses.
+// getTaskHandler builds a handler over a real uiprojector assembler, so the
+// tests exercise the same claim-gated rendering production uses.
 func getTaskHandler(t *testing.T, fetcher *fakeTaskFetcher, templates *stubTemplates) *HTTPHandler {
 	t.Helper()
 	asm, err := uiprojector.NewAssembler(templates, uiprojector.DefaultProjectors())
@@ -130,7 +136,7 @@ func pendingHSCodeTask() *fakeTaskFetcher {
 			TaskType:       "APPLICATION",
 			State:          "PENDING_USER",
 			RootWorkflowID: testConsignmentID,
-			RenderConfig:   json.RawMessage(hsCodeTaskRenderConfig),
+			RenderConfig:   json.RawMessage(hsCodeRenderConfig),
 		},
 	}
 }
@@ -254,6 +260,185 @@ func TestHandleGetTask_ClientPrincipalDenied(t *testing.T) {
 	}
 }
 
+// The read.roles allowlist narrows access even for a genuine owner.
+func TestHandleGetTask_OwnedRoleNotAdmittedByReadPolicy(t *testing.T) {
+	fetcher := pendingHSCodeTask()
+	fetcher.record.RenderConfig = json.RawMessage(`{"read":{"roles":["cha"]},"sections":{}}`)
+	in := ownerInput("Trader", "trader")
+
+	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("got %d, want 404", recorder.Code)
+	}
+}
+
+// The headline behavior: one task, one state, two roles, two different views —
+// and the submit affordance travels only with the section that owns it.
+func TestHandleGetTask_ClaimsShapeTheViewPerRole(t *testing.T) {
+	tests := []struct {
+		name        string
+		tokenRole   string
+		ownedRole   string
+		wantSlot    string
+		wantAbsent  string
+		wantHandles int
+	}{
+		{
+			name:        "cha gets the interactive workspace",
+			tokenRole:   "CHA",
+			ownedRole:   "cha",
+			wantSlot:    "workspace",
+			wantAbsent:  "status_message",
+			wantHandles: 1,
+		},
+		{
+			name:        "trader gets the waiting notice and no affordance",
+			tokenRole:   "Trader",
+			ownedRole:   "trader",
+			wantSlot:    "status_message",
+			wantAbsent:  "workspace",
+			wantHandles: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := ownerInput(tt.tokenRole, tt.ownedRole)
+			recorder := getTask(t, getTaskHandler(t, pendingHSCodeTask(), &stubTemplates{}), &in)
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("got %d, want 200: %s", recorder.Code, recorder.Body.String())
+			}
+			zv := decodeZoneView(t, recorder.Body.String())
+			if zv.TaskID != testTaskID || zv.State != "PENDING_USER" {
+				t.Errorf("got task %q state %q, want %q PENDING_USER", zv.TaskID, zv.State, testTaskID)
+			}
+			view := decodeSlots(t, zv)
+			if len(view) != 1 {
+				t.Fatalf("got %d slots %v, want exactly 1", len(view), view)
+			}
+			got, ok := view[tt.wantSlot]
+			if !ok {
+				t.Fatalf("slot %q missing from view %v", tt.wantSlot, view)
+			}
+			if _, ok := view[tt.wantAbsent]; ok {
+				t.Errorf("slot %q must not be visible to this role", tt.wantAbsent)
+			}
+			if len(got.Handles) != tt.wantHandles {
+				t.Errorf("got %d handles, want %d", len(got.Handles), tt.wantHandles)
+			}
+		})
+	}
+}
+
+// A company that is both trader and CHA on one consignment still sees only the
+// view for the role its token carries.
+func TestHandleGetTask_SameCompanyBothSlotsFollowsTheTokenRole(t *testing.T) {
+	in := taskauthz.Input{
+		Kind:  taskauthz.KindUser,
+		Roles: []string{"CHA"},
+		OwnedRoles: func(context.Context, string) (map[string]bool, error) {
+			return map[string]bool{"trader": true, "cha": true}, nil
+		},
+	}
+	recorder := getTask(t, getTaskHandler(t, pendingHSCodeTask(), &stubTemplates{}), &in)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	view := decodeSlots(t, decodeZoneView(t, recorder.Body.String()))
+	if _, ok := view["workspace"]; !ok {
+		t.Errorf("want the workspace for a CHA token, got %v", view)
+	}
+	if _, ok := view["status_message"]; ok {
+		t.Error("the trader notice must not be visible to a CHA token")
+	}
+}
+
+// A self-clearing operator — one user holding both roles at a company filling
+// both slots — is genuinely eligible for both. Without precedence they were
+// served the CHA form and the "waiting for your CHA" notice on the same screen.
+// read.roles order must resolve that to exactly one section.
+func TestHandleGetTask_DualRoleUserGetsOneViewNotBoth(t *testing.T) {
+	bothRoles := func() taskauthz.Input {
+		return taskauthz.Input{
+			Kind:  taskauthz.KindUser,
+			Roles: []string{"Trader", "CHA"},
+			OwnedRoles: func(context.Context, string) (map[string]bool, error) {
+				return map[string]bool{"trader": true, "cha": true}, nil
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		readRoles  string
+		wantSlot   string
+		wantAbsent string
+	}{
+		{
+			// The shipped HS-code config: the CHA is the actor, so they get the form.
+			name:       "cha first yields the workspace",
+			readRoles:  `["cha", "trader"]`,
+			wantSlot:   "workspace",
+			wantAbsent: "status_message",
+		},
+		{
+			name:       "trader first yields the notice",
+			readRoles:  `["trader", "cha"]`,
+			wantSlot:   "status_message",
+			wantAbsent: "workspace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fetcher := pendingHSCodeTask()
+			fetcher.record.RenderConfig = json.RawMessage(
+				strings.Replace(hsCodeRenderConfig, `["cha", "trader"]`, tt.readRoles, 1),
+			)
+			in := bothRoles()
+
+			recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("got %d, want 200: %s", recorder.Code, recorder.Body.String())
+			}
+			view := decodeSlots(t, decodeZoneView(t, recorder.Body.String()))
+			if len(view) != 1 {
+				t.Fatalf("got %d slots %v, want exactly 1 — a dual-role user must not see both views", len(view), view)
+			}
+			if _, ok := view[tt.wantSlot]; !ok {
+				t.Errorf("slot %q missing from view %v", tt.wantSlot, view)
+			}
+			if _, ok := view[tt.wantAbsent]; ok {
+				t.Errorf("slot %q must not be rendered alongside %q", tt.wantAbsent, tt.wantSlot)
+			}
+		})
+	}
+}
+
+// A render config naming a claim the app cannot produce is a configuration bug.
+// It must surface as a 500, not quietly hide the section.
+func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
+	fetcher := pendingHSCodeTask()
+	fetcher.record.RenderConfig = json.RawMessage(`{
+	  "read": { "roles": ["trader"] },
+	  "sections": {
+	    "workspace": {
+	      "templateId": "form",
+	      "projector": "MARKDOWN",
+	      "visibleWhen": { "requireClaim": "role:chaa" }
+	    }
+	  }
+	}`)
+	in := ownerInput("Trader", "trader")
+
+	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d, want 500: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
 type mockAuditor struct {
 	mu     sync.Mutex
 	events []*argus.AuditLogRequest
@@ -298,35 +483,5 @@ func TestParseCompleteTaskStepRequest_AllowsTrailingWhitespace(t *testing.T) {
 	}
 	if payload["key"] != "value" {
 		t.Fatalf("payload[\"key\"] = %v, want %q", payload["key"], "value")
-	}
-}
-
-// The authorized path: an owner reads the task and gets the rendered view. Paired
-// with the denial cases above, this is what distinguishes "the gate denies
-// everyone" from "the gate denies the right people".
-func TestHandleGetTask_OwnerReadsTheTask(t *testing.T) {
-	fetcher := pendingHSCodeTask()
-	templates := &stubTemplates{}
-	in := ownerInput("Trader", "trader")
-
-	recorder := getTask(t, getTaskHandler(t, fetcher, templates), &in)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("got %d, want 200: %s", recorder.Code, recorder.Body.String())
-	}
-	zv := decodeZoneView(t, recorder.Body.String())
-	if zv.TaskID != testTaskID || zv.State != "PENDING_USER" {
-		t.Errorf("got task %q in state %q, want %q/PENDING_USER", zv.TaskID, zv.State, testTaskID)
-	}
-	view := decodeSlots(t, zv)
-	ws, ok := view["workspace"]
-	if !ok {
-		t.Fatalf("workspace missing from view %v", view)
-	}
-	if len(ws.Handles) != 1 || ws.Handles[0].Command != "submit" {
-		t.Errorf("got handles %v, want the submit affordance", ws.Handles)
-	}
-	if templates.calls == 0 {
-		t.Error("the assembler never ran, so this asserts nothing about rendering")
 	}
 }
