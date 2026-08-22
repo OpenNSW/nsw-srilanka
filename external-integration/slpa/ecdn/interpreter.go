@@ -1,9 +1,8 @@
 package ecdn
 
 import (
-	"context"
-	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -19,82 +18,98 @@ type UploadRequest struct {
 }
 
 // ClientKeyHeader carries the SLPA-issued client company identifier (the CMS
-// calls it the ClientSqid). It is per-company rather than per-deployment, so it
-// is resolved from the submitting company's profile on every upload rather than
-// configured once.
+// calls it the ClientSqid). It is the same for every submission this deployment
+// makes, so it is declared on the slpa service in services.json — as
+// "slpacmsuser-key": "env:SLPA_CMS_CLIENT_KEY" — and remote.Manager applies it
+// to every call. Nothing in this package sends it: a value that is a property of
+// the deployment does not belong in a request builder.
+//
+// This constant documents the header the configuration must use; it is not read
+// here.
 const ClientKeyHeader = "slpacmsuser-key"
 
-// ClientKeyInput is the task input the SLPA-issued client key arrives in.
-//
-// The key belongs to the submitting company, so it travels with the consignment:
-// the company profile is propagated into the workflow, the split that spawns an
-// agency flow carries it into the branch, and the artifact maps it here. Nothing
-// in this package reads a database — which company a submission is filed under is
-// a workflow decision, expressed in the artifact rather than in code.
-const ClientKeyInput = "client_key"
-
-// Interpreter renders the trader's form as the ECDN document, presents the client
-// key the CMS identifies the submission by, and reads the CMS's answer back as an
-// acceptance flag plus a trader-facing message.
-//
-// It implements the API-call plugin's CallInterpreter, because that key is a
-// header taken from the task inputs rather than a value configurable per service.
-// That is the only reason this needs more than the plain JSON path.
+// Interpreter renders the trader's form as the ECDN document and reads the CMS's
+// answer back as an acceptance flag plus a trader-facing message.
 type Interpreter struct{}
 
 // NewInterpreter returns the ECDN interpreter.
 func NewInterpreter() *Interpreter { return &Interpreter{} }
 
-// BuildCall assembles the upload: the declaration as the body, and the client key
-// as the header SLPA identifies the submitting company by.
-func (i *Interpreter) BuildCall(_ context.Context, _ string, inputs map[string]any) (any, map[string]string, error) {
-	body, err := buildBody(inputs)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	clientKey, _ := inputs[ClientKeyInput].(string)
-	clientKey = strings.TrimSpace(clientKey)
-	if clientKey == "" {
-		return nil, nil, &buildError{
-			"Your company is not registered with the SLPA Cargo Management System, so this declaration cannot be submitted. Please contact SLPA to be issued a CMS client key."}
-	}
-
-	return body, map[string]string{
-		ClientKeyHeader: clientKey,
-		"Accept":        "application/json",
-	}, nil
-}
-
-// buildBody renders the form as the ECDN document and wraps it for upload.
-func buildBody(inputs map[string]any) (UploadRequest, error) {
+// BuildRequest renders the form as the ECDN document and wraps it for upload.
+//
+// The contract has no error return, so a document that cannot be assembled is
+// sent as an empty declaration: the CMS validates the document and answers with
+// its own reason, which is what the trader is shown. The form the trader submits
+// already requires every field this needs and at least one container, so this is
+// a defensive path rather than an expected one — hence the log, which is the only
+// place the local reason survives.
+func (i *Interpreter) BuildRequest(inputs map[string]any) any {
 	form, ok := inputs["payload"].(map[string]any)
 	if !ok {
-		return UploadRequest{}, &buildError{"The cargo declaration form could not be read."}
+		slog.Error("slpa ecdn: task inputs carry no payload form; sending an empty declaration")
+		return UploadRequest{}
 	}
 
 	doc, err := BuildXML(form)
 	if err != nil {
-		return UploadRequest{}, err
+		slog.Error("slpa ecdn: declaration could not be assembled; sending an empty declaration", "error", err)
+		return UploadRequest{}
 	}
-	return UploadRequest{XMLPayload: doc}, nil
+	return UploadRequest{XMLPayload: doc}
 }
 
 // Interpret reports whether the CMS accepted the declaration and captures the
 // fields worth recording against the task.
 func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
-	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
+	body := flattenEnvelope(resp)
+	accepted := callErr == nil && !hasErrors(body) && statusIsAccepted(body)
 
 	out := map[string]any{}
-	for _, k := range []string{"status", "message", "reference", "ecdn_id", "error", "errors", "detail"} {
-		if v, ok := resp[k]; ok {
+	for _, k := range []string{
+		"status", "message", "reference", "ecdn_id", "cusdec_serial", "validated_at",
+		"error", "errors", "detail",
+	} {
+		if v, ok := body[k]; ok {
 			out[k] = v
 		}
 	}
 	if !accepted {
-		out["error"] = describeFailure(callErr, resp)
+		out["error"] = describeFailure(callErr, body)
 	}
 	return accepted, out
+}
+
+// flattenEnvelope lifts the CMS's response envelope into the flat map the rest of
+// this file reads.
+//
+// The CMS answers with the outcome nested under "data" and a top-level "status"
+// that describes the envelope rather than the declaration — a served request is
+// status 1 whether or not the document was accepted:
+//
+//	{"data": {"status": "ACCEPTED", "cusdec_serial": "...", "validated_at": "..."},
+//	 "status": 1, "openapi": "3.0.3"}
+//
+// The nested fields therefore win over the envelope's, so "status" means the
+// declaration's verdict everywhere below. Envelope-level fields are kept as the
+// fallback, because a request the CMS refuses outright reports it there with no
+// "data" to nest it under.
+func flattenEnvelope(resp map[string]any) map[string]any {
+	nested, ok := resp["data"].(map[string]any)
+	if !ok {
+		return resp
+	}
+
+	body := make(map[string]any, len(resp)+len(nested))
+	for k, v := range resp {
+		if k == "data" {
+			continue
+		}
+		body[k] = v
+	}
+	for k, v := range nested {
+		body[k] = v
+	}
+	return body
 }
 
 // statusIsAccepted reports whether the CMS answered with a success.
@@ -123,6 +138,9 @@ func hasErrors(resp map[string]any) bool {
 	case map[string]any:
 		return len(errs) > 0
 	}
+	if obj, ok := resp["error"].(map[string]any); ok {
+		return len(obj) > 0
+	}
 	return stringField(resp, "error") != ""
 }
 
@@ -132,15 +150,11 @@ func describeFailure(callErr error, resp map[string]any) string {
 	const intro = "SLPA did not accept your cargo declaration:"
 	const outro = "\n\nPlease correct the details and submit again."
 
-	// A local assembly failure never reached SLPA, so it is reported on its own
-	// terms rather than as their rejection.
-	var be *buildError
-	if errors.As(callErr, &be) {
-		return "Your cargo declaration could not be submitted:\n\n- " + be.msg
-	}
-
 	if bullets := reasonBullets(resp); len(bullets) > 0 {
 		return intro + "\n\n" + strings.Join(bullets, "\n") + outro
+	}
+	if bullet := errorObjectBullet(resp); bullet != "" {
+		return intro + "\n\n" + bullet + outro
 	}
 	for _, key := range []string{"error", "message", "detail"} {
 		if s := stringField(resp, key); s != "" {
@@ -151,6 +165,34 @@ func describeFailure(callErr error, resp map[string]any) string {
 		return "We could not reach the SLPA Cargo Management System. Please try again in a few minutes."
 	}
 	return intro + outro
+}
+
+// errorObjectBullet renders the object the CMS puts under "error" when it
+// refuses the request outright — {"code": "…", "message": "…"} — as opposed to
+// the field-keyed "errors" map it returns for a declaration it has read and
+// validated. Without this the reason is dropped: the object is not a string, so
+// the string-valued fields below find nothing and the trader is told only that
+// the declaration was not accepted.
+//
+// The code travels with the message because it is what SLPA support asks for
+// when a submission is refused for a reason the trader cannot act on alone.
+func errorObjectBullet(resp map[string]any) string {
+	obj, ok := resp["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	msg := stringField(obj, "message")
+	if msg == "" {
+		msg = stringField(obj, "description")
+	}
+	if msg == "" {
+		return ""
+	}
+	if code := stringField(obj, "code"); code != "" {
+		return fmt.Sprintf("- %s _(%s)_", msg, code)
+	}
+	return "- " + msg
 }
 
 func reasonBullets(resp map[string]any) []string {

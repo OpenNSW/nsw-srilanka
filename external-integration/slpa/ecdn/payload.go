@@ -215,16 +215,13 @@ func buildContainers(form map[string]any, cusdecNo, cusdecDate string) ([]Contai
 }
 
 // buildError marks a failure to assemble the declaration, as opposed to a
-// transport failure or a CMS rejection, so the message reaches the trader
-// verbatim.
+// transport failure or a CMS rejection. Its message is written for a person: the
+// plugin contract BuildRequest implements cannot fail a call, so the reason is
+// logged rather than shown, and the trader sees the CMS's answer to the empty
+// declaration that gets sent instead (see Interpreter.BuildRequest).
 type buildError struct{ msg string }
 
 func (e *buildError) Error() string { return e.msg }
-
-// NewSubmissionError builds a failure whose message is shown to the trader
-// verbatim, for a submission that could not be attempted — the declaration never
-// reached SLPA, so it must not be reported as their rejection.
-func NewSubmissionError(reason string) error { return &buildError{reason} }
 
 // --- form accessors -------------------------------------------------------
 //

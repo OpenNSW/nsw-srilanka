@@ -10,24 +10,15 @@
 -- identifier among the others already there (br_no, tin_no, vat_no), and only
 -- companies registered with SLPA have one.
 --
--- ADAM PVT LTD gets the key SLPA actually issued for the integration; every
--- other company gets a generated one of the same shape (10 alphanumerics) so a
--- local environment can exercise the flow as any company. These are development
--- values: a real deployment overwrites them with the keys SLPA issued.
+-- Every company gets the one key SLPA issued for this integration, so a local
+-- environment can exercise the flow as whichever company it signs in as. That is
+-- a development convenience, not the real shape: SLPA issues a key per
+-- registered company, and a real deployment overwrites these with the key each
+-- company was issued — companies not registered with SLPA carry none at all, and
+-- their submissions are refused by the CMS.
 UPDATE company_records
-SET data = COALESCE(data, '{}'::jsonb) || jsonb_build_object('slpacmsuser_key', 'UkLWZg9DAJ'),
-    updated_at = now()
-WHERE id = 'adam-pvt-ltd';
-
-UPDATE company_records
-SET data = COALESCE(data, '{}'::jsonb) || jsonb_build_object(
-        'slpacmsuser_key',
-        -- 10 characters drawn from the same alphabet as the issued key, seeded
-        -- from the company id so re-running is idempotent.
-        upper(substr(md5(id || 'slpa-cms'), 1, 5)) || substr(md5(id), 6, 5)
-    ),
-    updated_at = now()
-WHERE NOT (data ? 'slpacmsuser_key');
+SET data = COALESCE(data, '{}'::jsonb) || jsonb_build_object('slpacmsuser_key', 'agztNvLSUA'),
+    updated_at = now();
 
 -- @DOWN
 UPDATE company_records
