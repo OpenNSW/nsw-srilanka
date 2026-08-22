@@ -14,7 +14,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
 )
 
 const (

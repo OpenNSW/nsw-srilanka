@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Catalog is the parsed catalog file.
@@ -40,6 +41,29 @@ func Load(path string) (*Catalog, error) {
 		return nil, fmt.Errorf("catalog %s: %w", path, err)
 	}
 	return &c, nil
+}
+
+// RequireRoles reports an error unless roles — the catalog's Roles map — defines
+// every one of names with a non-empty token role.
+//
+// It exists because some callers depend on specific logical names rather than on
+// whatever the catalog happens to define: consignment scopes queries by "trader"
+// and "cha", and task ownership resolution maps each of those to its own database
+// column. For them a missing name is not a narrower catalog but a silent denial of
+// every request in that role, so they call this at construction to fail loudly
+// instead. An empty mapping counts as missing: it can never match a real JWT role
+// claim, and honoring it would let a comparison against an empty string succeed.
+func RequireRoles(roles map[string]string, names ...string) error {
+	var missing []string
+	for _, name := range names {
+		if role, ok := roles[name]; !ok || role == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("catalog is missing required role(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // Validate reports whether the catalog is internally consistent: it must define

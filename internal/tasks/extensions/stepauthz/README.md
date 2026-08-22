@@ -1,4 +1,4 @@
-# Task-step authorization extension
+# `stepauthz` — task-step authorization extension
 
 A `PRE_RESUME` task extension that decides whether the caller may run a command on
 a task at its current state. It is the enforcement point behind
@@ -12,7 +12,9 @@ company services.
 
 ## Per-task config
 
-Add an `authz` block to a subtask template's `extensions` array. `properties` is
+Add an `authz` block to a subtask template's `extensions` array. The block id
+stays `"authz"` — it is the `ExtensionConfig.id` the artifacts declare, and is
+independent of this package's name. `properties` is
 `state → command → [logical principal names]`; deny-by-default (a state/command
 with no rule is rejected):
 
