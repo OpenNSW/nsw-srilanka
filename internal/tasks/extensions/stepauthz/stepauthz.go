@@ -8,7 +8,7 @@
 // the catalog it is handed at construction. It reads no configuration file,
 // resolves ownership only when a user rule actually needs it, and never touches
 // domain services directly.
-package authz
+package stepauthz
 
 import (
 	"context"

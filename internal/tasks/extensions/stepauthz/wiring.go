@@ -1,4 +1,4 @@
-package authz
+package stepauthz
 
 import (
 	"fmt"
@@ -15,13 +15,13 @@ const ExtAuthz = "authz"
 // resolve through it.
 func Register(reg *extensions.Registry, cat Catalog) error {
 	if reg == nil {
-		return fmt.Errorf("authz: registry is nil")
+		return fmt.Errorf("stepauthz: registry is nil")
 	}
 	if len(cat.Roles) == 0 && len(cat.Clients) == 0 {
-		return fmt.Errorf("authz: catalog defines no roles or clients")
+		return fmt.Errorf("stepauthz: catalog defines no roles or clients")
 	}
 	if err := reg.Register(ExtAuthz, NewExtension(cat)); err != nil {
-		return fmt.Errorf("authz: register %s: %w", ExtAuthz, err)
+		return fmt.Errorf("stepauthz: register %s: %w", ExtAuthz, err)
 	}
 	return nil
 }

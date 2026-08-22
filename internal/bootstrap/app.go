@@ -47,8 +47,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
+	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
@@ -282,7 +282,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task-step authorization: attach the caller's identity and a lazy
 	// ownership resolver for the PRE_RESUME authz extension to evaluate.
-	taskAuthzGate, err := authzgate.NewMiddleware(consignmentService, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+	taskAuthzGate, err := authzgate.NewMiddleware(ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
@@ -526,6 +526,27 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 		return "", nil
 	}
 	return rec.ID, nil
+}
+
+// ownershipResolver adapts the consignment service to
+// authzgate.OwnershipResolver. A consignment that does not exist is reported as
+// ("", "", nil) — the caller then owns neither side and is denied cleanly, the
+// same fail-closed convention companyIDResolver follows, rather than surfacing a
+// missing consignment as a 500.
+//
+// It wraps the same interface it produces: *consignment.Service already has the
+// right shape, so all this adds is the error translation.
+type ownershipResolver struct{ svc authzgate.OwnershipResolver }
+
+func (r ownershipResolver) GetOwnership(ctx context.Context, consignmentID string) (string, string, error) {
+	traderCompanyID, chaCompanyID, err := r.svc.GetOwnership(ctx, consignmentID)
+	if err != nil {
+		if errors.Is(err, consignment.ErrConsignmentNotFound) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	return traderCompanyID, chaCompanyID, nil
 }
 
 // registryTemplateProvider adapts the artifact registry to uiprojector's
