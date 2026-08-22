@@ -1,7 +1,6 @@
 package ecdn
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -10,17 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInterpreter_BuildCall(t *testing.T) {
-	i := NewInterpreter()
-
-	req, headers, err := i.BuildCall(context.Background(), "consignment-1", map[string]any{
-		"payload":      fullForm(),
-		ClientKeyInput: "UkLWZg9DAJ",
-	})
-	require.NoError(t, err)
-
-	// SLPA identifies the submitting company by this header, not by the body.
-	assert.Equal(t, "UkLWZg9DAJ", headers[ClientKeyHeader])
+func TestInterpreter_BuildRequest(t *testing.T) {
+	req := NewInterpreter().BuildRequest(map[string]any{"payload": fullForm()})
 
 	body, err := json.Marshal(req)
 	require.NoError(t, err)
@@ -29,7 +19,8 @@ func TestInterpreter_BuildCall(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &out))
 
 	// The declaration travels as a string in xml_payload, and identity is not in
-	// the body — it is the bearer token and the slpacmsuser-key header.
+	// the body — it is the bearer token and the slpacmsuser-key header, both
+	// applied by remote.Manager from the service's configuration.
 	doc, ok := out["xml_payload"].(string)
 	require.True(t, ok, "xml_payload must be a string")
 	assert.Contains(t, doc, "<CusDecNote>")
@@ -37,29 +28,20 @@ func TestInterpreter_BuildCall(t *testing.T) {
 	assert.Len(t, out, 1, "the upload body carries only the declaration")
 }
 
-func TestInterpreter_RefusesToSendWithoutAnIdentifiedCompany(t *testing.T) {
+// The contract cannot fail a call, so a declaration that will not assemble is
+// sent empty and the CMS's own validation answers it. What must not happen is a
+// half-built document reaching SLPA.
+func TestInterpreter_BuildRequestSendsNothingItCannotAssemble(t *testing.T) {
 	i := NewInterpreter()
 
-	t.Run("unreadable form", func(t *testing.T) {
-		_, _, err := i.BuildCall(context.Background(), "c1", map[string]any{ClientKeyInput: "K"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "could not be read")
+	t.Run("no form in the inputs", func(t *testing.T) {
+		assert.Equal(t, UploadRequest{}, i.BuildRequest(map[string]any{}))
 	})
 
-	// Reaching SLPA without a client key would file the declaration against no
-	// company at all, so it is refused before anything is sent.
-	t.Run("no client key mapped in", func(t *testing.T) {
-		_, _, err := i.BuildCall(context.Background(), "c1", map[string]any{"payload": fullForm()})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not registered with the SLPA")
-	})
-
-	t.Run("blank client key", func(t *testing.T) {
-		_, _, err := i.BuildCall(context.Background(), "c1", map[string]any{
-			"payload": fullForm(), ClientKeyInput: "   ",
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not registered with the SLPA")
+	t.Run("a form with no containers", func(t *testing.T) {
+		form := fullForm()
+		delete(form, "containers")
+		assert.Equal(t, UploadRequest{}, i.BuildRequest(map[string]any{"payload": form}))
 	})
 }
 
@@ -69,6 +51,29 @@ func TestInterpreter_InterpretAccepted(t *testing.T) {
 	})
 	assert.True(t, accepted)
 	assert.Equal(t, "ECDN-9001", out["reference"])
+	assert.NotContains(t, out, "error")
+}
+
+// The response SLPA's CMS actually returns: the verdict is nested under "data",
+// and the top-level "status" is an envelope code (1 for a served request) that
+// says nothing about the declaration.
+func TestInterpreter_InterpretAcceptedInsideTheDataEnvelope(t *testing.T) {
+	accepted, out := NewInterpreter().Interpret(nil, map[string]any{
+		"data": map[string]any{
+			"status":        "ACCEPTED",
+			"validated_at":  "2026-08-22T18:13:57+05:30",
+			"cusdec_serial": "BIBE1CBEX1-2026-E-10512026",
+		},
+		"status":  float64(1),
+		"openapi": "3.0.3",
+	})
+	assert.True(t, accepted)
+	// The serial the CMS filed the declaration under is worth recording: it is
+	// how SLPA refers to it afterwards.
+	assert.Equal(t, "BIBE1CBEX1-2026-E-10512026", out["cusdec_serial"])
+	assert.Equal(t, "2026-08-22T18:13:57+05:30", out["validated_at"])
+	// The nested verdict wins over the envelope's numeric status.
+	assert.Equal(t, "ACCEPTED", out["status"])
 	assert.NotContains(t, out, "error")
 }
 
@@ -106,6 +111,51 @@ func TestInterpreter_InterpretRejections(t *testing.T) {
 		assert.False(t, accepted)
 	})
 
+	// The shape the CMS uses to refuse a request it never read: one object under
+	// "error", with the reason and a support code.
+	t.Run("an object-shaped refusal is rendered with its code", func(t *testing.T) {
+		accepted, out := i.Interpret(nil, map[string]any{
+			"error": map[string]any{
+				"code":    "MISSING_CLIENT_HEADER",
+				"message": "Client identifier header 'slpacmsuser-key' is required.",
+			},
+			"status":  float64(0),
+			"openapi": "3.0.3",
+		})
+		assert.False(t, accepted)
+
+		msg := out["error"].(string)
+		assert.Contains(t, msg, "Client identifier header 'slpacmsuser-key' is required.")
+		assert.Contains(t, msg, "_(MISSING_CLIENT_HEADER)_")
+		// The reason must not be swallowed, leaving only the wrapper prose.
+		assert.NotEqual(t, "SLPA did not accept your cargo declaration:\n\nPlease correct the details and submit again.", msg)
+	})
+
+	t.Run("an object-shaped refusal with no code", func(t *testing.T) {
+		_, out := i.Interpret(nil, map[string]any{
+			"error": map[string]any{"message": "Duplicate declaration."},
+		})
+		assert.Contains(t, out["error"], "- Duplicate declaration.")
+	})
+
+	t.Run("a rejection nested in the data envelope is read", func(t *testing.T) {
+		accepted, out := i.Interpret(nil, map[string]any{
+			"data": map[string]any{"status": "REJECTED", "errors": map[string]any{
+				"Cusdec_No": "Duplicate declaration",
+			}},
+			"status": float64(1),
+		})
+		assert.False(t, accepted)
+		assert.Contains(t, out["error"], "Duplicate declaration")
+	})
+
+	// The envelope's numeric status is not a verdict, so a body with no nested
+	// outcome is a rejection rather than an acceptance.
+	t.Run("an envelope status alone is not an acceptance", func(t *testing.T) {
+		accepted, _ := i.Interpret(nil, map[string]any{"status": float64(1), "openapi": "3.0.3"})
+		assert.False(t, accepted)
+	})
+
 	t.Run("a success flag without a status is honoured", func(t *testing.T) {
 		accepted, _ := i.Interpret(nil, map[string]any{"success": true})
 		assert.True(t, accepted)
@@ -117,14 +167,6 @@ func TestInterpreter_InterpretRejections(t *testing.T) {
 		assert.Contains(t, out["error"], "could not reach the SLPA")
 	})
 
-	// A declaration that never left NSW must not be reported as SLPA's rejection.
-	t.Run("local build failure", func(t *testing.T) {
-		accepted, out := i.Interpret(&buildError{"Add at least one container before submitting."}, nil)
-		assert.False(t, accepted)
-		msg := out["error"].(string)
-		assert.Contains(t, msg, "could not be submitted")
-		assert.NotContains(t, msg, "did not accept")
-	})
 }
 
 func indexOf(haystack, needle string) int {
