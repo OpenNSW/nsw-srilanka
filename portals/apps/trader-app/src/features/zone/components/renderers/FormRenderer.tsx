@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button } from '@radix-ui/themes'
-import type { JsonSchema } from '@jsonforms/core'
+import { createAjv, type JsonSchema } from '@jsonforms/core'
 import type { Handle, ZoneRendererProps } from '@/features/zone/types'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
@@ -41,6 +41,15 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
+
+  const ajvInstance = useMemo(() => {
+    const instance = createAjv({ useDefaults: true })
+    instance.addFormat(
+      'time',
+      /^(?:(?:[01]\d|2[0-3]):[0-5]\d(?::(?:[0-5]\d|60))?(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?|(?:0?[1-9]|1[0-2]):[0-5]\d(?::(?:[0-5]\d|60))?(?:\.\d+)?\s?[AP]M)$/i,
+    )
+    return instance
+  }, [])
 
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
@@ -81,6 +90,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
             setData(next)
             setErrors(errors ?? [])
           }}
+          ajv={ajvInstance}
         />
       </div>
       {interactive && (
