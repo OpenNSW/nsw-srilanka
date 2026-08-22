@@ -13,43 +13,20 @@ package authzgate
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/OpenNSW/core/authn"
 
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // Logical role names ownedRolesFor resolves ownership for. The global catalog
-// must define both — see validateCatalogRoles.
+// must define both — NewMiddleware enforces it.
 const (
 	roleTrader = "trader"
 	roleCHA    = "cha"
 )
-
-// requiredCatalogRoles are the catalog role keys ownedRolesFor depends on.
-var requiredCatalogRoles = []string{roleTrader, roleCHA}
-
-// validateCatalogRoles reports an error if roles (the global catalog's Roles
-// map) omits any role ownedRolesFor requires. A missing key doesn't fail to
-// load — the authz extension's role match against it still succeeds — but
-// ownership resolution for that name silently returns false, denying every
-// caller in that role. NewMiddleware calls this so a misconfigured catalog
-// fails at construction instead of failing every request.
-func validateCatalogRoles(roles map[string]string) error {
-	var missing []string
-	for _, name := range requiredCatalogRoles {
-		if _, ok := roles[name]; !ok {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("authzgate: catalog is missing required role(s): %s", strings.Join(missing, ", "))
-	}
-	return nil
-}
 
 // OwnershipResolver returns the trader and CHA company ids that own a
 // consignment. *consignment.Service satisfies it via GetOwnership.
@@ -76,7 +53,7 @@ type Middleware struct {
 // a role ownedRolesFor depends on fails construction instead of silently
 // denying every request in that role.
 func NewMiddleware(ownership OwnershipResolver, company CompanyResolver, roles map[string]string) (*Middleware, error) {
-	if err := validateCatalogRoles(roles); err != nil {
+	if err := catalog.RequireRoles(roles, roleTrader, roleCHA); err != nil {
 		return nil, err
 	}
 	return &Middleware{ownership: ownership, company: company}, nil

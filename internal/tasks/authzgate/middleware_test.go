@@ -11,7 +11,7 @@ import (
 	"github.com/OpenNSW/core/authn"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 type fakeOwnership struct {
@@ -195,11 +195,16 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	})
 }
 
-func TestValidateCatalogRoles(t *testing.T) {
+// NewMiddleware must reject a catalog missing a role ownedRolesFor depends on:
+// each of those names maps to a specific ownership column, so a missing key would
+// resolve false for every caller in that role — a silent blanket denial. Failing
+// at construction turns that into a startup error instead. (The name-matching
+// itself is catalog.RequireRoles' contract and is tested there.)
+func TestNewMiddleware_RejectsIncompleteCatalog(t *testing.T) {
 	tests := []struct {
 		name    string
 		roles   map[string]string
-		wantErr string // substring expected in the error; "" means no error
+		wantErr string // substring expected in the error; "" means construction succeeds
 	}{
 		{name: "both present", roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
 		{name: "extra roles ignored", roles: map[string]string{"trader": "Trader", "cha": "CHA", "fcau": "FCAU_TO_NSW"}},
@@ -210,32 +215,31 @@ func TestValidateCatalogRoles(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateCatalogRoles(tc.roles)
+			_, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, tc.roles)
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateCatalogRoles(%v) = %v, want nil", tc.roles, err)
+					t.Fatalf("NewMiddleware(%v) = %v, want nil", tc.roles, err)
 				}
 				return
 			}
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("validateCatalogRoles(%v) = %v, want error containing %q", tc.roles, err, tc.wantErr)
+				t.Fatalf("NewMiddleware(%v) = %v, want error containing %q", tc.roles, err, tc.wantErr)
 			}
 		})
 	}
 }
 
 // TestOwnedRoleKeysMatchCatalog pins the logical names ownedRolesFor hardcodes to
-// the shipped catalog by running the exact check NewMiddleware runs at
-// construction. The authz extension looks up the same names in the catalog's
-// roles, so a rename there would leave the role match succeeding while
-// ownership silently resolved false for every candidate — a blanket 403 with no
-// obvious cause. Fail here instead.
+// the shipped catalog by constructing against it. The authz evaluators look up the
+// same names in the catalog's roles, so a rename there would leave the role match
+// succeeding while ownership silently resolved false for every candidate — a
+// blanket denial with no obvious cause. Fail here instead.
 func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
 	c, err := catalog.Load(filepath.Join("..", "..", "..", "configs", "catalog.example.json"))
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if err := validateCatalogRoles(c.Roles); err != nil {
+	if _, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, c.Roles); err != nil {
 		t.Error(err)
 	}
 }

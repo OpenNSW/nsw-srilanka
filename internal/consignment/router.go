@@ -12,6 +12,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
@@ -44,20 +45,13 @@ func NewRouter(cs *Service, chaService cha.Service, companyService company.Servi
 }
 
 // validateRoles reports an error if roles (the global catalog's Roles map) omits
-// "trader" or "cha", or maps either to an empty string. An empty mapping is
-// treated as missing: it can never match a real JWT role claim, so honoring it
-// would let slices.Contains(callerRoles, "") wrongly succeed if a caller's roles
-// ever contained an empty string. Package-private; internal/consignment's
+// "trader" or "cha", or maps either to an empty string — this package scopes
+// queries by exactly those two names, so a missing one would silently deny every
+// request in that role. Package-private; internal/consignment's
 // Service.NewService also calls this (same package, no import needed).
 func validateRoles(roles map[string]string) error {
-	var missing []string
-	for _, name := range []string{"trader", "cha"} {
-		if role, ok := roles[name]; !ok || role == "" {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("consignment: catalog is missing required role(s): %s", strings.Join(missing, ", "))
+	if err := catalog.RequireRoles(roles, "trader", "cha"); err != nil {
+		return fmt.Errorf("consignment: %w", err)
 	}
 	return nil
 }
@@ -167,7 +161,7 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	// The caller must actually hold the role they're asserting via the query
 	// param — resolved through the global catalog, not hardcoded, so it stays in
 	// step with the same "trader"/"cha" -> token-role mapping the task-authz
-	// layer (internal/tasks/extensions/authz) uses.
+	// layer (internal/tasks/taskauthz) uses.
 	requiredTokenRole, ok := c.roles[role]
 	if !ok {
 		httputil.InternalServerError(w, r, "role not configured in catalog", fmt.Errorf("catalog has no mapping for role %q", role))

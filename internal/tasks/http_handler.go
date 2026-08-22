@@ -14,7 +14,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 )
 
 const (
@@ -98,9 +98,9 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		switch {
-		case errors.Is(err, taskauthz.ErrUnauthenticated):
+		case errors.Is(err, taskauthzext.ErrUnauthenticated):
 			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
-		case errors.Is(err, taskauthz.ErrForbidden):
+		case errors.Is(err, taskauthzext.ErrForbidden):
 			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
 			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 		default:
