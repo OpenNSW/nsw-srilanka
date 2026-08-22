@@ -92,8 +92,10 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// RootWorkflowID is the consignment id, so this decides the caller's access
-	// from their role-tied ownership of the task's consignment.
-	if err := h.ReadAuthz.Authorize(ctx, in, record.RootWorkflowID); err != nil {
+	// from their role-tied ownership of the task's consignment, and returns the
+	// claims that shape their view of it.
+	claims, err := h.ReadAuthz.Resolve(ctx, in, record.RenderConfig, record.RootWorkflowID)
+	if err != nil {
 		if !errors.Is(err, readauthz.ErrDenied) {
 			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
 			return
@@ -107,7 +109,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(ctx, record)
+	zv, err := h.Assembler.Assemble(ctx, record, claims)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return

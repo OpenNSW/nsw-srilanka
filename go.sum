@@ -2,8 +2,8 @@ github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7Oputl
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
 github.com/LSFLK/argus/pkg/audit v0.0.0-20260616134204-858f4ee608e8 h1:d1IUg4PzKxgWnl9UPnQYbMlPaNiwGcZPjq2lXyrY5Y4=
 github.com/LSFLK/argus/pkg/audit v0.0.0-20260616134204-858f4ee608e8/go.mod h1:VPLkj7lPFOPSTNZulUsf+OCWcjz9vdndCRhcc2hfQjM=
-github.com/OpenNSW/core v0.0.0-20260811160010-4ad1c7119562 h1:ZNaI+pWPc7NJUpDla3IMKMmcOn4V0ii9ISq7lwxIYA8=
-github.com/OpenNSW/core v0.0.0-20260811160010-4ad1c7119562/go.mod h1:CXAX36LQn34dFZmZiMUz+mBYjU33kYnMcBrbRLS2YDs=
+github.com/OpenNSW/core v0.0.0-20260821083557-9756e7bcd45b h1:IyaFFf+aMYn8dBDwkkudiYNHpQ/490pOIIyBU3tmhgc=
+github.com/OpenNSW/core v0.0.0-20260821083557-9756e7bcd45b/go.mod h1:8MHLbXk8XO39KeTcxKSrPkPIixt+ZXHa7xxnzGJcWFU=
 github.com/OpenNSW/core/authn v0.2.0 h1:hNiD7H/f/qln/E9zq8rbnC+Sru1CvC/Z1rDhR/qrUhE=
 github.com/OpenNSW/core/authn v0.2.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
@@ -24,8 +24,8 @@ github.com/OpenNSW/core/shared v0.3.0 h1:HcWcXyMdwzMfsVvo1HG2OTBYaQTRipTpLI0AFx/
 github.com/OpenNSW/core/shared v0.3.0/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
 github.com/OpenNSW/core/trace v0.2.0 h1:C0ngf3m03oySzYvdpQNG+D+dsGs9+n5zWugoyMmWnlg=
 github.com/OpenNSW/core/trace v0.2.0/go.mod h1:b3qhByzXWqepa+5NOYpqIZILwv4OuhACLHCh/eRdWRo=
-github.com/OpenNSW/core/uiprojector v0.2.0 h1:1nooVc97oXXkFhYCQrsjDVdr/WqtVxnfvkMl0h5HUI8=
-github.com/OpenNSW/core/uiprojector v0.2.0/go.mod h1:wWmdAkD71gPcDwaPyH/9BY0IbbqWFXoR/UkgssSxwh0=
+github.com/OpenNSW/core/uiprojector v0.3.0 h1:TRp0+TCcq+9eGMU0KPf0a2idHVE/xjVoFgy5Nf/pqZM=
+github.com/OpenNSW/core/uiprojector v0.3.0/go.mod h1:wWmdAkD71gPcDwaPyH/9BY0IbbqWFXoR/UkgssSxwh0=
 github.com/aws/aws-sdk-go-v2 v1.43.4 h1:b9FTvbRwy+JCsfp2Wp6wV/KbOx3Aj7nkoFb2cRX0IhE=
 github.com/aws/aws-sdk-go-v2 v1.43.4/go.mod h1:70vwSy16txshwG+g55WkpgPKDIByzHI8ccBsOteo3bQ=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.16 h1:aiuaKlDweRC5qExJondpWjOgyzMHpofpwspGXUtwn4c=

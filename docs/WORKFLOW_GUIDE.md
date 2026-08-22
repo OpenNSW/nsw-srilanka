@@ -115,15 +115,69 @@ The child subworkflow defines the execution path of a single transaction stage.
 
 ### Schema Fields
 - `id`: Unique identifier, conventionally `<subworkflow-id>:render` (e.g. `fcau-warehouse-scheduling-flow:render`).
-- `type`: `APPLICATION` (trader/applicant submission view) or `REVIEW` (officer review split pane).
+- `type`: A user-facing category for the view. `APPLICATION` (trader/applicant submission view) and `REVIEW` (officer review split pane) are the common ones; the shipped configs also use `PAYMENT`, `SYSTEM`, `LAB_TEST`, `SAMPLE_COLLECTION`, `VISUAL_ASSESSMENT`, and `CERTIFICATE_ISSUANCE`.
+- `title`: Human-readable name for the whole task view (e.g. `[Trade] Select HS Codes`).
+- `read`: **Who may read this task at all** — see [Read authorization](#read-authorization) below.
 - `sections`: Map of slots (e.g. `workspace`, `reference`, `instructions`).
   - `templateId`: Identifies the schema file to display (maps to `id` in the respective `*_jsonform.json`).
   - `projector`: `FORM` (interactive JSONForm), `MARKDOWN` (static instructions), or `PAYMENT` (checkout page).
-  - `dataKey`: Variable name matching the task's output namespace (e.g. `traderinput`, `reviewerform`).
-  - `handles`: **CRITICAL FOR EDITABILITY**. Defines what actions/buttons can be clicked on the form zone. **If `handles` is missing or empty, the frontend renders the form fields as read-only (non-interactive).**
+  - `dataKey`: Variable name matching the task's output namespace (e.g. `traderinput`, `reviewerform`). Omit it to hand the projector the whole variable map.
+  - `title`: Heading rendered above the section.
+  - `visibleWhen`: Declarative rules deciding whether the section renders at all. All rules present must hold (they AND together); omitting the block renders the section always. There is no `OR` — express alternatives as separate slots.
+    - `states`: List of task states the section shows in, matched case-insensitively (e.g. `["PENDING_USER"]`).
+    - `requireDataKey`: Section only renders if this **top-level** key exists and is non-null in the task's data. Not a dotted path.
+    - `requireClaim`: Section only renders if the caller holds this claim — see [Read authorization](#read-authorization).
+  - `handles`: **CRITICAL FOR EDITABILITY**. Defines what actions/buttons can be clicked on the form zone. **If `handles` is missing or empty, the frontend renders the form fields as read-only (non-interactive).** A handle only reaches the frontend if its section rendered *and* its `command` is legal in the current state, so hiding a section also removes its buttons.
 - `states`: Defines the operational lifecycle.
   - `PENDING_USER`: Active state where user can perform actions.
     - `actions`: List of allowed commands (e.g. `{ "command": "submit" }`).
+
+### Read authorization
+
+`GET /api/v1/tasks/{id}` is scoped to the caller. Before rendering, the backend resolves one **claim** per role in `configs/catalog.json`, named `role:<logicalName>` — so `role:trader` and `role:cha` today. A claim is true only when the caller both holds that role in their token **and** their company owns the task's consignment in that same slot; holding the role is not enough.
+
+Two levers use those claims:
+
+- **`read.roles`** (top level) lists the logical roles allowed to read the task at all. A caller eligible for none of them gets a `404` — deliberately indistinguishable from a task that does not exist. Omit the block (or leave the list empty) to admit any role that owns the consignment.
+- **`visibleWhen.requireClaim`** (per section) gates one section on one claim, which is how a single task state shows different content to different roles.
+
+> [!IMPORTANT]
+> **`read.roles` is ordered, and the order is precedence.** One user can be eligible for several roles at once — a self-clearing operator holding both Trader and CHA at a company that is both the trader and the CHA on its own consignment. Since `visibleWhen` rules only ever AND, two true claims would render two contradictory sections side by side ("here is the form" next to "waiting for your CHA"). So when `read.roles` is declared, the caller **acts as the first role in the list they are eligible for**, and exactly one `role:*` claim is true.
+>
+> Put the role that *acts* on the task first: `["cha", "trader"]` for a step the CHA performs, `["trader", "cha"]` for one the trader performs. Reordering the list changes which screen a dual-role user gets.
+>
+> A config that declares **no** `read.roles` has expressed no precedence, so every eligible role's claim is reported. That is safe only because such a config has no per-role sections to disagree — **if you use `requireClaim` anywhere, declare `read.roles`.**
+
+```json
+{
+  "id": "trade-hscode-selection-flow:render",
+  "type": "APPLICATION",
+  "read": { "roles": ["cha", "trader"] },
+  "sections": {
+    "status_message": {
+      "templateId": "trade-hscode-selection--waiting-markdown",
+      "projector": "MARKDOWN",
+      "visibleWhen": { "states": ["PENDING_USER"], "requireClaim": "role:trader" }
+    },
+    "workspace": {
+      "templateId": "trade-hscode-selection--form",
+      "projector": "FORM",
+      "dataKey": "traderinput",
+      "visibleWhen": { "states": ["PENDING_USER"], "requireClaim": "role:cha" },
+      "handles": [{ "command": "submit", "label": "Complete Selection", "element": "primary_action" }]
+    }
+  },
+  "states": { "PENDING_USER": { "actions": [{ "command": "submit" }] } }
+}
+```
+
+In the same `PENDING_USER` state the CHA gets the form and its submit button, while the trader gets only a waiting notice. A section with no `requireClaim` is visible to whichever role the caller is acting as — which is how both roles share one completed-summary section.
+
+> [!WARNING]
+> Claim names are matched **exactly and case-sensitively**, and a `requireClaim` naming a claim the backend does not produce fails the whole request with a `500` rather than silently hiding the section. Only use names of the form `role:<key>` where `<key>` is a role in `configs/catalog.json`.
+
+> [!IMPORTANT]
+> This is presentation-layer scoping and the read gate — it does not authorize *writes*. Who may run a command is a separate, deny-by-default rule in the subtask template's `authz` extension (see [`internal/tasks/extensions/stepauthz/README.md`](../internal/tasks/extensions/stepauthz/README.md)). A section hidden here still needs its command denied there.
 
 ### Interactive Form Template Example (`render.json`)
 ```json
@@ -203,5 +257,9 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 
 1. **Parent Workflow Hot-Reload**:
    - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
-2. **Subworkflows and Render configs**:
-   - Subfolder configurations (e.g. `workflow.json`, `render.json`) are parsed and cached in-memory during application startup (`LoadConfigsInto`). **Modifying any render config, form schema, or child workflow definition requires restarting the Go server (`go run ./cmd/server`)**.
+2. **Form schemas and markdown templates**:
+   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `ARTIFACT_LOADER_TYPE=local`).
+3. **Render configs**:
+   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
+4. **The manifest**:
+   - `manifest.json` is read once at startup. Adding a new template file means adding its row there **and** restarting the server.

@@ -147,7 +147,28 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 | `path` | URL path; `{{var}}` tokens interpolated. |
 | `body` | JSON body; `{{var}}` in string values interpolated. |
 | `expectStatus` | Expected status code (default 200). |
-| `extract` | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`). |
+| `extract` | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`). Fails the step if the path is missing. |
+| `expectPresent` | List of dot-notation paths that must exist in the response. |
+| `expectAbsent` | List of dot-notation paths that must **not** exist — how a flow proves an authorization rule withheld something. |
+
+#### Asserting a role-scoped view
+
+`GET /api/v1/tasks/{id}` shapes its `view` to the caller's role, so the same task
+answers two actors differently. `expectAbsent` is what makes the negative half of
+that assertable:
+
+```json
+{
+  "name": "trader waits on the HS-code task and gets a notice, not the form",
+  "request": {
+    "actor": "trader",
+    "method": "GET",
+    "path": "/api/v1/tasks/{{hsTask}}",
+    "expectPresent": ["view.status_message.type"],
+    "expectAbsent": ["view.workspace"]
+  }
+}
+```
 
 #### Completing a USER_INPUT task
 
