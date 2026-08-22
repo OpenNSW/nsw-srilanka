@@ -11,7 +11,7 @@ import (
 	"github.com/OpenNSW/core/authn"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 type fakeOwnership struct {

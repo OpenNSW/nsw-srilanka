@@ -14,7 +14,10 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 const (
@@ -32,41 +35,101 @@ type TaskFetcher interface {
 }
 
 type HTTPHandler struct {
-	Manager         *orchestrator.TaskManager
-	Store           TaskFetcher
-	Assembler       *zoneview.ZoneViewAssembler
+	Manager   *orchestrator.TaskManager
+	Store     TaskFetcher
+	Assembler *zoneview.ZoneViewAssembler
+	// ReadAuthz gates HandleGetTask and resolves the claims that shape the view.
+	ReadAuthz *readauthz.Evaluator
+	// Audit records refused reads. Optional — nil disables the audit trail.
+	Audit           *nswaudit.Recorder
 	MaxRequestBytes int64
 }
 
-func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64) *HTTPHandler {
-	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes}
+func NewHTTPHandler(
+	manager *orchestrator.TaskManager,
+	store TaskFetcher,
+	assembler *zoneview.ZoneViewAssembler,
+	readAuthz *readauthz.Evaluator,
+	recorder *nswaudit.Recorder,
+	maxRequestBytes int64,
+) *HTTPHandler {
+	return &HTTPHandler{
+		Manager:         manager,
+		Store:           store,
+		Assembler:       assembler,
+		ReadAuthz:       readAuthz,
+		Audit:           recorder,
+		MaxRequestBytes: maxRequestBytes,
+	}
 }
 
-// HandleGetTask returns the ZoneView payload for a single task.
+// HandleGetTask returns the ZoneView payload for a single task, scoped to the
+// caller: they must own the task's consignment in a role the task's render
+// config admits, and the claims resolved for them decide which sections of the
+// view they see.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
-	// TODO: retrieve the authenticated context and validate it against the
-	// task's ownership bounds before returning ZoneView.
+	ctx := r.Context()
 	taskID := r.PathValue("id")
 	if taskID == "" {
 		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
 
-	record, ok := h.Store.GetTask(r.Context(), taskID)
+	// Attached by the task authz gate. Absent means no usable principal, which
+	// the scope middleware should already have rejected.
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok {
+		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+		return
+	}
+
+	record, ok := h.Store.GetTask(ctx, taskID)
 	if !ok {
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(r.Context(), record)
+	// RootWorkflowID is the consignment id, so this decides the caller's access
+	// from their role-tied ownership of the task's consignment.
+	if err := h.ReadAuthz.Authorize(ctx, in, record.RootWorkflowID); err != nil {
+		if !errors.Is(err, readauthz.ErrDenied) {
+			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
+			return
+		}
+		h.recordReadDenial(ctx, taskID)
+		// Answer with the not-found status and text, so a denied read is
+		// indistinguishable from a task that does not exist and cannot be used to
+		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
+		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return
+	}
+
+	zv, err := h.Assembler.Assemble(ctx, record)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
 	}
 
 	httputil.JSON(w, http.StatusOK, zv)
+}
+
+// recordReadDenial writes the audit trail for a refused read. The recorder is
+// optional so tests and any non-audited wiring can leave it nil.
+func (h *HTTPHandler) recordReadDenial(ctx context.Context, taskID string) {
+	if h.Audit == nil {
+		return
+	}
+	h.Audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventTask,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetTask,
+		TargetID:   taskID,
+		Failure:    true,
+		Metadata:   map[string]any{"error": "task read access denied"},
+	})
 }
 
 // HandleCompleteTaskStep advances a task by submitting a step payload.
@@ -98,9 +161,9 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		switch {
-		case errors.Is(err, taskauthz.ErrUnauthenticated):
+		case errors.Is(err, stepauthz.ErrUnauthenticated):
 			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
-		case errors.Is(err, taskauthz.ErrForbidden):
+		case errors.Is(err, stepauthz.ErrForbidden):
 			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
 			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 		default:

@@ -1,14 +1,18 @@
-// Package authzgate is Layer 1 of task-step authorization: an HTTP middleware for
-// the task-write routes that reads the caller's identity and attaches an
-// authz.Input — including a lazy consignment-ownership resolver — to the request
-// context for the PRE_RESUME authz extension to evaluate.
+// Package authzgate is Layer 1 of task authorization, shared by the task read and
+// write routes: an HTTP middleware that reads the caller's identity and attaches a
+// taskauthz.Input — including a lazy consignment-ownership resolver — to the
+// request context for a Layer-2 evaluator to judge.
 //
-// It resolves the principal eagerly (cheap) but defers ownership to a resolver
-// the extension invokes only when a user rule matches by role, so clients,
-// role-mismatches, and non-authz tasks incur no ownership lookup. It depends only
-// on narrow interfaces (bootstrap injects the concrete services), so the task
-// HTTP surface, the authz policy evaluator, and the consignment/company domains
-// each stay unaware of one another.
+// It makes no decision of its own. The two evaluators it feeds are the PRE_RESUME
+// authz extension on writes (internal/tasks/extensions/stepauthz) and the read
+// evaluator on reads (internal/tasks/readauthz).
+//
+// It resolves the principal eagerly (cheap) but defers ownership to a resolver an
+// evaluator invokes only once the caller is known to hold a relevant role, so
+// clients, role-mismatches, and non-authz tasks incur no ownership lookup. It
+// depends only on narrow interfaces (bootstrap injects the concrete services), so
+// the task HTTP surface, the policy evaluators, and the consignment/company
+// domains each stay unaware of one another.
 package authzgate
 
 import (
@@ -18,7 +22,7 @@ import (
 	"github.com/OpenNSW/core/authn"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
-	taskauthz "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/stepauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // Logical role names ownedRolesFor resolves ownership for. The global catalog
@@ -41,8 +45,8 @@ type CompanyResolver interface {
 	CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error)
 }
 
-// Middleware attaches the authz.Input (principal facts + a lazy ownership
-// resolver) for task-write requests.
+// Middleware attaches the taskauthz.Input (principal facts + a lazy ownership
+// resolver) for task read and write requests.
 type Middleware struct {
 	ownership OwnershipResolver
 	company   CompanyResolver
@@ -59,7 +63,7 @@ func NewMiddleware(ownership OwnershipResolver, company CompanyResolver, roles m
 	return &Middleware{ownership: ownership, company: company}, nil
 }
 
-// Handler wraps next (the task-write handler), attaching the authz Input.
+// Handler wraps next (a task read or write handler), attaching the Input.
 func (m *Middleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if in, ok := m.resolve(r.Context()); ok {
@@ -69,8 +73,9 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 	})
 }
 
-// resolve builds the authz.Input from the request's auth context. ok is false for
-// an unauthenticated request — no Input is attached and the extension denies 401.
+// resolve builds the taskauthz.Input from the request's auth context. ok is false
+// for an unauthenticated request — no Input is attached, and the evaluator
+// downstream answers 401.
 func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	ac := authn.GetAuthContext(ctx)
 	if ac == nil {
@@ -96,9 +101,9 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	}
 }
 
-// ownedRolesFor returns a resolver bound to the caller's OU handle. The extension
-// invokes it (with the task's root workflow id) only when a user rule matches by
-// role; that is the only point at which the DB is touched.
+// ownedRolesFor returns a resolver bound to the caller's OU handle. An evaluator
+// invokes it (with the task's root workflow id) only once the caller is known to
+// hold a relevant role; that is the only point at which the DB is touched.
 func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 	return func(ctx context.Context, rootWorkflowID string) (map[string]bool, error) {
 		owned := map[string]bool{}
