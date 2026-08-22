@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/ecdn"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -35,6 +36,13 @@ const (
 	// dispatch note covers one container, so a consignment fans out to this task
 	// once per container (see TaskTypeCDNSplitBuilder).
 	TaskTypeCustomsCDNDispatch = "CUSTOMS_CDN_DISPATCH"
+
+	// TaskTypeSLPAECDNUpload is the generic AUTH_API_CALL plugin wired with the
+	// SLPA CMS interpreter: it renders the trader's form as the Electronic Cargo
+	// Declaration Note and uploads it. SLPA's CMS is the system of record for the
+	// declaration, so nothing is validated or stored here beyond the outcome the
+	// trader is shown.
+	TaskTypeSLPAECDNUpload = "SLPA_ECDN_UPLOAD"
 
 	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
 	// ePhyto Hub interpreter; the subtask template's plugin_properties select
@@ -88,6 +96,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
+		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 
