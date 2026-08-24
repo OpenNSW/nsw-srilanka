@@ -4,19 +4,20 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/taskflow/extensions"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 func TestRegister(t *testing.T) {
 	tests := []struct {
 		name    string
 		nilReg  bool
-		catalog Catalog
+		catalog taskauthz.Catalog
 		wantErr bool
 	}{
 		{name: "nil registry", nilReg: true, catalog: testCatalog(), wantErr: true},
-		{name: "empty catalog", catalog: Catalog{}, wantErr: true},
-		{name: "roles only", catalog: Catalog{Roles: map[string]string{"trader": "Trader"}}, wantErr: false},
-		{name: "clients only", catalog: Catalog{Clients: map[string]string{"fcau": "FCAU_TO_NSW"}}, wantErr: false},
+		{name: "empty catalog", catalog: taskauthz.Catalog{}, wantErr: true},
+		{name: "roles only", catalog: taskauthz.Catalog{Roles: map[string]string{"trader": "Trader"}}, wantErr: false},
+		{name: "clients only", catalog: taskauthz.Catalog{Clients: map[string]string{"fcau": "FCAU_TO_NSW"}}, wantErr: false},
 		{name: "valid full", catalog: testCatalog(), wantErr: false},
 	}
 	for _, tc := range tests {
