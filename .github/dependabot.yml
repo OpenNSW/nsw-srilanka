@@ -95,7 +95,7 @@ updates:
           - patch
 
   # Docker base images
-  #   /                        -> golang:1.26.4-bookworm, debian:bookworm-slim
+  #   /                        -> golang:1.27-bookworm, debian:bookworm-slim
   #   /portals/apps/trader-app -> node:22-bookworm-slim, nginxinc/nginx-unprivileged
   - package-ecosystem: docker
     directories:
