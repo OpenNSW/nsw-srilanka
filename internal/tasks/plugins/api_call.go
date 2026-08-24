@@ -15,7 +15,7 @@ import (
 type Interpreter interface {
 	// BuildRequest returns the request body to POST, derived from the task's
 	// mapped inputs — e.g. selecting a payload key and injecting identifiers.
-	BuildRequest(inputs map[string]any) any
+	BuildRequest(inputs map[string]any) remote.Body
 
 	// Interpret turns the call outcome into a result: whether the call was
 	// accepted, plus the fields to record into the output namespace (e.g.
@@ -44,11 +44,11 @@ type MultipartInterpreter interface {
 // transport-level success as accepted.
 type passthroughInterpreter struct{}
 
-func (passthroughInterpreter) BuildRequest(inputs map[string]any) any {
+func (passthroughInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 	if v, ok := inputs["payload"]; ok {
-		return v
+		return remote.JSONBody{V: v}
 	}
-	return inputs
+	return remote.JSONBody{V: inputs}
 }
 
 func (passthroughInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
@@ -137,9 +137,9 @@ func (p *APICallPlugin) callMultipart(ctx pluginContext, mp MultipartInterpreter
 	if err != nil {
 		return err
 	}
-	return p.manager.CallMultipart(ctx.Context, cfg.ServiceID, remote.MultipartRequest{
+	return p.manager.Call(ctx.Context, cfg.ServiceID, remote.Request{
 		Method: "POST",
 		Path:   cfg.Path,
-		Parts:  parts,
+		Body:   remote.MultipartBody{Parts: parts},
 	}, resp)
 }

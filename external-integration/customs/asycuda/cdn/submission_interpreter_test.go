@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/OpenNSW/core/remote"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +13,7 @@ import (
 func TestCDNInterpreter_BuildRequest(t *testing.T) {
 	sub := NewCDNInterpreter().BuildRequest(map[string]any{"payload": fullForm()})
 
-	body, err := json.Marshal(sub)
+	body, err := json.Marshal(sub.(remote.JSONBody).V)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"containerNumber":"MSCU8492019"`)
 	assert.Contains(t, string(body), `"cusDecRefs":[{"year":"2026","office":"CBEX1","serial":"E","number":1047}]`)
@@ -23,7 +24,7 @@ func TestCDNInterpreter_BuildRequest(t *testing.T) {
 func TestCDNInterpreter_BuildRequestOnUnusableForm(t *testing.T) {
 	req := NewCDNInterpreter().BuildRequest(map[string]any{})
 
-	m, ok := req.(map[string]any)
+	m, ok := req.(remote.JSONBody).V.(map[string]any)
 	require.True(t, ok, "expected an error object, got %T", req)
 	assert.Contains(t, m["error"], "could not be read")
 }

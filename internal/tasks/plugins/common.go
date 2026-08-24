@@ -51,7 +51,7 @@ func (h *dispatchHelper) post(ctx context.Context, serviceID, path string, body 
 	req := remote.Request{
 		Method: "POST",
 		Path:   path,
-		Body:   body,
+		Body:   remote.JSONBody{V: body},
 	}
 	if err := h.manager.Call(ctx, serviceID, req, nil); err != nil {
 		return h.dispatchOrSwallow(serviceID, path, err)
