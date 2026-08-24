@@ -24,7 +24,8 @@
       "agency:application:feedback",
       "agency:consignment:read",
       "agency:storage:read",
-      "agency:storage:write"
+      "agency:storage:write",
+      "agency:profile:read"
     ],
     "m2mAgency": [
       "agency:application:inject"
