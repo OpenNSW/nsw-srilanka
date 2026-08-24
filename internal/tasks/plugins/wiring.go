@@ -15,6 +15,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/ecdn"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -43,6 +44,13 @@ const (
 	// declaration, so nothing is validated or stored here beyond the outcome the
 	// trader is shown.
 	TaskTypeSLPAECDNUpload = "SLPA_ECDN_UPLOAD"
+
+	// TaskTypeSLPAServiceOrder raises the Export Service Order against a
+	// declaration the CMS has already validated — the step the ECDN unblocks. The
+	// declaration and its containers are on SLPA's side by then, so the trader is
+	// asked only which service to order per container, and the CMS derives the
+	// cargo type from the CUSDEC record itself.
+	TaskTypeSLPAServiceOrder = "SLPA_SERVICE_ORDER"
 
 	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
 	// ePhyto Hub interpreter; the subtask template's plugin_properties select
@@ -97,6 +105,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
+		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 

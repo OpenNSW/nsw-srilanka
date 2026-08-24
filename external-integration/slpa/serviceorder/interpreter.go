@@ -1,0 +1,135 @@
+package serviceorder
+
+import (
+	"log/slog"
+	"strings"
+
+	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/cms"
+)
+
+// Interpreter turns the trader's service selection into a create-order call and
+// reads the CMS's answer back as an acceptance flag plus a trader-facing message.
+//
+// Identity is not in the body: SLPA authenticates the caller with a bearer token
+// and identifies the submitting company with the slpacmsuser-key header, which
+// the workflow carries and BuildHeaders presents. See the ecdn package for the
+// same arrangement on the declaration itself.
+type Interpreter struct{}
+
+// NewInterpreter returns the service-order interpreter.
+func NewInterpreter() *Interpreter { return &Interpreter{} }
+
+// BuildRequest assembles the order from the mapped form.
+//
+// The contract has no error return, so an order that cannot be assembled is sent
+// with no lines on it: the CMS validates the request and answers with its own
+// reason, which is what the trader is shown. The form requires a service against
+// every line, so this is a defensive path — hence the log, which is the only place
+// the local reason survives.
+func (i *Interpreter) BuildRequest(inputs map[string]any) remote.Body {
+	form, ok := inputs["payload"].(map[string]any)
+	if !ok {
+		slog.Error("slpa service order: task inputs carry no payload form; sending an empty order")
+		return remote.JSONBody{V: Request{}}
+	}
+
+	req, err := Build(form)
+	if err != nil {
+		slog.Error("slpa service order: order could not be assembled; sending an empty order", "error", err)
+		return remote.JSONBody{V: Request{CusdecNo: str(form, "cusdecNo")}}
+	}
+	return remote.JSONBody{V: req}
+}
+
+// ClientKeyInput is the task input the SLPA-issued client key arrives in.
+//
+// The key belongs to the submitting company, so it travels with the consignment:
+// the company profile is propagated into the workflow, the split that spawns an
+// agency flow carries it into the branch, and the artifact maps it here. Nothing
+// in this package reads a database — which company a submission is filed under is
+// a workflow decision, expressed in the artifact rather than in code.
+const ClientKeyInput = "client_key"
+
+// ClientKeyHeader is the header SLPA identifies the submitting company by.
+const ClientKeyHeader = "slpacmsuser-key"
+
+// BuildHeaders presents the client key the CMS identifies the submission by.
+//
+// No key means none is sent: filing a declaration against no company is not
+// something to guess at, and SLPA answers for itself ("Client identifier header
+// 'slpacmsuser-key' is required"), which is a truer message than one invented
+// here.
+func (i *Interpreter) BuildHeaders(inputs map[string]any) map[string]string {
+	key, _ := inputs[ClientKeyInput].(string)
+	if key = strings.TrimSpace(key); key == "" {
+		slog.Error("slpa service order: no SLPA client key on the task inputs; the CMS will refuse the call")
+		return nil
+	}
+	return map[string]string{ClientKeyHeader: key}
+}
+
+// Interpret reports whether the CMS raised the order and captures what identifies
+// it afterwards.
+func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	body := cms.Flatten(resp)
+	accepted := callErr == nil && !cms.HasErrors(body) && raised(body)
+
+	out := map[string]any{}
+	// The identifiers SLPA hands back are what a trader quotes at the terminal
+	// and what any later sundry order keys off, so they are recorded even though
+	// nothing downstream reads them yet.
+	for _, k := range []string{
+		"status", "message", "service_order_no", "slug", "invoice_no", "parent_invoice_no",
+		"cusdec_serial", "total_lkr", "total_usd", "created_at", "reason",
+		"error", "errors", "detail",
+	} {
+		if v, ok := body[k]; ok {
+			out[k] = v
+		}
+	}
+	if !accepted {
+		out["error"] = describeFailure(callErr, body)
+	}
+	return accepted, out
+}
+
+// raised reports whether the CMS created the order.
+//
+// Unlike the declaration upload, this endpoint answers with the order's own
+// workflow state rather than a verdict — "client_new_actclk" for one it has just
+// created — so a fixed list of success words cannot recognise it, and guessing at
+// their state machine would break on the next state they add. What is unambiguous
+// is the order number: the CMS issues one only for an order that exists, so that
+// is what is read.
+//
+// cms.Accepted is still consulted, so an endpoint that answers with a plain
+// verdict is honoured too, and an error in the body is checked by the caller
+// either way — a refusal that happens to carry a number is not read as a
+// success.
+func raised(body map[string]any) bool {
+	if cms.String(body, "service_order_no") != "" {
+		return true
+	}
+	return cms.Accepted(body)
+}
+
+// describeFailure builds the trader-facing message for an order the CMS did not
+// raise, preferring the CMS's own reasons over anything invented here.
+func describeFailure(callErr error, body map[string]any) string {
+	const intro = "SLPA did not raise your service order:"
+	const outro = "\n\nPlease correct the details and submit again."
+
+	if reasons := cms.Reasons(body); len(reasons) > 0 {
+		return intro + "\n\n" + strings.Join(reasons, "\n") + outro
+	}
+	if callErr != nil && len(body) == 0 {
+		// Either the CMS could not be reached or it answered with something that
+		// is not one of its own responses (an HTML error page, say). The
+		// difference matters to whoever reads the logs, not to the trader, and
+		// claiming a specific cause we have not established would be wrong.
+		return "We could not get a usable answer from the SLPA Cargo Management System. Please try again in a few minutes."
+	}
+	return intro + outro
+}
