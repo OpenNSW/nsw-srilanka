@@ -90,6 +90,12 @@ type SummaryDTO struct {
 // ListResult is the pagination envelope returned by the list consignments endpoint.
 type ListResult = pagination.Page[SummaryDTO]
 
+// AgencyDTO is the allowlisted projection returned to Agencies.
+type AgencyDTO struct {
+	ConsignmentID     string `json:"consignmentId"`
+	TraderCompanyName string `json:"traderCompanyName"`
+}
+
 // DetailDTO represents the full consignment data returned in detailed responses.
 type DetailDTO struct {
 	ID              string                    `json:"id"`              // Consignment ID

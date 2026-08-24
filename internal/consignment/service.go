@@ -230,6 +230,30 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	return responseDTO, nil
 }
 
+// GetAgencySummary returns the allowlisted projection for an Agency caller.
+// It does not enforce trader/CHA ownership — the route is gated by
+// nsw:consignment:read and an unguessable consignment UUID.
+func (s *Service) GetAgencySummary(ctx context.Context, consignmentID string) (*AgencyDTO, error) {
+	var consignment Consignment
+	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, ErrConsignmentNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
+	}
+
+	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve trader company with ID %s: %w", consignment.TraderCompanyID, err)
+	}
+
+	return &AgencyDTO{
+		ConsignmentID:     consignment.ID,
+		TraderCompanyName: traderCompany.Name,
+	}, nil
+}
+
 // GetOwnership returns the trader and CHA company ids of a consignment in a
 // single row read, without assembling the detail DTO or touching the workflow
 // engine. It projects only the two ownership columns so the read stays cheap
