@@ -60,7 +60,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(r.Context(), record)
+	zv, err := h.Assembler.Assemble(r.Context(), record, nil)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return

@@ -68,12 +68,12 @@ func NewCusdecInterpreter(files FileFetcher) *CusdecInterpreter {
 // BuildRequest satisfies the Interpreter interface. The CusDec submission is
 // always multipart, so the plugin calls BuildParts instead; this returns the
 // mapped payload so the interface contract still holds if that ever changes.
-func (c CusdecInterpreter) BuildRequest(inputs map[string]any) any {
+func (c CusdecInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 	payload, _, err := buildFromInputs(inputs)
 	if err != nil {
-		return inputs
+		return remote.JSONBody{V: inputs}
 	}
-	return payload
+	return remote.JSONBody{V: payload}
 }
 
 // BuildParts assembles the §6.1.1 multipart body: exactly one payload part

@@ -3,6 +3,8 @@ package cdn
 import (
 	"errors"
 	"strings"
+
+	"github.com/OpenNSW/core/remote"
 )
 
 // SLC Edge submission statuses that count as accepted. RECEIVED is what the
@@ -46,12 +48,12 @@ func NewCDNInterpreter() *CDNInterpreter {
 // endpoint rejects, and Interpret recognizes the same failure on the way back
 // out and reports the trader-facing message — the same path a rejection takes,
 // rather than a silently truncated payload.
-func (CDNInterpreter) BuildRequest(inputs map[string]any) any {
+func (CDNInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 	payload, err := buildFromInputs(inputs)
 	if err != nil {
-		return map[string]any{"error": err.Error()}
+		return remote.JSONBody{V: map[string]any{"error": err.Error()}}
 	}
-	return payload
+	return remote.JSONBody{V: payload}
 }
 
 // Interpret reports whether the submission was accepted and captures the SLC
