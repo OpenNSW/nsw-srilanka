@@ -40,6 +40,33 @@ type MultipartInterpreter interface {
 	BuildParts(ctx context.Context, inputs map[string]any) ([]remote.Part, error)
 }
 
+// HeaderInterpreter is implemented by interpreters whose service needs a header
+// resolved per call: a value that belongs to the case being processed rather than
+// to the service — the identifier a provider issued for the organisation a
+// submission is filed under, say. A header that is the same for every call
+// belongs in the service's own configuration instead.
+//
+// The value reaches the interpreter as a task input, so which workflow variable
+// it comes from is an artifact decision. Returning nil sends none: an
+// interpreter must not invent an identity, and the service is the one to say
+// whether it can be identified.
+//
+// It composes with either body contract — a JSON body or multipart parts.
+type HeaderInterpreter interface {
+	Interpreter
+
+	BuildHeaders(inputs map[string]any) map[string]string
+}
+
+// headersFor returns the per-call headers the interpreter asks for, if any.
+func headersFor(interp Interpreter, inputs map[string]any) map[string]string {
+	hi, ok := interp.(HeaderInterpreter)
+	if !ok {
+		return nil
+	}
+	return hi.BuildHeaders(inputs)
+}
+
 // passthroughInterpreter sends the "payload" input as-is and treats any
 // transport-level success as accepted.
 type passthroughInterpreter struct{}
@@ -105,7 +132,12 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	if mp, ok := p.interpreter.(MultipartInterpreter); ok {
 		callErr = p.callMultipart(ctx, mp, cfg, &resp)
 	} else {
-		req := remote.Request{Method: "POST", Path: cfg.Path, Body: p.interpreter.BuildRequest(ctx.Inputs)}
+		req := remote.Request{
+			Method:  "POST",
+			Path:    cfg.Path,
+			Body:    p.interpreter.BuildRequest(ctx.Inputs),
+			Headers: headersFor(p.interpreter, ctx.Inputs),
+		}
 		callErr = p.manager.Call(ctx.Context, cfg.ServiceID, req, &resp)
 	}
 
@@ -138,8 +170,9 @@ func (p *APICallPlugin) callMultipart(ctx pluginContext, mp MultipartInterpreter
 		return err
 	}
 	return p.manager.Call(ctx.Context, cfg.ServiceID, remote.Request{
-		Method: "POST",
-		Path:   cfg.Path,
-		Body:   remote.MultipartBody{Parts: parts},
+		Method:  "POST",
+		Path:    cfg.Path,
+		Body:    remote.MultipartBody{Parts: parts},
+		Headers: headersFor(mp, ctx.Inputs),
 	}, resp)
 }

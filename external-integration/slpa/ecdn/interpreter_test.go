@@ -7,13 +7,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OpenNSW/core/remote"
 )
 
 func TestInterpreter_BuildRequest(t *testing.T) {
-	req := NewInterpreter().BuildRequest(map[string]any{"payload": fullForm()})
-
-	body, err := json.Marshal(req)
+	// Encode is what the transport calls, so asserting on it is asserting on the
+	// bytes SLPA receives — and on the Content-Type that describes them.
+	body, contentType, err := NewInterpreter().
+		BuildRequest(map[string]any{"payload": fullForm()}).
+		Encode()
 	require.NoError(t, err)
+	assert.Equal(t, "application/json", contentType)
 
 	var out map[string]any
 	require.NoError(t, json.Unmarshal(body, &out))
@@ -35,14 +40,42 @@ func TestInterpreter_BuildRequestSendsNothingItCannotAssemble(t *testing.T) {
 	i := NewInterpreter()
 
 	t.Run("no form in the inputs", func(t *testing.T) {
-		assert.Equal(t, UploadRequest{}, i.BuildRequest(map[string]any{}))
+		assert.Equal(t, remote.JSONBody{V: UploadRequest{}}, i.BuildRequest(map[string]any{}))
 	})
 
 	t.Run("a form with no containers", func(t *testing.T) {
 		form := fullForm()
 		delete(form, "containers")
-		assert.Equal(t, UploadRequest{}, i.BuildRequest(map[string]any{"payload": form}))
+		assert.Equal(t, remote.JSONBody{V: UploadRequest{}}, i.BuildRequest(map[string]any{"payload": form}))
 	})
+}
+
+// SLPA identifies the submitting company by this header, and the key reaches the
+// interpreter as a task input the artifact maps from the company profile.
+func TestInterpreter_BuildHeaders(t *testing.T) {
+	i := NewInterpreter()
+
+	t.Run("the key is presented as the header", func(t *testing.T) {
+		assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
+			i.BuildHeaders(map[string]any{ClientKeyInput: "agztNvLSUA"}))
+	})
+
+	t.Run("surrounding space is trimmed", func(t *testing.T) {
+		assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
+			i.BuildHeaders(map[string]any{ClientKeyInput: "  agztNvLSUA \n"}))
+	})
+
+	// Sending nothing lets SLPA say the caller cannot be identified, which is a
+	// truer message than one invented here.
+	for name, inputs := range map[string]map[string]any{
+		"no key mapped in": {},
+		"a blank key":      {ClientKeyInput: "   "},
+		"not a string":     {ClientKeyInput: 42},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Nil(t, i.BuildHeaders(inputs))
+		})
+	}
 }
 
 func TestInterpreter_InterpretAccepted(t *testing.T) {
@@ -164,7 +197,7 @@ func TestInterpreter_InterpretRejections(t *testing.T) {
 	t.Run("transport failure", func(t *testing.T) {
 		accepted, out := i.Interpret(errors.New("dial tcp: timeout"), nil)
 		assert.False(t, accepted)
-		assert.Contains(t, out["error"], "could not reach the SLPA")
+		assert.Contains(t, out["error"], "could not get a usable answer")
 	})
 
 }
