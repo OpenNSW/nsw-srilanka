@@ -45,7 +45,9 @@
             { "handle": "consignment", "name": "Consignment",
               "actions": [ { "handle": "read", "name": "Read" } ] },
             { "handle": "storage", "name": "Storage",
-              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] }
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
+            { "handle": "profile", "name": "Profile",
+              "actions": [ { "handle": "read", "name": "Read" } ] }
           ]
         }
       ]
