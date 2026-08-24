@@ -78,6 +78,13 @@ func withAuthContextRoles(ctx context.Context, userID, ouHandle string, roles ..
 	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
 }
 
+func withAuthContextClient(ctx context.Context, clientID string) context.Context {
+	authCtx := &authn.AuthContext{
+		Client: &authn.ClientContext{ClientID: clientID},
+	}
+	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+}
+
 func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
@@ -528,6 +535,83 @@ func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 	r.HandleCreateConsignment(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestConsignmentRouter_HandleGetConsignmentAgency(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
+	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+	consignmentID := uuid.NewString()
+	traderCompanyID := "company-trader"
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).
+			AddRow(consignmentID, "IN_PROGRESS", traderCompanyID))
+
+	mockCompany.On("GetCompanyByID", mock.Anything, traderCompanyID).Return(&company.Record{
+		ID:   traderCompanyID,
+		Name: "Stay Naturals Private Limited",
+		Data: []byte(`{"email":"secret@example.com","phone":"+94112345678"}`),
+	}, nil)
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID+"/agency", nil)
+	req.SetPathValue("id", consignmentID)
+	req = req.WithContext(withAuthContextClient(req.Context(), "NPQS_TO_NSW"))
+
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentAgency(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	body := w.Body.String()
+	assert.Contains(t, body, `"consignmentId":"`+consignmentID+`"`)
+	assert.Contains(t, body, `"traderCompanyName":"Stay Naturals Private Limited"`)
+	assert.NotContains(t, body, "email")
+	assert.NotContains(t, body, "phone")
+	assert.NotContains(t, body, "mobile")
+	assert.NotContains(t, body, "secret@example.com")
+	assert.NotContains(t, body, traderCompanyID)
+	mockCompany.AssertExpectations(t)
+}
+
+func TestConsignmentRouter_HandleGetConsignmentAgency_NotFound(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, new(MockCompanyService), nil, nil)
+	r := mustNewRouter(t, svc, nil, nil, nswaudit.NewRecorder(nil))
+
+	id := uuid.NewString()
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+id+"/agency", nil)
+	req.SetPathValue("id", id)
+	req = req.WithContext(withAuthContextClient(req.Context(), "NPQS_TO_NSW"))
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentAgency(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestConsignmentRouter_HandleGetConsignmentAgency_Unauthorized(t *testing.T) {
+	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments/abc/agency", nil)
+	req.SetPathValue("id", "abc")
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentAgency(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestConsignmentRouter_HandleGetConsignmentAgency_MissingID(t *testing.T) {
+	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+
+	req, _ := http.NewRequest("GET", "/api/v1/consignments//agency", nil)
+	req = req.WithContext(withAuthContextClient(req.Context(), "NPQS_TO_NSW"))
+	w := httptest.NewRecorder()
+	r.HandleGetConsignmentAgency(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestConsignmentRouter_HandleGetConsignmentByID_ServiceError(t *testing.T) {

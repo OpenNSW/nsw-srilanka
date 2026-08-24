@@ -545,6 +545,56 @@ func TestConsignmentService_getWorkflowStatus_NoWM(t *testing.T) {
 	assert.Contains(t, err.Error(), "no workflow manager registered")
 }
 
+func TestConsignmentService_GetAgencySummary(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
+
+	consignmentID := uuid.NewString()
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).
+			AddRow(consignmentID, "IN_PROGRESS", "co-1"))
+
+	mockCompany.On("GetCompanyByID", mock.Anything, "co-1").Return(&company.Record{
+		ID:   "co-1",
+		Name: "Exporter Co",
+	}, nil)
+
+	dto, err := svc.GetAgencySummary(context.Background(), consignmentID)
+	require.NoError(t, err)
+	assert.Equal(t, consignmentID, dto.ConsignmentID)
+	assert.Equal(t, "Exporter Co", dto.TraderCompanyName)
+}
+
+func TestConsignmentService_GetAgencySummary_NotFound(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+
+	id := uuid.NewString()
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	_, err := svc.GetAgencySummary(context.Background(), id)
+	assert.ErrorIs(t, err, ErrConsignmentNotFound)
+}
+
+func TestConsignmentService_GetAgencySummary_CompanyNotFound(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockCompany := new(MockCompanyService)
+	svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
+
+	consignmentID := uuid.NewString()
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).
+			AddRow(consignmentID, "IN_PROGRESS", "co-1"))
+
+	mockCompany.On("GetCompanyByID", mock.Anything, "co-1").Return(nil, company.ErrCompanyNotFound)
+
+	_, err := svc.GetAgencySummary(context.Background(), consignmentID)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, company.ErrCompanyNotFound)
+}
+
 func TestTaskDisplayName(t *testing.T) {
 	// nil render config → template ID
 	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", nil))
