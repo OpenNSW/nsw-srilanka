@@ -35,8 +35,8 @@ backend:
   # runAsUser/runAsGroup/fsGroup outside the range it permits is rejected at
   # admission. Where you control the UID, you may set, e.g.
   #   runAsNonRoot: true
-  #   runAsUser: 10001   # must match the image's numeric USER
-  #   fsGroup: 10001
+  #   runAsUser: 1001   # must match the image's numeric USER
+  #   fsGroup: 1001
   podSecurityContext: {}
 
   # Container-level security context (applies to the server and migration

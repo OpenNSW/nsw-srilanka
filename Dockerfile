@@ -81,8 +81,8 @@ LABEL org.opencontainers.image.description="NSW schema migrator (OpenNSW/agency 
 # to run as it: a cluster with a restricted pod-security policy may override
 # USER and assign a UID of its own, so do not mirror this value as runAsUser.
 RUN apk add --no-cache ca-certificates tzdata \
-    && addgroup -g 10001 -S appuser \
-    && adduser -u 10001 -S -D -H -h /app -s /sbin/nologin -G appuser appuser
+    && addgroup -g 1001 -S appuser \
+    && adduser -u 1001 -S -D -H -h /app -s /sbin/nologin -G appuser appuser
 
 WORKDIR /app
 
@@ -96,7 +96,7 @@ ENV MIGRATION_DIR=/app/migrations \
 
 # Numeric so the kubelet can verify it against runAsNonRoot: true — it cannot
 # resolve names. A cluster that assigns its own UID overrides this either way.
-USER 10001
+USER 1001
 
 # Apply all pending migrations by default; override with status/down/generate.
 CMD ["migrate", "up"]
@@ -117,8 +117,8 @@ LABEL org.opencontainers.image.description="NSW Backend API Service (built from 
 # guaranteed to run as it: a cluster with a restricted pod-security policy may
 # override USER and assign a UID of its own, so do not mirror it as runAsUser.
 RUN apk add --no-cache ca-certificates tzdata \
-    && addgroup -g 10001 -S appuser \
-    && adduser -u 10001 -S -D -H -h /app -s /sbin/nologin -G appuser appuser
+    && addgroup -g 1001 -S appuser \
+    && adduser -u 1001 -S -D -H -h /app -s /sbin/nologin -G appuser appuser
 
 WORKDIR /app
 
@@ -126,8 +126,8 @@ WORKDIR /app
 # copied file. Group 0 because a cluster that overrides USER runs the container
 # as an arbitrary UID placed in group 0 — that group is then the only identity
 # the process is guaranteed to hold.
-COPY --chown=10001:0 --from=builder /out/server /app/server
-COPY --chown=10001:0 --from=builder /out/otc /usr/local/bin/otc
+COPY --chown=1001:0 --from=builder /out/server /app/server
+COPY --chown=1001:0 --from=builder /out/otc /usr/local/bin/otc
 
 # Bake the configs directory. Only the committed *.example.json templates
 # (services, payment_methods, notification, catalog) and argus/ land here — the
@@ -142,24 +142,24 @@ COPY --chown=10001:0 --from=builder /out/otc /usr/local/bin/otc
 # override this to the GitHub loader pointed at OpenNSW/one-trade-artifacts (see
 # the ARTIFACT_* env there). A host bind mount over /app/configs (docker-compose)
 # takes precedence over anything baked here.
-COPY --chown=10001:0 --from=builder /src/configs /app/configs
+COPY --chown=1001:0 --from=builder /src/configs /app/configs
 
 # The blob storage mount point, and the only path the server writes to
 # (STORAGE_TYPE=local, STORAGE_LOCAL_BASE_DIR=./bucket). It is group-0 writable
 # the running UID may be assigned by the cluster and is unknown at build time;
-# a mode-0755 dir owned by 10001 would reject the first file upload.
+# a mode-0755 dir owned by 1001 would reject the first file upload.
 # Keep STORAGE_LOCAL_BASE_DIR at this baked path, or mount a volume over it: /app
 # itself is deliberately not group-writable, so pointing the driver at a sibling
 # directory it has to create would fail under an arbitrary UID. Hardened
 # deployments should prefer STORAGE_TYPE=s3 or an emptyDir/PVC mounted here —
 # the latter is required if readOnlyRootFilesystem is enabled.
 RUN mkdir -p /app/bucket \
-    && chown 10001:0 /app/bucket \
+    && chown 1001:0 /app/bucket \
     && chmod g+w /app/bucket
 
 # Numeric so the kubelet can verify it against runAsNonRoot: true — it cannot
 # resolve names. A cluster that assigns its own UID overrides this either way.
-USER 10001
+USER 1001
 
 # Expose application port (configurable via SERVER_PORT env var)
 EXPOSE 8080
