@@ -8,8 +8,9 @@ on:
     paths:
       - 'cmd/**'
       - 'internal/**'
-      - 'integration/**'
+      - 'external-integration/**'
       - 'configs/**'
+      - '.dockerignore'
       - 'go.mod'
       - 'go.sum'
       - 'Dockerfile'

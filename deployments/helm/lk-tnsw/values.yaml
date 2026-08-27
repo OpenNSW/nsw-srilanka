@@ -27,10 +27,16 @@ backend:
 
   imagePullSecrets: []
 
-  # Pod-level security context (applies to the server and migration pods), e.g.
+  # Pod-level security context (applies to the server and migration pods).
+  # Empty by default, which suits both cases. The images own their files by
+  # group 0 and make every writable path group-0 writable, so they run correctly
+  # under whatever UID the cluster gives them — no override is required. Where
+  # the platform allocates the UID itself, leave this unset: an explicit
+  # runAsUser/runAsGroup/fsGroup outside the range it permits is rejected at
+  # admission. Where you control the UID, you may set, e.g.
   #   runAsNonRoot: true
-  #   runAsUser: 1000
-  #   fsGroup: 1000
+  #   runAsUser: 1001   # must match the image's numeric USER
+  #   fsGroup: 1001
   podSecurityContext: {}
 
   # Container-level security context (applies to the server and migration
@@ -129,7 +135,9 @@ frontend:
 
   imagePullSecrets: []
 
-  # Pod-level security context, e.g.
+  # Pod-level security context. Same reasoning as the backend above: the image
+  # runs under any cluster-assigned UID, so leave this unset unless you control
+  # the UID yourself, in which case you may set, e.g.
   #   runAsNonRoot: true
   #   runAsUser: 101   # the image's nginx-unprivileged user
   #   fsGroup: 101

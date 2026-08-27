@@ -35,6 +35,11 @@ backend:
     # chart fails to render if this is unset.
     tag: "0.1.0"
 
+  # podSecurityContext / securityContext are intentionally left unset here so
+  # the cluster decides the UID. The images run correctly under any UID, and on
+  # clusters that allocate it themselves an explicit runAsUser is rejected at
+  # admission. See values.yaml for the full note.
+
   containerPort: 8080
 
   service:
@@ -203,6 +208,9 @@ frontend:
     # Required — pick the app version to deploy. There is no default; the
     # chart fails to render if this is unset.
     tag: "0.1.0"
+
+  # Left unset for the same reason as the backend above; the image writes only
+  # to /tmp and to group-0 writable paths, so any assigned UID works.
 
   containerPort: 8080
 

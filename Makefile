@@ -14,9 +14,10 @@ COMPOSE_PREVIEW := docker compose -f compose.yml
 APP_SERVICES    := api trader-portal
 # A literal space, so APP_SERVICES can be turned into a grep alternation.
 SPACE           := $(subst ,, )
-# Migrator version for `make migration` — KEEP IN SYNC with the
-# MIGRATE_VERSION build arg in the Dockerfile.
-MIGRATE_VERSION := v0.0.0-20260610120959-d981e67a7a47
+# Migrator version for `make migration`, read straight out of the Dockerfile's
+# ARG so the two cannot drift apart. Lazy (=, not :=) so the sed runs only when
+# `make migration` expands it, not on every make invocation.
+MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
 
 .DEFAULT_GOAL := help
 
@@ -63,14 +64,14 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 	E2E=1 GOWORK=off APP_ENV=development go test -v -count=1 -timeout 240s ./test/e2e/...
 
 # ---------------------------------------------------------------------------
-# Migrations (uses the nsw-agency migrate tool; generate needs no database)
+# Migrations (uses the OpenNSW/agency migrate tool; generate needs no database)
 # ---------------------------------------------------------------------------
 
 .PHONY: migration
 migration: ## Scaffold a new migration file: make migration name=<description>
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
 	@GOWORK=off MIGRATION_DIR=./migrations DB_DRIVER=sqlite \
-		go run github.com/OpenNSW/nsw-agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
+		go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
 
 # ---------------------------------------------------------------------------
 # Lifecycle

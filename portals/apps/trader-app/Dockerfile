@@ -1,4 +1,7 @@
-FROM node:22-bookworm-slim AS builder
+# musl base. Every native addon this build needs (@swc/core, @tailwindcss/oxide,
+# lightningcss, @rolldown/binding) has a `libc: [musl]` variant pinned in
+# pnpm-lock.yaml, which is what --frozen-lockfile resolves to here.
+FROM node:22-alpine3.24 AS builder
 
 WORKDIR /workspace
 
@@ -16,7 +19,11 @@ ENV VITE_APP_VERSION=$BUILD_VERSION
 
 RUN pnpm --filter trader-app build
 
-FROM nginxinc/nginx-unprivileged:stable-alpine3.23-perl
+# Non-perl variant: nginx.conf declares no perl directives, so shipping
+# ngx_http_perl_module and a perl interpreter would only widen the CVE surface.
+# envsubst templating and /docker-entrypoint.d — which default.conf.template and
+# 40-runtime-env.sh below both rely on — live in the base layer, not this variant.
+FROM nginxinc/nginx-unprivileged:stable-alpine3.24
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
 LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"

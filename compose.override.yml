@@ -38,7 +38,7 @@ services:
   api:
     # Cancel the base file's `build:` and run the stock Go image instead.
     build: !reset null
-    image: golang:1.27-bookworm
+    image: golang:1.27-alpine3.24
     working_dir: /src
     volumes:
       # Live source mount — the container sees your edits instantly.
@@ -59,13 +59,15 @@ services:
   # -------------------------------------------------------------------
   trader-portal:
     build: !reset null
-    image: node:22-bookworm-slim
+    image: node:22-alpine3.24
     working_dir: /workspace
     volumes:
       # Live source mount of the pnpm workspace root.
       - ./portals:/workspace
       # Overlay container-native node_modules so macOS host binaries
-      # (swc, tailwind-oxide) don't leak into the Linux container.
+      # (swc, tailwind-oxide) don't leak into the Linux container. The cached
+      # addons are musl-specific: if these volumes were populated by a non-musl
+      # image, `make clean` is required or the binaries fail to load.
       - pnpm-workspace-modules:/workspace/node_modules
       - pnpm-app-modules:/workspace/apps/trader-app/node_modules
     # Replace the base host:8080 mapping — Vite serves on 5173, and keeping
