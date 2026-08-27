@@ -190,10 +190,14 @@ services:
       dockerfile: Dockerfile
       target: migrate
       args:
-        # Override the migrator version without editing the Dockerfile:
+        # Passed through from the environment, so overriding the migrator version
+        # needs no edit here:
         #   MIGRATE_VERSION=<pseudo-version> docker compose build migrate
-        # Falls back to the Dockerfile's pinned default when unset.
-        MIGRATE_VERSION: ${MIGRATE_VERSION:-v0.0.0-20260610120959-d981e67a7a47}
+        # Listed by name with no value on purpose — when the variable is unset,
+        # Compose omits the build arg entirely and the Dockerfile's pinned
+        # default applies. Repeating the version here instead would give it a
+        # second home to drift from.
+        - MIGRATE_VERSION
     container_name: tnsw-migrate
     networks:
       - nsw-network
