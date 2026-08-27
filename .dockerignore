@@ -6,8 +6,36 @@
 # Frontend — irrelevant to the Go build, large build context
 portals/
 
+# Secrets and key material. Every path here is gitignored, so a CI build from a
+# clean checkout never sees it; these rules make a local `docker build` behave
+# the same way instead of copying a developer's credentials into the build
+# context (and, with cache-to mode=max, into the shared layer cache).
+.env
+.env.*
+idp/
+certs/
+
+# Live service configs hold literal credentials (client secrets, SMTP/SMS
+# tokens) and are gitignored. Only the committed *.example.json templates are
+# baked; deployments supply the real files via ConfigMap or bind mount, which is
+# the documented contract for /app/configs.
+configs/*.json
+!configs/*.example.json
+
 # Runtime data — must never be baked into the image
 bucket/
+
+# Dev-only trees and local tooling the build never reads. NOTE: do not add
+# external-integration/ here — internal/bootstrap and internal/tasks/plugins
+# import it, so it is a build input.
+test/
+deployments/
+docs/
+Makefile
+compose*.yml
+go.work
+go.work.sum
+coverage.out
 
 # Docs & meta
 *.md
