@@ -15,8 +15,9 @@ APP_SERVICES    := api trader-portal
 # A literal space, so APP_SERVICES can be turned into a grep alternation.
 SPACE           := $(subst ,, )
 # Migrator version for `make migration`, read straight out of the Dockerfile's
-# ARG so the two cannot drift apart.
-MIGRATE_VERSION := $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
+# ARG so the two cannot drift apart. Lazy (=, not :=) so the sed runs only when
+# `make migration` expands it, not on every make invocation.
+MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
 
 .DEFAULT_GOAL := help
 

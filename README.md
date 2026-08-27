@@ -241,9 +241,9 @@ your database. Note the env var names differ slightly from the app's
 (`DB_USER`, not `DB_USERNAME`):
 
 ```bash
-# Pin the same version the Docker image uses — MIGRATE_VERSION in the Dockerfile
-# is the single source of truth (compose and the Makefile both read it from there).
-go install github.com/OpenNSW/agency/backend/cmd/migrate@v0.0.0-20260827070610-a0c2d032a061
+# Read the pin out of the Dockerfile rather than repeating it — MIGRATE_VERSION
+# there is the single source of truth, and compose and the Makefile both defer to it.
+go install github.com/OpenNSW/agency/backend/cmd/migrate@"$(sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)"
 
 DB_DRIVER=postgres MIGRATION_DIR=./migrations \
   DB_HOST=localhost DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" \
