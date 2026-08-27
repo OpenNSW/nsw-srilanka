@@ -212,14 +212,32 @@ func officeName(office string) string {
 	}
 }
 
+// modeCodeNotSpecified is the code for "transport mode not specified", used when
+// the form carries no mode at all. The element it goes in is mandatory, so
+// something has to be sent; saying the mode is unknown is the only honest filler.
+//
+// It matches the code list the NPQS form presents (see the transport_mode field
+// in npqs/1-apply). If that list is ever reconciled against the Hub's own, this
+// constant moves with it.
+const modeCodeNotSpecified = "10"
+
+// transportModeCode returns the mode-of-transport code for what the form
+// submitted.
+//
+// The form presents the numeric codes directly, so a code passes straight
+// through. It used to present labels, and a task that was filled in before that
+// changed still holds one — hence the two names, mapped to the codes the current
+// list gives them.
 func transportModeCode(mode string) string {
-	switch mode {
-	case "sea":
-		return "1"
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "":
+		return modeCodeNotSpecified
+	case "sea", "maritime":
+		return "3"
 	case "air":
-		return "4"
+		return "1"
 	default:
-		return ""
+		return strings.TrimSpace(mode)
 	}
 }
 
@@ -284,8 +302,12 @@ func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentIn
 	if poe := asString(uf["point_of_entry_port"]); poe != "" {
 		c.PointOfEntry = &spscert.PointOfEntry{Name: poe}
 	}
-	if mode := transportModeCode(asString(uf["transport_mode"])); mode != "" {
-		c.MeansOfConveyance = []spscert.Conveyance{{ModeCode: mode}}
+	// MainCarriageSPSTransportMovement is mandatory in an SPSCertificate — the Hub
+	// refuses an envelope without it — so the mode is always sent. The form asks
+	// for nothing else about the carriage; a vessel or voyage would go on the same
+	// element (see spscert.Conveyance) if it ever did.
+	c.MeansOfConveyance = []spscert.Conveyance{
+		{ModeCode: transportModeCode(asString(uf["transport_mode"]))},
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])

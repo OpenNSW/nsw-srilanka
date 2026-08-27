@@ -26,7 +26,7 @@ func sampleUserform() map[string]any {
 		"distinguishing_marks":     "EXP-NPQS-2026-A",
 		"point_of_entry_port":      "Andorra la Vella",
 		"seal_number":              "SL-CUSTOMS-93820",
-		"transport_mode":           "sea",
+		"transport_mode":           "3",
 		"import_permit_number":     "IP-ANDORRA-2026-948",
 		"proposed_inspection_date": "2026-07-01",
 		"additional_declaration":   "CODE: SAD1 - inspected and found free from quarantine pests.",
@@ -113,6 +113,52 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 		if !strings.Contains(soap, want) {
 			t.Errorf("SOAP missing %q", want)
 		}
+	}
+}
+
+// The Hub refuses an envelope whose certificate has no
+// MainCarriageSPSTransportMovement ("element is mandatory"), so the certificate
+// carries the mode of transport whatever the form said — including nothing.
+func TestBuildInput_AlwaysCarriesTheTransportMovement(t *testing.T) {
+	for name, tc := range map[string]struct{ formValue, want string }{
+		"the code the form submitted": {"3", "3"},
+		"another code":                {"8", "8"},
+		"nothing chosen":              {"", modeCodeNotSpecified},
+		// The form used to present labels; a task filled in before that changed
+		// still holds one.
+		"a legacy sea label": {"sea", "3"},
+		"a legacy air label": {"air", "1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			uf := sampleUserform()
+			uf["transport_mode"] = tc.formValue
+
+			in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1", "hub_destination": "LK2"})
+
+			conveyances := in.Certificate.Consignment.MeansOfConveyance
+			if len(conveyances) != 1 {
+				t.Fatalf("conveyances = %d, want exactly one so the mandatory element is emitted", len(conveyances))
+			}
+			if conveyances[0].ModeCode != tc.want {
+				t.Errorf("ModeCode = %q, want %q", conveyances[0].ModeCode, tc.want)
+			}
+		})
+	}
+}
+
+// The same, seen on the wire: the element the Hub asked for is in the XML.
+func TestBuildCertXML_EmitsTheTransportMovement(t *testing.T) {
+	in := BuildInput(map[string]any{"userform": sampleUserform(), "certificate_id": "PC-1", "hub_destination": "LK2"})
+
+	body, err := BuildCertXML(in)
+	if err != nil {
+		t.Fatalf("BuildCertXML: %v", err)
+	}
+	if !strings.Contains(body, "<ram:MainCarriageSPSTransportMovement>") {
+		t.Error("certificate has no MainCarriageSPSTransportMovement; the Hub rejects that as a missing mandatory element")
+	}
+	if !strings.Contains(body, "<ram:ModeCode>3</ram:ModeCode>") {
+		t.Error("the chosen mode of transport did not reach the certificate")
 	}
 }
 
