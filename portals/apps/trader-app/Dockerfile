@@ -1,7 +1,7 @@
 # musl base. Every native addon this build needs (@swc/core, @tailwindcss/oxide,
 # lightningcss, @rolldown/binding) has a `libc: [musl]` variant pinned in
 # pnpm-lock.yaml, which is what --frozen-lockfile resolves to here.
-FROM node:22-alpine3.24 AS builder
+FROM node:26-alpine3.24 AS builder
 
 WORKDIR /workspace
 
