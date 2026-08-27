@@ -1,6 +1,6 @@
 module github.com/OpenNSW/nsw-srilanka
 
-go 1.26.4
+go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2

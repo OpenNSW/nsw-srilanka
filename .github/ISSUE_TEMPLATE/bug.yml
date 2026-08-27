@@ -54,7 +54,7 @@ body:
     attributes:
       label: "Environment Details (with versions)"
       description: "Mention the environment details the platform is running on."
-      placeholder: "e.g. Ubuntu 22.04, Docker 24.0, PostgreSQL 17, Go 1.26"
+      placeholder: "e.g. Ubuntu 22.04, Docker 24.0, PostgreSQL 17, Go 1.27"
 
   - type: textarea
     id: context
