@@ -42,14 +42,12 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
-	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
-	storagesvc "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -289,12 +287,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
-	paymentService.SetAuditor(nswpayment.NewAuditAdapter(recorder))
+	coreAuditor := nswaudit.NewCoreAdapter(recorder)
+	paymentService.WithAuditor(coreAuditor)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
 	// The storage driver and service behind this handler are built in Stage 2 —
 	// task plugins that attach uploaded files to an outbound call read through
 	// the service, so it has to exist before the task stack (Stage 4).
-	storageService.Auditor = storagesvc.NewAuditAdapter(recorder)
+	storageService.WithAuditor(coreAuditor)
 	storageHandler := storage.NewHTTPHandler(storageService)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.

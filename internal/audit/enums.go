@@ -14,10 +14,11 @@ const (
 	EventPayment     EventType = "PAYMENT_EVENT"
 	EventUserMgmt    EventType = "USER_MANAGEMENT"
 
-	ActionCreate Action = "CREATE"
-	ActionRead   Action = "READ"
-	ActionUpdate Action = "UPDATE"
-	ActionDelete Action = "DELETE"
+	ActionCreate        Action = "CREATE"
+	ActionRead          Action = "READ"
+	ActionUpdate        Action = "UPDATE"
+	ActionDelete        Action = "DELETE"
+	ActionPresignUpload Action = "PRESIGN_UPLOAD"
 
 	TargetConsignment TargetType = "CONSIGNMENT"
 	TargetTask        TargetType = "TASK"
