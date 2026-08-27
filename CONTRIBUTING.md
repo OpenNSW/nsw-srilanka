@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.26+ (see `go.mod` for the exact version)
+- Go 1.27+ (see `go.mod` for the exact version)
 - Docker with BuildKit enabled
 - pnpm 11.1.2+ (for frontend work only)
 - Node.js 22.18.0+ (see `portals/.nvmrc`)
