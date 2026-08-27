@@ -125,7 +125,11 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return fmt.Errorf("api_call: service_id and path are required")
 	}
 
-	ctx.Record.State = "DISPATCHED"
+	// The state a render config keys on while the call is out. Every flow that
+	// uses this plugin moves straight from it to a step that waits on the
+	// receiving agency, so reporting the same state here means the panel for
+	// "with the agency" covers the whole span rather than starting a beat late.
+	ctx.Record.State = "QUEUED_EXTERNALLY"
 
 	var resp map[string]any
 	var callErr error
