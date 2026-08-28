@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/consolidation"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/ecdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
 )
@@ -51,6 +52,18 @@ const (
 	// asked only which service to order per container, and the CMS derives the
 	// cargo type from the CUSDEC record itself.
 	TaskTypeSLPAServiceOrder = "SLPA_SERVICE_ORDER"
+
+	// TaskTypeSLPAConsolidationFetch looks up the containers available for
+	// consolidation under a CUSDEC serial and matches the two sides SLPA holds
+	// separately — the containers a terminal pre-advised and the containers
+	// priced on the service order. A GET, so the CUSDEC serial travels in the
+	// query rather than a body.
+	TaskTypeSLPAConsolidationFetch = "SLPA_CONSOLIDATION_FETCH"
+
+	// TaskTypeSLPAConsolidationSave saves the pairs the lookup matched. Split
+	// from the lookup so what will be written is recorded, and shown to the
+	// trader, before anything changes on SLPA's side.
+	TaskTypeSLPAConsolidationSave = "SLPA_CONSOLIDATION_SAVE"
 
 	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
 	// ePhyto Hub interpreter; the subtask template's plugin_properties select
@@ -106,6 +119,8 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
+		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
+		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 
