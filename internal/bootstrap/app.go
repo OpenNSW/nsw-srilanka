@@ -624,6 +624,9 @@ func initTask(
 	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.CDNSplitBuilderFunc)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNSplitBuilder, err)
 	}
+	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAGatePassSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAGatePassSplitBuilderFunc)); err != nil {
+		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAGatePassSplitBuilder, err)
+	}
 	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNResultsCollector, err)
 	}

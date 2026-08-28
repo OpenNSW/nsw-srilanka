@@ -16,6 +16,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/consolidation"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/ecdn"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
 )
 
@@ -64,6 +65,11 @@ const (
 	// from the lookup so what will be written is recorded, and shown to the
 	// trader, before anything changes on SLPA's side.
 	TaskTypeSLPAConsolidationSave = "SLPA_CONSOLIDATION_SAVE"
+
+	// TaskTypeSLPAGatePass issues the export container gate pass, which SLPA
+	// grants only against a paid service order. One pass covers one container,
+	// so a consignment fans out to this task once per consolidated container.
+	TaskTypeSLPAGatePass = "SLPA_GATE_PASS"
 
 	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
 	// ePhyto Hub interpreter; the subtask template's plugin_properties select
@@ -121,6 +127,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
+		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
 
