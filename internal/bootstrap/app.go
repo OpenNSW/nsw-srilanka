@@ -279,6 +279,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// the route below carries no bearer middleware.
 	slpaHandler, err := slpawebhook.NewHandler(
 		slpawebhook.NewOrderEvents(db, tm),
+		slpawebhook.NewInvoiceEvents(db, tm),
 		cfg.Webhooks.SLPASecret,
 	)
 	if err != nil {
