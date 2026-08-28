@@ -7,8 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/OpenNSW/core/remote"
 )
 
 func TestInterpreter_BuildRequest(t *testing.T) {
@@ -31,23 +29,6 @@ func TestInterpreter_BuildRequest(t *testing.T) {
 	assert.Contains(t, doc, "<CusDecNote>")
 	assert.Contains(t, doc, "<ContainerMark>MSCU-849201-9</ContainerMark>")
 	assert.Len(t, out, 1, "the upload body carries only the declaration")
-}
-
-// The contract cannot fail a call, so a declaration that will not assemble is
-// sent empty and the CMS's own validation answers it. What must not happen is a
-// half-built document reaching SLPA.
-func TestInterpreter_BuildRequestSendsNothingItCannotAssemble(t *testing.T) {
-	i := NewInterpreter()
-
-	t.Run("no form in the inputs", func(t *testing.T) {
-		assert.Equal(t, remote.JSONBody{V: UploadRequest{}}, i.BuildRequest(map[string]any{}))
-	})
-
-	t.Run("a form with no containers", func(t *testing.T) {
-		form := fullForm()
-		delete(form, "containers")
-		assert.Equal(t, remote.JSONBody{V: UploadRequest{}}, i.BuildRequest(map[string]any{"payload": form}))
-	})
 }
 
 // SLPA identifies the submitting company by this header, and the key reaches the
@@ -176,4 +157,67 @@ func TestInterpreter_InterpretRejections(t *testing.T) {
 		assert.False(t, accepted)
 		assert.Contains(t, out["error"], "could not get a usable answer")
 	})
+}
+
+// A declaration that cannot be assembled must not be uploaded. Sending an empty
+// one would put a meaningless document in front of a live cargo system, and
+// answer the trader with SLPA's opinion of it rather than the real fault.
+func TestBuildRequest_DoesNotSendWhatItCouldNotAssemble(t *testing.T) {
+	formWithoutContainers := fullForm()
+	delete(formWithoutContainers, "containers")
+
+	for name, inputs := range map[string]map[string]any{
+		"no form at all":            {},
+		"form of wrong type":        {"payload": "not a form"},
+		"a form with no containers": {"payload": formWithoutContainers},
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := NewInterpreter().BuildRequest(inputs)
+			require.NotNil(t, body)
+
+			data, _, err := body.Encode()
+			require.Error(t, err, "the body must refuse to encode, so nothing is sent")
+			assert.ErrorIs(t, err, ErrNotAssembled)
+			assert.Empty(t, data)
+			assert.NotContains(t, string(data), "xml_payload")
+		})
+	}
+}
+
+// The trader is told what happened here, not what SLPA thinks of a document it
+// never received.
+func TestInterpret_ReportsALocalAssemblyFailureAsOurs(t *testing.T) {
+	body := NewInterpreter().BuildRequest(map[string]any{"payload": map[string]any{}})
+	_, _, callErr := body.Encode()
+	require.Error(t, callErr)
+
+	accepted, out := NewInterpreter().Interpret(callErr, nil)
+
+	require.False(t, accepted)
+	message, _ := out["error"].(string)
+	assert.Contains(t, message, "could not be prepared for SLPA, so nothing was submitted")
+	assert.NotContains(t, message, "SLPA did not accept",
+		"SLPA refused nothing; they never saw it")
+	assert.NotContains(t, message, ErrNotAssembled.Error(),
+		"the sentinel is for code, not for the trader")
+}
+
+// The key is an opaque string SLPA issues per company, mapped from the company
+// profile. A value of any other shape is no key at all: rendering one from it
+// would file the declaration against a company nobody chose.
+func TestBuildHeaders_RequiresAStringKey(t *testing.T) {
+	i := NewInterpreter()
+	assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
+		i.BuildHeaders(map[string]any{ClientKeyInput: " agztNvLSUA "}))
+
+	for name, value := range map[string]any{
+		"absent":            nil,
+		"blank":             "   ",
+		"a number":          42,
+		"the whole profile": map[string]any{"slpacmsuser_key": "agztNvLSUA"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Nil(t, i.BuildHeaders(map[string]any{ClientKeyInput: value}))
+		})
+	}
 }

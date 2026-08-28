@@ -51,13 +51,13 @@
     },
     {
       "id": "slpa",
-      "url": "https://slpacargoapi.slpa.lk",
+      "url": "https://slpa-cms.example.com",
       "timeout": "60s",
       "auth": {
         "type": "oauth2",
         "options": {
-          "token_url": "https://slpacargoapi.slpa.lk/api/nsw/v1/token",
-          "client_id": "62a851d7-ede8-4725-9bd4-516674ef840e",
+          "token_url": "https://slpa-cms.example.com/api/nsw/v1/token",
+          "client_id": "NSW_TO_SLPA_CLIENT_ID",
           "client_secret": "env:SLPA_CLIENT_SECRET"
         }
       }
