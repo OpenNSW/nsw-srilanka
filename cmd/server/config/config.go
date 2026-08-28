@@ -33,8 +33,21 @@ type Config struct {
 	Notification notification.Config
 	Temporal     temporal.Config
 	Audit        audit.Config
+	Webhooks     WebhooksConfig
 
 	ArtifactLoader loaders.Config
+}
+
+// WebhooksConfig holds the secrets that authenticate inbound calls from partner
+// systems that do not use the shared IdP.
+//
+// SLPA signs each webhook with a secret shared out of band, so the signature is
+// the whole of that route's authentication (see external-integration/slpa).
+// Empty means the route is not mounted: a deployment that has not been given a
+// secret must not expose an unauthenticated endpoint that advances a
+// consignment.
+type WebhooksConfig struct {
+	SLPASecret string
 }
 
 // ServerConfig holds server configuration.
@@ -148,6 +161,9 @@ func Load() (*Config, error) {
 		Audit: audit.Config{
 			BaseURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
 			APIKey:  os.Getenv("ARGUS_API_KEY"),
+		},
+		Webhooks: WebhooksConfig{
+			SLPASecret: os.Getenv("SLPA_WEBHOOK_SECRET"),
 		},
 		ArtifactLoader: loaders.Config{
 			Type: getEnvOrDefault("ARTIFACT_LOADER_TYPE", loaders.TypeLocal),

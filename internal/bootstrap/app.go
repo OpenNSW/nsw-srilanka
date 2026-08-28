@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
+	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
@@ -272,6 +274,20 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	slceHandler := asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
+	// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
+	// presenting an IdP token, so this handler owns its own authentication and
+	// the route below carries no bearer middleware.
+	slpaHandler, err := slpawebhook.NewHandler(
+		slpawebhook.NewOrderEvents(db, tm),
+		cfg.Webhooks.SLPASecret,
+	)
+	if err != nil {
+		// A deployment without the secret runs without the route rather than
+		// exposing an unauthenticated one: SLPA cannot report a decision, and the
+		// service order waits, which is visible and recoverable.
+		slog.Warn("slpa webhook route not mounted", "reason", err)
+	}
+
 	chaHandler := cha.NewHandler(chaService)
 	companyHandler := company.NewHandler(companyService)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
@@ -381,6 +397,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	// SLCE Webhook Endpoint (single central route handling all ASYCUDA/SLCE events).
 	mux.Handle("POST /webhooks/slce", withAuth(withScope(scopes.SLCEWebhooksWrite)(http.HandlerFunc(slceHandler.HandleWebhook))))
+
+	// SLPA Webhook Endpoint. Authenticated by the HMAC signature on the request
+	// itself — see slpa.VerifySignature — so no token middleware here.
+	if slpaHandler != nil {
+		mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
+	}
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
