@@ -3,7 +3,10 @@
 ## Prerequisites
 
 - Go 1.27+ (see `go.mod` for the exact version)
-- Docker with BuildKit enabled
+- Docker with BuildKit — required, not just recommended: the Dockerfiles use
+  `FROM --platform=$BUILDPLATFORM`, which the legacy builder cannot parse. Docker
+  >= 23 and Compose v2 default to BuildKit, so this only bites if you have
+  exported `DOCKER_BUILDKIT=0`.
 - pnpm 11.1.2+ (for frontend work only)
 - Node.js 22.18.0+ (see `portals/.nvmrc`)
 

@@ -1,7 +1,11 @@
 # The Alpine Go image is alpine:3.24 plus ca-certificates — it ships no git and
 # no compiler. Neither is needed: modules arrive from GOPROXY as zips, and every
 # build below sets CGO_ENABLED=0, so nothing links libc.
-FROM golang:1.27-alpine3.24 AS builder
+#
+# Pinned to $BUILDPLATFORM so the compile runs natively and cross-compiles to the
+# target arch, instead of running an emulated toolchain once per platform.
+# Requires BuildKit.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine3.24 AS builder
 
 WORKDIR /src
 
@@ -14,9 +18,10 @@ RUN GOWORK=off go mod download
 # Copy the full source tree
 COPY . .
 
-# BuildKit populates TARGETOS/TARGETARCH for cross/multi-arch builds. When they
-# are empty (e.g. no BuildKit), leaving GOOS/GOARCH unset lets Go target the
-# builder's native platform — avoids forcing amd64 emulation on arm64 hosts.
+# TARGETOS/TARGETARCH describe the image being built, not this stage's own
+# platform. Declared here rather than higher up on purpose: an ARG makes every RUN
+# beneath it platform-specific, so keeping them low lets `go mod download` and the
+# source COPY be computed once and shared by every target platform.
 ARG TARGETOS
 ARG TARGETARCH
 ARG BUILD_VERSION=dev
@@ -34,32 +39,37 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
 # go-sqlite3, but we only drive postgres (pure-Go pgx), so sqlite stays an unused
 # runtime stub. We use `go build -o` rather than `go install`, because
 # `go install` refuses to write the binary when cross-compiling for a non-host
-# GOOS/GOARCH (multi-arch buildx).
+# GOOS/GOARCH (multi-arch buildx) — which now binds on every cross-arch target,
+# since this stage is $BUILDPLATFORM-pinned. Do not switch it back to go install.
 # -------------------------------------------------------------------
-FROM golang:1.27-alpine3.24 AS migrate-builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine3.24 AS migrate-builder
 
-ARG TARGETOS
-ARG TARGETARCH
-
-# Kept above the MIGRATE_VERSION ARG so a version bump invalidates only the
-# fetch+build layer below, not these steps. The GOPROXY path needs no git; it is
+# Kept above the MIGRATE_VERSION ARG so a version bump invalidates only the fetch
+# and build layers below, not these steps. The GOPROXY path needs no git; it is
 # installed solely so a `direct`-mode fallback fetch still works.
 RUN apk add --no-cache git
 WORKDIR /tmp-build
 RUN GOWORK=off go mod init migrate-build
 
 # Bump to adopt a newer migrator (overridable via --build-arg / compose).
-# This commit is release v0.3.0. The value must be a pseudo-version rather than
-# `v0.3.0`: the module sits in the repo's backend/ subdirectory, so Go honours
-# only a `backend/`-prefixed tag, while the release tags sit at the repo root.
-# A bare `v0.3.0` resolves the root module and fails with "does not contain
-# package .../backend/cmd/migrate", because backend/ is carved out of the root
-# module by its own go.mod. Publishing `backend/v0.3.0` upstream would make the
-# plain tag usable here.
-ARG MIGRATE_VERSION=v0.0.0-20260827070610-a0c2d032a061
-RUN GOWORK=off go get github.com/OpenNSW/agency/backend/cmd/migrate@${MIGRATE_VERSION} \
-    && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-       go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/agency/backend/cmd/migrate
+# The value must be a pseudo-version rather than a release tag: the module sits
+# in the repo's backend/ subdirectory, so Go honours only a `backend/`-prefixed
+# tag, while the release tags sit at the repo root. A bare tag resolves the root
+# module and fails with "does not contain package .../backend/cmd/migrate",
+# because backend/ is carved out of the root module by its own go.mod.
+# Publishing `backend/vX.Y.Z` upstream would make the plain tag usable here.
+ARG MIGRATE_VERSION=v0.0.0-20260828042937-10e26e2d7008
+
+# Fetch kept in its own layer, above the TARGETOS/TARGETARCH ARGs: an ARG makes
+# every RUN beneath it platform-specific, so this way one download serves both
+# platforms rather than repeating the only network fetch in the build — which has
+# already flaked a release on a transient sum.golang.org error.
+RUN GOWORK=off go get github.com/OpenNSW/agency/backend/cmd/migrate@${MIGRATE_VERSION}
+
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
+    go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/agency/backend/cmd/migrate
 
 # -------------------------------------------------------------------
 # Migrate image – self-contained schema migrator. Runs to completion

@@ -1,7 +1,12 @@
 # musl base. Every native addon this build needs (@swc/core, @tailwindcss/oxide,
 # lightningcss, @rolldown/binding) has a `libc: [musl]` variant pinned in
 # pnpm-lock.yaml, which is what --frozen-lockfile resolves to here.
-FROM node:22-alpine3.24 AS builder
+#
+# Pinned to $BUILDPLATFORM: `pnpm build` emits only text assets, so dist/ is
+# architecture-independent and one native build serves every target. This stage
+# therefore runs once however many platforms are requested — only the nginx stage
+# below is per-platform. Requires BuildKit.
+FROM --platform=$BUILDPLATFORM node:22-alpine3.24 AS builder
 
 WORKDIR /workspace
 
