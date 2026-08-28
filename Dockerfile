@@ -44,8 +44,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
 # -------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine3.24 AS migrate-builder
 
-# Kept above the MIGRATE_VERSION ARG so a version bump invalidates only the
-# fetch+build layer below, not these steps. The GOPROXY path needs no git; it is
+# Kept above the MIGRATE_VERSION ARG so a version bump invalidates only the fetch
+# and build layers below, not these steps. The GOPROXY path needs no git; it is
 # installed solely so a `direct`-mode fallback fetch still works.
 RUN apk add --no-cache git
 WORKDIR /tmp-build
@@ -59,18 +59,18 @@ RUN GOWORK=off go mod init migrate-build
 # package .../backend/cmd/migrate", because backend/ is carved out of the root
 # module by its own go.mod. Publishing `backend/v0.3.0` upstream would make the
 # plain tag usable here.
-# TARGETOS/TARGETARCH are declared here rather than at the top of the stage on
-# purpose: a declared ARG enters the environment of every RUN below it, which
-# makes those layers platform-specific even when they never read it. Keeping them
-# down here lets `apk add git` and `go mod init` above be computed once and shared
-# by every target platform. The fetch below stays fused to the build (see the
-# MIGRATE_VERSION note) so it does still run per platform.
+ARG MIGRATE_VERSION=v0.0.0-20260827070610-a0c2d032a061
+
+# Fetch kept in its own layer, above the TARGETOS/TARGETARCH ARGs: an ARG makes
+# every RUN beneath it platform-specific, so this way one download serves both
+# platforms rather than repeating the only network fetch in the build — which has
+# already flaked a release on a transient sum.golang.org error.
+RUN GOWORK=off go get github.com/OpenNSW/agency/backend/cmd/migrate@${MIGRATE_VERSION}
+
 ARG TARGETOS
 ARG TARGETARCH
-ARG MIGRATE_VERSION=v0.0.0-20260827070610-a0c2d032a061
-RUN GOWORK=off go get github.com/OpenNSW/agency/backend/cmd/migrate@${MIGRATE_VERSION} \
-    && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
-       go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/agency/backend/cmd/migrate
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
+    go build -ldflags="-s -w" -o /out/migrate github.com/OpenNSW/agency/backend/cmd/migrate
 
 # -------------------------------------------------------------------
 # Migrate image – self-contained schema migrator. Runs to completion
