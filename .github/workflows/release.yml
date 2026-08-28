@@ -436,32 +436,50 @@ jobs:
         id: repo_owner
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
+      # Rendered in a step rather than inlined in the action's `body:` so the
+      # digests can be read out of release-digests.json and shown next to each
+      # image, instead of pointing the reader at an attachment. The image list is
+      # taken from that file's keys too, so adding one to the build matrix needs no
+      # change here.
+      - name: Render release body
+        env:
+          OWNER: ${{ steps.repo_owner.outputs.owner }}
+          VERSION: ${{ needs.collate-digests.outputs.version }}
+        run: |
+          {
+            echo "### Published Images"
+            echo ""
+            echo "| Image | Digest |"
+            echo "| --- | --- |"
+            for IMG in $(jq -r 'keys[]' release-digests.json); do
+              DIGEST=$(jq -r --arg k "$IMG" '.[$k]' release-digests.json)
+              echo "| \`${{ env.REGISTRY }}/${OWNER}/${IMG}:${VERSION}\` | \`${DIGEST}\` |"
+            done
+            echo ""
+            echo "### Pull Images"
+            echo '```bash'
+            for IMG in $(jq -r 'keys[]' release-digests.json); do
+              echo "docker pull ${{ env.REGISTRY }}/${OWNER}/${IMG}:${VERSION}"
+            done
+            echo '```'
+            echo ""
+            echo "### Supported Platforms"
+            echo "Every image above is a multi-arch manifest list covering \`linux/amd64\`"
+            echo "and \`linux/arm64\` — one tag resolves correctly on both x86_64 and arm64"
+            echo "(Graviton/Ampere) nodes, and on Apple Silicon."
+            echo ""
+            echo "The digests above are manifest-list digests. \`release-digests.json\` is"
+            echo "attached for the GitOps pipeline, which verifies them before deploying."
+          } > release-body.md
+          echo "Rendered release body:"
+          cat release-body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', needs.collate-digests.outputs.version) || github.ref }}
           name: TNSW ${{ needs.collate-digests.outputs.version }}
-          body: |
-            ### Published Image Targets
-            - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-web:${{ needs.collate-digests.outputs.version }}`
-            - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-api:${{ needs.collate-digests.outputs.version }}`
-            - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-migrate:${{ needs.collate-digests.outputs.version }}`
-
-            ### Pull Images
-            ```bash
-            docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-web:${{ needs.collate-digests.outputs.version }}
-            docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-api:${{ needs.collate-digests.outputs.version }}
-            docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-migrate:${{ needs.collate-digests.outputs.version }}
-            ```
-
-            ### Supported Platforms
-            Every image above is a multi-arch manifest list covering
-            `linux/amd64` and `linux/arm64` — one tag resolves correctly on
-            both x86_64 and arm64 (Graviton/Ampere) nodes, and on Apple Silicon.
-
-            ### Image Digests
-            See `release-digests.json` attached to this release for the exact SHA256 digest
-            of each image — used by the GitOps pipeline to verify them before deploying.
+          body_path: release-body.md
           # Appends GitHub's own changelog — merged PRs since the previous release,
           # plus a compare link. `body` above is PRE-pended and `name` is kept, so
           # this only adds a section.
