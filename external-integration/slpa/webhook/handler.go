@@ -32,21 +32,25 @@ const maxWebhookBody = 1 << 20 // 1 MB
 // no bearer token and the signature is the whole of its authentication. See
 // VerifySignature.
 type Handler struct {
-	orders *OrderEvents
-	secret string
+	orders   *OrderEvents
+	invoices *InvoiceEvents
+	secret   string
 }
 
-// NewHandler binds the handler to the service that applies a decision. A
+// NewHandler binds the handler to the services that apply an event. A
 // configuration without a secret is refused: an unauthenticated webhook on a
 // live cargo system would let anyone advance another trader's consignment.
-func NewHandler(orders *OrderEvents, cfg Config) (*Handler, error) {
+func NewHandler(orders *OrderEvents, invoices *InvoiceEvents, cfg Config) (*Handler, error) {
 	if orders == nil {
 		return nil, errors.New("slpa webhook: service order webhook service is required")
+	}
+	if invoices == nil {
+		return nil, errors.New("slpa webhook: invoice webhook service is required")
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	return &Handler{orders: orders, secret: cfg.Secret}, nil
+	return &Handler{orders: orders, invoices: invoices, secret: cfg.Secret}, nil
 }
 
 // HandleWebhook authenticates the call, then applies what the CMS decided.
@@ -69,9 +73,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The event name decides who reads the body. Only the approvals a service
-	// order goes through are modelled here; anything else is answered rather
-	// than guessed at.
+	// One signed route carries both lifecycles, as the CMS sends them: the
+	// approvals a service order goes through, and the invoice raised once it is
+	// approved. Which envelope this is decides only who reads it.
 	var envelope struct {
 		Event string `json:"event"`
 	}
@@ -85,6 +89,8 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.HasPrefix(envelope.Event, "service_order."):
 		applyErr = h.applyOrderEvent(r, body)
+	case strings.HasPrefix(envelope.Event, "invoice."):
+		applyErr = h.applyInvoiceEvent(r, body)
 	default:
 		slog.WarnContext(r.Context(), "slpa webhook: event not handled here", "event", envelope.Event)
 		httputil.Error(w, r, http.StatusBadRequest, errUnknownEvent)
@@ -126,4 +132,13 @@ func (h *Handler) applyOrderEvent(r *http.Request, body []byte) error {
 		return fmt.Errorf("%w: %v", ErrUnknownEvent, err)
 	}
 	return h.orders.Handle(r.Context(), event)
+}
+
+// applyInvoiceEvent hands an invoice event to the service that owns it.
+func (h *Handler) applyInvoiceEvent(r *http.Request, body []byte) error {
+	var event InvoiceEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		return fmt.Errorf("%w: %v", ErrUnknownEvent, err)
+	}
+	return h.invoices.Handle(r.Context(), event)
 }

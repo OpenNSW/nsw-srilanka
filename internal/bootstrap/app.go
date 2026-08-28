@@ -285,6 +285,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// secret is a deployment fault worth stopping for either way.
 	slpaHandler, err := slpawebhook.NewHandler(
 		slpawebhook.NewOrderEvents(db, tm),
+		slpawebhook.NewInvoiceEvents(db, tm),
 		cfg.Integrations.SLPAWebhook(),
 	)
 	if err != nil {
