@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/OpenNSW/core/remote"
 )
@@ -67,6 +70,68 @@ func headersFor(interp Interpreter, inputs map[string]any) map[string]string {
 	return hi.BuildHeaders(inputs)
 }
 
+// QueryInterpreter is implemented by interpreters whose service takes its
+// parameters in the query string rather than a body — a lookup, typically,
+// where the method is GET and there is nothing to send.
+//
+// Which workflow variable each parameter comes from is an artifact decision, as
+// with BuildHeaders: the interpreter only names what the service asks for.
+type QueryInterpreter interface {
+	Interpreter
+
+	BuildQuery(inputs map[string]any) url.Values
+}
+
+// queryFor returns the query parameters the interpreter asks for, if any.
+func queryFor(interp Interpreter, inputs map[string]any) url.Values {
+	qi, ok := interp.(QueryInterpreter)
+	if !ok {
+		return nil
+	}
+	return qi.BuildQuery(inputs)
+}
+
+// expandPath fills {name} placeholders in a configured path from the task's
+// inputs, so a resource-scoped endpoint — /orders/{slug}/gate-pass — can be
+// declared in an artifact and addressed per case.
+//
+// A placeholder with no input is an error rather than an empty segment: the
+// alternative is calling a different URL than the one the artifact declared,
+// which a service can only answer with a 404 the trader cannot act on.
+func expandPath(path string, inputs map[string]any) (string, error) {
+	var missing []string
+	var b strings.Builder
+	rest := path
+	for {
+		open := strings.Index(rest, "{")
+		if open == -1 {
+			b.WriteString(rest)
+			break
+		}
+		close := strings.Index(rest[open:], "}")
+		if close == -1 {
+			b.WriteString(rest)
+			break
+		}
+		close += open
+
+		name := rest[open+1 : close]
+		b.WriteString(rest[:open])
+
+		value, ok := inputs[name]
+		if !ok || value == nil || fmt.Sprint(value) == "" {
+			missing = append(missing, name)
+		} else {
+			b.WriteString(url.PathEscape(fmt.Sprint(value)))
+		}
+		rest = rest[close+1:]
+	}
+	if len(missing) > 0 {
+		return "", fmt.Errorf("api_call: path %q has no input for %s", path, strings.Join(missing, ", "))
+	}
+	return b.String(), nil
+}
+
 // passthroughInterpreter sends the "payload" input as-is and treats any
 // transport-level success as accepted.
 type passthroughInterpreter struct{}
@@ -111,8 +176,21 @@ func NewAPICallPluginWithInterpreter(manager *remote.Manager, interp Interpreter
 }
 
 type apiCallConfig struct {
-	ServiceID   string `json:"service_id"`
-	Path        string `json:"path"`
+	ServiceID string `json:"service_id"`
+	Path      string `json:"path"`
+
+	// Method defaults to POST, which every submission this plugin drives uses.
+	// A lookup step sets GET, and then the interpreter's BuildQuery carries the
+	// parameters instead of a body.
+	//
+	// The body is whatever the interpreter builds, whatever the method: HTTP
+	// discourages content on a GET but does not forbid it, so which calls carry
+	// one is the artifact's business rather than this plugin's. An interpreter
+	// driving a GET returns nil from BuildRequest — see the SLPA consolidation
+	// lookup — and the generic passthrough interpreter always builds one, so a
+	// GET configured on a plugin without its own interpreter will send the
+	// mapped inputs as a body.
+	Method      string `json:"method,omitempty"`
 	ResultField string `json:"result_field,omitempty"` // record the accepted flag under this key
 }
 
@@ -125,6 +203,16 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return fmt.Errorf("api_call: service_id and path are required")
 	}
 
+	method := strings.ToUpper(strings.TrimSpace(cfg.Method))
+	if method == "" {
+		method = http.MethodPost
+	}
+
+	path, err := expandPath(cfg.Path, ctx.Inputs)
+	if err != nil {
+		return err
+	}
+
 	// The state a render config keys on while the call is out. Every flow that
 	// uses this plugin moves straight from it to a step that waits on the
 	// receiving agency, so reporting the same state here means the panel for
@@ -134,11 +222,12 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	var resp map[string]any
 	var callErr error
 	if mp, ok := p.interpreter.(MultipartInterpreter); ok {
-		callErr = p.callMultipart(ctx, mp, cfg, &resp)
+		callErr = p.callMultipart(ctx, mp, path, cfg, &resp)
 	} else {
 		req := remote.Request{
-			Method:  "POST",
-			Path:    cfg.Path,
+			Method:  method,
+			Path:    path,
+			Query:   queryFor(p.interpreter, ctx.Inputs),
 			Body:    p.interpreter.BuildRequest(ctx.Inputs),
 			Headers: headersFor(p.interpreter, ctx.Inputs),
 		}
@@ -168,14 +257,14 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 // failure to assemble the body is returned rather than sent, so the
 // interpreter reports it to the trader through the same path as a rejection —
 // nothing reaches the service in that case.
-func (p *APICallPlugin) callMultipart(ctx pluginContext, mp MultipartInterpreter, cfg apiCallConfig, resp *map[string]any) error {
+func (p *APICallPlugin) callMultipart(ctx pluginContext, mp MultipartInterpreter, path string, cfg apiCallConfig, resp *map[string]any) error {
 	parts, err := mp.BuildParts(ctx.Context, ctx.Inputs)
 	if err != nil {
 		return err
 	}
 	return p.manager.Call(ctx.Context, cfg.ServiceID, remote.Request{
-		Method:  "POST",
-		Path:    cfg.Path,
+		Method:  http.MethodPost,
+		Path:    path,
 		Body:    remote.MultipartBody{Parts: parts},
 		Headers: headersFor(mp, ctx.Inputs),
 	}, resp)
