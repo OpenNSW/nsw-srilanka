@@ -440,12 +440,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', needs.collate-digests.outputs.version) || github.ref }}
-          name: Release ${{ needs.collate-digests.outputs.version }}
+          name: TNSW ${{ needs.collate-digests.outputs.version }}
           body: |
-            ## Release ${{ needs.collate-digests.outputs.version }}
-
-            This release publishes the platform Docker images for the NSW Single Window.
-
             ### Published Image Targets
             - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-web:${{ needs.collate-digests.outputs.version }}`
             - `${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-api:${{ needs.collate-digests.outputs.version }}`
@@ -466,6 +462,16 @@ jobs:
             ### Image Digests
             See `release-digests.json` attached to this release for the exact SHA256 digest
             of each image — used by the GitOps pipeline to verify them before deploying.
+          # Appends GitHub's own changelog — merged PRs since the previous release,
+          # plus a compare link. `body` above is PRE-pended and `name` is kept, so
+          # this only adds a section.
+          #
+          # No release exists in this repo yet, so GitHub has no base to diff from
+          # and the FIRST release will list every PR in the repo's history (~200).
+          # `previous_tag` cannot narrow that — the input requires a tag with a
+          # release attached, and none of the 8 tags here has one. Every release
+          # after the first is scoped normally, against the release before it.
+          generate_release_notes: true
           draft: false
           prerelease: ${{ needs.collate-digests.outputs.is_prerelease == 'true' }}
           # Attach the digest manifest so gitops.yaml can fetch it directly
