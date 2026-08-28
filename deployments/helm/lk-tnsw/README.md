@@ -63,6 +63,10 @@ same version for all three):
 | `ghcr.io/opennsw/tnsw-migrate`  | root `Dockerfile`, `migrate` target           | `backend/migration-job.yaml` |
 | `ghcr.io/opennsw/tnsw-web` | `portals/apps/trader-app/Dockerfile`          | `frontend/deployment.yaml`   |
 
+All three are published as multi-arch manifest lists covering `linux/amd64` and
+`linux/arm64`, so one tag scheduled onto a mixed-arch cluster resolves to the
+right image per node — no `nodeSelector` on `kubernetes.io/arch` is needed.
+
 The migration Job (`backend.migration.enabled: true`) uses a **different
 image** from the backend Deployment — see `backend.migration.image` in
 `values.yaml`. It also uses **different DB env var names** than the backend

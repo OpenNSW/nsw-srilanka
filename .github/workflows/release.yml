@@ -28,6 +28,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # Platforms in every published manifest list; the Trivy steps iterate it too.
+  # Adding one needs a matching "Upload Trivy results" step — each SARIF upload
+  # needs its own category.
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -104,6 +108,12 @@ jobs:
             echo "Dry run mode - image will be built only"
           fi
 
+      # binfmt for the foreign-arch RUN steps in the final stages; the builder
+      # stages are $BUILDPLATFORM-pinned, so little is emulated. Must come BEFORE
+      # setup-buildx-action — buildkitd fixes its platform list at startup.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -168,6 +178,9 @@ jobs:
           file: ${{ matrix.dockerfile }}
           # Empty for default-stage images; set to `migrate` for the migrator.
           target: ${{ matrix.target }}
+          # One manifest list per tag, so steps.build.outputs.digest is the list
+          # digest — which is what release-digests.json should pin.
+          platforms: ${{ env.PLATFORMS }}
           push: ${{ steps.release-mode.outputs.enabled == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -197,41 +210,116 @@ jobs:
           path: /tmp/digests/${{ matrix.image_name }}.txt
           retention-days: 1
 
-      # Trivy scans the pushed image for CRITICAL/HIGH CVEs.
+      # Scans the pushed image for HIGH/CRITICAL CVEs. Reports only — see
+      # "Report Trivy findings" below.
       - name: Setup Trivy
         if: steps.release-mode.outputs.enabled == 'true'
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
         with:
           version: v0.69.3
 
+      # `trivy image` resolves a manifest list to ONE entry, so each platform is
+      # scanned explicitly or arm64 goes unscanned. --platform needs the full
+      # os/arch form; a bare `arm64` parses as an OS name and matches nothing.
+      # --exit-code 0 so a finding neither aborts the loop nor skips the uploads
+      # below, which is what the old --exit-code 1 did.
       - name: Run Trivy vulnerability scanner
         id: trivy-scan
         if: steps.release-mode.outputs.enabled == 'true'
+        env:
+          IMAGE_REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
-          trivy image \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed \
-            --format sarif \
-            --output "trivy-${{ matrix.image_name }}.sarif" \
-            --exit-code 1 \
-            "${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
+          # Collected rather than raised: a platform that cannot be scanned is
+          # reported by "Report Trivy findings", not failed here.
+          FAILED_PLATFORMS=""
+          for PLATFORM in ${PLATFORMS//,/ }; do
+            SLUG="${PLATFORM//\//-}"
+            echo "::group::Trivy ${{ matrix.image_name }} ${PLATFORM}"
+            # --image-src remote is load-bearing: the default `docker` source has
+            # priority and silently IGNORES --platform, which would turn both
+            # per-platform scans into two scans of the same arch.
+            if trivy image \
+                 --image-src remote \
+                 --platform "$PLATFORM" \
+                 --severity HIGH,CRITICAL \
+                 --ignore-unfixed \
+                 --format sarif \
+                 --output "trivy-${{ matrix.image_name }}-${SLUG}.sarif" \
+                 --exit-code 0 \
+                 "$IMAGE_REF"; then
+              # Same scan again as a readable table; caches are warm, so it is cheap.
+              trivy image \
+                --image-src remote \
+                --platform "$PLATFORM" \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --format table \
+                --exit-code 0 \
+                "$IMAGE_REF" || true
+            else
+              echo "::warning::Trivy could not scan ${PLATFORM} — it is reported as unscanned below."
+              FAILED_PLATFORMS="${FAILED_PLATFORMS} ${PLATFORM}"
+            fi
+            echo "::endgroup::"
+          done
+          echo "failed_platforms=${FAILED_PLATFORMS# }" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Trivy results
-        if: always() && steps.trivy-scan.outcome == 'success'
+      # One upload per (image, platform) — two uploads sharing a tool+category fails
+      # the whole run. hashFiles tolerates a missing SARIF (narrowed PLATFORMS, or a
+      # platform that failed to scan).
+      - name: Upload Trivy results (linux/amd64)
+        if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-amd64.sarif', matrix.image_name)) != ''
         uses: github/codeql-action/upload-sarif@v4.37.8
         with:
-          sarif_file: trivy-${{ matrix.image_name }}.sarif
-          # Distinct category per image so the two matrix uploads don't overwrite each other.
-          category: ${{ matrix.image_name }}
+          sarif_file: trivy-${{ matrix.image_name }}-linux-amd64.sarif
+          category: ${{ matrix.image_name }}-linux-amd64
 
-      - name: Print Trivy findings (debug)
-        if: always() && steps.trivy-scan.outcome != 'skipped'
+      - name: Upload Trivy results (linux/arm64)
+        if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-arm64.sarif', matrix.image_name)) != ''
+        uses: github/codeql-action/upload-sarif@v4.37.8
+        with:
+          sarif_file: trivy-${{ matrix.image_name }}-linux-arm64.sarif
+          category: ${{ matrix.image_name }}-linux-arm64
+
+      # Report-only: cannot fail the release. Base-image CVEs arrive on the CVE
+      # feed's schedule and often have no same-day fix, so gating on them blocks
+      # shipping on something nobody can action. Runs after the uploads, so the
+      # alerts it points at already exist.
+      - name: Report Trivy findings
+        if: always() && steps.trivy-scan.outcome == 'success'
         run: |
-          trivy image \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed \
-            --format table \
-            ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          {
+            echo "### ${{ matrix.image_name }} — image CVEs (report only)"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          UNSCANNED="${{ steps.trivy-scan.outputs.failed_platforms }}"
+          if [ -n "$UNSCANNED" ]; then
+            echo "::warning::Trivy could not scan: ${UNSCANNED} — published without a CVE report for those platforms."
+            {
+              echo "> **Not scanned:** \`${UNSCANNED}\` — published without a CVE report for those platforms."
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # `[ -e ]` guards the no-match case: an unexpanded glob would otherwise
+          # reach jq as a literal filename.
+          TOTAL=0
+          for FILE in trivy-${{ matrix.image_name }}-*.sarif; do
+            [ -e "$FILE" ] || continue
+            COUNT=$(jq '[.runs[].results[]] | length' "$FILE")
+            TOTAL=$(( TOTAL + COUNT ))
+            echo "$FILE: $COUNT fixable HIGH/CRITICAL finding(s)"
+            echo "- \`${FILE}\`: ${COUNT} fixable HIGH/CRITICAL" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "::warning::${TOTAL} fixable HIGH/CRITICAL CVE(s) in ${{ matrix.image_name }} — the release was NOT blocked; triage under Security → Code scanning."
+            echo "Triage under **Security → Code scanning**, category \`${{ matrix.image_name }}-linux-<arch>\`. The release was not blocked." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No fixable HIGH/CRITICAL CVEs on any scanned platform." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Generate service summary
         if: always()
@@ -369,6 +457,11 @@ jobs:
             docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-api:${{ needs.collate-digests.outputs.version }}
             docker pull ${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}/tnsw-migrate:${{ needs.collate-digests.outputs.version }}
             ```
+
+            ### Supported Platforms
+            Every image above is a multi-arch manifest list covering
+            `linux/amd64` and `linux/arm64` — one tag resolves correctly on
+            both x86_64 and arm64 (Graviton/Ampere) nodes, and on Apple Silicon.
 
             ### Image Digests
             See `release-digests.json` attached to this release for the exact SHA256 digest

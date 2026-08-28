@@ -27,6 +27,13 @@ on:
         required: false
         type: string
         default: ""
+      platforms:
+        description: >-
+          Platforms in the published manifest list. Narrow to one for a faster
+          build; the default covers arm64 nodes and Apple Silicon.
+        required: false
+        type: string
+        default: linux/amd64,linux/arm64
 
 env:
   REGISTRY: ghcr.io
@@ -41,6 +48,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # binfmt for the foreign-arch RUN steps in the final stages; the builder
+      # stages are $BUILDPLATFORM-pinned, so little is emulated. Must come BEFORE
+      # setup-buildx-action — buildkitd fixes its platform list at startup.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -63,6 +76,8 @@ jobs:
           file: ${{ inputs.dockerfile }}
           # Empty for default-stage images; set to `migrate` for the migrator.
           target: ${{ inputs.target }}
+          # One manifest list per tag, so it resolves on amd64 and arm64 alike.
+          platforms: ${{ inputs.platforms }}
           push: true
           # Sequential run numbers let Argo CD Image Updater sort/detect the newest dev builds.
           tags: |
