@@ -52,14 +52,13 @@ WORKDIR /tmp-build
 RUN GOWORK=off go mod init migrate-build
 
 # Bump to adopt a newer migrator (overridable via --build-arg / compose).
-# This commit is release v0.3.0. The value must be a pseudo-version rather than
-# `v0.3.0`: the module sits in the repo's backend/ subdirectory, so Go honours
-# only a `backend/`-prefixed tag, while the release tags sit at the repo root.
-# A bare `v0.3.0` resolves the root module and fails with "does not contain
-# package .../backend/cmd/migrate", because backend/ is carved out of the root
-# module by its own go.mod. Publishing `backend/v0.3.0` upstream would make the
-# plain tag usable here.
-ARG MIGRATE_VERSION=v0.0.0-20260827070610-a0c2d032a061
+# The value must be a pseudo-version rather than a release tag: the module sits
+# in the repo's backend/ subdirectory, so Go honours only a `backend/`-prefixed
+# tag, while the release tags sit at the repo root. A bare tag resolves the root
+# module and fails with "does not contain package .../backend/cmd/migrate",
+# because backend/ is carved out of the root module by its own go.mod.
+# Publishing `backend/vX.Y.Z` upstream would make the plain tag usable here.
+ARG MIGRATE_VERSION=v0.0.0-20260828042937-10e26e2d7008
 
 # Fetch kept in its own layer, above the TARGETOS/TARGETARCH ARGs: an ARG makes
 # every RUN beneath it platform-specific, so this way one download serves both
