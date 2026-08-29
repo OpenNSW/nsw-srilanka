@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/cms"
 )
 
 func TestInterpreter_BuildRequest(t *testing.T) {
@@ -31,32 +33,12 @@ func TestInterpreter_BuildRequest(t *testing.T) {
 	assert.Len(t, out, 1, "the upload body carries only the declaration")
 }
 
-// SLPA identifies the submitting company by this header, and the key reaches the
-// interpreter as a task input the artifact maps from the company profile.
+// SLPA identifies the submitting company by this header. The shape rules are
+// the cms package's — this only pins that the declaration presents the key.
 func TestInterpreter_BuildHeaders(t *testing.T) {
-	i := NewInterpreter()
-
-	t.Run("the key is presented as the header", func(t *testing.T) {
-		assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
-			i.BuildHeaders(map[string]any{ClientKeyInput: "agztNvLSUA"}))
-	})
-
-	t.Run("surrounding space is trimmed", func(t *testing.T) {
-		assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
-			i.BuildHeaders(map[string]any{ClientKeyInput: "  agztNvLSUA \n"}))
-	})
-
-	// Sending nothing lets SLPA say the caller cannot be identified, which is a
-	// truer message than one invented here.
-	for name, inputs := range map[string]map[string]any{
-		"no key mapped in": {},
-		"a blank key":      {ClientKeyInput: "   "},
-		"not a string":     {ClientKeyInput: 42},
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Nil(t, i.BuildHeaders(inputs))
-		})
-	}
+	assert.Equal(t, map[string]string{cms.ClientKeyHeader: "agztNvLSUA"},
+		NewInterpreter().BuildHeaders(map[string]any{cms.ClientKeyInput: "agztNvLSUA"}))
+	assert.Nil(t, NewInterpreter().BuildHeaders(map[string]any{}))
 }
 
 // The CMS's answer to a declaration it stored: the outcome nested under "data",
@@ -200,24 +182,4 @@ func TestInterpret_ReportsALocalAssemblyFailureAsOurs(t *testing.T) {
 		"SLPA refused nothing; they never saw it")
 	assert.NotContains(t, message, ErrNotAssembled.Error(),
 		"the sentinel is for code, not for the trader")
-}
-
-// The key is an opaque string SLPA issues per company, mapped from the company
-// profile. A value of any other shape is no key at all: rendering one from it
-// would file the declaration against a company nobody chose.
-func TestBuildHeaders_RequiresAStringKey(t *testing.T) {
-	i := NewInterpreter()
-	assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
-		i.BuildHeaders(map[string]any{ClientKeyInput: " agztNvLSUA "}))
-
-	for name, value := range map[string]any{
-		"absent":            nil,
-		"blank":             "   ",
-		"a number":          42,
-		"the whole profile": map[string]any{"slpacmsuser_key": "agztNvLSUA"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Nil(t, i.BuildHeaders(map[string]any{ClientKeyInput: value}))
-		})
-	}
 }

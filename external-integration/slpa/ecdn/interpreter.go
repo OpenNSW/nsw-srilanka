@@ -36,12 +36,6 @@ type UploadRequest struct {
 	XMLPayload string `json:"xml_payload"`
 }
 
-// ClientKeyHeader carries the SLPA-issued client company identifier (the CMS
-// calls it the ClientSqid). SLPA issues one per registered company, so it is
-// per-consignment rather than per-deployment: it is presented on every call from
-// the task's inputs — see BuildHeaders — not configured on the service.
-const ClientKeyHeader = "slpacmsuser-key"
-
 // Interpreter renders the trader's form as the ECDN document and reads the CMS's
 // answer back as an acceptance flag plus a trader-facing message.
 type Interpreter struct{}
@@ -78,40 +72,11 @@ func (i *Interpreter) BuildRequest(inputs map[string]any) remote.Body {
 	return remote.JSONBody{V: UploadRequest{XMLPayload: doc}}
 }
 
-// ClientKeyInput is the task input the SLPA-issued client key arrives in.
-//
-// The key belongs to the submitting company, so it travels with the consignment:
-// the company profile is propagated into the workflow, the split that spawns an
-// agency flow carries it into the branch, and the artifact maps it here. Nothing
-// in this package reads a database — which company a submission is filed under is
-// a workflow decision, expressed in the artifact rather than in code.
-const ClientKeyInput = "client_key"
-
 // BuildHeaders presents the client key the CMS identifies the submission by.
-//
-// The input is expected to be a string: the artifact maps it from the company
-// profile's own field (company.data.slpacmsuser_key), which SLPA issues as an
-// opaque string per registered company. Anything else — a number, an object, a
-// profile mapped in whole by mistake — counts as no key at all rather than being
-// rendered into one, because a header built from the wrong shape would file the
-// declaration against a company nobody chose.
-//
-// No key means none is sent: filing a declaration against no company is not
-// something to guess at, and SLPA answers for itself ("Client identifier header
-// 'slpacmsuser-key' is required"), which is a truer message than one invented
-// here.
+// The key, the header and the shape expected of it are the same on every SLPA
+// endpoint, so they live in the cms package.
 func (i *Interpreter) BuildHeaders(inputs map[string]any) map[string]string {
-	key, ok := inputs[ClientKeyInput].(string)
-	if !ok && inputs[ClientKeyInput] != nil {
-		slog.Error("slpa ecdn: the SLPA client key on the task inputs is not a string; the CMS will refuse the call",
-			"got", fmt.Sprintf("%T", inputs[ClientKeyInput]))
-		return nil
-	}
-	if key = strings.TrimSpace(key); key == "" {
-		slog.Error("slpa ecdn: no SLPA client key on the task inputs; the CMS will refuse the call")
-		return nil
-	}
-	return map[string]string{ClientKeyHeader: key}
+	return cms.ClientKeyHeaders(inputs, "slpa ecdn")
 }
 
 // Interpret reports whether the CMS accepted the declaration and captures the
@@ -120,15 +85,10 @@ func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 	body := cms.Flatten(resp)
 	accepted := callErr == nil && !cms.HasErrors(body) && cms.Accepted(body)
 
-	out := map[string]any{}
-	for _, k := range []string{
+	out := cms.Capture(body,
 		"status", "message", "reference", "ecdn_id", "cusdec_serial", "validated_at",
 		"error", "errors", "detail",
-	} {
-		if v, ok := body[k]; ok {
-			out[k] = v
-		}
-	}
+	)
 	if !accepted {
 		out["error"] = describeFailure(callErr, body)
 	}
@@ -149,15 +109,5 @@ func describeFailure(callErr error, body map[string]any) string {
 			strings.TrimPrefix(callErr.Error(), ErrNotAssembled.Error()+": ") + outro
 	}
 
-	if reasons := cms.Reasons(body); len(reasons) > 0 {
-		return intro + "\n\n" + strings.Join(reasons, "\n") + outro
-	}
-	if callErr != nil && len(body) == 0 {
-		// Either the CMS could not be reached or it answered with something that
-		// is not one of its own responses (an HTML error page, say). The
-		// difference matters to whoever reads the logs, not to the trader, and
-		// claiming a specific cause we have not established would be wrong.
-		return "We could not get a usable answer from the SLPA Cargo Management System. Please try again in a few minutes."
-	}
-	return intro + outro
+	return cms.Failure(callErr, body, intro, outro)
 }

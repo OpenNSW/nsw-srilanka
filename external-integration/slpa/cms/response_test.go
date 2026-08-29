@@ -2,6 +2,7 @@ package cms
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -200,4 +201,49 @@ func TestReasons_NothingToSay(t *testing.T) {
 	t.Run("an empty error object is not a refusal", func(t *testing.T) {
 		assert.False(t, HasErrors(body(t, `{"error": {}, "status": 0}`)))
 	})
+}
+
+// The key is an opaque string SLPA issues per company, mapped from the company
+// profile (company.data.slpacmsuser_key). A value of any other shape is no key
+// at all: rendering one from it would file the submission against a company
+// nobody chose.
+func TestClientKeyHeaders(t *testing.T) {
+	assert.Equal(t, map[string]string{ClientKeyHeader: "agztNvLSUA"},
+		ClientKeyHeaders(map[string]any{ClientKeyInput: " agztNvLSUA \n"}, "slpa test"))
+
+	for name, inputs := range map[string]map[string]any{
+		"no key mapped in":  {},
+		"absent":            {ClientKeyInput: nil},
+		"blank":             {ClientKeyInput: "   "},
+		"a number":          {ClientKeyInput: 42},
+		"the whole profile": {ClientKeyInput: map[string]any{"slpacmsuser_key": "agztNvLSUA"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Nil(t, ClientKeyHeaders(inputs, "slpa test"))
+		})
+	}
+}
+
+// A field the CMS did not send must not appear on the task as an empty one.
+func TestCapture(t *testing.T) {
+	body := map[string]any{"status": "ACCEPTED", "reference": "ECDN-1", "extra": 1}
+
+	assert.Equal(t, map[string]any{"status": "ACCEPTED", "reference": "ECDN-1"},
+		Capture(body, "status", "reference", "cusdec_serial"))
+	assert.Empty(t, Capture(map[string]any{}, "status"))
+}
+
+func TestFailure(t *testing.T) {
+	const intro, outro = "SLPA did not accept it:", "\n\nTry again."
+
+	refused := Failure(nil, map[string]any{"error": map[string]any{
+		"code": "INVALID", "details": map[string]any{"cusdecNo": []any{"is required"}}}}, intro, outro)
+	assert.Contains(t, refused, "is required", "the CMS's own reason wins")
+
+	// Nothing came back at all: neither a reason to quote nor a cause we have
+	// established, so the trader is told only what is known.
+	assert.Equal(t, Unreachable, Failure(errors.New("dial tcp: timeout"), nil, intro, outro))
+
+	// An answer with no reason in it is still an answer.
+	assert.Equal(t, intro+outro, Failure(nil, map[string]any{"status": 0}, intro, outro))
 }

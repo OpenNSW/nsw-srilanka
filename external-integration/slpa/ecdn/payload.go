@@ -12,8 +12,9 @@ package ecdn
 import (
 	"encoding/xml"
 	"fmt"
-	"strconv"
 	"strings"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
 )
 
 // Declaration is the ECDN document, matching a reference document produced by
@@ -116,9 +117,9 @@ func BuildXML(form map[string]any) (string, error) {
 		return "", &buildError{"The cargo declaration form could not be read."}
 	}
 
-	cusdecNo := str(form, "cusdecNo")
-	cusdecDate := str(form, "cusdecDate")
-	cusdecOffice := str(form, "cusdecOffice")
+	cusdecNo := fields.String(form, "cusdecNo")
+	cusdecDate := fields.String(form, "cusdecDate")
+	cusdecOffice := fields.String(form, "cusdecOffice")
 
 	containers, err := buildContainers(form, cusdecNo, cusdecDate)
 	if err != nil {
@@ -134,28 +135,28 @@ func BuildXML(form map[string]any) (string, error) {
 			// and the declaration's year run together. The trader is not asked
 			// for it because it carries no information they hold.
 			CusDecSerial:     cusdecSerial(cusdecOffice, cusdecNo, cusdecDate),
-			Terminal:         str(form, "terminal"),
-			ShipperName:      str(form, "shipperName"),
-			ShipperAddress:   str(form, "shipperAddress"),
-			ConsigneeName:    str(form, "consigneeName"),
-			ConsigneeAddress: str(form, "consigneeAddress"),
-			PackageNumber:    integer(form, "packageNumber"),
-			PackageType:      str(form, "packageType"),
-			Volume:           number(form, "volumeCBM"),
-			Weight:           number(form, "weightKg"),
-			GoodsDescription: str(form, "goodsDescription"),
-			CusDecSerLet:     str(form, "cusdecSerLet"),
-			Status:           str(form, "status"),
+			Terminal:         fields.String(form, "terminal"),
+			ShipperName:      fields.String(form, "shipperName"),
+			ShipperAddress:   fields.String(form, "shipperAddress"),
+			ConsigneeName:    fields.String(form, "consigneeName"),
+			ConsigneeAddress: fields.String(form, "consigneeAddress"),
+			PackageNumber:    fields.Integer(form, "packageNumber"),
+			PackageType:      fields.String(form, "packageType"),
+			Volume:           fields.Number(form, "volumeCBM"),
+			Weight:           fields.Number(form, "weightKg"),
+			GoodsDescription: fields.String(form, "goodsDescription"),
+			CusDecSerLet:     fields.String(form, "cusdecSerLet"),
+			Status:           fields.String(form, "status"),
 		},
 		Sub: Sub{
-			CdnNumber:       str(form, "cdnNumber"),
-			VoyageNumber:    str(form, "voyageNumber"),
-			VoyageDate:      str(form, "voyageDate"),
-			PortOfLoading:   str(form, "portOfLoading"),
-			PortOfUnloading: str(form, "portOfUnloading"),
-			VesselOPCode:    str(form, "vesselOPCode"),
-			ContOPCode:      str(form, "contOPCode"),
-			EXVessel:        str(form, "exVessel"),
+			CdnNumber:       fields.String(form, "cdnNumber"),
+			VoyageNumber:    fields.String(form, "voyageNumber"),
+			VoyageDate:      fields.String(form, "voyageDate"),
+			PortOfLoading:   fields.String(form, "portOfLoading"),
+			PortOfUnloading: fields.String(form, "portOfUnloading"),
+			VesselOPCode:    fields.String(form, "vesselOPCode"),
+			ContOPCode:      fields.String(form, "contOPCode"),
+			EXVessel:        fields.String(form, "exVessel"),
 		},
 		Containers: Containers{Container: containers},
 	}
@@ -193,7 +194,7 @@ func buildContainers(form map[string]any, cusdecNo, cusdecDate string) ([]Contai
 			return nil, &buildError{fmt.Sprintf("Container %d could not be read.", i+1)}
 		}
 
-		number := str(m, "containerNo")
+		number := fields.String(m, "containerNo")
 		if number == "" {
 			// SLPA's generator writes a per-declaration key here rather than the
 			// physical container number, which it carries in ContainerMark. Match
@@ -204,11 +205,11 @@ func buildContainers(form map[string]any, cusdecNo, cusdecDate string) ([]Contai
 		containers = append(containers, Container{
 			ContainerNumber: number,
 			// Lower case, as the reference document has it.
-			ContainerType: strings.ToLower(str(m, "containerType")),
-			ContainerSize: str(m, "containerSize"),
-			SealNumber:    str(m, "sealNumber"),
-			ContainerMark: str(m, "containerMark"),
-			Commodity:     str(m, "commodity"),
+			ContainerType: strings.ToLower(fields.String(m, "containerType")),
+			ContainerSize: fields.String(m, "containerSize"),
+			SealNumber:    fields.String(m, "sealNumber"),
+			ContainerMark: fields.String(m, "containerMark"),
+			Commodity:     fields.String(m, "commodity"),
 		})
 	}
 	return containers, nil
@@ -222,40 +223,3 @@ func buildContainers(form map[string]any, cusdecNo, cusdecDate string) ([]Contai
 type buildError struct{ msg string }
 
 func (e *buildError) Error() string { return e.msg }
-
-// --- form accessors -------------------------------------------------------
-//
-// The form arrives as decoded JSON, so every value is any and every number is
-// float64. These read through that without the caller repeating type assertions.
-
-func str(m map[string]any, key string) string {
-	switch v := m[key].(type) {
-	case string:
-		return strings.TrimSpace(v)
-	case float64:
-		// ContainerSize is a coded value the form may hand over as a number.
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		return ""
-	}
-}
-
-func number(m map[string]any, key string) float64 {
-	switch v := m[key].(type) {
-	case float64:
-		return v
-	case int:
-		return float64(v)
-	case string:
-		// JSONForms number widgets round-trip as strings in some browsers.
-		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-		if err != nil {
-			return 0
-		}
-		return f
-	default:
-		return 0
-	}
-}
-
-func integer(m map[string]any, key string) int { return int(number(m, key)) }
