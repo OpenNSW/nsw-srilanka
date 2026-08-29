@@ -10,7 +10,10 @@ import (
 
 // TaskTypeSLPAGatePassSplitBuilder is the synchronous transform that turns the
 // containers SLPA consolidated into the SPLIT_TASK items array.
-const TaskTypeSLPAGatePassSplitBuilder = "SLPA_GATE_PASS_SPLIT_BUILDER"
+// The name carries "pass" as in gate pass, which is what trips gosec's
+// hardcoded-credentials heuristic here; the value is a task type, and the only
+// secret this flow uses is the client key it reads from the task inputs.
+const TaskTypeSLPAGatePassSplitBuilder = "SLPA_GATE_PASS_SPLIT_BUILDER" //nolint:gosec // G101 false positive: a task type name, not a credential.
 
 // maxGatePassesPerOrder bounds the fan-out, as the CDN builder does: each item
 // becomes a child workflow with a form for the trader to fill, so a runaway list

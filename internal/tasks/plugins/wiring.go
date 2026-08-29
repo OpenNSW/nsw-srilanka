@@ -69,7 +69,9 @@ const (
 	// TaskTypeSLPAGatePass issues the export container gate pass, which SLPA
 	// grants only against a paid service order. One pass covers one container,
 	// so a consignment fans out to this task once per consolidated container.
-	TaskTypeSLPAGatePass = "SLPA_GATE_PASS"
+	// gosec reads "pass" here as a credential; it is the gate pass the haulier
+	// presents at the terminal.
+	TaskTypeSLPAGatePass = "SLPA_GATE_PASS" //nolint:gosec // G101 false positive: a task type name, not a credential.
 
 	// TaskTypeNPQSEphytoHub is the generic SOAP-call plugin wired with the IPPC
 	// ePhyto Hub interpreter; the subtask template's plugin_properties select
