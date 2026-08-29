@@ -51,17 +51,14 @@
     },
     {
       "id": "slpa",
-      "url": "http://localhost:8084",
-      "timeout": "30s",
+      "url": "https://slpa-cms.example.com",
+      "timeout": "60s",
       "auth": {
         "type": "oauth2",
         "options": {
-          "token_url": "https://localhost:8090/oauth2/token",
-          "client_id": "NSW_TO_SLPA",
-          "client_secret": "env:M2M_NSW_TO_SLPA_SECRET",
-          "scopes": ["agency:application:inject"],
-          "insecure_skip_tls_verify": true,
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "token_url": "https://slpa-cms.example.com/api/nsw/v1/token",
+          "client_id": "NSW_TO_SLPA_CLIENT_ID",
+          "client_secret": "env:SLPA_CLIENT_SECRET"
         }
       }
     },

@@ -52,16 +52,13 @@
     {
       "id": "slpa",
       "url": "http://host.docker.internal:8084",
-      "timeout": "30s",
+      "timeout": "60s",
       "auth": {
         "type": "oauth2",
         "options": {
-          "token_url": "https://thunderid:8090/oauth2/token",
-          "client_id": "NSW_TO_SLPA",
-          "client_secret": "env:M2M_NSW_TO_SLPA_SECRET",
-          "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"],
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "token_url": "http://host.docker.internal:8084/api/nsw/v1/token",
+          "client_id": "NSW_TO_SLPA_CLIENT_ID",
+          "client_secret": "env:SLPA_CLIENT_SECRET"
         }
       }
     },

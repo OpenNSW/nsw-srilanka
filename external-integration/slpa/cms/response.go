@@ -6,6 +6,7 @@ package cms
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -146,4 +147,92 @@ func messages(value any) []string {
 func String(m map[string]any, key string) string {
 	s, _ := m[key].(string)
 	return strings.TrimSpace(s)
+}
+
+// --- what every SLPA integration presents and records ------------------------
+//
+// The CMS answers each of its endpoints in the same envelope and identifies the
+// caller the same way on all of them, so these belong to the integration as a
+// whole rather than to whichever endpoint was written first.
+
+// ClientKeyInput is the task input the SLPA-issued client key arrives in, and
+// ClientKeyHeader the header the CMS identifies the submitting company by (the
+// CMS calls it the ClientSqid).
+//
+// SLPA issues one key per registered company, so it is per-consignment rather
+// than per-deployment: the company profile is propagated into the workflow, the
+// split that spawns an agency flow carries it into the branch, and the artifact
+// maps it onto the task. Nothing here reads a database — which company a
+// submission is filed under is a workflow decision, expressed in the artifact
+// rather than in code.
+const (
+	ClientKeyInput  = "client_key"
+	ClientKeyHeader = "slpacmsuser-key"
+)
+
+// ClientKeyHeaders presents the client key on a call, if the task carries one.
+//
+// The input is expected to be a string: the artifact maps it from the company
+// profile's own field (company.data.slpacmsuser_key), which SLPA issues as an
+// opaque string. Anything else — a number, an object, a profile mapped in whole
+// by mistake — counts as no key at all rather than being rendered into one,
+// because a header built from the wrong shape would file the submission against
+// a company nobody chose.
+//
+// No key means none is sent: submitting against no company is not something to
+// guess at, and SLPA answers for itself ("Client identifier header
+// 'slpacmsuser-key' is required"), which is a truer message than one invented
+// here. integration names the caller in the log, since that is the only place
+// the local reason survives.
+func ClientKeyHeaders(inputs map[string]any, integration string) map[string]string {
+	raw, present := inputs[ClientKeyInput]
+	key, isString := raw.(string)
+
+	switch {
+	case present && !isString && raw != nil:
+		slog.Error(integration+": the SLPA client key on the task inputs is not a string; the CMS will refuse the call",
+			"got", fmt.Sprintf("%T", raw))
+		return nil
+	case strings.TrimSpace(key) == "":
+		slog.Error(integration + ": no SLPA client key on the task inputs; the CMS will refuse the call")
+		return nil
+	}
+	return map[string]string{ClientKeyHeader: strings.TrimSpace(key)}
+}
+
+// Capture copies the fields worth recording against the task out of a flattened
+// body, skipping those the CMS did not send.
+//
+// Each endpoint names its own keys: what a trader quotes at the terminal differs
+// from what a later step reads, and a field absent from one answer must not
+// appear as an empty one on the task.
+func Capture(body map[string]any, keys ...string) map[string]any {
+	out := make(map[string]any, len(keys))
+	for _, k := range keys {
+		if v, ok := body[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// Unreachable is what a trader is told when the CMS could not be reached, or
+// answered with something that is not one of its own responses (an HTML error
+// page, say). Which of the two it was matters to whoever reads the logs, not to
+// the trader, and naming a cause we have not established would be wrong.
+const Unreachable = "We could not get a usable answer from the SLPA Cargo Management System. Please try again in a few minutes."
+
+// Failure builds the trader-facing message for a submission the CMS did not
+// accept, preferring the CMS's own reasons over anything invented here.
+//
+// intro says what was not accepted and outro what to do about it; both belong to
+// the calling integration, since only it knows what the trader submitted.
+func Failure(callErr error, body map[string]any, intro, outro string) string {
+	if reasons := Reasons(body); len(reasons) > 0 {
+		return intro + "\n\n" + strings.Join(reasons, "\n") + outro
+	}
+	if callErr != nil && len(body) == 0 {
+		return Unreachable
+	}
+	return intro + outro
 }
