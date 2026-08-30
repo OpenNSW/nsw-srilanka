@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -277,15 +276,19 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
 	// presenting an IdP token, so this handler owns its own authentication and
 	// the route below carries no bearer middleware.
+	// Refused at boot rather than started without the route. SLPA reports every
+	// decision on this endpoint, so a deployment that cannot mount it accepts
+	// service orders it can never hear the answer to: the callback 404s, their
+	// retries stop, and the consignment waits on an approval that has already
+	// happened. The outbound half of this integration fails the same way when
+	// its own secret is missing (see the services registry), and a missing
+	// secret is a deployment fault worth stopping for either way.
 	slpaHandler, err := slpawebhook.NewHandler(
 		slpawebhook.NewOrderEvents(db, tm),
 		cfg.Webhooks.SLPASecret,
 	)
 	if err != nil {
-		// A deployment without the secret runs without the route rather than
-		// exposing an unauthenticated one: SLPA cannot report a decision, and the
-		// service order waits, which is visible and recoverable.
-		slog.Warn("slpa webhook route not mounted", "reason", err)
+		return nil, fmt.Errorf("failed to build the SLPA webhook handler: %w", err)
 	}
 
 	chaHandler := cha.NewHandler(chaService)
@@ -400,9 +403,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	// SLPA Webhook Endpoint. Authenticated by the HMAC signature on the request
 	// itself — see slpa.VerifySignature — so no token middleware here.
-	if slpaHandler != nil {
-		mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
-	}
+	mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
