@@ -36,17 +36,17 @@ type Handler struct {
 	secret string
 }
 
-// NewHandler binds the handler to the service that applies a decision. A blank
-// secret is refused: an unauthenticated webhook on a live cargo system would let
-// anyone advance another trader's consignment.
-func NewHandler(orders *OrderEvents, secret string) (*Handler, error) {
+// NewHandler binds the handler to the service that applies a decision. A
+// configuration without a secret is refused: an unauthenticated webhook on a
+// live cargo system would let anyone advance another trader's consignment.
+func NewHandler(orders *OrderEvents, cfg Config) (*Handler, error) {
 	if orders == nil {
 		return nil, errors.New("slpa webhook: service order webhook service is required")
 	}
-	if secret == "" {
-		return nil, errors.New("slpa webhook: signing secret is required")
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
-	return &Handler{orders: orders, secret: secret}, nil
+	return &Handler{orders: orders, secret: cfg.Secret}, nil
 }
 
 // HandleWebhook authenticates the call, then applies what the CMS decided.

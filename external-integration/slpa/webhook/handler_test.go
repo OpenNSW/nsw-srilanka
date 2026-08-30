@@ -41,7 +41,7 @@ func handlerOver(t *testing.T, parked bool) (*Handler, *orderCompleter) {
 	}
 
 	tasks := &orderCompleter{}
-	h, err := NewHandler(NewOrderEvents(db, tasks), secret)
+	h, err := NewHandler(NewOrderEvents(db, tasks), Config{Secret: secret})
 	require.NoError(t, err)
 	return h, tasks
 }
@@ -128,7 +128,7 @@ func TestHandleWebhook_AnswersSoRetriesStop(t *testing.T) {
 
 // A deployment without the shared secret must not expose the route at all.
 func TestNewHandler_RequiresASecret(t *testing.T) {
-	_, err := NewHandler(&OrderEvents{}, "")
+	_, err := NewHandler(&OrderEvents{}, Config{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "signing secret is required")
 }
