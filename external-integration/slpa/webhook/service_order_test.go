@@ -145,8 +145,61 @@ func TestOrderEvents_UnknownOrder(t *testing.T) {
 		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
 		WillReturnRows(sqlmock.NewRows([]string{"state"}))
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	assert.ErrorIs(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)), ErrOrderNotFound)
+}
+
+// The decision arrives before the task that waits for it — the consignment holds
+// the order, but this wait has not opened yet. Their retry resolves it.
+func TestOrderEvents_BeforeTheWaitOpens(t *testing.T) {
+	service, mock, tasks := newOrderEvents(t)
+
+	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+		WillReturnError(gorm.ErrRecordNotFound)
+	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+		WillReturnRows(sqlmock.NewRows([]string{"state"}))
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	assert.ErrorIs(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)), ErrNotWaitingYet)
+	assert.False(t, tasks.called)
+}
+
+// A redelivered final approval must be answered even while the invoice task that
+// followed it is open. Both tasks carry the same slug, so judging the redelivery
+// by every row would let that sibling say "retry" for a decision already applied
+// — and SLPA would keep retrying it for as long as the invoice went unpaid.
+func TestOrderEvents_RedeliveryIsAnsweredWhileTheInvoiceTaskRuns(t *testing.T) {
+	service, mock, tasks := newOrderEvents(t)
+
+	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+		WillReturnError(gorm.ErrRecordNotFound)
+	// Scoped to the approval wait: the invoice task's QUEUED_EXTERNALLY row
+	// carries the same slug and must not be consulted here.
+	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+		WithArgs(slug, ApprovalWaitTemplateID).
+		WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("COMPLETED"))
+
+	require.NoError(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)))
+	require.NoError(t, mock.ExpectationsWereMet())
+	assert.False(t, tasks.called)
+}
+
+// Between steps the wait is neither parked nor finished: the previous event is
+// still being applied. Answering "already applied" would drop an event nothing
+// acted on, so the CMS is asked to retry.
+func TestOrderEvents_BetweenStepsAsksForARetry(t *testing.T) {
+	service, mock, tasks := newOrderEvents(t)
+
+	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
+		WillReturnError(gorm.ErrRecordNotFound)
+	mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).
+		WillReturnRows(sqlmock.NewRows([]string{"state"}).AddRow("STARTING"))
+
+	assert.ErrorIs(t, service.Handle(context.Background(), orderEvent(EventApprovedByAccountant)), ErrNotWaitingYet)
+	assert.False(t, tasks.called)
 }
 
 func TestOrderEvents_RefusesWhatItCannotActOn(t *testing.T) {

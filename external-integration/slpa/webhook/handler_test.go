@@ -38,6 +38,8 @@ func handlerOver(t *testing.T, parked bool) (*Handler, *orderCompleter) {
 		}
 		mock.ExpectQuery(`SELECT "task_id" FROM "task_records_v2"`).WillReturnError(gorm.ErrRecordNotFound)
 		mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).WillReturnRows(sqlmock.NewRows([]string{"state"}))
+		mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	}
 
 	tasks := &orderCompleter{}

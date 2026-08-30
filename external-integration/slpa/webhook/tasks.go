@@ -52,6 +52,11 @@ type taskLookup struct {
 // The three outcomes are deliberately different, because they tell the CMS
 // different things: a task to resume, a lifecycle already finished (its retries
 // should stop), and an order mid-transition (its retry will land).
+//
+// Every answer is about this wait alone. A consignment carries the same order
+// identifiers on more than one task — the approval and the invoice both hold
+// the slug — so a redelivered approval must not be judged by whether the
+// invoice task that followed it happens to be open.
 func (l taskLookup) parked(ctx context.Context, templateID string, match string, args ...any) (string, error) {
 	var task struct {
 		TaskID string `gorm:"column:task_id"`
@@ -69,26 +74,49 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 		return "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
 	}
 
-	// Nothing parked under that template. Which of the three cases this is
-	// decides whether the CMS should retry.
+	// Nothing parked under that wait. Which of the three cases this is decides
+	// whether the CMS should retry, and the answer is only ever about this wait:
+	// a consignment carries the same order identifiers on several tasks — the
+	// approval and the invoice both hold the slug — so reading their states
+	// would let a sibling still running answer for a wait that has finished.
 	var states []string
 	if err := l.db.WithContext(ctx).
 		Table("task_records_v2").
-		Where(match, args...).
+		Where("("+match+") AND active_task_template_id = ?", append(append([]any{}, args...), templateID)...).
 		Pluck("state", &states).Error; err != nil {
 		return "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
 	}
-	if len(states) == 0 {
-		return "", ErrOrderNotFound
-	}
+
 	for _, state := range states {
-		if state != stateCompleted {
-			// A task of this consignment is still running, so the wait is either
-			// about to open or has already moved on. Either way a retry is
-			// worth its while.
-			return "", ErrNotWaitingYet
+		if state == stateCompleted {
+			// The wait ran to the end of its flow, so this event has been
+			// applied already and the CMS is answered rather than told to
+			// retry — which is what stops the retries.
+			return "", nil
 		}
 	}
-	// Everything finished: this event has been applied already.
-	return "", nil
+	if len(states) > 0 {
+		// The wait exists but is between steps: the previous event is still
+		// being applied and the one after it has not reopened yet. Answering
+		// "already applied" here would drop an event that was never acted on,
+		// so the CMS is asked to retry, and its retry lands.
+		return "", ErrNotWaitingYet
+	}
+
+	// This wait has never opened. Whether that is worth retrying depends on
+	// there being an order here at all.
+	var held int64
+	if err := l.db.WithContext(ctx).
+		Table("task_records_v2").
+		Where(match, args...).
+		Count(&held).Error; err != nil {
+		return "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
+	}
+	if held == 0 {
+		return "", ErrOrderNotFound
+	}
+	// The consignment holds the order but has not reached this step yet — a
+	// decision arriving before the task that waits for it, which their retry
+	// resolves.
+	return "", ErrNotWaitingYet
 }
