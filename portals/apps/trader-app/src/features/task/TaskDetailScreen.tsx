@@ -1,19 +1,41 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Spinner, Text } from '@radix-ui/themes'
-import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { getZoneView, submitTaskStep } from './service'
+import { getConsignment } from '@/features/consignment/service.ts'
+import type { WorkflowNode } from '@/features/consignment/types'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const SUBMIT_SUCCESS_DISMISS_MS = 5000
+const HIDDEN_NODE_TYPES = new Set(['START', 'END', 'GATEWAY', 'END_NODE', 'SYSTEM', 'SPLIT_TASK'])
+
+function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
+  const currentIndex = nodes.findIndex((node) => node.id === currentTaskId)
+  const following = currentIndex >= 0 ? nodes.slice(currentIndex + 1) : nodes
+  return following.find((node) => {
+    const type = node.workflowNodeTemplate.type?.toUpperCase()
+    return !HIDDEN_NODE_TYPES.has(type ?? '') && node.state !== 'COMPLETED' && node.state !== 'FAILED'
+  })?.id
+}
 
 export function TaskDetailScreen() {
-  const { taskId } = useParams<{ taskId: string }>()
+  const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
   const navigate = useNavigate()
-  const goBack = () => void navigate(-1)
+  const goToTasks = () => {
+    if (consignmentId) {
+      void navigate(`/consignments/${consignmentId}`, { replace: true })
+      return
+    }
+    void navigate(-1)
+  }
+  const goToNextTask = (nextId: string) => {
+    if (!consignmentId) return
+    void navigate(`/consignments/${consignmentId}/tasks/${nextId}`)
+  }
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -22,11 +44,13 @@ export function TaskDetailScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const [showSubmitSuccess, setShowSubmitSuccess] = useState(false)
+  const [nextTaskId, setNextTaskId] = useState<string | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
     setShowSubmitSuccess(false)
+    setNextTaskId(null)
   }
 
   const fetchTask = useCallback(async () => {
@@ -66,6 +90,35 @@ export function TaskDetailScreen() {
     }
   }, [taskId, t])
 
+  useEffect(() => {
+    if (!consignmentId || !taskId || zoneView?.state !== 'COMPLETED') return
+
+    let cancelled = false
+    let attempt = 0
+    let timeout: ReturnType<typeof setTimeout> | undefined
+
+    const loadNextTask = async () => {
+      try {
+        const consignment = await getConsignment(consignmentId)
+        if (cancelled || !consignment) return
+        const id = nextActionableTaskId(consignment.workflowNodes ?? [], taskId)
+        setNextTaskId(id ?? null)
+        if (!id && attempt < 4) {
+          attempt += 1
+          timeout = setTimeout(() => void loadNextTask(), 1000)
+        }
+      } catch (err) {
+        console.error('TaskDetailScreen: failed to resolve next task:', err)
+      }
+    }
+
+    void loadNextTask()
+    return () => {
+      cancelled = true
+      if (timeout) clearTimeout(timeout)
+    }
+  }, [consignmentId, taskId, zoneView?.state])
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full p-6">
@@ -85,7 +138,7 @@ export function TaskDetailScreen() {
             {error}
           </Text>
           <div className="mt-4">
-            <Button variant="soft" onClick={goBack}>
+            <Button variant="soft" onClick={goToTasks}>
               <ArrowLeftIcon />
               {t('tasks.goBack')}
             </Button>
@@ -103,7 +156,7 @@ export function TaskDetailScreen() {
             {t('tasks.error.notFound')}
           </Text>
           <div className="mt-4">
-            <Button variant="soft" onClick={goBack}>
+            <Button variant="soft" onClick={goToTasks}>
               <ArrowLeftIcon />
               {t('tasks.goBack')}
             </Button>
@@ -116,10 +169,18 @@ export function TaskDetailScreen() {
   return (
     <div className="min-h-full">
       <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
-        <Button variant="ghost" color="gray" onClick={goBack}>
-          <ArrowLeftIcon />
-          {t('tasks.back')}
-        </Button>
+        <div className="flex items-center gap-6">
+          <Button variant="ghost" color="gray" onClick={goToTasks} className="cursor-pointer">
+            <ArrowLeftIcon />
+            {t('tasks.back')}
+          </Button>
+          {zoneView.state === 'COMPLETED' && nextTaskId && (
+            <Button variant="ghost" color="gray" onClick={() => goToNextTask(nextTaskId)} className="cursor-pointer">
+              {t('tasks.nextTask')}
+              <ArrowRightIcon />
+            </Button>
+          )}
+        </div>
         <Button
           variant="soft"
           color="blue"

@@ -150,3 +150,31 @@ export const SAMPLE_TASK: ZoneView = {
     },
   },
 }
+
+export const SAMPLE_COMPLETED_TASK: ZoneView = {
+  task_id: 'sltb_1_submit_blendsheet:cf5183fb-0022-4dc4-97e6-1fbebd9e236b',
+  task_type: 'APPLICATION',
+  state: 'COMPLETED',
+  created_at: '2026-05-24T11:05:52.212844+05:30',
+  updated_at: '2026-05-24T14:22:10.228813+05:30',
+  view: {
+    workspace: {
+      type: 'MARKDOWN',
+      payload: {
+        content: [
+          '## 🌟 Blend Sheet Approved',
+          '',
+          'Your SLTB Tea Blend Sheet has been reviewed and approved by the SLTB Officer.',
+          '',
+          '- **CUSDEC Reference:** `CBEX1-E68930`',
+          '- **SLTB Reference Number:** `23/12345`',
+          '- **Assessed Levy:** `LKR 50000`',
+          '- **Lion Logo Requested:** No',
+          '- **Status:** Blend Sheet Approved',
+          '',
+          'Please proceed to the next step to pay the assessed SLTB Levy.',
+        ].join('\n'),
+      },
+    },
+  },
+}
