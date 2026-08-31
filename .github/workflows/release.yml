@@ -269,14 +269,14 @@ jobs:
       # platform that failed to scan).
       - name: Upload Trivy results (linux/amd64)
         if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-amd64.sarif', matrix.image_name)) != ''
-        uses: github/codeql-action/upload-sarif@v4.37.8
+        uses: github/codeql-action/upload-sarif@v4.37.9
         with:
           sarif_file: trivy-${{ matrix.image_name }}-linux-amd64.sarif
           category: ${{ matrix.image_name }}-linux-amd64
 
       - name: Upload Trivy results (linux/arm64)
         if: always() && steps.trivy-scan.outcome == 'success' && hashFiles(format('trivy-{0}-linux-arm64.sarif', matrix.image_name)) != ''
-        uses: github/codeql-action/upload-sarif@v4.37.8
+        uses: github/codeql-action/upload-sarif@v4.37.9
         with:
           sarif_file: trivy-${{ matrix.image_name }}-linux-arm64.sarif
           category: ${{ matrix.image_name }}-linux-arm64
