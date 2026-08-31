@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
+import { isFinishedNodeState, isLockedNodeState } from '@/features/consignment/utils'
 
 const sortByUpdatedAt = (a: WorkflowNode, b: WorkflowNode) => b.updatedAt.localeCompare(a.updatedAt)
 
@@ -45,8 +46,8 @@ export function ActionListView({
 
   const groups = useMemo(
     () => ({
-      active: filteredSteps.filter((s) => s.state === 'READY' || s.state === 'IN_PROGRESS'),
-      finished: filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt),
+      active: filteredSteps.filter((s) => !isFinishedNodeState(s.state) && !isLockedNodeState(s.state)),
+      finished: filteredSteps.filter((s) => isFinishedNodeState(s.state)).sort(sortByUpdatedAt),
     }),
     [filteredSteps],
   )
@@ -55,7 +56,7 @@ export function ActionListView({
 
   const displaySteps = useMemo(() => {
     if (isConsignmentTerminal) {
-      return filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt)
+      return filteredSteps.filter((s) => isFinishedNodeState(s.state)).sort(sortByUpdatedAt)
     }
     return filteredSteps
   }, [filteredSteps, isConsignmentTerminal])
