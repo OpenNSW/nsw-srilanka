@@ -10,6 +10,12 @@ import type { ZoneView } from '@/features/zone/types'
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const SUBMIT_SUCCESS_DISMISS_MS = 5000
 
+function hasRejection(zv: ZoneView): boolean {
+  const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
+  if (variant === 'error') return true
+  return Object.keys(zv.view).some((name) => name.toLowerCase().includes('reject'))
+}
+
 export function TaskDetailScreen() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
@@ -29,13 +35,14 @@ export function TaskDetailScreen() {
     setShowSubmitSuccess(false)
   }
 
-  const fetchTask = useCallback(async () => {
+  const fetchTask = useCallback(async (): Promise<ZoneView | undefined> => {
     if (!taskId) return
     setRefreshing(true)
     setError(null)
     try {
       const zv = await getZoneView(taskId)
       setZoneView(zv)
+      return zv
     } catch (err) {
       setError(t('tasks.error.fetchFailed'))
       console.error('TaskDetailScreen: failed to fetch task:', err)
@@ -164,11 +171,13 @@ export function TaskDetailScreen() {
                   // can't be double-submitted while the backend advances.
                   setHasSubmitted(true)
                   window.scrollTo({ top: 0, behavior: 'smooth' })
-                  setShowSubmitSuccess(true)
-                  setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
-                  await fetchTask()
+                  const zv = await fetchTask()
+                  if (zv && !hasRejection(zv)) {
+                    setShowSubmitSuccess(true)
+                    setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
+                  }
                 } catch (err) {
                   // Use a local error here rather than the screen-level `error`, which
                   // would unmount the layout and discard the user's entered form data.
