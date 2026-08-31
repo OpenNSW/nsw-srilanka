@@ -149,6 +149,14 @@ backend:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-asycuda-secret }
 
+    # --- SLPA Cargo Management System ---
+    # Inbound: SLPA signs each service order webhook with this shared secret and
+    # it is the whole of that route's authentication, so the service refuses to
+    # start without it. Required on any deployment SLPA calls back.
+    SLPA_WEBHOOK_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
+
     # --- Audit service (Argus) ---
     ARGUS_SERVICE_URL: "http://argus:3001"
     ARGUS_API_KEY:

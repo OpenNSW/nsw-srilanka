@@ -21,6 +21,8 @@ import (
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
+
+	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 )
 
 // Config holds all configuration for the application.
@@ -33,6 +35,7 @@ type Config struct {
 	Notification notification.Config
 	Temporal     temporal.Config
 	Audit        audit.Config
+	Integrations integrations.Config
 
 	ArtifactLoader loaders.Config
 }
@@ -149,6 +152,11 @@ func Load() (*Config, error) {
 			BaseURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
 			APIKey:  os.Getenv("ARGUS_API_KEY"),
 		},
+		// The values themselves; what each integration requires of them is the
+		// integration's own to say (see external-integration).
+		Integrations: integrations.Config{
+			SLPAWebhookSecret: os.Getenv("SLPA_WEBHOOK_SECRET"),
+		},
 		ArtifactLoader: loaders.Config{
 			Type: getEnvOrDefault("ARTIFACT_LOADER_TYPE", loaders.TypeLocal),
 			Local: local.Config{
@@ -196,6 +204,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Authn.Validate(); err != nil {
 		return fmt.Errorf("invalid authn configuration: %w", err)
+	}
+	if err := c.Integrations.Validate(); err != nil {
+		return fmt.Errorf("invalid external integration configuration: %w", err)
 	}
 	// Refuse to skip JWKS TLS verification outside development: a forged
 	// signing-key response here means full JWT forgery / auth bypass.

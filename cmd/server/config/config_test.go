@@ -15,7 +15,9 @@ import (
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/storage"
+
 	"github.com/OpenNSW/core/temporal"
+	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 )
 
 // validConfig returns a minimal Config that passes Validate().
@@ -44,6 +46,9 @@ func validConfig() *Config {
 			LocalPublicURL: "http://localhost:8080",
 			LocalPutSecret: "secret",
 			PresignTTL:     15 * time.Minute,
+		},
+		Integrations: integrations.Config{
+			SLPAWebhookSecret: "a-secret-shared-with-slpa",
 		},
 		Authn: authn.Config{
 			JWKSURL:   "https://example.com/jwks",
@@ -361,6 +366,7 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 
@@ -399,6 +405,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_DefaultFailClosed(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
@@ -414,6 +421,7 @@ func TestLoad_DefaultFailClosed(t *testing.T) {
 
 func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*")
 	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
@@ -429,6 +437,7 @@ func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
 
 func TestLoad_CustomPort(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVER_PORT", "9090")
@@ -452,6 +461,7 @@ func TestLoad_CustomPort(t *testing.T) {
 
 func TestLoad_CustomServiceURL(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVICE_URL", "https://api.example.com")
@@ -467,6 +477,7 @@ func TestLoad_CustomServiceURL(t *testing.T) {
 
 func TestLoad_CustomLogLevel(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVER_LOG_LEVEL", "debug")
@@ -482,6 +493,7 @@ func TestLoad_CustomLogLevel(t *testing.T) {
 
 func TestLoad_CustomServerLimits(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVER_MAX_REQUEST_BYTES", "262144")
@@ -513,6 +525,7 @@ func TestLoad_CustomServerLimits(t *testing.T) {
 
 func TestLoad_InvalidServiceURL(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVICE_URL", "not-a-url")
@@ -525,6 +538,7 @@ func TestLoad_InvalidServiceURL(t *testing.T) {
 
 func TestLoad_ZeroReadTimeoutRejected(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
 	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("SERVER_READ_TIMEOUT", "0")
