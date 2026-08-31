@@ -121,7 +121,7 @@ func TestRunner_RequestExtractAndStatusAssertion(t *testing.T) {
 func TestRunner_WaitMatchesNode(t *testing.T) {
 	detail := `{"id":"c-1","state":"IN_PROGRESS","workflowNodes":[
 		{"id":"task-init","state":"COMPLETED","workflowNodeTemplate":{"name":"[Trade] Initialize Consignment","type":"APPLICATION"}},
-		{"id":"task-hs","state":"IN_PROGRESS","workflowNodeTemplate":{"name":"[Trade] Select HS Codes","type":"APPLICATION"}}
+		{"id":"task-hs","state":"PENDING_USER","workflowNodeTemplate":{"name":"[Trade] Select HS Codes","type":"APPLICATION"}}
 	]}`
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/consignments/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +144,28 @@ func TestRunner_WaitMatchesNode(t *testing.T) {
 	err := r.doWait(context.Background(), &Wait{Node: "Nonexistent", State: "IN_PROGRESS", Timeout: "1ms"})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("expected timeout error, got %v", err)
+	}
+}
+
+func TestNodeStateMatches(t *testing.T) {
+	cases := []struct {
+		actual, wanted string
+		want           bool
+	}{
+		{actual: "PENDING_USER", wanted: "PENDING_USER", want: true},
+		{actual: "PENDING_USER", wanted: "IN_PROGRESS", want: true},
+		{actual: "QUEUED_EXTERNALLY", wanted: "IN_PROGRESS", want: true},
+		{actual: "PENDING_FEEDBACK", wanted: "IN_PROGRESS", want: true},
+		{actual: "COMPLETED", wanted: "IN_PROGRESS", want: false},
+		{actual: "FAILED", wanted: "IN_PROGRESS", want: false},
+		{actual: "COMPLETED", wanted: "COMPLETED", want: true},
+		{actual: "PENDING_USER", wanted: "", want: true},
+		{actual: "PENDING_USER", wanted: "QUEUED_EXTERNALLY", want: false},
+	}
+	for _, tc := range cases {
+		if got := nodeStateMatches(tc.actual, tc.wanted); got != tc.want {
+			t.Errorf("nodeStateMatches(%q, %q) = %v, want %v", tc.actual, tc.wanted, got, tc.want)
+		}
 	}
 }
 
