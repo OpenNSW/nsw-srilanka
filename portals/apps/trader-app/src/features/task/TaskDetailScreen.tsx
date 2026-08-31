@@ -8,6 +8,7 @@ import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
+const SUBMIT_SUCCESS_DISMISS_MS = 5000
 
 export function TaskDetailScreen() {
   const { taskId } = useParams<{ taskId: string }>()
@@ -20,10 +21,12 @@ export function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
+  const [showSubmitSuccess, setShowSubmitSuccess] = useState(false)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
+    setShowSubmitSuccess(false)
   }
 
   const fetchTask = useCallback(async () => {
@@ -129,6 +132,15 @@ export function TaskDetailScreen() {
           {t('tasks.refresh')}
         </Button>
       </div>
+      {showSubmitSuccess && (
+        <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="rounded-lg border border-success bg-success-subtle px-4 py-3">
+            <Text size="2" weight="medium" className="text-success-strong">
+              {t('tasks.submitSuccess')}
+            </Text>
+          </div>
+        </div>
+      )}
       {submitError && (
         <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="rounded-lg border border-red-6 bg-red-2 px-4 py-3">
@@ -151,6 +163,10 @@ export function TaskDetailScreen() {
                   // Latch the action off during the transition window so the step
                   // can't be double-submitted while the backend advances.
                   setHasSubmitted(true)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                  setShowSubmitSuccess(true)
+                  setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
+
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
                   await fetchTask()
                 } catch (err) {
