@@ -1,4 +1,4 @@
-import type { ConsignmentState } from './types'
+import type { ConsignmentState, WorkflowNodeState } from './types'
 import i18n from '@/i18n'
 
 /**
@@ -32,61 +32,36 @@ export function formatState(state: ConsignmentState): string {
   return state.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export type NodeStatusColor = 'green' | 'blue' | 'orange' | 'gray' | 'red'
+/**
+ * Render-config section keys that agency artifacts use to show officer feedback
+ * to the trader (visibleWhen.requireDataKey). Exact section names only.
+ */
+const FEEDBACK_VIEW_KEYS = new Set(['assessment_outcome', 'feedback'])
 
-export type NodeStatusLabelKey =
-  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'pendingFeedback' | 'awaitingReview' | 'pendingPayment'
-
-export type NodeStatusAppearance = {
-  color: NodeStatusColor
-  labelKey?: NodeStatusLabelKey
-  fallbackLabel: string
+function viewHasFeedbackSurface(view: object | undefined): boolean {
+  if (!view) {
+    return false
+  }
+  return Object.keys(view).some((key) => FEEDBACK_VIEW_KEYS.has(key))
 }
 
 /**
- * Map a workflow-node state (orchestrator or derived) to trader-facing badge
- * colour and copy. Unknown states (status_override values from artifacts) are
- * title-cased so agency-specific parked states still read clearly.
+ * Overlay Pending Feedback when GET /tasks/{id} is user-pending and the
+ * projected view is showing an officer-feedback section. Otherwise keep the
+ * consignment API state (typically IN_PROGRESS).
  */
-export function getNodeStatusAppearance(state: string): NodeStatusAppearance {
-  switch (state) {
-    case 'COMPLETED':
-      return { color: 'green', labelKey: 'completed', fallbackLabel: 'Completed' }
-    case 'READY':
-      return { color: 'blue', labelKey: 'ready', fallbackLabel: 'Ready' }
-    case 'LOCKED':
-      return { color: 'gray', labelKey: 'locked', fallbackLabel: 'Locked' }
-    case 'FAILED':
-      return { color: 'red', labelKey: 'failed', fallbackLabel: 'Failed' }
-    case 'PENDING_FEEDBACK':
-      return { color: 'orange', labelKey: 'pendingFeedback', fallbackLabel: 'Pending Feedback' }
-    case 'QUEUED_EXTERNALLY':
-      return { color: 'blue', labelKey: 'awaitingReview', fallbackLabel: 'Awaiting Review' }
-    case 'PENDING_PAYMENT':
-      return { color: 'orange', labelKey: 'pendingPayment', fallbackLabel: 'Pending Payment' }
-    case 'PENDING_USER':
-    case 'IN_PROGRESS':
-      return { color: 'orange', labelKey: 'inProgress', fallbackLabel: 'In Progress' }
-    default:
-      return { color: 'orange', fallbackLabel: humanizeNodeState(state) }
+export function deriveTraderFacingState(
+  apiState: WorkflowNodeState,
+  zone?: { state: string; view?: object } | null,
+): WorkflowNodeState {
+  if (!zone) {
+    return apiState
   }
-}
-
-export function isFinishedNodeState(state: string): boolean {
-  return state === 'COMPLETED' || state === 'FAILED'
-}
-
-export function isLockedNodeState(state: string): boolean {
-  return state === 'LOCKED'
-}
-
-function humanizeNodeState(state: string): string {
-  return state
-    .toLowerCase()
-    .split('_')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
+  const userPending = zone.state === 'PENDING_USER' || zone.state === 'IN_PROGRESS' || zone.state === 'READY'
+  if (userPending && viewHasFeedbackSurface(zone.view)) {
+    return 'PENDING_FEEDBACK'
+  }
+  return apiState
 }
 
 /**

@@ -150,8 +150,6 @@ const en = {
       locked: 'Locked',
       failed: 'Failed',
       pendingFeedback: 'Pending Feedback',
-      awaitingReview: 'Awaiting Review',
-      pendingPayment: 'Pending Payment',
     },
   },
 

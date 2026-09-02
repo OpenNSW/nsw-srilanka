@@ -3,9 +3,10 @@ import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
+import { useNodeZoneViews } from '@/features/consignment/hooks/useNodeZoneViews'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
-import { isFinishedNodeState, isLockedNodeState } from '@/features/consignment/utils'
+import { deriveTraderFacingState } from '@/features/consignment/utils'
 
 const sortByUpdatedAt = (a: WorkflowNode, b: WorkflowNode) => b.updatedAt.localeCompare(a.updatedAt)
 
@@ -44,22 +45,28 @@ export function ActionListView({
     [steps],
   )
 
+  const zones = useNodeZoneViews(filteredSteps)
+
+  const displaySteps = useMemo(
+    () =>
+      filteredSteps.map((step) => ({
+        ...step,
+        state: deriveTraderFacingState(step.state, zones[step.id]),
+      })),
+    [filteredSteps, zones],
+  )
+
   const groups = useMemo(
     () => ({
-      active: filteredSteps.filter((s) => !isFinishedNodeState(s.state) && !isLockedNodeState(s.state)),
-      finished: filteredSteps.filter((s) => isFinishedNodeState(s.state)).sort(sortByUpdatedAt),
+      active: displaySteps.filter(
+        (s) => s.state === 'READY' || s.state === 'IN_PROGRESS' || s.state === 'PENDING_FEEDBACK',
+      ),
+      finished: displaySteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt),
     }),
-    [filteredSteps],
+    [displaySteps],
   )
 
   const isConsignmentTerminal = consignmentState === 'FINISHED' || consignmentState === 'FAILED'
-
-  const displaySteps = useMemo(() => {
-    if (isConsignmentTerminal) {
-      return filteredSteps.filter((s) => isFinishedNodeState(s.state)).sort(sortByUpdatedAt)
-    }
-    return filteredSteps
-  }, [filteredSteps, isConsignmentTerminal])
 
   const RefreshButton =
     onRefresh && !isConsignmentTerminal ? (
@@ -83,12 +90,12 @@ export function ActionListView({
                   {t('workflow.taskHistory')}
                 </Heading>
                 <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
-                  {displaySteps.length}
+                  {groups.finished.length}
                 </Badge>
               </Flex>
             </Flex>
             <Box px="0.5">
-              {displaySteps.map((step) => (
+              {groups.finished.map((step) => (
                 <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
               ))}
             </Box>

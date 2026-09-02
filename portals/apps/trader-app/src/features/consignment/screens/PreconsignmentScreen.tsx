@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 import { getTraderPreConsignments, createPreConsignment, getPreConsignment } from '@/features/consignment/service'
 import { PaginationControl } from '@/components/common/PaginationControl'
 import type { TraderPreConsignmentItem } from '@/features/consignment/types'
-import { isFinishedNodeState, isLockedNodeState } from '@/features/consignment/utils'
 
 const PAGE_LIMIT = 15
 
@@ -68,9 +67,7 @@ export function PreconsignmentScreen() {
       const nodes = instance.workflowNodes || []
       const targetNode = nodes.find(
         (node) =>
-          !isFinishedNodeState(node.state) &&
-          !isLockedNodeState(node.state) &&
-          node.workflowNodeTemplate?.type === 'SIMPLE_FORM',
+          (node.state === 'READY' || node.state === 'IN_PROGRESS') && node.workflowNodeTemplate?.type === 'SIMPLE_FORM',
       )
 
       if (targetNode) {
@@ -93,7 +90,7 @@ export function PreconsignmentScreen() {
       const instance = await getPreConsignment(preConsignmentId)
       const nodes = instance.workflowNodes || []
 
-      let targetNode = nodes.find((node) => !isFinishedNodeState(node.state) && !isLockedNodeState(node.state))
+      let targetNode = nodes.find((node) => node.state === 'IN_PROGRESS' || node.state === 'READY')
       if (!targetNode && nodes.length > 0) {
         targetNode = nodes[nodes.length - 1]
       }
