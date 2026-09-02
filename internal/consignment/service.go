@@ -420,9 +420,6 @@ func (s *Service) buildConsignmentDetailDTO(
 
 // buildNodeDTOsFromTaskRecords queries tasks via the TaskStore by root_workflow_id and converts each
 // non-SYSTEM record into a WorkflowNodeResponseDTO for the consignment detail response.
-// Task orchestrator states are passed through (and feedback loops are labelled
-// PENDING_FEEDBACK) so the trader list can distinguish first fill, OGA review,
-// and amendment requests instead of collapsing every active node to IN_PROGRESS.
 func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentID string) ([]WorkflowNodeResponseDTO, error) {
 	if s.taskStore == nil {
 		return nil, fmt.Errorf("task store not initialized")
@@ -434,6 +431,20 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 		if t.TaskType == "SYSTEM" {
 			continue
 		}
+		var nodeState WorkflowNodeState
+		switch t.State {
+		case "COMPLETED":
+			nodeState = WorkflowNodeStateCompleted
+		case "FAILED":
+			nodeState = WorkflowNodeStateFailed
+			// Note: the workflow manager doesn't currently have a FAILED state for tasks, but if it did,
+			// we would want to reflect that here in the consignment detail response's workflow node states.
+			// For now, any task that isn't marked as COMPLETED is effectively "in progress" from the API consumer's perspective.
+			// This means that if a task fails, it will show as "in progress" in the UI until the workflow either retries or completes with an error.
+			// When the workflow completes, the consignment will be marked as FINISHED regardless of whether individual tasks failed or succeeded, so the UI should primarily be checking the consignment state for a high-level view of whether the workflow is still active or fully completed.
+		default:
+			nodeState = WorkflowNodeStateInProgress
+		}
 		dtos = append(dtos, WorkflowNodeResponseDTO{
 			ID:        t.TaskID,
 			CreatedAt: t.CreatedAt.Format(time.RFC3339),
@@ -442,7 +453,7 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 				Name: taskDisplayName(t.ActiveTaskTemplateID, t.RenderConfig),
 				Type: t.TaskType,
 			},
-			State: traderFacingState(t.State, t.Data),
+			State: nodeState,
 		})
 	}
 	return dtos, nil

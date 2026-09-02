@@ -51,17 +51,7 @@ export type TradeFlow = 'IMPORT' | 'EXPORT'
 
 export type ConsignmentState = 'INITIALIZED' | 'IN_PROGRESS' | 'FAILED' | 'FINISHED'
 
-export type WorkflowNodeState =
-  | 'READY'
-  | 'LOCKED'
-  | 'IN_PROGRESS'
-  | 'PENDING_USER'
-  | 'QUEUED_EXTERNALLY'
-  | 'PENDING_FEEDBACK'
-  | 'PENDING_PAYMENT'
-  | 'COMPLETED'
-  | 'FAILED'
-  | (string & {})
+export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'PENDING_FEEDBACK'
 
 export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT' | 'PAYMENT' | 'START' | 'END' | 'GATEWAY' | 'END_NODE'
 

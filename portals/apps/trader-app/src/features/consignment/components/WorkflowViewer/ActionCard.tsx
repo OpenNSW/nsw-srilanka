@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Badge, Box, Card, Flex, Text } from '@radix-ui/themes'
 import {
-  ChatBubbleIcon,
   CheckCircledIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -15,8 +14,7 @@ import {
   ReaderIcon,
   UpdateIcon,
 } from '@radix-ui/react-icons'
-import type { WorkflowNode } from '@/features/consignment/types'
-import { getNodeStatusAppearance, isLockedNodeState, type NodeStatusColor } from '@/features/consignment/utils'
+import type { WorkflowNode, WorkflowNodeState } from '@/features/consignment/types'
 
 const nodeTypeIcons: Record<string, React.ReactNode> = {
   SIMPLE_FORM: <FileTextIcon className="w-4 h-4" />,
@@ -25,16 +23,56 @@ const nodeTypeIcons: Record<string, React.ReactNode> = {
   DOCUMENT_UPLOAD: <ReaderIcon className="w-4 h-4" />,
 }
 
-const statusIcons: Record<string, React.ReactNode> = {
-  COMPLETED: <CheckCircledIcon className="w-4 h-4" />,
-  READY: <PlayIcon className="w-4 h-4" />,
-  IN_PROGRESS: <UpdateIcon className="w-4 h-4" />,
-  PENDING_USER: <UpdateIcon className="w-4 h-4" />,
-  PENDING_FEEDBACK: <ChatBubbleIcon className="w-4 h-4" />,
-  QUEUED_EXTERNALLY: <ClockIcon className="w-4 h-4" />,
-  PENDING_PAYMENT: <ReaderIcon className="w-4 h-4" />,
-  LOCKED: <LockClosedIcon className="w-3 h-3" />,
-  FAILED: <CrossCircledIcon className="w-4 h-4" />,
+const statusConfig: Record<
+  WorkflowNodeState,
+  {
+    color: 'green' | 'blue' | 'orange' | 'gray' | 'red'
+    label: string
+    icon: React.ReactNode
+  }
+> = {
+  COMPLETED: {
+    color: 'green',
+    label: 'Completed',
+    icon: <CheckCircledIcon className="w-4 h-4" />,
+  },
+  READY: {
+    color: 'blue',
+    label: 'Ready',
+    icon: <PlayIcon className="w-4 h-4" />,
+  },
+  IN_PROGRESS: {
+    color: 'orange',
+    label: 'In Progress',
+    icon: <UpdateIcon className="w-4 h-4" />,
+  },
+  PENDING_FEEDBACK: {
+    color: 'orange',
+    label: 'Pending Feedback',
+    icon: <UpdateIcon className="w-4 h-4" />,
+  },
+  LOCKED: {
+    color: 'gray',
+    label: 'Locked',
+    icon: <LockClosedIcon className="w-3 h-3" />,
+  },
+  FAILED: {
+    color: 'red',
+    label: 'Failed',
+    icon: <CrossCircledIcon className="w-4 h-4" />,
+  },
+}
+
+const STATUS_KEYS: Record<
+  WorkflowNodeState,
+  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'pendingFeedback'
+> = {
+  COMPLETED: 'completed',
+  READY: 'ready',
+  IN_PROGRESS: 'inProgress',
+  PENDING_FEEDBACK: 'pendingFeedback',
+  LOCKED: 'locked',
+  FAILED: 'failed',
 }
 
 export interface ActionCardProps {
@@ -42,10 +80,10 @@ export interface ActionCardProps {
   consignmentId: string
 }
 
-// Keyed by the Radix semantic color names in getNodeStatusAppearance, mapped to
+// Keyed by the Radix semantic color names in statusConfig above, mapped to
 // brand status tokens (green→success, blue→info, orange→warning, red→error,
 // gray→secondary). See the token block in index.css.
-const statusStyles: Record<NodeStatusColor, string> = {
+const statusStyles: Record<string, string> = {
   green: 'bg-success-subtle text-success-strong border-success-subtle',
   blue: 'bg-info-subtle text-info-strong border-info-subtle',
   orange: 'bg-warning-subtle text-warning-strong border-warning-subtle',
@@ -56,14 +94,12 @@ const statusStyles: Record<NodeStatusColor, string> = {
 export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const appearance = getNodeStatusAppearance(step.state)
-  const icon = statusIcons[step.state] ?? <UpdateIcon className="w-4 h-4" />
+  const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
 
   const handleOpen = () => void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
 
   const label = step.workflowNodeTemplate.name || `Step ${step.id.split('-').pop()}`
-  const isClickable = !isLockedNodeState(step.state)
-  const statusLabel = appearance.labelKey ? t(`workflow.status.${appearance.labelKey}`) : appearance.fallbackLabel
+  const isClickable = step.state !== 'LOCKED'
 
   return (
     <Card
@@ -91,7 +127,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
       <Flex direction="column" gap="3">
         <Flex align="center" justify="between" gap="3">
           <Flex align="center" gap="3" className="flex-1 min-w-0">
-            <Box className={`p-2.5 rounded-lg border ${statusStyles[appearance.color] || statusStyles.gray}`}>
+            <Box className={`p-2.5 rounded-lg border ${statusStyles[config.color] || statusStyles.gray}`}>
               {nodeTypeIcons[step.workflowNodeTemplate.type] || <FileTextIcon className="w-5 h-5" />}
             </Box>
             <Box className="flex-1 min-w-0">
@@ -99,10 +135,10 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
                 {label}
               </Text>
               <Flex align="center" gap="2" mt="1">
-                <Badge color={appearance.color} variant="soft" size="1">
+                <Badge color={config.color} variant="soft" size="1">
                   <Flex align="center" gap="1">
-                    {icon}
-                    {statusLabel}
+                    {config.icon}
+                    {t(`workflow.status.${STATUS_KEYS[step.state]}`)}
                   </Flex>
                 </Badge>
               </Flex>

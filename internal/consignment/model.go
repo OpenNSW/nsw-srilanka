@@ -117,19 +117,15 @@ type WorkflowNodeResponseDTO struct {
 	CreatedAt            string                          `json:"createdAt"`            // Timestamp of node creation
 	UpdatedAt            string                          `json:"updatedAt"`            // Timestamp of last node update
 	WorkflowNodeTemplate WorkflowNodeTemplateResponseDTO `json:"workflowNodeTemplate"` // Workflow node template details
-	State                WorkflowNodeState               `json:"state"`                // Trader-facing state of the workflow node
+	State                WorkflowNodeState               `json:"state"`                // State of the workflow node
 }
 
 type WorkflowNodeState string
 
 const (
-	WorkflowNodeStateInProgress       WorkflowNodeState = "IN_PROGRESS"       // Legacy/unknown active state
-	WorkflowNodeStatePendingUser      WorkflowNodeState = "PENDING_USER"      // Trader still filling the form
-	WorkflowNodeStateQueuedExternally WorkflowNodeState = "QUEUED_EXTERNALLY" // Submitted; waiting on an OGA
-	WorkflowNodeStatePendingFeedback  WorkflowNodeState = "PENDING_FEEDBACK"  // OGA asked the trader to amend
-	WorkflowNodeStatePendingPayment   WorkflowNodeState = "PENDING_PAYMENT"   // Payment subtask is awaiting confirmation
-	WorkflowNodeStateCompleted        WorkflowNodeState = "COMPLETED"         // Node has been completed
-	WorkflowNodeStateFailed           WorkflowNodeState = "FAILED"            // Node has failed
+	WorkflowNodeStateInProgress WorkflowNodeState = "IN_PROGRESS" // Node is currently active and in progress
+	WorkflowNodeStateCompleted  WorkflowNodeState = "COMPLETED"   // Node has been completed
+	WorkflowNodeStateFailed     WorkflowNodeState = "FAILED"      // Node has failed
 )
 
 // WorkflowNodeTemplateResponseDTO represents workflow node template details in the response.

@@ -480,31 +480,20 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 		{TaskID: "t1", TaskType: "FORM", State: "COMPLETED", ActiveTaskTemplateID: "step-1", CreatedAt: now, UpdatedAt: now},
 		{TaskID: "t2", TaskType: "FORM", State: "FAILED", ActiveTaskTemplateID: "step-2", CreatedAt: now, UpdatedAt: now},
 		{
-			TaskID: "t3", TaskType: "FORM", State: "PENDING_USER", ActiveTaskTemplateID: "step-3", CreatedAt: now, UpdatedAt: now,
+			TaskID: "t3", TaskType: "FORM", State: "IN_PROGRESS", ActiveTaskTemplateID: "step-3", CreatedAt: now, UpdatedAt: now,
 			RenderConfig: json.RawMessage(`{"title":"My Step"}`),
 		},
-		{
-			TaskID: "t4", TaskType: "FORM", State: "QUEUED_EXTERNALLY", ActiveTaskTemplateID: "step-4", CreatedAt: now, UpdatedAt: now,
-			RenderConfig: json.RawMessage(`{"title":"Submitted App"}`),
-		},
-		{
-			TaskID: "t5", TaskType: "FORM", State: "PENDING_USER", ActiveTaskTemplateID: "step-5", CreatedAt: now, UpdatedAt: now,
-			RenderConfig: json.RawMessage(`{"title":"Needs Amendment"}`),
-			Data:         map[string]any{"reviewerform": map[string]any{"review_outcome": "needs_more_info"}},
-		},
-		{TaskID: "t6", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
+		{TaskID: "t4", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
 	}
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(tasks)
 
 	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID)
 	assert.NoError(t, err)
-	assert.Len(t, dtos, 5) // SYSTEM task filtered out
+	assert.Len(t, dtos, 3) // SYSTEM task filtered out
 	assert.Equal(t, WorkflowNodeStateCompleted, dtos[0].State)
 	assert.Equal(t, WorkflowNodeStateFailed, dtos[1].State)
-	assert.Equal(t, WorkflowNodeStatePendingUser, dtos[2].State)
+	assert.Equal(t, WorkflowNodeStateInProgress, dtos[2].State)
 	assert.Equal(t, "My Step", dtos[2].WorkflowNodeTemplate.Name)
-	assert.Equal(t, WorkflowNodeStateQueuedExternally, dtos[3].State)
-	assert.Equal(t, WorkflowNodeStatePendingFeedback, dtos[4].State)
 }
 
 func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {

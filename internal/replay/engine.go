@@ -256,7 +256,7 @@ func (r *Runner) doWait(ctx context.Context, w *Wait) error {
 		}
 		last = d
 		for _, n := range d.WorkflowNodes {
-			if strings.Contains(n.Template.Name, w.Node) && nodeStateMatches(n.State, w.State) {
+			if strings.Contains(n.Template.Name, w.Node) && (w.State == "" || n.State == w.State) {
 				if w.Into != "" {
 					r.Vars[w.Into] = n.ID
 				}
@@ -417,26 +417,6 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
-}
-
-// nodeStateMatches reports whether an observed workflow-node state satisfies a
-// wait. Empty wanted matches anything. IN_PROGRESS is treated as "not yet
-// terminal" so existing flow files keep working after the consignment API
-// started passing through orchestrator states (PENDING_USER, QUEUED_EXTERNALLY,
-// PENDING_FEEDBACK, …) instead of collapsing them all to IN_PROGRESS.
-func nodeStateMatches(actual, wanted string) bool {
-	if wanted == "" || actual == wanted {
-		return true
-	}
-	if wanted == "IN_PROGRESS" {
-		switch actual {
-		case "COMPLETED", "FAILED", "LOCKED":
-			return false
-		default:
-			return actual != ""
-		}
-	}
-	return false
 }
 
 // lookupPath resolves a dot-notation path (e.g. "consignment.id") against a
