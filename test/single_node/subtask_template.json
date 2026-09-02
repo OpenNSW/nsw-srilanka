@@ -1,0 +1,6 @@
+{
+  "id": "test_single_subtask",
+  "task_type": "USER_INPUT",
+  "output_namespace": "test_input",
+  "plugin_properties": {}
+}

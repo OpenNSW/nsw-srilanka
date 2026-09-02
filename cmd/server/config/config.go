@@ -38,6 +38,11 @@ type Config struct {
 	Integrations integrations.Config
 
 	ArtifactLoader loaders.Config
+
+	// TestManifestPaths holds optional relative paths to test/sandbox manifest files
+	// (e.g. "test/single_node/manifest.json") loaded alongside the primary manifest
+	// for local development and workflow test harnesses.
+	TestManifestPaths []string
 }
 
 // ServerConfig holds server configuration.
@@ -181,6 +186,7 @@ func Load() (*Config, error) {
 				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
 			},
 		},
+		TestManifestPaths: parseCommaSeparated(getEnvOrDefault("TEST_MANIFEST_PATHS", "test/single_node/manifest.json")),
 	}
 
 	// Validate required fields

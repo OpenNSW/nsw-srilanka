@@ -1,0 +1,41 @@
+{
+  "id": "test_single_render_config",
+  "sections": {
+    "applicant_form": {
+      "templateId": "test_single_form",
+      "title": "Test Single Task Form",
+      "projector": "FORM",
+      "dataKey": "test_input",
+      "handles": [
+        {
+          "command": "SUBMISSION",
+          "label": "Submit Form",
+          "element": "primary_action"
+        }
+      ]
+    }
+  },
+  "states": {
+    "PENDING_USER": {
+      "actions": [
+        {
+          "command": "SUBMISSION"
+        }
+      ]
+    },
+    "READY": {
+      "actions": [
+        {
+          "command": "SUBMISSION"
+        }
+      ]
+    },
+    "IN_PROGRESS": {
+      "actions": [
+        {
+          "command": "SUBMISSION"
+        }
+      ]
+    }
+  }
+}

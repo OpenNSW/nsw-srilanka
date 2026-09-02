@@ -1,0 +1,32 @@
+{
+  "id": "test_single_task_workflow",
+  "name": "Single Task Micro Workflow",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "user_input_step",
+      "type": "TASK",
+      "task_template_id": "test_single_subtask"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source_id": "start",
+      "target_id": "user_input_step"
+    },
+    {
+      "id": "e2",
+      "source_id": "user_input_step",
+      "target_id": "end"
+    }
+  ]
+}

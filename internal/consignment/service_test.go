@@ -377,7 +377,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
 	mockTaskStore.On("GetAllTasks", mock.Anything, returnedID).Return([]store.TaskRecord(nil))
 
-	result, err := svc.CreateAndStartConsignment(context.Background(), traderID)
+	result, err := svc.CreateAndStartConsignment(context.Background(), traderID, defaultExportWorkflowTemplateID)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, returnedID, result.ID)
@@ -394,7 +394,7 @@ func TestConsignmentService_CreateAndStartConsignment_UserLookupFails(t *testing
 	mockUser := svc.userService.(*MockUserService)
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(nil, errors.New("user not found"))
 
-	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1")
+	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "trader user lookup failed")
 }
@@ -407,7 +407,7 @@ func TestConsignmentService_CreateAndStartConsignment_CompanyLookupFails(t *test
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(nil, errors.New("company not found"))
 
-	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1")
+	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "trader company lookup failed")
 }
@@ -435,7 +435,7 @@ func TestConsignmentService_CreateAndStartConsignment_StartWorkflowFails(t *test
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectRollback()
 
-	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1")
+	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to register workflow")
 	assert.NoError(t, sqlMock.ExpectationsWereMet())

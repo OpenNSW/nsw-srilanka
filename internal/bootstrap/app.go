@@ -13,6 +13,7 @@ import (
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
+	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
@@ -131,22 +132,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry)
 
-	artifactLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
+	artifactRegistry, err := initArtifactRegistry(ctx, cfg)
 	if err != nil {
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
-	}
-
-	artifactRegistry := artifact.NewRegistry(artifactLoader)
-
-	manifestCfg, err := artifact.LoadManifest(ctx, artifactLoader)
-	if err != nil {
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to load artifact manifest: %w", err)
-	}
-	if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to register artifacts from manifest: %w", err)
+		return nil, err
 	}
 
 	chaService := cha.NewService(db)
@@ -207,7 +196,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to build consignment service: %w", err)
 	}
-	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
+	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.Server.Debug)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -708,4 +697,72 @@ func initTask(
 		Store:     taskStore,
 		Assembler: zoneAssembler,
 	}, stop, nil
+}
+
+// fallbackLoader queries the primary loader first, falling back to local disk
+// if not found. This allows local test artifacts to resolve seamlessly even when
+// the primary loader points to a remote source (GitHub, S3).
+type fallbackLoader struct {
+	primary artifact.Loader
+	local   artifact.Loader
+}
+
+func (fl fallbackLoader) Load(ctx context.Context, path string) ([]byte, error) {
+	data, err := fl.primary.Load(ctx, path)
+	if err == nil {
+		return data, nil
+	}
+	if fl.local != nil {
+		if localData, localErr := fl.local.Load(ctx, path); localErr == nil {
+			return localData, nil
+		}
+	}
+	return nil, err
+}
+
+// initArtifactRegistry initializes the artifact loader, registry, and registers
+// the primary manifest (plus any test manifests if in development mode).
+func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Registry, error) {
+	primaryLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
+	}
+
+	artifactLoader := primaryLoader
+	manifestPaths := []string{artifact.ManifestFilename}
+
+	if cfg.Server.Debug {
+		// In development, fallback to local disk so test artifacts under test/
+		// can be resolved even when the primary loader is remote (e.g. GitHub or S3).
+		if localFallback, err := local.New(local.Config{Root: "."}); err == nil {
+			artifactLoader = fallbackLoader{primary: primaryLoader, local: localFallback}
+		}
+		manifestPaths = append(manifestPaths, cfg.TestManifestPaths...)
+	}
+
+	artifactRegistry := artifact.NewRegistry(artifactLoader)
+	for _, path := range manifestPaths {
+		if path == "" {
+			continue
+		}
+		data, err := artifactLoader.Load(ctx, path)
+		if err != nil {
+			if path == artifact.ManifestFilename {
+				return nil, fmt.Errorf("failed to load root manifest %q: %w", path, err)
+			}
+			log.Printf("info: optional manifest %q not found, skipping: %v", path, err)
+			continue
+		}
+
+		var manifestCfg artifact.ManifestConfig
+		if err := json.Unmarshal(data, &manifestCfg); err != nil {
+			return nil, fmt.Errorf("failed to parse manifest %q: %w", path, err)
+		}
+
+		if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
+			return nil, fmt.Errorf("failed to register manifest %q: %w", path, err)
+		}
+	}
+
+	return artifactRegistry, nil
 }
