@@ -39,6 +39,10 @@ type Config struct {
 
 	ArtifactLoader loaders.Config
 
+	// DevFeaturesEnabled explicitly toggles development-only features like
+	// local test manifests and test workflow endpoints. Defaults to false.
+	DevFeaturesEnabled bool
+
 	// TestManifestPaths holds optional relative paths to test/sandbox manifest files
 	// (e.g. "test/single_node/manifest.json") loaded alongside the primary manifest
 	// for local development and workflow test harnesses.
@@ -186,7 +190,8 @@ func Load() (*Config, error) {
 				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
 			},
 		},
-		TestManifestPaths: parseCommaSeparated(getEnvOrDefault("TEST_MANIFEST_PATHS", "test/single_node/manifest.json")),
+		DevFeaturesEnabled: getBoolOrDefault("ENABLE_DEV_FEATURES", false),
+		TestManifestPaths:  parseCommaSeparated(getEnvOrDefault("TEST_MANIFEST_PATHS", "")),
 	}
 
 	// Validate required fields

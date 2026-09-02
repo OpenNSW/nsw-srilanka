@@ -196,7 +196,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to build consignment service: %w", err)
 	}
-	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.Server.Debug)
+	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.DevFeaturesEnabled)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -712,7 +712,7 @@ func (fl fallbackLoader) Load(ctx context.Context, path string) ([]byte, error) 
 	if err == nil {
 		return data, nil
 	}
-	if fl.local != nil {
+	if fl.local != nil && errors.Is(err, artifact.ErrNotFound) {
 		if localData, localErr := fl.local.Load(ctx, path); localErr == nil {
 			return localData, nil
 		}
@@ -731,7 +731,7 @@ func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Re
 	artifactLoader := primaryLoader
 	manifestPaths := []string{artifact.ManifestFilename}
 
-	if cfg.Server.Debug {
+	if cfg.DevFeaturesEnabled {
 		// In development, fallback to local disk so test artifacts under test/
 		// can be resolved even when the primary loader is remote (e.g. GitHub or S3).
 		if localFallback, err := local.New(local.Config{Root: "."}); err == nil {
@@ -750,8 +750,11 @@ func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Re
 			if path == artifact.ManifestFilename {
 				return nil, fmt.Errorf("failed to load root manifest %q: %w", path, err)
 			}
-			log.Printf("info: optional manifest %q not found, skipping: %v", path, err)
-			continue
+			if errors.Is(err, artifact.ErrNotFound) {
+				log.Printf("info: optional manifest %q not found, skipping", path)
+				continue
+			}
+			return nil, fmt.Errorf("failed to load optional manifest %q: %w", path, err)
 		}
 
 		var manifestCfg artifact.ManifestConfig

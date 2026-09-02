@@ -538,6 +538,42 @@ func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+func TestConsignmentRouter_ResolveTemplateID(t *testing.T) {
+	devRouter := &Router{devMode: true}
+	prodRouter := &Router{devMode: false}
+
+	t.Run("prod ignores body and returns default template", func(t *testing.T) {
+		body := strings.NewReader(`{"template_id":"test-single-node-v1"}`)
+		req, _ := http.NewRequest("POST", "/api/v1/consignments", body)
+		tmpl, err := prodRouter.resolveTemplateID(req)
+		require.NoError(t, err)
+		assert.Equal(t, defaultExportWorkflowTemplateID, tmpl)
+	})
+
+	t.Run("dev accepts test-* template", func(t *testing.T) {
+		body := strings.NewReader(`{"template_id":"test-single-node-v1"}`)
+		req, _ := http.NewRequest("POST", "/api/v1/consignments", body)
+		tmpl, err := devRouter.resolveTemplateID(req)
+		require.NoError(t, err)
+		assert.Equal(t, "test-single-node-v1", tmpl)
+	})
+
+	t.Run("dev rejects non-test template", func(t *testing.T) {
+		body := strings.NewReader(`{"template_id":"custom-prod-flow"}`)
+		req, _ := http.NewRequest("POST", "/api/v1/consignments", body)
+		_, err := devRouter.resolveTemplateID(req)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "only test-* workflow templates are allowed")
+	})
+
+	t.Run("dev empty body uses default template", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
+		tmpl, err := devRouter.resolveTemplateID(req)
+		require.NoError(t, err)
+		assert.Equal(t, defaultExportWorkflowTemplateID, tmpl)
+	})
+}
+
 func TestConsignmentRouter_HandleCreateConsignment_CustomTemplate_ProductionIgnored(t *testing.T) {
 	mockUser := new(MockUserService)
 	svc := mustNewService(t, nil, nil, nil, nil, mockUser, nil)
@@ -569,6 +605,7 @@ func TestConsignmentRouter_HandleCreateConsignment_CustomTemplate_DevModeInvalid
 	r.HandleCreateConsignment(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "only test-* workflow templates are allowed")
 }
 
 func TestConsignmentRouter_HandleGetConsignmentAgency(t *testing.T) {

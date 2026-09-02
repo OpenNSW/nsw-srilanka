@@ -306,6 +306,8 @@ services:
       # Pinned to the bind-mount target above, not interpolated: the host path in
       # .env does not resolve inside the container.
       - ARTIFACT_LOCAL_ROOT=/app/artifacts
+      - ENABLE_DEV_FEATURES=${ENABLE_DEV_FEATURES:-true}
+      - TEST_MANIFEST_PATHS=${TEST_MANIFEST_PATHS:-}
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
     depends_on:
