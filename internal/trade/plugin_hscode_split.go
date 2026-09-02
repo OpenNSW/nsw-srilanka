@@ -30,11 +30,16 @@ type hscodeSplitConfig struct {
 // immediately without waiting for any user or external action. Register it via
 // NewGenericExecutorPlugin.
 func HscodeSplitBuilderFunc(ctx plugins.PluginContext, config json.RawMessage) error {
+	if len(config) == 0 {
+		return fmt.Errorf("hscode_split_builder: config is required")
+	}
+
 	var cfg hscodeSplitConfig
-	if len(config) > 0 && string(config) != "null" {
-		if err := json.Unmarshal(config, &cfg); err != nil {
-			return fmt.Errorf("hscode_split_builder: invalid config: %w", err)
-		}
+	if err := json.Unmarshal(config, &cfg); err != nil {
+		return fmt.Errorf("hscode_split_builder: invalid config: %w", err)
+	}
+	if len(cfg.Mappings) == 0 {
+		return fmt.Errorf("hscode_split_builder: no mappings configured")
 	}
 
 	raw, ok := ctx.Inputs["hs_codes"]

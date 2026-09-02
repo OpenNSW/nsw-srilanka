@@ -118,6 +118,18 @@ func TestHscodeSplitBuilderFunc_InvalidInputs(t *testing.T) {
 		expectedErr string
 	}{
 		{
+			name:        "missing config",
+			inputs:      map[string]any{"hs_codes": []any{"0902.30.11"}},
+			config:      nil,
+			expectedErr: "config is required",
+		},
+		{
+			name:        "empty mappings in config",
+			inputs:      map[string]any{"hs_codes": []any{"0902.30.11"}},
+			config:      json.RawMessage(`{"mappings":{}}`),
+			expectedErr: "no mappings configured",
+		},
+		{
 			name:        "missing hs_codes key",
 			inputs:      map[string]any{},
 			config:      config,
