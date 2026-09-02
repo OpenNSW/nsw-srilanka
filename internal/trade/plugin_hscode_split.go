@@ -102,6 +102,9 @@ func resolveTemplates(items []any, mappings map[string][]string) ([]string, erro
 		}
 
 		for _, wf := range workflows {
+			if wf == "" {
+				return nil, fmt.Errorf("hscode_split_builder: HS code %q has an empty workflow template ID", hsCode)
+			}
 			if !seen[wf] {
 				seen[wf] = true
 				templates = append(templates, wf)

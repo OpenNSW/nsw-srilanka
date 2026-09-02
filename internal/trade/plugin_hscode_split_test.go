@@ -167,6 +167,12 @@ func TestHscodeSplitBuilderFunc_InvalidInputs(t *testing.T) {
 			config:      json.RawMessage(`{malformed-json`),
 			expectedErr: "invalid config",
 		},
+		{
+			name:        "empty workflow template ID in mappings",
+			inputs:      map[string]any{"hs_codes": []any{"0902.30.11"}},
+			config:      json.RawMessage(`{"mappings":{"0902.30.11":[""]}}`),
+			expectedErr: "has an empty workflow template ID",
+		},
 	}
 
 	for _, tc := range tests {
