@@ -34,9 +34,9 @@ var testCatalogRoles = map[string]string{"trader": "Trader", "cha": "CHA"}
 
 // mustNewRouter builds a Router with testCatalogRoles, failing the test
 // immediately if construction errors.
-func mustNewRouter(t *testing.T, cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder) *Router {
+func mustNewRouter(t *testing.T, cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor) *Router {
 	t.Helper()
-	r, err := NewRouter(cs, chaService, companyService, recorder, testCatalogRoles)
+	r, err := NewRouter(cs, chaService, companyService, auditor, testCatalogRoles)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 const (
@@ -27,13 +28,15 @@ const (
 type Handler struct {
 	cusdecService cusdec.WebhookService
 	cdnService    cdn.CDNWebhookService
+	audit         nswaudit.Auditor
 }
 
 // NewHandler creates a new central SLCE webhook handler.
-func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookService) *Handler {
+func NewHandler(cusdecService cusdec.WebhookService, cdnService cdn.CDNWebhookService, auditor nswaudit.Auditor) *Handler {
 	return &Handler{
 		cusdecService: cusdecService,
 		cdnService:    cdnService,
+		audit:         auditor,
 	}
 }
 
@@ -45,23 +48,43 @@ type payloadEnvelope struct {
 // It inspects the eventType field in the incoming JSON payload and dispatches
 // execution to the appropriate domain service handler using a switch statement.
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var eventType string
+	var failure bool
+
+	defer func() {
+		if h.audit != nil {
+			h.audit.Audit(ctx, nswaudit.Event{
+				EventType:  nswaudit.EventConsignment,
+				Action:     nswaudit.ActionUpdate,
+				TargetType: nswaudit.TargetConsignment,
+				Failure:    failure,
+				Metadata: map[string]any{
+					"eventType": eventType,
+				},
+			})
+		}
+	}()
+
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to read request body", "error", err)
+		slog.WarnContext(ctx, "slce: failed to read request body", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		failure = true
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
 
 	var env payloadEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		slog.WarnContext(r.Context(), "slce: failed to decode JSON envelope", "error", err)
+		slog.WarnContext(ctx, "slce: failed to decode JSON envelope", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		failure = true
 		return
 	}
 
-	eventType := strings.ToUpper(strings.TrimSpace(env.EventType))
+	eventType = strings.ToUpper(strings.TrimSpace(env.EventType))
 
 	switch eventType {
 	case "CUSDEC_INTEGRATED":
@@ -83,8 +106,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		h.handleCDNAcknowledgment(w, r, body)
 
 	default:
-		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType)
+		slog.WarnContext(ctx, "slce: unknown or unsupported event type", "event", eventType)
 		httputil.Error(w, r, http.StatusBadRequest, errUnknownEventType)
+		failure = true
 	}
 }
 
