@@ -1,18 +1,24 @@
 // Package taskauthz is the shared vocabulary of task authorization: who the
-// caller is, and what the deployment's logical principal names mean.
+// caller is, what the deployment's logical principal names mean, and which roles
+// the caller may act in on a given task.
 //
-// It holds no policy. Two packages build on it, and neither depends on the other:
+// It holds no policy. Three packages build on it, and none of them depends on
+// another:
 //
 //   - internal/tasks/authzgate — Layer 1. An HTTP middleware that resolves the
 //     caller's identity into an Input and attaches it to the request context,
 //     along with a lazy ownership resolver.
-//   - internal/tasks/extensions/authz — Layer 2. A PRE_RESUME task extension
-//     deciding whether the caller may run a command on a task.
+//   - internal/tasks/extensions/authz — Layer 2 for writes. A PRE_RESUME task
+//     extension deciding whether the caller may run a command on a task.
+//   - internal/tasks/readauthz — Layer 2 for reads. Decides whether the caller may
+//     read a task at all.
 //
-// These types used to live in the extension. But only one of the two packages
-// that need them is a core task extension — Layer 1 is HTTP middleware — so the
-// shared half cannot live under extensions/ without the transport layer importing
-// a write-policy package for types that have nothing to do with write policy.
+// These types used to live in the write extension. But only one of the packages
+// that need them is a core task extension, so the shared half cannot live under
+// extensions/ without Layer 1 and the read evaluator importing a write-policy
+// package for types that have nothing to do with write policy. Eligibility is
+// here for the same reason: both Layer-2 evaluators rest on that one rule, and a
+// security rule with two implementations can drift.
 package taskauthz
 
 import "context"

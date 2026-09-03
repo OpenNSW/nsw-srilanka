@@ -15,6 +15,8 @@ import (
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 const (
@@ -32,35 +34,75 @@ type TaskFetcher interface {
 }
 
 type HTTPHandler struct {
-	Manager         *orchestrator.TaskManager
-	Store           TaskFetcher
-	Assembler       *zoneview.ZoneViewAssembler
+	Manager   *orchestrator.TaskManager
+	Store     TaskFetcher
+	Assembler *zoneview.ZoneViewAssembler
+	// AuthzCatalog names the logical roles a reader may own the task's
+	// consignment in. HandleGetTask authorizes against it.
+	AuthzCatalog    taskauthz.Catalog
 	MaxRequestBytes int64
 }
 
-func NewHTTPHandler(manager *orchestrator.TaskManager, store TaskFetcher, assembler *zoneview.ZoneViewAssembler, maxRequestBytes int64) *HTTPHandler {
-	return &HTTPHandler{Manager: manager, Store: store, Assembler: assembler, MaxRequestBytes: maxRequestBytes}
+func NewHTTPHandler(
+	manager *orchestrator.TaskManager,
+	store TaskFetcher,
+	assembler *zoneview.ZoneViewAssembler,
+	authzCatalog taskauthz.Catalog,
+	maxRequestBytes int64,
+) *HTTPHandler {
+	return &HTTPHandler{
+		Manager:         manager,
+		Store:           store,
+		Assembler:       assembler,
+		AuthzCatalog:    authzCatalog,
+		MaxRequestBytes: maxRequestBytes,
+	}
 }
 
-// HandleGetTask returns the ZoneView payload for a single task.
+// HandleGetTask returns the ZoneView payload for a single task, scoped to the
+// caller: they must own the task's consignment in a role the task's render
+// config admits, and the claims resolved for them decide which sections of the
+// view they see.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
-	// TODO: retrieve the authenticated context and validate it against the
-	// task's ownership bounds before returning ZoneView.
+	ctx := r.Context()
 	taskID := r.PathValue("id")
 	if taskID == "" {
 		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
 
-	record, ok := h.Store.GetTask(r.Context(), taskID)
+	// Attached by the task authz gate. Absent means no usable principal, which
+	// the scope middleware should already have rejected.
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok {
+		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+		return
+	}
+
+	record, ok := h.Store.GetTask(ctx, taskID)
 	if !ok {
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(r.Context(), record, nil)
+	// RootWorkflowID is the consignment id, so this decides the caller's access
+	// from their role-tied ownership of the task's consignment.
+	if err := readauthz.Authorize(ctx, h.AuthzCatalog, in, record.RootWorkflowID); err != nil {
+		if !errors.Is(err, readauthz.ErrDenied) {
+			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
+			return
+		}
+		// Answer with the not-found status and text, so a denied read is
+		// indistinguishable from a task that does not exist and cannot be used to
+		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
+		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return
+	}
+
+	zv, err := h.Assembler.Assemble(ctx, record, nil)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return

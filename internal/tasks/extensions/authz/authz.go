@@ -2,12 +2,16 @@
 // PRE_RESUME policy gate that decides whether the caller may run a command on a
 // task at its current state.
 //
-// It is a pure evaluator. Layer 1 (internal/tasks/authzgate) resolves the caller's
-// identity and attaches it — together with a lazy ownership resolver — to the
-// request context as a taskauthz.Input; this extension only matches that against
-// the per-task policy and the catalog it is handed at construction. It reads no
-// configuration file, resolves ownership only when a user rule actually needs it,
-// and never touches domain services directly.
+// It is a pure evaluator. Layer 1 (internal/tasks/authzgate) resolves the
+// caller's identity and attaches it — together with a lazy ownership resolver —
+// to the request context as a taskauthz.Input; this extension only matches that
+// against the per-task policy and the catalog it is handed at construction. It
+// reads no configuration file, resolves ownership only when a user rule actually
+// needs it, and never touches domain services directly.
+//
+// Reads are guarded separately, by internal/tasks/readauthz — core has no read
+// hook, so only the write path can be an extension. Both share the principal
+// types and the eligibility rule in internal/tasks/taskauthz.
 package authz
 
 import (
@@ -79,34 +83,28 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 	}
 }
 
-// authorizeUser allows the call iff some allowed name is a catalog user whose
-// token role the caller holds and whose company owns the task's root workflow in
-// that role. Ownership is resolved lazily and only after a role first matches, so
-// a caller whose roles match no allowed user is denied with no ownership lookup.
+// authorizeUser allows the call iff the caller may act as some allowed name —
+// they hold its token role and their company owns the task's root workflow in
+// that role. Because a write is one yes/no decision, any single match suffices;
+// the read path, which selects content rather than deciding, instead resolves a
+// single acting role.
 func (e *Extension) authorizeUser(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, allowed []string) error {
-	held := roleSet(in.Roles)
-
-	var candidates []string
-	for _, name := range allowed {
-		if role, isRole := e.catalog.Roles[name]; isRole && held[role] {
-			candidates = append(candidates, name)
-		}
+	// Eligible resolves ownership only if the caller holds one of the allowed
+	// roles, so the common denial below costs no database lookup.
+	eligible, err := e.catalog.Eligible(ctx, in, record.RootWorkflowID, allowed)
+	if err != nil {
+		return fmt.Errorf("task authz: %w", err)
 	}
-	if len(candidates) == 0 {
+	if !eligible.HoldsAny(allowed) {
 		return fmt.Errorf("%w: caller holds no role allowed for this command", ErrForbidden)
 	}
+	// A user principal reaching here with no resolver means Layer 1 attached none
+	// — a wiring bug. Say so rather than reporting it as "does not own".
 	if in.OwnedRoles == nil {
 		return fmt.Errorf("%w: ownership could not be resolved", ErrForbidden)
 	}
-
-	owned, err := in.OwnedRoles(ctx, record.RootWorkflowID)
-	if err != nil {
-		return fmt.Errorf("task authz: resolve ownership: %w", err)
-	}
-	for _, name := range candidates {
-		if owned[name] {
-			return nil
-		}
+	if eligible.Any(allowed) {
+		return nil
 	}
 	return fmt.Errorf("%w: caller's company does not own this task in the required role", ErrForbidden)
 }
@@ -120,12 +118,4 @@ func (e *Extension) authorizeClient(in taskauthz.Input, allowed []string) error 
 		}
 	}
 	return fmt.Errorf("%w: client %q is not permitted for this command", ErrForbidden, in.ClientID)
-}
-
-func roleSet(roles []string) map[string]bool {
-	m := make(map[string]bool, len(roles))
-	for _, r := range roles {
-		m[r] = true
-	}
-	return m
 }
