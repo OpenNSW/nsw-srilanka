@@ -41,6 +41,12 @@ func (l *loadable) Parse(raw []byte) error {
 	if err := json.Unmarshal(envelope.Data, &probe); err != nil {
 		return fmt.Errorf(`static data artifact's "data" field must be a JSON array: %w`, err)
 	}
+	// Unmarshaling JSON null into a slice succeeds with a nil slice and no
+	// error — distinct from "[]", which unmarshals to a non-nil empty slice —
+	// so a null "data" field must be rejected explicitly.
+	if probe == nil {
+		return fmt.Errorf(`static data artifact's "data" field must be a JSON array, got null`)
+	}
 	l.RawMessage = raw
 	return nil
 }

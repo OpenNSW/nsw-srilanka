@@ -12,6 +12,17 @@ function staticDataParams(params: Record<string, unknown> | undefined): { id: st
   return { id, version }
 }
 
+// The artifact source isn't type-checked against this contract, so a malformed entry (a bare
+// string, a missing/non-string field) is dropped here rather than reaching `.toLowerCase()` below.
+function isStaticDataOption(value: unknown): value is StaticDataOption {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as StaticDataOption).const === 'string' &&
+    typeof (value as StaticDataOption).title === 'string'
+  )
+}
+
 // (id, version) identifies immutable content (see internal/staticdata's Cache-Control), so a
 // successful fetch is kept for the lifetime of the page: every field pointing at the same
 // artifact, and every reopen of the same dropdown, reuses it instead of re-fetching. A failed
@@ -34,7 +45,7 @@ function fetchOptions(id: string, version: string): Promise<StaticDataOption[]> 
       params: { version },
       attachToken: true,
     })
-    .then(({ data }) => data.data)
+    .then(({ data }) => data.data.filter(isStaticDataOption))
   promise.catch(() => optionsCache.delete(key))
 
   optionsCache.set(key, promise)

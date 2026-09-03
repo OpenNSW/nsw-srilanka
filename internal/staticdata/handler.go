@@ -8,9 +8,12 @@ import (
 	"github.com/OpenNSW/core/httputil"
 )
 
-// cacheControlImmutable tells the browser/CDN it never needs to re-fetch a
-// given (id, version) response, since that pair identifies immutable content.
-const cacheControlImmutable = "public, max-age=31536000, immutable"
+// cacheControlImmutable tells the caller's own browser it never needs to
+// re-fetch a given (id, version) response, since that pair identifies
+// immutable content. "private" (not "public") because this endpoint is
+// scope-protected — a shared/CDN cache must never serve one caller's response
+// to another.
+const cacheControlImmutable = "private, max-age=31536000, immutable"
 
 // Handler serves static JSON reference-data artifacts looked up by id and version.
 type Handler struct {

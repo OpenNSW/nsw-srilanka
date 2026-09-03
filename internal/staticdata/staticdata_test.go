@@ -78,3 +78,11 @@ func TestLoad_DataFieldNotAnArray(t *testing.T) {
 		t.Fatal(`expected an error when "data" is not an array, got nil`)
 	}
 }
+
+func TestLoad_DataFieldIsNull(t *testing.T) {
+	reg := newTestRegistry(t, "hs-codes", "1.0.0", "refdata/hs-codes/1.0.0.json", []byte(`{"data":null}`))
+
+	if _, err := Load(context.Background(), reg, "hs-codes", "1.0.0"); err == nil {
+		t.Fatal(`expected an error when "data" is null, got nil`)
+	}
+}
