@@ -63,11 +63,11 @@ export async function getWorkflowById(id: string): Promise<Workflow | undefined>
 }
 
 // Consignment functions
-export async function createConsignment(): Promise<CreateConsignmentResponse> {
+export async function createConsignment(templateId?: string): Promise<CreateConsignmentResponse> {
   const { data } = await http.request<CreateConsignmentResponse>({
     url: `${API_BASE_URL}/api/v1/consignments`,
     method: 'POST',
-    data: {},
+    data: templateId ? { template_id: templateId } : {},
     attachToken: true,
   })
   return data

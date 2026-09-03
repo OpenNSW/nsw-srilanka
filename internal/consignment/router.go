@@ -1,8 +1,10 @@
 package consignment
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -26,22 +28,31 @@ const (
 	errConsignmentNotFound   = "consignment not found"
 )
 
+type CreateConsignmentRequest struct {
+	TemplateID string `json:"template_id,omitempty"`
+}
+
 type Router struct {
 	cs      *Service
 	cha     cha.Service
 	company company.Service
 	audit   *nswaudit.Recorder
 	roles   map[string]string // logical name ("trader"/"cha") -> IdP token role
+	devMode bool
 }
 
 // NewRouter builds the router. roles is the global catalog's Roles map; it must
 // define "trader" and "cha" — HandleGetConsignments resolves a caller's ?role=
 // query param through it.
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string) (*Router, error) {
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string, devMode ...bool) (*Router, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles}, nil
+	isDev := false
+	if len(devMode) > 0 {
+		isDev = devMode[0]
+	}
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles, devMode: isDev}, nil
 }
 
 // validateRoles reports an error if roles (the global catalog's Roles map) omits
@@ -56,6 +67,11 @@ func validateRoles(roles map[string]string) error {
 	return nil
 }
 
+// TODO: Move default workflow template ID to configuration.
+// defaultExportWorkflowTemplateID is the top-level workflow started by default when
+// creating a consignment.
+const defaultExportWorkflowTemplateID = "trade-export-v1"
+
 // HandleCreateConsignment handles POST /api/v1/consignments
 // Creates an export consignment and starts its workflow directly — no CHA company or HS code
 // is collected up front; the workflow's own tasks collect those later. Response: DetailDTO.
@@ -67,8 +83,14 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	templateID, err := c.resolveTemplateID(r)
+	if err != nil {
+		httputil.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	traderID := authCtx.User.ID
-	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID)
+	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, templateID)
 	if err != nil {
 		c.audit.Record(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
@@ -307,4 +329,27 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 		},
 	})
 	httputil.JSON(w, http.StatusOK, dto)
+}
+
+// resolveTemplateID extracts and validates the workflow template ID from the request.
+// In production (!c.devMode), it always returns defaultExportWorkflowTemplateID without
+// parsing the body. In dev mode, it accepts optional test-* templates.
+func (c *Router) resolveTemplateID(r *http.Request) (string, error) {
+	if !c.devMode || r.Body == nil || r.ContentLength == 0 {
+		return defaultExportWorkflowTemplateID, nil
+	}
+
+	var req CreateConsignmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		return "", errors.New("invalid request body")
+	}
+
+	if req.TemplateID != "" && req.TemplateID != defaultExportWorkflowTemplateID {
+		if !strings.HasPrefix(req.TemplateID, "test-") {
+			return "", errors.New("only test-* workflow templates are allowed")
+		}
+		return req.TemplateID, nil
+	}
+
+	return defaultExportWorkflowTemplateID, nil
 }

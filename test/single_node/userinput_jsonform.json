@@ -1,0 +1,52 @@
+{
+  "schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "Test Single Task Form",
+    "required": [
+      "title",
+      "status"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "title": "Test Title",
+        "default": "Test Execution #1"
+      },
+      "status": {
+        "type": "string",
+        "title": "Status",
+        "enum": [
+          "PASSED",
+          "FLAGGED",
+          "REJECTED"
+        ],
+        "default": "PASSED"
+      },
+      "notes": {
+        "type": "string",
+        "title": "Remarks / Notes"
+      }
+    }
+  },
+  "uischema": {
+    "type": "VerticalLayout",
+    "elements": [
+      {
+        "type": "Control",
+        "scope": "#/properties/title"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/status"
+      },
+      {
+        "type": "Control",
+        "scope": "#/properties/notes",
+        "options": {
+          "multi": true
+        }
+      }
+    ]
+  }
+}

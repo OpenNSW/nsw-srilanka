@@ -114,16 +114,8 @@ func (s *Service) OnWorkflowStatusChanged(ctx context.Context, tx *gorm.DB, work
 	}
 }
 
-// directStartExportWorkflowTemplateID is the top-level workflow started immediately by
-// CreateAndStartConsignment. CHA selection happens inside this workflow's own
-// tasks (trade_1_cha_selection) as workflow variables
-// (trade.cha_id) rather than as an upfront trader/CHA handoff.
-const directStartExportWorkflowTemplateID = "trade-export-v1"
-
-// CreateAndStartConsignment creates an export consignment and starts its workflow directly,
-// in one step — replacing the two-stage trader-creates-shell → CHA-claims handoff
-// for flows whose entire CHA selection now happens inside the workflow itself.
-func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string) (*DetailDTO, error) {
+// CreateAndStartConsignment creates an export consignment and starts its workflow directly.
+func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string, templateID string) (*DetailDTO, error) {
 	traderUser, err := s.userService.GetUser(ctx, traderID)
 	if err != nil {
 		return nil, fmt.Errorf("trader user lookup failed: %w", err)
@@ -140,9 +132,9 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	}
 	initialVars := map[string]any{"traderCompany": traderCompanyVars}
 
-	def, err := workflowdef.Load(ctx, s.artifactRegistry, directStartExportWorkflowTemplateID)
+	def, err := workflowdef.Load(ctx, s.artifactRegistry, templateID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get workflow template: %w", err)
+		return nil, fmt.Errorf("failed to get workflow template %q: %w", templateID, err)
 	}
 
 	consignment := &Consignment{

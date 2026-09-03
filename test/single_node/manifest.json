@@ -1,0 +1,40 @@
+{
+  "artifacts": [
+    {
+      "id": "test-single-node-v1",
+      "kind": "workflow",
+      "version": "v1.0.0",
+      "path": "test/single_node/parent_workflow.json"
+    },
+    {
+      "id": "test_single_task_template",
+      "kind": "task_template",
+      "version": "v1.0.0",
+      "path": "test/single_node/task_template.json"
+    },
+    {
+      "id": "test_single_task_workflow",
+      "kind": "workflow",
+      "version": "v1.0.0",
+      "path": "test/single_node/task_workflow.json"
+    },
+    {
+      "id": "test_single_subtask",
+      "kind": "subtask_template",
+      "version": "v1.0.0",
+      "path": "test/single_node/subtask_template.json"
+    },
+    {
+      "id": "test_single_render_config",
+      "kind": "generic_template",
+      "version": "v1.0.0",
+      "path": "test/single_node/render_config.json"
+    },
+    {
+      "id": "test_single_form",
+      "kind": "generic_template",
+      "version": "v1.0.0",
+      "path": "test/single_node/userinput_jsonform.json"
+    }
+  ]
+}

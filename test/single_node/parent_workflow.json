@@ -1,0 +1,32 @@
+{
+  "id": "test-single-node-v1",
+  "name": "Single Node Test Workflow",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START"
+    },
+    {
+      "id": "test_step",
+      "type": "TASK",
+      "task_template_id": "test_single_task_template"
+    },
+    {
+      "id": "end",
+      "type": "END"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_start_to_step",
+      "source_id": "start",
+      "target_id": "test_step"
+    },
+    {
+      "id": "edge_step_to_end",
+      "source_id": "test_step",
+      "target_id": "end"
+    }
+  ]
+}

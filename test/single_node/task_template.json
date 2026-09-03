@@ -1,0 +1,6 @@
+{
+  "id": "test_single_task_template",
+  "type": "APPLICATION",
+  "workflow_id": "test_single_task_workflow",
+  "render_config_id": "test_single_render_config"
+}
