@@ -23,8 +23,5 @@
   "private": true,
   "devDependencies": {
     "prettier": "^3.9.6"
-  },
-  "dependencies": {
-    "@opennsw/jsonforms-renderers": "link:../../../WebstormProjects/ui-packages/packages/jsonforms-renderers"
   }
 }
