@@ -61,6 +61,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			PlaceOfIssue:           officeName(asString(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
 			DocDeclarations:        buildDocDeclarations(uf),
+			Attachments:            buildAttachments(uf, inputs),
 			Consignment:            buildConsignment(uf, importISO),
 		},
 	}
@@ -517,4 +518,119 @@ func isAlpha(s string) bool {
 		}
 	}
 	return true
+}
+
+// --- trader-submitted documents ----------------------------------------------
+
+// traderDocuments is every place the trader uploads a file in the NPQS flow,
+// with the ePhyto form field that says whether it travels with the certificate.
+//
+// A document is sent only when the trader says so at the ePhyto step: they know
+// what the importing NPPO asked for, and a certificate that carries a document
+// the consignment does not is worse than one that carries none.
+//
+// The label is what the receiving NPPO reads as the document's ID, so it names
+// the document rather than the field it arrived in.
+var traderDocuments = []struct {
+	url   string // the task input carrying the upload's storage reference
+	send  string // the ePhyto form field the trader answers
+	label string
+}{
+	{url: "treatment_certificate_url", send: "send_treatment_certificate", label: "Treatment Certificate"},
+	{url: "supervision_report_url", send: "send_supervision_report", label: "Treatment Supervision Report"},
+	{url: "invoice_file_url", send: "send_invoice", label: "Commercial Invoice"},
+	{url: "packing_list_file_url", send: "send_packing_list", label: "Packing List"},
+	{url: "additional_file_url", send: "send_additional_document", label: "Additional Supporting Document"},
+}
+
+// sendApplicationDocuments is the ePhyto form field covering the files attached
+// to the application itself. They are one answer rather than one per file: the
+// trader attached them together, describing the same consignment.
+const sendApplicationDocuments = "send_application_documents"
+
+// buildAttachments lists, as referenced documents on the certificate, the
+// documents the trader chose to send at the ePhyto step.
+//
+// The receiving NPPO inspects a consignment against what the certificate says
+// accompanies it, so a document the trader was asked to upload belongs on the
+// certificate rather than only in this deployment's storage — but only the ones
+// they said yes to.
+//
+// Each is referenced by name, type and description; the file's bytes are not
+// embedded. The SPS model does carry them (ram:AttachmentBinaryObject, see
+// spscert.Attachment.Base64), but reading a file needs a context to cancel on
+// and the SOAP interpreter contract passes none — so embedding is a separate
+// change, not a silent omission here.
+func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attachment {
+	var out []spscert.Attachment
+
+	// The application's attachments carry their own type and description.
+	if saidYes(inputs[sendApplicationDocuments]) {
+		for _, raw := range asSlice(uf["attachments"]) {
+			row := asMap(raw)
+			url := asString(row["attachment_file_url"])
+			if url == "" {
+				continue
+			}
+			id := asString(row["file_type"])
+			if id == "" {
+				id = "Supporting Document"
+			}
+			out = append(out, spscert.Attachment{
+				RelationshipTypeCode: attachmentRelationship,
+				ID:                   id,
+				Filename:             documentFilename(url),
+				Key:                  url,
+				Information:          asString(row["attachment_description"]),
+			})
+		}
+	}
+
+	// The later steps upload one file per field, so the field names what it is.
+	for _, doc := range traderDocuments {
+		url := asString(inputs[doc.url])
+		if url == "" || !saidYes(inputs[doc.send]) {
+			continue
+		}
+		out = append(out, spscert.Attachment{
+			RelationshipTypeCode: attachmentRelationship,
+			ID:                   doc.label,
+			Filename:             documentFilename(url),
+			Key:                  url,
+		})
+	}
+
+	return out
+}
+
+// saidYes reports whether the trader ticked this document at the ephyto step.
+// A checkbox arrives as a bool from JSON; a form that stringifies its values
+// has been seen to send "true".
+func saidYes(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
+// attachmentRelationship is the code for a document that accompanies this
+// certificate. "AWR" is reserved for a copy of the original certificate on a
+// re-export, which none of these are.
+const attachmentRelationship = "ZZZ"
+
+// documentFilename reduces an upload's storage key or URL to the file name a
+// reader would recognise, without the path or the query a signed URL carries.
+func documentFilename(ref string) string {
+	if i := strings.IndexAny(ref, "?#"); i != -1 {
+		ref = ref[:i]
+	}
+	ref = strings.TrimSuffix(ref, "/")
+	if i := strings.LastIndex(ref, "/"); i != -1 {
+		ref = ref[i+1:]
+	}
+	return ref
 }

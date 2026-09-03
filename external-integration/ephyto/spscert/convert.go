@@ -76,7 +76,7 @@ func BuildCertificate(in Input) (SPSCertificate, error) { //nolint:gocyclo // li
 			ID:                   a.ID,
 		}
 		if a.Base64 != "" || a.Filename != "" {
-			rd.Attachment = &BinaryObject{Filename: a.Filename, Value: a.Base64}
+			rd.Attachment = &BinaryObject{MimeCode: a.MimeCode, Filename: a.Filename, Value: a.Base64}
 		}
 		if a.Information != "" {
 			rd.Information = &LangText{Lang: a.LanguageID, Value: a.Information}
