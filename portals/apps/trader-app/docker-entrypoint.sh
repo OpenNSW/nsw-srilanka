@@ -35,6 +35,6 @@ window.__APP_CONFIG__ = {
   "VITE_IDP_TRADER_GROUP_NAME": "$(escape_js "${VITE_IDP_TRADER_GROUP_NAME:-Traders}")",
   "VITE_IDP_CHA_GROUP_NAME": "$(escape_js "${VITE_IDP_CHA_GROUP_NAME:-CHA}")",
   "VITE_SHOW_AUTOFILL_BUTTON": "$(escape_js "${VITE_SHOW_AUTOFILL_BUTTON:-true}")",
-  "VITE_ENABLE_TEST_FLOW": "$(escape_js "${VITE_ENABLE_TEST_FLOW:-true}")"
+  "VITE_DEV_ENABLE_TEST_FLOW": "$(escape_js "${VITE_DEV_ENABLE_TEST_FLOW:-true}")"
 };
 EOF

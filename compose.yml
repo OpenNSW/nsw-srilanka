@@ -306,10 +306,10 @@ services:
       # Pinned to the bind-mount target above, not interpolated: the host path in
       # .env does not resolve inside the container.
       - ARTIFACT_LOCAL_ROOT=/app/artifacts
-      - ENABLE_DEV_FEATURES=${ENABLE_DEV_FEATURES:-true}
-      - TEST_MANIFEST_PATHS=${TEST_MANIFEST_PATHS:-}
       - ARGUS_SERVICE_URL=http://argus:3001
       - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
+      # Development features (honored only when APP_ENV=development)
+      - DEV_TEST_MANIFEST_PATHS=${DEV_TEST_MANIFEST_PATHS:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -353,7 +353,8 @@ services:
       - VITE_IDP_TRADER_GROUP_NAME=${VITE_IDP_TRADER_GROUP_NAME:-Traders}
       - VITE_IDP_CHA_GROUP_NAME=${VITE_IDP_CHA_GROUP_NAME:-CHA}
       - VITE_SHOW_AUTOFILL_BUTTON=${VITE_SHOW_AUTOFILL_BUTTON:-true}
-      - VITE_ENABLE_TEST_FLOW=${VITE_ENABLE_TEST_FLOW:-true}
+      # Development features
+      - VITE_DEV_ENABLE_TEST_FLOW=${VITE_DEV_ENABLE_TEST_FLOW:-true}
     depends_on:
       api:
         condition: service_started

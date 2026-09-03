@@ -196,7 +196,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to build consignment service: %w", err)
 	}
-	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.DevFeaturesEnabled)
+	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.DevMode)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -731,7 +731,7 @@ func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Re
 	artifactLoader := primaryLoader
 	manifestPaths := []string{artifact.ManifestFilename}
 
-	if cfg.DevFeaturesEnabled {
+	if cfg.DevMode {
 		// In development, fallback to local disk so test artifacts under test/
 		// can be resolved even when the primary loader is remote (e.g. GitHub or S3).
 		if localFallback, err := local.New(local.Config{Root: "."}); err == nil {

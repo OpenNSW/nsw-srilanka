@@ -103,7 +103,7 @@ export function ConsignmentScreen() {
         <div className="flex gap-2">
           {role === 'cha' ? null : (
             <>
-              {getBooleanEnv('VITE_ENABLE_TEST_FLOW', import.meta.env.DEV) && (
+              {getBooleanEnv('VITE_DEV_ENABLE_TEST_FLOW', import.meta.env.DEV) && (
                 <Button
                   variant="soft"
                   color="amber"

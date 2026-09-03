@@ -360,7 +360,7 @@ func TestLoad_Defaults(t *testing.T) {
 		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
 		"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
 		"CATALOG_CONFIG_PATH", "TEMPORAL_HOST", "TEMPORAL_PORT",
-		"TEMPORAL_NAMESPACE",
+		"TEMPORAL_NAMESPACE", "DEV_TEST_MANIFEST_PATHS",
 	}
 	for _, k := range envsToClear {
 		t.Setenv(k, "")
@@ -392,6 +392,7 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Database.Password", cfg.Database.Password, "testpassword"},
 		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
 		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
+		{"DevMode", cfg.DevMode, false},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
@@ -740,6 +741,26 @@ func TestIsDevEnvironment(t *testing.T) {
 				t.Fatalf("isDevEnvironment() with APP_ENV=%q = %v, want %v", c.val, got, c.want)
 			}
 		})
+	}
+}
+
+func TestLoad_DevModeWithAppEnv(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DEV_TEST_MANIFEST_PATHS", "test/manifest1.json, test/manifest2.json")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.DevMode {
+		t.Fatalf("expected DevMode=true when APP_ENV=development, got false")
+	}
+	if len(cfg.TestManifestPaths) != 2 || cfg.TestManifestPaths[0] != "test/manifest1.json" || cfg.TestManifestPaths[1] != "test/manifest2.json" {
+		t.Fatalf("expected TestManifestPaths [test/manifest1.json test/manifest2.json], got %v", cfg.TestManifestPaths)
 	}
 }
 
