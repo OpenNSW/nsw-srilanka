@@ -92,6 +92,9 @@ type RefDocument struct {
 }
 
 type BinaryObject struct {
+	// MimeCode is required by the Hub's validator wherever a binary object is
+	// present: an empty attribute is rejected.
+	MimeCode string `xml:"mimeCode,attr,omitempty"`
 	Filename string `xml:"filename,attr,omitempty"`
 	Value    string `xml:",chardata"`
 }

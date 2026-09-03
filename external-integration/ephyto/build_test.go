@@ -216,3 +216,137 @@ func context_err() error { return &tempErr{} }
 type tempErr struct{}
 
 func (*tempErr) Error() string { return "dial tcp: timeout" }
+
+// The trader uploads documents at three points in the NPQS flow, and says at
+// the ePhyto step which of them travel with the certificate. A yes lists the
+// document; anything else leaves it out.
+func TestBuildInput_ListsTheDocumentsTheTraderSaidYesTo(t *testing.T) {
+	form := sampleUserform()
+	form["attachments"] = []any{
+		map[string]any{
+			"attachment_file_url":    "https://nsw.gov.lk/storage/uploads/invoice-1092.pdf?sig=abc",
+			"attachment_description": "Commercial invoice of foliage export",
+			"file_type":              "Fumigation Certificate",
+		},
+		map[string]any{"attachment_file_url": "packing/list.pdf"},
+	}
+
+	in := BuildInput(map[string]any{
+		"userform":       form,
+		"certificate_id": "PC-2026-0001",
+
+		"send_application_documents": true,
+		"treatment_certificate_url":  "storage/certs/treatment-cert-1092.pdf",
+		"send_treatment_certificate": true,
+		"invoice_file_url":           "storage/docs/invoice.pdf",
+		"send_invoice":               true,
+
+		// Uploaded, but the trader said no.
+		"packing_list_file_url": "storage/docs/packing.pdf",
+		"send_packing_list":     false,
+		// Said yes, but nothing was ever uploaded.
+		"send_supervision_report": true,
+	})
+
+	got := in.Certificate.Attachments
+	if len(got) != 4 {
+		t.Fatalf("expected the two application attachments, the treatment certificate and the invoice, got %d: %+v", len(got), got)
+	}
+
+	// The trader's own type and description travel with the file, and a signed
+	// URL's query is not part of the name a reader sees.
+	if got[0].ID != "Fumigation Certificate" || got[0].Filename != "invoice-1092.pdf" {
+		t.Errorf("first attachment = %+v", got[0])
+	}
+	if got[0].Information != "Commercial invoice of foliage export" {
+		t.Errorf("description not carried: %q", got[0].Information)
+	}
+	if got[0].RelationshipTypeCode != "ZZZ" {
+		t.Errorf("relationship = %q, want ZZZ (accompanying document)", got[0].RelationshipTypeCode)
+	}
+
+	// An attachment with no declared type is listed rather than dropped.
+	if got[1].ID != "Supporting Document" || got[1].Filename != "list.pdf" {
+		t.Errorf("untyped attachment = %+v", got[1])
+	}
+
+	// The later steps upload one file per field, so the field names the document.
+	if got[2].ID != "Treatment Certificate" || got[2].Filename != "treatment-cert-1092.pdf" {
+		t.Errorf("treatment certificate = %+v", got[2])
+	}
+	if got[3].ID != "Commercial Invoice" {
+		t.Errorf("supporting document = %+v", got[3])
+	}
+
+	for _, a := range got {
+		if a.ID == "Packing List" {
+			t.Error("a document the trader said no to was listed")
+		}
+		if a.ID == "Treatment Supervision Report" {
+			t.Error("a document that was never uploaded was listed")
+		}
+	}
+}
+
+// Saying no to everything sends nothing, and so does not being asked at all —
+// a document travels only on an explicit yes.
+func TestBuildInput_NothingSaidYesToListsNothing(t *testing.T) {
+	form := sampleUserform()
+	form["attachments"] = []any{map[string]any{"attachment_file_url": "storage/uploads/permit.pdf", "file_type": "Import Permit"}}
+
+	for name, inputs := range map[string]map[string]any{
+		"said no": {
+			"userform": form, "certificate_id": "PC-2026-0002",
+			"send_application_documents": false,
+		},
+		"never asked": {"userform": form, "certificate_id": "PC-2026-0002"},
+	} {
+		if got := BuildInput(inputs).Certificate.Attachments; len(got) != 0 {
+			t.Errorf("%s: expected no attachments, got %+v", name, got)
+		}
+	}
+}
+
+// A form that stringifies its checkboxes still says yes.
+func TestBuildInput_AcceptsAStringifiedYes(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":                   sampleUserform(),
+		"certificate_id":             "PC-2026-0003",
+		"treatment_certificate_url":  "storage/certs/fumigation.pdf",
+		"send_treatment_certificate": "true",
+	})
+	if len(in.Certificate.Attachments) != 1 {
+		t.Fatalf("expected the treatment certificate, got %+v", in.Certificate.Attachments)
+	}
+}
+
+// The documents must reach the rendered certificate, not just the input struct.
+func TestBuildCertXML_CarriesTheReferencedDocuments(t *testing.T) {
+	form := sampleUserform()
+	form["attachments"] = []any{map[string]any{
+		"attachment_file_url":    "storage/uploads/phyto-permit.pdf",
+		"attachment_description": "Import permit issued by the NPPO of destination",
+		"file_type":              "Import Permit",
+	}}
+
+	xml, err := BuildCertXML(BuildInput(map[string]any{
+		"userform":                   form,
+		"certificate_id":             "PC-2026-0004",
+		"send_application_documents": true,
+	}))
+	if err != nil {
+		t.Fatalf("BuildCertXML: %v", err)
+	}
+
+	for _, want := range []string{
+		"<ram:ReferenceSPSReferencedDocument>",
+		"<ram:RelationshipTypeCode>ZZZ</ram:RelationshipTypeCode>",
+		"<ram:ID>Import Permit</ram:ID>",
+		`filename="phyto-permit.pdf"`,
+		"Import permit issued by the NPPO of destination",
+	} {
+		if !strings.Contains(xml, want) {
+			t.Errorf("certificate is missing %q", want)
+		}
+	}
+}
