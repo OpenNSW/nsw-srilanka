@@ -94,11 +94,6 @@
       }
     },
     {
-      "id": "customs-app",
-      "url": "http://host.docker.internal:3001",
-      "timeout": "5s"
-    },
-    {
       "id": "ippc-hub",
       "url": "https://uat-hub.ephytoexchange.org/hub",
       "timeout": "60s",
