@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "lk-tnsw.backend.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.backend.autoscaling.enabled }}
   replicas: {{ .Values.backend.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "lk-tnsw.backend.selectorLabels" . | nindent 6 }}
