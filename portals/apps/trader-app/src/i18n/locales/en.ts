@@ -122,6 +122,7 @@ const en = {
   tasks: {
     loading: 'Loading task...',
     back: 'Back to Tasks',
+    nextTask: 'Next Task',
     goBack: 'Go Back',
     refresh: 'Refresh',
     submitSuccess: 'Application submitted successfully',
