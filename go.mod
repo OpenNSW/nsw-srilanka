@@ -6,7 +6,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.0.0-20260616134204-858f4ee608e8
 	github.com/OpenNSW/core v0.0.0-20260904053918-a57d1de97e0f
-	github.com/OpenNSW/core/authn v0.2.0
+	github.com/OpenNSW/core/authn v0.3.0
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/database v0.1.0
 	github.com/OpenNSW/core/httputil v0.1.0
