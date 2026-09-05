@@ -46,10 +46,10 @@ const statusConfig: Record<
     label: 'In Progress',
     icon: <UpdateIcon className="w-4 h-4" />,
   },
-  PENDING_FEEDBACK: {
-    color: 'orange',
-    label: 'Pending Feedback',
-    icon: <UpdateIcon className="w-4 h-4" />,
+  QUEUED_EXTERNALLY: {
+    color: 'blue',
+    label: 'Awaiting Feedback',
+    icon: <ClockIcon className="w-4 h-4" />,
   },
   LOCKED: {
     color: 'gray',
@@ -65,12 +65,12 @@ const statusConfig: Record<
 
 const STATUS_KEYS: Record<
   WorkflowNodeState,
-  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'pendingFeedback'
+  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'awaitingFeedback'
 > = {
   COMPLETED: 'completed',
   READY: 'ready',
   IN_PROGRESS: 'inProgress',
-  PENDING_FEEDBACK: 'pendingFeedback',
+  QUEUED_EXTERNALLY: 'awaitingFeedback',
   LOCKED: 'locked',
   FAILED: 'failed',
 }
@@ -138,7 +138,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
                 <Badge color={config.color} variant="soft" size="1">
                   <Flex align="center" gap="1">
                     {config.icon}
-                    {t(`workflow.status.${STATUS_KEYS[step.state]}`)}
+                    {t(`workflow.status.${STATUS_KEYS[step.state] ?? 'inProgress'}`)}
                   </Flex>
                 </Badge>
               </Flex>

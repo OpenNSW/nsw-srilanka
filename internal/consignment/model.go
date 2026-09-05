@@ -123,9 +123,10 @@ type WorkflowNodeResponseDTO struct {
 type WorkflowNodeState string
 
 const (
-	WorkflowNodeStateInProgress WorkflowNodeState = "IN_PROGRESS" // Node is currently active and in progress
-	WorkflowNodeStateCompleted  WorkflowNodeState = "COMPLETED"   // Node has been completed
-	WorkflowNodeStateFailed     WorkflowNodeState = "FAILED"      // Node has failed
+	WorkflowNodeStateInProgress       WorkflowNodeState = "IN_PROGRESS"       // Trader (or CHA) still has work on this node
+	WorkflowNodeStateQueuedExternally WorkflowNodeState = "QUEUED_EXTERNALLY" // Submitted; waiting on an agency officer
+	WorkflowNodeStateCompleted        WorkflowNodeState = "COMPLETED"         // Node has been completed
+	WorkflowNodeStateFailed           WorkflowNodeState = "FAILED"            // Node has failed
 )
 
 // WorkflowNodeTemplateResponseDTO represents workflow node template details in the response.
