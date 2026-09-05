@@ -66,6 +66,12 @@ const (
 	// trader, before anything changes on SLPA's side.
 	TaskTypeSLPAConsolidationSave = "SLPA_CONSOLIDATION_SAVE"
 
+	// TaskTypeSLPAConsolidationDelete removes a consolidation the trader wants
+	// to redo against a different real container. The CMS deletes the pairing
+	// and everything hanging off it, so the flow offers it only before a gate
+	// pass has been generated.
+	TaskTypeSLPAConsolidationDelete = "SLPA_CONSOLIDATION_DELETE"
+
 	// TaskTypeSLPAGatePass issues the export container gate pass, which SLPA
 	// grants only against a paid service order. One pass covers one container,
 	// so a consignment fans out to this task once per consolidated container.
@@ -129,6 +135,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
+		{TaskTypeSLPAConsolidationDelete, NewAPICallPluginWithInterpreter(mgr, consolidation.NewDeleteInterpreter())},
 		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
 	}
