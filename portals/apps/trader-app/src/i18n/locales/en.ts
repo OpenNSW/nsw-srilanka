@@ -136,6 +136,7 @@ const en = {
   workflow: {
     taskHistory: 'Task History',
     actionRequired: 'Action Required',
+    inReview: 'In Review',
     processHistory: 'Process History',
     updatingList: 'Updating your list...',
     refresh: 'Refresh',
@@ -149,7 +150,7 @@ const en = {
       inProgress: 'In Progress',
       locked: 'Locked',
       failed: 'Failed',
-      pendingFeedback: 'Pending Feedback',
+      awaitingFeedback: 'Awaiting Feedback',
     },
   },
 

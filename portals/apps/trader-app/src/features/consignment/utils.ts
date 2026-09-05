@@ -1,4 +1,4 @@
-import type { ConsignmentState, WorkflowNodeState } from './types'
+import type { ConsignmentState } from './types'
 import i18n from '@/i18n'
 
 /**
@@ -30,38 +30,6 @@ export function getStateColor(state: ConsignmentState): 'gray' | 'orange' | 'gre
  */
 export function formatState(state: ConsignmentState): string {
   return state.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-/**
- * Render-config section keys that agency artifacts use to show officer feedback
- * to the trader (visibleWhen.requireDataKey). Exact section names only.
- */
-const FEEDBACK_VIEW_KEYS = new Set(['assessment_outcome', 'feedback'])
-
-function viewHasFeedbackSurface(view: object | undefined): boolean {
-  if (!view) {
-    return false
-  }
-  return Object.keys(view).some((key) => FEEDBACK_VIEW_KEYS.has(key))
-}
-
-/**
- * Overlay Pending Feedback when GET /tasks/{id} is user-pending and the
- * projected view is showing an officer-feedback section. Otherwise keep the
- * consignment API state (typically IN_PROGRESS).
- */
-export function deriveTraderFacingState(
-  apiState: WorkflowNodeState,
-  zone?: { state: string; view?: object } | null,
-): WorkflowNodeState {
-  if (!zone) {
-    return apiState
-  }
-  const userPending = zone.state === 'PENDING_USER' || zone.state === 'IN_PROGRESS' || zone.state === 'READY'
-  if (userPending && viewHasFeedbackSurface(zone.view)) {
-    return 'PENDING_FEEDBACK'
-  }
-  return apiState
 }
 
 /**
