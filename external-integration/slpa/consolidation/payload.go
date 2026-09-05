@@ -202,3 +202,68 @@ func (s Selection) Containers() []string {
 func normalise(containerNo string) string {
 	return strings.ToUpper(strings.TrimSpace(containerNo))
 }
+
+// CapContainerNumbers lists the real containers available to pair: the ones the
+// terminal has pre-advised against this declaration and SLPA has not already
+// consolidated.
+//
+// This is the list the trader picks from. A container missing from it has not
+// been pre-advised in Navis yet — the trader does that there and comes back,
+// which is why the branch waits rather than failing.
+func CapContainerNumbers(resp FetchResponse) []string {
+	var numbers []string
+	for _, capContainer := range resp.CapContainers {
+		if capContainer.consolidated() {
+			continue
+		}
+		if no := strings.TrimSpace(capContainer.ContainerNo); no != "" {
+			numbers = append(numbers, no)
+		}
+	}
+	sort.Strings(numbers)
+	return numbers
+}
+
+// PairOne associates one real container with the placeholder a branch owns.
+//
+// Both sides are named by number, because that is what the trader and the order
+// speak in, and both are resolved to the sqids the CMS reads. A number neither
+// side holds is reported rather than sent: the CMS would refuse a sqid we could
+// not supply, and the trader would have no way to see which half was at fault.
+func PairOne(capNo, soNo string, resp FetchResponse) (Pair, error) {
+	var pair Pair
+
+	capNorm, soNorm := normalise(capNo), normalise(soNo)
+	if capNorm == "" {
+		return pair, fmt.Errorf("choose the real container this one is being consolidated against")
+	}
+
+	for _, capContainer := range resp.CapContainers {
+		// Matched on either, because the trader's answer is the sqid — it keys
+		// the delete as well as this pairing — while a caller holding only the
+		// number should not have to look it up first.
+		sqid := strings.TrimSpace(capContainer.Sqid)
+		if sqid == "" {
+			continue
+		}
+		if normalise(capContainer.ContainerNo) == capNorm || normalise(sqid) == capNorm {
+			pair.ID = sqid
+			pair.ContainerNo = strings.TrimSpace(capContainer.ContainerNo)
+			break
+		}
+	}
+	if pair.ID == "" {
+		return Pair{}, fmt.Errorf("SLPA is no longer offering container %s for consolidation", capNo)
+	}
+
+	for _, so := range resp.SOContainers {
+		if normalise(so.ContainerNo) == soNorm && strings.TrimSpace(so.Sqid) != "" {
+			pair.SOContainerID = strings.TrimSpace(so.Sqid)
+			break
+		}
+	}
+	if pair.SOContainerID == "" {
+		return Pair{}, fmt.Errorf("SLPA does not hold service order container %s", soNo)
+	}
+	return pair, nil
+}

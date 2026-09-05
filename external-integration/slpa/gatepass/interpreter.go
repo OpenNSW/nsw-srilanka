@@ -78,10 +78,11 @@ func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 	body := cms.Flatten(resp)
 	// The pass number and its barcode are the whole point of the call: they are
 	// what the terminal scans, so they are recorded even before anything
-	// downstream reads them.
+	// downstream reads them. gate_pass_url is the printable pass itself, which
+	// is what the haulier actually carries to the gate.
 	out := cms.Capture(body,
 		"gate_pass_id", "gate_pass_no", "container_no", "truck_no", "driver_name",
-		"seal_no", "barcode", "status", "issued_at", "message",
+		"seal_no", "barcode", "status", "issued_at", "gate_pass_url", "message",
 	)
 
 	issued := callErr == nil && !cms.HasErrors(body) && cms.String(body, "gate_pass_no") != ""
