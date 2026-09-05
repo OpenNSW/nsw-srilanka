@@ -27,6 +27,17 @@ const RowsKey = "rows"
 // chose into the sqid the CMS reads.
 const SOContainersKey = "so_containers"
 
+// ChosenCapKey is the task input carrying the real container the trader picked,
+// and BranchSOKey the placeholder the branch owns. Both are container numbers:
+// what the trader and the order speak in, resolved to sqids before the call.
+const (
+	ChosenCapKey = "cap_container_no"
+	BranchSOKey  = "so_container_no"
+)
+
+// CapContainersKey is the output key the pre-advised side is recorded under.
+const CapContainersKey = "cap_containers"
+
 // FormKey is the task input the submitted form arrives in.
 const FormKey = "payload"
 
@@ -118,6 +129,8 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	out[RowsKey] = rowsOut(rows)
 	out[SOContainersKey] = soContainersOut(fetched.SOContainers)
 	out["so_container_numbers"] = soNumbers
+	out["cap_container_numbers"] = CapContainerNumbers(fetched)
+	out["cap_containers"] = capContainersOut(fetched.CapContainers)
 	out["available_so_containers"] = strings.Join(soNumbers, ", ")
 	out["already_consolidated"] = done
 	out["cap_container_count"] = len(fetched.CapContainers)
@@ -161,6 +174,21 @@ func NewSaveInterpreter() *SaveInterpreter { return &SaveInterpreter{} }
 // reason. The workflow only reaches this step when a row was ticked, so this is
 // a defensive path — hence the log.
 func (i *SaveInterpreter) BuildRequest(inputs map[string]any) remote.Body {
+	// A branch consolidates one container: the placeholder it owns, against the
+	// real container the trader picked. The pairing is resolved from the sides
+	// the lookup recorded, so nothing is sent that SLPA did not just offer.
+	if capNo := fields.String(inputs, ChosenCapKey); capNo != "" {
+		pair, err := PairOne(capNo, fields.String(inputs, BranchSOKey), branchSides(inputs))
+		if err != nil {
+			// The contract has no error return, so the reason is logged and an
+			// empty list is sent: the CMS validates the request and answers with
+			// its own, which is what the trader is shown.
+			slog.Error("slpa consolidation: the chosen pairing could not be resolved", "error", err)
+			return remote.JSONBody{V: SaveRequest{}}
+		}
+		return remote.JSONBody{V: SaveRequest{Containers: []Pair{pair}}}
+	}
+
 	selection := Resolve(submittedRows(inputs), knownSOContainers(inputs[SOContainersKey]))
 	if len(selection.Pairs) == 0 {
 		slog.Error("slpa consolidation: nothing resolvable in the submitted selection; sending an empty save call",
@@ -253,6 +281,70 @@ func soContainersOut(containers []SOContainer) []map[string]any {
 			"sqid":         so.Sqid,
 			"container_no": so.ContainerNo,
 			"size":         so.ContainerSize,
+		})
+	}
+	return out
+}
+
+// capContainersOut records the pre-advised side the way soContainersOut records
+// the other, so the save step can resolve a container number back to the sqid
+// SLPA issued for it without a second lookup.
+func capContainersOut(containers []CapContainer) []map[string]any {
+	out := make([]map[string]any, 0, len(containers))
+	for _, capContainer := range containers {
+		out = append(out, map[string]any{
+			"sqid":              capContainer.Sqid,
+			"container_no":      capContainer.ContainerNo,
+			"container_size":    capContainer.ContainerSize,
+			"so_container_sqid": capContainer.SOContainerSqid,
+		})
+	}
+	return out
+}
+
+// branchSides rebuilds the two sides of the lookup from what it recorded, so a
+// pairing is resolved against SLPA's own answer rather than anything the form
+// carried back.
+//
+// Read field by field rather than unmarshalled into the CMS's own structs: what
+// the lookup recorded is this integration's shape, not the CMS's, and the two
+// disagree on the service-order side — the CMS sends "ContainerNumber" where the
+// record holds "container_no". Decoding the record with the CMS's tags left
+// every placeholder nameless, so a pairing the trader had made correctly was
+// reported as one SLPA did not hold.
+func branchSides(inputs map[string]any) FetchResponse {
+	return FetchResponse{
+		CapContainers: knownCapContainers(inputs[CapContainersKey]),
+		SOContainers:  knownSOContainers(inputs[SOContainersKey]),
+	}
+}
+
+// knownCapContainers reads back the pre-advised side the lookup recorded, as
+// knownSOContainers does for the other.
+func knownCapContainers(value any) []CapContainer {
+	items, ok := value.([]any)
+	if !ok {
+		typed, isTyped := value.([]map[string]any)
+		if !isTyped {
+			return nil
+		}
+		items = make([]any, 0, len(typed))
+		for _, item := range typed {
+			items = append(items, item)
+		}
+	}
+
+	out := make([]CapContainer, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, CapContainer{
+			Sqid:            fields.String(m, "sqid"),
+			ContainerNo:     fields.String(m, "container_no"),
+			ContainerSize:   fields.String(m, "container_size"),
+			SOContainerSqid: m["so_container_sqid"],
 		})
 	}
 	return out

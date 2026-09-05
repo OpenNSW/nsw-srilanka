@@ -626,6 +626,12 @@ func initTask(
 	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAGatePassSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAGatePassSplitBuilderFunc)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAGatePassSplitBuilder, err)
 	}
+	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAContainerSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAContainerSplitBuilderFunc)); err != nil {
+		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAContainerSplitBuilder, err)
+	}
+	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)); err != nil {
+		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAConsolidationResolve, err)
+	}
 	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)); err != nil {
 		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNResultsCollector, err)
 	}
@@ -636,7 +642,7 @@ func initTask(
 	taskStore := gormstore.New(db)
 
 	// Construct UI projectors and the renderer/zoneview assembler
-	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector())
+	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector())
 	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{reg: artifactRegistry}, projectors)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)

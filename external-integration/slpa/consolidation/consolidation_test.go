@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/OpenNSW/core/remote"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -244,4 +246,54 @@ func TestHeaders_PresentTheClientKey(t *testing.T) {
 			assert.Nil(t, i.BuildHeaders(map[string]any{}), "no key invents no identity")
 		})
 	}
+}
+
+// The lookup records its own shape, not the CMS's — "container_no" where the
+// CMS sends "ContainerNumber" — so a branch's pairing must be resolved by
+// reading those fields, not by decoding them with the CMS's tags. Doing the
+// latter left every placeholder nameless and reported a correct pairing as one
+// SLPA did not hold.
+func TestSave_PairsTheBranchesChoiceFromWhatTheLookupRecorded(t *testing.T) {
+	inputs := map[string]any{
+		ChosenCapKey: "cap-e778-mscu8492019",
+		BranchSOKey:  "TCLU9999999",
+		CapContainersKey: []any{
+			map[string]any{"sqid": "cap-e778-mscu8492019", "container_no": "MSCU8492019", "so_container_sqid": nil},
+			map[string]any{"sqid": "cap-e778-tclu1234567", "container_no": "TCLU1234567", "so_container_sqid": nil},
+		},
+		SOContainersKey: []any{
+			map[string]any{"sqid": "so-e778-mscu8492347", "container_no": "MSCU8492347", "size": "40"},
+			map[string]any{"sqid": "so-e778-tclu9999999", "container_no": "TCLU9999999", "size": "40"},
+		},
+	}
+
+	body := NewSaveInterpreter().BuildRequest(inputs)
+
+	encoded, err := json.Marshal(body.(remote.JSONBody).V)
+	require.NoError(t, err)
+
+	var req SaveRequest
+	require.NoError(t, json.Unmarshal(encoded, &req))
+	require.Len(t, req.Containers, 1, "the branch consolidates exactly one container")
+	assert.Equal(t, "cap-e778-mscu8492019", req.Containers[0].ID)
+	assert.Equal(t, "so-e778-tclu9999999", req.Containers[0].SOContainerID,
+		"the placeholder this branch owns, resolved to its sqid")
+}
+
+// A choice SLPA is no longer offering is not sent: the CMS would refuse a sqid
+// we could not supply, and its reason would name neither half.
+func TestSave_SendsNothingForAChoiceSLPADoesNotHold(t *testing.T) {
+	inputs := map[string]any{
+		ChosenCapKey:     "cap-e778-gone",
+		BranchSOKey:      "TCLU9999999",
+		CapContainersKey: []any{},
+		SOContainersKey:  []any{map[string]any{"sqid": "so-e778-tclu9999999", "container_no": "TCLU9999999"}},
+	}
+
+	encoded, err := json.Marshal(NewSaveInterpreter().BuildRequest(inputs).(remote.JSONBody).V)
+	require.NoError(t, err)
+
+	var req SaveRequest
+	require.NoError(t, json.Unmarshal(encoded, &req))
+	assert.Empty(t, req.Containers)
 }
