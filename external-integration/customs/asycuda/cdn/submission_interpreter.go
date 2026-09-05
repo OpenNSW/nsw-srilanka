@@ -79,8 +79,16 @@ func buildFromInputs(inputs map[string]any) (Submission, error) {
 	if !ok {
 		return Submission{}, &buildError{"The dispatch note form could not be read."}
 	}
-	return BuildPayload(form)
+	// The edgeId this task's previous attempt was given, when it had one. See
+	// nswid.For for what it settles.
+	previousEdgeID, _ := inputs[PreviousEdgeIDKey].(string)
+	return BuildPayload(form, previousEdgeID)
 }
+
+// PreviousEdgeIDKey is the task input carrying the edgeId of this task's last
+// dispatch attempt, which the workflow maps back in from the output namespace.
+// Absent on a first attempt.
+const PreviousEdgeIDKey = "previous_edge_id"
 
 // buildError marks a failure to assemble the submission (an unparseable
 // declaration reference, an unreadable form) as opposed to a transport failure,

@@ -3,10 +3,12 @@ package cusdec
 import (
 	"fmt"
 	"strings"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
 )
 
 // The SLC Edge CusDec submission payload, per Annex A of the ASYCUDA ↔ NSW
-// Interface Specification v1.3.
+// Interface Specification v1.5.
 //
 // The trader form (customs-cusdec--user-form in one-trade-artifacts) is shaped
 // around the ASYCUDA World data-entry screens — identification / traders /
@@ -24,12 +26,21 @@ import (
 //   - Annex A names the remittance block "Remittance. 1" (singular); the
 //     accepted payload sends "remittances" as an array.
 type Submission struct {
+	Properties          Properties   `json:"properties"`
 	Submitter           string       `json:"submitter"`
 	BaseGeneralSegment  BaseSegment  `json:"baseGeneralSegment"`
 	GeneralSegment      GeneralSeg   `json:"generalSegment"`
 	GoodsShipments      []GoodsItem  `json:"goodsShipments"`
 	Remittances         []Remittance `json:"remittances"`
 	SupportingDocuments []SupportDoc `json:"supportingDocuments,omitempty"`
+}
+
+// Properties is Annex A's properties block: who is submitting, and the
+// identifier that tells one logical submission from another (§2.2). See
+// nswid.For for how that identifier is derived and why.
+type Properties struct {
+	Submitter string `json:"submitter"`
+	NswID     string `json:"nswId"`
 }
 
 // Amount is Annex A §4.2 AmountType. CurrencyID is omitted when empty: the
@@ -160,7 +171,7 @@ const (
 // endpoint validates the document on integration and reports field-level
 // problems through the errors object, which produces a far better trader
 // message than a local guess at what Customs will accept.
-func BuildPayload(form map[string]any) (Submission, []SupportDoc, error) {
+func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []SupportDoc, error) {
 	if len(form) == 0 {
 		return Submission{}, nil, fmt.Errorf("customs: empty declaration form")
 	}
@@ -188,7 +199,8 @@ func BuildPayload(form map[string]any) (Submission, []SupportDoc, error) {
 	}
 
 	sub := Submission{
-		Submitter: submitterChannel,
+		Properties: Properties{Submitter: submitterChannel},
+		Submitter:  submitterChannel,
 		BaseGeneralSegment: BaseSegment{
 			DeclarationType:      str(ident, "declarationType"),
 			DeclarationProcedure: str(ident, "generalProcedureCode"),
@@ -235,6 +247,10 @@ func BuildPayload(form map[string]any) (Submission, []SupportDoc, error) {
 		Remittances:         buildRemittances(financial),
 		SupportingDocuments: docs,
 	}
+
+	// Derived last, from the submission as it will be sent: the field is empty
+	// while the digest is taken, so the identifier does not depend on itself.
+	sub.Properties.NswID = nswid.For(sub, previousEdgeID)
 
 	return sub, docs, nil
 }
