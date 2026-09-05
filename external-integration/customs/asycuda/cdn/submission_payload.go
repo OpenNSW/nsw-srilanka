@@ -2,9 +2,10 @@ package cdn
 
 import (
 	"fmt"
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
 	"strconv"
 	"strings"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
 )
 
 // The SLC Edge CDN submission payload, per Annex B of the ASYCUDA ↔ NSW
