@@ -2,6 +2,7 @@ package cdn
 
 import (
 	"fmt"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,8 @@ import (
 // object, not an array. A consignment of N containers is therefore N CDNs, each
 // referencing the same declaration through cusDecRefs.
 type Submission struct {
+	Properties Properties `json:"properties"`
+
 	OfficeCode string `json:"officeCode"`
 
 	Shipper   Party `json:"shipper"`
@@ -75,7 +78,19 @@ type Party struct {
 // than a local guess at what Customs will accept. The two things checked here
 // are the ones the trader cannot see and cannot fix from an error message — an
 // empty form, and a declaration reference that does not parse.
-func BuildPayload(form map[string]any) (Submission, error) {
+// Properties is Annex B's properties block: who is submitting, and the
+// identifier that tells one logical submission from another (§2.2). See
+// nswid.For for how that identifier is derived and why.
+type Properties struct {
+	Submitter string `json:"submitter"`
+	NswID     string `json:"nswId"`
+}
+
+// submitterChannel identifies NSW as the submitting channel, as it does on the
+// declaration.
+const submitterChannel = "1"
+
+func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error) {
 	if len(form) == 0 {
 		return Submission{}, &buildError{"The dispatch note form could not be read."}
 	}
@@ -91,7 +106,8 @@ func BuildPayload(form map[string]any) (Submission, error) {
 		return Submission{}, err
 	}
 
-	return Submission{
+	sub := Submission{
+		Properties: Properties{Submitter: submitterChannel},
 		OfficeCode: str(form, "officeCode"),
 		Shipper: Party{
 			ID:          str(shipper, "id"),
@@ -131,7 +147,13 @@ func BuildPayload(form map[string]any) (Submission, error) {
 		ContainerMark:   str(container, "mark"),
 
 		CusDecRefs: refs,
-	}, nil
+	}
+
+	// Derived last, from the submission as it will be sent: the field is empty
+	// while the digest is taken, so the identifier does not depend on itself.
+	sub.Properties.NswID = nswid.For(sub, previousEdgeID)
+
+	return sub, nil
 }
 
 // buildCusDecRefs resolves the declarations this note dispatches against.

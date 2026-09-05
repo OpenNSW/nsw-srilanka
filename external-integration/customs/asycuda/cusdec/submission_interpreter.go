@@ -142,6 +142,11 @@ func (c CusdecInterpreter) fetch(ctx context.Context, doc SupportDoc) ([]byte, s
 // buildError marks a failure to assemble the submission (a missing file, an
 // oversized attachment) as opposed to a transport failure, so Interpret can
 // surface the message to the trader verbatim.
+// PreviousEdgeIDKey is the task input carrying the edgeId of this task's last
+// dispatch attempt, which the workflow maps back in from the output namespace.
+// Absent on a first attempt.
+const PreviousEdgeIDKey = "previous_edge_id"
+
 type buildError struct{ msg string }
 
 func (e *buildError) Error() string { return e.msg }
@@ -151,7 +156,12 @@ func buildFromInputs(inputs map[string]any) (Submission, []SupportDoc, error) {
 	if !ok {
 		return Submission{}, nil, &buildError{"The declaration form could not be read."}
 	}
-	payload, docs, err := BuildPayload(form)
+	// The edgeId this task's previous attempt was given, when it had one. It
+	// makes a resubmission a new submission even if the trader changed nothing,
+	// while a resend of the same attempt — which never recorded a new edgeId —
+	// derives the identifier again unchanged. See nswid.For.
+	previousEdgeID, _ := inputs[PreviousEdgeIDKey].(string)
+	payload, docs, err := BuildPayload(form, previousEdgeID)
 	if err != nil {
 		return Submission{}, nil, &buildError{err.Error()}
 	}

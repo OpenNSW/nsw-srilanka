@@ -36,7 +36,7 @@ func fullForm() map[string]any {
 }
 
 func TestBuildPayload_MapsAnnexBFields(t *testing.T) {
-	sub, err := BuildPayload(fullForm())
+	sub, err := BuildPayload(fullForm(), "6d40eae3-3173-4247-8236-2c587ec50a74")
 	require.NoError(t, err)
 
 	assert.Equal(t, "CBEX1", sub.OfficeCode)
@@ -75,7 +75,7 @@ func TestBuildPayload_OmitsEmptyOptionalFields(t *testing.T) {
 	delete(goods, "bol")
 	delete(goods, "tempRequired")
 
-	sub, err := BuildPayload(form)
+	sub, err := BuildPayload(form, "")
 	require.NoError(t, err)
 
 	body, err := json.Marshal(sub)
@@ -89,7 +89,7 @@ func TestBuildPayload_OmitsEmptyOptionalFields(t *testing.T) {
 
 func TestBuildPayload_RejectsUnusableForms(t *testing.T) {
 	t.Run("empty form", func(t *testing.T) {
-		_, err := BuildPayload(map[string]any{})
+		_, err := BuildPayload(map[string]any{}, "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "could not be read")
 	})
@@ -97,7 +97,7 @@ func TestBuildPayload_RejectsUnusableForms(t *testing.T) {
 	t.Run("no declaration reference", func(t *testing.T) {
 		form := fullForm()
 		delete(form, "cusdecRef")
-		_, err := BuildPayload(form)
+		_, err := BuildPayload(form, "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not linked to a registered customs declaration")
 	})
@@ -105,7 +105,7 @@ func TestBuildPayload_RejectsUnusableForms(t *testing.T) {
 	t.Run("unparseable declaration reference", func(t *testing.T) {
 		form := fullForm()
 		form["cusdecRef"] = "CBEX1-2026-E-1047"
-		_, err := BuildPayload(form)
+		_, err := BuildPayload(form, "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "office/year/serial/number")
 	})
@@ -121,7 +121,7 @@ func TestBuildPayload_MultipleDeclarationReferences(t *testing.T) {
 		map[string]any{"office": "CBEX1", "year": "2026", "serial": "E", "number": float64(1048)},
 	}
 
-	sub, err := BuildPayload(form)
+	sub, err := BuildPayload(form, "")
 	require.NoError(t, err)
 	require.Len(t, sub.CusDecRefs, 2)
 	assert.Equal(t, 1047, sub.CusDecRefs[0].Number)
@@ -156,7 +156,7 @@ func TestBuildPayload_AcceptsStringNumbers(t *testing.T) {
 	goods["grossWeight"] = "16500.5"
 	goods["packageNumber"] = "80"
 
-	sub, err := BuildPayload(form)
+	sub, err := BuildPayload(form, "")
 	require.NoError(t, err)
 	assert.Equal(t, 16500.5, sub.GrossWeight)
 	assert.Equal(t, 80, sub.PackageNumber)
