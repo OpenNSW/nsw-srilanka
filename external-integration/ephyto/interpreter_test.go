@@ -74,16 +74,19 @@ func TestBuildEnvelope_PollBuildsTrackingSOAP(t *testing.T) {
 	}
 }
 
-func TestInterpret_SubmitDelivered(t *testing.T) {
-	resp := &remote.RawResponse{
+// deliveredResponse is the Hub accepting an envelope into its delivery queue.
+func deliveredResponse() *remote.RawResponse {
+	return &remote.RawResponse{
 		StatusCode: http.StatusOK,
 		Body: []byte(`<Envelope><Body><Response>` +
 			`<hubDeliveryNumber>HDN-001</hubDeliveryNumber>` +
 			`<HUBTrackingInfo>PendingDelivery</HUBTrackingInfo>` +
 			`</Response></Body></Envelope>`),
 	}
+}
 
-	state, out := HubInterpreter{}.Interpret(OpSubmit, nil, resp)
+func TestInterpret_SubmitDelivered(t *testing.T) {
+	state, out := HubInterpreter{}.Interpret(OpSubmit, nil, deliveredResponse())
 	if state != "EPHYTO_SUBMITTED" {
 		t.Errorf("state = %q, want EPHYTO_SUBMITTED", state)
 	}
@@ -180,5 +183,41 @@ func TestBuildEnvelope_UnknownOperation(t *testing.T) {
 	_, out := HubInterpreter{}.Interpret("validate", err, nil)
 	if got, _ := out["error"].(string); !strings.Contains(got, `Unknown ePhyto Hub operation "validate"`) {
 		t.Errorf("error = %q", got)
+	}
+}
+
+// The Hub resets connections in bursts, so a submit that never got an answer
+// is retried unattended; anything the Hub judged is the trader's to fix.
+func TestInterpret_SubmitRetryableOnlyWhenHubNeverAnswered(t *testing.T) {
+	buildErr, err := HubInterpreter{}.BuildEnvelope(OpSubmit, map[string]any{"userform": sampleUserform()})
+	if err == nil {
+		t.Fatalf("expected a build error, got envelope %q", buildErr)
+	}
+	fault := &remote.RawResponse{
+		StatusCode: http.StatusInternalServerError,
+		Body: []byte(`<Envelope><Body><Fault>` +
+			`<faultstring>NPPO from client certificate not found</faultstring>` +
+			`</Fault></Body></Envelope>`),
+	}
+
+	cases := []struct {
+		name      string
+		callErr   error
+		resp      *remote.RawResponse
+		retryable bool
+	}{
+		{"connection reset before any response", errors.New("Post \"https://hub/DeliveryService\": EOF"), nil, true},
+		{"timeout before any response", errors.New("context deadline exceeded"), nil, true},
+		{"Hub answered with a fault", nil, fault, false},
+		{"envelope could not be built", err, nil, false},
+		{"delivered", nil, deliveredResponse(), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, out := HubInterpreter{}.Interpret(OpSubmit, c.callErr, c.resp)
+			if out["retryable"] != c.retryable {
+				t.Errorf("retryable = %v, want %v (error prose: %v)", out["retryable"], c.retryable, out["error"])
+			}
+		})
 	}
 }

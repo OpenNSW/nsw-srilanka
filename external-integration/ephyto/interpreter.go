@@ -25,7 +25,8 @@ import (
 //	{ "operation": "submit" } — build the ePhyto from the application, validate
 //	    it (BuildCertXML rejects an incomplete document, and the Hub's
 //	    ValidateAndDeliverEnvelope validates on receipt), send it over mTLS, and
-//	    record ephyto.submitted / ephyto.tracking_number / ephyto.error.
+//	    record ephyto.submitted / ephyto.tracking_number / ephyto.error, plus
+//	    ephyto.retryable when the Hub never answered.
 //	{ "operation": "poll" }   — query GetEnvelopeTrackingInfo for the tracking
 //	    number once and set ephyto.delivered / ephyto.tracking_info.
 //
@@ -53,17 +54,29 @@ func (e *buildError) Error() string { return e.msg }
 // it builds the Deliver/GetTrackingInfo envelopes from the task inputs and
 // interprets the Hub's responses into the flags the workflow gateways branch
 // on.
-type HubInterpreter struct{}
+type HubInterpreter struct {
+	// files reads the documents the trader chose to send with the certificate.
+	// A deployment without storage configured can still issue certificates —
+	// it simply cannot attach anything, and says so rather than sending a
+	// certificate that claims documents it has not enclosed.
+	files Files
+}
 
-// NewHubInterpreter returns the IPPC ePhyto Hub interpreter.
-func NewHubInterpreter() *HubInterpreter { return &HubInterpreter{} }
+// NewHubInterpreter returns the IPPC ePhyto Hub interpreter, reading attached
+// documents through files.
+func NewHubInterpreter(files Files) *HubInterpreter { return &HubInterpreter{files: files} }
 
-func (HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (string, error) {
+func (i HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (string, error) {
 	switch operation {
 	case OpSubmit:
 		in := BuildInput(inputs)
 		if in.SOAP.To == "" {
 			return "", &buildError{"Please select a destination IPPC Hub connection before submitting."}
+		}
+		// The documents the trader said yes to travel inside the certificate,
+		// so their content is read before it is rendered.
+		if err := resolveAttachments(i.files, &in); err != nil {
+			return "", &buildError{"A document selected to accompany the certificate could not be attached: " + err.Error()}
 		}
 		certXML, err := BuildCertXML(in)
 		if err != nil {
@@ -94,7 +107,7 @@ func (i HubInterpreter) Interpret(operation string, callErr error, resp *remote.
 // flags drive the gateways.
 func (HubInterpreter) interpretSubmit(callErr error, resp *remote.RawResponse) (string, map[string]any) {
 	const intro = "The phytosanitary certificate could not be submitted to the IPPC ePhyto Hub:"
-	out := map[string]any{"submitted": false, "error": ""}
+	out := map[string]any{"submitted": false, "retryable": false, "error": ""}
 
 	var be *buildError
 	if errors.As(callErr, &be) {
@@ -115,6 +128,13 @@ func (HubInterpreter) interpretSubmit(callErr error, resp *remote.RawResponse) (
 	}
 	if !submitted {
 		out["error"] = DescribeFailure(intro, callErr, hubResp)
+		// The Hub drops connections in bursts: a handshake completes, the
+		// envelope is sent, and the connection is reset without a response.
+		// Such a failure says nothing about the certificate, so the workflow
+		// retries it unattended instead of sending the trader back to the
+		// form; a Hub that answered has judged the certificate, and only the
+		// trader can act on that.
+		out["retryable"] = hubResp == nil && callErr != nil
 	}
 	return "EPHYTO_SUBMITTED", out
 }

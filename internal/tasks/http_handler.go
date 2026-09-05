@@ -26,6 +26,7 @@ const (
 	errForbiddenTaskAction = "you may not perform this action on this task"
 	errInvalidRequestBody  = "invalid request body"
 	errRequestBodyTooLarge = "request body too large"
+	errCommandNotOffered   = "this step is no longer waiting for that action"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -140,6 +141,30 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	slog.InfoContext(r.Context(), "tasks: processing complete step command", "taskId", taskID, "command", command)
 
+	// A command the task's current state does not offer is refused here rather
+	// than passed on. CompleteTaskStep writes the payload into whichever
+	// subtask is active *before* it tries to resume the workflow, so a command
+	// arriving after the step it belongs to has moved on — a page reloaded
+	// mid-call, a second tab, a retried request — replaces the output
+	// namespace of the subtask that has since taken over, discarding what that
+	// subtask recorded there. The ZoneView assembler already hides a handle
+	// its state does not list; this applies the same rule to the endpoint, so
+	// hiding the button is not the only thing standing between a stale click
+	// and another step's results.
+	if command != "" && h.Store != nil {
+		record, ok := h.Store.GetTask(r.Context(), taskID)
+		if !ok {
+			httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+			return
+		}
+		if !offersCommand(record, command) {
+			slog.WarnContext(r.Context(), "tasks: refusing a command the current state does not offer",
+				"taskId", taskID, "command", command, "state", record.State, "active_template", record.ActiveTaskTemplateID)
+			httputil.Error(w, r, http.StatusConflict, errCommandNotOffered)
+			return
+		}
+	}
+
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		switch {
 		case errors.Is(err, taskauthzext.ErrUnauthenticated):
@@ -154,6 +179,36 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// offersCommand reports whether the task's current state lists this command
+// among its actions — the same states[<state>].actions contract the ZoneView
+// assembler filters handles by.
+//
+// It answers yes wherever the contract is silent (no render config, a config
+// that declares no states, or a state it does not describe): those flows never
+// stated which commands belong to which state, so the orchestrator remains the
+// judge and behaviour is unchanged. Only a state that does describe itself can
+// refuse — including one whose action list is deliberately empty, which is how
+// a render config says "nothing to do here but wait".
+func offersCommand(record store.TaskRecord, command string) bool {
+	if len(record.RenderConfig) == 0 {
+		return true
+	}
+	var cfg zoneview.TaskTemplateConfig
+	if err := json.Unmarshal(record.RenderConfig, &cfg); err != nil {
+		return true
+	}
+	state, described := cfg.States[record.State]
+	if !described {
+		return true
+	}
+	for _, a := range state.Actions {
+		if a.Command == command {
+			return true
+		}
+	}
+	return false
 }
 
 // parseCompleteTaskStepRequest extracts and validates the command and payload from either the URL path or the JSON body.

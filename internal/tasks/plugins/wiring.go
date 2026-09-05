@@ -130,7 +130,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
 		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
-		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
+		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter(files))},
 	}
 
 	for _, e := range entries {
