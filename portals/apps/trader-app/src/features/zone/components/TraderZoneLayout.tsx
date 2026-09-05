@@ -18,11 +18,41 @@ export function TraderZoneLayout({ task, onSubmitForm }: Props) {
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {zones.map(([name, component]) => (
-        <Zone key={`${name}:${task.task_id}:${task.state}`} name={name} component={component} onAction={onSubmitForm} />
+        <Zone
+          key={`${name}:${task.task_id}:${task.state}:${payloadFingerprint(component)}`}
+          name={name}
+          component={component}
+          onAction={onSubmitForm}
+        />
       ))}
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>
   )
+}
+
+// payloadFingerprint joins the Zone's key so a zone is rebuilt when the server's
+// payload for it changes.
+//
+// The task id and state alone are not enough. A step that loops — SLPA's
+// consolidation returns to PENDING_USER after every container it pairs — comes
+// back in the state it left, so the key would not change, the renderer would not
+// remount, and a form seeded once at mount would go on showing rows the server
+// has since dropped. The container just consolidated stays on screen, tickable,
+// and ticking it again is a pairing the CMS refuses.
+//
+// Fingerprinting the payload rather than the fetch time keeps what that key was
+// protecting: a poll that returns the same payload leaves the key alone, so
+// half-typed input is not thrown away by a background refresh. Only a payload
+// that genuinely moved on replaces what is on screen — which is what should
+// happen, since there is no draft to merge it into.
+function payloadFingerprint(component: ZoneComponent): string {
+  const raw = JSON.stringify(component.payload ?? null)
+  let hash = 0
+  for (let i = 0; i < raw.length; i++) {
+    // djb2-style rolling hash, kept in 32-bit range by the bitwise or.
+    hash = (hash * 31 + raw.charCodeAt(i)) | 0
+  }
+  return hash.toString(36)
 }
 
 function orderedZones(view: Record<string, ZoneComponent>): Array<[string, ZoneComponent]> {
