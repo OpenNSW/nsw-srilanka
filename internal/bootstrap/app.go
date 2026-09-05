@@ -595,6 +595,36 @@ func (p registryTemplateProvider) GetTemplate(ctx context.Context, id string) ([
 // TemporalManager runs the per-task (micro) sub-workflows, while the
 // parent/macro workflow runner is owned by the workflow package and wired
 // separately (see Stage 5 below).
+// registerFlowPlugins installs the plugins this deployment adds on top of the
+// task-plugin set: the synchronous transforms that shape a fan-out, and the CHA
+// writer.
+//
+// A table rather than a run of near-identical registrations, as
+// taskplugins.Register does for the same reason — seven of them inline was most
+// of initTask's branching, and adding an eighth meant editing a function that
+// has nothing else to do with plugins.
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service) error {
+	entries := []struct {
+		taskType string
+		plugin   plugins.TaskPlugin
+	}{
+		{"HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)},
+		{taskplugins.TaskTypeCDNSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.CDNSplitBuilderFunc)},
+		{taskplugins.TaskTypeSLPAGatePassSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAGatePassSplitBuilderFunc)},
+		{taskplugins.TaskTypeSLPAContainerSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAContainerSplitBuilderFunc)},
+		{taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)},
+		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},
+		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
+	}
+
+	for _, e := range entries {
+		if err := reg.Register(e.taskType, e.plugin); err != nil {
+			return fmt.Errorf("failed to register %s plugin: %w", e.taskType, err)
+		}
+	}
+	return nil
+}
+
 func initTask(
 	db *gorm.DB,
 	temporalClient client.Client,
@@ -617,26 +647,8 @@ func initTask(
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	if err := pluginsRegistry.Register("HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register HSCODE_SPLIT_BUILDER plugin: %w", err)
-	}
-	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.CDNSplitBuilderFunc)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNSplitBuilder, err)
-	}
-	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAGatePassSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAGatePassSplitBuilderFunc)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAGatePassSplitBuilder, err)
-	}
-	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAContainerSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAContainerSplitBuilderFunc)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAContainerSplitBuilder, err)
-	}
-	if err := pluginsRegistry.Register(taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeSLPAConsolidationResolve, err)
-	}
-	if err := pluginsRegistry.Register(taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register %s plugin: %w", taskplugins.TaskTypeCDNResultsCollector, err)
-	}
-	if err := pluginsRegistry.Register("CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)); err != nil {
-		return nil, nil, fmt.Errorf("failed to register CHA_PERSIST_WRITER plugin: %w", err)
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService); err != nil {
+		return nil, nil, err
 	}
 
 	taskStore := gormstore.New(db)
