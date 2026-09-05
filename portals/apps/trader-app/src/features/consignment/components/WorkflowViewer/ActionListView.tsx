@@ -43,22 +43,18 @@ export function ActionListView({
     [steps],
   )
 
-  const groups = useMemo(
-    () => ({
-      active: filteredSteps.filter((s) => s.state === 'READY' || s.state === 'IN_PROGRESS'),
-      finished: filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt),
-    }),
-    [filteredSteps],
-  )
+  const groups = useMemo(() => {
+    const finished = filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt)
+    const inReview = filteredSteps.filter((s) => s.state === 'QUEUED_EXTERNALLY')
+    const placed = new Set([...finished, ...inReview].map((s) => s.id))
+    return {
+      active: filteredSteps.filter((s) => !placed.has(s.id)),
+      inReview,
+      finished,
+    }
+  }, [filteredSteps])
 
   const isConsignmentTerminal = consignmentState === 'FINISHED' || consignmentState === 'FAILED'
-
-  const displaySteps = useMemo(() => {
-    if (isConsignmentTerminal) {
-      return filteredSteps.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(sortByUpdatedAt)
-    }
-    return filteredSteps
-  }, [filteredSteps, isConsignmentTerminal])
 
   const RefreshButton =
     onRefresh && !isConsignmentTerminal ? (
@@ -82,12 +78,12 @@ export function ActionListView({
                   {t('workflow.taskHistory')}
                 </Heading>
                 <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
-                  {displaySteps.length}
+                  {groups.finished.length}
                 </Badge>
               </Flex>
             </Flex>
             <Box px="0.5">
-              {displaySteps.map((step) => (
+              {groups.finished.map((step) => (
                 <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
               ))}
             </Box>
@@ -113,7 +109,30 @@ export function ActionListView({
                   ))}
                 </Box>
               </Box>
-            ) : filteredSteps.length > 0 ? (
+            ) : null}
+
+            {groups.inReview.length > 0 ? (
+              <Box mb="6">
+                <Flex align="center" justify="between" my="4" px="3">
+                  <Flex align="center" gap="2">
+                    <div className="w-1.5 h-5 bg-info rounded-full" />
+                    <Heading size="4" color="blue" weight="bold">
+                      {t('workflow.inReview')}
+                    </Heading>
+                    <Badge color="blue" variant="solid" radius="full">
+                      {groups.inReview.length}
+                    </Badge>
+                  </Flex>
+                </Flex>
+                <Box px="0.5">
+                  {groups.inReview.map((step) => (
+                    <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
+                  ))}
+                </Box>
+              </Box>
+            ) : null}
+
+            {groups.active.length === 0 && groups.inReview.length === 0 && filteredSteps.length > 0 ? (
               <Box
                 py="8"
                 px="6"
