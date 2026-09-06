@@ -614,7 +614,6 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 	}{
 		{"HSCODE_SPLIT_BUILDER", trade.NewGenericExecutorPlugin(trade.HscodeSplitBuilderFunc)},
 		{taskplugins.TaskTypeCDNSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.CDNSplitBuilderFunc)},
-		{taskplugins.TaskTypeSLPAGatePassSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAGatePassSplitBuilderFunc)},
 		{taskplugins.TaskTypeSLPAContainerSplitBuilder, trade.NewGenericExecutorPlugin(taskplugins.SLPAContainerSplitBuilderFunc)},
 		{taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)},
 		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},

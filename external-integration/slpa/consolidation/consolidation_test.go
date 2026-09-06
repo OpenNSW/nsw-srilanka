@@ -49,24 +49,15 @@ func TestFetch_OffersTheContainersForTheTraderToPair(t *testing.T) {
 
 	require.True(t, ok)
 	assert.Equal(t, OutcomeReady, out["outcome"])
-	// One real container, one placeholder: the pairing is not a choice, so it is
-	// pre-filled. Nothing was matched on the number — they differ.
-	assert.Equal(t, []map[string]any{{
-		"cap_container_no": "MSCU8492019",
-		"cap_sqid":         "9876543210ZYXWVT",
-		"so_container_no":  "DUMY0000001",
-		"consolidate":      true,
-	}}, out[RowsKey])
+	// Both sides travel with it, so the save step can turn the container the
+	// trader picked into the sqid the CMS reads.
+	assert.Equal(t, []string{"MSCU8492019"}, out["cap_container_numbers"],
+		"the real containers a branch chooses from")
 
-	// The service-order side travels with it, so the save step can turn the
-	// container the trader picked into the sqid the CMS reads.
 	assert.Equal(t, []map[string]any{{
 		"sqid": "zyxwvutsrqponmlk", "container_no": "DUMY0000001", "size": "40",
 	}}, out[SOContainersKey])
 	assert.Equal(t, "DUMY0000001", out["available_so_containers"])
-
-	// Nothing is consolidated yet: that only follows the trader's submission.
-	assert.NotContains(t, out, ConsolidatedKey)
 }
 
 // With more than one container on either side the pairing is the trader's, and
@@ -125,10 +116,8 @@ func TestFetch_AlreadyConsolidatedIsNotOfferedAgain(t *testing.T) {
 
 	assert.True(t, ok)
 	assert.Equal(t, OutcomeDone, out["outcome"])
-	assert.Empty(t, out[RowsKey])
+	assert.Empty(t, out["cap_container_numbers"], "a paired container is not offered again")
 	assert.Equal(t, []string{"MSCU8492019"}, out["already_consolidated"])
-	// A pass is still issued for it, under the real container number.
-	assert.Equal(t, []string{"MSCU8492019"}, out[ConsolidatedKey])
 	assert.NotContains(t, out, "error")
 }
 
@@ -138,7 +127,7 @@ func TestFetch_NothingPreAdvisedYet(t *testing.T) {
 
 	require.False(t, ok)
 	assert.Equal(t, OutcomeBlocked, out["outcome"])
-	assert.Empty(t, out[RowsKey], "the form is always recorded, empty included")
+	assert.Empty(t, out["cap_container_numbers"], "nothing pre-advised, nothing to choose from")
 	assert.Contains(t, out["error"], "Check Again")
 }
 
@@ -162,56 +151,6 @@ func TestFetch_QueryIsKeyedOnTheCusdecSerial(t *testing.T) {
 // This is a GET; the plugin must not be handed a body for it.
 func TestFetch_SendsNoBody(t *testing.T) {
 	assert.Nil(t, NewFetchInterpreter().BuildRequest(map[string]any{}))
-}
-
-// What is saved is what the trader ticked — resolved back to the sqids SLPA
-// issued, since they work in container numbers and the CMS works in sqids.
-func TestSave_SendsWhatTheTraderSelected(t *testing.T) {
-	inputs := map[string]any{
-		FormKey: map[string]any{RowsKey: []any{
-			map[string]any{"cap_container_no": "MSCU8492019", "cap_sqid": "cap-A", "so_container_no": "DUMY0000001", "consolidate": true},
-			map[string]any{"cap_container_no": "TCLU1234567", "cap_sqid": "cap-B", "so_container_no": "DUMY0000002", "consolidate": false},
-		}},
-		SOContainersKey: []any{
-			map[string]any{"sqid": "so-1", "container_no": "DUMY0000001"},
-			map[string]any{"sqid": "so-2", "container_no": "DUMY0000002"},
-		},
-	}
-
-	raw, contentType, err := NewSaveInterpreter().BuildRequest(inputs).Encode()
-	require.NoError(t, err)
-	assert.Contains(t, contentType, "application/json")
-
-	var sent SaveRequest
-	require.NoError(t, json.Unmarshal(raw, &sent))
-	assert.Equal(t, SaveRequest{Containers: []Pair{{ID: "cap-A", SOContainerID: "so-1"}}}, sent,
-		"an unticked row is a container the trader declined")
-	assert.NotContains(t, string(raw), "container_no", "the CMS reads only the two sqids")
-}
-
-// Whatever the trader picked is what is sent, looked up by the number they were
-// shown — the numbers on the two sides are unrelated by design.
-func TestResolve_SendsThePairingTheTraderChose(t *testing.T) {
-	selection := Resolve(
-		[]Row{{CapContainerNo: "MSCU8492019", CapSqid: "cap-A", SOContainerNo: " dumy0000002 ", Consolidate: true}},
-		[]SOContainer{
-			{Sqid: "so-1", ContainerNo: "DUMY0000001"},
-			{Sqid: "so-2", ContainerNo: "DUMY0000002"},
-		})
-
-	assert.Equal(t, []Pair{{ID: "cap-A", SOContainerID: "so-2", ContainerNo: "MSCU8492019"}}, selection.Pairs)
-	assert.Empty(t, selection.Unresolved)
-}
-
-// A container the CMS does not hold cannot be turned into a sqid, so it is
-// reported rather than dropped where nobody would see it.
-func TestResolve_ReportsWhatItCannotResolve(t *testing.T) {
-	selection := Resolve(
-		[]Row{{CapContainerNo: "MSCU8492019", CapSqid: "cap-A", SOContainerNo: "DUMY9999999", Consolidate: true}},
-		[]SOContainer{{Sqid: "so-1", ContainerNo: "DUMY0000001"}})
-
-	assert.Empty(t, selection.Pairs)
-	assert.Equal(t, []string{"MSCU8492019"}, selection.Unresolved)
 }
 
 func TestSave_ReadsTheEnvelopeStatus(t *testing.T) {

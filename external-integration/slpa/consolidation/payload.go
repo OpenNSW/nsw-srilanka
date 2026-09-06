@@ -142,61 +142,6 @@ func SOContainerNumbers(resp FetchResponse) []string {
 	return numbers
 }
 
-// Selection is what the trader submitted, resolved against what SLPA offered.
-type Selection struct {
-	// Pairs are the associations to save, in the order the rows were shown.
-	Pairs []Pair
-
-	// Unresolved names a row the trader ticked whose service-order container
-	// SLPA does not hold. It is reported rather than dropped silently: the CMS
-	// would refuse the sqid we cannot supply, and the trader would have no way
-	// to see which line was at fault.
-	Unresolved []string
-}
-
-// Resolve turns the submitted rows into the pairs the CMS reads.
-//
-// The service-order container the trader chose is looked up by its number to
-// recover the sqid SLPA issued for it: they work in the numbers they are shown,
-// and the CMS works in sqids. Only ticked rows are sent, so declining a
-// container is a decision this honours rather than one it overrides.
-func Resolve(rows []Row, soContainers []SOContainer) Selection {
-	soByNo := make(map[string]SOContainer, len(soContainers))
-	for _, so := range soContainers {
-		if no := normalise(so.ContainerNo); no != "" {
-			soByNo[no] = so
-		}
-	}
-
-	var selection Selection
-	for _, row := range rows {
-		if !row.Consolidate {
-			continue
-		}
-		capSqid := strings.TrimSpace(row.CapSqid)
-		so, ok := soByNo[normalise(row.SOContainerNo)]
-		if !ok || strings.TrimSpace(so.Sqid) == "" || capSqid == "" {
-			selection.Unresolved = append(selection.Unresolved, row.CapContainerNo)
-			continue
-		}
-		selection.Pairs = append(selection.Pairs, Pair{
-			ID:            capSqid,
-			SOContainerID: strings.TrimSpace(so.Sqid),
-			ContainerNo:   row.CapContainerNo,
-		})
-	}
-	return selection
-}
-
-// Containers lists what a selection consolidates.
-func (s Selection) Containers() []string {
-	out := make([]string, 0, len(s.Pairs))
-	for _, p := range s.Pairs {
-		out = append(out, p.ContainerNo)
-	}
-	return out
-}
-
 // normalise makes what the trader typed comparable with what SLPA holds, which
 // has been seen to differ in case and surrounding space.
 func normalise(containerNo string) string {

@@ -135,3 +135,21 @@ func containerRows(raw any) ([]map[string]any, error) {
 	}
 	return out, nil
 }
+
+// value reads one value a builder needs, from the step's mapped inputs first
+// and the task record second.
+//
+// Both are the workflow's own doing — the record carries what the task node
+// mapped in, the inputs what the subtask node mapped — and they are written by
+// different mappings, so a value can legitimately be in one and not the other.
+// Reading both means a step that has the value at all can use it, rather than
+// failing on which of the two mappings named it.
+func value(ctx flowplugins.PluginContext, key string) any {
+	if v, ok := ctx.Inputs[key]; ok && v != nil {
+		return v
+	}
+	if ctx.Record != nil && ctx.Record.Data != nil {
+		return ctx.Record.Data[key]
+	}
+	return nil
+}

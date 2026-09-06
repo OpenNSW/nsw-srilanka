@@ -18,10 +18,6 @@ import (
 // trader for this node.
 const CusdecInput = "cusdec_serial"
 
-// RowsKey is the output key the trader's form lines are recorded under: one per
-// pre-advised container, for them to confirm, change or decline.
-const RowsKey = "rows"
-
 // SOContainersKey is the output key the service-order containers are recorded
 // under. The save step reads them back to turn the container number the trader
 // chose into the sqid the CMS reads.
@@ -40,11 +36,6 @@ const CapContainersKey = "cap_containers"
 
 // FormKey is the task input the submitted form arrives in.
 const FormKey = "payload"
-
-// ConsolidatedKey is the output key listing the containers this step
-// consolidated. The gate-pass fan-out is built from it together with the ones
-// SLPA had already paired.
-const ConsolidatedKey = "consolidated"
 
 // Outcomes of the lookup, which is what the workflow's gateway reads. Three
 // rather than a boolean, because "nothing to do" and "nothing can be done" lead
@@ -105,7 +96,6 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	// to read: a lookup that failed leaves the trader where they can retry it.
 	if callErr != nil || cms.HasErrors(body) {
 		out["outcome"] = OutcomeBlocked
-		out[RowsKey] = []map[string]any{}
 		out["error"] = describeFailure(callErr, body,
 			"SLPA could not tell us which containers are available for consolidation:")
 		return false, out
@@ -115,7 +105,6 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	if err != nil {
 		slog.Error("slpa consolidation: the CMS answered with something this step cannot read", "error", err)
 		out["outcome"] = OutcomeBlocked
-		out[RowsKey] = []map[string]any{}
 		out["error"] = "SLPA answered the consolidation lookup with something we could not read. Please try again in a few minutes."
 		return false, out
 	}
@@ -124,9 +113,6 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	done := AlreadyConsolidated(fetched)
 	soNumbers := SOContainerNumbers(fetched)
 
-	// The form is always recorded, empty included: the workflow's gateway reads
-	// its length, and the trader's panel reads the rest.
-	out[RowsKey] = rowsOut(rows)
 	out[SOContainersKey] = soContainersOut(fetched.SOContainers)
 	out["so_container_numbers"] = soNumbers
 	out["cap_container_numbers"] = CapContainerNumbers(fetched)
@@ -145,7 +131,6 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	case len(done) > 0:
 		// Everything SLPA holds is already paired: nothing for the trader to do.
 		out["outcome"] = OutcomeDone
-		out[ConsolidatedKey] = done
 		return true, out
 
 	default:
@@ -177,24 +162,15 @@ func (i *SaveInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 	// A branch consolidates one container: the placeholder it owns, against the
 	// real container the trader picked. The pairing is resolved from the sides
 	// the lookup recorded, so nothing is sent that SLPA did not just offer.
-	if capNo := fields.String(inputs, ChosenCapKey); capNo != "" {
-		pair, err := PairOne(capNo, fields.String(inputs, BranchSOKey), branchSides(inputs))
-		if err != nil {
-			// The contract has no error return, so the reason is logged and an
-			// empty list is sent: the CMS validates the request and answers with
-			// its own, which is what the trader is shown.
-			slog.Error("slpa consolidation: the chosen pairing could not be resolved", "error", err)
-			return remote.JSONBody{V: SaveRequest{}}
-		}
-		return remote.JSONBody{V: SaveRequest{Containers: []Pair{pair}}}
+	pair, err := PairOne(fields.String(inputs, ChosenCapKey), fields.String(inputs, BranchSOKey), branchSides(inputs))
+	if err != nil {
+		// The contract has no error return, so the reason is logged and an empty
+		// list is sent: the CMS validates the request and answers with its own,
+		// which is what the trader is shown.
+		slog.Error("slpa consolidation: the chosen pairing could not be resolved", "error", err)
+		return remote.JSONBody{V: SaveRequest{}}
 	}
-
-	selection := Resolve(submittedRows(inputs), knownSOContainers(inputs[SOContainersKey]))
-	if len(selection.Pairs) == 0 {
-		slog.Error("slpa consolidation: nothing resolvable in the submitted selection; sending an empty save call",
-			"unresolved", selection.Unresolved)
-	}
-	return remote.JSONBody{V: SaveRequest{Containers: selection.Pairs}}
+	return remote.JSONBody{V: SaveRequest{Containers: []Pair{pair}}}
 }
 
 // BuildHeaders presents the client key the CMS identifies the company by.
@@ -255,21 +231,6 @@ func decode(body map[string]any) (FetchResponse, error) {
 		return FetchResponse{}, err
 	}
 	return fetched, nil
-}
-
-// rowsOut renders the form lines as plain maps, which is what a task record
-// holds and what the trader's form is filled from.
-func rowsOut(rows []Row) []map[string]any {
-	out := make([]map[string]any, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, map[string]any{
-			"cap_container_no": r.CapContainerNo,
-			"cap_sqid":         r.CapSqid,
-			"so_container_no":  r.SOContainerNo,
-			"consolidate":      r.Consolidate,
-		})
-	}
-	return out
 }
 
 // soContainersOut records the service-order side, which the save step reads back
@@ -348,50 +309,6 @@ func knownCapContainers(value any) []CapContainer {
 		})
 	}
 	return out
-}
-
-// submittedRows recovers the trader's form lines from the task inputs.
-//
-// The form arrives under the reserved "payload" key, as every other form-driven
-// step here receives it; the rows are read from it directly so nothing but what
-// they submitted decides what is sent.
-func submittedRows(inputs map[string]any) []Row {
-	form, _ := inputs[FormKey].(map[string]any)
-	if form == nil {
-		return nil
-	}
-	return readRows(form[RowsKey])
-}
-
-// readRows tolerates both the []any a task record holds after a round trip
-// through JSON and the typed slice recorded in Go.
-func readRows(value any) []Row {
-	items, ok := value.([]any)
-	if !ok {
-		typed, isTyped := value.([]map[string]any)
-		if !isTyped {
-			return nil
-		}
-		items = make([]any, 0, len(typed))
-		for _, item := range typed {
-			items = append(items, item)
-		}
-	}
-
-	rows := make([]Row, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		rows = append(rows, Row{
-			CapContainerNo: fields.String(m, "cap_container_no"),
-			CapSqid:        fields.String(m, "cap_sqid"),
-			SOContainerNo:  fields.String(m, "so_container_no"),
-			Consolidate:    truthy(m["consolidate"]),
-		})
-	}
-	return rows
 }
 
 // knownSOContainers recovers the service-order side the lookup recorded.
