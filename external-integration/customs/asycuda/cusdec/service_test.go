@@ -431,3 +431,37 @@ func TestProcessCusdecIntegrationResult_FailureIsNotComparedByReference(t *testi
 
 	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference)
 }
+
+// A reference held by a declaration that failed belongs to a submission ASYCUDA
+// rejected. The trader corrects it and resubmits, and that new round-trip has a
+// new edgeId against the same reference — it must be recorded, not refused.
+func TestProcessCusdecIntegrationResult_ReferenceHeldByAFailedDeclarationIsNotADuplicate(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 9876}
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{
+		"edge-first": {
+			ID: "decl-1", EdgeID: "edge-first", Status: CusdecStatusFailed,
+			CusdecYear: ref.Year, CusdecOffice: ref.Office, CusdecSerial: ref.Serial, CusdecNumber: ref.Number,
+		},
+	}}
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-second", "edge-second", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-1"))
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("parent-wf-1", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-abc"))
+
+	completer := &mockTaskCompleter{}
+	completer.On("CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	service := NewWebhookService(repo, db, completer)
+
+	err := service.ProcessIntegrationResult(ctx, CusdecIntegrationResultRequest{
+		EdgeID: "edge-second", Integrated: true, Event: "INTEGRATION_RESULT",
+		ProcessAt: time.Now(), Payload: cusdecResultPayload{CusdecRef: ref},
+	})
+
+	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference,
+		"the corrected resubmission is a new round-trip and belongs on the record")
+}

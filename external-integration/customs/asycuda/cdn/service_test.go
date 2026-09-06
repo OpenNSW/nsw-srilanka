@@ -347,3 +347,31 @@ func TestProcessIntegrationResult_SameNoteAnsweredAgainIsNotAReferenceClash(t *t
 
 	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference)
 }
+
+// A reference held by a note that failed belongs to a note Customs rejected.
+// The trader corrects it and resubmits, and that new round-trip has a new
+// edgeId against the same reference — it must be recorded, not refused.
+func TestProcessIntegrationResult_ReferenceHeldByAFailedNoteIsNotADuplicate(t *testing.T) {
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567}
+	repo := &mockRepository{
+		byEdgeID: map[string]*DispatchNote{
+			"edge-second": {ID: "2", EdgeID: "edge-second", Status: DispatchNoteStatusSubmitted},
+		},
+		byCDNRef: map[string]*DispatchNote{
+			"2026-COL-C": {
+				ID: "1", EdgeID: "edge-first", Status: DispatchNoteStatusFailed,
+				CDNYear: ref.Year, CDNOffice: ref.Office, CDNSerial: ref.Serial, CDNNumber: ref.Number,
+			},
+		},
+	}
+	svc := NewCDNWebhookService(repo, nil, nil)
+
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event:   "INTEGRATION_RESULT",
+		Payload: integrationResultPayload{EdgeID: "edge-second", Integrated: true, CDNRef: ref},
+	})
+
+	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference,
+		"the corrected resubmission is a new round-trip and belongs on the record")
+	assert.Equal(t, DispatchNoteStatusIntegrated, repo.updated.Status)
+}

@@ -128,10 +128,12 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 // carries a different cdnRef must not hand the workflow a reference that no
 // longer matches what was stored, or the acknowledgment could never correlate.
 // refusePreviouslyRegistered reports whether this result's cdnRef is already
-// held by a different dispatch note.
+// held by a different dispatch note that Customs answered.
 //
-// Only a successful result carries a reference — §7.2 has cdnRef absent on
-// failure — so there is nothing to compare on a rejection.
+// Only a successful result carries a reference (§7.2 has cdnRef absent on
+// failure), and only a held note that integrated or was acknowledged counts: a
+// failed one is a note the trader corrects and resubmits, which is a new
+// round-trip with a new edgeId against the same reference.
 func (s *cdnWebhookService) refusePreviouslyRegistered(ctx context.Context, req CDNIntegrationResultRequest) error {
 	if !req.Payload.Integrated || !req.Payload.CDNRef.IsValid() {
 		return nil
@@ -142,6 +144,13 @@ func (s *cdnWebhookService) refusePreviouslyRegistered(ctx context.Context, req 
 		return fmt.Errorf("failed to retrieve dispatch note by reference %v: %w", req.Payload.CDNRef, err)
 	}
 	if held == nil || held.EdgeID == req.Payload.EdgeID {
+		return nil
+	}
+	// Only a note that reached a terminal state is one this would be
+	// double-counting; a reference left on a failed row belongs to a note
+	// Customs rejected, which the trader corrects and resubmits under a new
+	// edgeId.
+	if held.Status != DispatchNoteStatusIntegrated && held.Status != DispatchNoteStatusAcknowledged {
 		return nil
 	}
 
