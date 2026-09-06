@@ -34,9 +34,6 @@ const (
 // CapContainersKey is the output key the pre-advised side is recorded under.
 const CapContainersKey = "cap_containers"
 
-// FormKey is the task input the submitted form arrives in.
-const FormKey = "payload"
-
 // Outcomes of the lookup, which is what the workflow's gateway reads. Three
 // rather than a boolean, because "nothing to do" and "nothing can be done" lead
 // to opposite places: one is finished, the other needs a person.
@@ -338,19 +335,6 @@ func knownSOContainers(value any) []SOContainer {
 		})
 	}
 	return out
-}
-
-// truthy reads a checkbox, which reaches here as a bool from JSON and has been
-// seen as a string from a form that stringifies its values.
-func truthy(value any) bool {
-	switch v := value.(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
-	default:
-		return false
-	}
 }
 
 // summarise describes what SLPA is holding, in the trader's terms.
