@@ -73,6 +73,13 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		return s.resumeIntegrationWait(ctx, storedResult(req, note), true)
 	}
 
+	// The edgeId threads one round-trip; cdnRef is the note itself (§2.1). Two
+	// edgeIds resolving to one reference means ASYCUDA answered twice for the
+	// same registered note, so it is acknowledged rather than recorded again.
+	if err := s.refusePreviouslyRegistered(ctx, req); err != nil {
+		return err
+	}
+
 	save := s.repo.Update
 	if isNew {
 		save = s.repo.Create
@@ -120,6 +127,29 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 // the note. The row is the authority once written: replaying a callback that
 // carries a different cdnRef must not hand the workflow a reference that no
 // longer matches what was stored, or the acknowledgment could never correlate.
+// refusePreviouslyRegistered reports whether this result's cdnRef is already
+// held by a different dispatch note.
+//
+// Only a successful result carries a reference — §7.2 has cdnRef absent on
+// failure — so there is nothing to compare on a rejection.
+func (s *cdnWebhookService) refusePreviouslyRegistered(ctx context.Context, req CDNIntegrationResultRequest) error {
+	if !req.Payload.Integrated || !req.Payload.CDNRef.IsValid() {
+		return nil
+	}
+
+	held, err := s.repo.GetByCDNRef(ctx, req.Payload.CDNRef)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve dispatch note by reference %v: %w", req.Payload.CDNRef, err)
+	}
+	if held == nil || held.EdgeID == req.Payload.EdgeID {
+		return nil
+	}
+
+	slog.WarnContext(ctx, "integration result carries a cdnRef another dispatch note already holds",
+		"edge_id", req.Payload.EdgeID, "held_by_edge_id", held.EdgeID, "cdn_ref", req.Payload.CDNRef)
+	return ErrDuplicateRegisteredReference
+}
+
 func storedResult(req CDNIntegrationResultRequest, note *DispatchNote) CDNIntegrationResultRequest {
 	req.Payload.Integrated = note.Status == DispatchNoteStatusIntegrated ||
 		note.Status == DispatchNoteStatusAcknowledged

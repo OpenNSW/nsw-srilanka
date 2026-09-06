@@ -353,3 +353,81 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 	completer.AssertExpectations(t)
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
+
+// The edgeId threads one round-trip; cusdecRef is the declaration itself. Two
+// edgeIds resolving to one reference means ASYCUDA answered twice for the same
+// registered declaration — recording it again would give one CusDec two rows
+// and complete its review a second time.
+func TestProcessCusdecIntegrationResult_ReferenceAlreadyHeldIsAcknowledged(t *testing.T) {
+	ctx := context.Background()
+	db, _ := setupTestDB(t)
+
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 9876}
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{
+		// Registered under an earlier correlation id, and already answered.
+		"edge-first": {
+			ID: "decl-1", EdgeID: "edge-first", Status: CusdecStatusIntegrated,
+			CusdecYear: ref.Year, CusdecOffice: ref.Office, CusdecSerial: ref.Serial, CusdecNumber: ref.Number,
+		},
+	}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, db, completer)
+
+	err := service.ProcessIntegrationResult(ctx, CusdecIntegrationResultRequest{
+		EdgeID:     "edge-second",
+		Integrated: true,
+		Event:      "INTEGRATION_RESULT",
+		ProcessAt:  time.Now(),
+		Payload:    cusdecResultPayload{CusdecRef: ref},
+	})
+
+	require.ErrorIs(t, err, ErrDuplicateRegisteredReference)
+	assert.False(t, repo.createCalled, "a second row for one declaration is what this prevents")
+	assert.False(t, repo.updateCalled)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// The same edgeId answering again is the retry schedule, judged where it always
+// was — the reference check must not shadow it with a different error.
+func TestProcessCusdecIntegrationResult_SameEdgeIDKeepsItsOwnDuplicateError(t *testing.T) {
+	ctx := context.Background()
+	db, _ := setupTestDB(t)
+
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 9876}
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{
+		"edge-123": {
+			ID: "decl-1", EdgeID: "edge-123", Status: CusdecStatusIntegrated,
+			CusdecYear: ref.Year, CusdecOffice: ref.Office, CusdecSerial: ref.Serial, CusdecNumber: ref.Number,
+		},
+	}}
+	service := NewWebhookService(repo, db, &mockTaskCompleter{})
+
+	err := service.ProcessIntegrationResult(ctx, CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true, Event: "INTEGRATION_RESULT",
+		ProcessAt: time.Now(), Payload: cusdecResultPayload{CusdecRef: ref},
+	})
+
+	require.ErrorIs(t, err, ErrDuplicateIntegrationResult)
+}
+
+// A rejection carries no reference (§6.2), so there is nothing to compare and
+// the declaration keeps its edgeId as its only identity.
+func TestProcessCusdecIntegrationResult_FailureIsNotComparedByReference(t *testing.T) {
+	ctx := context.Background()
+	db, _ := setupTestDB(t)
+
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{
+		"edge-first": {
+			ID: "decl-1", EdgeID: "edge-first", Status: CusdecStatusIntegrated,
+			CusdecYear: "2026", CusdecOffice: "COL", CusdecSerial: "C", CusdecNumber: 9876,
+		},
+	}}
+	service := NewWebhookService(repo, db, &mockTaskCompleter{})
+
+	err := service.ProcessIntegrationResult(ctx, CusdecIntegrationResultRequest{
+		EdgeID: "edge-second", Integrated: false, Event: "INTEGRATION_RESULT",
+		ProcessAt: time.Now(), Payload: cusdecResultPayload{},
+	})
+
+	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference)
+}

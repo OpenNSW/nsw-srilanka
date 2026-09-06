@@ -106,7 +106,7 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 		// A repeat delivery is acknowledged rather than re-run. 202 tells SLC
 		// Edge the callback landed — ending the §2 retry schedule — while
 		// staying distinguishable from the 200 that means work was done.
-		if errors.Is(err, cusdec.ErrDuplicateIntegrationResult) {
+		if errors.Is(err, cusdec.ErrDuplicateIntegrationResult) || errors.Is(err, cusdec.ErrDuplicateRegisteredReference) {
 			slog.InfoContext(r.Context(), "slce: duplicate CusDec integration result acknowledged",
 				"edge_id", req.EdgeID)
 			w.WriteHeader(http.StatusAccepted)
@@ -186,6 +186,14 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
+		// A second reference for one note is answered the way a repeated edgeId
+		// is: acknowledged, so SLC Edge stops retrying, and nothing re-run.
+		if errors.Is(err, cdn.ErrDuplicateRegisteredReference) {
+			slog.InfoContext(r.Context(), "slce: duplicate CDN integration result acknowledged",
+				"edge_id", req.Payload.EdgeID)
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for integration result",
 				"edge_id", req.Payload.EdgeID, "error", err)
