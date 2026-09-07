@@ -73,7 +73,7 @@ func (l *WorkflowFlowLogger) LogTransition(stageName, taskTemplateID string, aff
 
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "ASSIGNED TRACK", "CURRENT STAGE", "STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"} {
 		item := l.items[id]
 		if item == nil {
 			continue
@@ -100,7 +100,7 @@ func (l *WorkflowFlowLogger) LogFinalSummary(workflowID string) {
 	fmt.Printf("%s\n", strings.Repeat("─", 108))
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "COMPLETED TRACK", "FINAL STAGE", "FINAL STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"} {
 		item := l.items[id]
 		if item != nil {
 			fmt.Printf("  %-7s | %-20s | %-26s | %-22s | %s\n", item.ID, item.Name, item.Track, item.Stage, item.Status)
@@ -250,6 +250,31 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 			"treatment_provider":    "npqs",
 			"treatment_supervision": "with_supervision",
 		},
+		// item-9 and item-10 join item-2/item-6 in the visual track to prove the
+		// same per-item BATCH_SPLIT fix applied to visual_*_result_split: item-10
+		// shares item-2's consignment-inspection batch but fails while item-2
+		// passes, and item-9 shares item-6's sample-inspection batch but escalates
+		// to a full consignment check (which then itself fails) while item-6
+		// passes sample inspection outright. Before the fix, visual routing used a
+		// single workflow-level "worst outcome across items" value, which would
+		// have forced item-2 to follow item-10's failure and item-6 to follow
+		// item-9's escalation even though each individually passed.
+		map[string]any{
+			"id":                    "item-9",
+			"commodity_common_name": "Ceylon Cinnamon Sticks",
+			"lab_required":          false,
+			"visual_required":       true,
+			"visual_approach":       "sample",
+			"treatment_required":    false,
+		},
+		map[string]any{
+			"id":                    "item-10",
+			"commodity_common_name": "Vanilla Pods",
+			"lab_required":          false,
+			"visual_required":       true,
+			"visual_approach":       "consignment",
+			"treatment_required":    false,
+		},
 	}
 
 	flowLogger := newWorkflowFlowLogger(declaredItems)
@@ -272,21 +297,25 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.items["item-6"].Track = "Track 2: Visual Inspection (Sample)"
 				flowLogger.items["item-7"].Track = "Track 3: Treatment Pipeline (External)"
 				flowLogger.items["item-8"].Track = "Track 3: Treatment Pipeline (NPQS, Supervised)"
+				flowLogger.items["item-9"].Track = "Track 2: Visual Inspection (Sample)"
+				flowLogger.items["item-10"].Track = "Track 2: Visual Inspection"
 
 				flowLogger.LogTransition(
 					"1-Apply & Officer Review",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
 					"Officer approved application & configured per-item inspection/treatment requirements",
 					map[string]string{
-						"item-1": "Awaiting Sample Collection (Lab Required)",
-						"item-2": "Awaiting Consignment Inspection (Visual Required)",
-						"item-3": "Awaiting Treatment Plan (NPQS Station Treatment Required)",
-						"item-4": "Fast-Tracked: Bypasses to Join (No Intervention Needed)",
-						"item-5": "Awaiting Sample Collection (Lab Required)",
-						"item-6": "Awaiting Sample Collection (Visual Sample Required)",
-						"item-7": "Awaiting Treatment Plan (External Provider Treatment Required)",
-						"item-8": "Awaiting Treatment Plan (NPQS Station, Supervision Required)",
+						"item-1":  "Awaiting Sample Collection (Lab Required)",
+						"item-2":  "Awaiting Consignment Inspection (Visual Required)",
+						"item-3":  "Awaiting Treatment Plan (NPQS Station Treatment Required)",
+						"item-4":  "Fast-Tracked: Bypasses to Join (No Intervention Needed)",
+						"item-5":  "Awaiting Sample Collection (Lab Required)",
+						"item-6":  "Awaiting Sample Collection (Visual Sample Required)",
+						"item-7":  "Awaiting Treatment Plan (External Provider Treatment Required)",
+						"item-8":  "Awaiting Treatment Plan (NPQS Station, Supervision Required)",
+						"item-9":  "Awaiting Sample Collection (Visual Sample Required)",
+						"item-10": "Awaiting Consignment Inspection (Visual Required)",
 					},
 				)
 				return map[string]any{
@@ -351,27 +380,83 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				}, nil
 
 			case "npqs-v2-visual-consignment-flow":
+				// This task_template_id backs both the regular consignment-inspection
+				// batch (item-2 + item-10) AND the escalated-consignment check that
+				// item-9 is routed to after its sample inspection escalates — same
+				// template, reused. Tell them apart by which items are actually in
+				// this call's partition.
+				inputCommodities, _ := p.Inputs["commodities"].([]any)
+				isEscalatedCall := len(inputCommodities) == 1
+				if isEscalatedCall {
+					if cm, ok := inputCommodities[0].(map[string]any); ok {
+						isEscalatedCall = cm["id"] == "item-9"
+					}
+				}
+
+				if isEscalatedCall {
+					// Full consignment inspection triggered by item-9's sample-inspection
+					// escalation. Fails on-site — proves the escalation sub-flow gets its
+					// own independent per-item result too, nested two levels inside
+					// visual_sample_result_split.
+					flowLogger.LogTransition(
+						"4-Visual: Escalated Consignment Inspection",
+						p.TaskTemplateID,
+						[]string{"item-9"},
+						"Full consignment inspection triggered by sample-inspection escalation: infestation confirmed on-site",
+						map[string]string{
+							"item-9": "Escalated Consignment Inspection FAILED (Infestation Confirmed On-Site)",
+						},
+					)
+					return map[string]any{
+						"commodities": []any{
+							map[string]any{
+								"id":                    "item-9",
+								"commodity_common_name": "Ceylon Cinnamon Sticks",
+								"visual_result":         "fail",
+							},
+						},
+					}, nil
+				}
+
+				// Regular consignment batch: item-2 passes, item-10 fails. This is the
+				// scenario visual_consignment_result_split's per-item BATCH_SPLIT/JOIN
+				// redesign exists to support — one item can fail while the rest of the
+				// batch continues, instead of the whole batch following whichever
+				// single "worst outcome across items" value the officer picked.
 				flowLogger.LogTransition(
 					"4-Visual: Consignment Inspection",
 					p.TaskTemplateID,
-					[]string{"item-2"},
-					"Packhouse inspection completed for Fresh Cut Foliage: Free from regulated pests",
+					[]string{"item-2", "item-10"},
+					"Packhouse inspection completed: item-2 free from regulated pests, item-10 shows fungal rot on packaging",
 					map[string]string{
-						"item-2": "Visual Inspection PASSED (Consignment Cleared for Export)",
+						"item-2":  "Visual Inspection PASSED (Consignment Cleared for Export)",
+						"item-10": "Visual Inspection FAILED (Fungal Rot Detected On Packaging)",
 					},
 				)
 				return map[string]any{
-					"visual_result": "pass",
+					"commodities": []any{
+						map[string]any{
+							"id":                    "item-2",
+							"commodity_common_name": "Fresh Cut Foliage",
+							"visual_result":         "pass",
+						},
+						map[string]any{
+							"id":                    "item-10",
+							"commodity_common_name": "Vanilla Pods",
+							"visual_result":         "fail",
+						},
+					},
 				}, nil
 
 			case "npqs-v2-visual-sample-collection":
 				flowLogger.LogTransition(
 					"4-Visual: Collect Sample",
 					p.TaskTemplateID,
-					[]string{"item-6"},
-					"Trader dropped off a representative sample; NPQS officer received and registered it as VSMP-2026-001",
+					[]string{"item-6", "item-9"},
+					"Trader dropped off representative samples; NPQS officer received and registered them as VSMP-2026-001 (item-6) and VSMP-2026-002 (item-9)",
 					map[string]string{
 						"item-6": "Sample VSMP-2026-001 Received (Queued for Visual Inspection)",
+						"item-9": "Sample VSMP-2026-002 Received (Queued for Visual Inspection)",
 					},
 				)
 				return map[string]any{
@@ -379,17 +464,33 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				}, nil
 
 			case "npqs-v2-visual-sample-inspection":
+				// item-6 passes outright; item-9 (same sample batch) is escalated to a
+				// full consignment check. Proves visual_sample_result_split now routes
+				// each item by its own result instead of forcing item-6 through
+				// escalation too just because item-9 needed it.
 				flowLogger.LogTransition(
 					"4-Visual: Sample Inspection",
 					p.TaskTemplateID,
-					[]string{"item-6"},
-					"Quarantine officer visually inspected sample VSMP-2026-001: free from regulated pests",
+					[]string{"item-6", "item-9"},
+					"Quarantine officer visually inspected samples VSMP-2026-001 (item-6) and VSMP-2026-002 (item-9): item-6 clean, item-9 inconclusive and escalated",
 					map[string]string{
 						"item-6": "Visual Sample Inspection PASSED (Cleared for Export)",
+						"item-9": "Visual Sample Inspection ESCALATED (Full Consignment Inspection Required)",
 					},
 				)
 				return map[string]any{
-					"visual_result": "pass",
+					"commodities": []any{
+						map[string]any{
+							"id":                    "item-6",
+							"commodity_common_name": "Dried Cinnamon Bark",
+							"visual_result":         "pass",
+						},
+						map[string]any{
+							"id":                    "item-9",
+							"commodity_common_name": "Ceylon Cinnamon Sticks",
+							"visual_result":         "escalate_consignment",
+						},
+					},
 				}, nil
 
 			case "npqs-v2-treatment-request":
@@ -510,7 +611,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Upload Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
 					"[PARALLEL_JOIN Reached] All tracks synchronized; Trader uploaded invoice & packing list",
 					map[string]string{
 						"item-1": "All Tracks Synchronized: Trade Documents Uploaded",
@@ -531,7 +632,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Review Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
 					"NPQS documentation officer verified and approved commercial documents",
 					map[string]string{
 						"item-1": "Trade Documents APPROVED (Consignment Cleared for Payment)",
@@ -550,7 +651,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"7-Payment: Phytosanitary Certificate Fee",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
 					"Trader completed statutory phytosanitary certificate fee payment",
 					map[string]string{
 						"item-1": "Certificate Fee PAID (Authorized for Final Issuance)",
@@ -586,7 +687,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						gotIDs[id] = true
 					}
 				}
-				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"} {
+				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"} {
 					assert.True(t, gotIDs[wantID], "certificate item picker must be prefilled with %s, got %+v", wantID, certItemsIn)
 				}
 
@@ -594,19 +695,22 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"8-Issuance: Phytosanitary Certificate",
 					p.TaskTemplateID,
 					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8"},
-					"Senior NPQS Quarantine Officer issued Phytosanitary Certificate PC-NPQS-2026-8092 (item-5 excluded: rejected by lab)",
+					"Senior NPQS Quarantine Officer issued Phytosanitary Certificate PC-NPQS-2026-8092 (item-5, item-9, item-10 excluded)",
 					map[string]string{
-						"item-1": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
-						"item-2": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
-						"item-3": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
-						"item-4": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
-						"item-5": "EXCLUDED From Certificate (Rejected By Lab Test)",
-						"item-6": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
-						"item-7": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
-						"item-8": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-1":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-2":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-3":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-4":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-5":  "EXCLUDED From Certificate (Rejected By Lab Test)",
+						"item-6":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-7":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-8":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-9":  "EXCLUDED From Certificate (Failed Escalated Consignment Inspection)",
+						"item-10": "EXCLUDED From Certificate (Failed Consignment Inspection)",
 					},
 				)
-				// Officer deselects item-5 (and only item-5) on the picker.
+				// Officer deselects item-5 (lab rejected), item-9 and item-10 (visual
+				// rejected) on the picker.
 				return map[string]any{
 					"certificate_id": "PC-NPQS-2026-8092",
 					"certificate_items": []any{
@@ -618,6 +722,8 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						map[string]any{"id": "item-6", "include_in_certificate": true},
 						map[string]any{"id": "item-7", "include_in_certificate": true},
 						map[string]any{"id": "item-8", "include_in_certificate": true},
+						map[string]any{"id": "item-9", "include_in_certificate": false},
+						map[string]any{"id": "item-10", "include_in_certificate": false},
 					},
 				}, nil
 
@@ -685,9 +791,17 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	// the per-item BATCH_SPLIT (lab_result_split) does not force the whole batch through
 	// the resubmit loop just because one item in it was rejected.
 	assert.Equal(t, 1, executedTasks["npqs-v2-lab-testing"], "Track 1 (Lab) testing must execute once for the item-1/item-5 batch, with no resubmit retest triggered")
-	assert.Equal(t, 1, executedTasks["npqs-v2-visual-consignment-flow"], "Track 2 (Visual) must execute for item-2")
-	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-collection"], "Track 2 (Visual/Sample) sample collection must execute for item-6")
-	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-inspection"], "Track 2 (Visual/Sample) inspection must execute for item-6, after sample collection")
+	// visual_consignment_result_split, visual_sample_result_split, and
+	// visual_sample_escalated_result_split are now per-item BATCH_SPLIT/JOIN
+	// pairs (item.visual_result) instead of a single workflow-level "worst
+	// outcome across items" EXCLUSIVE_SPLIT. item-10 fails consignment
+	// inspection while item-2 (same batch) passes; item-9 escalates from
+	// sample inspection while item-6 (same batch) passes outright. If routing
+	// still ran on the old aggregate value, item-2 would have been forced onto
+	// item-10's fail path and item-6 onto item-9's escalation path.
+	assert.Equal(t, 2, executedTasks["npqs-v2-visual-consignment-flow"], "must execute twice: once for the item-2/item-10 consignment batch, once for item-9's escalated-consignment check")
+	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-collection"], "Track 2 (Visual/Sample) sample collection must execute once for the item-6/item-9 batch")
+	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-inspection"], "Track 2 (Visual/Sample) inspection must execute once for the item-6/item-9 batch, after sample collection")
 	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-request"], "Track 3 (Treatment) must execute once for the item-3/item-7/item-8 batch")
 	// treatment_provider_split now partitions per item (item.treatment_provider),
 	// not on a single workflow-level npqs.treatment_provider value set by the
@@ -754,7 +868,13 @@ func TestNPQSWorkflow_AllItemsFailed_ConsignmentRejected(t *testing.T) {
 			case "npqs-v2-visual-consignment-flow":
 				// Visual inspection fails for all items
 				return map[string]any{
-					"visual_result": "fail",
+					"commodities": []any{
+						map[string]any{
+							"id":                    "item-1",
+							"commodity_common_name": "Cut Rose Flowers",
+							"visual_result":         "fail",
+						},
+					},
 				}, nil
 
 			default:
