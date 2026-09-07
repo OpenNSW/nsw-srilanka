@@ -73,7 +73,7 @@ func (l *WorkflowFlowLogger) LogTransition(stageName, taskTemplateID string, aff
 
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "ASSIGNED TRACK", "CURRENT STAGE", "STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"} {
 		item := l.items[id]
 		if item == nil {
 			continue
@@ -100,7 +100,7 @@ func (l *WorkflowFlowLogger) LogFinalSummary(workflowID string) {
 	fmt.Printf("%s\n", strings.Repeat("─", 108))
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "COMPLETED TRACK", "FINAL STAGE", "FINAL STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"} {
 		item := l.items[id]
 		if item != nil {
 			fmt.Printf("  %-7s | %-20s | %-26s | %-22s | %s\n", item.ID, item.Name, item.Track, item.Stage, item.Status)
@@ -225,6 +225,31 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 			"visual_approach":       "sample",
 			"treatment_required":    false,
 		},
+		// item-7 and item-8 join item-3 in the SAME treatment_provider_split
+		// batch, each choosing a different provider (item-7: external) or
+		// needing supervision within the npqs provider (item-8), to prove a
+		// mixed-provider/mixed-supervision batch routes each item down its
+		// own path rather than all following whichever single value the old
+		// (pre-fix) workflow-level npqs.treatment_provider/treatment_supervision
+		// variables happened to hold.
+		map[string]any{
+			"id":                    "item-7",
+			"commodity_common_name": "Bamboo Poles",
+			"lab_required":          false,
+			"visual_required":       false,
+			"treatment_required":    true,
+			"treatment_provider":    "external",
+			"treatment_supervision": "without_supervision",
+		},
+		map[string]any{
+			"id":                    "item-8",
+			"commodity_common_name": "Areca Nut",
+			"lab_required":          false,
+			"visual_required":       false,
+			"treatment_required":    true,
+			"treatment_provider":    "npqs",
+			"treatment_supervision": "with_supervision",
+		},
 	}
 
 	flowLogger := newWorkflowFlowLogger(declaredItems)
@@ -242,11 +267,13 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.items["item-4"].Track = "Fast-Track (Direct Join)"
 				flowLogger.items["item-5"].Track = "Track 1: Lab Testing"
 				flowLogger.items["item-6"].Track = "Track 2: Visual Inspection (Sample)"
+				flowLogger.items["item-7"].Track = "Track 3: Treatment Pipeline (External)"
+				flowLogger.items["item-8"].Track = "Track 3: Treatment Pipeline (NPQS, Supervised)"
 
 				flowLogger.LogTransition(
 					"1-Apply & Officer Review",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
 					"Officer approved application & configured per-item inspection/treatment requirements",
 					map[string]string{
 						"item-1": "Awaiting Sample Collection (Lab Required)",
@@ -255,6 +282,8 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-4": "Fast-Tracked: Bypasses to Join (No Intervention Needed)",
 						"item-5": "Awaiting Sample Collection (Lab Required)",
 						"item-6": "Awaiting Sample Collection (Visual Sample Required)",
+						"item-7": "Awaiting Treatment Plan (External Provider Treatment Required)",
+						"item-8": "Awaiting Treatment Plan (NPQS Station, Supervision Required)",
 					},
 				)
 				return map[string]any{
@@ -361,31 +390,41 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				}, nil
 
 			case "npqs-v2-treatment-request":
+				// item-3, item-7, item-8 all satisfy treatment_required == true,
+				// so gw_treatment_split groups them into ONE n3_treatment_request
+				// batch together (partitioned by shared edge condition value, not
+				// per item) - even though they'll fan back out to different
+				// providers (and, within the npqs provider, different supervision
+				// needs) immediately after via the nested treatment_provider_split
+				// / n3_3_1_supervision_split batch gateways.
 				flowLogger.LogTransition(
 					"5-Treatment: Request & Review",
 					p.TaskTemplateID,
-					[]string{"item-3"},
-					"Methyl bromide fumigation request approved for execution at NPQS Station",
+					[]string{"item-3", "item-7", "item-8"},
+					"Treatment plan approved: item-3/item-8 at NPQS Station, item-7 via external provider",
 					map[string]string{
 						"item-3": "Treatment Request APPROVED (Assigned to NPQS Station)",
+						"item-7": "Treatment Request APPROVED (Assigned to External Provider)",
+						"item-8": "Treatment Request APPROVED (Assigned to NPQS Station, Supervision Required)",
 					},
 				)
 				return map[string]any{
 					"reviewerform": map[string]any{
 						"treatment_request_outcome": "approve",
-						"treatment_provider":        "npqs",
-						"treatment_supervision":     "without_supervision",
 					},
 				}, nil
 
 			case "npqs-v2-pay-for-treatment":
+				// npqs provider partition only (item-3, item-8) - item-7 (external)
+				// never reaches this node.
 				flowLogger.LogTransition(
 					"5-Treatment: Station Payment",
 					p.TaskTemplateID,
-					[]string{"item-3"},
+					[]string{"item-3", "item-8"},
 					"Trader settled NPQS treatment facility fees via online portal",
 					map[string]string{
 						"item-3": "Treatment Fee PAID (Authorized for Fumigation)",
+						"item-8": "Treatment Fee PAID (Authorized for Fumigation)",
 					},
 				)
 				return map[string]any{
@@ -396,24 +435,50 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"5-Treatment: Certificate Issuance",
 					p.TaskTemplateID,
-					[]string{"item-3"},
+					[]string{"item-3", "item-8"},
 					"NPQS treatment officer issued official Treatment Certificate TC-NPQS-901",
 					map[string]string{
 						"item-3": "Treatment Certificate TC-NPQS-901 ISSUED",
+						"item-8": "Treatment Certificate TC-NPQS-901 ISSUED",
 					},
 				)
 				return map[string]any{
 					"treatment_certificate_id": "TC-NPQS-901",
 				}, nil
 
+			case "npqs-v2-treatment-supervisor-report":
+				// Only item-8 (with_supervision) reaches this node - item-3
+				// (without_supervision) bypasses it via
+				// n3_3_1_supervision_split's false edge straight to the
+				// supervision join. Proves the nested supervision BATCH_SPLIT
+				// correctly separates item-3 from item-8 even though both are
+				// in the same npqs-provider partition.
+				flowLogger.LogTransition(
+					"5-Treatment: Supervision Report",
+					p.TaskTemplateID,
+					[]string{"item-8"},
+					"NPQS supervising officer completed on-site observation report",
+					map[string]string{
+						"item-8": "Supervision Report Issued (Supervised Treatment Complete)",
+					},
+				)
+				return map[string]any{
+					"supervisor_notes": "Treatment executed to specification under direct NPQS supervision.",
+				}, nil
+
 			case "npqs-v2-upload-treatment-certs":
+				// Reached twice: once for the npqs-provider partition
+				// (item-3+item-8, after the supervision sub-batch rejoins) and
+				// once for the external-provider partition (item-7 alone).
 				flowLogger.LogTransition(
 					"5-Treatment: Cert Upload",
 					p.TaskTemplateID,
-					[]string{"item-3"},
+					[]string{"item-3", "item-7", "item-8"},
 					"Trader attached signed treatment certificate for quarantine verification",
 					map[string]string{
 						"item-3": "Treatment Certificate Document Uploaded",
+						"item-7": "Treatment Certificate Document Uploaded",
+						"item-8": "Treatment Certificate Document Uploaded",
 					},
 				)
 				return map[string]any{
@@ -426,10 +491,12 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"5-Treatment: Cert Verification",
 					p.TaskTemplateID,
-					[]string{"item-3"},
+					[]string{"item-3", "item-7", "item-8"},
 					"NPQS officer verified treatment parameters: Treatment verified & cleared",
 					map[string]string{
 						"item-3": "Treatment VERIFIED & PASSED (Treatment Pipeline Complete)",
+						"item-7": "Treatment VERIFIED & PASSED (Treatment Pipeline Complete)",
+						"item-8": "Treatment VERIFIED & PASSED (Treatment Pipeline Complete)",
 					},
 				)
 				return map[string]any{
@@ -440,7 +507,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Upload Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
 					"[PARALLEL_JOIN Reached] All tracks synchronized; Trader uploaded invoice & packing list",
 					map[string]string{
 						"item-1": "All Tracks Synchronized: Trade Documents Uploaded",
@@ -461,7 +528,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Review Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
 					"NPQS documentation officer verified and approved commercial documents",
 					map[string]string{
 						"item-1": "Trade Documents APPROVED (Consignment Cleared for Payment)",
@@ -480,7 +547,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"7-Payment: Phytosanitary Certificate Fee",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"},
 					"Trader completed statutory phytosanitary certificate fee payment",
 					map[string]string{
 						"item-1": "Certificate Fee PAID (Authorized for Final Issuance)",
@@ -516,14 +583,14 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						gotIDs[id] = true
 					}
 				}
-				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"} {
+				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8"} {
 					assert.True(t, gotIDs[wantID], "certificate item picker must be prefilled with %s, got %+v", wantID, certItemsIn)
 				}
 
 				flowLogger.LogTransition(
 					"8-Issuance: Phytosanitary Certificate",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-6"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8"},
 					"Senior NPQS Quarantine Officer issued Phytosanitary Certificate PC-NPQS-2026-8092 (item-5 excluded: rejected by lab)",
 					map[string]string{
 						"item-1": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
@@ -532,6 +599,8 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-4": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 						"item-5": "EXCLUDED From Certificate (Rejected By Lab Test)",
 						"item-6": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-7": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
+						"item-8": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 					},
 				)
 				// Officer deselects item-5 (and only item-5) on the picker.
@@ -544,6 +613,8 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						map[string]any{"id": "item-4", "include_in_certificate": true},
 						map[string]any{"id": "item-5", "include_in_certificate": false},
 						map[string]any{"id": "item-6", "include_in_certificate": true},
+						map[string]any{"id": "item-7", "include_in_certificate": true},
+						map[string]any{"id": "item-8", "include_in_certificate": true},
 					},
 				}, nil
 
@@ -565,7 +636,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"9-ePhyto: IPPC Hub Transmission",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-6"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8"},
 					"Electronic Phytosanitary Certificate XML successfully transmitted to IPPC ePhyto Hub (item-5 excluded)",
 					map[string]string{
 						"item-1": "ePhyto Hub Transmission Confirmed (Completed)",
@@ -573,6 +644,8 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-3": "ePhyto Hub Transmission Confirmed (Completed)",
 						"item-4": "ePhyto Hub Transmission Confirmed (Completed)",
 						"item-6": "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-7": "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-8": "ePhyto Hub Transmission Confirmed (Completed)",
 					},
 				)
 				return map[string]any{
@@ -612,9 +685,26 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	assert.Equal(t, 1, executedTasks["npqs-v2-visual-consignment-flow"], "Track 2 (Visual) must execute for item-2")
 	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-collection"], "Track 2 (Visual/Sample) sample collection must execute for item-6")
 	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-inspection"], "Track 2 (Visual/Sample) inspection must execute for item-6, after sample collection")
-	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-request"], "Track 3 (Treatment) must execute for item-3")
-	assert.Equal(t, 1, executedTasks["npqs-v2-pay-for-treatment"], "Track 3 payment must execute for item-3")
-	assert.Equal(t, 1, executedTasks["npqs-v2-issue-treatment-cert"], "Track 3 cert issue must execute for item-3")
+	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-request"], "Track 3 (Treatment) must execute once for the item-3/item-7/item-8 batch")
+	// treatment_provider_split now partitions per item (item.treatment_provider),
+	// not on a single workflow-level npqs.treatment_provider value set by the
+	// officer's own single decision - this is the regression guard for that fix.
+	// item-8 (npqs, with_supervision) reaching the supervisor-report node while
+	// item-3 (npqs, without_supervision) does NOT proves the nested
+	// n3_3_1_supervision_split ALSO correctly partitions per item within the
+	// npqs provider branch.
+	assert.Equal(t, 1, executedTasks["npqs-v2-pay-for-treatment"], "Track 3 payment must execute once for the item-3/item-8 (npqs-provider) batch")
+	assert.Equal(t, 1, executedTasks["npqs-v2-issue-treatment-cert"], "Track 3 cert issue must execute once for the item-3/item-8 (npqs-provider) batch")
+	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-supervisor-report"], "supervision report must execute once, for item-8 only (with_supervision)")
+	// Reached from BOTH provider partitions (npqs: item-3+item-8 after the
+	// supervision sub-batch rejoins; external: item-7 alone) - each partition
+	// runs its own separate call, so this fires twice, not once. That's the
+	// real per-partition execution count; the mock's own LogTransition calls
+	// for these two cases print the same static item-3/item-7/item-8 label on
+	// both, since the mock has no way to tell which partition it's being
+	// called for.
+	assert.Equal(t, 2, executedTasks["npqs-v2-upload-treatment-certs"], "cert upload must execute once per provider partition (npqs, external)")
+	assert.Equal(t, 2, executedTasks["npqs-v2-review-treatment-certs"], "cert review must execute once per provider partition (npqs, external)")
 	assert.Equal(t, 1, executedTasks["npqs-v2-upload-docs"], "Consignment doc upload must execute")
 	assert.Equal(t, 1, executedTasks["npqs-v2-review-docs"], "Consignment doc review must execute")
 	assert.Equal(t, 1, executedTasks["npqs-v2-pay-certificate-fee"], "Consignment certificate fee payment must execute")
