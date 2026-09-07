@@ -73,7 +73,7 @@ func (l *WorkflowFlowLogger) LogTransition(stageName, taskTemplateID string, aff
 
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "ASSIGNED TRACK", "CURRENT STAGE", "STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"} {
 		item := l.items[id]
 		if item == nil {
 			continue
@@ -100,7 +100,7 @@ func (l *WorkflowFlowLogger) LogFinalSummary(workflowID string) {
 	fmt.Printf("%s\n", strings.Repeat("─", 108))
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "COMPLETED TRACK", "FINAL STAGE", "FINAL STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"} {
 		item := l.items[id]
 		if item != nil {
 			fmt.Printf("  %-7s | %-20s | %-26s | %-22s | %s\n", item.ID, item.Name, item.Track, item.Stage, item.Status)
@@ -275,6 +275,23 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 			"visual_approach":       "consignment",
 			"treatment_required":    false,
 		},
+		// item-11 is simultaneously lab_required AND visual_required (joining item-1/item-5's
+		// lab batch AND item-2/item-10's consignment batch) — the regression guard for the
+		// PARALLEL_SPLIT/JOIN isolation-and-merge fix. Before that fix, gw_lab_split and
+		// gw_visual_split ran as in-process coroutines sharing the same `commodities`
+		// variable directly; whichever one finished last would overwrite the WHOLE array
+		// using its own pre-split snapshot, silently erasing the other track's contribution
+		// even for fields with completely different names on the very item each track itself
+		// processed. If that regressed, item-11 would reach certificate issuance missing
+		// either sample_test_result or visual_result (whichever track's write got clobbered).
+		map[string]any{
+			"id":                    "item-11",
+			"commodity_common_name": "Betel Leaves",
+			"lab_required":          true,
+			"visual_required":       true,
+			"visual_approach":       "consignment",
+			"treatment_required":    false,
+		},
 	}
 
 	flowLogger := newWorkflowFlowLogger(declaredItems)
@@ -299,11 +316,12 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.items["item-8"].Track = "Track 3: Treatment Pipeline (NPQS, Supervised)"
 				flowLogger.items["item-9"].Track = "Track 2: Visual Inspection (Sample)"
 				flowLogger.items["item-10"].Track = "Track 2: Visual Inspection"
+				flowLogger.items["item-11"].Track = "Track 1 + Track 2: Lab Testing & Visual Inspection"
 
 				flowLogger.LogTransition(
 					"1-Apply & Officer Review",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"},
 					"Officer approved application & configured per-item inspection/treatment requirements",
 					map[string]string{
 						"item-1":  "Awaiting Sample Collection (Lab Required)",
@@ -316,6 +334,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-8":  "Awaiting Treatment Plan (NPQS Station, Supervision Required)",
 						"item-9":  "Awaiting Sample Collection (Visual Sample Required)",
 						"item-10": "Awaiting Consignment Inspection (Visual Required)",
+						"item-11": "Awaiting Sample Collection AND Consignment Inspection (Lab + Visual Required)",
 					},
 				)
 				return map[string]any{
@@ -346,24 +365,26 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				}, nil
 
 			case "npqs-v2-lab-testing":
-				// Per-item outcomes in the SAME batch submission: item-1 passes while
-				// item-5 fails final. This is the scenario the per-item BATCH_SPLIT/JOIN
+				// Per-item outcomes in the SAME batch submission: item-1 passes, item-5
+				// fails final, item-11 passes (item-11 is ALSO visual_required — see its
+				// declaration above). This is the scenario the per-item BATCH_SPLIT/JOIN
 				// redesign of lab_result_split exists to support — one item can be
 				// rejected while the rest of the batch continues, without forcing a
 				// resubmission of the whole batch.
 				flowLogger.LogTransition(
 					"3-Lab: Lab Testing",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-5"},
-					"NPQS Plant Pathology Lab completed tests: item-1 clean, item-5 positive for quarantine pest",
+					[]string{"item-1", "item-5", "item-11"},
+					"NPQS Plant Pathology Lab completed tests: item-1 clean, item-5 positive for quarantine pest, item-11 clean",
 					map[string]string{
-						"item-1": "Lab Test PASSED (Diagnostic Result: Clean)",
-						"item-5": "Lab Test FAILED FINAL (Diagnostic Result: Quarantine Pest Detected)",
+						"item-1":  "Lab Test PASSED (Diagnostic Result: Clean)",
+						"item-5":  "Lab Test FAILED FINAL (Diagnostic Result: Quarantine Pest Detected)",
+						"item-11": "Lab Test PASSED (Diagnostic Result: Clean)",
 					},
 				)
 				return map[string]any{
 					"sample_test_result": "fail_final",
-					"lab_comments":       "item-1 clean; item-5 positive for Bactrocera dorsalis, rejected.",
+					"lab_comments":       "item-1 clean; item-5 positive for Bactrocera dorsalis, rejected; item-11 clean.",
 					"commodities": []any{
 						map[string]any{
 							"id":                    "item-1",
@@ -374,7 +395,12 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 							"id":                    "item-5",
 							"commodity_common_name": "Cinnamon Quills",
 							"sample_test_result":    "fail_final",
-							"failure_reason":        "Presence of quarantine pest: Bactrocera dorsalis",
+							"lab_failure_reason":    "Presence of quarantine pest: Bactrocera dorsalis",
+						},
+						map[string]any{
+							"id":                    "item-11",
+							"commodity_common_name": "Betel Leaves",
+							"sample_test_result":    "pass",
 						},
 					},
 				}, nil
@@ -418,19 +444,22 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					}, nil
 				}
 
-				// Regular consignment batch: item-2 passes, item-10 fails. This is the
-				// scenario visual_consignment_result_split's per-item BATCH_SPLIT/JOIN
-				// redesign exists to support — one item can fail while the rest of the
-				// batch continues, instead of the whole batch following whichever
-				// single "worst outcome across items" value the officer picked.
+				// Regular consignment batch: item-2 passes, item-10 fails, item-11 passes
+				// (item-11 is ALSO lab_required — see its declaration above, and the
+				// npqs-v2-lab-testing mock). This is the scenario
+				// visual_consignment_result_split's per-item BATCH_SPLIT/JOIN redesign
+				// exists to support — one item can fail while the rest of the batch
+				// continues, instead of the whole batch following whichever single
+				// "worst outcome across items" value the officer picked.
 				flowLogger.LogTransition(
 					"4-Visual: Consignment Inspection",
 					p.TaskTemplateID,
-					[]string{"item-2", "item-10"},
-					"Packhouse inspection completed: item-2 free from regulated pests, item-10 shows fungal rot on packaging",
+					[]string{"item-2", "item-10", "item-11"},
+					"Packhouse inspection completed: item-2 free from regulated pests, item-10 shows fungal rot on packaging, item-11 clean",
 					map[string]string{
 						"item-2":  "Visual Inspection PASSED (Consignment Cleared for Export)",
 						"item-10": "Visual Inspection FAILED (Fungal Rot Detected On Packaging)",
+						"item-11": "Visual Inspection PASSED (Consignment Cleared for Export)",
 					},
 				)
 				return map[string]any{
@@ -444,6 +473,11 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 							"id":                    "item-10",
 							"commodity_common_name": "Vanilla Pods",
 							"visual_result":         "fail",
+						},
+						map[string]any{
+							"id":                    "item-11",
+							"commodity_common_name": "Betel Leaves",
+							"visual_result":         "pass",
 						},
 					},
 				}, nil
@@ -611,7 +645,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Upload Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"},
 					"[PARALLEL_JOIN Reached] All tracks synchronized; Trader uploaded invoice & packing list",
 					map[string]string{
 						"item-1": "All Tracks Synchronized: Trade Documents Uploaded",
@@ -632,7 +666,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Review Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"},
 					"NPQS documentation officer verified and approved commercial documents",
 					map[string]string{
 						"item-1": "Trade Documents APPROVED (Consignment Cleared for Payment)",
@@ -651,7 +685,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"7-Payment: Phytosanitary Certificate Fee",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"},
 					"Trader completed statutory phytosanitary certificate fee payment",
 					map[string]string{
 						"item-1": "Certificate Fee PAID (Authorized for Final Issuance)",
@@ -668,33 +702,34 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 
 			case "npqs-v2-issue-certificate":
 				// The officer's item picker is prefilled from `commodities` with id +
-				// commodity name for every declared item (that part never races: it's
-				// the pristine list n1_apply produced, untouched by any track). Per-item
-				// track OUTCOME context (lab/visual/treatment result) is deliberately
-				// NOT shown here: gw_lab_split, gw_visual_split, and gw_treatment_split
-				// all run concurrently under gw_par_split and, as currently built, share
-				// a single "commodities" items_variable — each one's completion
-				// overwrites that variable wholesale, so whichever track finishes last
-				// silently clobbers the others' per-item merges. That's a real gap in
-				// the shared core workflow engine (BATCH_JOIN has no merge-by-id
-				// semantics for concurrent writers), not something fixed here — so the
-				// picker only asserts on what's actually reliable: item identity.
+				// commodity name for every declared item.
 				certItemsIn, _ := p.Inputs["certificate_items"].([]any)
 				gotIDs := make(map[string]bool, len(certItemsIn))
+				byID := make(map[string]map[string]any, len(certItemsIn))
 				for _, raw := range certItemsIn {
 					item, _ := raw.(map[string]any)
 					if id, _ := item["id"].(string); id != "" {
 						gotIDs[id] = true
+						byID[id] = item
 					}
 				}
-				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10"} {
+				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6", "item-7", "item-8", "item-9", "item-10", "item-11"} {
 					assert.True(t, gotIDs[wantID], "certificate item picker must be prefilled with %s, got %+v", wantID, certItemsIn)
 				}
+				// item-11 is both lab_required and visual_required — regression guard for the
+				// PARALLEL_SPLIT/JOIN isolation-and-merge fix (see its declaration comment
+				// above). Before that fix, gw_lab_split and gw_visual_split ran as in-process
+				// coroutines sharing the same `commodities` variable directly; whichever
+				// finished last would overwrite the WHOLE array from its own pre-split
+				// snapshot, so by this point item-11 would be missing whichever track's field
+				// lost that race. Both must be present now, regardless of finish order.
+				assert.Equal(t, "pass", byID["item-11"]["sample_test_result"], "item-11 must carry lab's contribution through to certificate issuance")
+				assert.Equal(t, "pass", byID["item-11"]["visual_result"], "item-11 must ALSO carry visual's contribution — both tracks touched this item concurrently")
 
 				flowLogger.LogTransition(
 					"8-Issuance: Phytosanitary Certificate",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8", "item-11"},
 					"Senior NPQS Quarantine Officer issued Phytosanitary Certificate PC-NPQS-2026-8092 (item-5, item-9, item-10 excluded)",
 					map[string]string{
 						"item-1":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
@@ -707,6 +742,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-8":  "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 						"item-9":  "EXCLUDED From Certificate (Failed Escalated Consignment Inspection)",
 						"item-10": "EXCLUDED From Certificate (Failed Consignment Inspection)",
+						"item-11": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 					},
 				)
 				// Officer deselects item-5 (lab rejected), item-9 and item-10 (visual
@@ -724,6 +760,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						map[string]any{"id": "item-8", "include_in_certificate": true},
 						map[string]any{"id": "item-9", "include_in_certificate": false},
 						map[string]any{"id": "item-10", "include_in_certificate": false},
+						map[string]any{"id": "item-11", "include_in_certificate": true},
 					},
 				}, nil
 
@@ -745,16 +782,17 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"9-ePhyto: IPPC Hub Transmission",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-6", "item-7", "item-8", "item-11"},
 					"Electronic Phytosanitary Certificate XML successfully transmitted to IPPC ePhyto Hub (item-5 excluded)",
 					map[string]string{
-						"item-1": "ePhyto Hub Transmission Confirmed (Completed)",
-						"item-2": "ePhyto Hub Transmission Confirmed (Completed)",
-						"item-3": "ePhyto Hub Transmission Confirmed (Completed)",
-						"item-4": "ePhyto Hub Transmission Confirmed (Completed)",
-						"item-6": "ePhyto Hub Transmission Confirmed (Completed)",
-						"item-7": "ePhyto Hub Transmission Confirmed (Completed)",
-						"item-8": "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-1":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-2":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-3":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-4":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-6":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-7":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-8":  "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-11": "ePhyto Hub Transmission Confirmed (Completed)",
 					},
 				)
 				return map[string]any{
