@@ -73,7 +73,7 @@ func (l *WorkflowFlowLogger) LogTransition(stageName, taskTemplateID string, aff
 
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "ASSIGNED TRACK", "CURRENT STAGE", "STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"} {
 		item := l.items[id]
 		if item == nil {
 			continue
@@ -100,7 +100,7 @@ func (l *WorkflowFlowLogger) LogFinalSummary(workflowID string) {
 	fmt.Printf("%s\n", strings.Repeat("─", 108))
 	fmt.Printf(" %-8s | %-20s | %-26s | %-22s | %s\n", "ITEM ID", "COMMODITY", "COMPLETED TRACK", "FINAL STAGE", "FINAL STATUS")
 	fmt.Printf(" %-8s-+-%-20s-+-%-26s-+-%-22s-+-%s\n", "--------", "--------------------", "--------------------------", "----------------------", "-----------------------------------")
-	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5"} {
+	for _, id := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"} {
 		item := l.items[id]
 		if item != nil {
 			fmt.Printf("  %-7s | %-20s | %-26s | %-22s | %s\n", item.ID, item.Name, item.Track, item.Stage, item.Status)
@@ -217,6 +217,14 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 			"visual_required":       false,
 			"treatment_required":    false,
 		},
+		map[string]any{
+			"id":                    "item-6",
+			"commodity_common_name": "Dried Cinnamon Bark",
+			"lab_required":          false,
+			"visual_required":       true,
+			"visual_approach":       "sample",
+			"treatment_required":    false,
+		},
 	}
 
 	flowLogger := newWorkflowFlowLogger(declaredItems)
@@ -233,11 +241,12 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.items["item-3"].Track = "Track 3: Treatment Pipeline"
 				flowLogger.items["item-4"].Track = "Fast-Track (Direct Join)"
 				flowLogger.items["item-5"].Track = "Track 1: Lab Testing"
+				flowLogger.items["item-6"].Track = "Track 2: Visual Inspection (Sample)"
 
 				flowLogger.LogTransition(
 					"1-Apply & Officer Review",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
 					"Officer approved application & configured per-item inspection/treatment requirements",
 					map[string]string{
 						"item-1": "Awaiting Sample Collection (Lab Required)",
@@ -245,6 +254,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-3": "Awaiting Treatment Plan (NPQS Station Treatment Required)",
 						"item-4": "Fast-Tracked: Bypasses to Join (No Intervention Needed)",
 						"item-5": "Awaiting Sample Collection (Lab Required)",
+						"item-6": "Awaiting Sample Collection (Visual Sample Required)",
 					},
 				)
 				return map[string]any{
@@ -316,6 +326,34 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"Packhouse inspection completed for Fresh Cut Foliage: Free from regulated pests",
 					map[string]string{
 						"item-2": "Visual Inspection PASSED (Consignment Cleared for Export)",
+					},
+				)
+				return map[string]any{
+					"visual_result": "pass",
+				}, nil
+
+			case "npqs-v2-visual-sample-collection":
+				flowLogger.LogTransition(
+					"4-Visual: Collect Sample",
+					p.TaskTemplateID,
+					[]string{"item-6"},
+					"Trader dropped off a representative sample; NPQS officer received and registered it as VSMP-2026-001",
+					map[string]string{
+						"item-6": "Sample VSMP-2026-001 Received (Queued for Visual Inspection)",
+					},
+				)
+				return map[string]any{
+					"sample_number": "VSMP-2026-001",
+				}, nil
+
+			case "npqs-v2-visual-sample-inspection":
+				flowLogger.LogTransition(
+					"4-Visual: Sample Inspection",
+					p.TaskTemplateID,
+					[]string{"item-6"},
+					"Quarantine officer visually inspected sample VSMP-2026-001: free from regulated pests",
+					map[string]string{
+						"item-6": "Visual Sample Inspection PASSED (Cleared for Export)",
 					},
 				)
 				return map[string]any{
@@ -402,7 +440,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Upload Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
 					"[PARALLEL_JOIN Reached] All tracks synchronized; Trader uploaded invoice & packing list",
 					map[string]string{
 						"item-1": "All Tracks Synchronized: Trade Documents Uploaded",
@@ -410,6 +448,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-3": "All Tracks Synchronized: Trade Documents Uploaded",
 						"item-4": "All Tracks Synchronized: Trade Documents Uploaded",
 						"item-5": "All Tracks Synchronized: Trade Documents Uploaded (Rejected By Lab)",
+						"item-6": "All Tracks Synchronized: Trade Documents Uploaded",
 					},
 				)
 				return map[string]any{
@@ -422,7 +461,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"6-Docs: Review Trade Documents",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
 					"NPQS documentation officer verified and approved commercial documents",
 					map[string]string{
 						"item-1": "Trade Documents APPROVED (Consignment Cleared for Payment)",
@@ -430,6 +469,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-3": "Trade Documents APPROVED (Consignment Cleared for Payment)",
 						"item-4": "Trade Documents APPROVED (Consignment Cleared for Payment)",
 						"item-5": "Trade Documents APPROVED (Consignment Cleared for Payment; Rejected By Lab)",
+						"item-6": "Trade Documents APPROVED (Consignment Cleared for Payment)",
 					},
 				)
 				return map[string]any{
@@ -440,7 +480,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"7-Payment: Phytosanitary Certificate Fee",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4", "item-5"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"},
 					"Trader completed statutory phytosanitary certificate fee payment",
 					map[string]string{
 						"item-1": "Certificate Fee PAID (Authorized for Final Issuance)",
@@ -448,6 +488,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-3": "Certificate Fee PAID (Authorized for Final Issuance)",
 						"item-4": "Certificate Fee PAID (Authorized for Final Issuance)",
 						"item-5": "Certificate Fee PAID (Rejected By Lab; Excluded From Certificate)",
+						"item-6": "Certificate Fee PAID (Authorized for Final Issuance)",
 					},
 				)
 				return map[string]any{
@@ -475,14 +516,14 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						gotIDs[id] = true
 					}
 				}
-				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5"} {
+				for _, wantID := range []string{"item-1", "item-2", "item-3", "item-4", "item-5", "item-6"} {
 					assert.True(t, gotIDs[wantID], "certificate item picker must be prefilled with %s, got %+v", wantID, certItemsIn)
 				}
 
 				flowLogger.LogTransition(
 					"8-Issuance: Phytosanitary Certificate",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-6"},
 					"Senior NPQS Quarantine Officer issued Phytosanitary Certificate PC-NPQS-2026-8092 (item-5 excluded: rejected by lab)",
 					map[string]string{
 						"item-1": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
@@ -490,6 +531,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						"item-3": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 						"item-4": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 						"item-5": "EXCLUDED From Certificate (Rejected By Lab Test)",
+						"item-6": "Phytosanitary Certificate PC-NPQS-2026-8092 ISSUED",
 					},
 				)
 				// Officer deselects item-5 (and only item-5) on the picker.
@@ -501,6 +543,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 						map[string]any{"id": "item-3", "include_in_certificate": true},
 						map[string]any{"id": "item-4", "include_in_certificate": true},
 						map[string]any{"id": "item-5", "include_in_certificate": false},
+						map[string]any{"id": "item-6", "include_in_certificate": true},
 					},
 				}, nil
 
@@ -522,13 +565,14 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 				flowLogger.LogTransition(
 					"9-ePhyto: IPPC Hub Transmission",
 					p.TaskTemplateID,
-					[]string{"item-1", "item-2", "item-3", "item-4"},
+					[]string{"item-1", "item-2", "item-3", "item-4", "item-6"},
 					"Electronic Phytosanitary Certificate XML successfully transmitted to IPPC ePhyto Hub (item-5 excluded)",
 					map[string]string{
 						"item-1": "ePhyto Hub Transmission Confirmed (Completed)",
 						"item-2": "ePhyto Hub Transmission Confirmed (Completed)",
 						"item-3": "ePhyto Hub Transmission Confirmed (Completed)",
 						"item-4": "ePhyto Hub Transmission Confirmed (Completed)",
+						"item-6": "ePhyto Hub Transmission Confirmed (Completed)",
 					},
 				)
 				return map[string]any{
@@ -566,6 +610,8 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	// the resubmit loop just because one item in it was rejected.
 	assert.Equal(t, 1, executedTasks["npqs-v2-lab-testing"], "Track 1 (Lab) testing must execute once for the item-1/item-5 batch, with no resubmit retest triggered")
 	assert.Equal(t, 1, executedTasks["npqs-v2-visual-consignment-flow"], "Track 2 (Visual) must execute for item-2")
+	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-collection"], "Track 2 (Visual/Sample) sample collection must execute for item-6")
+	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-inspection"], "Track 2 (Visual/Sample) inspection must execute for item-6, after sample collection")
 	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-request"], "Track 3 (Treatment) must execute for item-3")
 	assert.Equal(t, 1, executedTasks["npqs-v2-pay-for-treatment"], "Track 3 payment must execute for item-3")
 	assert.Equal(t, 1, executedTasks["npqs-v2-issue-treatment-cert"], "Track 3 cert issue must execute for item-3")
