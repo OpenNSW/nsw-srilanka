@@ -48,11 +48,30 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	ctx.Record.State = "QUEUED_EXTERNALLY"
 
 	// Convention: if input_mapping placed a value under the reserved key
-	// "submission", that value is the wire shape OGA sees. Otherwise the
-	// whole inputs bag is sent (default fallback for simple cases).
+	// "submission", that value is the wire shape OGA sees — with any other
+	// input_mapping keys layered on as siblings (never overwriting a field
+	// submission itself already has), so a node can add context (e.g. a
+	// per-item array partitioned by a BATCH_SPLIT upstream) without losing
+	// the flat submission shape existing view/review forms already expect.
+	// Otherwise the whole inputs bag is sent (default fallback for simple
+	// cases).
 	var data any = ctx.Inputs
 	if submission, ok := ctx.Inputs["submission"]; ok {
-		data = submission
+		if submissionMap, isMap := submission.(map[string]any); isMap {
+			merged := make(map[string]any, len(submissionMap)+len(ctx.Inputs))
+			for k, v := range ctx.Inputs {
+				if k == "submission" {
+					continue
+				}
+				merged[k] = v
+			}
+			for k, v := range submissionMap {
+				merged[k] = v
+			}
+			data = merged
+		} else {
+			data = submission
+		}
 	}
 	body := buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, p.client.callbackTasksURL())
 
