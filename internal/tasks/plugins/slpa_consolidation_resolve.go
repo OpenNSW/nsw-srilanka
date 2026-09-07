@@ -7,6 +7,7 @@ import (
 
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/consolidation"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
 )
 
 // TaskTypeSLPAConsolidationResolve is the synchronous transform that turns the
@@ -36,11 +37,7 @@ func SLPAConsolidationResolveFunc(ctx flowplugins.PluginContext, _ json.RawMessa
 	}
 
 	sqid, number := chosen, ""
-	for _, raw := range asAnyList(value(ctx, consolidation.CapContainersKey)) {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, row := range fields.Rows(value(ctx, consolidation.CapContainersKey)) {
 		rowSqid := strings.TrimSpace(asString(row["sqid"]))
 		rowNo := strings.TrimSpace(asString(row["container_no"]))
 		if rowSqid == chosen || strings.EqualFold(rowNo, chosen) {
@@ -67,11 +64,4 @@ func SLPAConsolidationResolveFunc(ctx flowplugins.PluginContext, _ json.RawMessa
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
-}
-
-// asAnyList reads a value the workflow recorded as a list, tolerating the []any
-// a task record holds after a round trip through JSON.
-func asAnyList(v any) []any {
-	items, _ := v.([]any)
-	return items
 }

@@ -24,8 +24,14 @@ const CusdecInput = "cusdec_serial"
 const SOContainersKey = "so_containers"
 
 // ChosenCapKey is the task input carrying the real container the trader picked,
-// and BranchSOKey the placeholder the branch owns. Both are container numbers:
-// what the trader and the order speak in, resolved to sqids before the call.
+// and BranchSOKey the placeholder the branch owns.
+//
+// Despite its name, ChosenCapKey carries SLPA's sqid rather than a container
+// number: the trader picks from a list the projector builds, and it offers the
+// sqid as each option's value because one answer has to key the save, the
+// delete and — once resolved back to a number — the gate pass. The name is the
+// form field's, which the artifacts and the branch payload both spell this way.
+// BranchSOKey is a container number, which is what the order speaks in.
 const (
 	ChosenCapKey = "cap_container_no"
 	BranchSOKey  = "so_container_no"
@@ -34,9 +40,16 @@ const (
 // CapContainersKey is the output key the pre-advised side is recorded under.
 const CapContainersKey = "cap_containers"
 
-// Outcomes of the lookup, which is what the workflow's gateway reads. Three
-// rather than a boolean, because "nothing to do" and "nothing can be done" lead
-// to opposite places: one is finished, the other needs a person.
+// Outcomes of the lookup. Three rather than a boolean, because "nothing to do"
+// and "nothing can be done" are different states to report: one is finished,
+// the other is waiting on a terminal.
+//
+// Recorded for the trader's panel and for anyone reading the task afterwards.
+// No gateway routes on it today: the flow sends every branch to the form, and a
+// trader with nothing to pick submits an empty choice, which loops the lookup —
+// that is how waiting for a pre-advice is expressed. The value is here for a
+// gateway that wants it, in the pattern core's own plugins describe, rather than
+// because one currently reads it.
 const (
 	// OutcomeReady means there are containers for the trader to consolidate.
 	OutcomeReady = "ready"
@@ -134,7 +147,7 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 		out["outcome"] = OutcomeBlocked
 		out["error"] = "SLPA is not reporting any containers to consolidate for this declaration yet.\n\n" +
 			summarise(rows, done, soNumbers) +
-			"\n\nContainers appear here once the terminal has pre-advised them against the declaration. Use **Check Again** once they have."
+			"\n\nContainers appear here once the terminal has pre-advised them against the declaration. Submit without choosing a container to look again."
 		return false, out
 	}
 }
@@ -251,10 +264,10 @@ func capContainersOut(containers []CapContainer) []map[string]any {
 	out := make([]map[string]any, 0, len(containers))
 	for _, capContainer := range containers {
 		out = append(out, map[string]any{
-			"sqid":              capContainer.Sqid,
-			"container_no":      capContainer.ContainerNo,
-			"container_size":    capContainer.ContainerSize,
-			"so_container_sqid": capContainer.SOContainerSqid,
+			"sqid":               capContainer.Sqid,
+			"container_no":       capContainer.ContainerNo,
+			"container_size":     capContainer.ContainerSize,
+			SOContainerSqidField: capContainer.SOContainerSqid,
 		})
 	}
 	return out
@@ -280,29 +293,14 @@ func branchSides(inputs map[string]any) FetchResponse {
 // knownCapContainers reads back the pre-advised side the lookup recorded, as
 // knownSOContainers does for the other.
 func knownCapContainers(value any) []CapContainer {
-	items, ok := value.([]any)
-	if !ok {
-		typed, isTyped := value.([]map[string]any)
-		if !isTyped {
-			return nil
-		}
-		items = make([]any, 0, len(typed))
-		for _, item := range typed {
-			items = append(items, item)
-		}
-	}
-
-	out := make([]CapContainer, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	rows := fields.Rows(value)
+	out := make([]CapContainer, 0, len(rows))
+	for _, m := range rows {
 		out = append(out, CapContainer{
 			Sqid:            fields.String(m, "sqid"),
 			ContainerNo:     fields.String(m, "container_no"),
 			ContainerSize:   fields.String(m, "container_size"),
-			SOContainerSqid: m["so_container_sqid"],
+			SOContainerSqid: m[SOContainerSqidField],
 		})
 	}
 	return out
@@ -310,24 +308,9 @@ func knownCapContainers(value any) []CapContainer {
 
 // knownSOContainers recovers the service-order side the lookup recorded.
 func knownSOContainers(value any) []SOContainer {
-	items, ok := value.([]any)
-	if !ok {
-		typed, isTyped := value.([]map[string]any)
-		if !isTyped {
-			return nil
-		}
-		items = make([]any, 0, len(typed))
-		for _, item := range typed {
-			items = append(items, item)
-		}
-	}
-
-	out := make([]SOContainer, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	rows := fields.Rows(value)
+	out := make([]SOContainer, 0, len(rows))
+	for _, m := range rows {
 		out = append(out, SOContainer{
 			Sqid:          fields.String(m, "sqid"),
 			ContainerNo:   fields.String(m, "container_no"),

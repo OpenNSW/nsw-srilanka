@@ -30,11 +30,34 @@ type CapContainer struct {
 // The field is null until consolidation and carries the service-order
 // container's sqid afterwards, so it is also how a redelivered or repeated run
 // recognises work already done.
-func (c CapContainer) consolidated() bool {
-	if c.SOContainerSqid == nil {
+func (c CapContainer) consolidated() bool { return pairedWith(c.SOContainerSqid) }
+
+// SOContainerSqidField is the name the pairing is recorded under on the rows
+// the lookup writes to the task record. Named here because the reader of those
+// rows is elsewhere — the trader's form projector — and the two must agree.
+const SOContainerSqidField = "so_container_sqid"
+
+// Paired reports whether the CMS has already paired the container one recorded
+// row describes, for a caller reading those rows back off the task record
+// rather than holding the CapContainer they were built from.
+//
+// It exists so there is one answer to "is this one already done": the projector
+// leaves these out of what it offers the trader, and offering an already-paired
+// container is a save the CMS refuses.
+func Paired(row map[string]any) bool { return pairedWith(row[SOContainerSqidField]) }
+
+// pairedWith reads the field the CMS records a pairing in.
+//
+// Typed any and rendered rather than asserted to a string, because this is the
+// CMS's value and it has not promised which JSON type it comes back as. A hard
+// assertion would read anything unexpected as "not paired yet", which is the
+// answer that does damage: it puts a container that is already consolidated
+// back in front of the trader.
+func pairedWith(soContainerSqid any) bool {
+	if soContainerSqid == nil {
 		return false
 	}
-	return strings.TrimSpace(fmt.Sprint(c.SOContainerSqid)) != ""
+	return strings.TrimSpace(fmt.Sprint(soContainerSqid)) != ""
 }
 
 // SOContainer is one container priced on the export service order.
@@ -70,30 +93,22 @@ type SaveRequest struct {
 	Containers []Pair `json:"containers"`
 }
 
-// Row is one line of the trader's consolidation form: a container SLPA
-// pre-advised, and the service-order container they are pairing it with.
+// Row is one container SLPA pre-advised and has not consolidated yet: one of
+// the real containers a trader is choosing between.
 //
-// The pairing is the trader's to make, and it cannot be derived. The two sides
-// carry different numbers by design: a cap container is the real container the
-// terminal pre-advised, while a service-order container is the placeholder the
-// order was priced against. Only the trader knows which placeholder a real
-// container answers to.
+// The pairing itself is not modelled here. It is the trader's to make and it
+// cannot be derived — the two sides carry different numbers by design, a cap
+// container being the real container the terminal pre-advised and a
+// service-order container the placeholder the order was priced against — and
+// each branch resolves the one pairing it owns through PairOne.
 type Row struct {
 	CapContainerNo string `json:"cap_container_no"`
 	CapSqid        string `json:"cap_sqid"`
-	SOContainerNo  string `json:"so_container_no"`
-	Consolidate    bool   `json:"consolidate"`
 }
 
-// Rows builds the form the trader is shown: one line per pre-advised container
-// SLPA has not consolidated yet.
-//
-// Nothing is matched on the container number, because the two sides never share
-// one: the pre-advised number is the real container, the service-order number is
-// the placeholder it was priced against. A line is pre-filled only when the
-// choice is not a choice at all — one container to pair, one placeholder to pair
-// it with. Everything else is left for the trader, empty and unticked, rather
-// than filled with a guess they might submit unread.
+// Rows lists the pre-advised containers SLPA has not consolidated yet: what
+// there is to do under this declaration, which is what the lookup reports and
+// what the trader's panel describes.
 func Rows(resp FetchResponse) []Row {
 	rows := make([]Row, 0, len(resp.CapContainers))
 	for _, capContainer := range resp.CapContainers {
@@ -106,13 +121,6 @@ func Rows(resp FetchResponse) []Row {
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].CapContainerNo < rows[j].CapContainerNo })
-
-	if len(rows) == 1 && len(resp.SOContainers) == 1 {
-		if only := strings.TrimSpace(resp.SOContainers[0].ContainerNo); only != "" {
-			rows[0].SOContainerNo = only
-			rows[0].Consolidate = true
-		}
-	}
 	return rows
 }
 

@@ -6,6 +6,9 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/uiprojector"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/consolidation"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
 )
 
 // ProjectorSLPAConsolidation defines the container-consolidation form projector.
@@ -88,19 +91,15 @@ type choice struct{ value, label string }
 // become an option nothing downstream could resolve.
 func availableContainers(record map[string]any) []choice {
 	ns, _ := record[consolidationNamespace].(map[string]any)
-	raw, _ := ns["cap_containers"].([]any)
+	rows := fields.Rows(ns[consolidation.CapContainersKey])
 
-	out := make([]choice, 0, len(raw))
-	for _, item := range raw {
-		row, ok := item.(map[string]any)
-		if !ok {
+	out := make([]choice, 0, len(rows))
+	for _, row := range rows {
+		if consolidation.Paired(row) {
 			continue
 		}
-		if paired, _ := row["so_container_sqid"].(string); paired != "" {
-			continue
-		}
-		sqid, _ := row["sqid"].(string)
-		number, _ := row["container_no"].(string)
+		sqid := fields.String(row, "sqid")
+		number := fields.String(row, "container_no")
 		if sqid == "" || number == "" {
 			continue
 		}

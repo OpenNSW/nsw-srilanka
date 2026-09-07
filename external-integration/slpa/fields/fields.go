@@ -5,6 +5,10 @@
 // which Go type actually arrives. These accessors read through that, so a
 // payload builder states which field it wants rather than repeating the type
 // assertions, and every SLPA integration reads a form the same way.
+//
+// The same applies to what a step reads back off a task record, which is the
+// same decoded JSON once it has been through storage; Rows reads the lists a
+// record carries.
 package fields
 
 import (
@@ -58,3 +62,35 @@ func Number(m map[string]any, key string) float64 {
 
 // Integer reads a whole-number field, truncating as the CMS's own fields do.
 func Integer(m map[string]any, key string) int { return int(Number(m, key)) }
+
+// Rows reads a list of records, tolerating both shapes one arrives in: the
+// []any a task record holds once it has round-tripped through JSON, and the
+// []map[string]any a step recorded in Go and handed straight on.
+//
+// Both occur, and which one a reader gets depends on whether the value reached
+// it through storage or through a mapping made in the same process. A reader
+// that accepts only one of them silently finds no rows in the other, so the
+// tolerance lives here rather than being restated — differently — at each site.
+//
+// An entry that is not a record is skipped: a list is worth reading for the
+// rows it does hold. Anything that is not a list at all returns nil, which is
+// how a caller tells "no rows" from "not a list" when it needs to.
+func Rows(v any) []map[string]any {
+	var items []any
+	switch typed := v.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		items = typed
+	default:
+		return nil
+	}
+
+	rows := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if row, ok := item.(map[string]any); ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}

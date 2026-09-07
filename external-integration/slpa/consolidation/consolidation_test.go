@@ -60,14 +60,14 @@ func TestFetch_OffersTheContainersForTheTraderToPair(t *testing.T) {
 	assert.Equal(t, "DUMY0000001", out["available_so_containers"])
 }
 
-// With more than one container on either side the pairing is the trader's, and
-// nothing is pre-filled: the numbers carry no relationship to match on, so a
-// suggestion would be a guess they might submit unread.
-func TestRows_LeavesAnAmbiguousPairingToTheTrader(t *testing.T) {
+// Rows reports what is left to do, by both names, in a settled order. It models
+// no pairing at all: the numbers carry no relationship to match on, and each
+// branch resolves the one pairing it owns through PairOne.
+func TestRows_ListsWhatIsLeftToConsolidate(t *testing.T) {
 	rows := Rows(FetchResponse{
 		CapContainers: []CapContainer{
-			{Sqid: "cap-A", ContainerNo: "MSCU8492019"},
 			{Sqid: "cap-B", ContainerNo: "TCLU1234567"},
+			{Sqid: "cap-A", ContainerNo: "MSCU8492019"},
 		},
 		SOContainers: []SOContainer{
 			{Sqid: "so-1", ContainerNo: "DUMY0000001"},
@@ -76,33 +76,37 @@ func TestRows_LeavesAnAmbiguousPairingToTheTrader(t *testing.T) {
 	})
 
 	require.Len(t, rows, 2)
-	for _, row := range rows {
-		assert.Empty(t, row.SOContainerNo, "nothing to derive the pairing from")
-		assert.False(t, row.Consolidate)
-	}
-	assert.Equal(t, "MSCU8492019", rows[0].CapContainerNo)
-	assert.Equal(t, "TCLU1234567", rows[1].CapContainerNo)
+	assert.Equal(t, Row{CapContainerNo: "MSCU8492019", CapSqid: "cap-A"}, rows[0])
+	assert.Equal(t, Row{CapContainerNo: "TCLU1234567", CapSqid: "cap-B"}, rows[1])
 }
 
 // A pre-advised container whose number happens to equal a service-order number
-// is still not matched: the equality means nothing, and treating it as a pairing
-// would make behaviour depend on a coincidence.
-func TestRows_DoesNotPairOnAMatchingNumber(t *testing.T) {
-	rows := Rows(FetchResponse{
-		CapContainers: []CapContainer{
-			{Sqid: "cap-A", ContainerNo: "MSCU8492019"},
-			{Sqid: "cap-B", ContainerNo: "DUMY0000001"},
+// is still not paired with it: the equality means nothing, and treating it as a
+// pairing would make behaviour depend on a coincidence. The branch's own
+// placeholder is what decides, so the coincidence is not what gets sent.
+func TestSave_DoesNotPairOnACoincidentallyMatchingNumber(t *testing.T) {
+	inputs := map[string]any{
+		ChosenCapKey: "cap-B",
+		BranchSOKey:  "DUMY0000002",
+		CapContainersKey: []any{
+			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019"},
+			map[string]any{"sqid": "cap-B", "container_no": "DUMY0000001"},
 		},
-		SOContainers: []SOContainer{
-			{Sqid: "so-1", ContainerNo: "DUMY0000001"},
-			{Sqid: "so-2", ContainerNo: "DUMY0000002"},
+		SOContainersKey: []any{
+			map[string]any{"sqid": "so-1", "container_no": "DUMY0000001"},
+			map[string]any{"sqid": "so-2", "container_no": "DUMY0000002"},
 		},
-	})
-
-	require.Len(t, rows, 2)
-	for _, row := range rows {
-		assert.Empty(t, row.SOContainerNo)
 	}
+
+	encoded, err := json.Marshal(NewSaveInterpreter().BuildRequest(inputs).(remote.JSONBody).V)
+	require.NoError(t, err)
+
+	var req SaveRequest
+	require.NoError(t, json.Unmarshal(encoded, &req))
+	require.Len(t, req.Containers, 1)
+	assert.Equal(t, "cap-B", req.Containers[0].ID)
+	assert.Equal(t, "so-2", req.Containers[0].SOContainerID,
+		"the placeholder the branch owns, not the one whose number the container happens to share")
 }
 
 // so_container_sqid carries the pairing once it is made, so an already
@@ -128,7 +132,10 @@ func TestFetch_NothingPreAdvisedYet(t *testing.T) {
 	require.False(t, ok)
 	assert.Equal(t, OutcomeBlocked, out["outcome"])
 	assert.Empty(t, out["cap_container_numbers"], "nothing pre-advised, nothing to choose from")
-	assert.Contains(t, out["error"], "Check Again")
+	// The step has one button, so waiting is expressed by submitting an empty
+	// choice, which loops the lookup. Naming an affordance the form does not
+	// have leaves the trader looking for a button that is not there.
+	assert.Contains(t, out["error"], "Submit without choosing a container")
 }
 
 func TestFetch_RefusalCarriesTheCMSsOwnReason(t *testing.T) {

@@ -111,29 +111,20 @@ func containerBranchLabel(placeholder string, index, total int) string {
 	return fmt.Sprintf("Container %s (%d of %d)", placeholder, index+1, total)
 }
 
-// containerRows reads the service order's container rows, tolerating both the
-// []any a task record holds after a round trip through JSON and the typed slice
-// recorded in Go.
+// containerRows reads the service order's container rows.
+//
+// Something that is not a list at all is reported rather than read as empty: an
+// order whose containers arrived in a shape this cannot read is a mapping
+// mistake, and it must not look the same as an order with no containers.
 func containerRows(raw any) ([]map[string]any, error) {
-	var items []any
-	switch v := raw.(type) {
+	switch raw.(type) {
 	case nil:
 		return nil, nil
-	case []any:
-		items = v
-	case []map[string]any:
-		return v, nil
+	case []any, []map[string]any:
+		return fields.Rows(raw), nil
 	default:
 		return nil, fmt.Errorf("slpa_container_split_builder: containers is not a list (got %T)", raw)
 	}
-
-	out := make([]map[string]any, 0, len(items))
-	for _, raw := range items {
-		if row, ok := raw.(map[string]any); ok {
-			out = append(out, row)
-		}
-	}
-	return out, nil
 }
 
 // value reads one value a builder needs, from the step's mapped inputs first
