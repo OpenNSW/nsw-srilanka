@@ -61,7 +61,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			PlaceOfIssue:           officeName(asString(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
 			DocDeclarations:        buildDocDeclarations(uf),
-			Consignment:            buildConsignment(uf, importISO),
+			Consignment:            buildConsignment(uf, importISO, inputs["certificate_items"]),
 		},
 	}
 }
@@ -277,7 +277,28 @@ func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
 	return dd
 }
 
-func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentInput {
+// excludedItemIDs returns the set of commodity IDs the officer explicitly
+// deselected on the certificate-issuance item picker (include_in_certificate
+// == false). certificateItems is nil/empty whenever the officer form hasn't
+// captured a selection (older submissions, or a task config that doesn't ask
+// for one) — in that case every declared commodity still goes on the
+// certificate, matching prior behavior before the picker existed.
+func excludedItemIDs(certificateItems any) map[string]bool {
+	excluded := make(map[string]bool)
+	for _, raw := range asSlice(certificateItems) {
+		item := asMap(raw)
+		id := asString(item["id"])
+		if id == "" {
+			continue
+		}
+		if included, ok := item["include_in_certificate"].(bool); ok && !included {
+			excluded[id] = true
+		}
+	}
+	return excluded
+}
+
+func buildConsignment(uf map[string]any, importISO string, certificateItems any) spscert.ConsignmentInput {
 	c := spscert.ConsignmentInput{
 		ExportCountry: exportNPPOCode,
 		ImportCountry: importISO,
@@ -311,9 +332,16 @@ func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentIn
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])
-	for i, raw := range asSlice(uf["commodities"]) {
+	excluded := excludedItemIDs(certificateItems)
+	seq := 0
+	for _, raw := range asSlice(uf["commodities"]) {
+		com := asMap(raw)
+		if excluded[asString(com["id"])] {
+			continue
+		}
+		seq++
 		c.Items = append(c.Items, spscert.ItemInput{
-			TradeLines: []spscert.TradeLineInput{buildTradeLine(asMap(raw), i+1, treatment)},
+			TradeLines: []spscert.TradeLineInput{buildTradeLine(com, seq, treatment)},
 		})
 	}
 	return c
