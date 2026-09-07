@@ -254,10 +254,13 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 
 	flowLogger := newWorkflowFlowLogger(declaredItems)
 	executedTasks := make(map[string]int)
+	var executedTasksMu sync.Mutex
 
 	acts := &engine.Activities{
 		ExecuteTaskActivityHandler: func(p engine.TaskPayload) (map[string]any, error) {
+			executedTasksMu.Lock()
 			executedTasks[p.TaskTemplateID]++
+			executedTasksMu.Unlock()
 			switch p.TaskTemplateID {
 			case "npqs-v2-apply-phyto-cert":
 				// Update track assignments
