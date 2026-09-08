@@ -1,6 +1,7 @@
 import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { Zone } from './Zone'
 
 type Props = {
@@ -195,6 +196,9 @@ function formatRelative(iso: string, t: TFunction): string {
 }
 
 function Header({ task }: { task: ZoneView }) {
+  const { t } = useTranslation()
+  const statusKey = workflowStatusI18nKey(task.state)
+  const statusLabel = statusKey ? t(statusKey) : task.state
   return (
     <div className="border-b border-border pb-4">
       <div className="flex items-center justify-between gap-4">
@@ -203,7 +207,7 @@ function Header({ task }: { task: ZoneView }) {
           <p className="text-xs text-foreground-muted mt-1 font-mono">{task.task_id}</p>
         </div>
         <span className="inline-flex items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary border border-primary-subtle">
-          {task.state}
+          {statusLabel}
         </span>
       </div>
     </div>
