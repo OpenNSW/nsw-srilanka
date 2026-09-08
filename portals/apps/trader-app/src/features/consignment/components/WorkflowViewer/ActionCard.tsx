@@ -48,7 +48,7 @@ const statusConfig: Record<
     icon: <UpdateIcon className="w-4 h-4" />,
   },
   QUEUED_EXTERNALLY: {
-    color: 'orange',
+    color: 'blue',
     label: 'Awaiting Feedback',
     icon: <ClockIcon className="w-4 h-4" />,
   },

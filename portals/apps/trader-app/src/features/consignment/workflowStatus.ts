@@ -12,7 +12,9 @@ export const WORKFLOW_STATUS_I18N_KEYS: Record<
   FAILED: 'failed',
 }
 
-export function workflowStatusI18nKey(state: string): string | undefined {
+type WorkflowStatusI18nKey = `workflow.status.${(typeof WORKFLOW_STATUS_I18N_KEYS)[WorkflowNodeState]}`
+
+export function workflowStatusI18nKey(state: string): WorkflowStatusI18nKey | undefined {
   const key = WORKFLOW_STATUS_I18N_KEYS[state as WorkflowNodeState]
   return key ? `workflow.status.${key}` : undefined
 }
