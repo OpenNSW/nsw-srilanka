@@ -16,7 +16,6 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/core/database"
-	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
 
@@ -110,7 +109,7 @@ func printCompanyUsage() {
 }
 
 func initDB() *gorm.DB {
-	cfg, err := config.Load()
+	cfg, err := Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
