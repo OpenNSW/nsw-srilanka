@@ -32,6 +32,39 @@ func TestSLPAConsolidationResolve_RecordsBothNamesOfTheChosenContainer(t *testin
 	assert.Equal(t, "TCLU1234567", ctx.Record.Data["container_no"])
 }
 
+// The branch redoes a consolidation by reading a flag the delete sets, and the
+// gate pass does not set it when it issues a pass. Since a workflow output
+// mapping can only copy a value it finds, an absent flag left the previous one
+// standing: once a trader had deleted a pairing, every pass they went on to
+// issue sent the branch back to consolidate, with no way to finish the
+// container. Resolving says the answer plainly instead.
+func TestSLPAConsolidationResolve_ClearsTheDeletedFlagItRedoesOn(t *testing.T) {
+	ctx := splitCtx(map[string]any{
+		"cap_container_no": "cap-A",
+		"cap_containers":   capContainerRows(),
+		// What the branch carries after a delete-and-redo, which is the state
+		// that used to strand it.
+		"deleted": true,
+	})
+	require.NoError(t, SLPAConsolidationResolveFunc(ctx, nil))
+
+	assert.Equal(t, false, ctx.Record.Data["deleted"],
+		"a resolved pairing is not a deleted one, so the branch can reach its gate pass")
+}
+
+// Nothing is recorded for a resolve that failed, the flag included: saying "not
+// deleted" about a pairing that was never resolved would route the branch on to
+// a gate pass for a container it could not name.
+func TestSLPAConsolidationResolve_LeavesTheFlagAloneWhenItCannotResolve(t *testing.T) {
+	ctx := splitCtx(map[string]any{
+		"cap_container_no": "cap-gone",
+		"cap_containers":   capContainerRows(),
+		"deleted":          true,
+	})
+	require.Error(t, SLPAConsolidationResolveFunc(ctx, nil))
+	assert.NotContains(t, ctx.Record.Data, "deleted")
+}
+
 // A caller holding only the number should not have to look the sqid up first,
 // so the choice is matched on either name, ignoring case as SLPA's own values
 // have been seen to differ in it.

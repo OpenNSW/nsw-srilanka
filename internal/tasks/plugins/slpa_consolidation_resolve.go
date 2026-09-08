@@ -57,6 +57,18 @@ func SLPAConsolidationResolveFunc(ctx flowplugins.PluginContext, _ json.RawMessa
 	}
 	ctx.Record.Data["cap_sqid"] = sqid
 	ctx.Record.Data["container_no"] = number
+
+	// This container is consolidated, so nothing about it is deleted. Said
+	// plainly because the branch decides whether to redo a consolidation by
+	// reading a flag the delete sets, and a workflow output mapping can only
+	// copy a value it finds: the gate pass step does not set that flag when it
+	// issues a pass, so an optional mapping leaves whatever was there before.
+	// Once a trader had deleted a pairing once, the flag stayed true and the
+	// branch was sent back to consolidate after every pass it issued, with no
+	// way to finish the container. Resolving a pairing is the moment the answer
+	// is knowably false, so it is recorded here rather than left to the absence
+	// of a value elsewhere.
+	ctx.Record.Data["deleted"] = false
 	return nil
 }
 
