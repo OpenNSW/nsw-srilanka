@@ -15,6 +15,7 @@ import {
   UpdateIcon,
 } from '@radix-ui/react-icons'
 import type { WorkflowNode, WorkflowNodeState } from '@/features/consignment/types'
+import { WORKFLOW_STATUS_I18N_KEYS } from '@/features/consignment/workflowStatus'
 
 const nodeTypeIcons: Record<string, React.ReactNode> = {
   SIMPLE_FORM: <FileTextIcon className="w-4 h-4" />,
@@ -47,7 +48,7 @@ const statusConfig: Record<
     icon: <UpdateIcon className="w-4 h-4" />,
   },
   QUEUED_EXTERNALLY: {
-    color: 'blue',
+    color: 'orange',
     label: 'Awaiting Feedback',
     icon: <ClockIcon className="w-4 h-4" />,
   },
@@ -61,18 +62,6 @@ const statusConfig: Record<
     label: 'Failed',
     icon: <CrossCircledIcon className="w-4 h-4" />,
   },
-}
-
-const STATUS_KEYS: Record<
-  WorkflowNodeState,
-  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'awaitingFeedback'
-> = {
-  COMPLETED: 'completed',
-  READY: 'ready',
-  IN_PROGRESS: 'inProgress',
-  QUEUED_EXTERNALLY: 'awaitingFeedback',
-  LOCKED: 'locked',
-  FAILED: 'failed',
 }
 
 export interface ActionCardProps {
@@ -138,7 +127,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
                 <Badge color={config.color} variant="soft" size="1">
                   <Flex align="center" gap="1">
                     {config.icon}
-                    {t(`workflow.status.${STATUS_KEYS[step.state] ?? 'inProgress'}`)}
+                    {t(`workflow.status.${WORKFLOW_STATUS_I18N_KEYS[step.state] ?? 'inProgress'}`)}
                   </Flex>
                 </Badge>
               </Flex>

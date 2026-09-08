@@ -115,11 +115,11 @@ export function ActionListView({
               <Box mb="6">
                 <Flex align="center" justify="between" my="4" px="3">
                   <Flex align="center" gap="2">
-                    <div className="w-1.5 h-5 bg-info rounded-full" />
-                    <Heading size="4" color="blue" weight="bold">
+                    <div className="w-1.5 h-5 bg-warning rounded-full" />
+                    <Heading size="4" color="orange" weight="bold">
                       {t('workflow.inReview')}
                     </Heading>
-                    <Badge color="blue" variant="solid" radius="full">
+                    <Badge color="orange" variant="soft" radius="full">
                       {groups.inReview.length}
                     </Badge>
                   </Flex>
