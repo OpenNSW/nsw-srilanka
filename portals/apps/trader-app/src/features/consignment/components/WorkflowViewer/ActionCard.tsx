@@ -43,12 +43,12 @@ const statusConfig: Record<
     icon: <PlayIcon className="w-4 h-4" />,
   },
   IN_PROGRESS: {
-    color: 'orange',
+    color: 'blue',
     label: 'In Progress',
     icon: <UpdateIcon className="w-4 h-4" />,
   },
   QUEUED_EXTERNALLY: {
-    color: 'blue',
+    color: 'orange',
     label: 'Awaiting Feedback',
     icon: <ClockIcon className="w-4 h-4" />,
   },
