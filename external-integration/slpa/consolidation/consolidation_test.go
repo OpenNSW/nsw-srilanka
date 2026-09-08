@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/OpenNSW/core/remote"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -47,34 +49,25 @@ func TestFetch_OffersTheContainersForTheTraderToPair(t *testing.T) {
 
 	require.True(t, ok)
 	assert.Equal(t, OutcomeReady, out["outcome"])
-	// One real container, one placeholder: the pairing is not a choice, so it is
-	// pre-filled. Nothing was matched on the number — they differ.
-	assert.Equal(t, []map[string]any{{
-		"cap_container_no": "MSCU8492019",
-		"cap_sqid":         "9876543210ZYXWVT",
-		"so_container_no":  "DUMY0000001",
-		"consolidate":      true,
-	}}, out[RowsKey])
+	// Both sides travel with it, so the save step can turn the container the
+	// trader picked into the sqid the CMS reads.
+	assert.Equal(t, []string{"MSCU8492019"}, out["cap_container_numbers"],
+		"the real containers a branch chooses from")
 
-	// The service-order side travels with it, so the save step can turn the
-	// container the trader picked into the sqid the CMS reads.
 	assert.Equal(t, []map[string]any{{
 		"sqid": "zyxwvutsrqponmlk", "container_no": "DUMY0000001", "size": "40",
 	}}, out[SOContainersKey])
 	assert.Equal(t, "DUMY0000001", out["available_so_containers"])
-
-	// Nothing is consolidated yet: that only follows the trader's submission.
-	assert.NotContains(t, out, ConsolidatedKey)
 }
 
-// With more than one container on either side the pairing is the trader's, and
-// nothing is pre-filled: the numbers carry no relationship to match on, so a
-// suggestion would be a guess they might submit unread.
-func TestRows_LeavesAnAmbiguousPairingToTheTrader(t *testing.T) {
+// Rows reports what is left to do, by both names, in a settled order. It models
+// no pairing at all: the numbers carry no relationship to match on, and each
+// branch resolves the one pairing it owns through PairOne.
+func TestRows_ListsWhatIsLeftToConsolidate(t *testing.T) {
 	rows := Rows(FetchResponse{
 		CapContainers: []CapContainer{
-			{Sqid: "cap-A", ContainerNo: "MSCU8492019"},
 			{Sqid: "cap-B", ContainerNo: "TCLU1234567"},
+			{Sqid: "cap-A", ContainerNo: "MSCU8492019"},
 		},
 		SOContainers: []SOContainer{
 			{Sqid: "so-1", ContainerNo: "DUMY0000001"},
@@ -83,33 +76,37 @@ func TestRows_LeavesAnAmbiguousPairingToTheTrader(t *testing.T) {
 	})
 
 	require.Len(t, rows, 2)
-	for _, row := range rows {
-		assert.Empty(t, row.SOContainerNo, "nothing to derive the pairing from")
-		assert.False(t, row.Consolidate)
-	}
-	assert.Equal(t, "MSCU8492019", rows[0].CapContainerNo)
-	assert.Equal(t, "TCLU1234567", rows[1].CapContainerNo)
+	assert.Equal(t, Row{CapContainerNo: "MSCU8492019", CapSqid: "cap-A"}, rows[0])
+	assert.Equal(t, Row{CapContainerNo: "TCLU1234567", CapSqid: "cap-B"}, rows[1])
 }
 
 // A pre-advised container whose number happens to equal a service-order number
-// is still not matched: the equality means nothing, and treating it as a pairing
-// would make behaviour depend on a coincidence.
-func TestRows_DoesNotPairOnAMatchingNumber(t *testing.T) {
-	rows := Rows(FetchResponse{
-		CapContainers: []CapContainer{
-			{Sqid: "cap-A", ContainerNo: "MSCU8492019"},
-			{Sqid: "cap-B", ContainerNo: "DUMY0000001"},
+// is still not paired with it: the equality means nothing, and treating it as a
+// pairing would make behaviour depend on a coincidence. The branch's own
+// placeholder is what decides, so the coincidence is not what gets sent.
+func TestSave_DoesNotPairOnACoincidentallyMatchingNumber(t *testing.T) {
+	inputs := map[string]any{
+		ChosenCapKey: "cap-B",
+		BranchSOKey:  "DUMY0000002",
+		CapContainersKey: []any{
+			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019"},
+			map[string]any{"sqid": "cap-B", "container_no": "DUMY0000001"},
 		},
-		SOContainers: []SOContainer{
-			{Sqid: "so-1", ContainerNo: "DUMY0000001"},
-			{Sqid: "so-2", ContainerNo: "DUMY0000002"},
+		SOContainersKey: []any{
+			map[string]any{"sqid": "so-1", "container_no": "DUMY0000001"},
+			map[string]any{"sqid": "so-2", "container_no": "DUMY0000002"},
 		},
-	})
-
-	require.Len(t, rows, 2)
-	for _, row := range rows {
-		assert.Empty(t, row.SOContainerNo)
 	}
+
+	encoded, err := json.Marshal(NewSaveInterpreter().BuildRequest(inputs).(remote.JSONBody).V)
+	require.NoError(t, err)
+
+	var req SaveRequest
+	require.NoError(t, json.Unmarshal(encoded, &req))
+	require.Len(t, req.Containers, 1)
+	assert.Equal(t, "cap-B", req.Containers[0].ID)
+	assert.Equal(t, "so-2", req.Containers[0].SOContainerID,
+		"the placeholder the branch owns, not the one whose number the container happens to share")
 }
 
 // so_container_sqid carries the pairing once it is made, so an already
@@ -123,10 +120,8 @@ func TestFetch_AlreadyConsolidatedIsNotOfferedAgain(t *testing.T) {
 
 	assert.True(t, ok)
 	assert.Equal(t, OutcomeDone, out["outcome"])
-	assert.Empty(t, out[RowsKey])
+	assert.Empty(t, out["cap_container_numbers"], "a paired container is not offered again")
 	assert.Equal(t, []string{"MSCU8492019"}, out["already_consolidated"])
-	// A pass is still issued for it, under the real container number.
-	assert.Equal(t, []string{"MSCU8492019"}, out[ConsolidatedKey])
 	assert.NotContains(t, out, "error")
 }
 
@@ -136,8 +131,11 @@ func TestFetch_NothingPreAdvisedYet(t *testing.T) {
 
 	require.False(t, ok)
 	assert.Equal(t, OutcomeBlocked, out["outcome"])
-	assert.Empty(t, out[RowsKey], "the form is always recorded, empty included")
-	assert.Contains(t, out["error"], "Check Again")
+	assert.Empty(t, out["cap_container_numbers"], "nothing pre-advised, nothing to choose from")
+	// The step has one button, so waiting is expressed by submitting an empty
+	// choice, which loops the lookup. Naming an affordance the form does not
+	// have leaves the trader looking for a button that is not there.
+	assert.Contains(t, out["error"], "Submit without choosing a container")
 }
 
 func TestFetch_RefusalCarriesTheCMSsOwnReason(t *testing.T) {
@@ -160,56 +158,6 @@ func TestFetch_QueryIsKeyedOnTheCusdecSerial(t *testing.T) {
 // This is a GET; the plugin must not be handed a body for it.
 func TestFetch_SendsNoBody(t *testing.T) {
 	assert.Nil(t, NewFetchInterpreter().BuildRequest(map[string]any{}))
-}
-
-// What is saved is what the trader ticked — resolved back to the sqids SLPA
-// issued, since they work in container numbers and the CMS works in sqids.
-func TestSave_SendsWhatTheTraderSelected(t *testing.T) {
-	inputs := map[string]any{
-		FormKey: map[string]any{RowsKey: []any{
-			map[string]any{"cap_container_no": "MSCU8492019", "cap_sqid": "cap-A", "so_container_no": "DUMY0000001", "consolidate": true},
-			map[string]any{"cap_container_no": "TCLU1234567", "cap_sqid": "cap-B", "so_container_no": "DUMY0000002", "consolidate": false},
-		}},
-		SOContainersKey: []any{
-			map[string]any{"sqid": "so-1", "container_no": "DUMY0000001"},
-			map[string]any{"sqid": "so-2", "container_no": "DUMY0000002"},
-		},
-	}
-
-	raw, contentType, err := NewSaveInterpreter().BuildRequest(inputs).Encode()
-	require.NoError(t, err)
-	assert.Contains(t, contentType, "application/json")
-
-	var sent SaveRequest
-	require.NoError(t, json.Unmarshal(raw, &sent))
-	assert.Equal(t, SaveRequest{Containers: []Pair{{ID: "cap-A", SOContainerID: "so-1"}}}, sent,
-		"an unticked row is a container the trader declined")
-	assert.NotContains(t, string(raw), "container_no", "the CMS reads only the two sqids")
-}
-
-// Whatever the trader picked is what is sent, looked up by the number they were
-// shown — the numbers on the two sides are unrelated by design.
-func TestResolve_SendsThePairingTheTraderChose(t *testing.T) {
-	selection := Resolve(
-		[]Row{{CapContainerNo: "MSCU8492019", CapSqid: "cap-A", SOContainerNo: " dumy0000002 ", Consolidate: true}},
-		[]SOContainer{
-			{Sqid: "so-1", ContainerNo: "DUMY0000001"},
-			{Sqid: "so-2", ContainerNo: "DUMY0000002"},
-		})
-
-	assert.Equal(t, []Pair{{ID: "cap-A", SOContainerID: "so-2", ContainerNo: "MSCU8492019"}}, selection.Pairs)
-	assert.Empty(t, selection.Unresolved)
-}
-
-// A container the CMS does not hold cannot be turned into a sqid, so it is
-// reported rather than dropped where nobody would see it.
-func TestResolve_ReportsWhatItCannotResolve(t *testing.T) {
-	selection := Resolve(
-		[]Row{{CapContainerNo: "MSCU8492019", CapSqid: "cap-A", SOContainerNo: "DUMY9999999", Consolidate: true}},
-		[]SOContainer{{Sqid: "so-1", ContainerNo: "DUMY0000001"}})
-
-	assert.Empty(t, selection.Pairs)
-	assert.Equal(t, []string{"MSCU8492019"}, selection.Unresolved)
 }
 
 func TestSave_ReadsTheEnvelopeStatus(t *testing.T) {
@@ -244,4 +192,54 @@ func TestHeaders_PresentTheClientKey(t *testing.T) {
 			assert.Nil(t, i.BuildHeaders(map[string]any{}), "no key invents no identity")
 		})
 	}
+}
+
+// The lookup records its own shape, not the CMS's — "container_no" where the
+// CMS sends "ContainerNumber" — so a branch's pairing must be resolved by
+// reading those fields, not by decoding them with the CMS's tags. Doing the
+// latter left every placeholder nameless and reported a correct pairing as one
+// SLPA did not hold.
+func TestSave_PairsTheBranchesChoiceFromWhatTheLookupRecorded(t *testing.T) {
+	inputs := map[string]any{
+		ChosenCapKey: "cap-A",
+		BranchSOKey:  "TCLU9999999",
+		CapContainersKey: []any{
+			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": nil},
+			map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_sqid": nil},
+		},
+		SOContainersKey: []any{
+			map[string]any{"sqid": "so-1", "container_no": "MSCU8492347", "size": "40"},
+			map[string]any{"sqid": "so-2", "container_no": "TCLU9999999", "size": "40"},
+		},
+	}
+
+	body := NewSaveInterpreter().BuildRequest(inputs)
+
+	encoded, err := json.Marshal(body.(remote.JSONBody).V)
+	require.NoError(t, err)
+
+	var req SaveRequest
+	require.NoError(t, json.Unmarshal(encoded, &req))
+	require.Len(t, req.Containers, 1, "the branch consolidates exactly one container")
+	assert.Equal(t, "cap-A", req.Containers[0].ID)
+	assert.Equal(t, "so-2", req.Containers[0].SOContainerID,
+		"the placeholder this branch owns, resolved to its sqid")
+}
+
+// A choice SLPA is no longer offering is not sent: the CMS would refuse a sqid
+// we could not supply, and its reason would name neither half.
+func TestSave_SendsNothingForAChoiceSLPADoesNotHold(t *testing.T) {
+	inputs := map[string]any{
+		ChosenCapKey:     "cap-gone",
+		BranchSOKey:      "TCLU9999999",
+		CapContainersKey: []any{},
+		SOContainersKey:  []any{map[string]any{"sqid": "so-2", "container_no": "TCLU9999999"}},
+	}
+
+	encoded, err := json.Marshal(NewSaveInterpreter().BuildRequest(inputs).(remote.JSONBody).V)
+	require.NoError(t, err)
+
+	var req SaveRequest
+	require.NoError(t, json.Unmarshal(encoded, &req))
+	assert.Empty(t, req.Containers)
 }

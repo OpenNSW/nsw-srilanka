@@ -30,11 +30,34 @@ type CapContainer struct {
 // The field is null until consolidation and carries the service-order
 // container's sqid afterwards, so it is also how a redelivered or repeated run
 // recognises work already done.
-func (c CapContainer) consolidated() bool {
-	if c.SOContainerSqid == nil {
+func (c CapContainer) consolidated() bool { return pairedWith(c.SOContainerSqid) }
+
+// SOContainerSqidField is the name the pairing is recorded under on the rows
+// the lookup writes to the task record. Named here because the reader of those
+// rows is elsewhere — the trader's form projector — and the two must agree.
+const SOContainerSqidField = "so_container_sqid"
+
+// Paired reports whether the CMS has already paired the container one recorded
+// row describes, for a caller reading those rows back off the task record
+// rather than holding the CapContainer they were built from.
+//
+// It exists so there is one answer to "is this one already done": the projector
+// leaves these out of what it offers the trader, and offering an already-paired
+// container is a save the CMS refuses.
+func Paired(row map[string]any) bool { return pairedWith(row[SOContainerSqidField]) }
+
+// pairedWith reads the field the CMS records a pairing in.
+//
+// Typed any and rendered rather than asserted to a string, because this is the
+// CMS's value and it has not promised which JSON type it comes back as. A hard
+// assertion would read anything unexpected as "not paired yet", which is the
+// answer that does damage: it puts a container that is already consolidated
+// back in front of the trader.
+func pairedWith(soContainerSqid any) bool {
+	if soContainerSqid == nil {
 		return false
 	}
-	return strings.TrimSpace(fmt.Sprint(c.SOContainerSqid)) != ""
+	return strings.TrimSpace(fmt.Sprint(soContainerSqid)) != ""
 }
 
 // SOContainer is one container priced on the export service order.
@@ -70,30 +93,22 @@ type SaveRequest struct {
 	Containers []Pair `json:"containers"`
 }
 
-// Row is one line of the trader's consolidation form: a container SLPA
-// pre-advised, and the service-order container they are pairing it with.
+// Row is one container SLPA pre-advised and has not consolidated yet: one of
+// the real containers a trader is choosing between.
 //
-// The pairing is the trader's to make, and it cannot be derived. The two sides
-// carry different numbers by design: a cap container is the real container the
-// terminal pre-advised, while a service-order container is the placeholder the
-// order was priced against. Only the trader knows which placeholder a real
-// container answers to.
+// The pairing itself is not modelled here. It is the trader's to make and it
+// cannot be derived — the two sides carry different numbers by design, a cap
+// container being the real container the terminal pre-advised and a
+// service-order container the placeholder the order was priced against — and
+// each branch resolves the one pairing it owns through PairOne.
 type Row struct {
 	CapContainerNo string `json:"cap_container_no"`
 	CapSqid        string `json:"cap_sqid"`
-	SOContainerNo  string `json:"so_container_no"`
-	Consolidate    bool   `json:"consolidate"`
 }
 
-// Rows builds the form the trader is shown: one line per pre-advised container
-// SLPA has not consolidated yet.
-//
-// Nothing is matched on the container number, because the two sides never share
-// one: the pre-advised number is the real container, the service-order number is
-// the placeholder it was priced against. A line is pre-filled only when the
-// choice is not a choice at all — one container to pair, one placeholder to pair
-// it with. Everything else is left for the trader, empty and unticked, rather
-// than filled with a guess they might submit unread.
+// Rows lists the pre-advised containers SLPA has not consolidated yet: what
+// there is to do under this declaration, which is what the lookup reports and
+// what the trader's panel describes.
 func Rows(resp FetchResponse) []Row {
 	rows := make([]Row, 0, len(resp.CapContainers))
 	for _, capContainer := range resp.CapContainers {
@@ -106,13 +121,6 @@ func Rows(resp FetchResponse) []Row {
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].CapContainerNo < rows[j].CapContainerNo })
-
-	if len(rows) == 1 && len(resp.SOContainers) == 1 {
-		if only := strings.TrimSpace(resp.SOContainers[0].ContainerNo); only != "" {
-			rows[0].SOContainerNo = only
-			rows[0].Consolidate = true
-		}
-	}
 	return rows
 }
 
@@ -142,63 +150,73 @@ func SOContainerNumbers(resp FetchResponse) []string {
 	return numbers
 }
 
-// Selection is what the trader submitted, resolved against what SLPA offered.
-type Selection struct {
-	// Pairs are the associations to save, in the order the rows were shown.
-	Pairs []Pair
-
-	// Unresolved names a row the trader ticked whose service-order container
-	// SLPA does not hold. It is reported rather than dropped silently: the CMS
-	// would refuse the sqid we cannot supply, and the trader would have no way
-	// to see which line was at fault.
-	Unresolved []string
-}
-
-// Resolve turns the submitted rows into the pairs the CMS reads.
-//
-// The service-order container the trader chose is looked up by its number to
-// recover the sqid SLPA issued for it: they work in the numbers they are shown,
-// and the CMS works in sqids. Only ticked rows are sent, so declining a
-// container is a decision this honours rather than one it overrides.
-func Resolve(rows []Row, soContainers []SOContainer) Selection {
-	soByNo := make(map[string]SOContainer, len(soContainers))
-	for _, so := range soContainers {
-		if no := normalise(so.ContainerNo); no != "" {
-			soByNo[no] = so
-		}
-	}
-
-	var selection Selection
-	for _, row := range rows {
-		if !row.Consolidate {
-			continue
-		}
-		capSqid := strings.TrimSpace(row.CapSqid)
-		so, ok := soByNo[normalise(row.SOContainerNo)]
-		if !ok || strings.TrimSpace(so.Sqid) == "" || capSqid == "" {
-			selection.Unresolved = append(selection.Unresolved, row.CapContainerNo)
-			continue
-		}
-		selection.Pairs = append(selection.Pairs, Pair{
-			ID:            capSqid,
-			SOContainerID: strings.TrimSpace(so.Sqid),
-			ContainerNo:   row.CapContainerNo,
-		})
-	}
-	return selection
-}
-
-// Containers lists what a selection consolidates.
-func (s Selection) Containers() []string {
-	out := make([]string, 0, len(s.Pairs))
-	for _, p := range s.Pairs {
-		out = append(out, p.ContainerNo)
-	}
-	return out
-}
-
 // normalise makes what the trader typed comparable with what SLPA holds, which
 // has been seen to differ in case and surrounding space.
 func normalise(containerNo string) string {
 	return strings.ToUpper(strings.TrimSpace(containerNo))
+}
+
+// CapContainerNumbers lists the real containers available to pair: the ones the
+// terminal has pre-advised against this declaration and SLPA has not already
+// consolidated.
+//
+// This is the list the trader picks from. A container missing from it has not
+// been pre-advised in Navis yet — the trader does that there and comes back,
+// which is why the branch waits rather than failing.
+func CapContainerNumbers(resp FetchResponse) []string {
+	var numbers []string
+	for _, capContainer := range resp.CapContainers {
+		if capContainer.consolidated() {
+			continue
+		}
+		if no := strings.TrimSpace(capContainer.ContainerNo); no != "" {
+			numbers = append(numbers, no)
+		}
+	}
+	sort.Strings(numbers)
+	return numbers
+}
+
+// PairOne associates one real container with the placeholder a branch owns.
+//
+// Both sides are named by number, because that is what the trader and the order
+// speak in, and both are resolved to the sqids the CMS reads. A number neither
+// side holds is reported rather than sent: the CMS would refuse a sqid we could
+// not supply, and the trader would have no way to see which half was at fault.
+func PairOne(capNo, soNo string, resp FetchResponse) (Pair, error) {
+	var pair Pair
+
+	capNorm, soNorm := normalise(capNo), normalise(soNo)
+	if capNorm == "" {
+		return pair, fmt.Errorf("choose the real container this one is being consolidated against")
+	}
+
+	for _, capContainer := range resp.CapContainers {
+		// Matched on either, because the trader's answer is the sqid — it keys
+		// the delete as well as this pairing — while a caller holding only the
+		// number should not have to look it up first.
+		sqid := strings.TrimSpace(capContainer.Sqid)
+		if sqid == "" {
+			continue
+		}
+		if normalise(capContainer.ContainerNo) == capNorm || normalise(sqid) == capNorm {
+			pair.ID = sqid
+			pair.ContainerNo = strings.TrimSpace(capContainer.ContainerNo)
+			break
+		}
+	}
+	if pair.ID == "" {
+		return Pair{}, fmt.Errorf("SLPA is no longer offering container %s for consolidation", capNo)
+	}
+
+	for _, so := range resp.SOContainers {
+		if normalise(so.ContainerNo) == soNorm && strings.TrimSpace(so.Sqid) != "" {
+			pair.SOContainerID = strings.TrimSpace(so.Sqid)
+			break
+		}
+	}
+	if pair.SOContainerID == "" {
+		return Pair{}, fmt.Errorf("SLPA does not hold service order container %s", soNo)
+	}
+	return pair, nil
 }

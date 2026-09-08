@@ -18,26 +18,38 @@ import (
 // trader for this node.
 const CusdecInput = "cusdec_serial"
 
-// RowsKey is the output key the trader's form lines are recorded under: one per
-// pre-advised container, for them to confirm, change or decline.
-const RowsKey = "rows"
-
 // SOContainersKey is the output key the service-order containers are recorded
 // under. The save step reads them back to turn the container number the trader
 // chose into the sqid the CMS reads.
 const SOContainersKey = "so_containers"
 
-// FormKey is the task input the submitted form arrives in.
-const FormKey = "payload"
+// ChosenCapKey is the task input carrying the real container the trader picked,
+// and BranchSOKey the placeholder the branch owns.
+//
+// Despite its name, ChosenCapKey carries SLPA's sqid rather than a container
+// number: the trader picks from a list the projector builds, and it offers the
+// sqid as each option's value because one answer has to key the save, the
+// delete and — once resolved back to a number — the gate pass. The name is the
+// form field's, which the artifacts and the branch payload both spell this way.
+// BranchSOKey is a container number, which is what the order speaks in.
+const (
+	ChosenCapKey = "cap_container_no"
+	BranchSOKey  = "so_container_no"
+)
 
-// ConsolidatedKey is the output key listing the containers this step
-// consolidated. The gate-pass fan-out is built from it together with the ones
-// SLPA had already paired.
-const ConsolidatedKey = "consolidated"
+// CapContainersKey is the output key the pre-advised side is recorded under.
+const CapContainersKey = "cap_containers"
 
-// Outcomes of the lookup, which is what the workflow's gateway reads. Three
-// rather than a boolean, because "nothing to do" and "nothing can be done" lead
-// to opposite places: one is finished, the other needs a person.
+// Outcomes of the lookup. Three rather than a boolean, because "nothing to do"
+// and "nothing can be done" are different states to report: one is finished,
+// the other is waiting on a terminal.
+//
+// Recorded for the trader's panel and for anyone reading the task afterwards.
+// No gateway routes on it today: the flow sends every branch to the form, and a
+// trader with nothing to pick submits an empty choice, which loops the lookup —
+// that is how waiting for a pre-advice is expressed. The value is here for a
+// gateway that wants it, in the pattern core's own plugins describe, rather than
+// because one currently reads it.
 const (
 	// OutcomeReady means there are containers for the trader to consolidate.
 	OutcomeReady = "ready"
@@ -94,7 +106,6 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	// to read: a lookup that failed leaves the trader where they can retry it.
 	if callErr != nil || cms.HasErrors(body) {
 		out["outcome"] = OutcomeBlocked
-		out[RowsKey] = []map[string]any{}
 		out["error"] = describeFailure(callErr, body,
 			"SLPA could not tell us which containers are available for consolidation:")
 		return false, out
@@ -104,7 +115,6 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	if err != nil {
 		slog.Error("slpa consolidation: the CMS answered with something this step cannot read", "error", err)
 		out["outcome"] = OutcomeBlocked
-		out[RowsKey] = []map[string]any{}
 		out["error"] = "SLPA answered the consolidation lookup with something we could not read. Please try again in a few minutes."
 		return false, out
 	}
@@ -113,11 +123,10 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	done := AlreadyConsolidated(fetched)
 	soNumbers := SOContainerNumbers(fetched)
 
-	// The form is always recorded, empty included: the workflow's gateway reads
-	// its length, and the trader's panel reads the rest.
-	out[RowsKey] = rowsOut(rows)
 	out[SOContainersKey] = soContainersOut(fetched.SOContainers)
 	out["so_container_numbers"] = soNumbers
+	out["cap_container_numbers"] = CapContainerNumbers(fetched)
+	out["cap_containers"] = capContainersOut(fetched.CapContainers)
 	out["available_so_containers"] = strings.Join(soNumbers, ", ")
 	out["already_consolidated"] = done
 	out["cap_container_count"] = len(fetched.CapContainers)
@@ -132,14 +141,13 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	case len(done) > 0:
 		// Everything SLPA holds is already paired: nothing for the trader to do.
 		out["outcome"] = OutcomeDone
-		out[ConsolidatedKey] = done
 		return true, out
 
 	default:
 		out["outcome"] = OutcomeBlocked
 		out["error"] = "SLPA is not reporting any containers to consolidate for this declaration yet.\n\n" +
 			summarise(rows, done, soNumbers) +
-			"\n\nContainers appear here once the terminal has pre-advised them against the declaration. Use **Check Again** once they have."
+			"\n\nContainers appear here once the terminal has pre-advised them against the declaration. Submit without choosing a container to look again."
 		return false, out
 	}
 }
@@ -161,12 +169,18 @@ func NewSaveInterpreter() *SaveInterpreter { return &SaveInterpreter{} }
 // reason. The workflow only reaches this step when a row was ticked, so this is
 // a defensive path — hence the log.
 func (i *SaveInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	selection := Resolve(submittedRows(inputs), knownSOContainers(inputs[SOContainersKey]))
-	if len(selection.Pairs) == 0 {
-		slog.Error("slpa consolidation: nothing resolvable in the submitted selection; sending an empty save call",
-			"unresolved", selection.Unresolved)
+	// A branch consolidates one container: the placeholder it owns, against the
+	// real container the trader picked. The pairing is resolved from the sides
+	// the lookup recorded, so nothing is sent that SLPA did not just offer.
+	pair, err := PairOne(fields.String(inputs, ChosenCapKey), fields.String(inputs, BranchSOKey), branchSides(inputs))
+	if err != nil {
+		// The contract has no error return, so the reason is logged and an empty
+		// list is sent: the CMS validates the request and answers with its own,
+		// which is what the trader is shown.
+		slog.Error("slpa consolidation: the chosen pairing could not be resolved", "error", err)
+		return remote.JSONBody{V: SaveRequest{}}
 	}
-	return remote.JSONBody{V: SaveRequest{Containers: selection.Pairs}}
+	return remote.JSONBody{V: SaveRequest{Containers: []Pair{pair}}}
 }
 
 // BuildHeaders presents the client key the CMS identifies the company by.
@@ -229,21 +243,6 @@ func decode(body map[string]any) (FetchResponse, error) {
 	return fetched, nil
 }
 
-// rowsOut renders the form lines as plain maps, which is what a task record
-// holds and what the trader's form is filled from.
-func rowsOut(rows []Row) []map[string]any {
-	out := make([]map[string]any, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, map[string]any{
-			"cap_container_no": r.CapContainerNo,
-			"cap_sqid":         r.CapSqid,
-			"so_container_no":  r.SOContainerNo,
-			"consolidate":      r.Consolidate,
-		})
-	}
-	return out
-}
-
 // soContainersOut records the service-order side, which the save step reads back
 // to resolve the container number the trader chose into its sqid.
 func soContainersOut(containers []SOContainer) []map[string]any {
@@ -258,70 +257,60 @@ func soContainersOut(containers []SOContainer) []map[string]any {
 	return out
 }
 
-// submittedRows recovers the trader's form lines from the task inputs.
-//
-// The form arrives under the reserved "payload" key, as every other form-driven
-// step here receives it; the rows are read from it directly so nothing but what
-// they submitted decides what is sent.
-func submittedRows(inputs map[string]any) []Row {
-	form, _ := inputs[FormKey].(map[string]any)
-	if form == nil {
-		return nil
-	}
-	return readRows(form[RowsKey])
-}
-
-// readRows tolerates both the []any a task record holds after a round trip
-// through JSON and the typed slice recorded in Go.
-func readRows(value any) []Row {
-	items, ok := value.([]any)
-	if !ok {
-		typed, isTyped := value.([]map[string]any)
-		if !isTyped {
-			return nil
-		}
-		items = make([]any, 0, len(typed))
-		for _, item := range typed {
-			items = append(items, item)
-		}
-	}
-
-	rows := make([]Row, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		rows = append(rows, Row{
-			CapContainerNo: fields.String(m, "cap_container_no"),
-			CapSqid:        fields.String(m, "cap_sqid"),
-			SOContainerNo:  fields.String(m, "so_container_no"),
-			Consolidate:    truthy(m["consolidate"]),
+// capContainersOut records the pre-advised side the way soContainersOut records
+// the other, so the save step can resolve a container number back to the sqid
+// SLPA issued for it without a second lookup.
+func capContainersOut(containers []CapContainer) []map[string]any {
+	out := make([]map[string]any, 0, len(containers))
+	for _, capContainer := range containers {
+		out = append(out, map[string]any{
+			"sqid":               capContainer.Sqid,
+			"container_no":       capContainer.ContainerNo,
+			"container_size":     capContainer.ContainerSize,
+			SOContainerSqidField: capContainer.SOContainerSqid,
 		})
 	}
-	return rows
+	return out
+}
+
+// branchSides rebuilds the two sides of the lookup from what it recorded, so a
+// pairing is resolved against SLPA's own answer rather than anything the form
+// carried back.
+//
+// Read field by field rather than unmarshalled into the CMS's own structs: what
+// the lookup recorded is this integration's shape, not the CMS's, and the two
+// disagree on the service-order side — the CMS sends "ContainerNumber" where the
+// record holds "container_no". Decoding the record with the CMS's tags left
+// every placeholder nameless, so a pairing the trader had made correctly was
+// reported as one SLPA did not hold.
+func branchSides(inputs map[string]any) FetchResponse {
+	return FetchResponse{
+		CapContainers: knownCapContainers(inputs[CapContainersKey]),
+		SOContainers:  knownSOContainers(inputs[SOContainersKey]),
+	}
+}
+
+// knownCapContainers reads back the pre-advised side the lookup recorded, as
+// knownSOContainers does for the other.
+func knownCapContainers(value any) []CapContainer {
+	rows := fields.Rows(value)
+	out := make([]CapContainer, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, CapContainer{
+			Sqid:            fields.String(m, "sqid"),
+			ContainerNo:     fields.String(m, "container_no"),
+			ContainerSize:   fields.String(m, "container_size"),
+			SOContainerSqid: m[SOContainerSqidField],
+		})
+	}
+	return out
 }
 
 // knownSOContainers recovers the service-order side the lookup recorded.
 func knownSOContainers(value any) []SOContainer {
-	items, ok := value.([]any)
-	if !ok {
-		typed, isTyped := value.([]map[string]any)
-		if !isTyped {
-			return nil
-		}
-		items = make([]any, 0, len(typed))
-		for _, item := range typed {
-			items = append(items, item)
-		}
-	}
-
-	out := make([]SOContainer, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	rows := fields.Rows(value)
+	out := make([]SOContainer, 0, len(rows))
+	for _, m := range rows {
 		out = append(out, SOContainer{
 			Sqid:          fields.String(m, "sqid"),
 			ContainerNo:   fields.String(m, "container_no"),
@@ -329,19 +318,6 @@ func knownSOContainers(value any) []SOContainer {
 		})
 	}
 	return out
-}
-
-// truthy reads a checkbox, which reaches here as a bool from JSON and has been
-// seen as a string from a form that stringifies its values.
-func truthy(value any) bool {
-	switch v := value.(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
-	default:
-		return false
-	}
 }
 
 // summarise describes what SLPA is holding, in the trader's terms.
