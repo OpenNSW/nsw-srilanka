@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"text/tabwriter"
 
@@ -77,6 +78,13 @@ func main() {
 				os.Exit(1)
 			}
 			handleViewCompany(os.Args[3])
+		case "edit":
+			if len(os.Args) < 4 {
+				fmt.Println("Error: company ID is required for edit command.")
+				fmt.Println("Usage: otc company edit <id>")
+				os.Exit(1)
+			}
+			handleEditCompany(os.Args[3])
 		default:
 			fmt.Printf("Unknown company subcommand: %s\n", subCommand)
 			printCompanyUsage()
@@ -106,6 +114,7 @@ func printCompanyUsage() {
 	fmt.Println("  otc company add       Interactive wizard to add a new company record")
 	fmt.Println("  otc company list      List all company records in the database")
 	fmt.Println("  otc company view <id> Display details of a specific company by ID")
+	fmt.Println("  otc company edit <id> Interactively edit a company's fields and metadata")
 }
 
 func initDB() *gorm.DB {
@@ -198,35 +207,7 @@ func handleAddCompany() {
 
 	fmt.Println()
 	fmt.Println("--- Company Metadata ---")
-	brNo := promptString(reader, "Business Registration Number (br_no)", false, "")
-	vatNo := promptString(reader, "VAT Number (vat_no)", false, "")
-	tinNo := promptString(reader, "TIN Number (tin_no)", false, "")
-
-	meta := make(map[string]any)
-	if brNo != "" {
-		meta["br_no"] = brNo
-	}
-	if vatNo != "" {
-		meta["vat_no"] = vatNo
-	}
-	if tinNo != "" {
-		meta["tin_no"] = tinNo
-	}
-
-	for {
-		addMore := promptBool(reader, "Do you want to enter additional custom metadata fields?", false)
-		if !addMore {
-			break
-		}
-		key := promptString(reader, "Enter metadata key", true, "")
-		val := promptString(reader, "Enter metadata value", true, "")
-		meta[key] = val
-	}
-
-	dataBytes, err := json.Marshal(meta)
-	if err != nil {
-		log.Fatalf("Failed to marshal company metadata to JSON: %v", err)
-	}
+	dataBytes, _ := promptMetadataEditor(reader, json.RawMessage("{}"), "Do you want to add metadata now in your text editor?", false)
 
 	db := initDB()
 	svc := company.NewService(db)
@@ -305,11 +286,199 @@ func handleViewCompany(id string) {
 	fmt.Printf("Created At: %s\n", r.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("Updated At: %s\n", r.UpdatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Println("Metadata (Data JSON):")
+	printIndentedJSON(r.Data)
+}
 
-	var prettyJSON bytes.Buffer
-	if err := json.Indent(&prettyJSON, r.Data, "  ", "  "); err != nil {
-		fmt.Printf("  %s\n", string(r.Data))
+// printIndentedJSON prints raw JSON bytes indented for readability, falling back to the raw
+// bytes if they can't be parsed as JSON.
+func printIndentedJSON(data []byte) {
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, data, "  ", "  "); err != nil {
+		fmt.Printf("  %s\n", string(data))
 	} else {
-		fmt.Printf("  %s\n", prettyJSON.String())
+		fmt.Printf("  %s\n", pretty.String())
 	}
+}
+
+func handleEditCompany(id string) {
+	db := initDB()
+	svc := company.NewService(db)
+
+	record, err := svc.GetCompanyByID(context.Background(), id)
+	if err != nil {
+		if errors.Is(err, company.ErrCompanyNotFound) {
+			fmt.Printf("Error: company with ID %q not found.\n", id)
+			os.Exit(1)
+		}
+		log.Fatalf("Failed to fetch company: %v", err)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("--- Edit Company %q ---\n", id)
+	fmt.Println("Press Enter to keep the current value shown in brackets.")
+	fmt.Println()
+
+	name := promptString(reader, "Company Name", true, record.Name)
+	ouHandle := promptString(reader, "IdP Organisational Unit Handle (ou_handle)", true, record.OUHandle)
+	hasCHA := promptBool(reader, "Has Customs House Agent (CHA) capability?", record.HasCHA)
+
+	var fields company.CompanyFieldsUpdate
+	if name != record.Name {
+		fields.Name = &name
+	}
+	if ouHandle != record.OUHandle {
+		fields.OUHandle = &ouHandle
+	}
+	if hasCHA != record.HasCHA {
+		fields.HasCHA = &hasCHA
+	}
+	if err := svc.UpdateCompanyFields(context.Background(), id, fields); err != nil {
+		if errors.Is(err, company.ErrOUHandleConflict) {
+			fmt.Printf("Error: ou_handle %q is already used by another company.\n", ouHandle)
+			os.Exit(1)
+		}
+		log.Fatalf("Failed to update company fields: %v", err)
+	}
+
+	fmt.Println()
+	fmt.Println("--- Edit Metadata (extra_data) ---")
+	newData, changed := promptMetadataEditor(reader, record.Data, "Do you want to edit metadata in your text editor?", true)
+	if !changed {
+		fmt.Println("No changes made to metadata.")
+	} else if err := svc.ReplaceCompanyData(context.Background(), id, newData); err != nil {
+		log.Fatalf("Failed to save company metadata: %v", err)
+	} else {
+		fmt.Println("Metadata updated.")
+	}
+
+	fmt.Println()
+	fmt.Printf("Success! Company %q updated.\n", id)
+}
+
+// resolveEditor returns the command to use as a text editor: the EDITOR environment variable if
+// set, otherwise the first of a few common editors found on PATH.
+func resolveEditor() (string, error) {
+	if editor := strings.TrimSpace(os.Getenv("EDITOR")); editor != "" {
+		return editor, nil
+	}
+	for _, candidate := range []string{"nano", "vim", "vi"} {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("no text editor found; set the EDITOR environment variable")
+}
+
+// editJSONInEditor writes data to a temporary file, opens it in the user's text editor, and
+// re-prompts on invalid JSON until it either parses as a JSON object or the user chooses to
+// abort. It returns the edited (canonicalized) JSON and whether it differs from the original.
+func editJSONInEditor(reader *bufio.Reader, data json.RawMessage) (json.RawMessage, bool, error) {
+	editor, err := resolveEditor()
+	if err != nil {
+		return nil, false, err
+	}
+
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, data, "", "  "); err != nil {
+		pretty.Write(data)
+	}
+
+	tmpFile, err := os.CreateTemp("", "otc-company-*.json")
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	//nolint:gosec // G703: tmpPath is generated by os.CreateTemp above, not user input.
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if _, err := tmpFile.Write(pretty.Bytes()); err != nil {
+		_ = tmpFile.Close()
+		return nil, false, fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return nil, false, fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	originalParsed, err := decodeJSONObject(data)
+	if err != nil {
+		originalParsed = map[string]any{} // best-effort; missing/invalid original is treated as {}
+	}
+	normalizedOriginal, _ := json.Marshal(originalParsed)
+
+	editorFields := strings.Fields(editor)
+	if len(editorFields) == 0 {
+		return nil, false, fmt.Errorf("invalid editor command: %q", editor)
+	}
+	// EDITOR may carry flags (e.g. "code --wait"); exec.Command treats its first argument as a
+	// single executable name, so split into the executable and its arguments ourselves rather
+	// than passing the raw string through (no shell is invoked either way).
+	editorArgs := append(append([]string{}, editorFields[1:]...), tmpPath)
+
+	for {
+		// G204: editorFields[0] is resolved by resolveEditor (EDITOR env var or a PATH lookup
+		// among a fixed candidate list), and tmpPath is our own os.CreateTemp file — launching
+		// the operator's configured editor on it is the intended behavior, not user-controlled input.
+		cmd := exec.CommandContext(context.Background(), editorFields[0], editorArgs...) //nolint:gosec
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return nil, false, fmt.Errorf("editor exited with error: %w", err)
+		}
+
+		edited, err := os.ReadFile(tmpPath) //nolint:gosec // G703: tmpPath is our own os.CreateTemp file, not user input.
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to read edited file: %w", err)
+		}
+
+		parsed, err := decodeJSONObject(edited)
+		if err != nil {
+			fmt.Printf("Error: edited content is not a valid JSON object: %v\n", err)
+			if promptBool(reader, "Edit again to fix it?", true) {
+				continue
+			}
+			return nil, false, fmt.Errorf("metadata edit aborted")
+		}
+
+		normalizedEdited, err := json.Marshal(parsed)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to marshal edited metadata: %w", err)
+		}
+
+		return json.RawMessage(normalizedEdited), !bytes.Equal(normalizedOriginal, normalizedEdited), nil
+	}
+}
+
+// decodeJSONObject decodes data as a JSON object, preserving numeric precision via json.Number
+// (plain json.Unmarshal into map[string]any lossily converts every number to float64). It
+// rejects non-object top-level values (arrays, scalars, null) and any trailing data.
+func decodeJSONObject(data []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		return nil, fmt.Errorf("value is not a JSON object")
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("unexpected trailing data after JSON object")
+	}
+	return obj, nil
+}
+
+// promptMetadataEditor asks the user (via promptText/defaultValue) whether to open current in a
+// text editor. If they decline, current is returned unchanged with changed=false. Shared by the
+// add and edit company wizards so metadata (extra_data) is always edited the same way, with full
+// support for nested JSON.
+func promptMetadataEditor(reader *bufio.Reader, current json.RawMessage, promptText string, defaultValue bool) (json.RawMessage, bool) {
+	if !promptBool(reader, promptText, defaultValue) {
+		return current, false
+	}
+	newData, changed, err := editJSONInEditor(reader, current)
+	if err != nil {
+		log.Fatalf("Failed to edit company metadata: %v", err)
+	}
+	return newData, changed
 }

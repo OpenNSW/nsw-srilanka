@@ -2,11 +2,13 @@ package company
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -385,6 +387,204 @@ func TestService_UpdateCompany_Success(t *testing.T) {
 	mock.ExpectCommit()
 
 	if err := svc.UpdateCompany(context.Background(), "co-1", map[string]any{"new": "key"}); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// --- UpdateCompanyFields ---
+
+func TestService_UpdateCompanyFields_InvalidID(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.UpdateCompanyFields(context.Background(), "", CompanyFieldsUpdate{Name: strPtr("New Name")})
+	if !errors.Is(err, ErrInvalidCompanyID) {
+		t.Fatalf("expected ErrInvalidCompanyID, got %v", err)
+	}
+}
+
+func TestService_UpdateCompanyFields_EmptyName(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{Name: strPtr("   ")})
+	if err == nil {
+		t.Fatal("expected error for blank name, got nil")
+	}
+}
+
+func TestService_UpdateCompanyFields_EmptyOUHandle(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{OUHandle: strPtr("  ")})
+	if err == nil {
+		t.Fatal("expected error for blank ou_handle, got nil")
+	}
+}
+
+func TestService_UpdateCompanyFields_NoFields(t *testing.T) {
+	svc := NewService(nil)
+	// No fields set is a no-op — no DB call should be made.
+	if err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{}); err != nil {
+		t.Fatalf("expected no error for empty update, got %v", err)
+	}
+}
+
+func TestService_UpdateCompanyFields_NotFound(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "missing-id").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	err := svc.UpdateCompanyFields(context.Background(), "missing-id", CompanyFieldsUpdate{Name: strPtr("New Name")})
+	if !errors.Is(err, ErrCompanyNotFound) {
+		t.Fatalf("expected ErrCompanyNotFound, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_UpdateCompanyFields_OUHandleConflict(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
+		WillReturnError(&pgconn.PgError{Code: pgUniqueViolationCode, ConstraintName: "company_records_ou_handle_key"})
+	mock.ExpectRollback()
+
+	err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{OUHandle: strPtr("taken-handle")})
+	if !errors.Is(err, ErrOUHandleConflict) {
+		t.Fatalf("expected ErrOUHandleConflict, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_UpdateCompanyFields_Success(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{
+		Name:     strPtr("New Name"),
+		OUHandle: strPtr("new-handle"),
+		HasCHA:   boolPtr(true),
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// --- ReplaceCompanyData ---
+
+func TestService_ReplaceCompanyData_InvalidID(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.ReplaceCompanyData(context.Background(), "", json.RawMessage(`{"k":"v"}`))
+	if !errors.Is(err, ErrInvalidCompanyID) {
+		t.Fatalf("expected ErrInvalidCompanyID, got %v", err)
+	}
+}
+
+func TestService_ReplaceCompanyData_InvalidJSON(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.ReplaceCompanyData(context.Background(), "co-1", json.RawMessage(`not json`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+}
+
+func TestService_ReplaceCompanyData_NonObjectRejected(t *testing.T) {
+	svc := NewService(nil)
+	for _, data := range []string{`[1,2,3]`, `"a string"`, `42`, `true`, `null`} {
+		err := svc.ReplaceCompanyData(context.Background(), "co-1", json.RawMessage(data))
+		if err == nil {
+			t.Fatalf("expected error for non-object JSON %q, got nil", data)
+		}
+	}
+}
+
+func TestService_ReplaceCompanyData_NotFound(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "missing-id").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	err := svc.ReplaceCompanyData(context.Background(), "missing-id", json.RawMessage(`{"k":"v"}`))
+	if !errors.Is(err, ErrCompanyNotFound) {
+		t.Fatalf("expected ErrCompanyNotFound, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_ReplaceCompanyData_DBError(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
+		WillReturnError(errors.New("update failed"))
+	mock.ExpectRollback()
+
+	err := svc.ReplaceCompanyData(context.Background(), "co-1", json.RawMessage(`{"k":"v"}`))
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_ReplaceCompanyData_Success(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	err := svc.ReplaceCompanyData(context.Background(), "co-1", json.RawMessage(`{"address":{"city":"Colombo"}}`))
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_ReplaceCompanyData_EmptyDefaultsToEmptyObject(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "company_records" SET`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	if err := svc.ReplaceCompanyData(context.Background(), "co-1", nil); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

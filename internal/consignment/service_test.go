@@ -53,6 +53,14 @@ func (m *MockCompanyService) UpdateCompany(ctx context.Context, id string, data 
 	return m.Called(ctx, id, data).Error(0)
 }
 
+func (m *MockCompanyService) UpdateCompanyFields(ctx context.Context, id string, fields company.CompanyFieldsUpdate) error {
+	return m.Called(ctx, id, fields).Error(0)
+}
+
+func (m *MockCompanyService) ReplaceCompanyData(ctx context.Context, id string, data json.RawMessage) error {
+	return m.Called(ctx, id, data).Error(0)
+}
+
 func (m *MockCompanyService) Health(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
