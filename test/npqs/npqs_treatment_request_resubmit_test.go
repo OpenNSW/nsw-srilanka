@@ -23,7 +23,7 @@ import (
 // time), not reset back to the pristine commodities the officer originally
 // assessed.
 func TestTreatmentRequestSubWorkflow_ResubmitPrefillsPriorAnswer(t *testing.T) {
-	bytes, err := os.ReadFile("../../../one-trade-artifacts/tnsw/npqs_v2/5-1-treatment_request/workflow.json")
+	bytes, err := os.ReadFile("../../../one-trade-artifacts/tnsw/npqs/5-1-treatment_request/workflow.json")
 	require.NoError(t, err)
 	var def engine.WorkflowDefinition
 	require.NoError(t, json.Unmarshal(bytes, &def))
@@ -37,7 +37,7 @@ func TestTreatmentRequestSubWorkflow_ResubmitPrefillsPriorAnswer(t *testing.T) {
 	acts := &engine.Activities{
 		ExecuteTaskActivityHandler: func(p engine.TaskPayload) (map[string]any, error) {
 			switch p.TaskTemplateID {
-			case "npqs-v2-treatment-request--trader-request":
+			case "npqs-treatment-request--trader-request":
 				traderRequestCalls++
 				traderinput, _ := p.Inputs["traderinput"].(map[string]any)
 				prefill, _ := traderinput["treatment_items"].([]any)
@@ -83,7 +83,7 @@ func TestTreatmentRequestSubWorkflow_ResubmitPrefillsPriorAnswer(t *testing.T) {
 					"general_remarks": "corrected duration per officer feedback",
 				}, nil
 
-			case "npqs-v2-treatment-request--officer-review":
+			case "npqs-treatment-request--officer-review":
 				officerReviewCalls++
 				if officerReviewCalls == 1 {
 					return map[string]any{

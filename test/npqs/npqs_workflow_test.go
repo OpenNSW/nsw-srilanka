@@ -111,7 +111,7 @@ func (l *WorkflowFlowLogger) LogFinalSummary(workflowID string) {
 
 func loadNPQSWorkflowDefinition(t *testing.T) engine.WorkflowDefinition {
 	t.Helper()
-	path := "../../../one-trade-artifacts/tnsw/npqs_v2/npqs_workflow.json"
+	path := "../../../one-trade-artifacts/tnsw/npqs/npqs_workflow.json"
 	bytes, err := os.ReadFile(path)
 	require.NoError(t, err, "failed to read npqs_workflow.json at %s", path)
 
@@ -124,7 +124,7 @@ func loadNPQSWorkflowDefinition(t *testing.T) engine.WorkflowDefinition {
 func TestNPQSWorkflow_StructureAndValidation(t *testing.T) {
 	def := loadNPQSWorkflowDefinition(t)
 
-	assert.Equal(t, "npqs-v2-export-phytosanitary-reg", def.ID)
+	assert.Equal(t, "npqs-export-phytosanitary-reg", def.ID)
 	assert.NotEmpty(t, def.Name)
 
 	// 1. Verify batch gateway structure passes ValidateBatchGateways topological checks
@@ -304,7 +304,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 			executedTasks[p.TaskTemplateID]++
 			executedTasksMu.Unlock()
 			switch p.TaskTemplateID {
-			case "npqs-v2-apply-phyto-cert":
+			case "npqs-apply-phyto-cert":
 				// Update track assignments
 				flowLogger.items["item-1"].Track = "Track 1: Lab Testing"
 				flowLogger.items["item-2"].Track = "Track 2: Visual Inspection"
@@ -349,7 +349,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-draw-sample":
+			case "npqs-draw-sample":
 				flowLogger.LogTransition(
 					"3-Lab: Draw Sample",
 					p.TaskTemplateID,
@@ -364,7 +364,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"sample_number": "SMP-2026-001",
 				}, nil
 
-			case "npqs-v2-lab-testing":
+			case "npqs-lab-testing":
 				// Per-item outcomes in the SAME batch submission: item-1 passes, item-5
 				// fails final, item-11 passes (item-11 is ALSO visual_required — see its
 				// declaration above). This is the scenario the per-item BATCH_SPLIT/JOIN
@@ -405,7 +405,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-visual-consignment-flow":
+			case "npqs-visual-consignment-flow":
 				// This task_template_id backs both the regular consignment-inspection
 				// batch (item-2 + item-10) AND the escalated-consignment check that
 				// item-9 is routed to after its sample inspection escalates — same
@@ -446,7 +446,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 
 				// Regular consignment batch: item-2 passes, item-10 fails, item-11 passes
 				// (item-11 is ALSO lab_required — see its declaration above, and the
-				// npqs-v2-lab-testing mock). This is the scenario
+				// npqs-lab-testing mock). This is the scenario
 				// visual_consignment_result_split's per-item BATCH_SPLIT/JOIN redesign
 				// exists to support — one item can fail while the rest of the batch
 				// continues, instead of the whole batch following whichever single
@@ -482,7 +482,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-visual-sample-collection":
+			case "npqs-visual-sample-collection":
 				flowLogger.LogTransition(
 					"4-Visual: Collect Sample",
 					p.TaskTemplateID,
@@ -497,7 +497,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"sample_number": "VSMP-2026-001",
 				}, nil
 
-			case "npqs-v2-visual-sample-inspection":
+			case "npqs-visual-sample-inspection":
 				// item-6 passes outright; item-9 (same sample batch) is escalated to a
 				// full consignment check. Proves visual_sample_result_split now routes
 				// each item by its own result instead of forcing item-6 through
@@ -527,7 +527,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-treatment-request":
+			case "npqs-treatment-request":
 				// item-3, item-7, item-8 all satisfy treatment_required == true,
 				// so gw_treatment_split groups them into ONE n3_treatment_request
 				// batch together (partitioned by shared edge condition value, not
@@ -552,7 +552,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-pay-for-treatment":
+			case "npqs-pay-for-treatment":
 				// npqs provider partition only (item-3, item-8) - item-7 (external)
 				// never reaches this node.
 				flowLogger.LogTransition(
@@ -569,7 +569,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"payment_status": "success",
 				}, nil
 
-			case "npqs-v2-issue-treatment-cert":
+			case "npqs-issue-treatment-cert":
 				flowLogger.LogTransition(
 					"5-Treatment: Certificate Issuance",
 					p.TaskTemplateID,
@@ -584,7 +584,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"treatment_certificate_id": "TC-NPQS-901",
 				}, nil
 
-			case "npqs-v2-treatment-supervisor-report":
+			case "npqs-treatment-supervisor-report":
 				// Only item-8 (with_supervision) reaches this node - item-3
 				// (without_supervision) bypasses it via
 				// n3_3_1_supervision_split's false edge straight to the
@@ -604,7 +604,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"supervisor_notes": "Treatment executed to specification under direct NPQS supervision.",
 				}, nil
 
-			case "npqs-v2-upload-treatment-certs":
+			case "npqs-upload-treatment-certs":
 				// Reached twice: once for the npqs-provider partition
 				// (item-3+item-8, after the supervision sub-batch rejoins) and
 				// once for the external-provider partition (item-7 alone).
@@ -625,7 +625,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-review-treatment-certs":
+			case "npqs-review-treatment-certs":
 				flowLogger.LogTransition(
 					"5-Treatment: Cert Verification",
 					p.TaskTemplateID,
@@ -641,7 +641,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"treatment_review_result": "pass",
 				}, nil
 
-			case "npqs-v2-upload-docs":
+			case "npqs-upload-docs":
 				flowLogger.LogTransition(
 					"6-Docs: Upload Trade Documents",
 					p.TaskTemplateID,
@@ -662,7 +662,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-review-docs":
+			case "npqs-review-docs":
 				flowLogger.LogTransition(
 					"6-Docs: Review Trade Documents",
 					p.TaskTemplateID,
@@ -681,7 +681,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"docs_review_outcome": "approve",
 				}, nil
 
-			case "npqs-v2-pay-certificate-fee":
+			case "npqs-pay-certificate-fee":
 				flowLogger.LogTransition(
 					"7-Payment: Phytosanitary Certificate Fee",
 					p.TaskTemplateID,
@@ -700,7 +700,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					"payment_status": "success",
 				}, nil
 
-			case "npqs-v2-issue-certificate":
+			case "npqs-issue-certificate":
 				// The officer's item picker is prefilled from `commodities` with id +
 				// commodity name for every declared item.
 				certItemsIn, _ := p.Inputs["certificate_items"].([]any)
@@ -764,7 +764,7 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 					},
 				}, nil
 
-			case "npqs-v2-ephyto-upload":
+			case "npqs-ephyto-upload":
 				// The officer's exclusion of item-5 at certificate issuance must have
 				// survived through to the ePhyto submission task's own inputs — this
 				// is what build.go's excludedItemIDs() reads to keep item-5 off the
@@ -822,13 +822,13 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	require.NoError(t, env.GetWorkflowError(), "workflow execution must not error")
 
 	// Verify all expected tasks across the 3 parallel tracks ran
-	assert.Equal(t, 1, executedTasks["npqs-v2-apply-phyto-cert"], "n1_apply must execute once")
-	assert.Equal(t, 1, executedTasks["npqs-v2-draw-sample"], "Track 1 (Lab) draw sample must execute once for the item-1/item-5 batch")
+	assert.Equal(t, 1, executedTasks["npqs-apply-phyto-cert"], "n1_apply must execute once")
+	assert.Equal(t, 1, executedTasks["npqs-draw-sample"], "Track 1 (Lab) draw sample must execute once for the item-1/item-5 batch")
 	// Exactly one lab-testing call, and no second draw-sample/retest call, proves item-5's
 	// fail_final and item-1's pass were each resolved directly from the same submission —
 	// the per-item BATCH_SPLIT (lab_result_split) does not force the whole batch through
 	// the resubmit loop just because one item in it was rejected.
-	assert.Equal(t, 1, executedTasks["npqs-v2-lab-testing"], "Track 1 (Lab) testing must execute once for the item-1/item-5 batch, with no resubmit retest triggered")
+	assert.Equal(t, 1, executedTasks["npqs-lab-testing"], "Track 1 (Lab) testing must execute once for the item-1/item-5 batch, with no resubmit retest triggered")
 	// visual_consignment_result_split, visual_sample_result_split, and
 	// visual_sample_escalated_result_split are now per-item BATCH_SPLIT/JOIN
 	// pairs (item.visual_result) instead of a single workflow-level "worst
@@ -837,10 +837,10 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	// sample inspection while item-6 (same batch) passes outright. If routing
 	// still ran on the old aggregate value, item-2 would have been forced onto
 	// item-10's fail path and item-6 onto item-9's escalation path.
-	assert.Equal(t, 2, executedTasks["npqs-v2-visual-consignment-flow"], "must execute twice: once for the item-2/item-10 consignment batch, once for item-9's escalated-consignment check")
-	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-collection"], "Track 2 (Visual/Sample) sample collection must execute once for the item-6/item-9 batch")
-	assert.Equal(t, 1, executedTasks["npqs-v2-visual-sample-inspection"], "Track 2 (Visual/Sample) inspection must execute once for the item-6/item-9 batch, after sample collection")
-	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-request"], "Track 3 (Treatment) must execute once for the item-3/item-7/item-8 batch")
+	assert.Equal(t, 2, executedTasks["npqs-visual-consignment-flow"], "must execute twice: once for the item-2/item-10 consignment batch, once for item-9's escalated-consignment check")
+	assert.Equal(t, 1, executedTasks["npqs-visual-sample-collection"], "Track 2 (Visual/Sample) sample collection must execute once for the item-6/item-9 batch")
+	assert.Equal(t, 1, executedTasks["npqs-visual-sample-inspection"], "Track 2 (Visual/Sample) inspection must execute once for the item-6/item-9 batch, after sample collection")
+	assert.Equal(t, 1, executedTasks["npqs-treatment-request"], "Track 3 (Treatment) must execute once for the item-3/item-7/item-8 batch")
 	// treatment_provider_split now partitions per item (item.treatment_provider),
 	// not on a single workflow-level npqs.treatment_provider value set by the
 	// officer's own single decision - this is the regression guard for that fix.
@@ -848,9 +848,9 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	// item-3 (npqs, without_supervision) does NOT proves the nested
 	// n3_3_1_supervision_split ALSO correctly partitions per item within the
 	// npqs provider branch.
-	assert.Equal(t, 1, executedTasks["npqs-v2-pay-for-treatment"], "Track 3 payment must execute once for the item-3/item-8 (npqs-provider) batch")
-	assert.Equal(t, 1, executedTasks["npqs-v2-issue-treatment-cert"], "Track 3 cert issue must execute once for the item-3/item-8 (npqs-provider) batch")
-	assert.Equal(t, 1, executedTasks["npqs-v2-treatment-supervisor-report"], "supervision report must execute once, for item-8 only (with_supervision)")
+	assert.Equal(t, 1, executedTasks["npqs-pay-for-treatment"], "Track 3 payment must execute once for the item-3/item-8 (npqs-provider) batch")
+	assert.Equal(t, 1, executedTasks["npqs-issue-treatment-cert"], "Track 3 cert issue must execute once for the item-3/item-8 (npqs-provider) batch")
+	assert.Equal(t, 1, executedTasks["npqs-treatment-supervisor-report"], "supervision report must execute once, for item-8 only (with_supervision)")
 	// Reached from BOTH provider partitions (npqs: item-3+item-8 after the
 	// supervision sub-batch rejoins; external: item-7 alone) - each partition
 	// runs its own separate call, so this fires twice, not once. That's the
@@ -858,13 +858,13 @@ func TestNPQSWorkflow_FullExecutionSimulation(t *testing.T) { //nolint:gocyclo /
 	// for these two cases print the same static item-3/item-7/item-8 label on
 	// both, since the mock has no way to tell which partition it's being
 	// called for.
-	assert.Equal(t, 2, executedTasks["npqs-v2-upload-treatment-certs"], "cert upload must execute once per provider partition (npqs, external)")
-	assert.Equal(t, 2, executedTasks["npqs-v2-review-treatment-certs"], "cert review must execute once per provider partition (npqs, external)")
-	assert.Equal(t, 1, executedTasks["npqs-v2-upload-docs"], "Consignment doc upload must execute")
-	assert.Equal(t, 1, executedTasks["npqs-v2-review-docs"], "Consignment doc review must execute")
-	assert.Equal(t, 1, executedTasks["npqs-v2-pay-certificate-fee"], "Consignment certificate fee payment must execute")
-	assert.Equal(t, 1, executedTasks["npqs-v2-issue-certificate"], "Phytosanitary certificate issuance must execute")
-	assert.Equal(t, 1, executedTasks["npqs-v2-ephyto-upload"], "ePhyto IPPC Hub upload must execute")
+	assert.Equal(t, 2, executedTasks["npqs-upload-treatment-certs"], "cert upload must execute once per provider partition (npqs, external)")
+	assert.Equal(t, 2, executedTasks["npqs-review-treatment-certs"], "cert review must execute once per provider partition (npqs, external)")
+	assert.Equal(t, 1, executedTasks["npqs-upload-docs"], "Consignment doc upload must execute")
+	assert.Equal(t, 1, executedTasks["npqs-review-docs"], "Consignment doc review must execute")
+	assert.Equal(t, 1, executedTasks["npqs-pay-certificate-fee"], "Consignment certificate fee payment must execute")
+	assert.Equal(t, 1, executedTasks["npqs-issue-certificate"], "Phytosanitary certificate issuance must execute")
+	assert.Equal(t, 1, executedTasks["npqs-ephyto-upload"], "ePhyto IPPC Hub upload must execute")
 }
 
 func TestNPQSWorkflow_AllItemsFailed_ConsignmentRejected(t *testing.T) {
@@ -890,7 +890,7 @@ func TestNPQSWorkflow_AllItemsFailed_ConsignmentRejected(t *testing.T) {
 		ExecuteTaskActivityHandler: func(p engine.TaskPayload) (map[string]any, error) {
 			executedTasks[p.TaskTemplateID]++
 			switch p.TaskTemplateID {
-			case "npqs-v2-apply-phyto-cert":
+			case "npqs-apply-phyto-cert":
 				return map[string]any{
 					"reviewerform": map[string]any{
 						"reference_number": "NPQS-2026-EXP-9999",
@@ -903,7 +903,7 @@ func TestNPQSWorkflow_AllItemsFailed_ConsignmentRejected(t *testing.T) {
 					},
 				}, nil
 
-			case "npqs-v2-visual-consignment-flow":
+			case "npqs-visual-consignment-flow":
 				// Visual inspection fails for all items
 				return map[string]any{
 					"commodities": []any{
@@ -939,9 +939,9 @@ func TestNPQSWorkflow_AllItemsFailed_ConsignmentRejected(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted(), "workflow must complete")
 	require.NoError(t, env.GetWorkflowError(), "workflow execution must not error")
 
-	assert.Equal(t, 1, executedTasks["npqs-v2-apply-phyto-cert"], "n1_apply must execute")
-	assert.Equal(t, 1, executedTasks["npqs-v2-visual-consignment-flow"], "Visual inspection must execute and fail")
-	assert.Equal(t, 0, executedTasks["npqs-v2-upload-docs"], "Consignment doc upload must NOT execute on rejection")
-	assert.Equal(t, 0, executedTasks["npqs-v2-pay-certificate-fee"], "Payment must NOT execute on rejection")
-	assert.Equal(t, 0, executedTasks["npqs-v2-issue-certificate"], "Certificate issuance must NOT execute on rejection")
+	assert.Equal(t, 1, executedTasks["npqs-apply-phyto-cert"], "n1_apply must execute")
+	assert.Equal(t, 1, executedTasks["npqs-visual-consignment-flow"], "Visual inspection must execute and fail")
+	assert.Equal(t, 0, executedTasks["npqs-upload-docs"], "Consignment doc upload must NOT execute on rejection")
+	assert.Equal(t, 0, executedTasks["npqs-pay-certificate-fee"], "Payment must NOT execute on rejection")
+	assert.Equal(t, 0, executedTasks["npqs-issue-certificate"], "Certificate issuance must NOT execute on rejection")
 }

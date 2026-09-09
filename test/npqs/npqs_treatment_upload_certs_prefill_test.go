@@ -25,7 +25,7 @@ import (
 // input_mapping would provide them), trader_upload must surface them as
 // traderinput.treatment_certificate_url etc. in the task's own input.
 func TestTreatmentUploadCertsSubWorkflow_PrefillsPriorSubmission(t *testing.T) {
-	bytes, err := os.ReadFile("../../../one-trade-artifacts/tnsw/npqs_v2/5-4-treatment_upload_certs/workflow.json")
+	bytes, err := os.ReadFile("../../../one-trade-artifacts/tnsw/npqs/5-4-treatment_upload_certs/workflow.json")
 	require.NoError(t, err)
 	var def engine.WorkflowDefinition
 	require.NoError(t, json.Unmarshal(bytes, &def))
@@ -35,7 +35,7 @@ func TestTreatmentUploadCertsSubWorkflow_PrefillsPriorSubmission(t *testing.T) {
 
 	acts := &engine.Activities{
 		ExecuteTaskActivityHandler: func(p engine.TaskPayload) (map[string]any, error) {
-			require.Equal(t, "npqs-v2-upload-treatment-certs--user-input", p.TaskTemplateID)
+			require.Equal(t, "npqs-upload-treatment-certs--user-input", p.TaskTemplateID)
 			traderinput, _ := p.Inputs["traderinput"].(map[string]any)
 			assert.Equal(t, "https://nsw.gov.lk/storage/cert-old.pdf", traderinput["treatment_certificate_url"],
 				"resubmit must be prefilled with the prior certificate URL, not blank")
