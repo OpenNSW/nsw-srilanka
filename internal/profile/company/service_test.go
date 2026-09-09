@@ -592,6 +592,107 @@ func TestService_ReplaceCompanyData_EmptyDefaultsToEmptyObject(t *testing.T) {
 	}
 }
 
+// --- UpsertCompany ---
+
+func TestService_UpsertCompany_InvalidID(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.UpsertCompany(context.Background(), &Record{Name: "ACME"})
+	if !errors.Is(err, ErrInvalidCompanyID) {
+		t.Fatalf("expected ErrInvalidCompanyID, got %v", err)
+	}
+}
+
+func TestService_UpsertCompany_EmptyName(t *testing.T) {
+	svc := NewService(nil)
+	err := svc.UpsertCompany(context.Background(), &Record{ID: "co-1"})
+	if err == nil {
+		t.Fatal("expected error for missing name, got nil")
+	}
+}
+
+func TestService_UpsertCompany_DefaultsOUHandleAndData(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO "company_records"`).
+		WithArgs("co-1", "ACME", "co-1", false, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte(`{}`)))
+	mock.ExpectCommit()
+
+	record := &Record{ID: "co-1", Name: "ACME"}
+	if err := svc.UpsertCompany(context.Background(), record); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if record.OUHandle != "co-1" {
+		t.Errorf("expected OUHandle to default to ID, got %q", record.OUHandle)
+	}
+	if string(record.Data) != "{}" {
+		t.Errorf("expected Data to default to {}, got %q", record.Data)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_UpsertCompany_Success(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO "company_records"`).
+		WithArgs("co-1", "ACME", "acme", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte(`{"br_no":"123"}`)))
+	mock.ExpectCommit()
+
+	record := &Record{ID: "co-1", Name: "ACME", OUHandle: "acme", HasCHA: true, Data: json.RawMessage(`{"br_no":"123"}`)}
+	if err := svc.UpsertCompany(context.Background(), record); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_UpsertCompany_OUHandleConflict(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO "company_records"`).
+		WithArgs("co-1", "ACME", "taken-handle", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnError(&pgconn.PgError{Code: pgUniqueViolationCode, ConstraintName: "company_records_ou_handle_key"})
+	mock.ExpectRollback()
+
+	record := &Record{ID: "co-1", Name: "ACME", OUHandle: "taken-handle", HasCHA: true, Data: json.RawMessage(`{}`)}
+	err := svc.UpsertCompany(context.Background(), record)
+	if !errors.Is(err, ErrOUHandleConflict) {
+		t.Fatalf("expected ErrOUHandleConflict, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestService_UpsertCompany_DBError(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO "company_records"`).
+		WithArgs("co-1", "ACME", "acme", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnError(errors.New("insert failed"))
+	mock.ExpectRollback()
+
+	record := &Record{ID: "co-1", Name: "ACME", OUHandle: "acme", HasCHA: true, Data: json.RawMessage(`{}`)}
+	if err := svc.UpsertCompany(context.Background(), record); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 // --- Health ---
 
 func TestService_Health_Success(t *testing.T) {

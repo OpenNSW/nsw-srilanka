@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/OpenNSW/core/pagination"
 )
@@ -47,6 +48,13 @@ type Service interface {
 	// Unlike UpdateCompany, this is not a merge: keys absent from data are removed. data must be
 	// a valid JSON object. Returns ErrCompanyNotFound if the company does not exist.
 	ReplaceCompanyData(ctx context.Context, id string, data json.RawMessage) error
+
+	// UpsertCompany creates the company record if its ID does not exist, or replaces Name,
+	// OUHandle, HasCHA, and Data if it does, as a single atomic INSERT ... ON CONFLICT
+	// statement (safe under concurrent callers, e.g. declarative bulk loading via
+	// `otc company apply`). Returns ErrOUHandleConflict if OUHandle collides with a
+	// different company's existing OUHandle.
+	UpsertCompany(ctx context.Context, record *Record) error
 
 	// Health checks if the service can access the database.
 	Health(ctx context.Context) error
@@ -261,6 +269,37 @@ func (s *service) Health(ctx context.Context) error {
 		slog.Error("company service health check failed", "error", err)
 		return fmt.Errorf("company service health check failed: %w", err)
 	}
+	return nil
+}
+
+func (s *service) UpsertCompany(ctx context.Context, record *Record) error {
+	if record.ID == "" {
+		return ErrInvalidCompanyID
+	}
+	if record.Name == "" {
+		return fmt.Errorf("company name is required")
+	}
+	if record.OUHandle == "" {
+		record.OUHandle = record.ID
+	}
+	if len(record.Data) == 0 {
+		record.Data = json.RawMessage("{}")
+	}
+
+	result := s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name", "ou_handle", "has_cha", "data"}),
+	}).Create(record)
+
+	if result.Error != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(result.Error, &pgErr) && pgErr.Code == pgUniqueViolationCode {
+			return ErrOUHandleConflict
+		}
+		slog.Error("failed to upsert company record", "id", record.ID, "error", result.Error)
+		return fmt.Errorf("failed to upsert company record: %w", result.Error)
+	}
+
 	return nil
 }
 

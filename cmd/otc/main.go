@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -85,6 +86,8 @@ func main() {
 				os.Exit(1)
 			}
 			handleEditCompany(os.Args[3])
+		case "apply":
+			handleApplyCompanies(os.Args[3:])
 		default:
 			fmt.Printf("Unknown company subcommand: %s\n", subCommand)
 			printCompanyUsage()
@@ -115,6 +118,7 @@ func printCompanyUsage() {
 	fmt.Println("  otc company list      List all company records in the database")
 	fmt.Println("  otc company view <id> Display details of a specific company by ID")
 	fmt.Println("  otc company edit <id> Interactively edit a company's fields and metadata")
+	fmt.Println("  otc company apply -f <file> Declaratively create/update companies from a JSON file")
 }
 
 func initDB() *gorm.DB {
@@ -263,6 +267,80 @@ func handleListCompanies() {
 		)
 	}
 	_ = w.Flush()
+}
+
+// applyFile is the top-level declarative file format for `otc company apply`. It's keyed by
+// record type (currently only "companies") so the same file format can grow to cover other
+// record kinds later without a breaking change to the shape of existing files.
+type applyFile struct {
+	Companies []companySpec `json:"companies"`
+}
+
+// companySpec is one entry under "companies" in an applyFile: matches Record's public fields.
+// It's a dedicated type (rather than reusing Record directly) so the file format doesn't
+// accidentally expose DB-managed fields like CreatedAt/UpdatedAt.
+type companySpec struct {
+	ID       string          `json:"id"`
+	Name     string          `json:"name"`
+	OUHandle string          `json:"ouHandle"`
+	HasCHA   bool            `json:"hasCha"`
+	Data     json.RawMessage `json:"data"`
+}
+
+func handleApplyCompanies(args []string) {
+	fs := flag.NewFlagSet("apply", flag.ExitOnError)
+	var filePath string
+	fs.StringVar(&filePath, "f", "", `Path to a JSON file, e.g. {"companies": [...]}`)
+	fs.StringVar(&filePath, "file", "", "Alias for -f")
+	_ = fs.Parse(args)
+
+	if filePath == "" {
+		fmt.Println("Error: -f <file> is required.")
+		fmt.Println("Usage: otc company apply -f <file>")
+		os.Exit(1)
+	}
+
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Fatalf("Failed to read %q: %v", filePath, err)
+	}
+
+	var file applyFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		log.Fatalf(`Failed to parse %q (expected {"companies": [...]}): %v`, filePath, err)
+	}
+	specs := file.Companies
+
+	if len(specs) == 0 {
+		fmt.Println("No company definitions found in file.")
+		return
+	}
+
+	db := initDB()
+	svc := company.NewService(db)
+
+	failed := 0
+	for i, spec := range specs {
+		record := &company.Record{
+			ID:       spec.ID,
+			Name:     spec.Name,
+			OUHandle: spec.OUHandle,
+			HasCHA:   spec.HasCHA,
+			Data:     spec.Data,
+		}
+		if err := svc.UpsertCompany(context.Background(), record); err != nil {
+			fmt.Printf("[%d/%d] FAILED %q: %v\n", i+1, len(specs), spec.ID, err)
+			failed++
+			continue
+		}
+		fmt.Printf("[%d/%d] OK %q\n", i+1, len(specs), spec.ID)
+	}
+
+	fmt.Println()
+	fmt.Printf("Applied %d/%d company definitions (%d failed).\n", len(specs)-failed, len(specs), failed)
+	if failed > 0 {
+		os.Exit(1)
+	}
 }
 
 func handleViewCompany(id string) {

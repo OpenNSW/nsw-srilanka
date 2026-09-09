@@ -69,6 +69,10 @@ func (m *MockCompanyService) CreateCompany(ctx context.Context, record *company.
 	return m.Called(ctx, record).Error(0)
 }
 
+func (m *MockCompanyService) UpsertCompany(ctx context.Context, record *company.Record) error {
+	return m.Called(ctx, record).Error(0)
+}
+
 func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
 	db, _ := setupTestDB(t)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)

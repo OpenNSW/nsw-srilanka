@@ -58,6 +58,9 @@ func (s *stubCompanyService) Health(_ context.Context) error { return nil }
 func (s *stubCompanyService) CreateCompany(_ context.Context, _ *company.Record) error {
 	return nil
 }
+func (s *stubCompanyService) UpsertCompany(_ context.Context, _ *company.Record) error {
+	return nil
+}
 
 func withAuthContext(r *http.Request, userID, ouHandle string) *http.Request {
 	authCtx := &authn.AuthContext{User: &authn.UserContext{ID: userID, OUHandle: ouHandle}}
