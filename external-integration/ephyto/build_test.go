@@ -236,16 +236,20 @@ func TestBuildInput_ListsTheDocumentsTheTraderSaidYesTo(t *testing.T) {
 		"certificate_id": "PC-2026-0001",
 
 		"send_application_documents": true,
-		"treatment_certificate_url":  "storage/certs/treatment-cert-1092.pdf",
-		"send_treatment_certificate": true,
-		"invoice_file_url":           "storage/docs/invoice.pdf",
-		"send_invoice":               true,
-
-		// Uploaded, but the trader said no.
-		"packing_list_file_url": "storage/docs/packing.pdf",
-		"send_packing_list":     false,
-		// Said yes, but nothing was ever uploaded.
-		"send_supervision_report": true,
+		"documents": map[string]any{
+			"treatment_certificate": map[string]any{
+				"url": "storage/certs/treatment-cert-1092.pdf", "send": true,
+			},
+			"commercial_invoice": map[string]any{
+				"url": "storage/docs/invoice.pdf", "send": true,
+			},
+			// Uploaded, but the trader said no.
+			"packing_list": map[string]any{
+				"url": "storage/docs/packing.pdf", "send": false,
+			},
+			// Said yes, but nothing was ever uploaded.
+			"treatment_supervision_report": map[string]any{"send": true},
+		},
 	})
 
 	got := in.Certificate.Attachments
@@ -270,12 +274,13 @@ func TestBuildInput_ListsTheDocumentsTheTraderSaidYesTo(t *testing.T) {
 		t.Errorf("untyped attachment = %+v", got[1])
 	}
 
-	// The later steps upload one file per field, so the field names the document.
-	if got[2].ID != "Treatment Certificate" || got[2].Filename != "treatment-cert-1092.pdf" {
-		t.Errorf("treatment certificate = %+v", got[2])
+	// The workflow names each document and the name becomes its ID, listed in
+	// name order so one set of answers always builds the same certificate.
+	if got[2].ID != "Commercial Invoice" || got[2].Filename != "invoice.pdf" {
+		t.Errorf("commercial invoice = %+v", got[2])
 	}
-	if got[3].ID != "Commercial Invoice" {
-		t.Errorf("supporting document = %+v", got[3])
+	if got[3].ID != "Treatment Certificate" || got[3].Filename != "treatment-cert-1092.pdf" {
+		t.Errorf("treatment certificate = %+v", got[3])
 	}
 
 	for _, a := range got {
@@ -310,10 +315,11 @@ func TestBuildInput_NothingSaidYesToListsNothing(t *testing.T) {
 // A form that stringifies its checkboxes still says yes.
 func TestBuildInput_AcceptsAStringifiedYes(t *testing.T) {
 	in := BuildInput(map[string]any{
-		"userform":                   sampleUserform(),
-		"certificate_id":             "PC-2026-0003",
-		"treatment_certificate_url":  "storage/certs/fumigation.pdf",
-		"send_treatment_certificate": "true",
+		"userform":       sampleUserform(),
+		"certificate_id": "PC-2026-0003",
+		"documents": map[string]any{"treatment_certificate": map[string]any{
+			"url": "storage/certs/fumigation.pdf", "send": "true",
+		}},
 	})
 	if len(in.Certificate.Attachments) != 1 {
 		t.Fatalf("expected the treatment certificate, got %+v", in.Certificate.Attachments)
@@ -347,6 +353,62 @@ func TestBuildCertXML_CarriesTheReferencedDocuments(t *testing.T) {
 	} {
 		if !strings.Contains(xml, want) {
 			t.Errorf("certificate is missing %q", want)
+		}
+	}
+}
+
+// The workflow describes the documents, so a document the NPQS flow gains later
+// needs no change here: an entry this package has never heard of is attached
+// under the name the artifact gave it.
+func TestBuildInput_AttachesADocumentThisPackageDoesNotKnow(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":       sampleUserform(),
+		"certificate_id": "PC-2026-0004",
+		"documents": map[string]any{
+			"fumigation_clearance_note": map[string]any{
+				"url": "storage/docs/fumigation-clearance.pdf", "send": true,
+			},
+		},
+	})
+
+	got := in.Certificate.Attachments
+	if len(got) != 1 {
+		t.Fatalf("expected the one document the workflow named, got %+v", got)
+	}
+	if got[0].ID != "Fumigation Clearance Note" {
+		t.Errorf("ID = %q, want the entry's name in title case", got[0].ID)
+	}
+	if got[0].Filename != "fumigation-clearance.pdf" {
+		t.Errorf("filename = %q", got[0].Filename)
+	}
+}
+
+// Two documents, whichever order the map iterates, come out the same way: a
+// certificate built twice from one set of answers must list its documents
+// identically.
+func TestBuildInput_ListsDocumentsInNameOrder(t *testing.T) {
+	documents := map[string]any{
+		"packing_list":          map[string]any{"url": "b.pdf", "send": true},
+		"commercial_invoice":    map[string]any{"url": "a.pdf", "send": true},
+		"treatment_certificate": map[string]any{"url": "c.pdf", "send": true},
+	}
+
+	for i := 0; i < 5; i++ {
+		in := BuildInput(map[string]any{
+			"userform": sampleUserform(), "certificate_id": "PC-2026-0005", "documents": documents,
+		})
+		var ids []string
+		for _, a := range in.Certificate.Attachments {
+			ids = append(ids, a.ID)
+		}
+		want := []string{"Commercial Invoice", "Packing List", "Treatment Certificate"}
+		if len(ids) != len(want) {
+			t.Fatalf("got %v", ids)
+		}
+		for j := range want {
+			if ids[j] != want[j] {
+				t.Fatalf("run %d: got %v, want %v", i, ids, want)
+			}
 		}
 	}
 }

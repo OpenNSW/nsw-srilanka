@@ -3,6 +3,7 @@ package ephyto
 import (
 	"encoding/xml"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -522,26 +523,26 @@ func isAlpha(s string) bool {
 
 // --- trader-submitted documents ----------------------------------------------
 
-// traderDocuments is every place the trader uploads a file in the NPQS flow,
-// with the ePhyto form field that says whether it travels with the certificate.
+// DocumentsInput is the task input the trader's uploadable documents arrive
+// under: one entry per document, each with the storage reference of the upload
+// and the trader's answer to whether it travels with the certificate.
 //
-// A document is sent only when the trader says so at the ePhyto step: they know
-// what the importing NPPO asked for, and a certificate that carries a document
-// the consignment does not is worse than one that carries none.
+//	"documents": {
+//	  "treatment_certificate": {"url": "…", "send": true},
+//	  "commercial_invoice":    {"url": "…", "send": false}
+//	}
 //
-// The label is what the receiving NPPO reads as the document's ID, so it names
-// the document rather than the field it arrived in.
-var traderDocuments = []struct {
-	url   string // the task input carrying the upload's storage reference
-	send  string // the ePhyto form field the trader answers
-	label string
-}{
-	{url: "treatment_certificate_url", send: "send_treatment_certificate", label: "Treatment Certificate"},
-	{url: "supervision_report_url", send: "send_supervision_report", label: "Treatment Supervision Report"},
-	{url: "invoice_file_url", send: "send_invoice", label: "Commercial Invoice"},
-	{url: "packing_list_file_url", send: "send_packing_list", label: "Packing List"},
-	{url: "additional_file_url", send: "send_additional_document", label: "Additional Supporting Document"},
-}
+// Described by the workflow rather than listed here, so a document the NPQS
+// flow gains later is two lines of input mapping and no change to this package:
+//
+//	"treatment_certificate_url?":               "documents.treatment_certificate.url"
+//	"traderinput.send_treatment_certificate?":  "documents.treatment_certificate.send"
+//
+// The entry's name is what the receiving NPPO reads as the document's ID, in
+// title case — "treatment_certificate" becomes "Treatment Certificate" — so the
+// artifact names the document and nothing here has to know what documents
+// exist.
+const DocumentsInput = "documents"
 
 // sendApplicationDocuments is the ePhyto form field covering the files attached
 // to the application itself. They are one answer rather than one per file: the
@@ -586,21 +587,46 @@ func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attach
 		}
 	}
 
-	// The later steps upload one file per field, so the field names what it is.
-	for _, doc := range traderDocuments {
-		url := asString(inputs[doc.url])
-		if url == "" || !saidYes(inputs[doc.send]) {
+	// One entry per document the flow can produce, in name order: a certificate
+	// built twice from the same answers lists its documents the same way, which
+	// map iteration alone would not give.
+	documents := asMap(inputs[DocumentsInput])
+	names := make([]string, 0, len(documents))
+	for name := range documents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		doc := asMap(documents[name])
+		url := asString(doc["url"])
+		if url == "" || !saidYes(doc["send"]) {
 			continue
 		}
 		out = append(out, spscert.Attachment{
 			RelationshipTypeCode: attachmentRelationship,
-			ID:                   doc.label,
+			ID:                   documentLabel(name),
 			Filename:             documentFilename(url),
 			Key:                  url,
 		})
 	}
 
 	return out
+}
+
+// documentLabel turns the name the workflow gave a document into the ID the
+// receiving NPPO reads: "treatment_certificate" becomes "Treatment
+// Certificate". Naming the entry for the document rather than for the field it
+// arrived in is what lets the label be derived rather than configured.
+func documentLabel(name string) string {
+	words := strings.Split(name, "_")
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // saidYes reports whether the trader ticked this document at the ephyto step.
