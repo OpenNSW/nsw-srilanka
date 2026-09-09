@@ -81,10 +81,18 @@ func resolveAttachments(files Files, in *spscert.Input) error {
 		}
 		a.Key = ""
 
-		// The Hub's validator rejects an empty mimeCode wherever a binary
-		// object is present, so every attached file carries one.
-		if a.Base64 != "" && a.MimeCode == "" {
-			a.MimeCode = mimeCodeFor(a.Filename)
+		// Every attached file carries a type the Hub accepts, or it is refused
+		// here. The validator rejects an empty mimeCode wherever a binary object
+		// is present, and rejects the file outright for a type outside the four
+		// the guidelines allow — either way as a validation fault naming nothing
+		// the trader can act on.
+		if a.Base64 != "" {
+			mime := canonicalHubMime(a.Filename, a.MimeCode)
+			if mime == "" {
+				return fmt.Errorf("%s (%s) is not a JPG, GIF, PNG or PDF, which is all the Hub accepts with a certificate",
+					a.ID, a.Filename)
+			}
+			a.MimeCode = mime
 		}
 
 		// Every document counts towards the certificate's own ceiling,
@@ -119,26 +127,51 @@ func readFile(files Files, key string) ([]byte, string, error) {
 	return content, strings.TrimSpace(contentType), nil
 }
 
-// mimeCodeFor maps a filename extension to the MIME type the Hub expects in
-// the mimeCode attribute. An unknown extension gets the generic binary type
-// rather than an empty attribute, which the validator rejects.
-func mimeCodeFor(filename string) string {
-	switch strings.ToLower(filepath.Ext(filename)) {
-	case ".pdf":
-		return "application/pdf"
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".tif", ".tiff":
-		return "image/tiff"
-	case ".txt":
-		return "text/plain"
-	case ".xml":
-		return "application/xml"
-	default:
-		return "application/octet-stream"
+// The types the Hub accepts for an attachment: "Format: JPG, GIF, PNG and PDF"
+// (ePhyto Guidelines v2.12, ram:AttachmentBinaryObject). Anything else is
+// refused on receipt, so it is refused here instead.
+var hubMimes = map[string]string{
+	"application/pdf": "application/pdf",
+	"image/jpeg":      "image/jpeg",
+	"image/jpg":       "image/jpeg", // seen from browsers; canonicalised
+	"image/png":       "image/png",
+	"image/gif":       "image/gif",
+}
+
+// extensionMimes maps the extensions those four types are stored under.
+var extensionMimes = map[string]string{
+	".pdf":  "application/pdf",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+}
+
+// canonicalHubMime returns the type this file should be sent as, or "" when it
+// is not one the Hub accepts.
+//
+// The stored type is preferred when it names one of the four, and the extension
+// is used when it does not — which is the ordinary case rather than the
+// exceptional one. Storage answers "application/octet-stream" whenever it was
+// given nothing better (core/storage/drivers), and the upload path sends that
+// same default for any file the browser could not type, so a perfectly good PDF
+// routinely arrives here described as bytes. Believing that would put a
+// mimeCode on the certificate the validator refuses.
+//
+// Neither source placing the file is a refusal rather than a guess: the Hub
+// would reject it anyway, and it is only here that the message can name the
+// document and reach the trader.
+func canonicalHubMime(filename, contentType string) string {
+	// Storage may return parameters alongside the type ("text/plain;
+	// charset=utf-8"), which are not part of the comparison.
+	stored := strings.ToLower(strings.TrimSpace(contentType))
+	if i := strings.Index(stored, ";"); i != -1 {
+		stored = strings.TrimSpace(stored[:i])
 	}
+	if mime, ok := hubMimes[stored]; ok {
+		return mime
+	}
+	return extensionMimes[strings.ToLower(filepath.Ext(filename))]
 }
 
 // humanSize renders a byte count the way a trader would read it, in the unit

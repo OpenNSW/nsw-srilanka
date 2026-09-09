@@ -138,8 +138,7 @@ func TestBuildEnvelope_RefusesWithNoStorageConfigured(t *testing.T) {
 	}
 }
 
-// Storage that reports no content type falls back to the extension, because the
-// Hub's validator rejects an empty mimeCode.
+// The extension supplies the type when storage reports none.
 func TestResolveAttachments_FallsBackToTheExtension(t *testing.T) {
 	files := &stubFiles{content: map[string][]byte{"k/permit.PNG": []byte("png bytes")}}
 
@@ -193,5 +192,90 @@ func TestBuildEnvelope_SkipsADocumentTickedButNeverUploaded(t *testing.T) {
 	}
 	if len(files.asked) != 1 || files.asked[0] != "storage/docs/invoice.pdf" {
 		t.Errorf("storage reads = %v, want only the invoice", files.asked)
+	}
+}
+
+// The ordinary case, not the exceptional one: storage answers
+// "application/octet-stream" whenever it was given nothing better, and the
+// upload path sends that same default for any file the browser could not type.
+// A PDF described as bytes must still go out as a PDF — sent as octet-stream
+// the Hub's validator refuses it, and the fault names nothing the trader can
+// act on.
+func TestResolveAttachments_StoredTypeIsGeneric(t *testing.T) {
+	files := &stubFiles{
+		content:     map[string][]byte{"storage/docs/invoice.pdf": []byte("%PDF-1.7")},
+		contentType: "application/octet-stream",
+	}
+
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit,
+		sendingDocument("commercial_invoice", "storage/docs/invoice.pdf", true))
+	if err != nil {
+		t.Fatalf("BuildEnvelope: %v", err)
+	}
+	if !strings.Contains(envelope, `mimeCode="application/pdf"`) {
+		t.Error("a PDF stored as bytes must be sent as a PDF")
+	}
+	if strings.Contains(envelope, "octet-stream") {
+		t.Error("the generic stored type reached the certificate")
+	}
+}
+
+// A file the Hub does not accept is refused here, where the message names the
+// document, rather than there, where it arrives as a validation fault about a
+// certificate.
+func TestBuildEnvelope_RefusesATypeTheHubDoesNotAccept(t *testing.T) {
+	files := &stubFiles{
+		content:     map[string][]byte{"storage/docs/contract.docx": []byte("PK")},
+		contentType: "application/octet-stream",
+	}
+
+	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit,
+		sendingDocument("additional_supporting_document", "storage/docs/contract.docx", true))
+	if err == nil {
+		t.Fatal("expected a refusal")
+	}
+	for _, want := range []string{"contract.docx", "JPG, GIF, PNG or PDF"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("message %q is missing %q", err.Error(), want)
+		}
+	}
+}
+
+// The four the guidelines allow, from either source. GIF is one of them — it
+// was the type the old extension table left out.
+func TestResolveAttachments_AcceptsEveryTypeTheHubAllows(t *testing.T) {
+	for _, tc := range []struct {
+		name, file, stored, want string
+	}{
+		{"pdf by extension", "invoice.pdf", "application/octet-stream", "application/pdf"},
+		{"jpeg by extension", "photo.JPEG", "", "image/jpeg"},
+		{"png by stored type", "scan", "image/png", "image/png"},
+		{"gif by extension", "seal.gif", "application/octet-stream", "image/gif"},
+		{"jpg spelling canonicalised", "photo", "image/jpg", "image/jpeg"},
+		{"parameters ignored", "note", "application/pdf; charset=binary", "application/pdf"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := canonicalHubMime(tc.file, tc.stored); got != tc.want {
+				t.Errorf("canonicalHubMime(%q, %q) = %q, want %q", tc.file, tc.stored, got, tc.want)
+			}
+		})
+	}
+}
+
+// Types the Hub refuses are not sent under a name it would accept, and a file
+// neither source can place is refused.
+func TestResolveAttachments_RefusesWhatTheHubDoesNotAccept(t *testing.T) {
+	for _, tc := range []struct{ name, file, stored string }{
+		{"tiff", "scan.tiff", "image/tiff"},
+		{"plain text", "notes.txt", "text/plain"},
+		{"xml", "manifest.xml", "application/xml"},
+		{"no extension, generic type", "attachment", "application/octet-stream"},
+		{"nothing at all", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := canonicalHubMime(tc.file, tc.stored); got != "" {
+				t.Errorf("canonicalHubMime(%q, %q) = %q, want a refusal", tc.file, tc.stored, got)
+			}
+		})
 	}
 }
