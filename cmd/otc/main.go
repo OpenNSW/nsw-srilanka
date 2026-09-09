@@ -272,8 +272,10 @@ func handleListCompanies() {
 // applyFile is the top-level declarative file format for `otc company apply`. It's keyed by
 // record type (currently only "companies") so the same file format can grow to cover other
 // record kinds later without a breaking change to the shape of existing files.
+// Companies is a pointer so a missing or null "companies" key can be distinguished from an
+// explicitly empty array.
 type applyFile struct {
-	Companies []companySpec `json:"companies"`
+	Companies *[]companySpec `json:"companies"`
 }
 
 // companySpec is one entry under "companies" in an applyFile: matches Record's public fields.
@@ -285,6 +287,19 @@ type companySpec struct {
 	OUHandle string          `json:"ouHandle"`
 	HasCHA   bool            `json:"hasCha"`
 	Data     json.RawMessage `json:"data"`
+}
+
+// parseApplyFile decodes a declarative apply file. The "companies" key must be present
+// and non-null; an explicit empty array is allowed and yields a zero-length slice.
+func parseApplyFile(raw []byte) ([]companySpec, error) {
+	var file applyFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		return nil, err
+	}
+	if file.Companies == nil {
+		return nil, errors.New(`"companies" array is required (must not be omitted or null)`)
+	}
+	return *file.Companies, nil
 }
 
 func handleApplyCompanies(args []string) {
@@ -305,11 +320,10 @@ func handleApplyCompanies(args []string) {
 		log.Fatalf("Failed to read %q: %v", filePath, err)
 	}
 
-	var file applyFile
-	if err := json.Unmarshal(raw, &file); err != nil {
+	specs, err := parseApplyFile(raw)
+	if err != nil {
 		log.Fatalf(`Failed to parse %q (expected {"companies": [...]}): %v`, filePath, err)
 	}
-	specs := file.Companies
 
 	if len(specs) == 0 {
 		fmt.Println("No company definitions found in file.")

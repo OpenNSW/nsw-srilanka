@@ -50,7 +50,7 @@ type Service interface {
 	ReplaceCompanyData(ctx context.Context, id string, data json.RawMessage) error
 
 	// UpsertCompany creates the company record if its ID does not exist, or replaces Name,
-	// OUHandle, HasCHA, and Data if it does, as a single atomic INSERT ... ON CONFLICT
+	// OUHandle, HasCHA, Data, and UpdatedAt if it does, as a single atomic INSERT ... ON CONFLICT
 	// statement (safe under concurrent callers, e.g. declarative bulk loading via
 	// `otc company apply`). Returns ErrOUHandleConflict if OUHandle collides with a
 	// different company's existing OUHandle.
@@ -288,7 +288,7 @@ func (s *service) UpsertCompany(ctx context.Context, record *Record) error {
 
 	result := s.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "ou_handle", "has_cha", "data"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "ou_handle", "has_cha", "data", "updated_at"}),
 	}).Create(record)
 
 	if result.Error != nil {

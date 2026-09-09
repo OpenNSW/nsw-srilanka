@@ -615,7 +615,7 @@ func TestService_UpsertCompany_DefaultsOUHandleAndData(t *testing.T) {
 	svc := NewService(db)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "company_records"`).
+	mock.ExpectQuery(`INSERT INTO "company_records".*ON CONFLICT \("id"\) DO UPDATE`).
 		WithArgs("co-1", "ACME", "co-1", false, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte(`{}`)))
 	mock.ExpectCommit()
@@ -640,7 +640,7 @@ func TestService_UpsertCompany_Success(t *testing.T) {
 	svc := NewService(db)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "company_records"`).
+	mock.ExpectQuery(`INSERT INTO "company_records".*ON CONFLICT \("id"\) DO UPDATE`).
 		WithArgs("co-1", "ACME", "acme", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"data"}).AddRow([]byte(`{"br_no":"123"}`)))
 	mock.ExpectCommit()
@@ -659,7 +659,7 @@ func TestService_UpsertCompany_OUHandleConflict(t *testing.T) {
 	svc := NewService(db)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "company_records"`).
+	mock.ExpectQuery(`INSERT INTO "company_records".*ON CONFLICT \("id"\) DO UPDATE`).
 		WithArgs("co-1", "ACME", "taken-handle", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnError(&pgconn.PgError{Code: pgUniqueViolationCode, ConstraintName: "company_records_ou_handle_key"})
 	mock.ExpectRollback()
@@ -679,7 +679,7 @@ func TestService_UpsertCompany_DBError(t *testing.T) {
 	svc := NewService(db)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO "company_records"`).
+	mock.ExpectQuery(`INSERT INTO "company_records".*ON CONFLICT \("id"\) DO UPDATE`).
 		WithArgs("co-1", "ACME", "acme", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnError(errors.New("insert failed"))
 	mock.ExpectRollback()
