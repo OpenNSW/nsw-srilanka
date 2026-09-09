@@ -279,9 +279,10 @@ func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
 
 // excludedItemIDs returns the set of commodity IDs the officer explicitly
 // deselected on the certificate-issuance item picker (include_in_certificate
-// == false). certificate_items isn't required on the officer form, so
-// certificateItems can be nil/empty — every declared commodity is then
-// included on the certificate.
+// == false). certificate_items is required on the officer form and
+// validated before BuildInput is ever called for a submit (see
+// HubInterpreter.BuildEnvelope) — this function stays nil-safe regardless,
+// treating a missing list as excluding nothing.
 func excludedItemIDs(certificateItems any) map[string]bool {
 	excluded := make(map[string]bool)
 	for _, raw := range asSlice(certificateItems) {
