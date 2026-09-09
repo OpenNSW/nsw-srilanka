@@ -165,8 +165,10 @@ func TestBuildInput_CertificateItemsExcludesDeselectedItem(t *testing.T) {
 	}
 }
 
-// certificate_items isn't required on the officer form, so absent data must
-// include every declared commodity, unfiltered.
+// BuildInput itself stays nil-safe even though HubInterpreter.BuildEnvelope
+// now rejects a submit with no certificate_items before BuildInput is ever
+// called — absent data here must still include every declared commodity,
+// unfiltered.
 func TestBuildInput_CertificateItemsAbsentIncludesAllCommodities(t *testing.T) {
 	in := BuildInput(map[string]any{
 		"userform":        twoItemUserform(),
