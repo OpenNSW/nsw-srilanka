@@ -22,6 +22,15 @@ func (r *Record) TableName() string {
 	return "company_records"
 }
 
+// CompanyFieldsUpdate carries optional updates to a company's mutable core fields, for use with
+// Service.UpdateCompanyFields. A nil field means "leave unchanged"; a non-nil field's value fully
+// replaces the current one.
+type CompanyFieldsUpdate struct {
+	Name     *string
+	OUHandle *string
+	HasCHA   *bool
+}
+
 // ListFilter narrows the set returned by Service.ListCompanies. Nil fields mean "no filter".
 type ListFilter struct {
 	// HasCHA filters to companies whose has_cha column matches the pointed-to value when non-nil.

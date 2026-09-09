@@ -48,6 +48,12 @@ func (s *stubCompanyService) ListCompanies(_ context.Context, _ company.ListFilt
 func (s *stubCompanyService) UpdateCompany(_ context.Context, _ string, _ map[string]any) error {
 	return nil
 }
+func (s *stubCompanyService) UpdateCompanyFields(_ context.Context, _ string, _ company.CompanyFieldsUpdate) error {
+	return nil
+}
+func (s *stubCompanyService) ReplaceCompanyData(_ context.Context, _ string, _ json.RawMessage) error {
+	return nil
+}
 func (s *stubCompanyService) Health(_ context.Context) error { return nil }
 func (s *stubCompanyService) CreateCompany(_ context.Context, _ *company.Record) error {
 	return nil

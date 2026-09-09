@@ -8,10 +8,14 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/core/pagination"
 )
+
+// pgUniqueViolationCode is the PostgreSQL error code for a unique-constraint violation (23505).
+const pgUniqueViolationCode = "23505"
 
 // Service defines operations for company profile management.
 type Service interface {
@@ -32,6 +36,17 @@ type Service interface {
 	// Keys absent from data are never removed.
 	// Returns ErrCompanyNotFound if the company does not exist.
 	UpdateCompany(ctx context.Context, id string, data map[string]any) error
+
+	// UpdateCompanyFields updates the mutable core fields (Name, OUHandle, HasCHA) of a company
+	// record. Only fields set (non-nil) in fields are changed; the rest are left untouched.
+	// Returns ErrCompanyNotFound if the company does not exist, or ErrOUHandleConflict if the
+	// requested OUHandle is already used by another company.
+	UpdateCompanyFields(ctx context.Context, id string, fields CompanyFieldsUpdate) error
+
+	// ReplaceCompanyData replaces the company's entire Data field with the given JSON document.
+	// Unlike UpdateCompany, this is not a merge: keys absent from data are removed. data must be
+	// a valid JSON object. Returns ErrCompanyNotFound if the company does not exist.
+	ReplaceCompanyData(ctx context.Context, id string, data json.RawMessage) error
 
 	// Health checks if the service can access the database.
 	Health(ctx context.Context) error
@@ -154,6 +169,78 @@ func (s *service) UpdateCompany(ctx context.Context, id string, data map[string]
 	if result.Error != nil {
 		slog.Error("failed to update company data", "id", id, "error", result.Error)
 		return fmt.Errorf("failed to update company data: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrCompanyNotFound
+	}
+
+	return nil
+}
+
+func (s *service) UpdateCompanyFields(ctx context.Context, id string, fields CompanyFieldsUpdate) error {
+	if id == "" {
+		return ErrInvalidCompanyID
+	}
+
+	if fields.Name != nil && strings.TrimSpace(*fields.Name) == "" {
+		return fmt.Errorf("company name cannot be empty")
+	}
+	if fields.OUHandle != nil && strings.TrimSpace(*fields.OUHandle) == "" {
+		return fmt.Errorf("ou_handle cannot be empty")
+	}
+
+	updates := make(map[string]any, 3)
+	if fields.Name != nil {
+		updates["name"] = *fields.Name
+	}
+	if fields.OUHandle != nil {
+		updates["ou_handle"] = *fields.OUHandle
+	}
+	if fields.HasCHA != nil {
+		updates["has_cha"] = *fields.HasCHA
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
+	result := s.db.WithContext(ctx).Model(&Record{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(result.Error, &pgErr) && pgErr.Code == pgUniqueViolationCode {
+			return ErrOUHandleConflict
+		}
+		slog.Error("failed to update company fields", "id", id, "error", result.Error)
+		return fmt.Errorf("failed to update company fields: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrCompanyNotFound
+	}
+
+	return nil
+}
+
+func (s *service) ReplaceCompanyData(ctx context.Context, id string, data json.RawMessage) error {
+	if id == "" {
+		return ErrInvalidCompanyID
+	}
+
+	if len(data) == 0 {
+		data = json.RawMessage("{}")
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(data, &object); err != nil || object == nil {
+		return fmt.Errorf("company data must be a valid JSON object")
+	}
+
+	result := s.db.WithContext(ctx).Model(&Record{}).
+		Where("id = ?", id).
+		Update("data", gorm.Expr("?::jsonb", string(data)))
+
+	if result.Error != nil {
+		slog.Error("failed to replace company data", "id", id, "error", result.Error)
+		return fmt.Errorf("failed to replace company data: %w", result.Error)
 	}
 
 	if result.RowsAffected == 0 {
