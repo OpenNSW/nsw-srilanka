@@ -165,9 +165,8 @@ func TestBuildInput_CertificateItemsExcludesDeselectedItem(t *testing.T) {
 	}
 }
 
-// Absent certificate_items (a task config that never asked for a selection,
-// or data submitted before the picker existed) must include every declared
-// commodity, unfiltered — the picker is additive, not a new requirement.
+// certificate_items isn't required on the officer form, so absent data must
+// include every declared commodity, unfiltered.
 func TestBuildInput_CertificateItemsAbsentIncludesAllCommodities(t *testing.T) {
 	in := BuildInput(map[string]any{
 		"userform":        twoItemUserform(),
