@@ -41,20 +41,13 @@ func sending(extra map[string]any) map[string]any {
 	return inputs
 }
 
-// doc names one document the way an input mapping does.
-func doc(name, url string, send bool) map[string]any {
-	return map[string]any{name: map[string]any{"url": url, "send": send}}
-}
-
-// docs assembles several of them.
-func docs(entries ...map[string]any) map[string]any {
-	all := map[string]any{}
-	for _, e := range entries {
-		for k, v := range e {
-			all[k] = v
-		}
-	}
-	return map[string]any{"documents": all}
+// sendingDocument builds the submit inputs for a certificate carrying one
+// document, in the shape an input mapping delivers it: an entry under
+// DocumentsInput with the upload's storage reference and the trader's answer.
+func sendingDocument(name, url string, send any) map[string]any {
+	return sending(map[string]any{
+		DocumentsInput: map[string]any{name: map[string]any{"url": url, "send": send}},
+	})
 }
 
 // A document the trader said yes to travels inside the certificate: base64
@@ -66,9 +59,7 @@ func TestBuildEnvelope_AttachesTheSelectedDocuments(t *testing.T) {
 		contentType: "application/pdf",
 	}
 
-	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"treatment_certificate": map[string]any{"url": "storage/certs/fumigation.pdf", "send": true}},
-	}))
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("treatment_certificate", "storage/certs/fumigation.pdf", true))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
 	}
@@ -92,9 +83,7 @@ func TestBuildEnvelope_AttachesTheSelectedDocuments(t *testing.T) {
 func TestBuildEnvelope_ReadsNothingForADocumentNotSent(t *testing.T) {
 	files := &stubFiles{content: map[string][]byte{"storage/certs/fumigation.pdf": []byte("%PDF")}}
 
-	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"treatment_certificate": map[string]any{"url": "storage/certs/fumigation.pdf", "send": false}},
-	}))
+	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("treatment_certificate", "storage/certs/fumigation.pdf", false))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
 	}
@@ -107,9 +96,7 @@ func TestBuildEnvelope_ReadsNothingForADocumentNotSent(t *testing.T) {
 func TestBuildEnvelope_RefusesWhenADocumentCannotBeRead(t *testing.T) {
 	files := &stubFiles{err: errors.New("connection reset")}
 
-	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"commercial_invoice": map[string]any{"url": "storage/docs/invoice.pdf", "send": true}},
-	}))
+	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("commercial_invoice", "storage/docs/invoice.pdf", true))
 	if err == nil {
 		t.Fatal("expected a refusal")
 	}
@@ -133,9 +120,7 @@ func TestBuildEnvelope_RefusesAnOversizedDocument(t *testing.T) {
 		contentType: "application/pdf",
 	}
 
-	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"commercial_invoice": map[string]any{"url": "storage/docs/scan.pdf", "send": true}},
-	}))
+	_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("commercial_invoice", "storage/docs/scan.pdf", true))
 	if err == nil {
 		t.Fatal("expected a refusal")
 	}
@@ -147,9 +132,7 @@ func TestBuildEnvelope_RefusesAnOversizedDocument(t *testing.T) {
 // A deployment with no storage configured says so rather than sending a
 // certificate that claims documents it has not enclosed.
 func TestBuildEnvelope_RefusesWithNoStorageConfigured(t *testing.T) {
-	_, err := NewHubInterpreter(nil).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"commercial_invoice": map[string]any{"url": "storage/docs/invoice.pdf", "send": true}},
-	}))
+	_, err := NewHubInterpreter(nil).BuildEnvelope(OpSubmit, sendingDocument("commercial_invoice", "storage/docs/invoice.pdf", true))
 	if err == nil || !strings.Contains(err.Error(), "storage") {
 		t.Fatalf("want a refusal naming storage, got %v", err)
 	}
@@ -160,9 +143,7 @@ func TestBuildEnvelope_RefusesWithNoStorageConfigured(t *testing.T) {
 func TestResolveAttachments_FallsBackToTheExtension(t *testing.T) {
 	files := &stubFiles{content: map[string][]byte{"k/permit.PNG": []byte("png bytes")}}
 
-	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"additional_supporting_document": map[string]any{"url": "k/permit.PNG", "send": true}},
-	}))
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("additional_supporting_document", "k/permit.PNG", true))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
 	}
@@ -176,9 +157,7 @@ func TestResolveAttachments_FallsBackToTheExtension(t *testing.T) {
 func TestResolveAttachments_NeverEmitsTheStorageKey(t *testing.T) {
 	files := &stubFiles{content: map[string][]byte{"secret/internal/path/invoice.pdf": []byte("%PDF")}}
 
-	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		"documents": map[string]any{"commercial_invoice": map[string]any{"url": "secret/internal/path/invoice.pdf", "send": true}},
-	}))
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("commercial_invoice", "secret/internal/path/invoice.pdf", true))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
 	}
@@ -196,10 +175,12 @@ func TestBuildEnvelope_SkipsADocumentTickedButNeverUploaded(t *testing.T) {
 	files := &stubFiles{content: map[string][]byte{"storage/docs/invoice.pdf": []byte("%PDF")}}
 
 	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		// The treatment step never ran, so no URL was mapped in — but the
-		// trader ticked its box.
-		"send_treatment_certificate": true,
-		"documents":                  map[string]any{"commercial_invoice": map[string]any{"url": "storage/docs/invoice.pdf", "send": true}},
+		DocumentsInput: map[string]any{
+			// The treatment step never ran, so no url was mapped in — but the
+			// trader ticked its box.
+			"treatment_certificate": map[string]any{"send": true},
+			"commercial_invoice":    map[string]any{"url": "storage/docs/invoice.pdf", "send": true},
+		},
 	}))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
