@@ -37,12 +37,12 @@ type wfNode struct {
 // loud failure, and a field renamed on one side (tnsw/) without updating its agency
 // mirror silently reintroduces whatever bug the rename was meant to fix.
 //
-// For each tnsw/npqs_v2/*/*.json task-template file with an EXTERNAL_REVIEW or
+// For each tnsw/npqs/*/*.json task-template file with an EXTERNAL_REVIEW or
 // USER_INPUT task_type:
 //  1. Its plugin_properties.task_code is used to find the matching agency
-//     npqs_v2/*/*.taskconfig.json (by taskCode).
+//     npqs/*/*.taskconfig.json (by taskCode).
 //  2. That taskconfig's forms.review names a jsonform ID - resolved against every
-//     agency npqs_v2/*/*.json file with a matching top-level "id", to find the actual
+//     agency npqs/*/*.json file with a matching top-level "id", to find the actual
 //     form the officer/trader submits through in production.
 //  3. Every REQUIRED (non-"?") key in the corresponding tnsw workflow.json TASK node's
 //     output_mapping must exist as a top-level schema property on that agency form -
@@ -54,8 +54,8 @@ type wfNode struct {
 // officer's own form and isn't checked here.
 func TestNPQSAgencySubmitSchemaMatchesWorkflowWiring(t *testing.T) {
 	root := "../../../one-trade-artifacts"
-	tnswDir := filepath.Join(root, "tnsw", "npqs_v2")
-	agencyDir := filepath.Join(root, "npqs_v2")
+	tnswDir := filepath.Join(root, "tnsw", "npqs")
+	agencyDir := filepath.Join(root, "npqs")
 
 	agencyByTaskCode := loadAgencyTaskConfigs(t, agencyDir)
 	agencyFormsByID := loadAgencyForms(t, agencyDir)
@@ -93,7 +93,7 @@ func TestNPQSAgencySubmitSchemaMatchesWorkflowWiring(t *testing.T) {
 	t.Logf("cross-checked %d EXTERNAL_REVIEW/USER_INPUT tasks against their agency forms", checked)
 }
 
-// loadAgencyTaskConfigs indexes every agency npqs_v2/*/*.taskconfig.json by its taskCode.
+// loadAgencyTaskConfigs indexes every agency npqs/*/*.taskconfig.json by its taskCode.
 func loadAgencyTaskConfigs(t *testing.T, agencyDir string) map[string]agencyTaskConfig {
 	t.Helper()
 	tcFiles, err := filepath.Glob(filepath.Join(agencyDir, "*", "*.taskconfig.json"))

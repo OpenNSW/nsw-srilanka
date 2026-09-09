@@ -24,7 +24,7 @@ import (
 // would have caught the "reviewerform.sample_number" output_mapping bug that
 // left a real workflow instance permanently parked.
 func TestVisualSampleCollectionSubWorkflow(t *testing.T) {
-	bytes, err := os.ReadFile("../../../one-trade-artifacts/tnsw/npqs_v2/4-0-visual_sample_collection/workflow.json")
+	bytes, err := os.ReadFile("../../../one-trade-artifacts/tnsw/npqs/4-0-visual_sample_collection/workflow.json")
 	require.NoError(t, err)
 	var def engine.WorkflowDefinition
 	require.NoError(t, json.Unmarshal(bytes, &def))
@@ -34,7 +34,7 @@ func TestVisualSampleCollectionSubWorkflow(t *testing.T) {
 
 	acts := &engine.Activities{
 		ExecuteTaskActivityHandler: func(p engine.TaskPayload) (map[string]any, error) {
-			require.Equal(t, "npqs-v2-visual-sample-collection--officer-receive", p.TaskTemplateID)
+			require.Equal(t, "npqs-visual-sample-collection--officer-receive", p.TaskTemplateID)
 			// Flat, un-namespaced - exactly what CompleteTaskStep's payload
 			// parameter carries into mapTaskOutputs (see
 			// core/taskflow/orchestrator/manager.go CompleteTaskStep, which
