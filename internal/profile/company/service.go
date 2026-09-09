@@ -68,7 +68,13 @@ type service struct {
 }
 
 // NewService creates a new company service instance.
+// TranslateError is enabled on a cloned session so unique-constraint violations
+// surface as gorm.ErrDuplicatedKey without new call sites importing a SQL driver.
 func NewService(db *gorm.DB) Service {
+	if db != nil {
+		db = db.Session(&gorm.Session{})
+		db.TranslateError = true
+	}
 	return &service{db: db}
 }
 
@@ -292,8 +298,7 @@ func (s *service) UpsertCompany(ctx context.Context, record *Record) error {
 	}).Create(record)
 
 	if result.Error != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(result.Error, &pgErr) && pgErr.Code == pgUniqueViolationCode {
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
 			return ErrOUHandleConflict
 		}
 		slog.Error("failed to upsert company record", "id", record.ID, "error", result.Error)
