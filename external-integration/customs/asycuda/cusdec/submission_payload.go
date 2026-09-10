@@ -102,8 +102,11 @@ type GeneralSeg struct {
 	PlaceOfDischarge               string    `json:"placeOfDischarge"`
 	BorderOffice                   string    `json:"borderOffice"`
 	TotalCustomsValuation          Valuation `json:"totalCustomsValuation"`
-	IsContainer                    bool      `json:"isContainer"`
+	ContainerFlag                  bool      `json:"containerFlag"`
 	NumberOfContainers             int       `json:"numberOfContainers"`
+	WarehouseCode                  string    `json:"warehouseCode"`
+	WarehouseDelay                 int       `json:"warehouseDelay"`
+	DeferredPayment                string    `json:"deferredPayment"`
 }
 
 type Commodity struct {
@@ -133,13 +136,17 @@ type GoodsItem struct {
 	CountryOfOriginCode string              `json:"countryOfOriginCode"`
 	GoodsPreference     string              `json:"goodsPreference"`
 	ItemPackage         Measure             `json:"itemPackage"`
+	NumberOfUnits       int                 `json:"numberOfUnits"`
+	Bol                 string              `json:"bol"`
+	BolSplit            string              `json:"bolSplit"`
+	MarksAndNumbers     string              `json:"marksAndNumbers"`
 }
 
 type Remittance struct {
-	BankCode       string  `json:"bankCode"`
-	Reference      string  `json:"reference"`
-	TermsOfPayment string  `json:"termsOfPayment"`
-	Amount         float64 `json:"amount"`
+	BankCode        string `json:"bankCode"`
+	Reference       string `json:"reference"`
+	TermsOfPayment  string `json:"termsOfPayment"`
+	RemittanceValue Amount `json:"remittanceValue"`
 }
 
 // SupportDoc is one entry of the supportingDocuments array. FileName must match
@@ -208,8 +215,9 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 			OfficeCode:           str(ident, "officeCode"),
 			ManifestRegNumber:    str(ident, "manifestRegNumber"),
 			// The form collects the consignee, which is the importer in an
-			// export declaration; it has no field for their trader code.
+			// export declaration.
 			Importer: Party{
+				ID:          str(consignee, "code"),
 				Name:        str(consignee, "name"),
 				Address:     str(consignee, "address"),
 				CountryCode: str(consignee, "countryCode"),
@@ -239,12 +247,15 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 			ModeOfTransportAtBorder:        str(transport, "modeOfTransport"),
 			PlaceOfDischarge:               str(transport, "placeOfDischargeCode"),
 			BorderOffice:                   str(transport, "borderOfficeCode"),
-			TotalCustomsValuation:          buildValuation(valuation),
-			IsContainer:                    boolean(transport, "containerized"),
+			TotalCustomsValuation:          buildValuation(valuation, str(valuation, "invoiceCurrencyCode")),
+			ContainerFlag:                  boolean(transport, "containerized"),
 			NumberOfContainers:             integer(form, "containerCount"),
+			WarehouseCode:                  str(transport, "warehouseCode"),
+			WarehouseDelay:                 integer(transport, "warehouseDelay"),
+			DeferredPayment:                str(financial, "deferredPayment"),
 		},
 		GoodsShipments:      items,
-		Remittances:         buildRemittances(financial),
+		Remittances:         buildRemittances(financial, str(valuation, "invoiceCurrencyCode")),
 		SupportingDocuments: docs,
 	}
 
@@ -257,10 +268,9 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 
 // buildValuation maps the form's foreign-currency valuation block onto the
 // six-part customs valuation. The form records each cost twice (foreign and
-// LKR); the foreign figure is the one sent, paired with its currency, matching
-// what the endpoint accepts.
-func buildValuation(v map[string]any) Valuation {
-	currency := str(v, "invoiceCurrencyCode")
+// LKR); the foreign figure is the one sent, paired with the currency the
+// caller resolved, matching what the endpoint accepts.
+func buildValuation(v map[string]any, currency string) Valuation {
 	extFreight := nested(v, "externalFreight")
 
 	// Only the invoice and external freight carry their own currency in the
@@ -322,14 +332,18 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 			itemValue = number(tarif, "itemPrice")
 		}
 
+		// The item repeats the declaration's six-part valuation. Its charge
+		// amount is the item price, which buildValuation cannot read because
+		// the form spells it invoiceAmountForeign or itemPrice per item.
+		itemValuation := buildValuation(val, currency)
+		itemValuation.ChargeAmount = Amount{Value: itemValue, CurrencyID: currency}
+
 		items = append(items, GoodsItem{
 			// Annex A requires a unique item number; position in the array is
 			// the only ordering the form has, and it is what numberOfItems and
 			// the errors object's segment keys are counted against.
 			SequenceNumeric: i + 1,
-			CustomsValue: Valuation{
-				ChargeAmount: Amount{Value: itemValue, CurrencyID: currency},
-			},
+			CustomsValue:    itemValuation,
 			Commodity: Commodity{
 				CommercialDescription:  str(goods, "commercialDescription"),
 				CommercialDescription1: str(goods, "commercialDescription1"),
@@ -354,6 +368,10 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 				Value:    float64(integer(pkg, "quantity")),
 				UnitCode: str(pkg, "kindCode"),
 			},
+			NumberOfUnits:   integer(m, "numberOfUnits"),
+			Bol:             str(m, "bol"),
+			BolSplit:        str(m, "bolSplit"),
+			MarksAndNumbers: str(m, "marksAndNumbers"),
 		})
 	}
 	return items, nil
@@ -363,17 +381,22 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 // labels them in kilograms and offers no unit selector.
 const massUnit = "KG"
 
-func buildRemittances(financial map[string]any) []Remittance {
+func buildRemittances(financial map[string]any, currency string) []Remittance {
+	amount := number(financial, "remittanceAmount")
 	r := Remittance{
 		BankCode:       str(financial, "bankCode"),
 		Reference:      str(financial, "bankReference"),
 		TermsOfPayment: str(financial, "paymentTermsCode"),
-		Amount:         number(financial, "remittanceAmount"),
+	}
+	// AmountType pairs the value with its currency (§4.2). The form declares
+	// one currency for the whole declaration, on the valuation block.
+	if amount != 0 {
+		r.RemittanceValue = Amount{Value: amount, CurrencyID: currency}
 	}
 	// Annex A marks the whole block mandatory, but an empty one carries no
 	// information and the endpoint rejects it more clearly than a block of
 	// zero values would.
-	if r.BankCode == "" && r.Reference == "" && r.TermsOfPayment == "" && r.Amount == 0 {
+	if r.BankCode == "" && r.Reference == "" && r.TermsOfPayment == "" && r.RemittanceValue.Value == 0 {
 		return nil
 	}
 	return []Remittance{r}

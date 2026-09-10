@@ -94,3 +94,110 @@ func TestBuildPayload_TheIdentifierDoesNotDependOnItself(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, sub.Properties.NswID, rebuilt.Properties.NswID)
 }
+
+// sampleForm is the declaration Customs supplied as the worked example for
+// api/declaration/v1, expressed in the shape the NSW form collects.
+func sampleForm() map[string]any {
+	return map[string]any{
+		"containerCount": float64(2),
+		"identification": map[string]any{
+			"officeCode": "CBEX1", "declarationType": "EX",
+			"generalProcedureCode": "1", "manifestRegNumber": "",
+		},
+		"traders": map[string]any{
+			"exporter": map[string]any{"code": "1340082537000"},
+			"consignee": map[string]any{
+				"name":    "RENUKA AGRI FOODS",
+				"address": "JAPAN 2016 31 22, SHIBA KOEN, MINATO-KUTOKYO JP",
+				"code":    "", "countryCode": "JP",
+			},
+			"declarant": map[string]any{"code": "1040661607000"},
+		},
+		"generalInfo": map[string]any{
+			"countryOfFirstDestination": "JP", "exportCountryCode": "LK",
+			"destinationCountryCode": "JP",
+		},
+		"transport": map[string]any{
+			"vesselName": "TestVessal", "transportNationality": "LK",
+			"voyageNo": "VotageNameHere", "voyageNationality": "LK",
+			"modeOfTransport": "1", "containerized": true,
+			"deliveryTermsCode": "FOB", "deliveryTermsPlace": "Tokyo",
+			"borderOfficeCode": "CBEX1", "placeOfDischargeCode": "LKADP",
+			"warehouseCode": "string", "warehouseDelay": float64(0),
+		},
+		"financial": map[string]any{
+			"bankCode": "6010", "bankReference": "RemRefTest",
+			"remittanceAmount": float64(1500), "paymentTermsCode": "10",
+			"deferredPayment": "DiffPaymentString",
+		},
+		"valuation": map[string]any{
+			"invoiceAmountForeign": float64(1500), "invoiceCurrencyCode": "USD",
+			"externalFreight": map[string]any{"amountForeign": float64(100), "currencyCode": "USD"},
+		},
+		"packages": map[string]any{"totalPackages": float64(10)},
+		"items": []any{map[string]any{
+			"packages": map[string]any{"quantity": float64(10), "kindCode": "2C"},
+			"tarification": map[string]any{
+				"hsCode": "0801119000", "extendedProcedureCode": "1000",
+				"nationalProcedureCode": "000",
+				"supplementaryUnit":     map[string]any{"code": "KGM", "quantity": float64(125)},
+			},
+			"goodsDescription": map[string]any{
+				"originCountryCode": "LK", "description": "description",
+				"commercialDescription": "commercial", "commercialDescription1": "commercial",
+			},
+			"valuation": map[string]any{
+				"grossWeight": float64(1500), "netWeight": float64(1300),
+				"invoiceAmountForeign": float64(1500), "invoiceCurrencyCode": "USD",
+				"externalFreight": map[string]any{"amountForeign": float64(100), "currencyCode": "USD"},
+			},
+			"bol": "string", "bolSplit": "string",
+			"marksAndNumbers": "test", "numberOfUnits": float64(1),
+		}},
+	}
+}
+
+// Annex A carries fields the builder used to drop on the floor, so the form
+// could collect them and they would still never reach ASYCUDA. Assert them on
+// the wire, which is the only place that settles it.
+func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
+	sub, _, err := BuildPayload(sampleForm(), "")
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+
+	base := wire["baseGeneralSegment"].(map[string]any)
+	general := wire["generalSegment"].(map[string]any)
+	item := wire["goodsShipments"].([]any)[0].(map[string]any)
+	remittance := wire["remittances"].([]any)[0].(map[string]any)
+
+	// importer.id is Annex A's Importer/Consignee Code.
+	assert.Equal(t, "", base["importer"].(map[string]any)["id"],
+		"the importer code is sent even when the sample leaves it blank")
+
+	assert.Equal(t, "string", general["warehouseCode"])
+	assert.Equal(t, float64(0), general["warehouseDelay"])
+	assert.Equal(t, "DiffPaymentString", general["deferredPayment"])
+	assert.Equal(t, true, general["containerFlag"], "renamed from isContainer in v1.6")
+
+	assert.Equal(t, "string", item["bol"])
+	assert.Equal(t, "string", item["bolSplit"])
+	assert.Equal(t, "test", item["marksAndNumbers"])
+	assert.Equal(t, float64(1), item["numberOfUnits"])
+
+	// The item repeats the declaration's six-part valuation, not a lone charge.
+	customsValue := item["customsValue"].(map[string]any)
+	assert.Equal(t, float64(1500), customsValue["chargeAmount"].(map[string]any)["value"])
+	assert.Equal(t, float64(100), customsValue["externalFreight"].(map[string]any)["value"])
+	assert.Equal(t, "USD", customsValue["externalFreight"].(map[string]any)["currencyID"])
+
+	// remittanceValue is an AmountType (§4.2), not a bare number named amount.
+	assert.NotContains(t, remittance, "amount", "the pre-v1.6 spelling is gone")
+	value := remittance["remittanceValue"].(map[string]any)
+	assert.Equal(t, float64(1500), value["value"])
+	assert.Equal(t, "USD", value["currencyID"], "the declaration's currency carries to the remittance")
+}
