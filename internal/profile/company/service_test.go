@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -454,7 +453,7 @@ func TestService_UpdateCompanyFields_OUHandleConflict(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`UPDATE "company_records" SET`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
-		WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "company_records_ou_handle_key"})
+		WillReturnError(gorm.ErrDuplicatedKey)
 	mock.ExpectRollback()
 
 	err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{OUHandle: strPtr("taken-handle")})
@@ -661,7 +660,7 @@ func TestService_UpsertCompany_OUHandleConflict(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(`INSERT INTO "company_records".*ON CONFLICT \("id"\) DO UPDATE`).
 		WithArgs("co-1", "ACME", "taken-handle", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "company_records_ou_handle_key"})
+		WillReturnError(gorm.ErrDuplicatedKey)
 	mock.ExpectRollback()
 
 	record := &Record{ID: "co-1", Name: "ACME", OUHandle: "taken-handle", HasCHA: true, Data: json.RawMessage(`{}`)}
