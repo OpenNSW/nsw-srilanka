@@ -8,15 +8,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/OpenNSW/core/pagination"
 )
-
-// pgUniqueViolationCode is the PostgreSQL error code for a unique-constraint violation (23505).
-const pgUniqueViolationCode = "23505"
 
 // Service defines operations for company profile management.
 type Service interface {
@@ -68,13 +64,7 @@ type service struct {
 }
 
 // NewService creates a new company service instance.
-// TranslateError is enabled on a cloned session so unique-constraint violations
-// surface as gorm.ErrDuplicatedKey without new call sites importing a SQL driver.
 func NewService(db *gorm.DB) Service {
-	if db != nil {
-		db = db.Session(&gorm.Session{})
-		db.TranslateError = true
-	}
 	return &service{db: db}
 }
 
@@ -220,8 +210,7 @@ func (s *service) UpdateCompanyFields(ctx context.Context, id string, fields Com
 
 	result := s.db.WithContext(ctx).Model(&Record{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(result.Error, &pgErr) && pgErr.Code == pgUniqueViolationCode {
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
 			return ErrOUHandleConflict
 		}
 		slog.Error("failed to update company fields", "id", id, "error", result.Error)

@@ -24,7 +24,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	t.Cleanup(func() { db.Close() })
 
 	dialector := postgres.New(postgres.Config{Conn: db})
-	gormDB, err := gorm.Open(dialector, &gorm.Config{})
+	gormDB, err := gorm.Open(dialector, &gorm.Config{TranslateError: true})
 	if err != nil {
 		t.Fatalf("failed to open gorm: %v", err)
 	}
@@ -42,7 +42,7 @@ func setupPingTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 
 	mock.ExpectPing() // consumed by gorm.Open's connectivity check
 	dialector := postgres.New(postgres.Config{Conn: db})
-	gormDB, err := gorm.Open(dialector, &gorm.Config{})
+	gormDB, err := gorm.Open(dialector, &gorm.Config{TranslateError: true})
 	if err != nil {
 		t.Fatalf("failed to open gorm: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestService_UpdateCompanyFields_OUHandleConflict(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`UPDATE "company_records" SET`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "co-1").
-		WillReturnError(&pgconn.PgError{Code: pgUniqueViolationCode, ConstraintName: "company_records_ou_handle_key"})
+		WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "company_records_ou_handle_key"})
 	mock.ExpectRollback()
 
 	err := svc.UpdateCompanyFields(context.Background(), "co-1", CompanyFieldsUpdate{OUHandle: strPtr("taken-handle")})
@@ -661,7 +661,7 @@ func TestService_UpsertCompany_OUHandleConflict(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(`INSERT INTO "company_records".*ON CONFLICT \("id"\) DO UPDATE`).
 		WithArgs("co-1", "ACME", "taken-handle", true, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnError(&pgconn.PgError{Code: pgUniqueViolationCode, ConstraintName: "company_records_ou_handle_key"})
+		WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "company_records_ou_handle_key"})
 	mock.ExpectRollback()
 
 	record := &Record{ID: "co-1", Name: "ACME", OUHandle: "taken-handle", HasCHA: true, Data: json.RawMessage(`{}`)}

@@ -130,6 +130,7 @@ func initDB() *gorm.DB {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
+	db.TranslateError = true
 	return db
 }
 
@@ -343,7 +344,11 @@ func handleApplyCompanies(args []string) {
 			Data:     spec.Data,
 		}
 		if err := svc.UpsertCompany(context.Background(), record); err != nil {
-			fmt.Printf("[%d/%d] FAILED %q: %v\n", i+1, len(specs), spec.ID, err)
+			if errors.Is(err, company.ErrOUHandleConflict) {
+				fmt.Printf("[%d/%d] FAILED %q: ou_handle %q is already used by another company.\n", i+1, len(specs), spec.ID, record.OUHandle)
+			} else {
+				fmt.Printf("[%d/%d] FAILED %q: %v\n", i+1, len(specs), spec.ID, err)
+			}
 			failed++
 			continue
 		}
