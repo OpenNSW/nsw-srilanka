@@ -1,6 +1,7 @@
 package cdn
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -145,7 +146,7 @@ func TestCDNIntegrationResult_SpecShapeRejection(t *testing.T) {
 	require.NotEmpty(t, req.Payload.Errors)
 
 	// The trader sees the descriptions, never the raw segment-keyed JSON.
-	msg := describeErrors(req.Payload.Errors)
+	msg := describeErrors(context.Background(), req.Payload.Errors)
 	assert.Contains(t, msg, "Missing office Code")
 	assert.NotContains(t, msg, `"code"`)
 }

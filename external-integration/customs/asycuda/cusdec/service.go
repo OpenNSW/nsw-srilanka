@@ -65,14 +65,21 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 	if err != nil {
 		return err
 	}
+	slog.InfoContext(ctx, "CusDec declaration recorded",
+		"edge_id", req.EdgeID, "declaration_id", decl.ID,
+		"status_before", originalStatus, "status_now", decl.Status,
+		"cusdec_ref", req.Payload.CusdecRef.String())
 
 	if err := s.completeReviewTask(ctx, decl, originalStatus, req); err != nil {
 		return err
 	}
 
-	slog.InfoContext(ctx, "successfully completed external review task step and advanced workflow",
+	// Reached whether or not a review step was actually completed — the
+	// branches above acknowledge some callbacks without one, and say so.
+	slog.InfoContext(ctx, "CusDec integration result processed",
 		"edge_id", req.EdgeID,
 		"integrated", req.Integrated,
+		"declaration_status", decl.Status,
 	)
 	return nil
 }
@@ -134,9 +141,14 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if originalStatus != CusdecStatusSubmitted {
-				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
+				slog.InfoContext(ctx, "no task holds this edgeId; acknowledging without completing a review step",
+					"edge_id", req.EdgeID, "declaration_status_before_callback", originalStatus,
+					"declaration_status_now", decl.Status, "integrated", req.Integrated,
+					"lookup", "task_records_v2.data->cig->>edgeId")
 				return nil
 			}
+			slog.WarnContext(ctx, "no task holds this edgeId and the declaration is still awaiting its result",
+				"edge_id", req.EdgeID, "integrated", req.Integrated)
 			return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
 		}
 		slog.ErrorContext(ctx, "failed to locate task workflow by edgeId", "edge_id", req.EdgeID, "error", err)
@@ -155,8 +167,20 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// The parent workflow was found, so the edgeId is ours; only the
+			// suspended review step is missing. It has either already been
+			// completed by an earlier delivery, or not yet reached
+			// QUEUED_EXTERNALLY — a callback can arrive within milliseconds of
+			// the 202, ahead of the step it is meant to complete.
+			slog.InfoContext(ctx, "no suspended review step for this workflow",
+				"edge_id", req.EdgeID, "workflow_id", record.ParentWorkflowID,
+				"declaration_status_before_callback", originalStatus,
+				"declaration_status_now", decl.Status, "integrated", req.Integrated,
+				"expected_template", "customs-cusdec--external-review",
+				"expected_state", "QUEUED_EXTERNALLY")
 			if originalStatus != CusdecStatusSubmitted {
-				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
+				slog.InfoContext(ctx, "acknowledging without completing a review step",
+					"edge_id", req.EdgeID, "declaration_status_before_callback", originalStatus)
 				return nil
 			}
 		}
@@ -184,10 +208,13 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 		payload = map[string]any{
 			"__command":        "submit",
 			"review_outcome":   "needs_more_info",
-			"rejection_reason": describeErrors(req.Errors),
+			"rejection_reason": describeErrors(ctx, req.Errors),
 		}
 	}
 
+	slog.InfoContext(ctx, "completing external review step",
+		"edge_id", req.EdgeID, "task_id", task.TaskID,
+		"review_outcome", payload["review_outcome"])
 	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, payload); err != nil {
 		slog.ErrorContext(ctx, "failed to complete external review task step", "task_id", task.TaskID, "error", err)
 		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)

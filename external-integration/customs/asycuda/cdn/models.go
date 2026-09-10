@@ -3,6 +3,7 @@ package cdn
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -17,6 +18,17 @@ type DocumentReference struct {
 // IsValid reports whether all fields of the reference are populated and valid.
 func (r DocumentReference) IsValid() bool {
 	return r.Year != "" && r.Office != "" && r.Serial != "" && r.Number > 0
+}
+
+// String renders the reference the way Customs writes it — office/year/serial/
+// number — for logs and trader-facing text. An unpopulated reference, which is
+// what a failed integration carries (§7.2), renders as "-" rather than as a
+// string of separators.
+func (r DocumentReference) String() string {
+	if !r.IsValid() {
+		return "-"
+	}
+	return fmt.Sprintf("%s/%s/%s/%d", r.Office, r.Year, r.Serial, r.Number)
 }
 
 // DispatchNoteStatus represents the lifecycle state of a Cargo Dispatch Note.

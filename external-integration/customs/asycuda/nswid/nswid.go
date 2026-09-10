@@ -2,9 +2,11 @@
 package nswid
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 )
 
 // For returns the identifier for one logical submission (interface spec §2.2).
@@ -42,9 +44,10 @@ import (
 // submissions derive equal identifiers. A payload that cannot be marshalled
 // yields "", and the caller sends without the field rather than refusing a
 // submission the trader would have no way to make.
-func For(payload any, previousEdgeID string) string {
+func For(ctx context.Context, payload any, previousEdgeID string) string {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
+		slog.WarnContext(ctx, "nswid: submission could not be encoded; sending without the identifier", "error", err)
 		return ""
 	}
 
@@ -55,5 +58,12 @@ func For(payload any, previousEdgeID string) string {
 	sum.Write([]byte{0})
 	sum.Write([]byte(previousEdgeID))
 
-	return hex.EncodeToString(sum.Sum(nil))
+	id := hex.EncodeToString(sum.Sum(nil))
+	// Whether a previous edgeId went into the derivation is what separates a
+	// first submission from a resubmission, and so what decides whether
+	// ASYCUDA should suppress this as a duplicate. Worth being able to see.
+	slog.InfoContext(ctx, "nswid: derived",
+		"nsw_id", id, "payload_bytes", len(encoded),
+		"resubmission", previousEdgeID != "", "previous_edge_id", previousEdgeID)
+	return id
 }

@@ -43,6 +43,38 @@ type MultipartInterpreter interface {
 	BuildParts(ctx context.Context, inputs map[string]any) ([]remote.Part, error)
 }
 
+// ContextInterpreter is implemented by interpreters that need the call's
+// context — to log against the request's traceId, so an outbound submission and
+// the answer to it can be followed through one trace rather than correlated by
+// hand afterwards.
+//
+// Both methods are optional refinements of the base interface: an interpreter
+// implementing this is called through these instead of BuildRequest/Interpret,
+// and one that does not is unaffected.
+type ContextInterpreter interface {
+	Interpreter
+
+	BuildRequestContext(ctx context.Context, inputs map[string]any) remote.Body
+	InterpretContext(ctx context.Context, callErr error, resp map[string]any) (accepted bool, captured map[string]any)
+}
+
+// buildRequestFor prefers the context-aware body builder when the interpreter
+// offers one.
+func buildRequestFor(ctx context.Context, interp Interpreter, inputs map[string]any) remote.Body {
+	if ci, ok := interp.(ContextInterpreter); ok {
+		return ci.BuildRequestContext(ctx, inputs)
+	}
+	return interp.BuildRequest(inputs)
+}
+
+// interpretFor prefers the context-aware interpreter when there is one.
+func interpretFor(ctx context.Context, interp Interpreter, callErr error, resp map[string]any) (bool, map[string]any) {
+	if ci, ok := interp.(ContextInterpreter); ok {
+		return ci.InterpretContext(ctx, callErr, resp)
+	}
+	return interp.Interpret(callErr, resp)
+}
+
 // HeaderInterpreter is implemented by interpreters whose service needs a header
 // resolved per call: a value that belongs to the case being processed rather than
 // to the service — the identifier a provider issued for the organisation a
@@ -228,13 +260,13 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			Method:  method,
 			Path:    path,
 			Query:   queryFor(p.interpreter, ctx.Inputs),
-			Body:    p.interpreter.BuildRequest(ctx.Inputs),
+			Body:    buildRequestFor(ctx.Context, p.interpreter, ctx.Inputs),
 			Headers: headersFor(p.interpreter, ctx.Inputs),
 		}
 		callErr = p.manager.Call(ctx.Context, cfg.ServiceID, req, &resp)
 	}
 
-	accepted, out := p.interpreter.Interpret(callErr, resp)
+	accepted, out := interpretFor(ctx.Context, p.interpreter, callErr, resp)
 	if out == nil {
 		out = map[string]any{}
 	}

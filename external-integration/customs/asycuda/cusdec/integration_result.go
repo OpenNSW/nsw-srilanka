@@ -1,8 +1,10 @@
 package cusdec
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,7 +29,7 @@ func totalTaxes(taxes []TaxEntry) float64 {
 // Segment "0" is the declaration as a whole; any other key is an item number.
 // Anything that does not parse falls back to the raw text rather than being
 // dropped — an unreadable reason still beats no reason.
-func describeErrors(raw json.RawMessage) string {
+func describeErrors(ctx context.Context, raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return "Sri Lanka Customs rejected the declaration without giving a reason."
 	}
@@ -37,6 +39,11 @@ func describeErrors(raw json.RawMessage) string {
 		Description string `json:"description"`
 	}
 	if err := json.Unmarshal(raw, &segments); err != nil || len(segments) == 0 {
+		// Not the §4.4 shape. The raw blob still reaches the trader, but a
+		// rejection we could not read is worth knowing about: it means either
+		// ASYCUDA changed the shape or this is not an errors object at all.
+		slog.WarnContext(ctx, "cusdec: rejection detail is not the segment-keyed errors object",
+			"bytes", len(raw), "raw", string(raw), "error", err)
 		return strings.TrimSpace(string(raw))
 	}
 

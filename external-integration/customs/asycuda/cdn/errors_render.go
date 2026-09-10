@@ -1,8 +1,10 @@
 package cdn
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +25,7 @@ import (
 // in front of a trader who has no way to read it is worse than no reason at all.
 // Anything that does not parse falls back to the raw text — an unreadable reason
 // still beats a blank one.
-func describeErrors(raw json.RawMessage) string {
+func describeErrors(ctx context.Context, raw json.RawMessage) string {
 	const intro = "Sri Lanka Customs could not integrate your cargo dispatch note:"
 	const outro = "\n\nPlease correct the highlighted fields and resubmit."
 
@@ -33,6 +35,10 @@ func describeErrors(raw json.RawMessage) string {
 
 	var parsed any
 	if err := json.Unmarshal(raw, &parsed); err != nil {
+		// Not the §4.4 shape. The raw blob still reaches the trader, but a
+		// rejection we could not read is worth knowing about.
+		slog.WarnContext(ctx, "cdn: rejection detail is not the segment-keyed errors object",
+			"bytes", len(raw), "raw", string(raw), "error", err)
 		return strings.TrimSpace(string(raw))
 	}
 

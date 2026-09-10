@@ -1,6 +1,7 @@
 package cusdec
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -178,7 +179,7 @@ const (
 // endpoint validates the document on integration and reports field-level
 // problems through the errors object, which produces a far better trader
 // message than a local guess at what Customs will accept.
-func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []SupportDoc, error) {
+func BuildPayload(ctx context.Context, form map[string]any, previousEdgeID string) (Submission, []SupportDoc, error) {
 	if len(form) == 0 {
 		return Submission{}, nil, fmt.Errorf("customs: empty declaration form")
 	}
@@ -261,7 +262,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 
 	// Derived last, from the submission as it will be sent: the field is empty
 	// while the digest is taken, so the identifier does not depend on itself.
-	sub.Properties.NswID = nswid.For(sub, previousEdgeID)
+	sub.Properties.NswID = nswid.For(ctx, sub, previousEdgeID)
 
 	return sub, docs, nil
 }
