@@ -298,6 +298,23 @@ func excludedItemIDs(certificateItems any) map[string]bool {
 	return excluded
 }
 
+// anyItemIncluded reports whether at least one entry in certificateItems will
+// actually end up on the certificate, using the same inclusion rule as
+// excludedItemIDs (missing/non-bool/true all count as included; only an
+// explicit include_in_certificate: false excludes). A certificate_items list
+// that's non-empty but has every item deselected must be rejected the same
+// way an entirely absent list is — otherwise buildConsignment silently
+// produces a certificate with zero consignment items.
+func anyItemIncluded(certificateItems any) bool {
+	for _, raw := range asSlice(certificateItems) {
+		item := asMap(raw)
+		if included, ok := item["include_in_certificate"].(bool); !ok || included {
+			return true
+		}
+	}
+	return false
+}
+
 func buildConsignment(uf map[string]any, importISO string, certificateItems any) spscert.ConsignmentInput {
 	c := spscert.ConsignmentInput{
 		ExportCountry: exportNPPOCode,

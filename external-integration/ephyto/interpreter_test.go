@@ -74,6 +74,34 @@ func TestBuildEnvelope_SubmitWithoutCertificateItemsIsBuildError(t *testing.T) {
 	}
 }
 
+// A non-empty certificate_items list with every entry deselected must be
+// rejected the same way an absent list is — otherwise BuildInput silently
+// excludes every commodity and builds a certificate with zero consignment
+// items instead of failing the submit outright.
+func TestBuildEnvelope_SubmitWithAllCertificateItemsDeselectedIsBuildError(t *testing.T) {
+	inputs := submitInputs()
+	inputs["certificate_items"] = []any{
+		map[string]any{"id": "item-1", "include_in_certificate": false},
+	}
+
+	_, err := HubInterpreter{}.BuildEnvelope(OpSubmit, inputs)
+	if err == nil {
+		t.Fatal("expected a build error when every certificate item is deselected")
+	}
+
+	state, out := HubInterpreter{}.Interpret(OpSubmit, err, nil)
+	if state != "" {
+		t.Errorf("state = %q, want unchanged (empty) on a build failure", state)
+	}
+	if out["submitted"] != false {
+		t.Errorf("submitted = %v, want false", out["submitted"])
+	}
+	msg, _ := out["error"].(string)
+	if !strings.Contains(msg, "could not be submitted") || !strings.Contains(msg, "which items to include") {
+		t.Errorf("error prose = %q, want intro + item-selection guidance", msg)
+	}
+}
+
 func TestBuildEnvelope_PollWithoutTrackingIsBuildError(t *testing.T) {
 	_, err := HubInterpreter{}.BuildEnvelope(OpPoll, map[string]any{})
 	if err == nil {
