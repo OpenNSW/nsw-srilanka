@@ -105,6 +105,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+	db.TranslateError = true
 
 	if err := database.HealthCheck(db); err != nil {
 		_ = database.Close(db)

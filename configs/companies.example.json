@@ -1,0 +1,100 @@
+{
+  "companies": [
+    {
+      "id": "adam-pvt-ltd",
+      "name": "ADAM PVT LTD",
+      "ouHandle": "adam-pvt-ltd",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00123456",
+        "vat_no": "VAT-409123456-7000",
+        "tin_no": "134256789",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "edward-pvt-ltd",
+      "name": "EDWARD PVT LTD",
+      "ouHandle": "edward-pvt-ltd",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00876543",
+        "vat_no": "VAT-409876543-7000",
+        "tin_no": "987654321",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "cda",
+      "name": "CDA Company",
+      "ouHandle": "cda-company",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00123456",
+        "vat_no": "VAT-409123456-7000",
+        "tin_no": "134256789",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "fcau",
+      "name": "FCAU Company",
+      "ouHandle": "fcau-company",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00876543",
+        "vat_no": "VAT-409876543-7000",
+        "tin_no": "987654321",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "npqs",
+      "name": "NPQS Company",
+      "ouHandle": "npqs-company",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00000001",
+        "vat_no": "VAT-409000000-7000",
+        "tin_no": "000000001",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "govtech",
+      "name": "GovTech Company",
+      "ouHandle": "govtech-company",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00000002",
+        "vat_no": "VAT-409000001-7000",
+        "tin_no": "000000002",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "piu",
+      "name": "PIU Company",
+      "ouHandle": "piu-company",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00000004",
+        "vat_no": "VAT-409000003-7000",
+        "tin_no": "000000004",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    },
+    {
+      "id": "sltb",
+      "name": "SLTB Company",
+      "ouHandle": "sltb-company",
+      "hasCha": true,
+      "data": {
+        "br_no": "PV-00000005",
+        "vat_no": "VAT-409000004-7000",
+        "tin_no": "000000005",
+        "slpacmsuser_key": "agztNvLSUA"
+      }
+    }
+  ]
+}
