@@ -232,9 +232,9 @@ func TestHandleGetTask_ClientPrincipalDenied(t *testing.T) {
 	}
 }
 func TestParseCompleteTaskStepRequest_AllowsTrailingWhitespace(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/commands/approve", strings.NewReader(`{"key":"value"}`+"\n"))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}`+"\n"))
 
-	command, payload, _, _, err := parseCompleteTaskStepRequest(req, "approve")
+	command, payload, _, _, err := parseCompleteTaskStepRequest(req)
 	if err != nil {
 		t.Fatalf("unexpected error for trailing whitespace: %v", err)
 	}

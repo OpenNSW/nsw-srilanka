@@ -13,9 +13,9 @@ export async function getZoneView(taskId: string): Promise<ZoneView> {
 
 export async function submitTaskStep(taskId: string, command: string, payload: Record<string, unknown>): Promise<void> {
   await http.request({
-    url: `${API_BASE_URL}/api/v1/tasks/${taskId}/commands/${command}`,
+    url: `${API_BASE_URL}/api/v1/tasks/${taskId}`,
     method: 'POST',
-    data: payload,
+    data: { command, payload },
     attachToken: true,
   })
 }
@@ -24,11 +24,14 @@ export async function sendTaskCommand(request: TaskCommandRequest): Promise<Task
   const action: string = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
 
   const { data } = await http.request<TaskCommandResponse>({
-    url: `${API_BASE_URL}/api/v1/tasks/${request.taskId}/commands/${action}`,
+    url: `${API_BASE_URL}/api/v1/tasks/${request.taskId}`,
     method: 'POST',
     data: {
-      workflow_id: request.workflowId,
-      content: request.data,
+      command: action,
+      payload: {
+        workflow_id: request.workflowId,
+        content: request.data,
+      },
     },
     attachToken: true,
   })

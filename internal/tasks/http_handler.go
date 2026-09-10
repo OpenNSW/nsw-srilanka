@@ -115,7 +115,6 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 
 // HandleCompleteTaskStep advances a task by submitting a step payload.
 //
-//	POST /api/v1/tasks/{id}/commands/{command}
 //	POST /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
 	// TODO: retrieve the authenticated context and validate it against the
@@ -129,9 +128,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
-	pathCommand := r.PathValue("command")
-
-	command, payload, status, responseMessage, err := parseCompleteTaskStepRequest(r, pathCommand)
+	command, payload, status, responseMessage, err := parseCompleteTaskStepRequest(r)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "tasks: failed to parse request", "taskId", taskID, "error", err)
 		httputil.Error(w, r, status, responseMessage)
@@ -156,19 +153,29 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// parseCompleteTaskStepRequest extracts and validates the command and payload from either the URL path or the JSON body.
+// completeTaskStepRequest is the JSON envelope HandleCompleteTaskStep accepts:
+// {"command": "...", "payload": {...}}. Payload stays map[string]any because its
+// contents are genuinely dynamic per task type; only the envelope around it has
+// a fixed shape.
+type completeTaskStepRequest struct {
+	Command string         `json:"command"`
+	Payload map[string]any `json:"payload"`
+}
+
+// parseCompleteTaskStepRequest extracts and validates the command and payload from the JSON request body.
 // The body must contain at most one JSON value: json.Decoder.Decode only parses the first value and
 // silently ignores anything after it, so a second Decode call is required to confirm nothing trails it.
-func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[string]any, int, string, error) {
-	var rawBody map[string]any
+func parseCompleteTaskStepRequest(r *http.Request) (string, map[string]any, int, string, error) {
+	var req completeTaskStepRequest
 	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&rawBody); err != nil {
+	if err := dec.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			return "", nil, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err
 		}
 
-		// An empty body is a valid acknowledge-style completion; only fail on genuinely malformed JSON.
+		// An empty body is tolerated here and caught by the command-required check below;
+		// only fail on genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
 			slog.WarnContext(r.Context(), "tasks: malformed request body", "error", err)
 			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON")
@@ -184,34 +191,11 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 		return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value")
 	}
 
-	var payload map[string]any
-
-	if command != "" {
-		// URL-based route: body is the flat payload
-		payload = rawBody
-	} else {
-		// Body-based route: body must be the nested envelope containing "command" and "payload"
-		if rawBody == nil {
-			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("request body is required for body-based command route")
-		}
-
-		cmd, hasCmd := rawBody["command"].(string)
-		if !hasCmd {
-			return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: must contain 'command' (string)")
-		}
-
-		var p map[string]any
-		if rawBody["payload"] != nil {
-			var ok bool
-			p, ok = rawBody["payload"].(map[string]any)
-			if !ok {
-				return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: 'payload' must be an object")
-			}
-		}
-
-		command = cmd
-		payload = p
+	if req.Command == "" {
+		return "", nil, http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: must contain 'command' (string)")
 	}
+
+	payload := req.Payload
 
 	// Validate system metadata collision
 	if payload != nil {
@@ -224,7 +208,7 @@ func parseCompleteTaskStepRequest(r *http.Request, command string) (string, map[
 		payload = make(map[string]any)
 	}
 
-	payload["__command"] = command
+	payload["__command"] = req.Command
 
-	return command, payload, http.StatusOK, "", nil
+	return req.Command, payload, http.StatusOK, "", nil
 }
