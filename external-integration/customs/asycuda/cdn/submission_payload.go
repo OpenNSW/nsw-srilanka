@@ -30,7 +30,15 @@ type Submission struct {
 	Consignee Party `json:"consignee"`
 
 	// Voyage / transport.
-	VoyageNumber       string `json:"voyageNumber"`
+	// FIXME(slc-edge): restore `json:"voyageNumber"` once ASYCUDA reads the
+	// Annex B name.
+	//
+	// SLC Edge reads the voyage number from "voaygeNumber" — their misspelling.
+	// Annex B names it voyageNumber, and sending that spelling is answered with
+	// error 602, "Voyage Number is mandatory", for a note that carries it. The
+	// SLC Edge team asked us to send their spelling until they correct it, so
+	// this is deliberate and temporary.
+	VoyageNumber       string `json:"voaygeNumber"`
 	VoyageDateAsString string `json:"voyageDateAsString"`
 	Vessel             string `json:"vessel"`
 	VesselOpCode       string `json:"vesselOpCode"`
@@ -59,7 +67,37 @@ type Submission struct {
 
 	// CusDecRefs is the one-to-many link to the declarations this note
 	// dispatches cargo for (§7.1).
-	CusDecRefs []DocumentReference `json:"cusDecRefs"`
+	CusDecRefs []cusDecReference `json:"cusDecRefs"`
+}
+
+// FIXME(slc-edge): delete this type and send DocumentReference again once
+// ASYCUDA reads the §4.1 name. buildCusDecRefs and outbound go with it.
+//
+// cusDecReference is a declaration reference as SLC Edge reads it on the way
+// in, which is not how §4.1 defines it: the year arrives under "regYear"
+// rather than "year".
+//
+// It is a type of its own rather than a tag on DocumentReference because that
+// type is also the inbound cdnRef, where §4.1 does hold and the callbacks do
+// send "year". One shape cannot serve both, and renaming the shared tag would
+// silently stop their callbacks from binding.
+//
+// Temporary, at the SLC Edge team's request, pending their correction.
+type cusDecReference struct {
+	Office  string `json:"office"`
+	RegYear string `json:"regYear"`
+	Serial  string `json:"serial"`
+	Number  int    `json:"number"`
+}
+
+// outbound converts a canonical reference into the shape SLC Edge accepts.
+func outbound(ref DocumentReference) cusDecReference {
+	return cusDecReference{
+		Office:  ref.Office,
+		RegYear: ref.Year,
+		Serial:  ref.Serial,
+		Number:  ref.Number,
+	}
 }
 
 // Party is Annex B's shipper / consignee block.
@@ -163,7 +201,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error
 // integration result produced ("CBEX1/2026/E/1047"), because that is what the
 // workflow has to hand and what the trader sees on screen. Annex B needs it
 // split back into the four canonical elements of §4.1.
-func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
+func buildCusDecRefs(form map[string]any) ([]cusDecReference, error) {
 	raw := form["cusDecRefs"]
 	if raw == nil {
 		// Single-reference forms carry the string directly.
@@ -172,7 +210,7 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 			if err != nil {
 				return nil, err
 			}
-			return []DocumentReference{ref}, nil
+			return []cusDecReference{outbound(ref)}, nil
 		}
 		return nil, &buildError{"This dispatch note is not linked to a registered customs declaration."}
 	}
@@ -182,7 +220,7 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 		return nil, &buildError{"This dispatch note is not linked to a registered customs declaration."}
 	}
 
-	refs := make([]DocumentReference, 0, len(list))
+	refs := make([]cusDecReference, 0, len(list))
 	for _, entry := range list {
 		switch v := entry.(type) {
 		case string:
@@ -190,14 +228,14 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 			if err != nil {
 				return nil, err
 			}
-			refs = append(refs, ref)
+			refs = append(refs, outbound(ref))
 		case map[string]any:
-			refs = append(refs, DocumentReference{
+			refs = append(refs, outbound(DocumentReference{
 				Office: str(v, "office"),
 				Year:   str(v, "year"),
 				Serial: str(v, "serial"),
 				Number: integer(v, "number"),
-			})
+			}))
 		default:
 			return nil, &buildError{"A customs declaration reference on this dispatch note could not be read."}
 		}
