@@ -34,9 +34,12 @@ func (s *cdnWebhookService) resumeIntegrationWait(ctx context.Context, req CDNIn
 		ref := req.Payload.CDNRef
 		payload["cdn_number"] = fmt.Sprintf("%s/%s/%s/%d", ref.Office, ref.Year, ref.Serial, ref.Number)
 	} else {
-		payload["error"] = describeErrors(req.Payload.Errors)
+		payload["error"] = describeErrors(ctx, req.Payload.Errors)
 	}
 
+	slog.InfoContext(ctx, "cdn: releasing the integration wait",
+		"edge_id", req.Payload.EdgeID, "integrated", req.Payload.Integrated,
+		"already_processed", alreadyProcessed, "payload", payload)
 	return s.resumeWait(ctx, waitLookup{
 		edgeID:     req.Payload.EdgeID,
 		templateID: integrationWaitTemplateID,

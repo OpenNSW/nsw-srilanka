@@ -6,9 +6,12 @@ package cusdec
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -69,7 +72,13 @@ func NewCusdecInterpreter(files FileFetcher) *CusdecInterpreter {
 // always multipart, so the plugin calls BuildParts instead; this returns the
 // mapped payload so the interface contract still holds if that ever changes.
 func (c CusdecInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	payload, _, err := buildFromInputs(inputs)
+	return c.BuildRequestContext(context.Background(), inputs)
+}
+
+// BuildRequestContext is the same on the request's own context, so what it
+// logs carries the traceId.
+func (c CusdecInterpreter) BuildRequestContext(ctx context.Context, inputs map[string]any) remote.Body {
+	payload, _, err := buildFromInputs(ctx, inputs)
 	if err != nil {
 		return remote.JSONBody{V: inputs}
 	}
@@ -80,10 +89,12 @@ func (c CusdecInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 // carrying the declaration JSON, a fileinfo part holding the attachment count,
 // and one contiguous fileN part per declared document.
 func (c CusdecInterpreter) BuildParts(ctx context.Context, inputs map[string]any) ([]remote.Part, error) {
-	payload, docs, err := buildFromInputs(inputs)
+	payload, docs, err := buildFromInputs(ctx, inputs)
 	if err != nil {
+		slog.WarnContext(ctx, "cusdec: declaration could not be built, nothing was sent", "error", err)
 		return nil, err
 	}
+	logDeclaration(ctx, payload, docs)
 
 	payloadPart, err := remote.JSONPart("payload", payload)
 	if err != nil {
@@ -99,8 +110,13 @@ func (c CusdecInterpreter) BuildParts(ctx context.Context, inputs map[string]any
 	for i, doc := range docs {
 		content, mime, err := c.fetch(ctx, doc)
 		if err != nil {
+			slog.WarnContext(ctx, "cusdec: supporting document could not be attached",
+				"file_name", doc.FileName, "document_code", doc.DocumentCode, "error", err)
 			return nil, err
 		}
+		slog.DebugContext(ctx, "cusdec: supporting document attached",
+			"part", fmt.Sprintf("file%d", i+1), "file_name", doc.FileName,
+			"document_code", doc.DocumentCode, "mime", mime, "bytes", len(content))
 		parts = append(parts, remote.Part{
 			// fileN is numbered from 1 and must be contiguous (§6.1.1).
 			Name:        fmt.Sprintf("file%d", i+1),
@@ -110,7 +126,37 @@ func (c CusdecInterpreter) BuildParts(ctx context.Context, inputs map[string]any
 		})
 	}
 
+	slog.InfoContext(ctx, "cusdec: multipart submission assembled",
+		"parts", len(parts), "fileinfo", len(docs))
 	return parts, nil
+}
+
+// logDeclaration records what is about to go to SLC Edge. The call is made over
+// TLS to a remote endpoint and no layer keeps the request body, so without this
+// the only way to learn what was sent is to rebuild it from the stored form.
+//
+// The whole declaration is recorded, not a summary of it: a rejection names a
+// field, and answering it means seeing the value that field actually carried.
+// It holds the exporter, the importer and their addresses, so wherever these
+// logs are shipped is handling trader data.
+func logDeclaration(ctx context.Context, payload Submission, docs []SupportDoc) {
+	slog.InfoContext(ctx, "cusdec: declaration built",
+		"nsw_id", payload.Properties.NswID,
+		"declaration_type", payload.BaseGeneralSegment.DeclarationType,
+		"office_code", payload.BaseGeneralSegment.OfficeCode,
+		"items", payload.GeneralSegment.NumberOfItems,
+		// The v1.6 rename (Annex A): sent as isContainer before.
+		"container_flag", payload.GeneralSegment.ContainerFlag,
+		"number_of_containers", payload.GeneralSegment.NumberOfContainers,
+		"supporting_documents", len(docs),
+	)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		slog.WarnContext(ctx, "cusdec: declaration could not be encoded for logging", "error", err)
+		return
+	}
+	slog.InfoContext(ctx, "cusdec: declaration payload",
+		"nsw_id", payload.Properties.NswID, "bytes", len(encoded), "payload", string(encoded))
 }
 
 func (c CusdecInterpreter) fetch(ctx context.Context, doc SupportDoc) ([]byte, string, error) {
@@ -151,9 +197,10 @@ type buildError struct{ msg string }
 
 func (e *buildError) Error() string { return e.msg }
 
-func buildFromInputs(inputs map[string]any) (Submission, []SupportDoc, error) {
+func buildFromInputs(ctx context.Context, inputs map[string]any) (Submission, []SupportDoc, error) {
 	form, ok := inputs["payload"].(map[string]any)
 	if !ok {
+		slog.WarnContext(ctx, "cusdec: task inputs carry no declaration form", "input_keys", inputKeys(inputs))
 		return Submission{}, nil, &buildError{"The declaration form could not be read."}
 	}
 	// The edgeId this task's previous attempt was given, when it had one. It
@@ -161,7 +208,7 @@ func buildFromInputs(inputs map[string]any) (Submission, []SupportDoc, error) {
 	// while a resend of the same attempt — which never recorded a new edgeId —
 	// derives the identifier again unchanged. See nswid.For.
 	previousEdgeID, _ := inputs[PreviousEdgeIDKey].(string)
-	payload, docs, err := BuildPayload(form, previousEdgeID)
+	payload, docs, err := BuildPayload(ctx, form, previousEdgeID)
 	if err != nil {
 		return Submission{}, nil, &buildError{err.Error()}
 	}
@@ -170,7 +217,13 @@ func buildFromInputs(inputs map[string]any) (Submission, []SupportDoc, error) {
 
 // Interpret reports whether the submission was accepted and captures the SLC
 // response fields (and a trader-facing error message on rejection).
-func (CusdecInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+func (c CusdecInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	return c.InterpretContext(context.Background(), callErr, resp)
+}
+
+// InterpretContext is the same on the request's own context, so the
+// acknowledgement is logged under the traceId that carried the submission.
+func (CusdecInterpreter) InterpretContext(ctx context.Context, callErr error, resp map[string]any) (bool, map[string]any) {
 	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
 
 	out := map[string]any{}
@@ -182,7 +235,17 @@ func (CusdecInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 
 	if !accepted {
 		out["error"] = describeFailure(callErr, resp)
+		slog.WarnContext(ctx, "cusdec: submission not accepted",
+			"edge_id", stringField(resp, "edgeId"), "nsw_id", stringField(resp, "nswId"),
+			"status", stringField(resp, "status"), "transport_error", callErr,
+			"reason", out["error"])
+		return accepted, out
 	}
+
+	slog.InfoContext(ctx, "cusdec: submission accepted",
+		"edge_id", stringField(resp, "edgeId"), "nsw_id", stringField(resp, "nswId"),
+		"status", stringField(resp, "status"), "received_at", stringField(resp, "receivedAt"),
+		"acknowledgement", resp)
 	return accepted, out
 }
 
@@ -276,4 +339,15 @@ func validationBullets(resp map[string]any) []string {
 func stringField(resp map[string]any, key string) string {
 	s, _ := resp[key].(string)
 	return s
+}
+
+// inputKeys names the task inputs that did arrive, so a mapping that failed to
+// deliver the form can be diagnosed without logging the trader's data.
+func inputKeys(inputs map[string]any) []string {
+	keys := make([]string, 0, len(inputs))
+	for k := range inputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

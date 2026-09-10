@@ -3,6 +3,7 @@ package cusdec
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"gorm.io/gorm"
 )
@@ -28,10 +29,16 @@ func (r *declarationRepository) GetByEdgeID(ctx context.Context, edgeID string) 
 	var decl CusdecDeclaration
 	if err := r.db.WithContext(ctx).Where("edge_id = ?", edgeID).First(&decl).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Ordinary on a first callback; the caller distinguishes that from
+			// a repeat, and both paths read very differently in the log.
+			slog.DebugContext(ctx, "cusdec: no declaration held for edgeId", "edge_id", edgeID)
 			return nil, nil
 		}
+		slog.ErrorContext(ctx, "cusdec: declaration lookup by edgeId failed", "edge_id", edgeID, "error", err)
 		return nil, err
 	}
+	slog.DebugContext(ctx, "cusdec: declaration found by edgeId",
+		"edge_id", edgeID, "declaration_id", decl.ID, "status", decl.Status)
 	return &decl, nil
 }
 
@@ -43,19 +50,38 @@ func (r *declarationRepository) GetByCusdecRef(ctx context.Context, ref Document
 		First(&decl).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			slog.DebugContext(ctx, "cusdec: no declaration holds this reference", "cusdec_ref", ref.String())
 			return nil, nil
 		}
+		slog.ErrorContext(ctx, "cusdec: declaration lookup by reference failed", "cusdec_ref", ref.String(), "error", err)
 		return nil, err
 	}
+	slog.DebugContext(ctx, "cusdec: declaration found by reference",
+		"cusdec_ref", ref.String(), "declaration_id", decl.ID, "edge_id", decl.EdgeID, "status", decl.Status)
 	return &decl, nil
 }
 
 func (r *declarationRepository) Create(ctx context.Context, decl *CusdecDeclaration) error {
-	return r.db.WithContext(ctx).Create(decl).Error
+	if err := r.db.WithContext(ctx).Create(decl).Error; err != nil {
+		slog.ErrorContext(ctx, "cusdec: declaration insert failed",
+			"declaration_id", decl.ID, "edge_id", decl.EdgeID, "error", err)
+		return err
+	}
+	slog.InfoContext(ctx, "cusdec: declaration inserted",
+		"declaration_id", decl.ID, "edge_id", decl.EdgeID, "status", decl.Status)
+	return nil
 }
 
 func (r *declarationRepository) Update(ctx context.Context, decl *CusdecDeclaration) error {
-	return r.db.WithContext(ctx).Model(decl).
+	err := r.db.WithContext(ctx).Model(decl).
 		Select("status", "cusdec_year", "cusdec_office", "cusdec_serial", "cusdec_number", "errors", "updated_at").
 		Updates(decl).Error
+	if err != nil {
+		slog.ErrorContext(ctx, "cusdec: declaration update failed",
+			"declaration_id", decl.ID, "edge_id", decl.EdgeID, "error", err)
+		return err
+	}
+	slog.InfoContext(ctx, "cusdec: declaration updated",
+		"declaration_id", decl.ID, "edge_id", decl.EdgeID, "status", decl.Status)
+	return nil
 }

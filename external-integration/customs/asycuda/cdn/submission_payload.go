@@ -1,6 +1,7 @@
 package cdn
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -91,7 +92,7 @@ type Properties struct {
 // declaration.
 const submitterChannel = "1"
 
-func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error) {
+func BuildPayload(ctx context.Context, form map[string]any, previousEdgeID string) (Submission, error) {
 	if len(form) == 0 {
 		return Submission{}, &buildError{"The dispatch note form could not be read."}
 	}
@@ -152,7 +153,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error
 
 	// Derived last, from the submission as it will be sent: the field is empty
 	// while the digest is taken, so the identifier does not depend on itself.
-	sub.Properties.NswID = nswid.For(sub, previousEdgeID)
+	sub.Properties.NswID = nswid.For(ctx, sub, previousEdgeID)
 
 	return sub, nil
 }

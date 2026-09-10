@@ -69,7 +69,8 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	// trader waiting on a note Customs has already answered.
 	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
 		slog.InfoContext(ctx, "dispatch note already recorded; releasing any task still parked on it",
-			"edge_id", req.Payload.EdgeID, "status", note.Status)
+			"edge_id", req.Payload.EdgeID, "status", note.Status,
+			"dispatch_note_id", note.ID, "cdn_ref", req.Payload.CDNRef.String())
 		return s.resumeIntegrationWait(ctx, storedResult(req, note), true)
 	}
 
@@ -91,7 +92,8 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 
 		slog.InfoContext(ctx, "dispatch note integrated successfully",
 			"edge_id", req.Payload.EdgeID,
-			"cdn_ref", req.Payload.CDNRef,
+			"dispatch_note_id", note.ID,
+			"cdn_ref", req.Payload.CDNRef.String(),
 		)
 	} else {
 		if note.Status == DispatchNoteStatusFailed {
@@ -107,12 +109,16 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 
 		slog.WarnContext(ctx, "dispatch note integration failed",
 			"edge_id", req.Payload.EdgeID,
+			"dispatch_note_id", note.ID,
 			"errors", string(req.Payload.Errors),
 		)
 	}
 
 	// The trader's CDN task is parked on the integration wait; releasing it
 	// completes the dispatch note step and opens the acknowledgment wait.
+	slog.InfoContext(ctx, "releasing the task parked on the integration wait",
+		"edge_id", req.Payload.EdgeID, "dispatch_note_id", note.ID,
+		"integrated", req.Payload.Integrated)
 	return s.resumeIntegrationWait(ctx, req, false)
 }
 
@@ -145,7 +151,7 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 		return fmt.Errorf("failed to retrieve dispatch note by cdnRef: %w", err)
 	}
 	if note == nil {
-		slog.WarnContext(ctx, "no dispatch note found for cdnRef",
+		slog.WarnContext(ctx, "no dispatch note found for cdnRef; the acknowledgment cannot be matched to a workflow",
 			"year", ref.Year,
 			"office", ref.Office,
 			"serial", ref.Serial,

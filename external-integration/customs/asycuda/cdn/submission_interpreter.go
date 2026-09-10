@@ -1,7 +1,11 @@
 package cdn
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/OpenNSW/core/remote"
@@ -48,17 +52,54 @@ func NewCDNInterpreter() *CDNInterpreter {
 // endpoint rejects, and Interpret recognizes the same failure on the way back
 // out and reports the trader-facing message — the same path a rejection takes,
 // rather than a silently truncated payload.
-func (CDNInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	payload, err := buildFromInputs(inputs)
+func (c CDNInterpreter) BuildRequest(inputs map[string]any) remote.Body {
+	return c.BuildRequestContext(context.Background(), inputs)
+}
+
+// BuildRequestContext is the same on the request's own context, so what it
+// logs carries the traceId.
+func (CDNInterpreter) BuildRequestContext(ctx context.Context, inputs map[string]any) remote.Body {
+	payload, err := buildFromInputs(ctx, inputs)
 	if err != nil {
+		slog.WarnContext(ctx, "cdn: dispatch note could not be built, an error object is being sent in its place", "error", err)
 		return remote.JSONBody{V: map[string]any{"error": err.Error()}}
 	}
+	logDispatchNote(ctx, payload)
 	return remote.JSONBody{V: payload}
+}
+
+// logDispatchNote records what is about to go to SLC Edge. As with the
+// declaration, the call is made over TLS and no layer keeps the request body,
+// so this is the only record of what was sent.
+//
+// The whole note is recorded, not a summary of it: a rejection names a field,
+// and answering it means seeing the value that field actually carried. It holds
+// the shipper, the consignee and their addresses, so wherever these logs are
+// shipped is handling trader data.
+func logDispatchNote(ctx context.Context, payload Submission) {
+	slog.InfoContext(ctx, "cdn: dispatch note built",
+		"nsw_id", payload.Properties.NswID,
+		"office_code", payload.OfficeCode,
+		"declaration_references", len(payload.CusDecRefs),
+	)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		slog.WarnContext(ctx, "cdn: dispatch note could not be encoded for logging", "error", err)
+		return
+	}
+	slog.InfoContext(ctx, "cdn: dispatch note payload",
+		"nsw_id", payload.Properties.NswID, "bytes", len(encoded), "payload", string(encoded))
 }
 
 // Interpret reports whether the submission was accepted and captures the SLC
 // response fields (and a trader-facing error message on rejection).
-func (CDNInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+func (c CDNInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	return c.InterpretContext(context.Background(), callErr, resp)
+}
+
+// InterpretContext is the same on the request's own context, so the
+// acknowledgement is logged under the traceId that carried the submission.
+func (CDNInterpreter) InterpretContext(ctx context.Context, callErr error, resp map[string]any) (bool, map[string]any) {
 	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
 
 	out := map[string]any{}
@@ -70,19 +111,30 @@ func (CDNInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 
 	if !accepted {
 		out["error"] = describeFailure(callErr, resp)
+		slog.WarnContext(ctx, "cdn: submission not accepted",
+			"edge_id", stringField(resp, "edgeId"), "nsw_id", stringField(resp, "nswId"),
+			"status", stringField(resp, "status"), "transport_error", callErr,
+			"reason", out["error"])
+		return accepted, out
 	}
+
+	slog.InfoContext(ctx, "cdn: submission accepted",
+		"edge_id", stringField(resp, "edgeId"), "nsw_id", stringField(resp, "nswId"),
+		"status", stringField(resp, "status"), "received_at", stringField(resp, "receivedAt"),
+		"acknowledgement", resp)
 	return accepted, out
 }
 
-func buildFromInputs(inputs map[string]any) (Submission, error) {
+func buildFromInputs(ctx context.Context, inputs map[string]any) (Submission, error) {
 	form, ok := inputs["payload"].(map[string]any)
 	if !ok {
+		slog.WarnContext(ctx, "cdn: task inputs carry no dispatch note form", "input_keys", inputKeys(inputs))
 		return Submission{}, &buildError{"The dispatch note form could not be read."}
 	}
 	// The edgeId this task's previous attempt was given, when it had one. See
 	// nswid.For for what it settles.
 	previousEdgeID, _ := inputs[PreviousEdgeIDKey].(string)
-	return BuildPayload(form, previousEdgeID)
+	return BuildPayload(ctx, form, previousEdgeID)
 }
 
 // PreviousEdgeIDKey is the task input carrying the edgeId of this task's last
@@ -161,4 +213,15 @@ func describeFailure(callErr error, resp map[string]any) string {
 		return "We could not reach Sri Lanka Customs to submit your cargo dispatch note. Please try again in a few minutes."
 	}
 	return intro + outro
+}
+
+// inputKeys names the task inputs that did arrive, so a mapping that failed to
+// deliver the form can be diagnosed without logging the trader's data.
+func inputKeys(inputs map[string]any) []string {
+	keys := make([]string, 0, len(inputs))
+	for k := range inputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

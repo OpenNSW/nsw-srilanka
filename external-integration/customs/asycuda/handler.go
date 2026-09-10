@@ -63,6 +63,15 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	eventType := strings.ToUpper(strings.TrimSpace(env.EventType))
 
+	// Every callback is recorded with its body, whatever it turns out to be:
+	// this is the only record of what ASYCUDA actually sent — the errors
+	// object, the taxes, the reference. Everything downstream logs its reading
+	// of the callback rather than the callback itself, so a disagreement
+	// between the two is otherwise impossible to settle. An unknown event is
+	// logged the same way, since that is exactly when the body matters.
+	slog.InfoContext(r.Context(), "slce: webhook received",
+		"event", eventType, "bytes", len(body), "body", string(body))
+
 	switch eventType {
 	case "CUSDEC_INTEGRATED":
 		h.handleCusdecIntegrationResult(w, r, body)

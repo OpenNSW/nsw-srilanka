@@ -1,6 +1,7 @@
 package cusdec
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -28,7 +29,7 @@ func minimalForm() map[string]any {
 func identifier(t *testing.T, form map[string]any, previousEdgeID string) string {
 	t.Helper()
 
-	sub, _, err := BuildPayload(form, previousEdgeID)
+	sub, _, err := BuildPayload(context.Background(), form, previousEdgeID)
 	require.NoError(t, err)
 
 	encoded, err := json.Marshal(sub)
@@ -85,12 +86,12 @@ func TestBuildPayload_AResubmissionIsNewEvenWhenNothingChanged(t *testing.T) {
 // The identifier is derived from the submission as it will be sent, so it must
 // not depend on itself: the field is empty while the digest is taken.
 func TestBuildPayload_TheIdentifierDoesNotDependOnItself(t *testing.T) {
-	sub, _, err := BuildPayload(minimalForm(), "")
+	sub, _, err := BuildPayload(context.Background(), minimalForm(), "")
 	require.NoError(t, err)
 
 	// Re-deriving from the payload as returned — with the field now populated —
 	// would give a different answer if the field were part of the digest.
-	rebuilt, _, err := BuildPayload(minimalForm(), "")
+	rebuilt, _, err := BuildPayload(context.Background(), minimalForm(), "")
 	require.NoError(t, err)
 	assert.Equal(t, sub.Properties.NswID, rebuilt.Properties.NswID)
 }
@@ -161,7 +162,7 @@ func sampleForm() map[string]any {
 // could collect them and they would still never reach ASYCUDA. Assert them on
 // the wire, which is the only place that settles it.
 func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
-	sub, _, err := BuildPayload(sampleForm(), "")
+	sub, _, err := BuildPayload(context.Background(), sampleForm(), "")
 	require.NoError(t, err)
 
 	encoded, err := json.Marshal(sub)
