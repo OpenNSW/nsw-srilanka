@@ -19,7 +19,7 @@ import (
 )
 
 // SignatureHeader carries the CMS's HMAC over the request body.
-const SignatureHeader = "X-Signature"
+const SignatureHeader = "X-NSW-Signature"
 
 // signaturePrefix names the digest the header carries, as GitHub's convention
 // does, so a change of algorithm is visible in the header rather than silent.
