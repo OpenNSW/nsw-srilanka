@@ -57,6 +57,14 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [showErrors, setShowErrors] = useState(false)
 
   const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
+  // JsonForms merges additionalErrors with native AJV errors. Absent keys
+  // already produce a required error; synthesizing another would render
+  // "X is required" twice. Only present empty values ("" / []) need a
+  // synthetic error — JSON Schema `required` checks presence, not emptiness.
+  const additionalRequiredErrors = useMemo(
+    () => requiredErrors.filter((error) => isPresentEmpty(data, error)),
+    [requiredErrors, data],
+  )
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
   // collapses interactivity, readonly, and button visibility into a single
@@ -102,7 +110,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           data={data}
           renderers={radixRenderers}
           readonly={!interactive}
-          additionalErrors={showErrors ? requiredErrors : []}
+          additionalErrors={showErrors ? additionalRequiredErrors : []}
           validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
@@ -209,6 +217,25 @@ function collectRequiredErrors(schema: JsonSchema | undefined, data: unknown, in
   }
 
   return out
+}
+
+// True when the required property exists on the instance but is empty, so
+// AJV will not have emitted its own `required` error for that key.
+function isPresentEmpty(data: unknown, error: RequiredFieldError): boolean {
+  const parent = valueAtPath(data, error.instancePath)
+  if (!parent || typeof parent !== 'object' || Array.isArray(parent)) return false
+  return Object.prototype.hasOwnProperty.call(parent, error.params.missingProperty)
+}
+
+function valueAtPath(data: unknown, instancePath: string): unknown {
+  if (!instancePath) return data
+  return instancePath
+    .split('/')
+    .filter(Boolean)
+    .reduce<unknown>((current, part) => {
+      if (current == null || typeof current !== 'object') return undefined
+      return Array.isArray(current) ? current[Number(part)] : (current as Record<string, unknown>)[part]
+    }, data)
 }
 
 function isEmpty(value: unknown): boolean {
