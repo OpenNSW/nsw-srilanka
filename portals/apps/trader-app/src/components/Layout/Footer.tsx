@@ -5,6 +5,12 @@ import { appConfig } from '@/config'
 // full-width across the bottom of the viewport (z-30: above Sidebar's z-20,
 // below TopBar's z-50 — see those components), so it's the same one instance
 // regardless of what's rendered above it — see Layout.tsx and LoginScreen.tsx.
+//
+// Height contract: sm:h-8 (32px) at sm+ breakpoints; stacks to a taller,
+// unfixed height on mobile. Anything that reserves space for this footer
+// (Layout.tsx, LoginScreen.tsx, UnauthorizedScreen.tsx, Sidebar.tsx) must use
+// `pb-16 sm:pb-8` (or the equivalent `h-[calc(...-64px)] sm:h-[calc(...-32px)]`
+// for Sidebar) so the reserve stays in sync with this component.
 export function Footer() {
   const { t } = useTranslation()
   const footerLinks = appConfig.branding.footerLinks ?? []

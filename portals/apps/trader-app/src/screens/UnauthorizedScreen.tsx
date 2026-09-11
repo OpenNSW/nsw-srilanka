@@ -8,7 +8,7 @@ export function UnauthorizedScreen() {
   const { t } = useTranslation()
 
   return (
-    <div className="min-h-screen bg-app-bg relative pb-16 sm:pb-12">
+    <div className="min-h-screen bg-app-bg relative pb-16 sm:pb-8">
       <main className="mt-16 min-h-[calc(100vh-64px)] flex items-center justify-center px-6">
         <div className="w-full max-w-lg rounded-xl border border-border bg-app-surface p-8 shadow-sm text-center">
           <h1 className="text-2xl font-semibold text-foreground">{t('auth.unauthorized.title')}</h1>
