@@ -1,11 +1,24 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
-import { Button } from '@radix-ui/themes'
+import { Button, Callout } from '@radix-ui/themes'
+import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 import type { JsonSchema } from '@jsonforms/core'
 import type { Handle, ZoneRendererProps } from '@/features/zone/types'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
+
+// AJV-shaped error so JsonForms maps it onto the missing control. `message`
+// must stay "is a required property" — the radix renderers rewrite that
+// exact string to "<label> is required".
+type RequiredFieldError = {
+  instancePath: string
+  schemaPath: string
+  keyword: 'required'
+  params: { missingProperty: string }
+  message: 'is a required property'
+}
 
 type Props = ZoneRendererProps<'FORM'> & {
   // handles, when non-empty, render as physical controls in the form's own
@@ -31,6 +44,7 @@ const FORM_ELEMENT_CATALOG: Record<string, { variant: 'solid' | 'outline'; color
 }
 
 export function FormRenderer({ payload, handles, onAction }: Props) {
+  const { t } = useTranslation()
   // The form owns its data state from mount until submit. payload.data is
   // consumed only as the initial seed: TraderZoneLayout keys Zone by task
   // state, so a state transition unmounts this component and the next mount
@@ -42,11 +56,12 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
 
+  const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
   // collapses interactivity, readonly, and button visibility into a single
   // derived fact — the same rule the backend uses to derive Role.
-  const isValid = errors.length === 0 && allRequiredFilled(payload.schema, data)
+  const isValid = errors.length === 0 && requiredErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('VITE_SHOW_AUTOFILL_BUTTON', false)
 
@@ -57,8 +72,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
-    const isSubmitAction = h.element !== 'secondary_action'
-    if (isSubmitAction && !isValid) {
+    // Save as Draft (and any other secondary_action) must accept a partial
+    // form. Submit still hits schema required and surfaces field errors.
+    const skipRequired = h.command === 'SAVE_AS_DRAFT' || h.element === 'secondary_action'
+    if (!skipRequired && !isValid) {
       setShowErrors(true)
       return
     }
@@ -68,6 +85,16 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   return (
     <>
+      {interactive && showErrors && requiredErrors.length > 0 && (
+        <div className="px-6 pt-6">
+          <Callout.Root color="red">
+            <Callout.Icon>
+              <ExclamationTriangleIcon />
+            </Callout.Icon>
+            <Callout.Text>{t('tasks.validation.requiredFields')}</Callout.Text>
+          </Callout.Root>
+        </div>
+      )}
       <div className="p-6">
         <JsonForms
           schema={payload.schema}
@@ -75,6 +102,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           data={data}
           renderers={radixRenderers}
           readonly={!interactive}
+          additionalErrors={showErrors ? requiredErrors : []}
           validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
@@ -141,33 +169,46 @@ function HandleButton({
   )
 }
 
-// Walks the schema's `required` arrays and checks each path against the data.
-// Treats undefined, null, empty string, and empty array as "missing".
-function allRequiredFilled(schema: JsonSchema | undefined, data: unknown): boolean {
-  if (!schema || typeof schema !== 'object') return true
+// Emits AJV-shaped `required` errors for empty values so JsonForms controls
+// show "X is required". JSON Schema `required` only checks presence; empty
+// string / empty array would otherwise produce no field error.
+function collectRequiredErrors(schema: JsonSchema | undefined, data: unknown, instancePath = ''): RequiredFieldError[] {
+  if (!schema || typeof schema !== 'object') return []
   const required = (schema as { required?: string[] }).required
   const properties = (schema as { properties?: Record<string, JsonSchema> }).properties
+  const items = (schema as { items?: JsonSchema | JsonSchema[] }).items
+  const out: RequiredFieldError[] = []
 
   if (Array.isArray(required)) {
-    if (!data || typeof data !== 'object') {
-      return required.length === 0
-    }
-    const obj = data as Record<string, unknown>
+    const obj = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : undefined
     for (const key of required) {
-      if (isEmpty(obj[key])) return false
-    }
-  }
-
-  if (properties && data && typeof data === 'object') {
-    const obj = data as Record<string, unknown>
-    for (const key of Object.keys(properties)) {
-      if (obj[key] !== undefined) {
-        if (!allRequiredFilled(properties[key], obj[key])) return false
+      if (isEmpty(obj?.[key])) {
+        out.push({
+          instancePath,
+          schemaPath: '#/required',
+          keyword: 'required',
+          params: { missingProperty: key },
+          message: 'is a required property',
+        })
       }
     }
   }
 
-  return true
+  if (properties && data && typeof data === 'object' && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>
+    for (const key of Object.keys(properties)) {
+      if (obj[key] === undefined) continue
+      out.push(...collectRequiredErrors(properties[key], obj[key], `${instancePath}/${key}`))
+    }
+  }
+
+  if (items && !Array.isArray(items) && Array.isArray(data)) {
+    data.forEach((item, index) => {
+      out.push(...collectRequiredErrors(items, item, `${instancePath}/${index}`))
+    })
+  }
+
+  return out
 }
 
 function isEmpty(value: unknown): boolean {
