@@ -168,7 +168,7 @@ const en = {
       },
     },
 
-    // Footer.tsx. Labels are resolved by footerLinks[].key, not carried in branding.json.
+  // Footer.tsx. Labels are resolved by footerLinks[].key, not carried in branding.json.
   footer: {
     links: {
       policy: 'Policy',
