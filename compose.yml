@@ -216,6 +216,41 @@ services:
     restart: "no"
 
   # -------------------------------------------------------------------
+  # 4b. Local Dev Seed Data
+  # -------------------------------------------------------------------
+  # Declaratively (re)applies the example companies via `otc company apply`
+  # every time the stack comes up. Idempotent (upsert by id), so it's safe to
+  # re-run on every `docker compose up`. Not a dependency of `api` — company
+  # data isn't required for the API to start, so this runs alongside it
+  # rather than gating it.
+  seed-companies:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # No `target:` — defaults to the last stage (`runtime`), which already
+      # bakes the `otc` binary at /usr/local/bin/otc.
+    container_name: tnsw-seed-companies
+    networks:
+      - nsw-network
+    volumes:
+      # Mount live, not baked-in, so editing the file needs no rebuild.
+      - ./configs:/app/configs:ro
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-nsw_db}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-changeme}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+    command: ["otc", "company", "apply", "-f", "configs/companies.example.json"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # -------------------------------------------------------------------
   # 5. Backend Orchestration API Layer
   # -------------------------------------------------------------------
   api:
