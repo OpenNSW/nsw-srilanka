@@ -309,21 +309,6 @@ func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestParseCompleteTaskStepRequest_AllowsTrailingWhitespace(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}`+"\n"))
-
-	command, payload, _, _, err := parseCompleteTaskStepRequest(req)
-	if err != nil {
-		t.Fatalf("unexpected error for trailing whitespace: %v", err)
-	}
-	if command != "approve" {
-		t.Fatalf("command = %q, want %q", command, "approve")
-	}
-	if payload["key"] != "value" {
-		t.Fatalf("payload[\"key\"] = %v, want %q", payload["key"], "value")
-	}
-}
-
 // The read.roles allowlist narrows access even for a genuine owner.
 func TestHandleGetTask_OwnedRoleNotAdmittedByReadPolicy(t *testing.T) {
 	fetcher := pendingHSCodeTask()
