@@ -113,7 +113,11 @@ func (i *FetchInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 
 	fetched, err := decode(body)
 	if err != nil {
-		slog.Error("slpa consolidation: the CMS answered with something this step cannot read", "error", err)
+		// The answer itself is logged, truncated: the trader is told only that it
+		// could not be read, and without the body nobody can tell a changed field
+		// type from a changed shape — which is the whole of the diagnosis.
+		slog.Error("slpa consolidation: the CMS answered with something this step cannot read",
+			"error", err, "body", truncate(body, maxLoggedBody))
 		out["outcome"] = OutcomeBlocked
 		out["error"] = "SLPA answered the consolidation lookup with something we could not read. Please try again in a few minutes."
 		return false, out
@@ -228,6 +232,25 @@ func envelopeOK(resp map[string]any) bool {
 	}
 }
 
+// maxLoggedBody bounds what an unreadable answer contributes to a log line.
+// Enough to see which field is the wrong shape, not so much that one bad
+// response floods the log.
+const maxLoggedBody = 2000
+
+// truncate renders a body for a log line, cut to n bytes. A body that cannot be
+// rendered is described rather than dropped, since this runs on the path where
+// something is already unexpected.
+func truncate(body map[string]any, n int) string {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Sprintf("<unrenderable: %v>", err)
+	}
+	if len(raw) <= n {
+		return string(raw)
+	}
+	return string(raw[:n]) + "...(truncated)"
+}
+
 // decode re-reads the flattened body into the response this step models. Going
 // back through JSON keeps one definition of the field names — the struct tags —
 // rather than a second, hand-written reading of the same map.
@@ -267,7 +290,7 @@ func capContainersOut(containers []CapContainer) []map[string]any {
 			"sqid":               capContainer.Sqid,
 			"container_no":       capContainer.ContainerNo,
 			"container_size":     capContainer.ContainerSize,
-			SOContainerSqidField: capContainer.SOContainerSqid,
+			SOContainerSqidField: capContainer.pairing(),
 		})
 	}
 	return out

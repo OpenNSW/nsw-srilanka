@@ -17,12 +17,25 @@ import (
 // Only the fields this integration acts on are modelled; the CMS sends more
 // (vessel, ISO code, VGM) and it stays in the raw response for the panel.
 type CapContainer struct {
-	Sqid            string `json:"sqid"`
-	CusdecSerial    string `json:"cusdecserial"`
-	ContainerNo     string `json:"container_no"`
-	ContainerSize   string `json:"container_size"`
-	ConStatus       string `json:"con_status"`
-	SOContainerSqid any    `json:"so_container_sqid"`
+	Sqid          string `json:"sqid"`
+	ContainerNo   string `json:"container_no"`
+	ContainerSize string `json:"container_size"`
+
+	// The service-order container this one has been paired with, which the CMS
+	// names so_container_id on the wire. so_container_sqid is read alongside it
+	// because that is the name their specification gives: whichever arrives, a
+	// container already consolidated must be recognised as such.
+	SOContainerID   any `json:"so_container_id"`
+	SOContainerSqid any `json:"so_container_sqid"`
+}
+
+// pairing reports which service-order container the CMS has paired this one
+// with, under whichever of the two names the answer carried.
+func (c CapContainer) pairing() any {
+	if pairedWith(c.SOContainerID) {
+		return c.SOContainerID
+	}
+	return c.SOContainerSqid
 }
 
 // consolidated reports whether the CMS has already paired this container.
@@ -30,7 +43,7 @@ type CapContainer struct {
 // The field is null until consolidation and carries the service-order
 // container's sqid afterwards, so it is also how a redelivered or repeated run
 // recognises work already done.
-func (c CapContainer) consolidated() bool { return pairedWith(c.SOContainerSqid) }
+func (c CapContainer) consolidated() bool { return pairedWith(c.pairing()) }
 
 // SOContainerSqidField is the name the pairing is recorded under on the rows
 // the lookup writes to the task record. Named here because the reader of those
@@ -61,12 +74,18 @@ func pairedWith(soContainerSqid any) bool {
 }
 
 // SOContainer is one container priced on the export service order.
+//
+// As on CapContainer, only what this integration acts on is modelled. The CMS
+// sends more against each container — the order id it belongs to, the service
+// priced on it — and modelling those cost the whole lookup once: they were typed
+// as int, the CMS sent one of them as a string, and the decode of the entire
+// answer failed, leaving the trader a form with no containers to pick from and a
+// message saying only that the answer could not be read. A field nothing reads
+// is a field that can only break the decode.
 type SOContainer struct {
 	Sqid          string `json:"sqid"`
-	ExportSOID    int    `json:"export_so_id"`
 	ContainerNo   string `json:"ContainerNumber"`
 	ContainerSize string `json:"ContainerSize"`
-	Service       int    `json:"Service"`
 }
 
 // FetchResponse is the CMS's answer to the consolidation lookup, as it arrives
