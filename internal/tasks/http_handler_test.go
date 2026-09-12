@@ -2,21 +2,28 @@ package tasks
 
 import (
 	"context"
+	"crypto"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
+	argus "github.com/LSFLK/argus/pkg/audit"
+	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, v)
+		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, v)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
@@ -231,6 +238,77 @@ func TestHandleGetTask_ClientPrincipalDenied(t *testing.T) {
 		t.Fatalf("got %d, want 404", recorder.Code)
 	}
 }
+
+// A denied task read must emit a failure audit event matching the consignment read denial pattern.
+func TestHandleGetTask_DeniedAudited(t *testing.T) {
+	templates := &stubTemplates{}
+	handler := getTaskHandler(t, pendingHSCodeTask(), templates)
+	auditor := &mockAuditor{}
+	handler.Audit = nswaudit.NewRecorder(auditor)
+
+	in := taskauthz.Input{
+		Kind:  taskauthz.KindUser,
+		Roles: []string{"Trader"},
+		OwnedRoles: func(context.Context, string) (map[string]bool, error) {
+			return map[string]bool{"trader": false, "cha": false}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
+	req.SetPathValue("id", testTaskID)
+	ctx := taskauthz.WithInput(req.Context(), in)
+	authCtx := &authn.AuthContext{
+		User: &authn.UserContext{
+			ID:    "user-trader-1",
+			Email: "trader@example.com",
+		},
+	}
+	ctx = context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	req = req.WithContext(ctx)
+
+	recorder := httptest.NewRecorder()
+	handler.HandleGetTask(recorder, req)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("got %d, want 404", recorder.Code)
+	}
+
+	require.Len(t, auditor.events, 1)
+	assert.Equal(t, string(nswaudit.ActionRead), auditor.events[0].Action)
+	assert.Equal(t, string(nswaudit.TargetTask), auditor.events[0].TargetType)
+	assert.Equal(t, string(nswaudit.EventTask), auditor.events[0].EventType)
+	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
+	assert.Equal(t, string(nswaudit.ActorMember), auditor.events[0].ActorType)
+	assert.Equal(t, "user-trader-1", auditor.events[0].ActorID)
+	assert.NotEmpty(t, auditor.events[0].Timestamp)
+	require.NotNil(t, auditor.events[0].TargetID)
+	assert.Equal(t, testTaskID, *auditor.events[0].TargetID)
+	assert.Equal(t, "task read access denied", auditor.events[0].Metadata["error"])
+}
+
+// When handler.Audit is nil, a denied task read must not panic and still return 404.
+func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
+	templates := &stubTemplates{}
+	handler := getTaskHandler(t, pendingHSCodeTask(), templates)
+	handler.Audit = nil
+
+	in := taskauthz.Input{
+		Kind:  taskauthz.KindUser,
+		Roles: []string{"Trader"},
+		OwnedRoles: func(context.Context, string) (map[string]bool, error) {
+			return map[string]bool{"trader": false, "cha": false}, nil
+		},
+	}
+	recorder := getTask(t, handler, &in)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("got %d, want 404", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), errTaskNotFound) {
+		t.Errorf("body should be the not-found text, got %s", recorder.Body.String())
+	}
+}
+
 func TestParseCompleteTaskStepRequest_AllowsTrailingWhitespace(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/commands/approve", strings.NewReader(`{"key":"value"}`+"\n"))
 
@@ -423,4 +501,36 @@ func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("got %d, want 500: %s", recorder.Code, recorder.Body.String())
 	}
+}
+
+type mockAuditor struct {
+	mu     sync.Mutex
+	events []*argus.AuditLogRequest
+}
+
+func (m *mockAuditor) LogEvent(ctx context.Context, event *argus.AuditLogRequest) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, event)
+	return true
+}
+
+func (m *mockAuditor) IsEnabled() bool { return true }
+
+func (m *mockAuditor) SignEvent(ctx context.Context, event *argus.AuditLogRequest) error {
+	return nil
+}
+
+func (m *mockAuditor) SignMessageBytes(ctx context.Context, message []byte) (string, error) {
+	return "", nil
+}
+
+func (m *mockAuditor) LogSignedEvent(ctx context.Context, event *argus.AuditLogRequest) {}
+
+func (m *mockAuditor) VerifyIntegrity(event *argus.AuditLogRequest, publicKey crypto.PublicKey) (bool, error) {
+	return true, nil
+}
+
+func (m *mockAuditor) Close(ctx context.Context) error {
+	return nil
 }

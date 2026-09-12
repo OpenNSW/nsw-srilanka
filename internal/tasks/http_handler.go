@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
@@ -40,6 +41,7 @@ type HTTPHandler struct {
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
 	AuthzCatalog    taskauthz.Catalog
+	Audit           *nswaudit.Recorder
 	MaxRequestBytes int64
 }
 
@@ -48,6 +50,7 @@ func NewHTTPHandler(
 	store TaskFetcher,
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
+	audit *nswaudit.Recorder,
 	maxRequestBytes int64,
 ) *HTTPHandler {
 	return &HTTPHandler{
@@ -55,6 +58,7 @@ func NewHTTPHandler(
 		Store:           store,
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
+		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
 }
@@ -100,6 +104,14 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		// indistinguishable from a task that does not exist and cannot be used to
 		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
 		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
+		h.Audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionRead,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata:   map[string]any{"error": "task read access denied"},
+		})
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
