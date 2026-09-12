@@ -27,7 +27,7 @@ const fetched = `{
     "status": 1,
     "cap_containers": [
       {"sqid": "9876543210ZYXWVT", "cusdecserial": "CUSDEC-FCL-001", "container_no": "MSCU8492019",
-       "container_size": "40", "con_status": "FCL", "so_container_sqid": null}
+       "container_size": "40", "con_status": "FCL", "so_container_id": null}
     ],
     "so_containers": [
       {"sqid": "zyxwvutsrqponmlk", "export_so_id": 1, "ContainerNumber": "DUMY0000001",
@@ -110,11 +110,11 @@ func TestSave_DoesNotPairOnACoincidentallyMatchingNumber(t *testing.T) {
 		"the placeholder the branch owns, not the one whose number the container happens to share")
 }
 
-// so_container_sqid carries the pairing once it is made, so an already
+// so_container_id carries the pairing once it is made, so an already
 // consolidated container is not offered again.
 func TestFetch_AlreadyConsolidatedIsNotOfferedAgain(t *testing.T) {
 	const raw = `{"status": 1, "data": {"cap_containers": [
-	  {"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": "so-1"}],
+	  {"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": "so-1"}],
 	  "so_containers": [{"sqid": "so-1", "ContainerNumber": "DUMY0000001"}]}}`
 
 	ok, out := NewFetchInterpreter().Interpret(nil, body(t, raw))
@@ -205,8 +205,8 @@ func TestSave_PairsTheBranchesChoiceFromWhatTheLookupRecorded(t *testing.T) {
 		ChosenCapKey: "cap-A",
 		BranchSOKey:  "TCLU9999999",
 		CapContainersKey: []any{
-			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": nil},
-			map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_sqid": nil},
+			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": nil},
+			map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_id": nil},
 		},
 		SOContainersKey: []any{
 			map[string]any{"sqid": "so-1", "container_no": "MSCU8492347", "size": "40"},
@@ -253,7 +253,7 @@ func TestSave_SendsNothingForAChoiceSLPADoesNotHold(t *testing.T) {
 //     (the object). encoding/json matches field names case-insensitively, so a
 //     Service int modelled for the first also matched the second, and the whole
 //     answer failed to decode — leaving the trader a form with no containers.
-//   - the pairing is named so_container_id here, not so_container_sqid.
+//   - the pairing is named so_container_id, and is null until consolidated.
 const liveFetched = `{
   "openapi": "3.0.3",
   "status": 1,
@@ -290,7 +290,7 @@ func TestFetch_OffersWhatTheLiveCMSAnswers(t *testing.T) {
 		"the placeholder the order was priced against")
 	assert.Equal(t, []map[string]any{{
 		"sqid": "7L7AvJPUrv", "container_no": "MGMU5248651", "container_size": "20",
-		SOContainerSqidField: nil,
+		SOContainerIDField: nil,
 	}}, out[CapContainersKey])
 }
 
