@@ -424,3 +424,79 @@ func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 		t.Fatalf("got %d, want 500: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+// stubStore serves one record to the handler's pre-flight check.
+type stubStore struct{ record store.TaskRecord }
+
+func (s stubStore) GetTask(context.Context, string) (store.TaskRecord, bool) {
+	return s.record, true
+}
+
+// ephytoRenderConfig mirrors the shape a render.json carries: the state the
+// trader acts in offers a command, the states the workflow drives itself
+// through offer none.
+const ephytoRenderConfig = `{
+  "states": {
+    "PENDING_USER": { "actions": [{ "command": "submit" }] },
+    "EPHYTO_SUBMITTED": { "actions": [] }
+  }
+}`
+
+// A command arriving after its step has moved on is refused before it reaches
+// the orchestrator, which would otherwise write the payload into whichever
+// subtask is now active — overwriting the results that subtask recorded.
+func TestHandleCompleteTaskStep_RefusesACommandTheStateDoesNotOffer(t *testing.T) {
+	handler := &HTTPHandler{
+		MaxRequestBytes: 1024,
+		Store: stubStore{record: store.TaskRecord{
+			TaskID:       "123",
+			State:        "EPHYTO_SUBMITTED",
+			RenderConfig: []byte(ephytoRenderConfig),
+		}},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/commands/submit", strings.NewReader(`{"hub_destination":"LK2"}`))
+	req.SetPathValue("id", "123")
+	req.SetPathValue("command", "submit")
+	recorder := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(recorder, req)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), errCommandNotOffered) {
+		t.Fatalf("expected error body to mention %q, got %s", errCommandNotOffered, recorder.Body.String())
+	}
+}
+
+// A render config that never describes the current state leaves the decision
+// where it was, so flows that predate the states contract are unaffected.
+func TestOffersCommand_AllowsWhatTheConfigDoesNotDescribe(t *testing.T) {
+	cases := []struct {
+		name   string
+		record store.TaskRecord
+	}{
+		{"no render config", store.TaskRecord{State: "PENDING_USER"}},
+		{"unparsable render config", store.TaskRecord{State: "PENDING_USER", RenderConfig: []byte(`{`)}},
+		{"no states block", store.TaskRecord{State: "PENDING_USER", RenderConfig: []byte(`{"sections":{}}`)}},
+		{"state not described", store.TaskRecord{State: "SOMETHING_ELSE", RenderConfig: []byte(ephytoRenderConfig)}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !offersCommand(c.record, "submit") {
+				t.Error("want the command allowed")
+			}
+		})
+	}
+}
+
+// The state the trader acts in still accepts its own command.
+func TestOffersCommand_AllowsTheStatesOwnAction(t *testing.T) {
+	record := store.TaskRecord{State: "PENDING_USER", RenderConfig: []byte(ephytoRenderConfig)}
+	if !offersCommand(record, "submit") {
+		t.Error("PENDING_USER offers submit")
+	}
+	if offersCommand(record, "acknowledge") {
+		t.Error("PENDING_USER does not offer acknowledge")
+	}
+}
