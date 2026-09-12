@@ -203,6 +203,11 @@ func (i *SaveInterpreter) Interpret(callErr error, resp map[string]any) (bool, m
 
 	if !saved {
 		out["error"] = describeFailure(callErr, body, "SLPA did not save the container consolidation:")
+		// The choice is released. It named a container SLPA would not pair, and
+		// the flow goes back to the lookup — which may now hold different
+		// containers — so carrying it forward would let the next submission
+		// retry a refusal the trader never asked to repeat.
+		out[ChosenCapKey] = ""
 		return false, out
 	}
 	return true, out
