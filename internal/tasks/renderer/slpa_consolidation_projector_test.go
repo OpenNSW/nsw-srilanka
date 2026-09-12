@@ -51,7 +51,7 @@ func projectConsolidation(t *testing.T, capContainers []any) map[string]any {
 // keys the save and the delete, while the trader reads what is on the box.
 func TestConsolidationProjector_OffersTheContainersFreeToPair(t *testing.T) {
 	field := projectConsolidation(t, []any{
-		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": nil},
+		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": nil},
 		map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567"},
 	})
 
@@ -61,15 +61,15 @@ func TestConsolidationProjector_OffersTheContainersFreeToPair(t *testing.T) {
 	}, field["oneOf"])
 }
 
-// so_container_sqid is the CMS's value and it has not promised which JSON type
+// so_container_id is the CMS's value and it has not promised which JSON type
 // it comes back as. Read with a hard string assertion, a number here said "not
 // paired yet" and put an already-consolidated container back in front of the
 // trader — a save the CMS then refuses.
-func TestConsolidationProjector_LeavesOutAlreadyPairedWhateverTypeTheSqidArrivesAs(t *testing.T) {
+func TestConsolidationProjector_LeavesOutAlreadyPairedWhateverTypeTheIDArrivesAs(t *testing.T) {
 	field := projectConsolidation(t, []any{
-		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": "so-1"},
-		map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_sqid": float64(4021)},
-		map[string]any{"sqid": "cap-C", "container_no": "GESU5566778", "so_container_sqid": nil},
+		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": "so-1"},
+		map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_id": float64(4021)},
+		map[string]any{"sqid": "cap-C", "container_no": "GESU5566778", "so_container_id": nil},
 	})
 
 	assert.Equal(t, []any{
@@ -98,7 +98,7 @@ func TestConsolidationProjector_LeavesTheFieldAsAuthoredWithNothingToOffer(t *te
 	assert.NotContains(t, projectConsolidation(t, []any{}), "oneOf")
 
 	assert.NotContains(t, projectConsolidation(t, []any{
-		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": "so-1"},
+		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": "so-1"},
 	}), "oneOf", "everything here is already consolidated")
 }
 

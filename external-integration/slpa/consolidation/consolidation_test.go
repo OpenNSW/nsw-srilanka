@@ -3,6 +3,7 @@ package consolidation
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"testing"
 
@@ -26,7 +27,7 @@ const fetched = `{
     "status": 1,
     "cap_containers": [
       {"sqid": "9876543210ZYXWVT", "cusdecserial": "CUSDEC-FCL-001", "container_no": "MSCU8492019",
-       "container_size": "40", "con_status": "FCL", "so_container_sqid": null}
+       "container_size": "40", "con_status": "FCL", "so_container_id": null}
     ],
     "so_containers": [
       {"sqid": "zyxwvutsrqponmlk", "export_so_id": 1, "ContainerNumber": "DUMY0000001",
@@ -109,11 +110,11 @@ func TestSave_DoesNotPairOnACoincidentallyMatchingNumber(t *testing.T) {
 		"the placeholder the branch owns, not the one whose number the container happens to share")
 }
 
-// so_container_sqid carries the pairing once it is made, so an already
+// so_container_id carries the pairing once it is made, so an already
 // consolidated container is not offered again.
 func TestFetch_AlreadyConsolidatedIsNotOfferedAgain(t *testing.T) {
 	const raw = `{"status": 1, "data": {"cap_containers": [
-	  {"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": "so-1"}],
+	  {"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": "so-1"}],
 	  "so_containers": [{"sqid": "so-1", "ContainerNumber": "DUMY0000001"}]}}`
 
 	ok, out := NewFetchInterpreter().Interpret(nil, body(t, raw))
@@ -204,8 +205,8 @@ func TestSave_PairsTheBranchesChoiceFromWhatTheLookupRecorded(t *testing.T) {
 		ChosenCapKey: "cap-A",
 		BranchSOKey:  "TCLU9999999",
 		CapContainersKey: []any{
-			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": nil},
-			map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_sqid": nil},
+			map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": nil},
+			map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_id": nil},
 		},
 		SOContainersKey: []any{
 			map[string]any{"sqid": "so-1", "container_no": "MSCU8492347", "size": "40"},
@@ -242,4 +243,65 @@ func TestSave_SendsNothingForAChoiceSLPADoesNotHold(t *testing.T) {
 	var req SaveRequest
 	require.NoError(t, json.Unmarshal(encoded, &req))
 	assert.Empty(t, req.Containers)
+}
+
+// liveFetched is SLPA's own answer from their live API, trimmed of nothing that
+// this step touches. Two things in it broke the lookup, and both are the reason
+// it is kept verbatim rather than reduced to the handful of fields modelled:
+//
+//   - each service-order container carries "Service" (the id) and "service"
+//     (the object). encoding/json matches field names case-insensitively, so a
+//     Service int modelled for the first also matched the second, and the whole
+//     answer failed to decode — leaving the trader a form with no containers.
+//   - the pairing is named so_container_id, and is null until consolidated.
+const liveFetched = `{
+  "openapi": "3.0.3",
+  "status": 1,
+  "data": {
+    "status": 1,
+    "so_containers": [
+      {"sqid": "L6QqzDd3RB", "export_so_id": 262342, "ContainerNumber": "MSCU8492019",
+       "ContainerSize": "20", "ContainerType": "general", "Quantity": "1", "Service": 3,
+       "service": {"id": 3, "sqid": "d0n6oeqw", "service_type": "HC", "imp_exp_status": "E"},
+       "tariff": {"id": 1, "size": "20", "tariff_no": "40.01.05", "tariff_rate": 16},
+       "so_type": "FCL", "total": 16, "lkrtotal": 4776, "exchange_rate": 298.5}
+    ],
+    "cap_containers": [
+      {"sqid": "7L7AvJPUrv", "container_no": "MGMU5248651", "container_size": "20",
+       "cusdecserial": "BIBE1CBEX1-2026-E-32978892026", "con_status": "FCL",
+       "iso_code": "2200", "vgm": "N/A", "reefer": "NO", "line_operator": "MSC",
+       "vessel_name": "TEST VES", "vessel_ref": "014001J", "port_of_discharge": "DEHAM",
+       "gatepass": null, "socontainer": null, "so_container_id": %s,
+       "container_status": 0, "is_deletable": true}
+    ]
+  }
+}`
+
+// What the trader must end up with: the real container SLPA pre-advised, offered
+// by number, with the sqid that keys the save behind it.
+func TestFetch_OffersWhatTheLiveCMSAnswers(t *testing.T) {
+	ok, out := NewFetchInterpreter().Interpret(nil, body(t, fmt.Sprintf(liveFetched, "null")))
+
+	require.True(t, ok)
+	assert.Equal(t, OutcomeReady, out["outcome"])
+	assert.Equal(t, []string{"MGMU5248651"}, out["cap_container_numbers"],
+		"the real container the trader picks from the form")
+	assert.Equal(t, []string{"MSCU8492019"}, out["so_container_numbers"],
+		"the placeholder the order was priced against")
+	assert.Equal(t, []map[string]any{{
+		"sqid": "7L7AvJPUrv", "container_no": "MGMU5248651", "container_size": "20",
+		SOContainerIDField: nil,
+	}}, out[CapContainersKey])
+}
+
+// The CMS names the pairing so_container_id. Read under any other name every
+// container reads as unpaired, so one already consolidated is offered to the
+// trader again — a save the CMS refuses.
+func TestFetch_RecognisesAPairingTheCMSHasAlreadyMade(t *testing.T) {
+	ok, out := NewFetchInterpreter().Interpret(nil, body(t, fmt.Sprintf(liveFetched, `"L6QqzDd3RB"`)))
+
+	require.True(t, ok)
+	assert.Equal(t, OutcomeDone, out["outcome"])
+	assert.Empty(t, out["cap_container_numbers"], "nothing left for the trader to pair")
+	assert.Equal(t, []string{"MGMU5248651"}, out["already_consolidated"])
 }

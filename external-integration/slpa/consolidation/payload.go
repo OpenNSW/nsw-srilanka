@@ -13,29 +13,31 @@ import (
 	"strings"
 )
 
-// CapContainer is one FCL container SLPA pre-advised against the declaration.
-// Only the fields this integration acts on are modelled; the CMS sends more
-// (vessel, ISO code, VGM) and it stays in the raw response for the panel.
+// CapContainer is one FCL container SLPA pre-advised against the declaration,
+// as their lookup answers. Only the fields this integration acts on are
+// modelled; the CMS sends more against each container — vessel, ISO code, VGM,
+// line operator — and it stays in the raw response for the panel.
 type CapContainer struct {
-	Sqid            string `json:"sqid"`
-	CusdecSerial    string `json:"cusdecserial"`
-	ContainerNo     string `json:"container_no"`
-	ContainerSize   string `json:"container_size"`
-	ConStatus       string `json:"con_status"`
-	SOContainerSqid any    `json:"so_container_sqid"`
+	Sqid          string `json:"sqid"`
+	ContainerNo   string `json:"container_no"`
+	ContainerSize string `json:"container_size"`
+
+	// SOContainerID is the service-order container this one has been paired
+	// with: null until it is consolidated. Typed any because only its presence
+	// is read here, and the CMS has never sent it populated for us to see which
+	// JSON type it takes.
+	SOContainerID any `json:"so_container_id"`
 }
 
 // consolidated reports whether the CMS has already paired this container.
-//
-// The field is null until consolidation and carries the service-order
-// container's sqid afterwards, so it is also how a redelivered or repeated run
-// recognises work already done.
-func (c CapContainer) consolidated() bool { return pairedWith(c.SOContainerSqid) }
+func (c CapContainer) consolidated() bool { return pairedWith(c.SOContainerID) }
 
-// SOContainerSqidField is the name the pairing is recorded under on the rows
-// the lookup writes to the task record. Named here because the reader of those
-// rows is elsewhere — the trader's form projector — and the two must agree.
-const SOContainerSqidField = "so_container_sqid"
+// SOContainerIDField is the name the pairing is recorded under on the rows the
+// lookup writes to the task record. It is SLPA's own name for it, so a row read
+// back off a task says the same thing their answer did; named here because the
+// reader of those rows is elsewhere — the trader's form projector — and the two
+// must agree.
+const SOContainerIDField = "so_container_id"
 
 // Paired reports whether the CMS has already paired the container one recorded
 // row describes, for a caller reading those rows back off the task record
@@ -44,29 +46,35 @@ const SOContainerSqidField = "so_container_sqid"
 // It exists so there is one answer to "is this one already done": the projector
 // leaves these out of what it offers the trader, and offering an already-paired
 // container is a save the CMS refuses.
-func Paired(row map[string]any) bool { return pairedWith(row[SOContainerSqidField]) }
+func Paired(row map[string]any) bool { return pairedWith(row[SOContainerIDField]) }
 
-// pairedWith reads the field the CMS records a pairing in.
+// pairedWith reports whether the CMS has recorded a pairing in the value given.
 //
-// Typed any and rendered rather than asserted to a string, because this is the
-// CMS's value and it has not promised which JSON type it comes back as. A hard
-// assertion would read anything unexpected as "not paired yet", which is the
-// answer that does damage: it puts a container that is already consolidated
-// back in front of the trader.
-func pairedWith(soContainerSqid any) bool {
-	if soContainerSqid == nil {
+// Rendered rather than asserted to a string: the field is null when unpaired and
+// the CMS has not promised which type it takes when set. A hard assertion would
+// read anything unexpected as "not paired yet", which is the answer that does
+// damage — it puts a container that is already consolidated back in front of the
+// trader.
+func pairedWith(soContainerID any) bool {
+	if soContainerID == nil {
 		return false
 	}
-	return strings.TrimSpace(fmt.Sprint(soContainerSqid)) != ""
+	return strings.TrimSpace(fmt.Sprint(soContainerID)) != ""
 }
 
 // SOContainer is one container priced on the export service order.
+//
+// As on CapContainer, only what this integration acts on is modelled. The CMS
+// sends more against each container — the order id it belongs to, the service
+// priced on it — and modelling those cost the whole lookup once: they were typed
+// as int, the CMS sent one of them as a string, and the decode of the entire
+// answer failed, leaving the trader a form with no containers to pick from and a
+// message saying only that the answer could not be read. A field nothing reads
+// is a field that can only break the decode.
 type SOContainer struct {
 	Sqid          string `json:"sqid"`
-	ExportSOID    int    `json:"export_so_id"`
 	ContainerNo   string `json:"ContainerNumber"`
 	ContainerSize string `json:"ContainerSize"`
-	Service       int    `json:"Service"`
 }
 
 // FetchResponse is the CMS's answer to the consolidation lookup, as it arrives
@@ -186,20 +194,16 @@ func CapContainerNumbers(resp FetchResponse) []string {
 func PairOne(capNo, soNo string, resp FetchResponse) (Pair, error) {
 	var pair Pair
 
-	capNorm, soNorm := normalise(capNo), normalise(soNo)
+	capNorm, soNorm := strings.TrimSpace(capNo), normalise(soNo)
 	if capNorm == "" {
 		return pair, fmt.Errorf("choose the real container this one is being consolidated against")
 	}
 
 	for _, capContainer := range resp.CapContainers {
-		// Matched on either, because the trader's answer is the sqid — it keys
-		// the delete as well as this pairing — while a caller holding only the
-		// number should not have to look it up first.
+		// Matched on the sqid alone: it is what the projector offers as each
+		// option's value, so it is what the trader's answer carries.
 		sqid := strings.TrimSpace(capContainer.Sqid)
-		if sqid == "" {
-			continue
-		}
-		if normalise(capContainer.ContainerNo) == capNorm || normalise(sqid) == capNorm {
+		if sqid != "" && sqid == capNorm {
 			pair.ID = sqid
 			pair.ContainerNo = strings.TrimSpace(capContainer.ContainerNo)
 			break

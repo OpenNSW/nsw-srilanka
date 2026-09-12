@@ -12,8 +12,8 @@ import (
 // []any shape a task record holds once it has been through storage.
 func capContainerRows() []any {
 	return []any{
-		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_sqid": nil},
-		map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_sqid": nil},
+		map[string]any{"sqid": "cap-A", "container_no": "MSCU8492019", "so_container_id": nil},
+		map[string]any{"sqid": "cap-B", "container_no": "TCLU1234567", "so_container_id": nil},
 	}
 }
 
