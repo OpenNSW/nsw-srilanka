@@ -104,16 +104,14 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		// indistinguishable from a task that does not exist and cannot be used to
 		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
 		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
-		if h.Audit != nil {
-			h.Audit.Record(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventTask,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetTask,
-				TargetID:   taskID,
-				Failure:    true,
-				Metadata:   map[string]any{"error": "task read access denied"},
-			})
-		}
+		h.Audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionRead,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata:   map[string]any{"error": "task read access denied"},
+		})
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
