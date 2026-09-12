@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/consolidation"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/ecdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/invoice"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
 )
 
@@ -53,6 +54,14 @@ const (
 	// asked only which service to order per container, and the CMS derives the
 	// cargo type from the CUSDEC record itself.
 	TaskTypeSLPAServiceOrder = "SLPA_SERVICE_ORDER"
+
+	// TaskTypeSLPAInvoiceGenerate asks the CMS to issue the official invoice for
+	// an approved service order. Asked for rather than waited on: the Single
+	// Window knows when the accountant approved the order, so a step that waited
+	// to be told the invoice existed left the trader in front of an empty panel
+	// for as long as the CMS took to call. The payment against it is still
+	// reported by webhook, since that money moves outside the Single Window.
+	TaskTypeSLPAInvoiceGenerate = "SLPA_INVOICE_GENERATE"
 
 	// TaskTypeSLPAConsolidationFetch looks up the containers available for
 	// consolidation under a CUSDEC serial and matches the two sides SLPA holds
@@ -133,6 +142,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
+		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
 		{TaskTypeSLPAConsolidationDelete, NewAPICallPluginWithInterpreter(mgr, consolidation.NewDeleteInterpreter())},

@@ -139,10 +139,10 @@ func TestNewHandler_RequiresASecret(t *testing.T) {
 // reads the body — an invoice event must not be read as an order decision.
 func TestHandleWebhook_RoutesByEventFamily(t *testing.T) {
 	const invoiceBody = `{
-		"event": "invoice.generated",
+		"event": "invoice.paid",
 		"slug": "8d326f3a-643a-4a1d-8072-87130288b032",
 		"invoice_no": "INV-2026-04412",
-		"details": {"invoice_details": {"invoice_url": "https://slpacargoapi.slpa.lk/invoices/INV-2026-04412.pdf",
+		"details": {"invoice_details": {"payment_slip_url": "https://slpacargoapi.slpa.lk/receipts/INV-2026-04412.pdf",
 		                                "total_payable_lkr": 4820.5}}
 	}`
 
@@ -154,7 +154,21 @@ func TestHandleWebhook_RoutesByEventFamily(t *testing.T) {
 	// The invoice side's payload, not a decision: an invoice event carries no
 	// "decision" at all.
 	assert.NotContains(t, tasks.payload, "decision")
-	assert.Equal(t, false, tasks.payload["paid"])
-	assert.Equal(t, "https://slpacargoapi.slpa.lk/invoices/INV-2026-04412.pdf", tasks.payload["invoice_url"])
-	assert.Equal(t, 4820.5, tasks.payload["payable"])
+	assert.Equal(t, true, tasks.payload["paid"])
+	assert.Equal(t, "https://slpacargoapi.slpa.lk/receipts/INV-2026-04412.pdf", tasks.payload["receipt_url"])
+	assert.Equal(t, 4820.5, tasks.payload["payable_lkr"])
+}
+
+// The invoice is asked for directly now, so an announcement that one exists is
+// refused like any event this route does not model: a 400 tells the CMS its
+// redelivery is pointless, rather than leaving it to retry an event nothing
+// acts on.
+func TestHandleWebhook_RefusesTheInvoiceGeneratedEvent(t *testing.T) {
+	const body = `{"event":"invoice.generated","slug":"8d326f3a-643a-4a1d-8072-87130288b032","invoice_no":"INV-2026-04412"}`
+
+	h, tasks := handlerOver(t, true)
+	rec := post(t, h, body, Sign([]byte(body), secret))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.False(t, tasks.called, "nothing on the task changed")
 }
