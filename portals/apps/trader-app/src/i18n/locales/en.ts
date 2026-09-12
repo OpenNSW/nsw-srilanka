@@ -125,6 +125,9 @@ const en = {
     goBack: 'Go Back',
     refresh: 'Refresh',
     submitSuccess: 'Application submitted successfully',
+    validation: {
+      requiredFields: 'Please fill in all required fields.',
+    },
     error: {
       missingId: 'Task ID is missing.',
       fetchFailed: 'Failed to fetch task details.',
