@@ -61,7 +61,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			PlaceOfIssue:           officeName(asString(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
 			DocDeclarations:        buildDocDeclarations(uf),
-			Consignment:            buildConsignment(uf, importISO),
+			Consignment:            buildConsignment(uf, importISO, inputs["certificate_items"]),
 		},
 	}
 }
@@ -277,7 +277,45 @@ func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
 	return dd
 }
 
-func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentInput {
+// excludedItemIDs returns the set of commodity IDs the officer explicitly
+// deselected on the certificate-issuance item picker (include_in_certificate
+// == false). certificate_items is required on the officer form and
+// validated before BuildInput is ever called for a submit (see
+// HubInterpreter.BuildEnvelope) — this function stays nil-safe regardless,
+// treating a missing list as excluding nothing.
+func excludedItemIDs(certificateItems any) map[string]bool {
+	excluded := make(map[string]bool)
+	for _, raw := range asSlice(certificateItems) {
+		item := asMap(raw)
+		id := asString(item["id"])
+		if id == "" {
+			continue
+		}
+		if included, ok := item["include_in_certificate"].(bool); ok && !included {
+			excluded[id] = true
+		}
+	}
+	return excluded
+}
+
+// anyItemIncluded reports whether at least one entry in certificateItems will
+// actually end up on the certificate, using the same inclusion rule as
+// excludedItemIDs (missing/non-bool/true all count as included; only an
+// explicit include_in_certificate: false excludes). A certificate_items list
+// that's non-empty but has every item deselected must be rejected the same
+// way an entirely absent list is — otherwise buildConsignment silently
+// produces a certificate with zero consignment items.
+func anyItemIncluded(certificateItems any) bool {
+	for _, raw := range asSlice(certificateItems) {
+		item := asMap(raw)
+		if included, ok := item["include_in_certificate"].(bool); !ok || included {
+			return true
+		}
+	}
+	return false
+}
+
+func buildConsignment(uf map[string]any, importISO string, certificateItems any) spscert.ConsignmentInput {
 	c := spscert.ConsignmentInput{
 		ExportCountry: exportNPPOCode,
 		ImportCountry: importISO,
@@ -311,9 +349,16 @@ func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentIn
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])
-	for i, raw := range asSlice(uf["commodities"]) {
+	excluded := excludedItemIDs(certificateItems)
+	seq := 0
+	for _, raw := range asSlice(uf["commodities"]) {
+		com := asMap(raw)
+		if excluded[asString(com["id"])] {
+			continue
+		}
+		seq++
 		c.Items = append(c.Items, spscert.ItemInput{
-			TradeLines: []spscert.TradeLineInput{buildTradeLine(asMap(raw), i+1, treatment)},
+			TradeLines: []spscert.TradeLineInput{buildTradeLine(com, seq, treatment)},
 		})
 	}
 	return c
