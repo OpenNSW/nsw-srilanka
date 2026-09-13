@@ -1,0 +1,38 @@
+{{- if and .Values.frontend.autoscaling .Values.frontend.autoscaling.enabled }}
+{{- if and .Values.frontend.autoscaling.targetCPUUtilizationPercentage (not (dig "requests" "cpu" "" .Values.frontend.resources)) }}
+{{- fail "frontend.autoscaling.targetCPUUtilizationPercentage requires frontend.resources.requests.cpu to be defined" }}
+{{- end }}
+{{- if and .Values.frontend.autoscaling.targetMemoryUtilizationPercentage (not (dig "requests" "memory" "" .Values.frontend.resources)) }}
+{{- fail "frontend.autoscaling.targetMemoryUtilizationPercentage requires frontend.resources.requests.memory to be defined" }}
+{{- end }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "lk-tnsw.frontend.fullname" . }}
+  labels:
+    {{- include "lk-tnsw.frontend.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "lk-tnsw.frontend.fullname" . }}
+  minReplicas: {{ .Values.frontend.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.frontend.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.frontend.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.frontend.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.frontend.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.frontend.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
