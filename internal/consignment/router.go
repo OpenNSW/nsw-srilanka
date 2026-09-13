@@ -26,6 +26,7 @@ const (
 	errForbiddenRole         = "caller does not hold the requested role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
+	errWorkflowNotFound      = "workflow execution not found"
 )
 
 type CreateConsignmentRequest struct {
@@ -329,6 +330,52 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 		},
 	})
 	httputil.JSON(w, http.StatusOK, dto)
+}
+
+// HandleGetConsignmentEngineStatus handles GET /api/v1/admin/consignments/{id}/engine-status.
+// Returns the root workflow's raw engine state (per-node status straight from the workflow
+// manager, e.g. RUNNING/COMPLETED/AWAITING_ADMIN) — an ops/admin view distinct from the
+// trader-facing GetConsignmentByID, which reflects task-store/business state instead.
+//
+// TODO: this currently only requires nsw:consignment:read — the same scope trader/CHA
+// callers use for their own consignments — and performs no ownership check, so any caller
+// holding it can view any consignment's engine state. That is deliberately deferred: gate
+// this behind a dedicated admin scope/role once one exists (see conversation with the core
+// team about the OpenNSW/core admin-visibility APIs).
+func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.Type() == "" {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	status, err := c.cs.GetEngineStatus(ctx, consignmentID)
+	if err != nil {
+		if errors.Is(err, ErrEngineWorkflowNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to retrieve consignment engine status", err)
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignmentID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"view": "engine-status",
+		},
+	})
+	httputil.JSON(w, http.StatusOK, status)
 }
 
 // resolveTemplateID extracts and validates the workflow template ID from the request.
