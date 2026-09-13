@@ -29,7 +29,7 @@ export function LoginScreen() {
       )}
 
       {/* Hero & Authentication */}
-      <div className="lg:order-last relative flex-1 min-h-125 lg:min-h-screen overflow-hidden">
+      <div className="lg:order-last relative flex-1 min-h-125 lg:min-h-[calc(100vh-2rem)] overflow-hidden">
         {/* Hero background — no clip on mobile (logo has its own strip above), diagonal on desktop */}
         <div className="absolute inset-0 [clip-path:none] lg:[clip-path:polygon(25%_0,100%_0,100%_100%,0%_100%)]">
           <div
@@ -69,7 +69,7 @@ export function LoginScreen() {
       </div>
 
       {/* Identity & Branding */}
-      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 pt-12 pb-16 sm:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-screen">
+      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 pt-12 pb-16 sm:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-[calc(100vh-2rem)]">
         <div className="max-w-md mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
           {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-32 mb-5 object-contain" />}
 
