@@ -21,6 +21,14 @@ var ErrInvalidCallbackPayload = errors.New("invalid callback payload")
 // rather than never sent. The callback is acknowledged and nothing is re-run.
 var ErrDuplicateIntegrationResult = errors.New("integration result already processed for edgeId")
 
+// ErrDuplicateRegisteredReference indicates an integration result carries a
+// cusdecRef another declaration already holds. Unlike a repeated edgeId this is
+// not the retry schedule at work: two edgeIds have resolved to one registered
+// declaration, so recording it again would give the same CusDec two rows and
+// complete its review a second time. The callback is acknowledged and nothing
+// is re-run.
+var ErrDuplicateRegisteredReference = errors.New("integration result already processed for cusdecRef")
+
 // ErrDuplicateEvent indicates a §6.5 event notification has already been
 // applied to the declaration it names. Like a repeated integration result this
 // is expected under the §2 retry schedule, and is acknowledged without
