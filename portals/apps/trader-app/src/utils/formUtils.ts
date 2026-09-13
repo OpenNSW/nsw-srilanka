@@ -10,7 +10,84 @@ const shouldSkipField = (property: any): boolean => {
   if (property['x-globalContext']?.readFrom !== '' && property['x-globalContext']?.readFrom !== undefined) {
     return true
   }
+  // Skip x-computed fields: ComputedControl derives these from its configured
+  // inputs and rewrites them on every recompute, so any sample value we wrote
+  // here would be immediately overwritten anyway.
+  if (property['x-computed'] !== undefined) {
+    return true
+  }
   return false
+}
+
+// x-spreadsheet fields are `type: 'object'` with `sheet`/`derivations` sub-
+// properties, so the generic object walk would "fill" them with an empty,
+// meaningless {sheet: [], derivations: {}}. They need their own generator.
+const isSpreadsheetField = (property: unknown): boolean =>
+  (property as SpreadsheetSchema | null)?.['x-spreadsheet'] !== undefined
+
+// The slices of an x-spreadsheet schema this generator reads.
+interface SpreadsheetSchema {
+  'x-spreadsheet'?: { persistSheet?: boolean; columnHeader?: boolean; rowHeader?: boolean }
+  'x-evaluate'?: { id?: unknown; label?: unknown }[]
+}
+
+// Generic column names for a generated sheet — this is demo data standing in
+// for a file nobody uploaded, so it deliberately doesn't try to imitate any
+// particular industry's real columns.
+const SAMPLE_SHEET_COLUMNS = ['Item', 'Description', 'Quantity', 'Rate', 'Value']
+const SAMPLE_SHEET_ROWS = 3
+
+// Builds the same { sheet, derivations } shape SpreadsheetControl persists
+// after a real upload, so a spreadsheet-backed form can be filled and
+// submitted without a file. The derivations are sample numbers rather than
+// values actually computed from `sheet` by the formula engine — for a demo
+// button that's fine, and it keeps this helper free of any dependency on the
+// renderer package's internals. What does matter, and is honoured here: the
+// derivation map is keyed by each x-evaluate `id`, so sibling x-computed
+// fields reading `<field>.derivations.<id>.value` resolve to a real number.
+const generateSpreadsheetValue = (property: unknown): Record<string, unknown> => {
+  const schema = (property ?? {}) as SpreadsheetSchema
+  const options = schema['x-spreadsheet'] ?? {}
+  const evaluate = Array.isArray(schema['x-evaluate']) ? schema['x-evaluate'] : []
+
+  const derivations: Record<string, unknown> = {}
+  evaluate.forEach((entry, index) => {
+    if (!entry || typeof entry.id !== 'string') return
+    derivations[entry.id] = {
+      label: typeof entry.label === 'string' ? entry.label : entry.id,
+      value: (index + 1) * 1000,
+    }
+  })
+
+  const value: Record<string, unknown> = { derivations }
+
+  // persistSheet: false means the real control stores derivations only.
+  if (options.persistSheet !== false) {
+    const rows = Array.from({ length: SAMPLE_SHEET_ROWS }, (_, r) => [
+      `Sample ${r + 1}`,
+      `Demo row ${r + 1}`,
+      (r + 1) * 10,
+      (r + 1) * 100,
+      (r + 1) * 1000,
+    ])
+    // Either header flag makes the persisted sheet records-shaped; with
+    // neither, it stays the raw matrix. Mirrors shapeSheet in the renderers.
+    value.sheet =
+      options.columnHeader || options.rowHeader
+        ? rows.map((row) => Object.fromEntries(SAMPLE_SHEET_COLUMNS.map((col, i) => [col, row[i]])))
+        : [[...SAMPLE_SHEET_COLUMNS], ...rows]
+  }
+
+  return value
+}
+
+// The `required` list at one schema level, as a Set. Autofill only ever fills
+// required fields — it exists to get a form to a submittable state quickly,
+// and filling optional fields just buries the tester in sample values they
+// then have to clear out one by one.
+const requiredNames = (schema: unknown): Set<string> => {
+  const required = (schema as { required?: unknown } | null)?.required
+  return new Set<string>(Array.isArray(required) ? (required as string[]) : [])
 }
 
 // Generate sample data for a field based on its schema
@@ -91,11 +168,18 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
       // Fall back to a generic sample value
       const label = property.title || fieldName
       return `Sample ${label}`
-    case 'object':
-      // Recursively generate nested objects
+    case 'object': {
+      // A spreadsheet field is an object too, but its contents are a persisted
+      // upload result, not ordinary sub-fields — check before the generic walk.
+      if (isSpreadsheetField(property)) {
+        return generateSpreadsheetValue(property)
+      }
+      // Recursively generate nested objects, required sub-fields only
       if (property.properties) {
+        const required = requiredNames(property)
         const nestedObj: Record<string, unknown> = {}
         for (const [nestedName, nestedProperty] of Object.entries(property.properties)) {
+          if (!required.has(nestedName)) continue
           const value = generateSampleValue(nestedProperty, nestedName)
           if (value !== undefined) {
             nestedObj[nestedName] = value
@@ -104,6 +188,7 @@ const generateSampleValue = (property: any, fieldName: string): unknown => {
         return nestedObj
       }
       return {}
+    }
     case 'array':
       if (property.items) {
         if (Array.isArray(property.items)) {
@@ -137,13 +222,26 @@ export const autoFillForm = (schema: JsonSchema, currentValues: any = {}): any =
     const result = { ...currentValues }
 
     if (currentSchema.properties) {
+      const required = requiredNames(currentSchema)
       for (const [name, property] of Object.entries(currentSchema.properties)) {
+        // Required fields only — see requiredNames above for why.
+        if (!required.has(name)) {
+          continue
+        }
         // Skip fields that should not be auto-filled
         if (shouldSkipField(property)) {
           continue
         }
 
-        if (property.type === 'object' && property.properties) {
+        if (isSpreadsheetField(property)) {
+          // Checked before the generic object branch below: a spreadsheet
+          // field is an object, but walking its sheet/derivations sub-schema
+          // would produce an empty {sheet: [], derivations: {}} that satisfies
+          // the schema while meaning nothing.
+          if (isEmpty(result[name])) {
+            result[name] = generateSpreadsheetValue(property)
+          }
+        } else if (property.type === 'object' && property.properties) {
           // Recursively fill nested objects
           const nestedValues = (result[name] as Record<string, unknown>) || {}
           result[name] = fillNestedValues(property as JsonSchema, nestedValues, [...path, name])
