@@ -9,11 +9,7 @@
     "description": "A unified digital platform enabling seamless and secure trade facilitation services.",
     "heroImageUrl": "",
     "partnerLogos": [{ "url": "", "alt": "" }],
-    "footerLinks": [
-      { "key": "policy", "url": "https://example.com/policy" },
-      { "key": "accessibility", "url": "https://example.com/accessibility" },
-      { "key": "support", "url": "https://example.com/support" }
-    ],
+    "footerLinks": [],
     "copyrightNotice": "© 2026 Trader Portal. All rights reserved."
   }
 }
