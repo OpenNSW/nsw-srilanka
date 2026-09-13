@@ -243,3 +243,27 @@ func TestSave_SendsNothingForAChoiceSLPADoesNotHold(t *testing.T) {
 	require.NoError(t, json.Unmarshal(encoded, &req))
 	assert.Empty(t, req.Containers)
 }
+
+// A refusal releases the container the trader picked.
+//
+// The flow returns to the lookup after a failed save, and the lookup may come
+// back holding different containers. Carrying the old choice forward means the
+// next submission — including one that only meant to look again — retries a
+// pairing SLPA has already refused.
+func TestSave_ARefusalReleasesTheChoice(t *testing.T) {
+	_, out := NewSaveInterpreter().Interpret(nil,
+		body(t, `{"status": 0, "error": {"code": "CONFLICT", "message": "Container already consolidated."}}`))
+
+	value, recorded := out[ChosenCapKey]
+	require.True(t, recorded, "the choice is cleared, not left as it was")
+	assert.Equal(t, "", value)
+}
+
+// A save that worked must not clear it: the step after this one resolves the
+// same container into the number a gate pass is requested by.
+func TestSave_ASuccessKeepsTheChoiceForTheStepAfterIt(t *testing.T) {
+	_, out := NewSaveInterpreter().Interpret(nil,
+		body(t, `{"status": 1, "message": "FCL Container consolidation saved successfully."}`))
+
+	assert.NotContains(t, out, ChosenCapKey)
+}
