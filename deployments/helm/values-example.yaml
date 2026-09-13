@@ -244,6 +244,23 @@ frontend:
     VITE_IDP_CHA_GROUP_NAME: "CHA"
     VITE_SHOW_AUTOFILL_BUTTON: "false"
 
+  # Overrides the image's baked-in public/configs/branding.json (see
+  # values.yaml and the chart README). Replace these example.com links with
+  # your environment's real policy/accessibility/support pages.
+  branding:
+    systemName: "NSW"
+    appName: "Trader Portal"
+    portalName: "Trader Portal"
+    description: "A unified digital platform enabling seamless and secure trade facilitation services."
+    footerLinks:
+      - key: policy
+        url: "https://gov.example.lk/policy"
+      - key: accessibility
+        url: "https://gov.example.lk/accessibility"
+      - key: support
+        url: "https://gov.example.lk/support"
+    copyrightNotice: "© 2026 Trader Portal. All rights reserved."
+
   # Expose the portal. Enable the one that matches your platform.
   #
   # OpenShift Route (default):

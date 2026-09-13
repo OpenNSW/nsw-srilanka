@@ -61,11 +61,25 @@ spec:
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           {{- end }}
-          {{- if .Values.frontend.volumeMounts }}
+          {{- if or .Values.frontend.branding .Values.frontend.volumeMounts }}
           volumeMounts:
+            {{- if .Values.frontend.branding }}
+            - name: branding
+              mountPath: /usr/share/nginx/html/configs/branding.json
+              subPath: branding.json
+            {{- end }}
+            {{- if .Values.frontend.volumeMounts }}
             {{- toYaml .Values.frontend.volumeMounts | nindent 12 }}
+            {{- end }}
           {{- end }}
-      {{- if .Values.frontend.volumes }}
+      {{- if or .Values.frontend.branding .Values.frontend.volumes }}
       volumes:
+        {{- if .Values.frontend.branding }}
+        - name: branding
+          configMap:
+            name: {{ include "lk-tnsw.frontend.fullname" . }}-branding
+        {{- end }}
+        {{- if .Values.frontend.volumes }}
         {{- toYaml .Values.frontend.volumes | nindent 8 }}
+        {{- end }}
       {{- end }}
