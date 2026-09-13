@@ -24,6 +24,7 @@ Templates are grouped by component under `templates/backend/` and `templates/fro
 - **[backend/migration-job.yaml](templates/backend/migration-job.yaml)**: Runs schema migrations as a pre-install/pre-upgrade hook (off by default). No frontend equivalent — the portal has no database.
 - **[backend/route.yaml](templates/backend/route.yaml)** / **[frontend/route.yaml](templates/frontend/route.yaml)**: Exposes each component externally via an OpenShift Route (when `<component>.route.enabled`).
 - **[backend/ingress.yaml](templates/backend/ingress.yaml)** / **[frontend/ingress.yaml](templates/frontend/ingress.yaml)**: Exposes each component externally via a Kubernetes Ingress (when `<component>.ingress.enabled`).
+- **[frontend/branding-configmap.yaml](templates/frontend/branding-configmap.yaml)**: Renders `frontend.branding` into a ConfigMap and mounts it over the image's baked-in `branding.json` (when `frontend.branding` is set).
 
 ## Layout
 
@@ -104,6 +105,20 @@ needs no secrets — its `env` is all public SPA config (see below).
 and read directly by the browser — so every URL must be the one the browser
 will actually hit (e.g. the public backend host), not an in-cluster Service
 name.
+
+### Frontend branding
+
+`frontend.branding` is empty by default, in which case the portal serves the
+neutral placeholder `branding.json` baked into the `tnsw-web` image at build
+time — fine to run with, but not meant to reach real users (placeholder
+footer links, generic copy). Set `frontend.branding` per deployment (see
+`../values-example.yaml`) to override it: the chart renders it into a
+ConfigMap and mounts it over
+`/usr/share/nginx/html/configs/branding.json`, which the SPA fetches at
+startup (`initAppConfig()` in
+[`src/config.ts`](../../../portals/apps/trader-app/src/config.ts)). See
+[`src/configs/types.ts`](../../../portals/apps/trader-app/src/configs/types.ts)
+for the full schema.
 
 ### Health checks
 

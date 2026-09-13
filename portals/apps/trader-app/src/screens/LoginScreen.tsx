@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '@/config'
+import { Footer } from '@/components/Layout/Footer'
 
 export function LoginScreen() {
   const auth = useAuth()
@@ -28,7 +29,7 @@ export function LoginScreen() {
       )}
 
       {/* Hero & Authentication */}
-      <div className="lg:order-last relative flex-1 min-h-125 lg:min-h-screen overflow-hidden">
+      <div className="lg:order-last relative flex-1 min-h-125 lg:min-h-[calc(100vh-2rem)] overflow-hidden">
         {/* Hero background — no clip on mobile (logo has its own strip above), diagonal on desktop */}
         <div className="absolute inset-0 [clip-path:none] lg:[clip-path:polygon(25%_0,100%_0,100%_100%,0%_100%)]">
           <div
@@ -65,22 +66,10 @@ export function LoginScreen() {
             </div>
           </div>
         </div>
-
-        <a
-          href="https://github.com/OpenNSW"
-          target="_blank"
-          rel="noreferrer"
-          className="absolute bottom-4 right-6 z-10 text-xs text-white/60 hover:underline"
-        >
-          {t('common.poweredBy')}
-        </a>
       </div>
 
       {/* Identity & Branding */}
-      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 py-12 lg:py-0 relative z-10 bg-app-surface lg:min-h-screen">
-        <p className="absolute bottom-4 left-8 lg:left-36 text-xs text-foreground-muted">
-          {import.meta.env.VITE_APP_VERSION || 'dev'}
-        </p>
+      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 pt-12 pb-16 sm:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-[calc(100vh-2rem)]">
         <div className="max-w-md mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
           {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-32 mb-5 object-contain" />}
 
@@ -104,6 +93,8 @@ export function LoginScreen() {
           )}
         </div>
       </div>
+
+      <Footer />
     </div>
   )
 }
