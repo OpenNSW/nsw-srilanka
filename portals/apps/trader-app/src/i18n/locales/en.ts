@@ -20,12 +20,12 @@ const en = {
         verifiedDocs: 'Verified Docs',
       },
       toggle: {
-      collapse: 'Collapse',
-      expand: 'Expand',
-      collapseTitle: 'Collapse sidebar',
-      expandTitle: 'Expand sidebar',
+        collapse: 'Collapse',
+        expand: 'Expand',
+        collapseTitle: 'Collapse sidebar',
+        expandTitle: 'Expand sidebar',
+      },
     },
-  },
 
     roles: {
       primary: '(Primary)',
@@ -168,28 +168,29 @@ const en = {
       },
     },
 
-  // Footer.tsx. Labels are resolved by footerLinks[].key, not carried in branding.json.
-  footer: {
-    links: {
-      policy: 'Policy',
-      accessibility: 'Accessibility',
-      support: 'Support',
+    // Footer.tsx. Labels are resolved by footerLinks[].key, not carried in branding.json.
+    footer: {
+      links: {
+        policy: 'Policy',
+        accessibility: 'Accessibility',
+        support: 'Support',
+      },
     },
-  },
 
-  common: {
-    dateTimeAt: '{{date}} at {{time}}',
-    poweredBy: 'Powered by OpenNSW',
-    pagination: {
-      total: 'Total: {{count}}',
-      page: 'Page {{page}} of {{totalPages}}',
-      previous: 'Previous',
-      next: 'Next',
-    },
-    error: {
-      title: 'Something went wrong',
-      unexpected: 'An unexpected error occurred',
-      tryAgain: 'Try Again',},
+    common: {
+      dateTimeAt: '{{date}} at {{time}}',
+      poweredBy: 'Powered by OpenNSW',
+      pagination: {
+        total: 'Total: {{count}}',
+        page: 'Page {{page}} of {{totalPages}}',
+        previous: 'Previous',
+        next: 'Next',
+      },
+      error: {
+        title: 'Something went wrong',
+        unexpected: 'An unexpected error occurred',
+        tryAgain: 'Try Again',
+      },
     },
   },
 } as const

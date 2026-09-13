@@ -35,7 +35,7 @@ export function Footer() {
   }
 
   return (
-    <footer className="fixed inset-x-0 bottom-0 z-30 flex flex-col items-center justify-center gap-1 border-t border-border bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0">
+    <footer className="fixed inset-x-0 bottom-0 z-30 flex h-16 flex-col items-center justify-center gap-1 border-t border-border bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0">
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
         {footerLinks.map((link) => {
           const label = footerLinkLabel(link.key)
