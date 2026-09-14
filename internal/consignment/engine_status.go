@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+
+	workflow "github.com/OpenNSW/core/workflow"
 )
 
 // EngineNodeDTO is a presentational view of one DAG node's raw engine state, as
@@ -22,6 +24,11 @@ type EngineNodeDTO struct {
 	LastError      string    `json:"last_error,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+	// ChildWorkflowIDs lists any child workflow executions spawned by this node (SPLIT_TASK /
+	// BATCH_SPLIT). Each ID can be fetched via the same engine-status endpoint (it treats the
+	// path parameter as a workflow ID, not a consignment record) to drill down, regardless of
+	// whether that child has since completed.
+	ChildWorkflowIDs []string `json:"child_workflow_ids,omitempty"`
 }
 
 // EngineStatusDTO is the root workflow's raw engine state for a consignment.
@@ -59,14 +66,20 @@ func (s *Service) GetEngineStatus(ctx context.Context, consignmentID string) (*E
 
 	nodes := make([]EngineNodeDTO, 0, len(instance.NodeInfo))
 	for _, n := range instance.NodeInfo {
+		// A DAG can define far more nodes than are ever relevant to look at — omit ones the
+		// interpreter hasn't reached yet, since "not started" carries no ops-actionable signal.
+		if n.Status == workflow.NodeStatusNotStarted {
+			continue
+		}
 		nodes = append(nodes, EngineNodeDTO{
-			ID:             n.ID,
-			Type:           string(n.Type),
-			TaskTemplateID: n.TaskTemplateID,
-			Status:         string(n.Status),
-			LastError:      n.LastError,
-			CreatedAt:      n.CreatedAt,
-			UpdatedAt:      n.UpdatedAt,
+			ID:               n.ID,
+			Type:             string(n.Type),
+			TaskTemplateID:   n.TaskTemplateID,
+			Status:           string(n.Status),
+			LastError:        n.LastError,
+			CreatedAt:        n.CreatedAt,
+			UpdatedAt:        n.UpdatedAt,
+			ChildWorkflowIDs: n.ChildWorkflowIDs,
 		})
 	}
 	// NodeInfo is a map; sort for a stable, readable response instead of

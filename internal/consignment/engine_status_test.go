@@ -28,7 +28,11 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
 			"node-b": {ID: "node-b", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusRunning, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)},
-			"node-a": {ID: "node-a", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusCompleted, CreatedAt: now, UpdatedAt: now},
+			"node-a": {
+				ID: "node-a", Type: workflow.NodeTypeSplitTask, Status: workflow.NodeStatusCompleted, CreatedAt: now, UpdatedAt: now,
+				ChildWorkflowIDs: []string{consignmentID + "--node-a--branch-1", consignmentID + "--node-a--branch-2"},
+			},
+			"node-c": {ID: "node-c", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusNotStarted, CreatedAt: now.Add(2 * time.Second), UpdatedAt: now.Add(2 * time.Second)},
 		},
 		AuditTrail: []string{"workflow started"},
 	}
@@ -39,12 +43,15 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 	assert.Equal(t, consignmentID, result.ConsignmentID)
 	assert.Equal(t, "RUNNING", result.Status)
 	assert.Equal(t, []string{"workflow started"}, result.AuditTrail)
+	// node-c (NOT_STARTED) is filtered out — only node-a and node-b remain.
 	require.Len(t, result.Nodes, 2)
 	// Sorted by CreatedAt: node-a (earlier) before node-b.
 	assert.Equal(t, "node-a", result.Nodes[0].ID)
 	assert.Equal(t, "COMPLETED", result.Nodes[0].Status)
+	assert.Equal(t, []string{consignmentID + "--node-a--branch-1", consignmentID + "--node-a--branch-2"}, result.Nodes[0].ChildWorkflowIDs)
 	assert.Equal(t, "node-b", result.Nodes[1].ID)
 	assert.Equal(t, "RUNNING", result.Nodes[1].Status)
+	assert.Empty(t, result.Nodes[1].ChildWorkflowIDs)
 	mockWM.AssertExpectations(t)
 }
 

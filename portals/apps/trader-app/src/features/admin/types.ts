@@ -12,6 +12,10 @@ export interface EngineNode {
   last_error?: string
   created_at: string
   updated_at: string
+  // IDs of any child workflow executions this node spawned (SPLIT_TASK / BATCH_SPLIT). Each can
+  // be looked up via the same engine-status endpoint to drill down, whether or not it has since
+  // completed.
+  child_workflow_ids?: string[]
 }
 
 export type EngineWorkflowStatus = 'RUNNING' | 'COMPLETED' | 'FAILED'

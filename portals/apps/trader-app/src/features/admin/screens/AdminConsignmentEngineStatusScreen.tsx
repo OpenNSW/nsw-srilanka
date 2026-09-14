@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
 import { ReloadIcon } from '@radix-ui/react-icons'
 import { getConsignmentEngineStatus } from '@/features/admin/service'
-import type { EngineNodeStatus, EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
+import type { EngineNode, EngineNodeStatus, EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
 
 const WORKFLOW_STATUS_COLOR: Record<EngineWorkflowStatus, 'orange' | 'green' | 'red'> = {
   RUNNING: 'orange',
@@ -19,6 +19,9 @@ const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 
   AWAITING_ADMIN: 'amber',
 }
 
+// Shared grid so NodeRow's columns line up under the header regardless of nesting depth.
+const NODE_ROW_GRID = 'grid grid-cols-[1fr_110px_130px_150px_1fr] gap-2 items-center'
+
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
@@ -30,16 +33,29 @@ function formatDateTime(iso: string): string {
 // direct URL, not linked from trader/CHA navigation.
 export function AdminConsignmentEngineStatusScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
+
+  if (!consignmentId) {
+    return (
+      <div className="p-6">
+        <Text color="red">A consignment ID is required.</Text>
+      </div>
+    )
+  }
+
+  // Keyed on consignmentId so navigating to a different root remounts fresh.
+  return <EngineStatusView key={consignmentId} workflowId={consignmentId} />
+}
+
+function EngineStatusView({ workflowId }: { workflowId: string }) {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<'notFound' | 'loadFailed' | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!consignmentId) return
     setRefreshing(true)
     try {
-      const result = await getConsignmentEngineStatus(consignmentId)
+      const result = await getConsignmentEngineStatus(workflowId)
       setStatus(result)
       setError(result ? null : 'notFound')
     } catch (err) {
@@ -48,15 +64,11 @@ export function AdminConsignmentEngineStatusScreen() {
     } finally {
       setRefreshing(false)
     }
-  }, [consignmentId])
+  }, [workflowId])
 
-  // Initial load is inlined (rather than reusing `refresh`) so the effect body
-  // itself never calls a setState setter synchronously — only from within the
-  // promise continuation.
   useEffect(() => {
-    if (!consignmentId) return
     let cancelled = false
-    getConsignmentEngineStatus(consignmentId)
+    getConsignmentEngineStatus(workflowId)
       .then((result) => {
         if (cancelled) return
         setStatus(result)
@@ -73,15 +85,7 @@ export function AdminConsignmentEngineStatusScreen() {
     return () => {
       cancelled = true
     }
-  }, [consignmentId])
-
-  if (!consignmentId) {
-    return (
-      <div className="p-6">
-        <Text color="red">A consignment ID is required.</Text>
-      </div>
-    )
-  }
+  }, [workflowId])
 
   if (loading) {
     return (
@@ -126,39 +130,23 @@ export function AdminConsignmentEngineStatusScreen() {
 
       <p className="text-xs font-mono text-foreground-muted mb-6">{status.consignment_id}</p>
 
-      <div className="bg-app-surface rounded-lg shadow mb-6">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left border-b border-app-border">
-              <th className="p-3 font-medium text-foreground-subtle">Node</th>
-              <th className="p-3 font-medium text-foreground-subtle">Type</th>
-              <th className="p-3 font-medium text-foreground-subtle">Status</th>
-              <th className="p-3 font-medium text-foreground-subtle">Updated</th>
-              <th className="p-3 font-medium text-foreground-subtle">Last error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {status.nodes.length === 0 ? (
-              <tr>
-                <td className="p-3 text-foreground-muted" colSpan={5}>
-                  No nodes reported yet.
-                </td>
-              </tr>
-            ) : (
-              status.nodes.map((node) => (
-                <tr key={node.id} className="border-b border-app-border last:border-0">
-                  <td className="p-3 font-mono text-xs">{node.id}</td>
-                  <td className="p-3">{node.type}</td>
-                  <td className="p-3">
-                    <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
-                  </td>
-                  <td className="p-3 text-foreground-muted">{formatDateTime(node.updated_at)}</td>
-                  <td className="p-3 text-red-600">{node.last_error ?? ''}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
+        <div className={`${NODE_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
+          <div className="p-3 font-medium text-foreground-subtle text-sm">Node</div>
+          <div className="p-3 font-medium text-foreground-subtle text-sm">Type</div>
+          <div className="p-3 font-medium text-foreground-subtle text-sm">Status</div>
+          <div className="p-3 font-medium text-foreground-subtle text-sm">Updated</div>
+          <div className="p-3 font-medium text-foreground-subtle text-sm">Last error</div>
+        </div>
+        <div className="min-w-[700px]">
+          {status.nodes.length === 0 ? (
+            <Text size="2" color="gray" className="block p-3">
+              No active or completed nodes yet.
+            </Text>
+          ) : (
+            status.nodes.map((node) => <NodeRow key={node.id} node={node} depth={0} />)
+          )}
+        </div>
       </div>
 
       <div className="bg-app-surface rounded-lg shadow p-4">
@@ -177,6 +165,111 @@ export function AdminConsignmentEngineStatusScreen() {
           </ul>
         )}
       </div>
+    </div>
+  )
+}
+
+// One engine node's row, plus (indented below) an expandable branch per spawned child
+// workflow — SPLIT_TASK/BATCH_SPLIT nodes can have several.
+function NodeRow({ node, depth }: { node: EngineNode; depth: number }) {
+  const childIds = node.child_workflow_ids ?? []
+  return (
+    <div className="border-b border-app-border last:border-0">
+      <div className={`${NODE_ROW_GRID} py-2`} style={{ paddingLeft: depth * 20 }}>
+        <div className="px-3 font-mono text-xs truncate" title={node.id}>
+          {node.id}
+        </div>
+        <div className="px-3 text-sm">{node.type}</div>
+        <div className="px-3">
+          <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
+        </div>
+        <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
+        <div className="px-3 text-xs text-red-600 truncate" title={node.last_error}>
+          {node.last_error ?? ''}
+        </div>
+      </div>
+      {childIds.map((childId) => (
+        <ChildWorkflowBranch key={childId} workflowId={childId} depth={depth + 1} />
+      ))}
+    </div>
+  )
+}
+
+// A collapsed-by-default row for one child workflow. Fetches its engine status only on first
+// expand (not eagerly with the parent), and keeps the result cached in local state so
+// collapsing and re-expanding doesn't re-fetch.
+function ChildWorkflowBranch({ workflowId, depth }: { workflowId: string; depth: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const [fetched, setFetched] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<EngineStatus | null>(null)
+  const [error, setError] = useState<'notFound' | 'loadFailed' | null>(null)
+
+  const ensureFetched = useCallback(() => {
+    if (fetched || loading) return
+    setLoading(true)
+    getConsignmentEngineStatus(workflowId)
+      .then((result) => {
+        setStatus(result)
+        setError(result ? null : 'notFound')
+      })
+      .catch((err: unknown) => {
+        console.error('Failed to fetch child workflow status:', err)
+        setError('loadFailed')
+      })
+      .finally(() => {
+        setLoading(false)
+        setFetched(true)
+      })
+  }, [workflowId, fetched, loading])
+
+  const toggle = () => {
+    setExpanded((prev) => {
+      const next = !prev
+      if (next) ensureFetched()
+      return next
+    })
+  }
+
+  return (
+    <div style={{ paddingLeft: depth * 20 }}>
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-mono text-foreground-muted hover:text-foreground w-full text-left"
+      >
+        <span className={`inline-block text-[10px] transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden>
+          ▸
+        </span>
+        <span className="text-foreground-subtle">child workflow</span>
+        {workflowId}
+      </button>
+
+      {expanded && (
+        <div className="pb-1">
+          {loading && (
+            <div className="flex items-center gap-2 py-1 px-3" style={{ paddingLeft: 20 }}>
+              <Spinner size="1" />
+              <Text size="1" color="gray">
+                Loading…
+              </Text>
+            </div>
+          )}
+          {error && (
+            <Text size="1" color="red" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
+              {error === 'notFound' ? 'No workflow execution found' : 'Failed to load'}
+            </Text>
+          )}
+          {status &&
+            (status.nodes.length === 0 ? (
+              <Text size="1" color="gray" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
+                No active or completed nodes yet.
+              </Text>
+            ) : (
+              status.nodes.map((node) => <NodeRow key={node.id} node={node} depth={depth + 1} />)
+            ))}
+        </div>
+      )}
     </div>
   )
 }
