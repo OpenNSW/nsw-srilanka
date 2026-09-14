@@ -17,11 +17,13 @@ const NEXT_TASK_RETRY_MS = 1000
 const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
 
 function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
-  return nodes.find((node) => {
+  const actionable = nodes.filter((node) => {
     if (node.id === currentTaskId) return false
     if (!isTraderVisibleNodeType(node.workflowNodeTemplate.type)) return false
     return ACTIONABLE_NODE_STATES.has(node.state)
-  })?.id
+  })
+  const successor = actionable.find((node) => node.depends_on?.includes(currentTaskId))
+  return (successor ?? actionable[0])?.id
 }
 
 function hasRejection(zv: ZoneView): boolean {
