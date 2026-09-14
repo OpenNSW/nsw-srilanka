@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { getZoneView, submitTaskStep } from './service'
 import { getConsignment } from '@/features/consignment/service.ts'
 import type { WorkflowNode } from '@/features/consignment/types'
+import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 
@@ -13,14 +14,12 @@ const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const SUBMIT_SUCCESS_DISMISS_MS = 5000
 const NEXT_TASK_MAX_ATTEMPTS = 5
 const NEXT_TASK_RETRY_MS = 1000
-const HIDDEN_NODE_TYPES = new Set(['START', 'END', 'GATEWAY', 'END_NODE', 'SYSTEM', 'SPLIT_TASK'])
 const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
 
 function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
   return nodes.find((node) => {
     if (node.id === currentTaskId) return false
-    const type = node.workflowNodeTemplate.type?.toUpperCase()
-    if (HIDDEN_NODE_TYPES.has(type ?? '')) return false
+    if (!isTraderVisibleNodeType(node.workflowNodeTemplate.type)) return false
     return ACTIONABLE_NODE_STATES.has(node.state)
   })?.id
 }
