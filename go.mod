@@ -4,16 +4,17 @@ go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/LSFLK/argus/pkg/audit v0.1.0
+	github.com/LSFLK/argus/pkg/audit v1.0.0
 	github.com/OpenNSW/core v0.0.0-20260924113947-9d0f524e49ee
-	github.com/OpenNSW/core/authn v0.2.0
+	github.com/OpenNSW/core/authn v0.3.0
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/database v0.1.0
 	github.com/OpenNSW/core/httputil v0.1.0
 	github.com/OpenNSW/core/pagination v0.1.0
-	github.com/OpenNSW/core/payment v0.2.0
+	github.com/OpenNSW/core/payment v0.2.1-0.20260914044355-f85b84486efa
 	github.com/OpenNSW/core/remote v0.8.0
-	github.com/OpenNSW/core/storage v0.1.0
+	github.com/OpenNSW/core/shared v0.3.1-0.20260914044355-9f63678c4393
+	github.com/OpenNSW/core/storage v0.1.1-0.20260914044355-f85b84486efa
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -27,7 +28,6 @@ require (
 
 require (
 	github.com/OpenNSW/core/secret v0.2.0 // indirect
-	github.com/OpenNSW/core/shared v0.3.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.47.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.33.5 // indirect
@@ -74,3 +74,7 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+// storage's Auditor PR requires authn v0.3.0, which drops UserContext.OUHandle.
+// Keep the app on v0.2.0 until the ExtraClaims migration lands separately.
+replace github.com/OpenNSW/core/authn => github.com/OpenNSW/core/authn v0.2.0

@@ -241,7 +241,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-		h.auditEvent(ctx, nswaudit.Event{
+	h.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventTask,
 		Action:     nswaudit.ActionUpdate,
 		TargetType: nswaudit.TargetTask,

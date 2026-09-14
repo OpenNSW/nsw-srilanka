@@ -19,16 +19,24 @@ func (c *captureAuditor) Audit(_ context.Context, e nswaudit.Event) {
 	c.events = append(c.events, e)
 }
 
+type stubDetails map[string]any
+
+func (d stubDetails) Metadata() map[string]any { return d }
+
 func TestCoreAdapter_Payment(t *testing.T) {
 	cap := &captureAuditor{}
 	adapter := nswaudit.NewCoreAdapter(cap)
 
 	adapter.Audit(context.Background(), sharedaudit.Event{
-		Domain:    sharedaudit.DomainPayment,
-		Action:    sharedaudit.ActionCheckout,
-		GatewayID: "govpay",
-		Reference: "REF-1",
-		Status:    "PENDING",
+		EventType:  "PAYMENT",
+		Action:     sharedaudit.ActionCreate,
+		Status:     sharedaudit.StatusSuccess,
+		TargetType: "RESOURCE",
+		TargetID:   "REF-1",
+		Details: stubDetails{
+			"gateway_id": "govpay",
+			"status":     "PENDING",
+		},
 	})
 
 	require.Len(t, cap.events, 1)
@@ -37,24 +45,25 @@ func TestCoreAdapter_Payment(t *testing.T) {
 	assert.Equal(t, nswaudit.ActionCreate, got.Action)
 	assert.Equal(t, nswaudit.TargetPayment, got.TargetType)
 	assert.Equal(t, "REF-1", got.TargetID)
-	assert.Equal(t, "govpay", got.Metadata["gatewayId"])
+	assert.Equal(t, "govpay", got.Metadata["gateway_id"])
 	assert.Equal(t, "PENDING", got.Metadata["status"])
 	assert.False(t, got.Failure)
 }
 
-func TestCoreAdapter_StorageFailure(t *testing.T) {
+func TestCoreAdapter_StoragePresignFailure(t *testing.T) {
 	cap := &captureAuditor{}
 	adapter := nswaudit.NewCoreAdapter(cap)
 
 	adapter.Audit(context.Background(), sharedaudit.Event{
-		Domain:   sharedaudit.DomainStorage,
-		Action:   sharedaudit.ActionPresignUpload,
-		Key:      "obj-1",
-		Filename: "doc.pdf",
-		MimeType: "application/pdf",
-		Size:     12,
-		Failure:  true,
-		Error:    "boom",
+		EventType:  "PRESIGN_UPLOAD",
+		Action:     sharedaudit.ActionCreate,
+		Status:     sharedaudit.StatusFailure,
+		TargetType: "RESOURCE",
+		TargetID:   "obj-1",
+		Details: stubDetails{
+			"filename": "doc.pdf",
+			"error":    "boom",
+		},
 	})
 
 	require.Len(t, cap.events, 1)
@@ -68,10 +77,22 @@ func TestCoreAdapter_StorageFailure(t *testing.T) {
 	assert.Equal(t, "doc.pdf", got.Metadata["filename"])
 }
 
+func TestCoreAdapter_UnknownEventTypeDropped(t *testing.T) {
+	cap := &captureAuditor{}
+	adapter := nswaudit.NewCoreAdapter(cap)
+
+	adapter.Audit(context.Background(), sharedaudit.Event{
+		EventType: "UNKNOWN",
+		Action:    sharedaudit.ActionRead,
+	})
+
+	assert.Empty(t, cap.events)
+}
+
 func TestCoreAdapter_NilSafe(t *testing.T) {
 	assert.NotPanics(t, func() {
 		var adapter *nswaudit.CoreAdapter
-		adapter.Audit(context.Background(), sharedaudit.Event{Domain: sharedaudit.DomainPayment})
-		nswaudit.NewCoreAdapter(nil).Audit(context.Background(), sharedaudit.Event{Domain: sharedaudit.DomainPayment})
+		adapter.Audit(context.Background(), sharedaudit.Event{EventType: "PAYMENT"})
+		nswaudit.NewCoreAdapter(nil).Audit(context.Background(), sharedaudit.Event{EventType: "PAYMENT"})
 	})
 }

@@ -6,8 +6,16 @@ import (
 	sharedaudit "github.com/OpenNSW/core/shared/audit"
 )
 
+// Core event types emitted by core/payment and core/storage. They are not the
+// Argus enums configured in configs/argus/config.yaml, so the adapter maps them.
+const (
+	coreEventPayment       = "PAYMENT"
+	coreEventStorage       = "STORAGE"
+	coreEventPresignUpload = "PRESIGN_UPLOAD"
+)
+
 // CoreAdapter bridges core/shared/audit.Auditor (used by core/payment and
-// core/storage) to the application Auditor that writes through Argus.
+// core/storage via WithAuditor) to the application Auditor that writes through Argus.
 type CoreAdapter struct {
 	auditor Auditor
 }
@@ -17,54 +25,43 @@ func NewCoreAdapter(a Auditor) *CoreAdapter {
 	return &CoreAdapter{auditor: a}
 }
 
-// Audit implements sharedaudit.Auditor.
+// Audit implements sharedaudit.Auditor. Actor, trace ID, and timestamp are left
+// for Recorder to derive from context; core events do not populate those fields.
 func (a *CoreAdapter) Audit(ctx context.Context, e sharedaudit.Event) {
 	if a == nil || a.auditor == nil {
 		return
 	}
 
-	var (
-		eventType  EventType
-		targetType TargetType
-		targetID   string
-		metadata   map[string]any
-	)
-
-	switch e.Domain {
-	case sharedaudit.DomainPayment:
-		eventType = EventPayment
-		targetType = TargetPayment
-		targetID = e.Reference
-		metadata = map[string]any{
-			"gatewayId": e.GatewayID,
-			"status":    e.Status,
-		}
-	case sharedaudit.DomainStorage:
-		eventType = EventStorage
-		targetType = TargetStorage
-		targetID = e.Key
-		metadata = map[string]any{
-			"filename": e.Filename,
-			"mimeType": e.MimeType,
-			"size":     e.Size,
-		}
-	default:
+	eventType, action, targetType, ok := mapCoreEvent(e)
+	if !ok {
 		return
 	}
 
-	if e.Error != "" {
-		if metadata == nil {
-			metadata = map[string]any{}
-		}
-		metadata["error"] = e.Error
+	var metadata map[string]any
+	if e.Details != nil {
+		metadata = e.Details.Metadata()
 	}
 
 	a.auditor.Audit(ctx, Event{
 		EventType:  eventType,
-		Action:     Action(e.Action),
+		Action:     action,
 		TargetType: targetType,
-		TargetID:   targetID,
-		Failure:    e.Failure,
+		TargetID:   e.TargetID,
+		Failure:    e.Status == sharedaudit.StatusFailure,
 		Metadata:   metadata,
 	})
+}
+
+func mapCoreEvent(e sharedaudit.Event) (EventType, Action, TargetType, bool) {
+	action := Action(e.Action)
+	switch e.EventType {
+	case coreEventPayment, string(EventPayment):
+		return EventPayment, action, TargetPayment, true
+	case coreEventStorage, string(EventStorage):
+		return EventStorage, action, TargetStorage, true
+	case coreEventPresignUpload:
+		return EventStorage, ActionPresignUpload, TargetStorage, true
+	default:
+		return "", "", "", false
+	}
 }
