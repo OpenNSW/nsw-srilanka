@@ -118,6 +118,63 @@ func TestRunner_RequestExtractAndStatusAssertion(t *testing.T) {
 	}
 }
 
+// expectPresent/expectAbsent are what let a flow assert on the *shape* of a
+// response, not just its status: that a caller got the parts they are entitled
+// to and none of the parts they are not.
+func TestRunner_PresenceAssertions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"view":{"status_message":{"type":"MARKDOWN"}}}`))
+	}))
+	defer srv.Close()
+	r := New(srv.URL, srv.Client())
+
+	step := func(req *Request) *Flow {
+		return &Flow{Name: "t", Steps: []Step{{Name: "read", Request: req}}}
+	}
+	get := func() *Request { return &Request{Method: "GET", Path: "/"} }
+
+	t.Run("present path passes, absent path passes", func(t *testing.T) {
+		req := get()
+		req.ExpectPresent = []string{"view.status_message.type"}
+		req.ExpectAbsent = []string{"view.workspace"}
+		if err := r.Run(context.Background(), step(req)); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	})
+
+	t.Run("expectPresent fails when the path is missing", func(t *testing.T) {
+		req := get()
+		req.ExpectPresent = []string{"view.workspace"}
+		err := r.Run(context.Background(), step(req))
+		if err == nil || !strings.Contains(err.Error(), "expectPresent") {
+			t.Fatalf("got %v, want an expectPresent failure", err)
+		}
+	})
+
+	// The assertion this whole field exists for: a section the caller must not
+	// see, present in the response, has to fail the step.
+	t.Run("expectAbsent fails when the path is present", func(t *testing.T) {
+		req := get()
+		req.ExpectAbsent = []string{"view.status_message.type"}
+		err := r.Run(context.Background(), step(req))
+		if err == nil || !strings.Contains(err.Error(), "expectAbsent") {
+			t.Fatalf("got %v, want an expectAbsent failure", err)
+		}
+	})
+
+	// A step asserting only a status code must not require a JSON object body,
+	// so the body is parsed lazily.
+	t.Run("a status-only step never parses the body", func(t *testing.T) {
+		plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not json"))
+		}))
+		defer plain.Close()
+		if err := New(plain.URL, plain.Client()).Run(context.Background(), step(get())); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	})
+}
+
 func TestRunner_WaitMatchesNode(t *testing.T) {
 	detail := `{"id":"c-1","state":"IN_PROGRESS","workflowNodes":[
 		{"id":"task-init","state":"COMPLETED","workflowNodeTemplate":{"name":"[Trade] Initialize Consignment","type":"APPLICATION"}},
