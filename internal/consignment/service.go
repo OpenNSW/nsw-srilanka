@@ -211,9 +211,7 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 
 // GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID but
 // performs no trader/CHA ownership check — callers must already be gated to ConsignmentAdminRead
-// by the router (see HandleGetConsignmentByID's admin branch). This mirrors the ownership-free
-// contract GetAgencySummary and GetEngineStatus already use for that scope, rather than
-// introducing a third, narrower way to read consignment data for admins.
+// by the router (see HandleAdminGetConsignmentByID).
 func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID string) (*DetailDTO, error) {
 	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
 	if err != nil {

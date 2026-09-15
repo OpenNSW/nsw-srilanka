@@ -18,10 +18,9 @@ export async function getConsignmentEngineStatus(consignmentId: string): Promise
   }
 }
 
-// Ops/admin view of the full consignment detail — GET /api/v1/admin/consignments/{id}, gated on
-// ConsignmentAdminRead with no trader/CHA ownership check (see HandleAdminGetConsignmentByID on
-// the backend). Deliberately not the trader/CHA-facing getConsignment() in
-// features/consignment/service.ts, which would 404/403 for the admins this screen serves.
+// Ops/admin view of the full consignment detail, no trader/CHA ownership check — not the
+// trader/CHA-facing getConsignment() in features/consignment/service.ts, which 404s/403s for
+// admins inspecting a consignment outside their own company.
 export async function getConsignmentForAdmin(consignmentId: string): Promise<ConsignmentDetail | null> {
   try {
     const { data } = await http.request<ConsignmentDetail>({

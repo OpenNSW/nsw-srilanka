@@ -36,15 +36,9 @@ type EngineStatusDTO struct {
 	Nodes         []EngineNodeDTO `json:"nodes"`
 	AuditTrail    []string        `json:"audit_trail"`
 	// GlobalVariables is the workflow instance's shared, dynamic business data
-	// (workflow.WorkflowInstance.WorkflowVariables), exposed at the workflow level rather than
-	// per node — every node in this workflow sees the same snapshot. Previously omitted here
-	// over business/PII concerns; this endpoint is already gated behind ConsignmentAdminRead
-	// and reachable only by direct URL (see HandleGetConsignmentEngineStatus), so it's exposed
-	// on the same terms an admin already has via the Temporal UI.
-	//
-	// Per-node inputs/outputs and the task's config template (from the task store, keyed by
-	// node ID — TaskManager.StartTask uses the node ID as the TaskID) are a deliberately
-	// separate follow-up, since they need their own click-through UI rather than living here.
+	// (workflow.WorkflowInstance.WorkflowVariables) — workflow-wide, not per node; every node in
+	// this workflow sees the same snapshot. May hold business/PII data, hence ConsignmentAdminRead
+	// rather than the trader/CHA-facing ConsignmentRead scope.
 	GlobalVariables map[string]any `json:"global_variables,omitempty"`
 }
 

@@ -239,11 +239,9 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   )
 }
 
-// Global variables belong to a workflow instance (root or child), not to any one node — see
-// EngineStatus.global_variables. The dialog is opened from a "Global variables" action at the
-// root header and on each expanded child-workflow branch, always labeled with which instance
-// it's showing, rather than from individual node rows (which would misleadingly imply the data
-// is node-specific). Per-node inputs/outputs and config template are a planned follow-up.
+// Global variables belong to a workflow instance (root or child), not to any one node — opened
+// from a "Global variables" action per workflow instance rather than per node row, which would
+// misleadingly imply the data is node-specific.
 function WorkflowVariablesDialog({
   target,
   onClose,

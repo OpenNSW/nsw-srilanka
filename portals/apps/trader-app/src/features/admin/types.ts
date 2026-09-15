@@ -26,8 +26,6 @@ export interface EngineStatus {
   nodes: EngineNode[]
   audit_trail: string[]
   // Workflow-wide shared/dynamic business data (workflow.WorkflowInstance.WorkflowVariables on
-  // the backend) — the same snapshot regardless of which node you're looking at. Per-node
-  // inputs/outputs and config template are a separate follow-up (see task store, keyed by node
-  // ID), not available here yet.
+  // the backend) — the same snapshot regardless of which node you're looking at.
   global_variables?: Record<string, unknown>
 }
