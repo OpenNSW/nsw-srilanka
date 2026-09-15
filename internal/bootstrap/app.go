@@ -380,11 +380,16 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/users/me", withAuth(withScope(scopes.ProfileRead)(http.HandlerFunc(profileHandler.HandleGetProfile))))
 	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
 	mux.Handle("GET /api/v1/consignments/{id}/agency", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentAgency))))
-	// Ops/admin view of the root workflow's raw engine state — gated behind the
-	// dedicated admin scope, not the trader/CHA-facing consignment read scope.
-	mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
+
+	// Ops/admin views of consignment data — gated behind the dedicated admin scope, not the
+	// trader/CHA-facing consignment read scope, and with no per-consignment ownership check.
+	// Kept together (and as their own handlers, not scope branches on the routes above) so this
+	// distinct trust boundary — a small admin group that can read any consignment — stays easy
+	// to audit as a group rather than spread through the general consignment API.
+	mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
+	mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleAdminGetConsignmentByID))))
 
 	// Storage
 	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))

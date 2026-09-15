@@ -17,6 +17,7 @@ import (
 type EngineNodeDTO struct {
 	ID             string    `json:"id"`
 	Type           string    `json:"type"`
+	GatewayType    string    `json:"gateway_type,omitempty"`
 	TaskTemplateID string    `json:"task_template_id,omitempty"`
 	Status         string    `json:"status"`
 	LastError      string    `json:"last_error,omitempty"`
@@ -30,13 +31,16 @@ type EngineNodeDTO struct {
 }
 
 // EngineStatusDTO is the root workflow's raw engine state for a consignment.
-// It deliberately omits WorkflowVariables (may hold business/PII data) — this
-// view exists for ops visibility into node progress, not for reading business data.
 type EngineStatusDTO struct {
 	ConsignmentID string          `json:"consignment_id"`
 	Status        string          `json:"status"`
 	Nodes         []EngineNodeDTO `json:"nodes"`
 	AuditTrail    []string        `json:"audit_trail"`
+	// GlobalVariables is the workflow instance's shared, dynamic business data
+	// (workflow.WorkflowInstance.WorkflowVariables) — workflow-wide, not per node; every node in
+	// this workflow sees the same snapshot. May hold business/PII data, hence ConsignmentAdminRead
+	// rather than the trader/CHA-facing ConsignmentRead scope.
+	GlobalVariables map[string]any `json:"global_variables,omitempty"`
 }
 
 // ErrEngineWorkflowNotFound is returned by GetEngineStatus when no workflow
@@ -71,6 +75,7 @@ func (s *Service) GetEngineStatus(ctx context.Context, consignmentID string) (*E
 		nodes = append(nodes, EngineNodeDTO{
 			ID:               n.ID,
 			Type:             string(n.Type),
+			GatewayType:      string(n.GatewayType),
 			TaskTemplateID:   n.TaskTemplateID,
 			Status:           string(n.Status),
 			LastError:        n.LastError,
@@ -89,9 +94,10 @@ func (s *Service) GetEngineStatus(ctx context.Context, consignmentID string) (*E
 	})
 
 	return &EngineStatusDTO{
-		ConsignmentID: consignmentID,
-		Status:        string(instance.Status),
-		Nodes:         nodes,
-		AuditTrail:    instance.AuditTrail,
+		ConsignmentID:   consignmentID,
+		Status:          string(instance.Status),
+		Nodes:           nodes,
+		AuditTrail:      instance.AuditTrail,
+		GlobalVariables: instance.WorkflowVariables,
 	}, nil
 }

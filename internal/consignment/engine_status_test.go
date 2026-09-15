@@ -25,8 +25,9 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 	now := time.Now()
 
 	instance := &workflow.WorkflowInstance{
-		ID:     consignmentID,
-		Status: workflow.StatusRunning,
+		ID:                consignmentID,
+		Status:            workflow.StatusRunning,
+		WorkflowVariables: map[string]any{"declared_value": float64(1000)},
 		NodeInfo: map[string]*workflow.NodeInfo{
 			"node-b": {ID: "node-b", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusRunning, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)},
 			"node-a": {
@@ -44,6 +45,7 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 	assert.Equal(t, consignmentID, result.ConsignmentID)
 	assert.Equal(t, "RUNNING", result.Status)
 	assert.Equal(t, []string{"workflow started"}, result.AuditTrail)
+	assert.Equal(t, map[string]any{"declared_value": float64(1000)}, result.GlobalVariables)
 	// node-c (NOT_STARTED) is filtered out — only node-a and node-b remain.
 	require.Len(t, result.Nodes, 2)
 	// Sorted by CreatedAt: node-a (earlier) before node-b.
