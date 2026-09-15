@@ -29,7 +29,7 @@ func decoded(t *testing.T, raw string) map[string]any {
 
 func TestBuildRequest_CarriesTheHaulageDetails(t *testing.T) {
 	req := sent(t, map[string]any{
-		"container_no": "CON-FCL-001",
+		"so_container_no": "MSCU8492019",
 		"payload": map[string]any{
 			"truck_no":    " LM-4821 ",
 			"driver_name": "K. Perera",
@@ -38,7 +38,7 @@ func TestBuildRequest_CarriesTheHaulageDetails(t *testing.T) {
 	})
 
 	assert.Equal(t, Request{
-		ContainerNo: "CON-FCL-001",
+		ContainerNo: "MSCU8492019",
 		TruckNo:     "LM-4821",
 		DriverName:  "K. Perera",
 		SealNo:      "SL-93820",
@@ -48,12 +48,28 @@ func TestBuildRequest_CarriesTheHaulageDetails(t *testing.T) {
 // The container comes from what SLPA consolidated, not from the form: a pass for
 // a container that was never consolidated is refused by the CMS with a 422 the
 // trader cannot act on.
-func TestBuildRequest_TakesTheContainerFromTheBranchNotTheForm(t *testing.T) {
+func TestBuildRequest_IssuesAgainstTheServiceOrderContainer(t *testing.T) {
+	// MGMU… is the real box the terminal pre-advised; MSCU… is the placeholder
+	// the order was priced on. SLPA issues the pass against the second, and
+	// echoes that number back on it.
 	req := sent(t, map[string]any{
-		"container_no": "CON-FCL-001",
-		"payload":      map[string]any{"container_no": "CON-TYPED-BY-HAND", "truck_no": "LM-4821"},
+		"so_container_no": "MSCU8492019",
+		"container_no":    "MGMU5248651",
+		"payload":         map[string]any{"container_no": "MGMU5248651", "truck_no": "LM-4821"},
 	})
-	assert.Equal(t, "CON-FCL-001", req.ContainerNo)
+	assert.Equal(t, "MSCU8492019", req.ContainerNo)
+}
+
+// The real container is shown to the trader so they know which box the pass is
+// for. Sending it asks SLPA for a pass against a container no service order was
+// priced on, which they refuse — naming a container the trader can see is right.
+func TestBuildRequest_NeverSendsTheRealContainer(t *testing.T) {
+	req := sent(t, map[string]any{
+		"container_no": "MGMU5248651",
+		"payload":      map[string]any{"container_no": "MGMU5248651", "truck_no": "LM-4821"},
+	})
+	assert.Empty(t, req.ContainerNo, "no service order container on the branch means none is sent")
+	assert.Equal(t, "LM-4821", req.TruckNo, "the rest of the haulage details still go")
 }
 
 func TestInterpret_CapturesWhatTheGateScans(t *testing.T) {
