@@ -3,6 +3,7 @@ import { type ReactNode } from 'react'
 import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Auth'
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 import { RoleSwitcher } from './RoleSwitcher'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { appConfig, displayName } from '@/config'
 import { useProfile } from '@/services/useProfile'
 
@@ -58,6 +59,7 @@ export function TopBar() {
         <BellIcon className="w-5 h-5" />
         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full"></span>
       </button>
+      <LanguageSwitcher />
       <TopBarUserActions onSignOut={handleSignOut} />
     </TopBarShell>
   )
