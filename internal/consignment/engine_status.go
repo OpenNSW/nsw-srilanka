@@ -17,6 +17,7 @@ import (
 type EngineNodeDTO struct {
 	ID             string    `json:"id"`
 	Type           string    `json:"type"`
+	GatewayType    string    `json:"gateway_type,omitempty"`
 	TaskTemplateID string    `json:"task_template_id,omitempty"`
 	Status         string    `json:"status"`
 	LastError      string    `json:"last_error,omitempty"`
@@ -74,6 +75,7 @@ func (s *Service) GetEngineStatus(ctx context.Context, consignmentID string) (*E
 		nodes = append(nodes, EngineNodeDTO{
 			ID:               n.ID,
 			Type:             string(n.Type),
+			GatewayType:      string(n.GatewayType),
 			TaskTemplateID:   n.TaskTemplateID,
 			Status:           string(n.Status),
 			LastError:        n.LastError,
