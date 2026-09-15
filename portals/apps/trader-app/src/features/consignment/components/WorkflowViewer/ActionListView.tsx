@@ -3,6 +3,7 @@ import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
+import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
 
@@ -28,18 +29,7 @@ export function ActionListView({
   const { t } = useTranslation()
 
   const filteredSteps = useMemo(
-    () =>
-      steps.filter((step) => {
-        const type = step.workflowNodeTemplate.type?.toUpperCase()
-        return (
-          type !== 'START' &&
-          type !== 'END' &&
-          type !== 'GATEWAY' &&
-          type !== 'END_NODE' &&
-          type !== 'SYSTEM' &&
-          type !== 'SPLIT_TASK'
-        )
-      }),
+    () => steps.filter((step) => isTraderVisibleNodeType(step.workflowNodeTemplate.type)),
     [steps],
   )
 
