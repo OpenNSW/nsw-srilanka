@@ -203,6 +203,11 @@ func (i *SaveInterpreter) Interpret(callErr error, resp map[string]any) (bool, m
 
 	if !saved {
 		out["error"] = describeFailure(callErr, body, "SLPA did not save the container consolidation:")
+		// The choice is released. It named a container SLPA would not pair, and
+		// the flow goes back to the lookup — which may now hold different
+		// containers — so carrying it forward would let the next submission
+		// retry a refusal the trader never asked to repeat.
+		out[ChosenCapKey] = ""
 		return false, out
 	}
 	return true, out
@@ -264,10 +269,10 @@ func capContainersOut(containers []CapContainer) []map[string]any {
 	out := make([]map[string]any, 0, len(containers))
 	for _, capContainer := range containers {
 		out = append(out, map[string]any{
-			"sqid":               capContainer.Sqid,
-			"container_no":       capContainer.ContainerNo,
-			"container_size":     capContainer.ContainerSize,
-			SOContainerSqidField: capContainer.SOContainerSqid,
+			"sqid":             capContainer.Sqid,
+			"container_no":     capContainer.ContainerNo,
+			"container_size":   capContainer.ContainerSize,
+			SOContainerIDField: capContainer.SOContainerID,
 		})
 	}
 	return out
@@ -297,10 +302,10 @@ func knownCapContainers(value any) []CapContainer {
 	out := make([]CapContainer, 0, len(rows))
 	for _, m := range rows {
 		out = append(out, CapContainer{
-			Sqid:            fields.String(m, "sqid"),
-			ContainerNo:     fields.String(m, "container_no"),
-			ContainerSize:   fields.String(m, "container_size"),
-			SOContainerSqid: m[SOContainerSqidField],
+			Sqid:          fields.String(m, "sqid"),
+			ContainerNo:   fields.String(m, "container_no"),
+			ContainerSize: fields.String(m, "container_size"),
+			SOContainerID: m[SOContainerIDField],
 		})
 	}
 	return out

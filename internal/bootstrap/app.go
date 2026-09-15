@@ -371,7 +371,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleGetTask)))))
-	mux.Handle("POST /api/v1/tasks/{id}/commands/{command}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))

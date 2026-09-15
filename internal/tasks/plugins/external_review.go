@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/taskflow/store"
@@ -48,8 +47,11 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	ctx.Record.State = "QUEUED_EXTERNALLY"
 
 	// Convention: if input_mapping placed a value under the reserved key
-	// "submission", that value is the wire shape OGA sees. Otherwise the
-	// whole inputs bag is sent (default fallback for simple cases).
+	// "submission", that value is the wire shape OGA sees — write any
+	// additional context directly into a nested "submission.<field>" path
+	// in the node's own input_mapping (input_mapping's destination side
+	// supports dot-paths natively). Otherwise the whole inputs bag is sent
+	// (default fallback for simple cases).
 	var data any = ctx.Inputs
 	if submission, ok := ctx.Inputs["submission"]; ok {
 		data = submission
@@ -76,25 +78,8 @@ func buildSubmissionBody(record *store.TaskRecord, data any, taskCode *string, c
 	return map[string]any{
 		"taskCode":      taskCode,
 		"taskId":        record.TaskID,
-		"consignmentId": rootWorkflowID(record.ParentWorkflowID),
+		"consignmentId": record.RootWorkflowID,
 		"serviceUrl":    callbackURL,
 		"data":          data,
 	}
-}
-
-// rootWorkflowID recovers the top-level consignment ID from a (possibly
-// child-workflow-mangled) parent workflow ID by taking everything before the
-// first "--" separator that FormatChildWorkflowID introduces for SPLIT_TASK
-// branches (format: "{root}--{nodeID}--{branchID}").
-//
-// TODO: this is a stop-gap string-parsing derivation that duplicates the one
-// in core/taskflow/store/gorm/model.go. Replace both once the engine threads a
-// RootWorkflowID through TaskPayload/TaskRecord natively (see SPLIT_TASK /
-// dynamic_split.go childVars propagation) so external dispatch can read
-// record.RootWorkflowID directly instead of reconstructing it.
-func rootWorkflowID(parentWorkflowID string) string {
-	if idx := strings.Index(parentWorkflowID, "--"); idx != -1 {
-		return parentWorkflowID[:idx]
-	}
-	return parentWorkflowID
 }
