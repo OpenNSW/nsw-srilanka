@@ -285,9 +285,7 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 // holding ConsignmentAdminRead (enforced at the route, see bootstrap/app.go) may fetch the full
 // consignment detail for any consignment, with no trader/CHA ownership check — unlike
 // HandleGetConsignmentByID above, which is scoped to the caller's own trader/CHA-owned
-// consignments. Kept as its own handler/route rather than a scope branch inside
-// HandleGetConsignmentByID so the two authorization models stay structurally separate: each
-// handler enforces exactly one policy, instead of one shared function having to get both right.
+// consignments.
 func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
