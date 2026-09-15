@@ -5,6 +5,7 @@ import { Layout } from './components/Layout'
 import { ConsignmentScreen } from './features/consignment/screens/ConsignmentScreen.tsx'
 import { ConsignmentDetailScreen } from './features/consignment/screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
+import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './screens/LoginScreen.tsx'
 import { RoleProvider } from './services/RoleContext'
@@ -81,6 +82,8 @@ function App() {
         <Route path="/consignments" element={<ConsignmentScreen />} />
         <Route path="/consignments/:consignmentId" element={<ConsignmentDetailScreen />} />
         <Route path="/consignments/:consignmentId/tasks/:taskId" element={<TaskDetailScreen />} />
+        {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
+        <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
