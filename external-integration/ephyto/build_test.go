@@ -116,6 +116,71 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 	}
 }
 
+// twoItemUserform is sampleUserform with a second commodity added, both
+// carrying the "id" field the NPQS v2 workflow's BATCH_SPLIT tracks key
+// commodities on (sampleUserform's single commodity has none, since the
+// original mapping test predates per-item tracking).
+func twoItemUserform() map[string]any {
+	uf := sampleUserform()
+	commodities := uf["commodities"].([]any)
+	commodities[0].(map[string]any)["id"] = "item-1"
+	uf["commodities"] = append(commodities, map[string]any{
+		"id":                       "item-2",
+		"commodity_common_name":    "Cinnamon Quills",
+		"commodity_botanical_name": "Cinnamomum verum",
+		"quantity_net_weight":      float64(100),
+		"quantity_net_weight_unit": "kg",
+		"packages_count":           float64(10),
+		"origin_country":           "Sri Lanka",
+	})
+	return uf
+}
+
+// The officer's certificate-issuance item picker (introduced so a lab-rejected
+// item never rides along onto a certificate covering the rest of the batch)
+// excludes a commodity by id via include_in_certificate: false. Sequence
+// numbers must stay contiguous after the exclusion — a gap (1, 3) rather than
+// (1, 2) is the kind of detail the Hub's schema validation would reject.
+func TestBuildInput_CertificateItemsExcludesDeselectedItem(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":        twoItemUserform(),
+		"certificate_id":  "PC-2026-000456",
+		"hub_destination": "LK2",
+		"certificate_items": []any{
+			map[string]any{"id": "item-1", "include_in_certificate": true},
+			map[string]any{"id": "item-2", "include_in_certificate": false},
+		},
+	})
+
+	items := in.Certificate.Consignment.Items
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item after exclusion, got %d: %+v", len(items), items)
+	}
+	tl := items[0].TradeLines[0]
+	if tl.Sequence != 1 {
+		t.Errorf("sequence = %d, want 1 (contiguous after exclusion)", tl.Sequence)
+	}
+	if !strings.Contains(tl.CommonNames[0], "Monstera") && tl.ScientificName != "Monstera deliciosa" {
+		t.Errorf("expected the surviving item to be item-1 (Monstera), got %+v", tl)
+	}
+}
+
+// BuildInput itself stays nil-safe even though HubInterpreter.BuildEnvelope
+// now rejects a submit with no certificate_items before BuildInput is ever
+// called — absent data here must still include every declared commodity,
+// unfiltered.
+func TestBuildInput_CertificateItemsAbsentIncludesAllCommodities(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":        twoItemUserform(),
+		"certificate_id":  "PC-2026-000789",
+		"hub_destination": "LK2",
+	})
+
+	if len(in.Certificate.Consignment.Items) != 2 {
+		t.Fatalf("expected 2 items with no certificate_items filter, got %d", len(in.Certificate.Consignment.Items))
+	}
+}
+
 // The Hub refuses an envelope whose certificate has no
 // MainCarriageSPSTransportMovement ("element is mandatory"), so the certificate
 // carries the mode of transport whatever the form said — including nothing.
