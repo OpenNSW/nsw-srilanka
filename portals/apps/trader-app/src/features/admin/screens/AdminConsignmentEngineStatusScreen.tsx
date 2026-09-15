@@ -212,6 +212,7 @@ function ChildWorkflowBranch({ workflowId, depth }: { workflowId: string; depth:
       .then((result) => {
         setStatus(result)
         setError(result ? null : 'notFound')
+        setFetched(true)
       })
       .catch((err: unknown) => {
         console.error('Failed to fetch child workflow status:', err)
@@ -219,7 +220,6 @@ function ChildWorkflowBranch({ workflowId, depth }: { workflowId: string; depth:
       })
       .finally(() => {
         setLoading(false)
-        setFetched(true)
       })
   }, [workflowId, fetched, loading])
 
