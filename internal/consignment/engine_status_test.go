@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 
 	workflow "github.com/OpenNSW/core/workflow"
 )
@@ -63,7 +64,7 @@ func TestConsignmentService_GetEngineStatus_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 	consignmentID := uuid.NewString()
-	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), serviceerror.NewNotFound("workflow not found"))
+	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), fmt.Errorf("%w: workflow not found", workflow.ErrWorkflowNotFound))
 
 	_, err := svc.GetEngineStatus(ctx, consignmentID)
 	assert.ErrorIs(t, err, ErrEngineWorkflowNotFound)

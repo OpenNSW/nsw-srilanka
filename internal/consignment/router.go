@@ -337,11 +337,10 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 // manager, e.g. RUNNING/COMPLETED/AWAITING_ADMIN) — an ops/admin view distinct from the
 // trader-facing GetConsignmentByID, which reflects task-store/business state instead.
 //
-// TODO: this currently only requires nsw:consignment:read — the same scope trader/CHA
-// callers use for their own consignments — and performs no ownership check, so any caller
-// holding it can view any consignment's engine state. That is deliberately deferred: gate
-// this behind a dedicated admin scope/role once one exists (see conversation with the core
-// team about the OpenNSW/core admin-visibility APIs).
+// Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go), not on the
+// trader/CHA nsw:consignment:read scope — this performs no per-consignment ownership
+// check, so any caller holding the admin scope can view any consignment's engine state
+// by design.
 func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)

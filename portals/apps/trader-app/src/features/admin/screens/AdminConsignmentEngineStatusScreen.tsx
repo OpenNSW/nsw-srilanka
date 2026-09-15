@@ -28,9 +28,9 @@ function formatDateTime(iso: string): string {
 }
 
 // Internal ops view of a consignment's raw engine state — the same picture you'd
-// otherwise need the Temporal UI for. Not gated by an admin role yet (backend
-// TODO: OpenNSW/nsw-srilanka HandleGetConsignmentEngineStatus); reachable only by
-// direct URL, not linked from trader/CHA navigation.
+// otherwise need the Temporal UI for. Backend gates this behind the
+// ConsignmentAdminRead scope (see HandleGetConsignmentEngineStatus); reachable
+// only by direct URL, not linked from trader/CHA navigation.
 export function AdminConsignmentEngineStatusScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
 

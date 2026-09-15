@@ -7,8 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
-
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
@@ -57,8 +55,7 @@ func (s *Service) GetEngineStatus(ctx context.Context, consignmentID string) (*E
 
 	instance, err := s.wm.GetStatus(ctx, consignmentID)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if errors.Is(err, workflow.ErrWorkflowNotFound) {
 			return nil, ErrEngineWorkflowNotFound
 		}
 		return nil, fmt.Errorf("failed to get engine status for consignment %s: %w", consignmentID, err)
