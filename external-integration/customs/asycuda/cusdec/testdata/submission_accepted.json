@@ -1,0 +1,142 @@
+{
+  "properties": {
+    "submitter": "1",
+    "nswId": "REPLACE-WITH-FRESH-NSWID"
+  },
+  "submitter": "1",
+  "baseGeneralSegment": {
+    "declarationType": "EX",
+    "declarationProcedure": "1",
+    "declarationMode": "E",
+    "officeCode": "CBEX1",
+    "manifestRegNumber": "",
+    "importer": {
+      "id": "",
+      "name": "RENUKA AGRI FOODS",
+      "address": "JAPAN 2016 31 22, SHIBA KOEN, MINATO-KUTOKYO JP",
+      "countryCode": "JP"
+    },
+    "exporter": {
+      "id": "1340082537000",
+      "name": "CEYLON SPICE EXPORTS (PVT) LTD",
+      "address": "NO 45, PARK STREET, COLOMBO 02",
+      "countryCode": "LK"
+    },
+    "declarantCode": "1040661607000"
+  },
+  "generalSegment": {
+    "numberOfItems": 1,
+    "numberOfPackages": 10,
+    "countryOfExportCode": "LK",
+    "countryOfDestination": "JP",
+    "countryFirstDestination": "JP",
+    "transportVesselName": "TestVessal",
+    "transportVesselNameNationality": "LK",
+    "transportVoageName": "VotageNameHere",
+    "transportVoageNameNationality": "LK",
+    "deliveryTerms": "FOB",
+    "deliveryTermsPlace": "Tokyo",
+    "modeOfTransportAtBorder": "1",
+    "placeOfDischarge": "LKADP",
+    "borderOffice": "CBEX1",
+    "totalCustomsValuation": {
+      "chargeAmount": {
+        "value": 1500,
+        "currencyID": "USD"
+      },
+      "externalFreight": {
+        "value": 100,
+        "currencyID": "USD"
+      },
+      "internalFreight": {
+        "value": 0
+      },
+      "insurance": {
+        "value": 0
+      },
+      "otherCost": {
+        "value": 0
+      },
+      "deductions": {
+        "value": 0
+      }
+    },
+    "containerFlag": true,
+    "numberOfContainers": 2,
+    "warehouseCode": "string",
+    "warehouseDelay": 0,
+    "deferredPayment": "DiffPaymentString"
+  },
+  "goodsShipments": [
+    {
+      "sequenceNumeric": 1,
+      "customsValue": {
+        "chargeAmount": {
+          "value": 1500,
+          "currencyID": "USD"
+        },
+        "externalFreight": {
+          "value": 100,
+          "currencyID": "USD"
+        },
+        "internalFreight": {
+          "value": 0
+        },
+        "insurance": {
+          "value": 0
+        },
+        "otherCost": {
+          "value": 0
+        },
+        "deductions": {
+          "value": 0
+        }
+      },
+      "commodity": {
+        "commercialDescription": "commercial",
+        "commercialDescription1": "commercial",
+        "commodityDescription": "description",
+        "classification": "0801119000",
+        "goodsMeasure": {
+          "grossMassMeasure": {
+            "value": 1500,
+            "unitCode": "KG"
+          },
+          "netWeightMeasure": {
+            "value": 1300,
+            "unitCode": "KG"
+          },
+          "tariffQuantity": {
+            "value": 125,
+            "unitCode": "KGM"
+          }
+        }
+      },
+      "governmentProcedure": {
+        "extendedProcedure": "1000",
+        "nationalProcedure": "000"
+      },
+      "countryOfOriginCode": "LK",
+      "goodsPreference": "",
+      "itemPackage": {
+        "value": 10,
+        "unitCode": "2C"
+      },
+      "numberOfUnits": 1,
+      "bol": "string",
+      "bolSplit": "string",
+      "marksAndNumbers": "test"
+    }
+  ],
+  "remittances": [
+    {
+      "bankCode": "6010",
+      "reference": "RemRefTest",
+      "termsOfPayment": "10",
+      "remittanceValue": {
+        "value": 1500,
+        "currencyID": "USD"
+      }
+    }
+  ]
+}
