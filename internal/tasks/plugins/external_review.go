@@ -48,8 +48,11 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	ctx.Record.State = "QUEUED_EXTERNALLY"
 
 	// Convention: if input_mapping placed a value under the reserved key
-	// "submission", that value is the wire shape OGA sees. Otherwise the
-	// whole inputs bag is sent (default fallback for simple cases).
+	// "submission", that value is the wire shape OGA sees — write any
+	// additional context directly into a nested "submission.<field>" path
+	// in the node's own input_mapping (input_mapping's destination side
+	// supports dot-paths natively). Otherwise the whole inputs bag is sent
+	// (default fallback for simple cases).
 	var data any = ctx.Inputs
 	if submission, ok := ctx.Inputs["submission"]; ok {
 		data = submission

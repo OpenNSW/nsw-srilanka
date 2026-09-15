@@ -61,6 +61,9 @@ func NewHubInterpreter() *HubInterpreter { return &HubInterpreter{} }
 func (HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (string, error) {
 	switch operation {
 	case OpSubmit:
+		if !anyItemIncluded(inputs["certificate_items"]) {
+			return "", &buildError{"Please select which items to include on this certificate before submitting."}
+		}
 		in := BuildInput(inputs)
 		if in.SOAP.To == "" {
 			return "", &buildError{"Please select a destination IPPC Hub connection before submitting."}
