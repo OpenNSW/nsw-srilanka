@@ -165,6 +165,17 @@ frontend:
   # Load environment from existing ConfigMaps or Secrets
   envFrom: []
 
+  # Branding/footer content for the portal — systemName, appName, logoUrl,
+  # footerLinks, copyrightNotice, etc. (see
+  # portals/apps/trader-app/src/configs/types.ts for the full schema). Empty
+  # by default: the image ships public/configs/branding.json baked in at
+  # build time with neutral placeholder content, which is fine to run with
+  # but not meant to reach real users. Set this per deployment to override
+  # that file — when non-empty, it's rendered into a ConfigMap and mounted
+  # over /usr/share/nginx/html/configs/branding.json, which initAppConfig()
+  # (src/config.ts) fetches at app start. See ../values-example.yaml.
+  branding: {}
+
   # Configuration for OpenShift Routes
   route:
     enabled: false
