@@ -199,18 +199,55 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 
 	slog.InfoContext(r.Context(), "tasks: processing complete step command", "taskId", taskID, "command", command)
 
+	// This endpoint mutates task state, so it gets full audit coverage: both
+	// denial shapes and the successful completion.
 	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
 		switch {
 		case errors.Is(err, taskauthzext.ErrUnauthenticated):
+			h.Audit.Record(r.Context(), nswaudit.Event{
+				EventType:  nswaudit.EventTask,
+				Action:     nswaudit.ActionUpdate,
+				TargetType: nswaudit.TargetTask,
+				TargetID:   taskID,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error_code": "task_cmd_unauthenticated",
+					"error":      err.Error(),
+					"command":    command,
+				},
+			})
 			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
 		case errors.Is(err, taskauthzext.ErrForbidden):
 			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
+			h.Audit.Record(r.Context(), nswaudit.Event{
+				EventType:  nswaudit.EventTask,
+				Action:     nswaudit.ActionUpdate,
+				TargetType: nswaudit.TargetTask,
+				TargetID:   taskID,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error_code": "task_cmd_forbidden",
+					"error":      err.Error(),
+					"command":    command,
+				},
+			})
 			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 		default:
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
 		return
 	}
+
+	h.Audit.Record(r.Context(), nswaudit.Event{
+		EventType:  nswaudit.EventTask,
+		Action:     nswaudit.ActionUpdate,
+		TargetType: nswaudit.TargetTask,
+		TargetID:   taskID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"command": command,
+		},
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }
