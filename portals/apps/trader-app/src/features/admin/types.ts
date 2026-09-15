@@ -7,6 +7,9 @@ export type EngineNodeStatus = 'NOT_STARTED' | 'RUNNING' | 'COMPLETED' | 'FAILED
 export interface EngineNode {
   id: string
   type: string
+  // Only present when type is 'GATEWAY' — which kind (EXCLUSIVE_SPLIT, PARALLEL_SPLIT,
+  // EXCLUSIVE_JOIN, PARALLEL_JOIN, BATCH_SPLIT, BATCH_JOIN).
+  gateway_type?: string
   task_template_id?: string
   status: EngineNodeStatus
   last_error?: string

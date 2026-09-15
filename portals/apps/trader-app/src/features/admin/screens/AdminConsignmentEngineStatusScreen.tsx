@@ -153,7 +153,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="soft" color="gray" size="2" asChild>
-            <Link to={`/consignments/${workflowId}`}>View consignment</Link>
+            <Link to={`/admin/consignments/${workflowId}/view`}>View consignment</Link>
           </Button>
           <Button
             variant="soft"
@@ -301,7 +301,7 @@ function NodeRow({
         <div className="px-3 font-mono text-xs truncate" title={node.id}>
           {node.id}
         </div>
-        <div className="px-3 text-sm">{node.type}</div>
+        <div className="px-3 text-sm">{node.gateway_type ?? node.type}</div>
         <div className="px-3">
           <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
         </div>
