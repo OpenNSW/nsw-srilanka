@@ -152,9 +152,9 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Link to={`/consignments/${workflowId}`} className="text-sm text-blue-600 hover:underline">
-            View consignment
-          </Link>
+          <Button variant="soft" color="gray" size="2" asChild>
+            <Link to={`/consignments/${workflowId}`}>View consignment</Link>
+          </Button>
           <Button
             variant="soft"
             color="gray"
