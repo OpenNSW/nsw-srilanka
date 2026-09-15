@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
+	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 const (
@@ -230,6 +231,32 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	consignmentID := r.PathValue("id")
 	if consignmentID == "" {
 		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	// Ops/admin callers bypass the trader/CHA company-ownership check entirely: the route is
+	// scope-gated to allow ConsignmentRead OR ConsignmentAdminRead (see app.go), and
+	// ConsignmentAdminRead exists precisely so a small trusted admin group can inspect any
+	// consignment, the same no-ownership-check contract GetAgencySummary and
+	// HandleGetConsignmentEngineStatus already use for that scope.
+	if slices.Contains(authCtx.Scopes(), scopes.ConsignmentAdminRead) {
+		consignment, err := c.cs.GetConsignmentByIDForAdmin(ctx, consignmentID)
+		if err != nil {
+			if errors.Is(err, ErrConsignmentNotFound) {
+				httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
+				return
+			}
+			httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
+			return
+		}
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionRead,
+			TargetType: nswaudit.TargetConsignment,
+			TargetID:   consignmentID,
+			Metadata:   map[string]any{"view": "admin"},
+		})
+		httputil.JSON(w, http.StatusOK, consignment)
 		return
 	}
 

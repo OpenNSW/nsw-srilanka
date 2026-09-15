@@ -383,7 +383,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Ops/admin view of the root workflow's raw engine state — gated behind the
 	// dedicated admin scope, not the trader/CHA-facing consignment read scope.
 	mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
-	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
+	// Admits ConsignmentRead (trader/CHA, ownership-checked in the handler) or
+	// ConsignmentAdminRead (ops, no ownership check — see HandleGetConsignmentByID).
+	mux.Handle("GET /api/v1/consignments/{id}", withAuth(authzr.RequireAnyScope(scopes.ConsignmentRead, scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
 	// Storage
