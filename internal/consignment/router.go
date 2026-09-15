@@ -17,7 +17,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
-	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 )
 
 const (
@@ -234,32 +233,6 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Ops/admin callers bypass the trader/CHA company-ownership check entirely: the route is
-	// scope-gated to allow ConsignmentRead OR ConsignmentAdminRead (see app.go), and
-	// ConsignmentAdminRead exists precisely so a small trusted admin group can inspect any
-	// consignment, the same no-ownership-check contract GetAgencySummary and
-	// HandleGetConsignmentEngineStatus already use for that scope.
-	if slices.Contains(authCtx.Scopes(), scopes.ConsignmentAdminRead) {
-		consignment, err := c.cs.GetConsignmentByIDForAdmin(ctx, consignmentID)
-		if err != nil {
-			if errors.Is(err, ErrConsignmentNotFound) {
-				httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
-				return
-			}
-			httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
-			return
-		}
-		c.audit.Record(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionRead,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   consignmentID,
-			Metadata:   map[string]any{"view": "admin"},
-		})
-		httputil.JSON(w, http.StatusOK, consignment)
-		return
-	}
-
 	// Resolve the caller's company. Fail closed on any identity problem: a missing
 	// company profile or an unusable OU handle must not grant access.
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
@@ -305,6 +278,46 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	httputil.JSON(w, http.StatusOK, consignment)
+}
+
+// HandleAdminGetConsignmentByID handles GET /api/v1/admin/consignments/{id}. Ops/admin callers
+// holding ConsignmentAdminRead (enforced at the route, see bootstrap/app.go) may fetch the full
+// consignment detail for any consignment, with no trader/CHA ownership check — unlike
+// HandleGetConsignmentByID above, which is scoped to the caller's own trader/CHA-owned
+// consignments. Kept as its own handler/route rather than a scope branch inside
+// HandleGetConsignmentByID so the two authorization models stay structurally separate: each
+// handler enforces exactly one policy, instead of one shared function having to get both right.
+func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.User == nil {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	consignment, err := c.cs.GetConsignmentByIDForAdmin(ctx, consignmentID)
+	if err != nil {
+		if errors.Is(err, ErrConsignmentNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignmentID,
+		Metadata:   map[string]any{"view": "admin"},
+	})
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 

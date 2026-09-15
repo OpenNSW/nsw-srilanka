@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Button, Dialog, Spinner, Text } from '@radix-ui/themes'
 import { ReloadIcon } from '@radix-ui/react-icons'
-import { getConsignmentEngineStatus } from '@/features/admin/service'
+import { getConsignmentEngineStatus, getConsignmentForAdmin } from '@/features/admin/service'
 import type { EngineNode, EngineNodeStatus, EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
-import { getConsignment } from '@/features/consignment/service'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
 
@@ -66,7 +65,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
 
   useEffect(() => {
     let cancelled = false
-    getConsignment(workflowId)
+    getConsignmentForAdmin(workflowId)
       .then((result) => {
         if (!cancelled) setConsignment(result)
       })
@@ -91,7 +90,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
       setRefreshing(false)
     }
     // Best-effort: the business-side panel just keeps its last-known values on failure.
-    getConsignment(workflowId)
+    getConsignmentForAdmin(workflowId)
       .then(setConsignment)
       .catch((err: unknown) => console.error('Failed to fetch consignment details:', err))
   }, [workflowId])
