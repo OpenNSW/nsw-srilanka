@@ -415,7 +415,7 @@ func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http
 	httputil.JSON(w, http.StatusOK, status)
 }
 
-// HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task-workflows/{id}/engine-status.
+// HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task/{id}/engine-status.
 // {id} is a task workflow's own Temporal ID (see EngineNodeDTO.TaskWorkflowID, surfaced by
 // HandleGetConsignmentEngineStatus on the TASK node that spawned it) — a separate ID space and
 // workflow.Manager from the consignment/child-workflow IDs HandleGetConsignmentEngineStatus

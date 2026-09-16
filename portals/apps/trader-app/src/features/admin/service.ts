@@ -23,7 +23,7 @@ export async function getConsignmentEngineStatus(consignmentId: string): Promise
 export async function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<EngineStatus | null> {
   try {
     const { data } = await http.request<EngineStatus>({
-      url: `${API_BASE_URL}/api/v1/admin/task-workflows/${taskWorkflowId}/engine-status`,
+      url: `${API_BASE_URL}/api/v1/admin/task/${taskWorkflowId}/engine-status`,
       attachToken: true,
     })
     return data

@@ -283,61 +283,9 @@ function WorkflowVariablesDialog({ target, onClose }: { target: WorkflowVariable
   )
 }
 
-// One engine node's row, plus (indented below) an expandable branch per spawned child
-// workflow — SPLIT_TASK/BATCH_SPLIT nodes can have several.
-function NodeRow({
-  node,
-  depth,
-  onOpenVariables,
-}: {
-  node: EngineNode
-  depth: number
-  onOpenVariables: (target: WorkflowVariablesTarget) => void
-}) {
-  const childIds = node.child_workflow_ids ?? []
-  return (
-    <div className="border-b border-app-border last:border-0">
-      <div className={`${NODE_ROW_GRID} py-2`} style={{ paddingLeft: depth * 20 }}>
-        <div className="px-3 font-mono text-xs truncate" title={node.id}>
-          {node.id}
-        </div>
-        <div className="px-3 text-sm">{node.gateway_type ?? node.type}</div>
-        <div className="px-3">
-          <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
-        </div>
-        <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
-        <div className="px-3 text-xs text-red-600 truncate" title={node.last_error}>
-          {node.last_error ?? ''}
-        </div>
-      </div>
-      {childIds.map((childId) => (
-        <ChildWorkflowBranch
-          key={childId}
-          workflowId={childId}
-          depth={depth + 1}
-          kind="child"
-          onOpenVariables={onOpenVariables}
-        />
-      ))}
-      {/* A TASK node's own task workflow is a separate ID space/manager from child_workflow_ids
-          above (see EngineNode.task_workflow_id) — same expand/drilldown UI, different fetcher. */}
-      {node.task_workflow_id && (
-        <ChildWorkflowBranch
-          key={node.task_workflow_id}
-          workflowId={node.task_workflow_id}
-          depth={depth + 1}
-          kind="task"
-          onOpenVariables={onOpenVariables}
-        />
-      )}
-    </div>
-  )
-}
-
-// Which nested-workflow drilldown this branch renders: a native engine child (SPLIT_TASK/
+// Which nested-workflow drilldown a branch renders: a native engine child (SPLIT_TASK/
 // BATCH_SPLIT/PARALLEL_SPLIT, fetched via getConsignmentEngineStatus) or a TASK node's own task
-// workflow (a separate ID space/manager, fetched via getTaskWorkflowEngineStatus). Same UI,
-// different fetcher and label.
+// workflow (a separate ID space/manager, fetched via getTaskWorkflowEngineStatus).
 type WorkflowBranchKind = 'child' | 'task'
 
 const BRANCH_FETCHER: Record<WorkflowBranchKind, (id: string) => Promise<EngineStatus | null>> = {
@@ -345,27 +293,10 @@ const BRANCH_FETCHER: Record<WorkflowBranchKind, (id: string) => Promise<EngineS
   task: getTaskWorkflowEngineStatus,
 }
 
-const BRANCH_LABEL: Record<WorkflowBranchKind, string> = {
-  child: 'child workflow',
-  task: 'task workflow',
-}
-
-// A collapsed-by-default row for one nested workflow instance (a native engine child, or a TASK
-// node's own task workflow — see WorkflowBranchKind). Fetches its engine status only on first
-// expand (not eagerly with the parent), and keeps the result cached in local state so
-// collapsing and re-expanding doesn't re-fetch. Once fetched, exposes a "Global variables"
-// action scoped to this specific workflow instance (distinct from its parent's).
-function ChildWorkflowBranch({
-  workflowId,
-  depth,
-  kind,
-  onOpenVariables,
-}: {
-  workflowId: string
-  depth: number
-  kind: WorkflowBranchKind
-  onOpenVariables: (target: WorkflowVariablesTarget) => void
-}) {
+// Fetch-on-first-expand state shared by the "child workflow" full-width branch and the compact
+// inline "task workflow" toggle — same lifecycle, different presentation (see NodeRow/
+// ChildWorkflowBranch).
+function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind) {
   const [expanded, setExpanded] = useState(false)
   const [fetched, setFetched] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -382,7 +313,7 @@ function ChildWorkflowBranch({
         setFetched(true)
       })
       .catch((err: unknown) => {
-        console.error(`Failed to fetch ${BRANCH_LABEL[kind]} status:`, err)
+        console.error(`Failed to fetch ${kind} workflow status:`, err)
         setError('loadFailed')
       })
       .finally(() => {
@@ -390,18 +321,108 @@ function ChildWorkflowBranch({
       })
   }, [workflowId, kind, fetched, loading])
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     setExpanded((prev) => {
       const next = !prev
       if (next) ensureFetched()
       return next
     })
-  }
+  }, [ensureFetched])
+
+  return { expanded, toggle, loading, status, error }
+}
+
+// One engine node's row. A native engine child (SPLIT_TASK/BATCH_SPLIT/PARALLEL_SPLIT) gets a
+// full-width expandable branch below, since those are rare and structurally significant. A TASK
+// node's own task workflow (task_workflow_id) is common — nearly every TASK node that has
+// started has one — so it gets a small inline toggle in the row instead of a line of its own,
+// only expanding into the fuller view below on demand.
+function NodeRow({
+  node,
+  depth,
+  onOpenVariables,
+}: {
+  node: EngineNode
+  depth: number
+  onOpenVariables: (target: WorkflowVariablesTarget) => void
+}) {
+  const childIds = node.child_workflow_ids ?? []
+  const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task')
+
+  return (
+    <div className="border-b border-app-border last:border-0">
+      <div className={`${NODE_ROW_GRID} py-2`} style={{ paddingLeft: depth * 20 }}>
+        <div className="px-3 font-mono text-xs truncate" title={node.id}>
+          {node.id}
+        </div>
+        <div className="px-3 text-sm flex items-center gap-1">
+          <span className="truncate">{node.gateway_type ?? node.type}</span>
+          {/* Always rendered, at a fixed size, even when there's no task workflow to toggle —
+              hidden (and inert) rather than omitted, so every row's height and column widths
+              stay identical instead of nodes-with-a-task-workflow shifting layout relative to
+              nodes without one. The h-6 w-6 box (not just the glyph) is the actual tap target. */}
+          <button
+            type="button"
+            onClick={taskBranch.toggle}
+            disabled={!node.task_workflow_id}
+            title="View task workflow"
+            aria-hidden={!node.task_workflow_id}
+            className={`inline-flex items-center justify-center h-6 w-6 shrink-0 text-foreground-muted hover:text-foreground ${
+              node.task_workflow_id ? '' : 'invisible'
+            }`}
+          >
+            <span
+              className={`inline-block text-xs transition-transform ${taskBranch.expanded ? 'rotate-90' : ''}`}
+              aria-hidden
+            >
+              ▸
+            </span>
+          </button>
+        </div>
+        <div className="px-3">
+          <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
+        </div>
+        <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
+        <div className="px-3 text-xs text-red-600 truncate" title={node.last_error}>
+          {node.last_error ?? ''}
+        </div>
+      </div>
+      {childIds.map((childId) => (
+        <ChildWorkflowBranch key={childId} workflowId={childId} depth={depth + 1} onOpenVariables={onOpenVariables} />
+      ))}
+      {node.task_workflow_id && taskBranch.expanded && (
+        <TaskWorkflowPanel
+          workflowId={node.task_workflow_id}
+          depth={depth + 1}
+          loading={taskBranch.loading}
+          status={taskBranch.status}
+          error={taskBranch.error}
+          onOpenVariables={onOpenVariables}
+        />
+      )}
+    </div>
+  )
+}
+
+// A collapsed-by-default full-width row for one native engine child workflow (SPLIT_TASK/
+// BATCH_SPLIT/PARALLEL_SPLIT). Fetches its engine status only on first expand, and keeps the
+// result cached in local state so collapsing and re-expanding doesn't re-fetch. Once fetched,
+// exposes a "Global variables" action scoped to this specific workflow instance.
+function ChildWorkflowBranch({
+  workflowId,
+  depth,
+  onOpenVariables,
+}: {
+  workflowId: string
+  depth: number
+  onOpenVariables: (target: WorkflowVariablesTarget) => void
+}) {
+  const { expanded, toggle, loading, status, error } = useExpandableWorkflow(workflowId, 'child')
 
   return (
     <div style={{ paddingLeft: depth * 20 }}>
       {/* Tinted, left-railed container marks this whole subtree as belonging to a different
-          workflow instance from its parent — otherwise it's easy to mistake a nested workflow's
+          workflow instance from its parent — otherwise it's easy to mistake a child workflow's
           nodes for more of the parent's own list, especially once nested a few levels deep. */}
       <div className="my-1 bg-primary-subtle border-l-2 border-primary rounded">
         <div className="flex items-center justify-between pr-3">
@@ -416,7 +437,7 @@ function ChildWorkflowBranch({
             >
               ▸
             </span>
-            <span className="text-foreground-subtle">{BRANCH_LABEL[kind]}</span>
+            <span className="text-foreground-subtle">child workflow</span>
             {workflowId}
           </button>
           {status && (
@@ -425,11 +446,7 @@ function ChildWorkflowBranch({
               color="gray"
               size="1"
               onClick={() =>
-                onOpenVariables({
-                  workflowId,
-                  label: kind === 'task' ? 'Task workflow' : 'Child workflow',
-                  variables: status.global_variables,
-                })
+                onOpenVariables({ workflowId, label: 'Child workflow', variables: status.global_variables })
               }
             >
               Global variables
@@ -438,33 +455,108 @@ function ChildWorkflowBranch({
         </div>
 
         {expanded && (
-          <div className="pb-1">
-            {loading && (
-              <div className="flex items-center gap-2 py-1 px-3" style={{ paddingLeft: 20 }}>
-                <Spinner size="1" />
-                <Text size="1" color="gray">
-                  Loading…
-                </Text>
-              </div>
-            )}
-            {error && (
-              <Text size="1" color="red" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
-                {error === 'notFound' ? 'No workflow execution found' : 'Failed to load'}
-              </Text>
-            )}
-            {status &&
-              (status.nodes.length === 0 ? (
-                <Text size="1" color="gray" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
-                  No active or completed nodes yet.
-                </Text>
-              ) : (
-                status.nodes.map((node) => (
-                  <NodeRow key={node.id} node={node} depth={depth + 1} onOpenVariables={onOpenVariables} />
-                ))
-              ))}
-          </div>
+          <WorkflowBranchBody
+            depth={depth}
+            loading={loading}
+            status={status}
+            error={error}
+            onOpenVariables={onOpenVariables}
+          />
         )}
       </div>
+    </div>
+  )
+}
+
+// The expanded contents of a task workflow toggled open from NodeRow's inline affordance — a
+// lighter-weight, un-boxed counterpart to ChildWorkflowBranch's tinted card, since a task
+// workflow is expected on nearly every TASK node rather than being an occasional structural
+// branch. Still gets its own "Global variables" action and ID, just without the full-line
+// always-visible toggle bar.
+function TaskWorkflowPanel({
+  workflowId,
+  depth,
+  loading,
+  status,
+  error,
+  onOpenVariables,
+}: {
+  workflowId: string
+  depth: number
+  loading: boolean
+  status: EngineStatus | null
+  error: 'notFound' | 'loadFailed' | null
+  onOpenVariables: (target: WorkflowVariablesTarget) => void
+}) {
+  return (
+    <div className="border-l-2 border-app-border ml-3" style={{ paddingLeft: depth * 20 }}>
+      <div className="flex items-center justify-between pr-3 py-1 pl-2">
+        <span className="text-[11px] font-mono text-foreground-muted truncate" title={workflowId}>
+          <span className="text-foreground-subtle">task workflow </span>
+          {workflowId}
+        </span>
+        {status && (
+          <Button
+            variant="ghost"
+            color="gray"
+            size="1"
+            onClick={() => onOpenVariables({ workflowId, label: 'Task workflow', variables: status.global_variables })}
+          >
+            Global variables
+          </Button>
+        )}
+      </div>
+      <WorkflowBranchBody
+        depth={depth}
+        loading={loading}
+        status={status}
+        error={error}
+        onOpenVariables={onOpenVariables}
+      />
+    </div>
+  )
+}
+
+// The loading/error/node-list body shared by ChildWorkflowBranch and TaskWorkflowPanel once
+// expanded.
+function WorkflowBranchBody({
+  depth,
+  loading,
+  status,
+  error,
+  onOpenVariables,
+}: {
+  depth: number
+  loading: boolean
+  status: EngineStatus | null
+  error: 'notFound' | 'loadFailed' | null
+  onOpenVariables: (target: WorkflowVariablesTarget) => void
+}) {
+  return (
+    <div className="pb-1">
+      {loading && (
+        <div className="flex items-center gap-2 py-1 px-3" style={{ paddingLeft: 20 }}>
+          <Spinner size="1" />
+          <Text size="1" color="gray">
+            Loading…
+          </Text>
+        </div>
+      )}
+      {error && (
+        <Text size="1" color="red" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
+          {error === 'notFound' ? 'No workflow execution found' : 'Failed to load'}
+        </Text>
+      )}
+      {status &&
+        (status.nodes.length === 0 ? (
+          <Text size="1" color="gray" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
+            No active or completed nodes yet.
+          </Text>
+        ) : (
+          status.nodes.map((node) => (
+            <NodeRow key={node.id} node={node} depth={depth + 1} onOpenVariables={onOpenVariables} />
+          ))
+        ))}
     </div>
   )
 }
