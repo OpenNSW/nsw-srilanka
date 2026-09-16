@@ -12,7 +12,8 @@ export function LanguageSwitcher() {
     return null
   }
 
-  const currentLabel = languageLabels[i18n.resolvedLanguage ?? i18n.language] ?? i18n.language
+  const activeLanguage = i18n.resolvedLanguage ?? i18n.language
+  const currentLabel = languageLabels[activeLanguage] ?? activeLanguage
 
   return (
     <DropdownMenu.Root>
@@ -23,17 +24,18 @@ export function LanguageSwitcher() {
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" size="2">
-        {supportedLanguages.map((code) => (
-          <DropdownMenu.Item
-            key={code}
-            onClick={() => {
-              void i18n.changeLanguage(code)
-            }}
-            style={{ cursor: 'pointer' }}
-          >
-            {languageLabels[code] ?? code}
-          </DropdownMenu.Item>
-        ))}
+        <DropdownMenu.RadioGroup
+          value={activeLanguage}
+          onValueChange={(code) => {
+            void i18n.changeLanguage(code)
+          }}
+        >
+          {supportedLanguages.map((code) => (
+            <DropdownMenu.RadioItem key={code} value={code} style={{ cursor: 'pointer' }}>
+              {languageLabels[code] ?? code}
+            </DropdownMenu.RadioItem>
+          ))}
+        </DropdownMenu.RadioGroup>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   )
