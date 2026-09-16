@@ -10,7 +10,7 @@
           "name": "NSW API",
           "resources": [
             { "handle": "consignment", "name": "Consignment",
-              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "adminread", "name": "Admin Read" } ] },
             { "handle": "task", "name": "Task",
               "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
             { "handle": "hscode", "name": "HS Code",
