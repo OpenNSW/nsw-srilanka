@@ -14,28 +14,32 @@ It depends on the open-source core engine published at [github.com/OpenNSW/core]
 ```
 nsw-srilanka/
 ├── cmd/
-│   └── server/
-│       └── main.go                       # Entry point: loads config, builds the app, runs the HTTP server
-├── internal/
-│   └── bootstrap/
-│       └── app.go                        # Wires DB, Temporal, taskflow, auth, storage, notifications, routes
-├── external-integration/
-│   └── payment/                          # Sri Lanka–specific payment gateway implementations (GovPay+)
-├── test/
-│   └── e2e/
-│       └── replay/                       # End-to-end replay tests (config-driven harness, mock agency/gateway)
-├── migrations/                           # PostgreSQL migration files (up/down SQL)
-├── portals/                              # Trader Portal frontend (React/Vite monorepo)
-├── idp/                                  # Identity Provider configuration and seed resources
+│   ├── server/                            # Main API entry point: loads config, builds the app, runs the HTTP server
+│   └── otc/                               # CLI for applying one-trade-artifacts config against a running instance
+├── internal/                              # Application code — bootstrap wiring, consignment/profile domains,
+│                                           # task plugins & authz, replay engine, audit, catalog, static data
+├── external-integration/                  # Sri Lanka–specific integrations
+│   ├── payment/                           #   Payment gateways (GovPay+)
+│   ├── customs/                          #   Customs declaration integration (ASYCUDA)
+│   ├── ephyto/                           #   IPPC ePhyto Hub client
+│   └── slpa/                             #   Sri Lanka Ports Authority (CMS, gate pass, consolidation, invoicing…)
+├── test/e2e/replay/                       # End-to-end replay tests (config-driven harness, mock agency/gateway)
+├── migrations/                            # PostgreSQL migration files (up/down SQL)
+├── portals/                                # Trader Portal frontend (React/Vite monorepo)
+├── idp/                                    # Identity Provider (ThunderID) configuration and seed resources
+├── deployments/helm/                       # Helm chart for deploying the stack
+├── docs/                                   # WORKFLOW_GUIDE.md and other developer docs
 ├── configs/                                 # Runtime configs only (no workflow/form artifacts)
 │   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
 │   ├── services.example.json                # Template for services.json (local/native dev — localhost)
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── notification.example.json            # Template for notification.json
-│   └── catalog.example.json                 # Template for catalog.json
-├── .env.example                          # Template for environment variables
-├── .gitignore
+│   ├── catalog.example.json                 # Template for catalog.json
+│   └── companies.example.json               # Template for companies.json
+├── compose.yml / compose.override.yml     # Docker Compose stack (base + dev hot-reload override)
+├── .env.example                            # Template for environment variables
 ├── Dockerfile
+├── Makefile
 ├── go.mod
 └── go.sum
 ```
@@ -47,7 +51,7 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ---
 
 ## How to Run Locally
-
+>[!NOTE]
 > ⚠️ **This quickstart is for local development only.** The example configs enable
 > insecure TLS (`AUTH_JWKS_INSECURE_SKIP_VERIFY=true`, `insecure_skip_tls_verify`
 > in `services.json`) for the self-signed local IdP. The backend only honors these
@@ -58,18 +62,45 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 
 ### 1. Prepare local config files
 
-Copy each example file to its live name (the real files are gitignored and must not be committed):
+## Environment Setup
+
+Copy the environment files:
 
 ```bash
 cp .env.example .env
+```
+
+```bash
 cp idp/.env.example idp/.env
+```
+
+## Service Configuration
+
+Choose **one** of the following depending on your setup.
+
+**Option A — Docker (default):**
+
+```bash
 cp configs/services.docker.example.json configs/services.docker.json
-# cp configs/services.example.json configs/services.json
-# For local development with direct host DB access, use the non-docker
-# config with localhost references instead of container hostnames.
+```
+
+**Option B — Non-Docker (local development):**
+
+Use this if you need direct host DB access with `localhost` references instead of container hostnames.
+
+```bash
+cp configs/services.example.json configs/services.json
+```
+
+## Application Configuration
+
+Copy the remaining config files:
+
+```bash
 cp configs/payment_methods.example.json configs/payment_methods.json
 cp configs/notification.example.json configs/notification.json
 cp configs/catalog.example.json configs/catalog.json
+cp configs/companies.example.json configs/companies.json
 ```
 
 Edit each seeded file for your environment before starting the stack.
@@ -286,5 +317,6 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
 | `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
 | `configs/catalog.json`                | Global catalog — logical names → IdP token roles and OAuth2 client ids          | `configs/catalog.example.json`                |
+| `configs/companies.json`              | Seed company/trader records (registration, VAT/TIN, per-agency IDs)             | `configs/companies.example.json`              |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
