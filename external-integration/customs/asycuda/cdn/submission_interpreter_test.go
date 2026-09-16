@@ -16,7 +16,7 @@ func TestCDNInterpreter_BuildRequest(t *testing.T) {
 	body, err := json.Marshal(sub.(remote.JSONBody).V)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"containerNumber":"MSCU8492019"`)
-	assert.Contains(t, string(body), `"cusDecRefs":[{"year":"2026","office":"CBEX1","serial":"E","number":1047}]`)
+	assert.Contains(t, string(body), `"cusDecRefs":[{"office":"CBEX1","regYear":"2026","serial":"E","number":1047}]`)
 }
 
 // A form that cannot be mapped must surface the reason to the trader rather
