@@ -355,24 +355,26 @@ function NodeRow({
         <div className="px-3 font-mono text-xs truncate" title={node.id}>
           {node.id}
         </div>
-        <div className="px-3 text-sm flex items-center gap-1">
-          <span className="truncate">{node.gateway_type ?? node.type}</span>
-          {/* Always rendered, at a fixed size, even when there's no task workflow to toggle —
-              hidden (and inert) rather than omitted, so every row's height and column widths
-              stay identical instead of nodes-with-a-task-workflow shifting layout relative to
-              nodes without one. The h-6 w-6 box (not just the glyph) is the actual tap target. */}
+        <div className="px-3 text-sm">
+          {/* Always the same button, at the same size, whether or not this node has a task
+              workflow — just disabled/inert (and the arrow hidden) when it doesn't, so every
+              row's height stays identical instead of nodes with one shifting layout relative to
+              nodes without. The whole label + arrow is the tap target, not just the arrow, and
+              -mx-1/-my-1 grow the hit area past the visible padding without nudging the text. */}
           <button
             type="button"
             onClick={taskBranch.toggle}
             disabled={!node.task_workflow_id}
-            title="View task workflow"
-            aria-hidden={!node.task_workflow_id}
-            className={`inline-flex items-center justify-center h-6 w-6 shrink-0 text-foreground-muted hover:text-foreground ${
-              node.task_workflow_id ? '' : 'invisible'
+            title={node.task_workflow_id ? 'View task workflow' : undefined}
+            className={`flex items-center gap-1 w-full -mx-1 -my-1 px-1 py-1 rounded text-left ${
+              node.task_workflow_id ? 'hover:bg-app-surface-muted cursor-pointer' : 'cursor-default'
             }`}
           >
+            <span className="truncate">{node.gateway_type ?? node.type}</span>
             <span
-              className={`inline-block text-xs transition-transform ${taskBranch.expanded ? 'rotate-90' : ''}`}
+              className={`inline-block text-xs shrink-0 transition-transform ${
+                node.task_workflow_id ? '' : 'invisible'
+              } ${taskBranch.expanded ? 'rotate-90' : ''}`}
               aria-hidden
             >
               ▸
