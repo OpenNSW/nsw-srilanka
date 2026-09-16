@@ -20,7 +20,22 @@ const PROVISION_MAX_DELAY_MS = 5000
 
 type FetchMode = 'initial' | 'refresh' | 'poll'
 
-export function ConsignmentDetailScreen() {
+interface ConsignmentDetailScreenProps {
+  // Defaults to the trader/CHA-facing, ownership-checked getConsignment. Pass
+  // getConsignmentForAdmin (features/admin/service.ts) to reuse this screen for the
+  // ConsignmentAdminRead-gated admin view instead.
+  fetcher?: (consignmentId: string) => Promise<ConsignmentDetail | null>
+  // Where the back/back-to-list buttons navigate. Defaults to the trader/CHA consignments list.
+  backTo?: string
+  // Accessible label for the back button. Defaults to matching the trader/CHA backTo default.
+  backLabel?: string
+}
+
+export function ConsignmentDetailScreen({
+  fetcher = getConsignment,
+  backTo = '/consignments',
+  backLabel = 'Back to consignments list',
+}: ConsignmentDetailScreenProps = {}) {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -61,7 +76,7 @@ export function ConsignmentDetailScreen() {
       }
 
       try {
-        const result = await getConsignment(consignmentId)
+        const result = await fetcher(consignmentId)
         if (requestId !== requestCountRef.current) return
 
         if (!result) {
@@ -107,7 +122,7 @@ export function ConsignmentDetailScreen() {
         }
       }
     },
-    [consignmentId, clearProvisionTimer],
+    [consignmentId, fetcher, clearProvisionTimer],
   )
 
   const handleRefresh = () => {
@@ -123,7 +138,7 @@ export function ConsignmentDetailScreen() {
     if (!consignmentId) return
     clearProvisionTimer()
     let cancelled = false
-    void getConsignment(consignmentId)
+    void fetcher(consignmentId)
       .then((result) => {
         if (cancelled) return
         provisionAttemptsRef.current = 0
@@ -165,7 +180,7 @@ export function ConsignmentDetailScreen() {
       cancelled = true
       clearProvisionTimer()
     }
-  }, [consignmentId, fetchConsignment, clearProvisionTimer])
+  }, [consignmentId, fetcher, fetchConsignment, clearProvisionTimer])
 
   if (loading || provisioning) {
     const message = provisioning
@@ -198,7 +213,7 @@ export function ConsignmentDetailScreen() {
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Button variant="ghost" color="gray" onClick={() => void navigate('/consignments')}>
+          <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)}>
             <ArrowLeftIcon />
             {t('consignments.detail.back')}
           </Button>
@@ -213,7 +228,7 @@ export function ConsignmentDetailScreen() {
               : t('consignments.detail.error.notFoundDescription')}
           </Text>
           <div className="flex gap-3 justify-center">
-            <Button variant="soft" onClick={() => void navigate('/consignments')}>
+            <Button variant="soft" onClick={() => void navigate(backTo)}>
               <ArrowLeftIcon />
               {t('consignments.detail.backToList')}
             </Button>
@@ -240,12 +255,7 @@ export function ConsignmentDetailScreen() {
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-64px)] flex flex-col">
       <div className="mb-3 flex items-center justify-between">
-        <Button
-          variant="ghost"
-          color="gray"
-          onClick={() => void navigate('/consignments')}
-          aria-label="Back to consignments list"
-        >
+        <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)} aria-label={backLabel}>
           <ArrowLeftIcon />
           {t('consignments.detail.back')}
         </Button>

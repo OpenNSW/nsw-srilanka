@@ -281,6 +281,44 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
+// HandleAdminGetConsignmentByID handles GET /api/v1/admin/consignments/{id}. Ops/admin callers
+// holding ConsignmentAdminRead (enforced at the route, see bootstrap/app.go) may fetch the full
+// consignment detail for any consignment, with no trader/CHA ownership check — unlike
+// HandleGetConsignmentByID above, which is scoped to the caller's own trader/CHA-owned
+// consignments.
+func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.User == nil {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	consignment, err := c.cs.GetConsignmentByIDForAdmin(ctx, consignmentID)
+	if err != nil {
+		if errors.Is(err, ErrConsignmentNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignmentID,
+		Metadata:   map[string]any{"view": "admin"},
+	})
+	httputil.JSON(w, http.StatusOK, consignment)
+}
+
 // HandleGetConsignmentAgency handles GET /api/v1/consignments/{id}/agency.
 // Authenticated M2M (or user) callers with nsw:consignment:read may fetch the
 // allowlisted display names. Knowing the unguessable UUID is sufficient; there

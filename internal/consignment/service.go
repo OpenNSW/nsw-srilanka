@@ -185,13 +185,9 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 // never panics. Otherwise ErrAccessDenied is returned before the workflow engine or task store
 // is touched, so an unauthorized caller triggers no work beyond the single row read.
 func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerCompanyID string, callerRoles []string) (*DetailDTO, error) {
-	var consignment Consignment
-	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, ErrConsignmentNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
+	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
+	if err != nil {
+		return nil, err
 	}
 
 	// The empty-callerCompanyID guard documents the invariant the check relies on (a
@@ -210,11 +206,38 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 		return nil, ErrAccessDenied
 	}
 
+	return s.buildConsignmentResponse(ctx, consignment)
+}
+
+// GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID but
+// performs no trader/CHA ownership check — callers must already be gated to ConsignmentAdminRead
+// by the router (see HandleAdminGetConsignmentByID).
+func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID string) (*DetailDTO, error) {
+	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildConsignmentResponse(ctx, consignment)
+}
+
+func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID string) (*Consignment, error) {
+	var consignment Consignment
+	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, ErrConsignmentNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
+	}
+	return &consignment, nil
+}
+
+func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment) (*DetailDTO, error) {
 	if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
-		slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignmentID, "error", err)
+		slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignment.ID, "error", err)
 	}
 
-	responseDTO, err := s.buildConsignmentDetailDTO(ctx, &consignment)
+	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build consignment response DTO: %w", err)
 	}
