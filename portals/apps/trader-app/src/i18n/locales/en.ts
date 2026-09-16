@@ -42,6 +42,11 @@ const en = {
         description: 'Handling Customs Clearances',
         dropdownDescription: 'Handle customs clearances',
       },
+      nswAdmin: {
+        label: 'NSW Admin',
+        description: 'Managing the system',
+        dropdownDescription: 'Manage the system',
+      },
     },
 
     consignments: {
