@@ -255,12 +255,7 @@ export function ConsignmentDetailScreen({
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-64px)] flex flex-col">
       <div className="mb-3 flex items-center justify-between">
-        <Button
-          variant="ghost"
-          color="gray"
-          onClick={() => void navigate(backTo)}
-          aria-label={backLabel}
-        >
+        <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)} aria-label={backLabel}>
           <ArrowLeftIcon />
           {t('consignments.detail.back')}
         </Button>

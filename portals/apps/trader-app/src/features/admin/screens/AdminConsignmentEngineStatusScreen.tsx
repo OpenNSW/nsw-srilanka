@@ -212,7 +212,9 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
               No active or completed nodes yet.
             </Text>
           ) : (
-            status.nodes.map((node) => <NodeRow key={node.id} node={node} depth={0} onOpenVariables={setVariablesTarget} />)
+            status.nodes.map((node) => (
+              <NodeRow key={node.id} node={node} depth={0} onOpenVariables={setVariablesTarget} />
+            ))
           )}
         </div>
       </div>
@@ -242,13 +244,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
 // Global variables belong to a workflow instance (root or child), not to any one node — opened
 // from a "Global variables" action per workflow instance rather than per node row, which would
 // misleadingly imply the data is node-specific.
-function WorkflowVariablesDialog({
-  target,
-  onClose,
-}: {
-  target: WorkflowVariablesTarget | null
-  onClose: () => void
-}) {
+function WorkflowVariablesDialog({ target, onClose }: { target: WorkflowVariablesTarget | null; onClose: () => void }) {
   return (
     <Dialog.Root open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content maxWidth="600px">
