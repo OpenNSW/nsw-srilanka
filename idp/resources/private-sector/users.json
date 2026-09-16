@@ -10,7 +10,7 @@
       "familyName": "Fernando",
       "phoneNumber": "+94771234567",
       "passwordEnv": { "override": "SAMPLE_SURESH_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
-      "groups": ["Traders", "CHA"]
+      "groups": ["Traders", "CHA", "NSW Admins"]
     },
     {
       "key": "ramesh",

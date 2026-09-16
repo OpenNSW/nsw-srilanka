@@ -1,0 +1,12 @@
+{
+  "groups": [
+    { "key": "NSW Admins", "name": "NSW Admins", "description": "NSW admin members group", "ou": "default" }
+  ],
+  "roles": [
+    { "key": "NSW Admin", "name": "NSW Admin", "description": "Role for NSW admin operations",
+      "ou": "default", "resourceServer": "https://api.nsw-srilanka.local", "scopeSet": "adminNsw" }
+  ],
+  "roleAssignments": [
+    { "role": "NSW Admin", "group": "NSW Admins" }
+  ]
+}
