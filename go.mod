@@ -2,6 +2,11 @@ module github.com/OpenNSW/nsw-srilanka
 
 go 1.27
 
+// TEMPORARY, local-only: points at the unpushed core branch (feat/admin-park-handler) that adds
+// RegisterAdminParkHandler. Remove this replace and bump the github.com/OpenNSW/core require
+// above to a real published version once that branch is merged/tagged — do not push this as-is.
+replace github.com/OpenNSW/core => /Users/nayana/Work/core
+
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.1.0
