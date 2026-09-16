@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/LSFLK/argus/pkg/audit v1.0.0
+	github.com/LSFLK/argus/pkg/audit v0.1.0
 	github.com/OpenNSW/core v0.0.0-20260915121954-3edb7f6bafc3
 	github.com/OpenNSW/core/authn v0.2.0
 	github.com/OpenNSW/core/authz v0.1.0
@@ -20,8 +20,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.12.1
-	go.temporal.io/sdk v1.48.0
-	gorm.io/driver/postgres v1.6.2
+	go.temporal.io/sdk v1.49.0
+	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )
 
@@ -62,15 +62,15 @@ require (
 	github.com/nexus-rpc/sdk-go v0.7.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	go.temporal.io/api v1.63.4 // indirect
+	go.temporal.io/api v1.63.5 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260504160031-60b97b32f348 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
