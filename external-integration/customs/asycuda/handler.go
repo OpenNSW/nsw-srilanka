@@ -22,6 +22,7 @@ const (
 	errDeclarationNotFoundRetry  = "declaration not found, retry later"
 	errDispatchNoteNotFound      = "dispatch note not found"
 	errDispatchNoteNotFoundRetry = "dispatch note not found, retry later"
+	errTaskNotParkedRetry        = "the step this answers is not ready yet, retry later"
 )
 
 // Handler handles central inbound HTTP webhook requests from SLCE / ASYCUDA
@@ -196,6 +197,12 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 			httputil.Error(w, r, http.StatusNotFound, errDispatchNoteNotFound)
 			return
 		}
+		if errors.Is(err, cdn.ErrTaskNotParkedYet) {
+			slog.WarnContext(r.Context(), "slce: CDN integration result arrived before its step parked, asking for a retry",
+				"edge_id", req.Payload.EdgeID, "error", err)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			return
+		}
 		httputil.InternalServerError(w, r, "slce: failed to process CDN integration result", err, "edge_id", req.Payload.EdgeID)
 		return
 	}
@@ -222,6 +229,12 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for acknowledgment (may be transient)",
 				"cdn_ref", req.Payload.CDNRef, "error", err)
 			httputil.Error(w, r, http.StatusServiceUnavailable, errDispatchNoteNotFoundRetry)
+			return
+		}
+		if errors.Is(err, cdn.ErrTaskNotParkedYet) {
+			slog.WarnContext(r.Context(), "slce: CDN acknowledgment arrived before its step parked, asking for a retry",
+				"cdn_ref", req.Payload.CDNRef, "error", err)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
 			return
 		}
 		httputil.InternalServerError(w, r, "slce: failed to process CDN acknowledgment", err, "cdn_ref", req.Payload.CDNRef)
