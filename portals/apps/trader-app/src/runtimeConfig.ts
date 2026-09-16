@@ -32,11 +32,6 @@ export function getEnv(name: string, fallback?: string): string | undefined {
     return runtimeValue
   }
 
-  const buildValue = (import.meta.env as Record<string, string | undefined>)[name]
-  if (buildValue && buildValue.trim() !== '') {
-    return buildValue
-  }
-
   return fallback
 }
 
@@ -93,7 +88,7 @@ export function getBooleanEnv(name: string, fallback = false): boolean {
 
 export function getIdpRoleGroupConfig(): IdpRoleGroupConfig {
   return {
-    traderGroupName: getEnv('VITE_IDP_TRADER_GROUP_NAME', DEFAULT_TRADER_GROUP_NAME),
-    chaGroupName: getEnv('VITE_IDP_CHA_GROUP_NAME', DEFAULT_CHA_GROUP_NAME),
+    traderGroupName: getEnv('IDP_TRADER_GROUP_NAME', DEFAULT_TRADER_GROUP_NAME),
+    chaGroupName: getEnv('IDP_CHA_GROUP_NAME', DEFAULT_CHA_GROUP_NAME),
   }
 }

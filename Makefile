@@ -126,7 +126,7 @@ setup: tools ## First-time setup: install tools, configure git hooks, seed confi
 	git config core.hooksPath .githooks
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
-	@for f in .env.example idp/.env.example; do \
+	@for f in .env.example idp/.env.example portals/apps/trader-app/public/config.example.js; do \
 		target=$$(echo $$f | sed 's/\.example//'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
