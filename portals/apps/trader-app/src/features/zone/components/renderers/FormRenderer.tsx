@@ -175,7 +175,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // derived fact — the same rule the backend uses to derive Role.
   const isValid = errors.length === 0 && requiredErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
-  const showAutoFill = interactive && getBooleanEnv('VITE_SHOW_AUTOFILL_BUTTON', false)
+  const showAutoFill = interactive && getBooleanEnv('SHOW_AUTOFILL_BUTTON', false)
 
   const handleAutoFill = () => {
     const next = autoFillForm(payload.schema, data) as Record<string, unknown>

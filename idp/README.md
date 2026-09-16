@@ -414,7 +414,7 @@ So every permission-bearing caller sends `resource`:
 
 | Caller | Sends `resource` | Where it is configured | Token `aud` |
 | --- | --- | --- | --- |
-| TraderApp users | NSW_API | `VITE_IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`) | `https://api.nsw-srilanka.local` |
+| TraderApp users | NSW_API | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`) | `https://api.nsw-srilanka.local` |
 | OGA portal users | AGENCY_API | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-agency.local` |
 | `*_TO_NSW` M2M | NSW_API | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-srilanka.local` |
 | `NSW_TO_*` M2M | AGENCY_API | `endpoint_params` in `configs/services*.json` | `https://api.nsw-agency.local` |

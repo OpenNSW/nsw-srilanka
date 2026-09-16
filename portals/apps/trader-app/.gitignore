@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Real runtime config (window.__APP_CONFIG__) — copy from public/config.example.js
+public/config.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

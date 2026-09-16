@@ -157,10 +157,13 @@ frontend:
     type: ClusterIP
     port: 80
 
-  # Runtime (VITE_*) environment variables, written into runtime-env.js for
-  # the browser to read. See ../values-example.yaml for the full set. No
-  # secrets here — see the chart README.
-  env: {}
+  # Runtime config values, rendered into a ConfigMap and mounted as
+  # /usr/share/nginx/html/config.js for the browser to read (see
+  # templates/frontend/configmap.yaml). Not container env vars — unlike
+  # backend.env above, nothing here reaches the container's process
+  # environment, so it's named `config`, not `env`. See ../values-example.yaml
+  # for the full set. No secrets here — see the chart README.
+  config: {}
 
   # Load environment from existing ConfigMaps or Secrets
   envFrom: []
