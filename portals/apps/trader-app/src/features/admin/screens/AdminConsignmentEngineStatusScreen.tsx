@@ -372,7 +372,7 @@ function NodeRow({
           >
             <span className="truncate">{node.gateway_type ?? node.type}</span>
             <span
-              className={`inline-block text-xs shrink-0 transition-transform ${
+              className={`inline-block text-base leading-none shrink-0 transition-transform ${
                 node.task_workflow_id ? '' : 'invisible'
               } ${taskBranch.expanded ? 'rotate-90' : ''}`}
               aria-hidden
