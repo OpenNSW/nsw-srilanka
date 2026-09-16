@@ -18,6 +18,23 @@ export async function getConsignmentEngineStatus(consignmentId: string): Promise
   }
 }
 
+// A TASK node's independent per-task ("micro") workflow (see EngineNode.task_workflow_id) — a
+// separate ID space/manager from getConsignmentEngineStatus's consignment/child-workflow IDs.
+export async function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<EngineStatus | null> {
+  try {
+    const { data } = await http.request<EngineStatus>({
+      url: `${API_BASE_URL}/api/v1/admin/task-workflows/${taskWorkflowId}/engine-status`,
+      attachToken: true,
+    })
+    return data
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 404) {
+      return null
+    }
+    throw error
+  }
+}
+
 // Ops/admin view of the full consignment detail, no trader/CHA ownership check — not the
 // trader/CHA-facing getConsignment() in features/consignment/service.ts, which 404s/403s for
 // admins inspecting a consignment outside their own company.

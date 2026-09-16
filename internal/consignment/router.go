@@ -415,6 +415,47 @@ func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http
 	httputil.JSON(w, http.StatusOK, status)
 }
 
+// HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task-workflows/{id}/engine-status.
+// {id} is a task workflow's own Temporal ID (see EngineNodeDTO.TaskWorkflowID, surfaced by
+// HandleGetConsignmentEngineStatus on the TASK node that spawned it) — a separate ID space and
+// workflow.Manager from the consignment/child-workflow IDs HandleGetConsignmentEngineStatus
+// queries. Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go).
+func (c *Router) HandleGetTaskWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.Type() == "" {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	taskWorkflowID := r.PathValue("id")
+	if taskWorkflowID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	status, err := c.cs.GetTaskWorkflowEngineStatus(ctx, taskWorkflowID)
+	if err != nil {
+		if errors.Is(err, ErrEngineWorkflowNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to retrieve task workflow engine status", err)
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   taskWorkflowID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"view": "task-workflow-engine-status",
+		},
+	})
+	httputil.JSON(w, http.StatusOK, status)
+}
+
 // resolveTemplateID extracts and validates the workflow template ID from the request.
 // In production (!c.devMode), it always returns defaultExportWorkflowTemplateID without
 // parsing the body. In dev mode, it accepts optional test-* templates.

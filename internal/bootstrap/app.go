@@ -229,6 +229,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to register workflow manager with consignment service: %w", err)
 	}
+	if err := consignmentService.RegisterTaskWorkflowManager(task.Runner); err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
+	}
 
 	// -------------------------------------------------------------------
 	// Stage 6: Identity Provider (IDP) Authentication Manager
@@ -390,6 +397,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// to audit as a group rather than spread through the general consignment API.
 	mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
 	mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleAdminGetConsignmentByID))))
+	// A TASK node's independent per-task ("micro") workflow — separate ID space and
+	// workflow.Manager from the consignment/child-workflow route above (see
+	// EngineNodeDTO.TaskWorkflowID).
+	mux.Handle("GET /api/v1/admin/task-workflows/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetTaskWorkflowEngineStatus))))
 
 	// Storage
 	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))

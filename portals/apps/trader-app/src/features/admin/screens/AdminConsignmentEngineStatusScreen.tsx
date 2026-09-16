@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Button, Dialog, Spinner, Text } from '@radix-ui/themes'
 import { ReloadIcon } from '@radix-ui/react-icons'
-import { getConsignmentEngineStatus, getConsignmentForAdmin } from '@/features/admin/service'
+import {
+  getConsignmentEngineStatus,
+  getConsignmentForAdmin,
+  getTaskWorkflowEngineStatus,
+} from '@/features/admin/service'
 import type { EngineNode, EngineNodeStatus, EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
@@ -307,23 +311,59 @@ function NodeRow({
         </div>
       </div>
       {childIds.map((childId) => (
-        <ChildWorkflowBranch key={childId} workflowId={childId} depth={depth + 1} onOpenVariables={onOpenVariables} />
+        <ChildWorkflowBranch
+          key={childId}
+          workflowId={childId}
+          depth={depth + 1}
+          kind="child"
+          onOpenVariables={onOpenVariables}
+        />
       ))}
+      {/* A TASK node's own task workflow is a separate ID space/manager from child_workflow_ids
+          above (see EngineNode.task_workflow_id) — same expand/drilldown UI, different fetcher. */}
+      {node.task_workflow_id && (
+        <ChildWorkflowBranch
+          key={node.task_workflow_id}
+          workflowId={node.task_workflow_id}
+          depth={depth + 1}
+          kind="task"
+          onOpenVariables={onOpenVariables}
+        />
+      )}
     </div>
   )
 }
 
-// A collapsed-by-default row for one child workflow. Fetches its engine status only on first
+// Which nested-workflow drilldown this branch renders: a native engine child (SPLIT_TASK/
+// BATCH_SPLIT/PARALLEL_SPLIT, fetched via getConsignmentEngineStatus) or a TASK node's own task
+// workflow (a separate ID space/manager, fetched via getTaskWorkflowEngineStatus). Same UI,
+// different fetcher and label.
+type WorkflowBranchKind = 'child' | 'task'
+
+const BRANCH_FETCHER: Record<WorkflowBranchKind, (id: string) => Promise<EngineStatus | null>> = {
+  child: getConsignmentEngineStatus,
+  task: getTaskWorkflowEngineStatus,
+}
+
+const BRANCH_LABEL: Record<WorkflowBranchKind, string> = {
+  child: 'child workflow',
+  task: 'task workflow',
+}
+
+// A collapsed-by-default row for one nested workflow instance (a native engine child, or a TASK
+// node's own task workflow — see WorkflowBranchKind). Fetches its engine status only on first
 // expand (not eagerly with the parent), and keeps the result cached in local state so
 // collapsing and re-expanding doesn't re-fetch. Once fetched, exposes a "Global variables"
-// action scoped to this specific child workflow instance (distinct from the root's).
+// action scoped to this specific workflow instance (distinct from its parent's).
 function ChildWorkflowBranch({
   workflowId,
   depth,
+  kind,
   onOpenVariables,
 }: {
   workflowId: string
   depth: number
+  kind: WorkflowBranchKind
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -335,20 +375,20 @@ function ChildWorkflowBranch({
   const ensureFetched = useCallback(() => {
     if (fetched || loading) return
     setLoading(true)
-    getConsignmentEngineStatus(workflowId)
+    BRANCH_FETCHER[kind](workflowId)
       .then((result) => {
         setStatus(result)
         setError(result ? null : 'notFound')
         setFetched(true)
       })
       .catch((err: unknown) => {
-        console.error('Failed to fetch child workflow status:', err)
+        console.error(`Failed to fetch ${BRANCH_LABEL[kind]} status:`, err)
         setError('loadFailed')
       })
       .finally(() => {
         setLoading(false)
       })
-  }, [workflowId, fetched, loading])
+  }, [workflowId, kind, fetched, loading])
 
   const toggle = () => {
     setExpanded((prev) => {
@@ -361,7 +401,7 @@ function ChildWorkflowBranch({
   return (
     <div style={{ paddingLeft: depth * 20 }}>
       {/* Tinted, left-railed container marks this whole subtree as belonging to a different
-          workflow instance from its parent — otherwise it's easy to mistake a child workflow's
+          workflow instance from its parent — otherwise it's easy to mistake a nested workflow's
           nodes for more of the parent's own list, especially once nested a few levels deep. */}
       <div className="my-1 bg-primary-subtle border-l-2 border-primary rounded">
         <div className="flex items-center justify-between pr-3">
@@ -376,7 +416,7 @@ function ChildWorkflowBranch({
             >
               ▸
             </span>
-            <span className="text-foreground-subtle">child workflow</span>
+            <span className="text-foreground-subtle">{BRANCH_LABEL[kind]}</span>
             {workflowId}
           </button>
           {status && (
@@ -385,7 +425,11 @@ function ChildWorkflowBranch({
               color="gray"
               size="1"
               onClick={() =>
-                onOpenVariables({ workflowId, label: 'Child workflow', variables: status.global_variables })
+                onOpenVariables({
+                  workflowId,
+                  label: kind === 'task' ? 'Task workflow' : 'Child workflow',
+                  variables: status.global_variables,
+                })
               }
             >
               Global variables
