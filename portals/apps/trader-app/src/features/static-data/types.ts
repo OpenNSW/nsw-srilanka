@@ -3,6 +3,7 @@
 export interface StaticDataOption {
   const: string
   title: string
+  parents?: string[]
 }
 
 // Wire envelope for a static_data artifact response: always an object with a
