@@ -1,5 +1,8 @@
 {
   "scopeSets": {
+    "adminNsw": [
+      "nsw:consignment:adminread"
+    ],
     "traderNsw": [
       "nsw:consignment:read",
       "nsw:consignment:write",

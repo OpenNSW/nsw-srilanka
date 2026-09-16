@@ -153,10 +153,11 @@ That script creates:
     matching groups — role inheritance is group-based)
   - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
     and **`NswM2M`** roles (machine clients) — see *API authorization* below
+  - **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`)
   - **`NSW_API`** and **`AGENCY_API`** OAuth2 resource servers (scopes + token audiences)
   - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
     `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
-    `sltb_officer` (government OUs)
+    `sltb_officer` (government OUs) — `suresh` is also in `NSW Admins`
   - **SPA applications** and **M2M applications** (see below)
 
 ## Seeding sample resources
@@ -262,6 +263,8 @@ idp/resources/
   shared/
     resource-servers.json      NSW_API, AGENCY_API (+ nested resources -> actions)
     m2m-roles.json             AgencyM2M
+  admin/
+    groups-roles.json          NSW Admins group + NSW Admin role
   private-sector/
     ous.json  user-types.json  groups-roles.json  users.json  apps.json
   government/
@@ -338,7 +341,7 @@ becomes the access-token **audience** (`aud`):
 
 | `identifier` (= token `aud`) | Backend | Scopes (`<resource>:<action>`) |
 | --- | --- | --- |
-| `https://api.nsw-srilanka.local` | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/` | `nsw:consignment:{read,write}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
+| `https://api.nsw-srilanka.local` | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/` | `nsw:consignment:{read,write,adminread}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
 | `https://api.nsw-agency.local` | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}` |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
@@ -361,6 +364,7 @@ scopes via a role:
 | Caller | Grant |
 | --- | --- |
 | TraderApp users | `Trader` / `CHA` role (via group) → `NSW_API` scopes |
+| NSW admin users | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread` |
 | `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes |
 | OGA portal users | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes |
 | `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject` |
