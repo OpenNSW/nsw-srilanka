@@ -61,9 +61,10 @@ func TestBuildPayload_MapsAnnexBFields(t *testing.T) {
 	assert.Equal(t, "894021", sub.SealNo)
 	assert.Equal(t, "MSCU-849201-9", sub.ContainerMark)
 
-	// §4.1: the display reference is split back into the four canonical parts.
+	// §4.1: the display reference is split back into the four canonical parts,
+	// then carried in the shape SLC Edge reads — the year under regYear.
 	require.Len(t, sub.CusDecRefs, 1)
-	assert.Equal(t, DocumentReference{Office: "CBEX1", Year: "2026", Serial: "E", Number: 1047}, sub.CusDecRefs[0])
+	assert.Equal(t, cusDecReference{Office: "CBEX1", RegYear: "2026", Serial: "E", Number: 1047}, sub.CusDecRefs[0])
 }
 
 // The unused optional cost/volume lines must not appear on the wire as bare
@@ -160,4 +161,43 @@ func TestBuildPayload_AcceptsStringNumbers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 16500.5, sub.GrossWeight)
 	assert.Equal(t, 80, sub.PackageNumber)
+}
+
+// FIXME(slc-edge): delete this test once ASYCUDA reads the Annex B names. It
+// exists to fail then — that failure is the signal to revert the two
+// workarounds in submission_payload.go and send the spec's spellings again.
+//
+// Two field names on this payload are not the ones Annex B defines. SLC Edge
+// reads the voyage number from "voaygeNumber" and the reference year from
+// "regYear", and answers the Annex B spellings with error 602, "Voyage Number
+// is mandatory", for a note that carries both. The SLC Edge team asked us to
+// send their spellings until they correct them.
+//
+// This test exists to be deleted. When it starts failing because the names are
+// right again, the workaround in submission_payload.go goes with it.
+func TestBuildPayload_SendsTheNamesSLCEdgeCurrentlyReads(t *testing.T) {
+	sub, err := BuildPayload(fullForm(), "")
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+	wire := string(encoded)
+
+	assert.Contains(t, wire, `"voaygeNumber":"V092"`, "SLC Edge reads the voyage number from voaygeNumber")
+	assert.NotContains(t, wire, `"voyageNumber"`, "the Annex B spelling is answered with error 602")
+
+	assert.Contains(t, wire, `"regYear":"2026"`, "SLC Edge reads the reference year from regYear")
+	assert.NotContains(t, wire, `"cusDecRefs":[{"year"`, "the canonical §4.1 spelling is not read on the way in")
+}
+
+// The workaround is outbound only. The cdnRef ASYCUDA sends back is the
+// canonical §4.1 shape, and renaming the shared type's tag would have stopped
+// their callbacks binding at all.
+func TestDocumentReference_InboundStillReadsTheCanonicalYear(t *testing.T) {
+	var ref DocumentReference
+	require.NoError(t, json.Unmarshal(
+		[]byte(`{"office":"CBEX1","year":"2026","serial":"C","number":28237}`), &ref))
+
+	assert.Equal(t, "2026", ref.Year)
+	assert.True(t, ref.IsValid())
 }

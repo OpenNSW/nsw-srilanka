@@ -1,10 +1,13 @@
 package cdn
 
 import (
+	"context"
 	"errors"
 	"strings"
 
 	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/edgetrace"
 )
 
 // SLC Edge submission statuses that count as accepted. RECEIVED is what the
@@ -37,6 +40,10 @@ var capturedFields = []string{
 type CDNInterpreter struct{}
 
 // NewCDNInterpreter returns the SLC Edge CDN submission interpreter.
+// cdnEndpoint names this exchange in the trace, so a dispatch note is
+// distinguishable from a declaration in one log.
+const cdnEndpoint = "cdn"
+
 func NewCDNInterpreter() *CDNInterpreter {
 	return &CDNInterpreter{}
 }
@@ -51,14 +58,20 @@ func NewCDNInterpreter() *CDNInterpreter {
 func (CDNInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 	payload, err := buildFromInputs(inputs)
 	if err != nil {
-		return remote.JSONBody{V: map[string]any{"error": err.Error()}}
+		body := map[string]any{"error": err.Error()}
+		edgetrace.Request(context.Background(), cdnEndpoint, body)
+		return remote.JSONBody{V: body}
 	}
+
+	edgetrace.Request(context.Background(), cdnEndpoint, payload)
 	return remote.JSONBody{V: payload}
 }
 
 // Interpret reports whether the submission was accepted and captures the SLC
 // response fields (and a trader-facing error message on rejection).
 func (CDNInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	edgetrace.Response(context.Background(), cdnEndpoint, resp, callErr)
+
 	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
 
 	out := map[string]any{}

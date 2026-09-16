@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/edgetrace"
 )
 
 // SLC Edge submission statuses that count as accepted. RECEIVED is what the
@@ -61,6 +63,12 @@ type CusdecInterpreter struct {
 // NewCusdecInterpreter returns the SLC Edge CusDec interpreter. files may be
 // nil, in which case a declaration carrying supporting documents is rejected
 // before it is sent rather than arriving without its attachments.
+// cusdecEndpoint names this exchange in the trace. The declaration goes as
+// multipart, so the payload is traced from BuildParts — the path that actually
+// assembles what is sent — rather than from BuildRequest, which exists only to
+// satisfy the interpreter contract.
+const cusdecEndpoint = "cusdec"
+
 func NewCusdecInterpreter(files FileFetcher) *CusdecInterpreter {
 	return &CusdecInterpreter{files: files}
 }
@@ -84,6 +92,8 @@ func (c CusdecInterpreter) BuildParts(ctx context.Context, inputs map[string]any
 	if err != nil {
 		return nil, err
 	}
+
+	edgetrace.Request(ctx, cusdecEndpoint, payload)
 
 	payloadPart, err := remote.JSONPart("payload", payload)
 	if err != nil {
@@ -171,6 +181,8 @@ func buildFromInputs(inputs map[string]any) (Submission, []SupportDoc, error) {
 // Interpret reports whether the submission was accepted and captures the SLC
 // response fields (and a trader-facing error message on rejection).
 func (CusdecInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	edgetrace.Response(context.Background(), cusdecEndpoint, resp, callErr)
+
 	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
 
 	out := map[string]any{}

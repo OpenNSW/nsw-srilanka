@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
+import { createAjv, type JsonSchema } from '@jsonforms/core'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Callout } from '@radix-ui/themes'
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { JsonSchema } from '@jsonforms/core'
 import type { Handle, ZoneRendererProps } from '@/features/zone/types'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
+
+// useDefaults: true lets Ajv populate schema `default` values into the data
+// during validation, so defaulted fields (e.g. a single-option country field)
+// are pre-filled without the trader touching them.
+const ajv = createAjv({ useDefaults: true })
 
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
@@ -108,6 +113,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           schema={payload.schema}
           uischema={payload.uiSchema}
           data={data}
+          ajv={ajv}
           renderers={radixRenderers}
           readonly={!interactive}
           additionalErrors={showErrors ? additionalRequiredErrors : []}
