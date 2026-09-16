@@ -12,8 +12,14 @@ COMPOSE         := docker compose
 COMPOSE_PREVIEW := docker compose -f compose.yml
 # Source services built from this repo; `make deps` starts everything else.
 APP_SERVICES    := api trader-portal
-# A literal space, so APP_SERVICES can be turned into a grep alternation.
-SPACE           := $(subst ,, )
+# Newline for turning `docker compose config --services` output into a word list.
+define NL
+
+
+endef
+# Lazy (=) so `docker compose config` runs only when `make deps` is invoked.
+ALL_SERVICES  = $(subst $(NL), ,$(shell $(COMPOSE) config --services))
+DEPS_SERVICES = $(filter-out $(APP_SERVICES),$(ALL_SERVICES))
 # Migrator version for `make migration`, read straight out of the Dockerfile's
 # ARG so the two cannot drift apart. Lazy (=, not :=) so the sed runs only when
 # `make migration` expands it, not on every make invocation.
@@ -26,8 +32,9 @@ MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
 # ---------------------------------------------------------------------------
 
 .PHONY: dev
+dev: export APP_ENV = development
 dev: ## Start the full stack with hot reload (detached; use `make logs` to watch)
-	APP_ENV=development $(COMPOSE) up -d
+	$(COMPOSE) up -d
 
 .PHONY: logs
 logs: ## Tail logs from all running services
@@ -38,8 +45,9 @@ logs: ## Tail logs from all running services
 # ---------------------------------------------------------------------------
 
 .PHONY: preview
+preview: export APP_ENV = development
 preview: ## Build and run the real images locally (detached; use `make logs` to watch)
-	APP_ENV=development $(COMPOSE_PREVIEW) up --build -d
+	$(COMPOSE_PREVIEW) up --build -d
 
 .PHONY: build
 build: ## Build the images without starting anything
@@ -51,9 +59,12 @@ build: ## Build the images without starting anything
 
 .PHONY: deps
 deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
-	$(COMPOSE) up -d $$($(COMPOSE) config --services | grep -vxE '$(subst $(SPACE),|,$(APP_SERVICES))')
+	$(COMPOSE) up -d $(DEPS_SERVICES)
 
 .PHONY: test-e2e
+test-e2e: export APP_ENV = development
+test-e2e: export E2E = 1
+test-e2e: export GOWORK = off
 test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api container)
 	$(COMPOSE) stop api
 	@if [ -f .env ]; then \
@@ -61,17 +72,19 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 	else \
 		echo "⚠️  No .env found — using the current environment"; \
 	fi; \
-	E2E=1 GOWORK=off APP_ENV=development go test -v -count=1 -timeout 240s ./test/e2e/...
+	go test -v -count=1 -timeout 240s ./test/e2e/...
 
 # ---------------------------------------------------------------------------
 # Migrations (uses the OpenNSW/agency migrate tool; generate needs no database)
 # ---------------------------------------------------------------------------
 
 .PHONY: migration
+migration: export GOWORK = off
+migration: export MIGRATION_DIR = ./migrations
+migration: export DB_DRIVER = sqlite
 migration: ## Scaffold a new migration file: make migration name=<description>
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
-	@GOWORK=off MIGRATION_DIR=./migrations DB_DRIVER=sqlite \
-		go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
+	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
 
 # ---------------------------------------------------------------------------
 # Lifecycle
@@ -141,20 +154,24 @@ fmt: ## Format all Go source files with gofmt
 	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
 
 .PHONY: lint
+lint: export GOWORK = off
 lint: ## Run golangci-lint
-	GOWORK=off golangci-lint run --config .golangci.yml ./...
+	golangci-lint run --config .golangci.yml ./...
 
 .PHONY: tidy
+tidy: export GOWORK = off
 tidy: ## Run go mod tidy
-	GOWORK=off go mod tidy
+	go mod tidy
 
 .PHONY: test
+test: export GOWORK = off
 test: ## Run all tests with the race detector
-	GOWORK=off go test -race -count=1 ./...
+	go test -race -count=1 ./...
 
 .PHONY: vuln
+vuln: export GOWORK = off
 vuln: ## Run govulncheck against the Go vulnerability database
-	GOWORK=off govulncheck ./...
+	govulncheck ./...
 
 .PHONY: secrets
 secrets: ## Run gitleaks secret scan on the repository

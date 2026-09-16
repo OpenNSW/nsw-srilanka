@@ -26,6 +26,7 @@ configs/services.json
 configs/services.docker.json
 configs/payment_methods.json
 configs/catalog.json
+configs/companies.json
 
 # Local bucket files
 bucket/*
