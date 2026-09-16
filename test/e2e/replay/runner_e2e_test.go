@@ -28,6 +28,25 @@ func TestReplay_FCAUApplicationApprove(t *testing.T) {
 	runFlow(t, h, "fcau_application_approve.json")
 }
 
+// TestReplay_CDAApplicationApprove drives the CDA coconut-certificate branch
+// end-to-end: submit the application → mock agency posts an "approve" callback
+// with product_type_dc (the payment path) → select payment method → mock
+// gateway confirms the payment → pay-fee COMPLETED.
+func TestReplay_CDAApplicationApprove(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "cda_application_approve.json")
+}
+
+// TestReplay_CDAApplicationRework sends the CDA application back with
+// needs_more_info, then the trader resubmits and the agency approves, asserting
+// the workflow still advances to the pay-fee task.
+func TestReplay_CDAApplicationRework(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "cda_application_rework.json")
+}
+
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()

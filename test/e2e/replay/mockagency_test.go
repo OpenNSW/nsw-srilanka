@@ -97,10 +97,16 @@ func (a *mockAgency) handleInject(w http.ResponseWriter, r *http.Request, agency
 	_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "taskId": taskID})
 }
 
-func (a *mockAgency) findInject(taskID string) (storedInject, bool) {
+// takeInject returns and removes the stored inject for taskID so a later
+// callback on the same task (e.g. after a needs_more_info loop) waits for
+// the next inject rather than replaying the previous one.
+func (a *mockAgency) takeInject(taskID string) (storedInject, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	inj, ok := a.injects[taskID]
+	if ok {
+		delete(a.injects, taskID)
+	}
 	return inj, ok
 }
 
@@ -114,7 +120,7 @@ func (a *mockAgency) Respond(ctx context.Context, taskID, command string, conten
 	var inj storedInject
 	for {
 		var ok bool
-		if inj, ok = a.findInject(taskID); ok {
+		if inj, ok = a.takeInject(taskID); ok {
 			break
 		}
 		if time.Now().After(deadline) {
