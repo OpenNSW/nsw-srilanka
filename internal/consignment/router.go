@@ -1,6 +1,7 @@
 package consignment
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -380,39 +381,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 // check, so any caller holding the admin scope can view any consignment's engine state
 // by design.
 func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.Type() == "" {
-		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
-		return
-	}
-	consignmentID := r.PathValue("id")
-	if consignmentID == "" {
-		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
-		return
-	}
-
-	status, err := c.cs.GetEngineStatus(ctx, consignmentID)
-	if err != nil {
-		if errors.Is(err, ErrEngineWorkflowNotFound) {
-			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
-			return
-		}
-		httputil.InternalServerError(w, r, "failed to retrieve consignment engine status", err)
-		return
-	}
-
-	c.audit.Record(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view": "engine-status",
-		},
-	})
-	httputil.JSON(w, http.StatusOK, status)
+	c.handleEngineStatus(w, r, "engine-status", c.cs.GetEngineStatus)
 }
 
 // HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task/{id}/engine-status.
@@ -421,25 +390,36 @@ func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http
 // workflow.Manager from the consignment/child-workflow IDs HandleGetConsignmentEngineStatus
 // queries. Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go).
 func (c *Router) HandleGetTaskWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
+	c.handleEngineStatus(w, r, "task-workflow-engine-status", c.cs.GetTaskWorkflowEngineStatus)
+}
+
+// handleEngineStatus is the common request/response handling shared by
+// HandleGetConsignmentEngineStatus and HandleGetTaskWorkflowEngineStatus — they differ only in
+// which Service method resolves {id} into an *EngineStatusDTO and the audit "view" label.
+func (c *Router) handleEngineStatus(
+	w http.ResponseWriter, r *http.Request,
+	view string,
+	fetch func(ctx context.Context, id string) (*EngineStatusDTO, error),
+) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.Type() == "" {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
-	taskWorkflowID := r.PathValue("id")
-	if taskWorkflowID == "" {
+	id := r.PathValue("id")
+	if id == "" {
 		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
 		return
 	}
 
-	status, err := c.cs.GetTaskWorkflowEngineStatus(ctx, taskWorkflowID)
+	status, err := fetch(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrEngineWorkflowNotFound) {
 			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
 			return
 		}
-		httputil.InternalServerError(w, r, "failed to retrieve task workflow engine status", err)
+		httputil.InternalServerError(w, r, "failed to retrieve "+view, err)
 		return
 	}
 
@@ -447,10 +427,10 @@ func (c *Router) HandleGetTaskWorkflowEngineStatus(w http.ResponseWriter, r *htt
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
-		TargetID:   taskWorkflowID,
+		TargetID:   id,
 		Failure:    false,
 		Metadata: map[string]any{
-			"view": "task-workflow-engine-status",
+			"view": view,
 		},
 	})
 	httputil.JSON(w, http.StatusOK, status)
