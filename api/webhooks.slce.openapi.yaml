@@ -296,6 +296,11 @@ components:
               example: true
             cusDecRef:
               description: Registered reference (§4.1). Present on success; absent/null on failure.
+            cusdecRef:
+              description: |
+                Deprecated alias for `cusDecRef` (lowercase `d`), accepted for
+                compatibility with an earlier draft of this contract. Present
+                on success; absent/null on failure.
             taxes:
               type: array
               maxItems: 100
@@ -308,13 +313,17 @@ components:
           oneOf:
             - title: Integrated
               required:
-                - cusDecRef
                 - taxes
                 - errors
+              anyOf:
+                - required: [cusDecRef]
+                - required: [cusdecRef]
               properties:
                 integrated:
                   enum: [true]
                 cusDecRef:
+                  $ref: '#/components/schemas/DocumentReference'
+                cusdecRef:
                   $ref: '#/components/schemas/DocumentReference'
                 taxes:
                   type: array
@@ -337,6 +346,11 @@ components:
                   nullable: true
                   enum: [null]
                   description: Registered reference (§4.1). Present on success; absent/null on failure.
+                cusdecRef:
+                  type: object
+                  nullable: true
+                  enum: [null]
+                  description: Deprecated alias for `cusDecRef`. Present on success; absent/null on failure.
                 taxes:
                   type: array
                   maxItems: 0
