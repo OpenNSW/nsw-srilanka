@@ -251,3 +251,35 @@ components:
             invoice_details:
               type: object
               additionalProperties: true
+              properties:
+                status:
+                  type: string
+                service_order_no:
+                  type: string
+                invoice_no:
+                  type: string
+                cusdec_serial:
+                  type: string
+                total_amount:
+                  type: number
+                invoice_url:
+                  type: string
+                timestamp:
+                  type: string
+                payment_receipt:
+                  type: object
+                  additionalProperties: true
+                  properties:
+                    invoice_no:
+                      type: string
+                    invoice_serial:
+                      type: string
+                    paid_amount:
+                      type: number
+                    paid_datetime:
+                      type: string
+                    payment_receipt:
+                      type: string
+                      description: A receipt reference number, not a link.
+                    service_order_no:
+                      type: string

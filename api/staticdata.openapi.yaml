@@ -50,8 +50,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                description: Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
         '400':
           description: Missing `version` query parameter.
           content:
@@ -60,6 +59,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:task:read`.
           content:
             application/json:
               schema:

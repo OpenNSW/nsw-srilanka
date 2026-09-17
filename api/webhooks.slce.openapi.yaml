@@ -14,6 +14,8 @@ paths:
       description: |
         Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, and CDN acknowledgments).
       operationId: processSLCEWebhook
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -207,6 +209,12 @@ paths:
                     example: "declaration not found, retry later"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     DocumentReference:
       type: object

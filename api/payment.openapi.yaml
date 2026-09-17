@@ -298,6 +298,24 @@ components:
             - required: [serviceid]
             - required: [serviceId]
             - required: [serviced]
+        - properties:
+            data:
+              not:
+                items:
+                  not:
+                    properties:
+                      paramName:
+                        enum: [refno, refNo]
+                    required: [paramName]
+        - properties:
+            data:
+              not:
+                items:
+                  not:
+                    properties:
+                      paramName:
+                        enum: [status, paymentstatus]
+                    required: [paramName]
       properties:
         transactionID:
           type: string
@@ -321,6 +339,8 @@ components:
           type: string
         data:
           type: array
+          minItems: 2
+          description: Must include one item named `refno`/`refNo` and one named `status`/`paymentstatus`.
           items:
             $ref: '#/components/schemas/GovPayParam'
 
@@ -358,6 +378,9 @@ components:
           type: string
         initialValue:
           description: String or number.
+          oneOf:
+            - type: string
+            - type: number
         datatype:
           type: string
           example: "decimal"
@@ -445,6 +468,9 @@ components:
           type: string
         initialValue:
           description: String or number.
+          oneOf:
+            - type: string
+            - type: number
         datatype:
           type: string
         maxLength:

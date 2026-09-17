@@ -264,6 +264,7 @@ components:
       type: object
       required:
         - error
+        - correlationId
       properties:
         error:
           type: string

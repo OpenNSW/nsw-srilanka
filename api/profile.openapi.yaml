@@ -41,6 +41,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:profile:read`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No persisted user profile exists for the caller.
           content:
@@ -73,6 +79,12 @@ paths:
                   $ref: '#/components/schemas/CHARecord'
         '401':
           description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:cha:read`.
           content:
             application/json:
               schema:
@@ -136,6 +148,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:company:read`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error.
           content:
@@ -155,6 +173,7 @@ components:
       type: object
       required:
         - error
+        - correlationId
       properties:
         error:
           type: string

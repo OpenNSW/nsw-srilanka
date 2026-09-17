@@ -47,6 +47,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No such consignment.
           content:
@@ -97,8 +103,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No workflow execution exists for this consignment ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/task/{id}/engine-status:
+    get:
+      summary: "[Admin] Get a task workflow's raw engine state"
+      description: |
+        Returns the raw engine state of a TASK node's independent per-task
+        ("micro") workflow — a separate ID space and workflow manager from
+        the consignment/child-workflow IDs used by
+        `GET /api/v1/admin/consignments/{id}/engine-status`. The ID is
+        obtained from `EngineNodeDTO.task_workflow_id` on the TASK node that
+        spawned it.
+
+        Requires scope `nsw:consignment:adminread`.
+      operationId: getTaskWorkflowEngineStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A task workflow's own workflow ID (see `EngineNodeDTO.task_workflow_id`).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EngineStatusDTO'
+        '400':
+          description: Missing task workflow ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. No usable principal on the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No workflow execution exists for this task workflow ID.
           content:
             application/json:
               schema:
@@ -131,6 +201,7 @@ components:
       type: object
       required:
         - error
+        - correlationId
       properties:
         error:
           type: string
@@ -239,6 +310,13 @@ components:
           type: string
         task_template_id:
           type: string
+        task_workflow_id:
+          type: string
+          description: |
+            Set only for a TASK node whose task has actually started its own
+            per-task ("micro") workflow. Pass this as `{id}` to
+            `GET /api/v1/admin/task/{id}/engine-status` to view that
+            workflow's engine state.
         status:
           type: string
         last_error:
@@ -253,8 +331,7 @@ components:
           type: array
           description: |
             Any child workflow executions spawned by this node (e.g. a
-            SPLIT_TASK / BATCH_SPLIT gateway). Each ID can itself be fetched
-            via this same endpoint to drill down.
+            SPLIT_TASK / BATCH_SPLIT gateway).
           items:
             type: string
 
