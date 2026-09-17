@@ -28,6 +28,10 @@ const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 
 // Shared grid so NodeRow's columns line up under the header regardless of nesting depth.
 const NODE_ROW_GRID = 'grid grid-cols-[1fr_110px_130px_150px_1fr] gap-2 items-center'
 
+// A fetch either found the workflow, didn't (404 — normal for a not-yet-started or already-gone
+// execution), or failed for some other reason.
+type FetchError = 'notFound' | 'loadFailed' | null
+
 // Internal ops view of a consignment's raw engine state — the same picture you'd
 // otherwise need the Temporal UI for. Backend gates this behind the
 // ConsignmentAdminRead scope (see HandleGetConsignmentEngineStatus); reachable
@@ -60,7 +64,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<'notFound' | 'loadFailed' | null>(null)
+  const [error, setError] = useState<FetchError>(null)
   const [variablesTarget, setVariablesTarget] = useState<WorkflowVariablesTarget | null>(null)
   // Supplementary business-side context (name, state, trader) fetched independently of the
   // engine status — best-effort only, so a failure here just hides this section rather than
@@ -159,16 +163,12 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
           <Button variant="soft" color="gray" size="2" asChild>
             <Link to={`/admin/consignments/${workflowId}/view`}>View consignment</Link>
           </Button>
-          <Button
-            variant="soft"
-            color="gray"
-            size="2"
-            onClick={() =>
-              setVariablesTarget({ workflowId, label: 'Root workflow', variables: status.global_variables })
-            }
-          >
-            Global variables
-          </Button>
+          <GlobalVariablesButton
+            workflowId={workflowId}
+            label="Root workflow"
+            variables={status.global_variables}
+            onOpen={setVariablesTarget}
+          />
           <Button variant="soft" color="blue" size="2" onClick={() => void refresh()} disabled={refreshing}>
             <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
             Refresh
@@ -283,6 +283,31 @@ function WorkflowVariablesDialog({ target, onClose }: { target: WorkflowVariable
   )
 }
 
+// The "Global variables" action that opens WorkflowVariablesDialog scoped to one workflow
+// instance — used at the root header (a full-size toolbar button) and by each nested branch
+// (a smaller inline one), which differ only in size/variant and which workflow/label they open.
+function GlobalVariablesButton({
+  workflowId,
+  label,
+  variables,
+  onOpen,
+  size = '2',
+  variant = 'soft',
+}: {
+  workflowId: string
+  label: string
+  variables?: Record<string, unknown>
+  onOpen: (target: WorkflowVariablesTarget) => void
+  size?: '1' | '2'
+  variant?: 'soft' | 'ghost'
+}) {
+  return (
+    <Button variant={variant} color="gray" size={size} onClick={() => onOpen({ workflowId, label, variables })}>
+      Global variables
+    </Button>
+  )
+}
+
 // Which nested-workflow drilldown a branch renders: a native engine child (SPLIT_TASK/
 // BATCH_SPLIT/PARALLEL_SPLIT, fetched via getConsignmentEngineStatus) or a TASK node's own task
 // workflow (a separate ID space/manager, fetched via getTaskWorkflowEngineStatus).
@@ -301,7 +326,7 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind) {
   const [fetched, setFetched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<EngineStatus | null>(null)
-  const [error, setError] = useState<'notFound' | 'loadFailed' | null>(null)
+  const [error, setError] = useState<FetchError>(null)
 
   const ensureFetched = useCallback(() => {
     if (fetched || loading) return
@@ -443,16 +468,14 @@ function ChildWorkflowBranch({
             {workflowId}
           </button>
           {status && (
-            <Button
-              variant="ghost"
-              color="gray"
+            <GlobalVariablesButton
+              workflowId={workflowId}
+              label="Child workflow"
+              variables={status.global_variables}
+              onOpen={onOpenVariables}
               size="1"
-              onClick={() =>
-                onOpenVariables({ workflowId, label: 'Child workflow', variables: status.global_variables })
-              }
-            >
-              Global variables
-            </Button>
+              variant="ghost"
+            />
           )}
         </div>
 
@@ -487,7 +510,7 @@ function TaskWorkflowPanel({
   depth: number
   loading: boolean
   status: EngineStatus | null
-  error: 'notFound' | 'loadFailed' | null
+  error: FetchError
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   return (
@@ -498,14 +521,14 @@ function TaskWorkflowPanel({
           {workflowId}
         </span>
         {status && (
-          <Button
-            variant="ghost"
-            color="gray"
+          <GlobalVariablesButton
+            workflowId={workflowId}
+            label="Task workflow"
+            variables={status.global_variables}
+            onOpen={onOpenVariables}
             size="1"
-            onClick={() => onOpenVariables({ workflowId, label: 'Task workflow', variables: status.global_variables })}
-          >
-            Global variables
-          </Button>
+            variant="ghost"
+          />
         )}
       </div>
       <WorkflowBranchBody
@@ -531,7 +554,7 @@ function WorkflowBranchBody({
   depth: number
   loading: boolean
   status: EngineStatus | null
-  error: 'notFound' | 'loadFailed' | null
+  error: FetchError
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   return (
