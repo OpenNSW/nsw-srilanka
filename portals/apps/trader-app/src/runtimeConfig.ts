@@ -5,10 +5,12 @@ type RuntimeConfigMap = Record<string, RuntimeConfigValue>
 export interface IdpRoleGroupConfig {
   traderGroupName: string
   chaGroupName: string
+  nswAdminGroupName: string
 }
 
 const DEFAULT_TRADER_GROUP_NAME = 'Traders'
 const DEFAULT_CHA_GROUP_NAME = 'CHA'
+const DEFAULT_NSW_ADMIN_GROUP_NAME = 'NSW Admins'
 
 declare global {
   interface Window {
@@ -95,5 +97,6 @@ export function getIdpRoleGroupConfig(): IdpRoleGroupConfig {
   return {
     traderGroupName: getEnv('VITE_IDP_TRADER_GROUP_NAME', DEFAULT_TRADER_GROUP_NAME),
     chaGroupName: getEnv('VITE_IDP_CHA_GROUP_NAME', DEFAULT_CHA_GROUP_NAME),
+    nswAdminGroupName: getEnv('VITE_IDP_NSW_ADMIN_GROUP_NAME', DEFAULT_NSW_ADMIN_GROUP_NAME),
   }
 }
