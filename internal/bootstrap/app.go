@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -496,6 +497,34 @@ type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }
 
+// newAdminParkLogger builds the AdminParkHandler registered on a Temporal worker. It is the
+// only place that currently reacts to a node parking for admin intervention — core's engine
+// itself only records the event on the workflow's own in-memory AuditTrail, which nothing
+// surfaces proactively. slog.Error here is deliberate: this should be loud and land wherever
+// this service's error-level logs are already aggregated/alerted on, since today there is no
+// other way to learn a node parked short of already suspecting a specific workflow ID and
+// querying its engine status.
+//
+// scope identifies which runner registered this handler ("top-level workflow" or "task
+// workflow"), since that can't be inferred from the payload itself.
+func newAdminParkLogger(scope string) func(workflow.AdminParkPayload) error {
+	return func(payload workflow.AdminParkPayload) error {
+		// TODO: also persist this park event to a DB (keyed on workflow_id/node_id, cleared on
+		// resolution) so currently-parked nodes can be queried on demand instead of only being
+		// discoverable via these logs.
+		slog.Error(scope+" parked for admin intervention",
+			"workflow_id", payload.WorkflowID,
+			"run_id", payload.RunID,
+			"root_workflow_id", payload.RootWorkflowID,
+			"node_id", payload.NodeID,
+			"node_type", payload.NodeType,
+			"task_template_id", payload.TaskTemplateID,
+			"cause", payload.Cause,
+		)
+		return nil
+	}
+}
+
 // wireParentRunner wires the core/workflow port of workflow.WireParentRunner.
 // core ships no wrapper for this, so the wiring is inlined here, the only
 // place that needs it.
@@ -525,6 +554,7 @@ func wireParentRunner(c client.Client, activator parentTaskActivator, upstream p
 	}
 
 	runner := workflow.NewTemporalManager(c, parentWorkflowQueue, onActivation, onCompletion)
+	runner.RegisterAdminParkHandler(newAdminParkLogger("top-level workflow"))
 	if err := runner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start parent workflow worker: %w", err)
 	}
@@ -705,6 +735,7 @@ func initTask(
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
+	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
 
 	notifManager, err := notification.NewManager(cfg.Notification,
 		providers.NewEmailProvider(), providers.NewSMSProvider())
