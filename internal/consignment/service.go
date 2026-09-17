@@ -37,10 +37,7 @@ type Service struct {
 	artifactRegistry *artifact.Registry
 	wm               workflow.Manager
 	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
-	// manager/task queue from wm. Each TASK node in wm's own workflow spawns an independent
-	// workflow execution here (see engine_status.go's TaskWorkflowID lookup), so a node parked
-	// for admin intervention inside one is invisible to wm.GetStatus and needs this second
-	// manager to query.
+	// manager/task queue from wm.
 	taskWm         workflow.Manager
 	chaService     cha.Service
 	companyService company.Service
@@ -89,7 +86,7 @@ func (s *Service) RegisterWorkflowManager(wm workflow.Manager) error {
 }
 
 // RegisterTaskWorkflowManager registers the workflow manager for the per-task ("micro")
-// workflow runner — see the taskWm field doc.
+// workflow runner.
 func (s *Service) RegisterTaskWorkflowManager(wm workflow.Manager) error {
 	if s.taskWm != nil {
 		return fmt.Errorf("task workflow manager already registered for ConsignmentService")

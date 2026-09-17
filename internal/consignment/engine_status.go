@@ -61,8 +61,7 @@ var ErrEngineWorkflowNotFound = errors.New("workflow execution not found")
 // performs no trader/CHA ownership check — see the TODO on the route wiring in router.go.
 //
 // Each TASK node's DTO is additionally enriched with TaskWorkflowID, when its task has actually
-// started — resolved via the task store rather than reconstructed from core/taskflow's
-// "task-wf-"+nodeID ID scheme, so this doesn't hardcode a convention private to that package.
+// started.
 func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*EngineStatusDTO, error) {
 	if s.wm == nil {
 		return nil, fmt.Errorf("no workflow manager registered for ConsignmentService")
@@ -90,9 +89,7 @@ func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*Engi
 // GetTaskWorkflowEngineStatus returns the raw engine state for taskWorkflowID — the independent
 // per-task ("micro") workflow a TASK node spawned to fulfill it (see EngineNodeDTO.TaskWorkflowID)
 // — from the registered task-workflow manager, a separate manager/task queue from the one
-// GetEngineStatus queries. A node parked for admin intervention inside a task workflow is
-// otherwise invisible: from its owning TASK node's own workflow, the node is just pending
-// completion.
+// GetEngineStatus queries.
 func (s *Service) GetTaskWorkflowEngineStatus(ctx context.Context, taskWorkflowID string) (*EngineStatusDTO, error) {
 	if s.taskWm == nil {
 		return nil, fmt.Errorf("no task workflow manager registered for ConsignmentService")

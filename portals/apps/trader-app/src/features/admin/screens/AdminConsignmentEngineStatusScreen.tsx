@@ -56,14 +56,13 @@ function visibleNodes(nodes: EngineNode[], showAllNodes: boolean): EngineNode[] 
   return showAllNodes ? nodes : nodes.filter((node) => !NOISY_NODE_TYPES.has(node.type))
 }
 
-// A one-shot "expand everything" / "collapse everything" command from the toolbar, threaded down
-// to every useExpandableWorkflow instance. gen only ever increases, so each click is always
-// distinguishable from the last even if it repeats the same `expand` value (e.g. clicking
-// "Expand all" again after manually collapsing one branch must still force it back open — a
-// plain boolean wouldn't re-trigger since React bails out on setting state to its current value).
-// Branches lazily fetch on first expand, so a branch revealed only after its parent's fetch
-// completes must also pick up the current signal on mount, not just the ones that existed at
-// click time — see useExpandableWorkflow's effect.
+// A one-shot "expand everything"/"collapse everything" command from the toolbar, threaded down
+// to every useExpandableWorkflow instance. gen === 0 means no command has been issued yet — a
+// plain boolean can't represent that third state, and without it every branch would eagerly
+// expand and fetch on mount before the toggle was ever clicked. Branches lazily fetch on first
+// expand, so a branch revealed only after its parent's fetch completes must also pick up the
+// current signal on mount, not just the ones that existed at click time — see
+// useExpandableWorkflow's effect.
 interface ExpandSignal {
   gen: number
   expand: boolean
