@@ -38,14 +38,6 @@ type Config struct {
 	Integrations integrations.Config
 
 	ArtifactLoader loaders.Config
-
-	// DevMode indicates whether the application is running in development mode (APP_ENV=development).
-	DevMode bool
-
-	// TestManifestPaths holds optional relative paths to test/sandbox manifest files
-	// (e.g. "test/single_node/manifest.json") loaded alongside the primary manifest
-	// when DevMode is true.
-	TestManifestPaths []string
 }
 
 // ServerConfig holds server configuration.
@@ -189,8 +181,6 @@ func Load() (*Config, error) {
 				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
 			},
 		},
-		DevMode:           isDevEnvironment(),
-		TestManifestPaths: parseCommaSeparated(getEnvOrDefault("DEV_TEST_MANIFEST_PATHS", "")),
 	}
 
 	// Validate required fields

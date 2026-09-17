@@ -12,12 +12,14 @@ import (
 
 // fakeSender records the last request and optionally fails.
 type fakeSender struct {
+	calls  int
 	last   notification.Request
 	called bool
 	err    error
 }
 
 func (f *fakeSender) Send(_ context.Context, req notification.Request) error {
+	f.calls++
 	f.called = true
 	f.last = req
 	return f.err
@@ -40,23 +42,63 @@ func recordWith(data map[string]any) *store.TaskRecord {
 	return &store.TaskRecord{TaskID: "task-1", Data: data}
 }
 
-func TestNotificationExtension_Execute(t *testing.T) {
-	tests := []struct {
-		name        string
-		props       string
-		payload     map[string]any
-		record      *store.TaskRecord
-		loaderDoc   string
-		loaderErr   error
-		sendErr     error
-		devMode     bool
-		wantErr     bool
-		wantCalled  bool
-		wantTo      string
-		wantBody    string
-		wantSubject string
-		wantHTML    string
+type notificationExecuteTestCase struct {
+	name          string
+	props         string
+	payload       map[string]any
+	record        *store.TaskRecord
+	loaderDoc     string
+	loaderErr     error
+	sendErr       error
+	wantErr       bool
+	wantCalled    bool
+	wantSendCalls int
+	wantTo        string
+	wantBody      string
+	wantSubject   string
+	wantHTML      string
+}
+
+// assertNotificationOutcome checks Execute's error/no-error contract and how
+// many times the sender was called.
+func assertNotificationOutcome(t *testing.T, tt notificationExecuteTestCase, fs *fakeSender, err error) {
+	t.Helper()
+
+	if gotErr := err != nil; gotErr != tt.wantErr {
+		t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+	}
+	if fs.called != tt.wantCalled {
+		t.Fatalf("sender called = %v, want %v", fs.called, tt.wantCalled)
+	}
+	if tt.wantSendCalls != 0 && fs.calls != tt.wantSendCalls {
+		t.Fatalf("sender calls = %d, want %d", fs.calls, tt.wantSendCalls)
+	}
+}
+
+// assertNotificationRequest checks the fields of the request the sender was
+// called with, when it was called.
+func assertNotificationRequest(t *testing.T, tt notificationExecuteTestCase, fs *fakeSender) {
+	t.Helper()
+
+	if !fs.called {
+		return
+	}
+	for _, field := range []struct {
+		name, got, want string
 	}{
+		{"To", fs.last.To, tt.wantTo},
+		{"Body", fs.last.Body, tt.wantBody},
+		{"Subject", fs.last.Subject, tt.wantSubject},
+		{"HTMLBody", fs.last.HTMLBody, tt.wantHTML},
+	} {
+		if field.want != "" && field.got != field.want {
+			t.Errorf("%s = %q, want %q", field.name, field.got, field.want)
+		}
+	}
+}
+
+func TestNotificationExtension_Execute(t *testing.T) {
+	tests := []notificationExecuteTestCase{
 		{
 			name:       "recipient resolved from payload notifyRecipient",
 			props:      `{"channel":"sms","body":"received"}`,
@@ -72,43 +114,20 @@ func TestNotificationExtension_Execute(t *testing.T) {
 			record: recordWith(nil),
 		},
 		{
-			name:    "missing notifyRecipient skips in dev mode too",
-			props:   `{"channel":"sms","body":"x"}`,
-			record:  recordWith(nil),
-			devMode: true,
-		},
-		{
-			name:    "invalid request fails (empty body)",
+			name:    "invalid request always fails (empty body is a config bug, not best-effort)",
 			props:   `{"channel":"sms"}`,
 			payload: map[string]any{"notifyRecipient": "+94771234567"},
 			record:  recordWith(nil),
 			wantErr: true,
 		},
 		{
-			name:    "invalid request still errors in dev mode",
-			props:   `{"channel":"sms"}`,
-			payload: map[string]any{"notifyRecipient": "+94771234567"},
-			record:  recordWith(nil),
-			devMode: true,
-			wantErr: true,
-		},
-		{
-			name:       "send error surfaces when not dev mode",
-			props:      `{"channel":"sms","body":"x"}`,
-			payload:    map[string]any{"notifyRecipient": "+94771234567"},
-			record:     recordWith(nil),
-			sendErr:    errors.New("gateway down"),
-			wantErr:    true,
-			wantCalled: true,
-		},
-		{
-			name:       "send error swallowed in dev mode",
-			props:      `{"channel":"sms","body":"x"}`,
-			payload:    map[string]any{"notifyRecipient": "+94771234567"},
-			record:     recordWith(nil),
-			sendErr:    errors.New("gateway down"),
-			devMode:    true,
-			wantCalled: true,
+			name:          "send error is swallowed, not fatal",
+			props:         `{"channel":"sms","body":"x"}`,
+			payload:       map[string]any{"notifyRecipient": "+94771234567"},
+			record:        recordWith(nil),
+			sendErr:       errors.New("gateway down"),
+			wantCalled:    true,
+			wantSendCalls: 1,
 		},
 		{
 			name:        "template fields interpolate record.Data",
@@ -123,30 +142,18 @@ func TestNotificationExtension_Execute(t *testing.T) {
 			wantHTML:    "<p>Hi Acme</p>",
 		},
 		{
-			name:      "missing template variable fails (non-dev)",
+			name:      "missing template variable is swallowed, not fatal",
 			props:     `{"channel":"sms","template_id":"t"}`,
 			payload:   map[string]any{"notifyRecipient": "+94771234567"},
 			loaderDoc: `{"body":"Hi {{.userform.missing}}"}`,
 			record:    recordWith(map[string]any{"userform": map[string]any{"name": "Acme"}}),
-			wantErr:   true,
 		},
 		{
-			name:       "missing template variable swallowed in dev mode",
-			props:      `{"channel":"sms","template_id":"t"}`,
-			payload:    map[string]any{"notifyRecipient": "+94771234567"},
-			loaderDoc:  `{"body":"Hi {{.userform.missing}}"}`,
-			record:     recordWith(map[string]any{"userform": map[string]any{"name": "Acme"}}),
-			devMode:    true,
-			wantErr:    false,
-			wantCalled: false,
-		},
-		{
-			name:      "template_id not found errors",
+			name:      "template_id not found is swallowed, not fatal",
 			props:     `{"channel":"sms","template_id":"missing"}`,
 			payload:   map[string]any{"notifyRecipient": "+94771234567"},
 			loaderErr: errors.New("template \"missing\" not found"),
 			record:    recordWith(nil),
-			wantErr:   true,
 		},
 		{
 			name:       "inline config falls back when template field empty",
@@ -172,31 +179,12 @@ func TestNotificationExtension_Execute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := &fakeSender{err: tt.sendErr}
-			ext := NewNotificationExtension(fs, fakeLoader{doc: tt.loaderDoc, err: tt.loaderErr}, tt.devMode)
+			ext := NewNotificationExtension(fs, fakeLoader{doc: tt.loaderDoc, err: tt.loaderErr})
 
 			err := ext.Execute(context.Background(), tt.record, tt.payload, json.RawMessage(tt.props))
 
-			if tt.wantErr && err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !tt.wantErr && err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if fs.called != tt.wantCalled {
-				t.Fatalf("sender called = %v, want %v", fs.called, tt.wantCalled)
-			}
-			if tt.wantTo != "" && fs.last.To != tt.wantTo {
-				t.Errorf("To = %q, want %q", fs.last.To, tt.wantTo)
-			}
-			if tt.wantBody != "" && fs.last.Body != tt.wantBody {
-				t.Errorf("Body = %q, want %q", fs.last.Body, tt.wantBody)
-			}
-			if tt.wantSubject != "" && fs.last.Subject != tt.wantSubject {
-				t.Errorf("Subject = %q, want %q", fs.last.Subject, tt.wantSubject)
-			}
-			if tt.wantHTML != "" && fs.last.HTMLBody != tt.wantHTML {
-				t.Errorf("HTMLBody = %q, want %q", fs.last.HTMLBody, tt.wantHTML)
-			}
+			assertNotificationOutcome(t, tt, fs, err)
+			assertNotificationRequest(t, tt, fs)
 		})
 	}
 }
