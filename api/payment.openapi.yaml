@@ -147,9 +147,8 @@ paths:
                 $ref: '#/components/schemas/UpdateResponse'
         '400':
           description: |
-            Malformed request envelope, a `status` value that does not map
-            to a known outcome, or an amount/currency mismatch against the
-            transaction on file.
+            Malformed request envelope, or a `status` value that does not
+            map to a known outcome.
           content:
             text/plain:
               schema:
@@ -220,23 +219,59 @@ components:
             - type: string
             - type: number
 
+    PresentmentDataItem:
+      type: object
+      description: The single `data[]` item required for presentment — named `refNo`, alphanumeric, ≤20 characters.
+      required:
+        - paramName
+        - value
+      properties:
+        seq:
+          type: string
+        paramName:
+          type: string
+          enum: [refNo]
+        value:
+          type: string
+          pattern: '^[A-Za-z0-9]{1,20}$'
+
     PresentmentRequest:
       type: object
       description: The common GovPay+ request envelope, posted for presentment (validate).
       required:
-        - transactionID
-        - subinstId
-        - serviceid
         - data
+      allOf:
+        - anyOf:
+            - required: [transactionID]
+            - required: [transactionId]
+        - anyOf:
+            - required: [subinstId]
+            - required: [suinstId]
+        - anyOf:
+            - required: [serviceid]
+            - required: [serviceId]
+            - required: [serviced]
       properties:
         transactionID:
           type: string
+        transactionId:
+          type: string
+          description: Alias for `transactionID` accepted by some GovPay+ environments.
         subinstId:
           type: string
           description: Sub-institution ID this reference must be registered under.
+        suinstId:
+          type: string
+          description: Alias for `subinstId` accepted by some GovPay+ environments.
         serviceid:
           type: string
           description: Service ID this reference must be registered under.
+        serviceId:
+          type: string
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviced:
+          type: string
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
         serviceName:
           type: string
         data:
@@ -245,23 +280,43 @@ components:
           minItems: 1
           maxItems: 1
           items:
-            $ref: '#/components/schemas/GovPayParam'
+            $ref: '#/components/schemas/PresentmentDataItem'
 
     UpdateRequest:
       type: object
       description: The common GovPay+ request envelope, posted for update (webhook).
       required:
-        - transactionID
-        - subinstId
-        - serviceid
         - data
+      allOf:
+        - anyOf:
+            - required: [transactionID]
+            - required: [transactionId]
+        - anyOf:
+            - required: [subinstId]
+            - required: [suinstId]
+        - anyOf:
+            - required: [serviceid]
+            - required: [serviceId]
+            - required: [serviced]
       properties:
         transactionID:
           type: string
+        transactionId:
+          type: string
+          description: Alias for `transactionID` accepted by some GovPay+ environments.
         subinstId:
           type: string
+        suinstId:
+          type: string
+          description: Alias for `subinstId` accepted by some GovPay+ environments.
         serviceid:
           type: string
+        serviceId:
+          type: string
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviced:
+          type: string
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
         serviceName:
           type: string
         data:

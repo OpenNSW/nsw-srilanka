@@ -3,8 +3,9 @@ info:
   title: NSW Sri Lanka / Consignment API
   description: |
     OpenAPI 3.0 specification for the consignment domain: creating export
-    consignments, listing and reading a caller's own trader/CHA-owned
-    consignments, and the ops/admin views of any consignment's engine state.
+    consignments, and listing and reading a caller's own trader/CHA-owned
+    consignments. Ops/admin views of any consignment are in the separate
+    Admin API.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -242,101 +243,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/admin/consignments/{id}:
-    get:
-      summary: "[Admin] Get any consignment's full detail"
-      description: |
-        Ops/admin view: fetches the full consignment detail for **any**
-        consignment, with no trader/CHA ownership check — unlike
-        `GET /api/v1/consignments/{id}`, which is scoped to the caller's own
-        consignments.
-
-        Requires scope `nsw:consignment:adminread`.
-      operationId: adminGetConsignmentByID
-      parameters:
-        - $ref: '#/components/parameters/ConsignmentID'
-      responses:
-        '200':
-          description: OK.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DetailDTO'
-        '400':
-          description: Missing consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: No such consignment.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/v1/admin/consignments/{id}/engine-status:
-    get:
-      summary: "[Admin] Get a consignment's raw workflow-engine state"
-      description: |
-        Returns the root workflow's raw engine state (per-node status
-        straight from the workflow manager, e.g. `RUNNING` /
-        `COMPLETED` / `AWAITING_ADMIN`) — distinct from the trader-facing
-        `GET /api/v1/consignments/{id}`, which reflects task-store/business
-        state instead. No per-consignment ownership check: any caller
-        holding the admin scope may view any consignment's engine state.
-
-        `global_variables` may hold business/PII data, which is why this is
-        gated on the admin scope rather than the trader/CHA read scope.
-
-        Requires scope `nsw:consignment:adminread`.
-      operationId: getConsignmentEngineStatus
-      parameters:
-        - $ref: '#/components/parameters/ConsignmentID'
-      responses:
-        '200':
-          description: OK.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EngineStatusDTO'
-        '400':
-          description: Missing consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: No workflow execution exists for this consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
 components:
   securitySchemes:
     BearerAuth:
@@ -517,71 +423,3 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
-
-    EngineNodeDTO:
-      type: object
-      description: |
-        Presentational view of one DAG node's raw engine state — distinct
-        from WorkflowNodeResponseDTO, which reflects task-store/business
-        semantics instead.
-      required:
-        - id
-        - type
-        - status
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-        gateway_type:
-          type: string
-        task_template_id:
-          type: string
-        status:
-          type: string
-        last_error:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        child_workflow_ids:
-          type: array
-          description: |
-            Any child workflow executions spawned by this node (e.g. a
-            SPLIT_TASK / BATCH_SPLIT gateway). Each ID can itself be fetched
-            via this same endpoint to drill down.
-          items:
-            type: string
-
-    EngineStatusDTO:
-      type: object
-      required:
-        - consignment_id
-        - status
-        - nodes
-        - audit_trail
-      properties:
-        consignment_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          description: The root workflow's overall status, e.g. RUNNING, COMPLETED, AWAITING_ADMIN.
-        nodes:
-          type: array
-          description: Only nodes the interpreter has already reached; not-yet-started nodes are omitted.
-          items:
-            $ref: '#/components/schemas/EngineNodeDTO'
-        audit_trail:
-          type: array
-          items:
-            type: string
-        global_variables:
-          type: object
-          description: |
-            The workflow instance's shared, dynamic business data —
-            workflow-wide, not per node. May contain business/PII data.
-          additionalProperties: true

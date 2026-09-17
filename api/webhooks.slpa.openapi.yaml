@@ -99,6 +99,8 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - received
                 properties:
                   received:
                     type: boolean

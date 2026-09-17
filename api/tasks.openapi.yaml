@@ -153,6 +153,7 @@ components:
       properties:
         command:
           type: string
+          minLength: 1
           description: The step command to submit, e.g. "submit".
           example: "submit"
         payload:
@@ -161,6 +162,9 @@ components:
             Command-specific data. Genuinely dynamic per task type; must not
             set the reserved `__command` key, which the server adds itself.
           additionalProperties: true
+          not:
+            required:
+              - __command
 
     HandleClaim:
       type: object
