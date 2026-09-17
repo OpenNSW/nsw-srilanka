@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / Static Data API
+  description: |
+    OpenAPI 3.0 specification for the static reference-data lookup endpoint.
+    Serves immutable JSON artifacts (HS code lists, lookup tables, etc.) out
+    of the artifact registry, keyed by (id, version).
+
+    Requires a JWT bearer token (see `securitySchemes.BearerAuth`) carrying
+    scope `nsw:task:read` — reused from the task domain since static data is
+    consumed alongside rendered tasks, not a distinct resource of its own.
+  version: 1.0.0
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/static-data/{id}:
+    get:
+      summary: Get a static reference-data artifact
+      description: |
+        Returns the raw JSON artifact registered under `id` at the given
+        `version`. The response is cacheable indefinitely by the caller's own
+        browser — `(id, version)` identifies immutable content — but marked
+        `private` since this endpoint is scope-protected.
+
+        Requires scope `nsw:task:read`.
+      operationId: getStaticData
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "hscode-list"
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "2026.1"
+      responses:
+        '200':
+          description: OK. The raw JSON artifact; its shape is defined by the artifact itself, not by this endpoint.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: "private, max-age=31536000, immutable"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Missing `version` query parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No artifact registered for this `(id, version)`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error loading the artifact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "static data not found"
+        correlationId:
+          type: string
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
