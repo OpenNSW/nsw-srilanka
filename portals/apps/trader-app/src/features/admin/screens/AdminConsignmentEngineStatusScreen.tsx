@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Button, Dialog, Spinner, Text } from '@radix-ui/themes'
-import { ReloadIcon } from '@radix-ui/react-icons'
+import { ChevronRightIcon, ReloadIcon } from '@radix-ui/react-icons'
 import {
   getConsignmentEngineStatus,
   getConsignmentForAdmin,
@@ -374,10 +374,14 @@ function NodeRow({
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task')
 
+  // Indentation lives only on the Node cell's own padding, never on the grid row/container
+  // itself — the grid's own column tracks (Type/Status/Updated/Last error) are fixed-width, so
+  // padding on the row would push every one of them right by the same amount, throwing nested
+  // rows out of sync with the header and with sibling rows at a different depth.
   return (
     <div className="border-b border-app-border last:border-0">
-      <div className={`${NODE_ROW_GRID} py-2`} style={{ paddingLeft: depth * 20 }}>
-        <div className="px-3 font-mono text-xs truncate" title={node.id}>
+      <div className={`${NODE_ROW_GRID} py-2`}>
+        <div className="pr-3 font-mono text-xs truncate" style={{ paddingLeft: 12 + depth * 20 }} title={node.id}>
           {node.id}
         </div>
         <div className="px-3 text-sm">
@@ -396,14 +400,14 @@ function NodeRow({
             }`}
           >
             <span className="truncate">{node.gateway_type ?? node.type}</span>
-            <span
-              className={`inline-block text-base leading-none shrink-0 transition-transform ${
-                node.task_workflow_id ? '' : 'invisible'
-              } ${taskBranch.expanded ? 'rotate-90' : ''}`}
+            <ChevronRightIcon
+              className={`shrink-0 transition-transform ${node.task_workflow_id ? 'text-foreground' : 'invisible'} ${
+                taskBranch.expanded ? 'rotate-90' : ''
+              }`}
+              width={16}
+              height={16}
               aria-hidden
-            >
-              ▸
-            </span>
+            />
           </button>
         </div>
         <div className="px-3">
@@ -447,23 +451,21 @@ function ChildWorkflowBranch({
   const { expanded, toggle, loading, status, error } = useExpandableWorkflow(workflowId, 'child')
 
   return (
-    <div style={{ paddingLeft: depth * 20 }}>
-      {/* Tinted, left-railed container marks this whole subtree as belonging to a different
-          workflow instance from its parent — otherwise it's easy to mistake a child workflow's
-          nodes for more of the parent's own list, especially once nested a few levels deep. */}
-      <div className="my-1 bg-primary-subtle border-l-2 border-primary rounded">
+    <>
+      {/* Tinted, left-railed header marks this as belonging to a different workflow instance
+          from its parent — otherwise it's easy to mistake a child workflow's nodes for more of
+          the parent's own list. Indented via its own margin, not a wrapper around the body
+          below: NodeRow's grid rows must never sit inside a padded/margined ancestor, or their
+          fixed-width Type/Status/Updated columns drift out of sync with the header and with
+          sibling rows at a different depth. */}
+      <div className="my-1 bg-primary-subtle border-l-2 border-primary rounded" style={{ marginLeft: depth * 20 }}>
         <div className="flex items-center justify-between pr-3">
           <button
             type="button"
             onClick={toggle}
             className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-mono text-foreground-muted hover:text-foreground text-left"
           >
-            <span
-              className={`inline-block text-[10px] transition-transform ${expanded ? 'rotate-90' : ''}`}
-              aria-hidden
-            >
-              ▸
-            </span>
+            <ChevronRightIcon className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden />
             <span className="text-foreground-subtle">child workflow</span>
             {workflowId}
           </button>
@@ -478,18 +480,18 @@ function ChildWorkflowBranch({
             />
           )}
         </div>
-
-        {expanded && (
-          <WorkflowBranchBody
-            depth={depth}
-            loading={loading}
-            status={status}
-            error={error}
-            onOpenVariables={onOpenVariables}
-          />
-        )}
       </div>
-    </div>
+
+      {expanded && (
+        <WorkflowBranchBody
+          depth={depth}
+          loading={loading}
+          status={status}
+          error={error}
+          onOpenVariables={onOpenVariables}
+        />
+      )}
+    </>
   )
 }
 
@@ -513,9 +515,15 @@ function TaskWorkflowPanel({
   error: FetchError
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
+  // The header is indented via its own margin, not a wrapper around the body below — see
+  // ChildWorkflowBranch's comment on why NodeRow's grid rows must never sit inside a
+  // padded/margined ancestor.
   return (
-    <div className="border-l-2 border-app-border ml-3" style={{ paddingLeft: depth * 20 }}>
-      <div className="flex items-center justify-between pr-3 py-1 pl-2">
+    <>
+      <div
+        className="border-l-2 border-app-border flex items-center justify-between pr-3 py-1 pl-2"
+        style={{ marginLeft: 12 + depth * 20 }}
+      >
         <span className="text-[11px] font-mono text-foreground-muted truncate" title={workflowId}>
           <span className="text-foreground-subtle">task workflow </span>
           {workflowId}
@@ -538,7 +546,7 @@ function TaskWorkflowPanel({
         error={error}
         onOpenVariables={onOpenVariables}
       />
-    </div>
+    </>
   )
 }
 
