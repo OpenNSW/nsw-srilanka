@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Button, Dialog, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
-import { ChevronRightIcon, EyeNoneIcon, EyeOpenIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { Badge, Button, Dialog, IconButton, Popover, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import {
+  ChevronRightIcon,
+  DoubleArrowDownIcon,
+  DoubleArrowUpIcon,
+  EyeNoneIcon,
+  EyeOpenIcon,
+  ReloadIcon,
+} from '@radix-ui/react-icons'
 import {
   getConsignmentEngineStatus,
   getConsignmentForAdmin,
@@ -38,6 +45,21 @@ const NOISY_NODE_TYPES = new Set(['START', 'END'])
 function visibleNodes(nodes: EngineNode[], showAllNodes: boolean): EngineNode[] {
   return showAllNodes ? nodes : nodes.filter((node) => !NOISY_NODE_TYPES.has(node.type))
 }
+
+// A one-shot "expand everything" / "collapse everything" command from the toolbar, threaded down
+// to every useExpandableWorkflow instance. gen only ever increases, so each click is always
+// distinguishable from the last even if it repeats the same `expand` value (e.g. clicking
+// "Expand all" again after manually collapsing one branch must still force it back open — a
+// plain boolean wouldn't re-trigger since React bails out on setting state to its current value).
+// Branches lazily fetch on first expand, so a branch revealed only after its parent's fetch
+// completes must also pick up the current signal on mount, not just the ones that existed at
+// click time — see useExpandableWorkflow's effect.
+interface ExpandSignal {
+  gen: number
+  expand: boolean
+}
+
+const NO_EXPAND_SIGNAL: ExpandSignal = { gen: 0, expand: false }
 
 // A fetch either found the workflow, didn't (404 — normal for a not-yet-started or already-gone
 // execution), or failed for some other reason.
@@ -80,6 +102,14 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   // Applies at every nesting level (root, child branches, task workflows) — see
   // NOISY_NODE_TYPES.
   const [showAllNodes, setShowAllNodes] = useState(false)
+  const [expandSignal, setExpandSignal] = useState<ExpandSignal>(NO_EXPAND_SIGNAL)
+  // What the next click does — starts at "expand" and flips every click. With branches free to
+  // expand/collapse individually, this can't track the true state of every branch, but it
+  // doesn't need to: from any partially-expanded state, one click reliably drives everything to
+  // the shown direction, and a second click (now flipped) drives it the other way.
+  const toggleAllExpansion = useCallback(() => {
+    setExpandSignal((prev) => ({ gen: prev.gen + 1, expand: !prev.expand }))
+  }, [])
   // Supplementary business-side context (name, state, trader) fetched independently of the
   // engine status — best-effort only, so a failure here just hides this section rather than
   // blocking the ops view the admin actually came here for.
@@ -189,6 +219,17 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
             <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
             Refresh
           </Button>
+          <Tooltip content={expandSignal.expand ? 'Collapse all' : 'Expand all'}>
+            <IconButton
+              variant="ghost"
+              color="gray"
+              size="2"
+              onClick={toggleAllExpansion}
+              aria-label={expandSignal.expand ? 'Collapse all' : 'Expand all'}
+            >
+              {expandSignal.expand ? <DoubleArrowUpIcon /> : <DoubleArrowDownIcon />}
+            </IconButton>
+          </Tooltip>
           <Tooltip content={showAllNodes ? 'Hide START/END nodes' : 'Show START/END nodes'}>
             <IconButton
               variant="ghost"
@@ -249,6 +290,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
                 node={node}
                 depth={0}
                 showAllNodes={showAllNodes}
+                expandSignal={expandSignal}
                 onOpenVariables={setVariablesTarget}
               />
             ))
@@ -354,7 +396,7 @@ const BRANCH_FETCHER: Record<WorkflowBranchKind, (id: string) => Promise<EngineS
 // Fetch-on-first-expand state shared by the "child workflow" full-width branch and the compact
 // inline "task workflow" toggle — same lifecycle, different presentation (see NodeRow/
 // ChildWorkflowBranch).
-function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind) {
+function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, expandSignal: ExpandSignal) {
   const [expanded, setExpanded] = useState(false)
   const [fetched, setFetched] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -387,6 +429,34 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind) {
     })
   }, [ensureFetched])
 
+  // ensureFetched's identity changes whenever fetched/loading do; reading the latest version via
+  // a ref (kept fresh in an effect, never assigned during render) lets the effect below key off
+  // expandSignal alone, without re-firing on every fetch-state change of its own making.
+  const ensureFetchedRef = useRef(ensureFetched)
+  useEffect(() => {
+    ensureFetchedRef.current = ensureFetched
+  })
+
+  // Adjusts `expanded` during render in response to a new expand-all/collapse-all signal — the
+  // recommended pattern for "reset/adjust state when a prop changes" (react.dev), rather than in
+  // an effect: remounting via key (the other common fix for this) would destroy the fetched/
+  // status cache this hook exists to keep. Comparing against the last *responded* generation,
+  // not the previous render's signal, means a branch mounted mid-"expand all" still picks up the
+  // current signal on its very first render.
+  const [respondedGen, setRespondedGen] = useState(0)
+  if (expandSignal.gen !== respondedGen) {
+    setRespondedGen(expandSignal.gen)
+    setExpanded(expandSignal.expand)
+  }
+
+  // The fetch itself is a real side effect (starts a network request) and so, unlike the state
+  // adjustment above, must stay in an effect rather than run directly during render — otherwise
+  // React re-invoking the render function (StrictMode, an interrupted render) would fire it
+  // again. ensureFetched's own fetched/loading guard makes this idempotent regardless.
+  useEffect(() => {
+    if (expandSignal.gen !== 0 && expandSignal.expand) ensureFetchedRef.current()
+  }, [expandSignal])
+
   return { expanded, toggle, loading, status, error }
 }
 
@@ -399,15 +469,17 @@ function NodeRow({
   node,
   depth,
   showAllNodes,
+  expandSignal,
   onOpenVariables,
 }: {
   node: EngineNode
   depth: number
   showAllNodes: boolean
+  expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   const childIds = node.child_workflow_ids ?? []
-  const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task')
+  const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
 
   // Indentation lives only on the Node cell's own padding, never on the grid row/container
   // itself — the grid's own column tracks (Type/Status/Updated/Last error) are fixed-width, so
@@ -449,8 +521,21 @@ function NodeRow({
           <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
         </div>
         <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
-        <div className="px-3 text-xs text-red-600 truncate" title={node.last_error}>
-          {node.last_error ?? ''}
+        <div className="px-3 text-xs text-red-600 min-w-0">
+          {node.last_error ? (
+            <Popover.Root>
+              <Popover.Trigger>
+                <button type="button" className="block w-full truncate text-left hover:underline">
+                  {node.last_error}
+                </button>
+              </Popover.Trigger>
+              <Popover.Content maxWidth="480px">
+                <Text size="1" className="font-mono whitespace-pre-wrap break-all">
+                  {node.last_error}
+                </Text>
+              </Popover.Content>
+            </Popover.Root>
+          ) : null}
         </div>
       </div>
       {childIds.map((childId) => (
@@ -459,6 +544,7 @@ function NodeRow({
           workflowId={childId}
           depth={depth + 1}
           showAllNodes={showAllNodes}
+          expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
         />
       ))}
@@ -470,6 +556,7 @@ function NodeRow({
           status={taskBranch.status}
           error={taskBranch.error}
           showAllNodes={showAllNodes}
+          expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
         />
       )}
@@ -485,14 +572,16 @@ function ChildWorkflowBranch({
   workflowId,
   depth,
   showAllNodes,
+  expandSignal,
   onOpenVariables,
 }: {
   workflowId: string
   depth: number
   showAllNodes: boolean
+  expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
-  const { expanded, toggle, loading, status, error } = useExpandableWorkflow(workflowId, 'child')
+  const { expanded, toggle, loading, status, error } = useExpandableWorkflow(workflowId, 'child', expandSignal)
 
   return (
     <>
@@ -533,6 +622,7 @@ function ChildWorkflowBranch({
           status={status}
           error={error}
           showAllNodes={showAllNodes}
+          expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
         />
       )}
@@ -552,6 +642,7 @@ function TaskWorkflowPanel({
   status,
   error,
   showAllNodes,
+  expandSignal,
   onOpenVariables,
 }: {
   workflowId: string
@@ -560,6 +651,7 @@ function TaskWorkflowPanel({
   status: EngineStatus | null
   error: FetchError
   showAllNodes: boolean
+  expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   // The header is indented via its own margin, not a wrapper around the body below — see
@@ -592,6 +684,7 @@ function TaskWorkflowPanel({
         status={status}
         error={error}
         showAllNodes={showAllNodes}
+        expandSignal={expandSignal}
         onOpenVariables={onOpenVariables}
       />
     </>
@@ -606,6 +699,7 @@ function WorkflowBranchBody({
   status,
   error,
   showAllNodes,
+  expandSignal,
   onOpenVariables,
 }: {
   depth: number
@@ -613,6 +707,7 @@ function WorkflowBranchBody({
   status: EngineStatus | null
   error: FetchError
   showAllNodes: boolean
+  expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   const nodes = status ? visibleNodes(status.nodes, showAllNodes) : []
@@ -643,6 +738,7 @@ function WorkflowBranchBody({
               node={node}
               depth={depth + 1}
               showAllNodes={showAllNodes}
+              expandSignal={expandSignal}
               onOpenVariables={onOpenVariables}
             />
           ))
