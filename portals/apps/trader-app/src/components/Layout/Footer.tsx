@@ -2,14 +2,13 @@ import { useTranslation } from 'react-i18next'
 import { appConfig } from '@/config'
 
 // Deliberately tiny — a thin white bar, not a full government footer. Fixed
-// full-width across the bottom of the viewport (z-30: above Sidebar's z-20,
-// below TopBar's z-50 — see those components). Mounted once in App.tsx
-// alongside <Routes>, so it's the same one instance across every screen.
+// full-width across the bottom of the viewport (z-30, below TopBar's z-50 —
+// see that component). Mounted once in App.tsx alongside <Routes>, so it's
+// the same one instance across every screen.
 //
 // Height contract: h-16 (64px) below sm, sm:h-8 (32px) at sm+ breakpoints.
 // Every screen (Layout.tsx, LoginScreen.tsx, UnauthorizedScreen.tsx,
-// ZonePreviewScreen.tsx) must reserve space for it with `pb-16 sm:pb-8` (or
-// the equivalent `h-[calc(...-64px)] sm:h-[calc(...-32px)]` for Sidebar) so
+// ZonePreviewScreen.tsx) must reserve space for it with `pb-16 sm:pb-8` so
 // the reserve stays in sync with this component.
 export function Footer() {
   const { t } = useTranslation()

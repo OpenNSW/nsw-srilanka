@@ -256,6 +256,29 @@ body {
     inset 0 0 0 1.5px var(--color-primary) !important;
 }
 
+/* Read-only / disabled fields recede instead of sharing the editable fill.
+ * JSONForms renders both in the same screen at once (e.g. a reviewer sees
+ * the applicant's already-submitted fields as read-only alongside the ones
+ * they can still act on), so the two need a visually obvious difference —
+ * otherwise nothing distinguishes "you can type here" from "you can't".
+ * Ordered after the hover/focus rules above so it wins that tie: a
+ * read-only (not disabled) field can still receive browser focus, and
+ * without this ordering it would light up with the editable focus ring. */
+.rt-TextFieldRoot.rt-variant-surface:has(.rt-TextFieldInput:disabled, .rt-TextFieldInput:read-only),
+.rt-TextAreaRoot.rt-variant-surface:has(.rt-TextAreaInput:disabled, .rt-TextAreaInput:read-only),
+.rt-SelectTrigger.rt-variant-surface:disabled {
+  background-color: var(--color-app-surface-muted) !important;
+  box-shadow: inset 0 0 0 1px var(--color-border) !important;
+  cursor: not-allowed;
+}
+.rt-TextFieldInput:disabled,
+.rt-TextFieldInput:read-only,
+.rt-TextAreaInput:disabled,
+.rt-TextAreaInput:read-only {
+  color: var(--color-foreground-subtle) !important;
+  cursor: not-allowed;
+}
+
 .rt-TextFieldRoot.rt-r-size-2 {
   --text-field-height: 2.75rem !important;
   --text-field-border-radius: var(--radius-lg) !important;

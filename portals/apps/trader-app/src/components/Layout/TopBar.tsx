@@ -4,6 +4,7 @@ import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Au
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 import { RoleSwitcher } from './RoleSwitcher'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { NavMenu } from './NavMenu'
 import { appConfig, displayName } from '@/config'
 import { useProfile } from '@/services/useProfile'
 
@@ -27,6 +28,9 @@ function TopBarShell({ children }: { children: ReactNode }) {
       <div className="flex items-center gap-3 min-w-0">
         <BrandMark />
         <span className="text-xl font-bold text-foreground tracking-tight">{displayName}</span>
+        <div className="flex items-center pl-4 ml-1 border-l border-border">
+          <NavMenu />
+        </div>
         {profile?.company?.name && (
           <div className="flex items-center pl-4 ml-1 border-l border-border h-6 min-w-0">
             <span
