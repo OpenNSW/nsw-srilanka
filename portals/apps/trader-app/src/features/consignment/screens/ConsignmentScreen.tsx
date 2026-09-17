@@ -94,7 +94,7 @@ export function ConsignmentScreen() {
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('consignments.list.title')}</h1>
           {totalCount > 0 && (
-            <span className="inline-flex items-center rounded-full bg-primary-subtle px-2.5 py-0.5 text-sm font-medium text-primary border border-border">
+            <span className="inline-flex items-center rounded-full bg-primary-subtle px-2.5 py-0.5 text-sm font-medium text-primary">
               {totalCount}
             </span>
           )}
@@ -109,8 +109,8 @@ export function ConsignmentScreen() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-app-surface shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-border bg-app-surface/60">
+      <div className="rounded-2xl bg-app-surface shadow-md overflow-hidden">
+        <div className="p-4 bg-app-surface/60">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <TextField.Root
@@ -186,7 +186,7 @@ export function ConsignmentScreen() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-border bg-app-surface-muted">
+                  <tr className="bg-app-surface-muted">
                     <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
                       {t('consignments.list.table.id')}
                     </th>
@@ -201,7 +201,7 @@ export function ConsignmentScreen() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-border/60">
                   {consignments.map((consignment) => (
                     <tr
                       key={consignment.id}
@@ -246,7 +246,7 @@ export function ConsignmentScreen() {
             </div>
           )}
         </div>
-        <div className="border-t border-border bg-app-surface/60">
+        <div className="bg-app-surface/60">
           <PaginationControl
             currentPage={page + 1}
             totalPages={Math.ceil(totalCount / limit)}

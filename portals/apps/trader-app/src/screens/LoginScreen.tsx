@@ -33,7 +33,7 @@ export function LoginScreen() {
 
       {/* Mobile logo strip — full-width box at the very top, hidden on desktop */}
       {logoUrl && (
-        <div className="lg:hidden w-full bg-app-surface px-6 py-4 flex items-center justify-center border-b border-border shadow-sm">
+        <div className="lg:hidden w-full bg-app-surface px-6 py-4 flex items-center justify-center shadow-sm">
           <img src={logoUrl} alt={appName} className="h-16 object-contain" />
         </div>
       )}
@@ -52,7 +52,7 @@ export function LoginScreen() {
         {/* Centered Authentication Card */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
           {auth.error && hasUrlError && (
-            <div className="bg-error-subtle border-l-4 border-error p-4 mb-6 rounded-r-xl shadow-sm">
+            <div className="bg-error-subtle p-4 mb-6 rounded-xl shadow-sm">
               <p className="text-sm text-error-strong font-semibold">{t('auth.login.errorTitle')}</p>
               <p className="text-xs text-error-strong/80 mt-1">{auth.error.message}</p>
             </div>
@@ -60,7 +60,7 @@ export function LoginScreen() {
           <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 -mt-20 drop-shadow-lg">
             {systemName}
           </h1>
-          <div className="bg-white/10 border border-white/20 backdrop-blur-xl py-10 px-8 xl:px-12 rounded-3xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-2xl">
+          <div className="bg-white/10 border border-white/15 backdrop-blur-xl py-10 px-8 xl:px-12 rounded-3xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-2xl">
             <div className="flex flex-col xl:flex-row items-center gap-8 xl:gap-12">
               <div className="flex flex-col items-center xl:items-start text-center xl:text-left">
                 <h2 className="text-2xl font-bold text-white tracking-tight">{displayName}</h2>

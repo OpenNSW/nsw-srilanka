@@ -41,7 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <Translation>
           {(t) => (
             <div className="min-h-screen flex items-center justify-center bg-app-bg p-4">
-              <div className="bg-app-surface rounded-2xl shadow-xl border border-border p-8 max-w-md w-full text-center">
+              <div className="bg-app-surface rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
                 <div className="mb-4">
                   <Text size="6" weight="bold" className="text-error-strong">
                     {t('common.error.title')}

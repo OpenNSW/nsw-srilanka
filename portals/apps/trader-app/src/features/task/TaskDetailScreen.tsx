@@ -147,7 +147,7 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-xl border border-border shadow-sm p-6 text-center">
+        <div className="bg-app-surface rounded-2xl shadow-md p-6 text-center">
           <Text size="4" color="red" weight="medium">
             {error}
           </Text>
@@ -165,7 +165,7 @@ export function TaskDetailScreen() {
   if (!zoneView) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-xl border border-border shadow-sm p-6 text-center">
+        <div className="bg-app-surface rounded-2xl shadow-md p-6 text-center">
           <Text size="4" color="gray" weight="medium">
             {t('tasks.error.notFound')}
           </Text>
@@ -209,7 +209,7 @@ export function TaskDetailScreen() {
       </div>
       {showSubmitSuccess && (
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="rounded-lg border border-success bg-success-subtle px-4 py-3">
+          <div className="rounded-xl bg-success-subtle px-4 py-3 shadow-sm">
             <Text size="2" weight="medium" className="text-success-strong">
               {t('tasks.submitSuccess')}
             </Text>
@@ -218,7 +218,7 @@ export function TaskDetailScreen() {
       )}
       {submitError && (
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="rounded-lg border border-error bg-error-subtle px-4 py-3">
+          <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
             <Text size="2" weight="medium" className="text-error-strong">
               {submitError}
             </Text>

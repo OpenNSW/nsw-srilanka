@@ -24,33 +24,31 @@ function TopBarShell({ children }: { children: ReactNode }) {
   const { profile } = useProfile()
 
   return (
-    <header className="fixed top-3 left-3 right-3 z-50 h-16 rounded-2xl border border-border/60 bg-app-surface/80 shadow-lg backdrop-blur-xl flex items-center justify-between px-6">
-      <div className="flex items-center gap-3 min-w-0">
-        <BrandMark />
-        <span className="text-xl font-bold text-foreground tracking-tight">{displayName}</span>
-        <div className="flex items-center pl-4 ml-1 border-l border-border">
-          <NavMenu />
+    <header className="fixed top-3 left-3 right-3 z-50 h-16 rounded-2xl bg-app-surface/80 shadow-lg backdrop-blur-xl flex items-center justify-between px-6">
+      <div className="flex items-center gap-6 min-w-0">
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <span className="text-xl font-bold text-foreground tracking-tight">{displayName}</span>
         </div>
+        <NavMenu />
         {profile?.company?.name && (
-          <div className="flex items-center pl-4 ml-1 border-l border-border h-6 min-w-0">
-            <span
-              className="inline-flex items-center max-w-72 truncate rounded-full bg-primary-subtle px-3 py-1 text-sm font-medium text-primary border border-primary-subtle"
-              title={profile.company.name}
-            >
-              {profile.company.name}
-            </span>
-          </div>
+          <span
+            className="inline-flex items-center max-w-72 truncate rounded-full bg-primary-subtle px-3 py-1 text-sm font-medium text-primary"
+            title={profile.company.name}
+          >
+            {profile.company.name}
+          </span>
         )}
       </div>
 
-      <div className="flex items-center gap-4">{children}</div>
+      <div className="flex items-center gap-5">{children}</div>
     </header>
   )
 }
 
-function TopBarUserActions({ onSignOut, withDivider = true }: { onSignOut: () => void; withDivider?: boolean }) {
+function TopBarUserActions({ onSignOut }: { onSignOut: () => void }) {
   return (
-    <div className={`flex items-center gap-3 ${withDivider ? 'pl-3 border-l border-border' : ''}`}>
+    <div className="flex items-center gap-3">
       <SignedIn>
         <UserDropdown onSignOut={onSignOut} />
       </SignedIn>

@@ -103,7 +103,7 @@ export function NavMenu() {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        <button className="flex items-center gap-2 pl-2.5 pr-2 h-10 rounded-xl border border-border bg-app-surface-muted/70 hover:bg-app-surface-muted text-sm font-semibold text-foreground transition-colors cursor-pointer focus:outline-none">
+        <button className="flex items-center gap-2 pl-2.5 pr-2 h-10 rounded-xl bg-app-surface-muted/70 hover:bg-app-surface-muted text-sm font-semibold text-foreground transition-colors cursor-pointer focus:outline-none">
           <HamburgerMenuIcon className="w-4 h-4 text-foreground-subtle" />
           <span>{currentLabel}</span>
           <ChevronDownIcon className="w-3.5 h-3.5 text-foreground-subtle" />
