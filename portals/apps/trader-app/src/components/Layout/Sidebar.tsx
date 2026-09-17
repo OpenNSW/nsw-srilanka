@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRole } from '@/services/useRole'
 import type { Role } from '@/services/RoleContext'
+import { displayName } from '@/config'
 
 interface NavItem {
   name: string
@@ -100,7 +101,9 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         to={item.path}
         className={clsx(
           'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-xl font-medium transition-all',
-          isActive ? 'bg-primary text-white shadow-md' : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
+          isActive
+            ? 'bg-gradient-to-r from-primary to-[#8b7ff5] text-white shadow-lg shadow-primary/40'
+            : 'text-white/65 hover:bg-white/10 hover:text-white',
           !showExpanded && 'justify-center',
           isInGroup && showExpanded && 'ml-4 text-sm',
         )}
@@ -119,18 +122,16 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
     if (!showExpanded) {
       return (
         <div key={group.name} className="flex flex-col gap-1">
-          <div
-            className={clsx('flex flex-col gap-1 rounded-xl transition-all', isGroupExpanded && 'bg-primary/20 p-1')}
-          >
+          <div className={clsx('flex flex-col gap-1 rounded-xl transition-all', isGroupExpanded && 'bg-white/10 p-1')}>
             <button
               onClick={() => toggleGroup(group.name)}
               className={clsx(
                 'relative flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-xl transition-all border',
                 isGroupExpanded
-                  ? 'text-white hover:bg-primary/40 border-primary/30'
+                  ? 'text-white hover:bg-white/15 border-white/20'
                   : hasActivePath
-                    ? 'bg-primary/30 text-white border-primary/20'
-                    : 'text-primary-subtle hover:bg-primary/30 hover:text-white border-transparent hover:border-primary/30',
+                    ? 'bg-white/15 text-white border-white/10'
+                    : 'text-white/65 hover:bg-white/10 hover:text-white border-transparent hover:border-white/10',
               )}
               title={group.name}
             >
@@ -153,8 +154,8 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
                     className={clsx(
                       'flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-xl transition-all',
                       isActive
-                        ? 'bg-primary text-white shadow-md'
-                        : 'text-primary-subtle hover:bg-primary/40 hover:text-white',
+                        ? 'bg-gradient-to-r from-primary to-[#8b7ff5] text-white shadow-lg shadow-primary/40'
+                        : 'text-white/65 hover:bg-white/10 hover:text-white',
                     )}
                     title={item.name}
                   >
@@ -173,9 +174,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
           onClick={() => toggleGroup(group.name)}
           className={clsx(
             'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-xl font-medium transition-all w-full',
-            hasActivePath && isGroupExpanded
-              ? 'bg-primary/20 text-white'
-              : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
+            hasActivePath && isGroupExpanded ? 'bg-white/10 text-white' : 'text-white/65 hover:bg-white/10 hover:text-white',
           )}
         >
           <span className="flex items-center text-xl shrink-0">{group.icon}</span>
@@ -191,14 +190,23 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
     )
   }
 
+  const brandInitial = displayName.trim().charAt(0).toUpperCase() || 'N'
+
   return (
     <aside
       className={`${
         showExpanded ? 'w-64' : 'w-20'
-      } h-[calc(100vh-128px)] sm:h-[calc(100vh-96px)] bg-primary-dark text-white flex flex-col fixed left-0 top-16 border-r border-primary-dark/40 shadow-xl transition-all duration-300 z-20`}
+      } h-[calc(100vh-164px)] sm:h-[calc(100vh-132px)] bg-gradient-to-b from-[#2b2870] via-[#1d1a4a] to-[#100e28] text-white flex flex-col fixed left-3 top-[88px] rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-primary-dark/40 transition-all duration-300 z-20`}
       onMouseEnter={() => !isExpanded && setIsHovered(true)}
       onMouseLeave={() => !isExpanded && setIsHovered(false)}
     >
+      <div className="flex items-center gap-3 px-4 h-16 shrink-0 border-b border-white/10">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#8b7ff5] text-sm font-bold text-white shadow-md shadow-primary/30">
+          {brandInitial}
+        </span>
+        {showExpanded && <span className="text-sm font-semibold text-white truncate">{displayName}</span>}
+      </div>
+
       <nav className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
         {filteredNavStructure.map((item) => {
           if (isNavGroup(item)) {
@@ -208,15 +216,15 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         })}
       </nav>
 
-      <div className="border-t border-primary-dark/40">
+      <div className="border-t border-white/10">
         <div className="p-4">
           <button
             onClick={onToggle}
             className={`${
               showExpanded ? 'w-full' : 'w-10'
-            } h-10 rounded-full bg-primary hover:bg-primary-dark flex items-center ${
+            } h-10 rounded-full bg-gradient-to-r from-primary to-[#8b7ff5] hover:brightness-110 flex items-center ${
               showExpanded ? 'justify-between px-4' : 'justify-center'
-            } text-white transition-all shadow-lg`}
+            } text-white transition-all shadow-lg shadow-primary/30`}
             title={isExpanded ? t('sidebar.toggle.collapseTitle') : t('sidebar.toggle.expandTitle')}
           >
             {showExpanded && (

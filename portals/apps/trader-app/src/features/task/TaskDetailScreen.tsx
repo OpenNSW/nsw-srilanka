@@ -182,7 +182,7 @@ export function TaskDetailScreen() {
 
   return (
     <div className="min-h-full">
-      <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Button variant="ghost" color="gray" onClick={goToTasks} className="cursor-pointer">
             <ArrowLeftIcon />
@@ -208,7 +208,7 @@ export function TaskDetailScreen() {
         </Button>
       </div>
       {showSubmitSuccess && (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="rounded-lg border border-success bg-success-subtle px-4 py-3">
             <Text size="2" weight="medium" className="text-success-strong">
               {t('tasks.submitSuccess')}
@@ -217,7 +217,7 @@ export function TaskDetailScreen() {
         </div>
       )}
       {submitError && (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="rounded-lg border border-error bg-error-subtle px-4 py-3">
             <Text size="2" weight="medium" className="text-error-strong">
               {submitError}

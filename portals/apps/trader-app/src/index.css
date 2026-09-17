@@ -1,3 +1,15 @@
+/* Registered before Tailwind below so it becomes the lowest-priority cascade
+ * layer: this vendored stylesheet is itself a separately-compiled Tailwind
+ * build (its own .hidden/.block/.border/etc.) for the file-upload dropzone
+ * in @opennsw/jsonforms-renderers. Importing it as a plain stylesheet
+ * previously merged those utility class names into our own "utilities"
+ * layer *after* ours (later import = later in the shared layer), which
+ * silently won every tie — e.g. its unconditional `.hidden` beat our
+ * `lg:block`, breaking every responsive show/hide in the app. Scoping it to
+ * its own named layer keeps its rules fully namespaced under that layer, so
+ * they can never outrank an app utility regardless of import order.
+ */
+@import '@opennsw/jsonforms-renderers/styles.css' layer(vendor-jsonforms);
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
 
@@ -49,9 +61,16 @@
    * avoid a name collision with Radix Themes' own --color-background and
    * --color-surface variables (defined on .radix-themes), which were
    * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted. */
-  --color-app-bg: #f8fafc;
+  --color-app-bg: #f3f2fa;
   --color-app-surface: #ffffff;
   --color-app-surface-muted: #f1f5f9;
+
+  /* Form fields — a filled, borderless treatment (vs. a bordered white box)
+   * reads as current-generation rather than early-2010s forms. Used by the
+   * Radix TextField/Select/TextArea override below, which is what every
+   * JSONForms field renders through. */
+  --color-field-bg: #f2f1fa;
+  --color-field-bg-hover: #eae8f7;
 
   /* Neutrals / text */
   --color-foreground: #0f172a;
@@ -197,7 +216,84 @@ body {
   }
 }
 
-/* Custom Styles for JSON Forms */
-.json-form-container .MuiFormControl-root {
-  margin-bottom: 1.5rem !important;
+/* =========================================================================
+ * FORM FIELD ELEVATION
+ * Every text field, select and textarea in this app — including every
+ * JSONForms-rendered field, since @opennsw/jsonforms-renderers is built
+ * directly on @radix-ui/themes components — renders through Radix's own
+ * stable `.rt-*` classes. Overriding them here reskins every form in the
+ * product (consignment forms, filters, search) from one place, without
+ * touching vendored component code.
+ *
+ * `!important` is deliberate: these rules tie in specificity with Radix's
+ * own :where()-wrapped variant styles, and which stylesheet lands later in
+ * the bundle isn't something this file controls. It only guards the
+ * specific properties below, scoped to the exact classes Radix renders.
+ * ========================================================================= */
+.rt-TextFieldRoot.rt-variant-surface,
+.rt-SelectTrigger.rt-variant-surface,
+.rt-TextAreaRoot.rt-variant-surface {
+  background-color: var(--color-field-bg) !important;
+  box-shadow: inset 0 0 0 1px transparent !important;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.rt-TextFieldRoot.rt-variant-surface:hover,
+.rt-SelectTrigger.rt-variant-surface:hover,
+.rt-TextAreaRoot.rt-variant-surface:hover {
+  background-color: var(--color-field-bg-hover) !important;
+}
+
+.rt-TextFieldRoot.rt-variant-surface:focus-within,
+.rt-TextAreaRoot.rt-variant-surface:focus-within,
+.rt-SelectTrigger.rt-variant-surface:focus-visible,
+.rt-SelectTrigger.rt-variant-surface[data-state='open'] {
+  background-color: var(--color-app-surface) !important;
+  box-shadow:
+    0 0 0 4px var(--color-primary-subtle),
+    inset 0 0 0 1.5px var(--color-primary) !important;
+}
+
+.rt-TextFieldRoot.rt-r-size-2 {
+  --text-field-height: 2.75rem !important;
+  --text-field-border-radius: var(--radius-lg) !important;
+}
+.rt-TextFieldRoot.rt-r-size-3 {
+  --text-field-height: 3rem !important;
+  --text-field-border-radius: var(--radius-lg) !important;
+}
+.rt-SelectTrigger.rt-r-size-2 {
+  --select-trigger-height: 2.75rem !important;
+  border-radius: var(--radius-lg) !important;
+}
+.rt-SelectTrigger.rt-r-size-3 {
+  --select-trigger-height: 3rem !important;
+  border-radius: var(--radius-lg) !important;
+}
+.rt-TextAreaRoot {
+  border-radius: var(--radius-lg) !important;
+  padding: 0.75rem !important;
+}
+
+/* Field labels: every JSONForms control label is a bare <label> styled via
+ * Radix Text (nothing else in this app pairs those two), so this selector
+ * is safe to scope broadly. Slightly softer weight/color than Radix's bold
+ * default reads as more considered and less "shouting". */
+label.rt-Text {
+  color: var(--color-foreground-muted) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Primary buttons get a subtle gradient + tinted shadow instead of a flat
+ * fill — scoped to the theme's own default accent (iris) so semantic
+ * color overrides (danger/success buttons) are untouched. */
+.rt-BaseButton.rt-variant-solid[data-accent-color='iris'] {
+  background-image: linear-gradient(135deg, var(--color-primary), #7c6ff0) !important;
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 55%, transparent) !important;
+}
+.rt-BaseButton.rt-variant-solid[data-accent-color='iris']:hover {
+  background-image: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary)) !important;
 }

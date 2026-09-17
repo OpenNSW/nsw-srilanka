@@ -7,15 +7,25 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { appConfig, displayName } from '@/config'
 import { useProfile } from '@/services/useProfile'
 
+function BrandMark() {
+  if (appConfig.branding.systemLogoUrl) {
+    return <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
+  }
+  const initial = displayName.trim().charAt(0).toUpperCase() || 'N'
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#7c6ff0] text-sm font-bold text-white shadow-md shadow-primary/30">
+      {initial}
+    </span>
+  )
+}
+
 function TopBarShell({ children }: { children: ReactNode }) {
   const { profile } = useProfile()
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-app-surface border-b border-border shadow-sm flex items-center justify-between px-6">
+    <header className="fixed top-3 left-3 right-3 z-50 h-16 rounded-2xl border border-border/60 bg-app-surface/80 shadow-lg backdrop-blur-xl flex items-center justify-between px-6">
       <div className="flex items-center gap-3 min-w-0">
-        {appConfig.branding.systemLogoUrl && (
-          <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
-        )}
+        <BrandMark />
         <span className="text-xl font-bold text-foreground tracking-tight">{displayName}</span>
         {profile?.company?.name && (
           <div className="flex items-center pl-4 ml-1 border-l border-border h-6 min-w-0">
