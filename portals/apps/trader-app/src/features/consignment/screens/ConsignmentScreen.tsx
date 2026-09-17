@@ -165,7 +165,7 @@ export function ConsignmentScreen() {
 
         <div className="relative min-h-[400px]">
           {loading && (
-            <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-2">
+            <div className="absolute inset-0 bg-app-surface/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-2">
               <Spinner size="3" />
               <Text size="2" color="gray">
                 {t('consignments.list.loading')}

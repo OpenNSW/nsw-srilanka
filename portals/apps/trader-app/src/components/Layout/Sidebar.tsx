@@ -99,7 +99,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         key={item.path}
         to={item.path}
         className={clsx(
-          'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-md font-medium transition-all',
+          'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-xl font-medium transition-all',
           isActive ? 'bg-primary text-white shadow-md' : 'text-primary-subtle hover:bg-primary/30 hover:text-white',
           !showExpanded && 'justify-center',
           isInGroup && showExpanded && 'ml-4 text-sm',
@@ -120,12 +120,12 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
       return (
         <div key={group.name} className="flex flex-col gap-1">
           <div
-            className={clsx('flex flex-col gap-1 rounded-md transition-all', isGroupExpanded && 'bg-primary/20 p-1')}
+            className={clsx('flex flex-col gap-1 rounded-xl transition-all', isGroupExpanded && 'bg-primary/20 p-1')}
           >
             <button
               onClick={() => toggleGroup(group.name)}
               className={clsx(
-                'relative flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-md transition-all border',
+                'relative flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-xl transition-all border',
                 isGroupExpanded
                   ? 'text-white hover:bg-primary/40 border-primary/30'
                   : hasActivePath
@@ -151,7 +151,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
                     key={item.path}
                     to={item.path}
                     className={clsx(
-                      'flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-md transition-all',
+                      'flex items-center justify-center px-3 h-12 min-h-12 shrink-0 rounded-xl transition-all',
                       isActive
                         ? 'bg-primary text-white shadow-md'
                         : 'text-primary-subtle hover:bg-primary/40 hover:text-white',
@@ -172,7 +172,7 @@ export function Sidebar({ isExpanded, onToggle }: SidebarProps) {
         <button
           onClick={() => toggleGroup(group.name)}
           className={clsx(
-            'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-md font-medium transition-all w-full',
+            'flex items-center gap-4 px-3 h-12 min-h-12 shrink-0 rounded-xl font-medium transition-all w-full',
             hasActivePath && isGroupExpanded
               ? 'bg-primary/20 text-white'
               : 'text-primary-subtle hover:bg-primary/30 hover:text-white',

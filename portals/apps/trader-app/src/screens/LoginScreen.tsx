@@ -43,33 +43,33 @@ export function LoginScreen() {
         {/* Hero background — no clip on mobile (logo has its own strip above), diagonal on desktop */}
         <div className="absolute inset-0 [clip-path:none] lg:[clip-path:polygon(25%_0,100%_0,100%_100%,0%_100%)]">
           <div
-            className="absolute inset-0 bg-cover bg-center bg-foreground"
+            className={`absolute inset-0 bg-cover bg-center ${heroImageUrl ? '' : 'bg-gradient-to-br from-primary-dark via-primary to-primary-dark'}`}
             style={heroImageUrl ? { backgroundImage: `url(${heroImageUrl})` } : undefined}
           />
-          <div className="absolute inset-0 bg-black/50" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 to-black/10" />
         </div>
 
         {/* Centered Authentication Card */}
         <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
           {auth.error && hasUrlError && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-xl">
-              <p className="text-sm text-red-700 font-semibold">{t('auth.login.errorTitle')}</p>
-              <p className="text-xs text-red-600 mt-1">{auth.error.message}</p>
+            <div className="bg-error-subtle border-l-4 border-error p-4 mb-6 rounded-r-xl shadow-sm">
+              <p className="text-sm text-error-strong font-semibold">{t('auth.login.errorTitle')}</p>
+              <p className="text-xs text-error-strong/80 mt-1">{auth.error.message}</p>
             </div>
           )}
-          <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-wide mb-10 -mt-20 drop-shadow-lg">
+          <h1 className="lg:hidden text-white text-2xl font-bold text-center tracking-tight mb-10 -mt-20 drop-shadow-lg">
             {systemName}
           </h1>
-          <div className="bg-foreground/80 border-2 border-white/30 py-10 px-8 xl:px-12 rounded-2xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+          <div className="bg-white/10 border border-white/20 backdrop-blur-xl py-10 px-8 xl:px-12 rounded-3xl flex flex-col xl:flex-row items-center gap-6 xl:gap-10 shadow-2xl">
             <div className="flex flex-col xl:flex-row items-center gap-8 xl:gap-12">
               <div className="flex flex-col items-center xl:items-start text-center xl:text-left">
-                <h2 className="text-2xl font-bold text-white tracking-wide">{displayName}</h2>
-                <p className="text-white/60 text-xs mt-1">{t('auth.login.tagline')}</p>
+                <h2 className="text-2xl font-bold text-white tracking-tight">{displayName}</h2>
+                <p className="text-white/70 text-xs mt-1">{t('auth.login.tagline')}</p>
               </div>
 
               <button
                 onClick={() => void auth.signinRedirect()}
-                className="bg-primary hover:bg-primary-dark text-white px-10 py-2.5 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
+                className="bg-primary hover:bg-primary-hover text-white px-10 py-3 rounded-2xl text-lg font-bold transition-all hover:scale-105 active:scale-95 shadow-lg cursor-pointer"
               >
                 {t('auth.login.button')}
               </button>

@@ -11,12 +11,12 @@ function TopBarShell({ children }: { children: ReactNode }) {
   const { profile } = useProfile()
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-app-surface border-b border-border flex items-center justify-between px-6">
+    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-app-surface border-b border-border shadow-sm flex items-center justify-between px-6">
       <div className="flex items-center gap-3 min-w-0">
         {appConfig.branding.systemLogoUrl && (
           <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
         )}
-        <span className="text-xl font-bold text-foreground">{displayName}</span>
+        <span className="text-xl font-bold text-foreground tracking-tight">{displayName}</span>
         {profile?.company?.name && (
           <div className="flex items-center pl-4 ml-1 border-l border-border h-6 min-w-0">
             <span

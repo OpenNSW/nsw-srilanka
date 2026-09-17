@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
 
 @theme {
   /* =========================================================================
@@ -9,11 +10,20 @@
    * Neutrals use contextual names (background / surface / foreground / border).
    * ========================================================================= */
 
-  /* Brand (primary - indigo). -dark is the deep-navy surface (e.g. sidebar);
-   * the bright base pops on it, and bright-at-opacity gives visible hovers. */
-  --color-primary-subtle: #eef2ff;
-  --color-primary: #4f46e5;
-  --color-primary-dark: #312e81;
+  /* Typography — Inter, self-hosted so first paint never blocks on a
+   * third-party font CDN (this app also has to run on restricted networks). */
+  --font-sans:
+    'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Brand (primary - iris, Radix Themes' accent). -dark is the deep surface
+   * (e.g. sidebar); the bright base pops on it, and bright-at-opacity gives
+   * visible hovers. Kept in sync with the Theme accentColor in main.tsx so
+   * Radix components (incl. every JSONForms field) and Tailwind utilities
+   * read as one palette. */
+  --color-primary-subtle: #f0f0ff;
+  --color-primary: #5b5bd6;
+  --color-primary-hover: #4a4ac7;
+  --color-primary-dark: #23214a;
 
   /* Status - success (green) */
   --color-success-subtle: #f0fdf4;
@@ -52,21 +62,25 @@
   --color-border: #e2e8f0;
   --color-border-strong: #cbd5e1;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  /* Shadows — slate-tinted rather than pure black, and softer/wider than the
+   * default Tailwind ramp. Colored, diffuse shadows read as more "designed"
+   * and less like a default framework drop-shadow. */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 12px 20px -6px rgb(15 23 42 / 0.1), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  --shadow-xl: 0 20px 32px -8px rgb(15 23 42 / 0.14), 0 8px 12px -6px rgb(15 23 42 / 0.08);
+  --shadow-2xl: 0 28px 56px -16px rgb(15 23 42 / 0.28);
 
-  /* Border Radius */
-  --radius-sm: 0.25rem;
-  --radius: 0.375rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
+  /* Border Radius — rounder across the board for a friendlier, more
+   * consumer-app feel (kept in step with the Theme radius="large" in
+   * main.tsx, which applies the same language to native Radix components). */
+  --radius-sm: 0.375rem;
+  --radius: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
 
   /* Animations */
   --animate-bounce-gentle: bounce-gentle 2s ease-in-out infinite;
@@ -77,6 +91,21 @@
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-fade-in-delayed: fade-in 0.8s ease-out 0.3s both;
   --animate-loading-bar: loading-bar 2s ease-in-out infinite;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Radix Themes sets its own font stack on .radix-themes (the Theme root),
+ * which would otherwise win over the body rule above for every Radix
+ * component — including every JSONForms field, since the renderer package
+ * is built on Radix Themes. Overriding the variable keeps Inter consistent
+ * everywhere instead of just in plain page text. */
+.radix-themes {
+  --default-font-family: var(--font-sans);
 }
 
 /* Custom Scrollbar Utility */

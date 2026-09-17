@@ -22,7 +22,7 @@ initAppConfig()
               window.history.replaceState({}, document.title, window.location.pathname)
             }}
           >
-            <Theme accentColor="indigo" grayColor="slate" radius="medium" panelBackground="solid" appearance="light">
+            <Theme accentColor="iris" grayColor="slate" radius="large" scaling="105%" panelBackground="solid" appearance="light">
               <BrowserRouter>
                 <App />
               </BrowserRouter>

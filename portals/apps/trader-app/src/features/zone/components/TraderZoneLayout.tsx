@@ -148,7 +148,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
   return (
     <li className="relative flex items-start gap-3">
       <span
-        className={`relative z-10 mt-1 inline-block w-2.5 h-2.5 rounded-full ring-4 ring-white ${color}`}
+        className={`relative z-10 mt-1 inline-block w-2.5 h-2.5 rounded-full ring-4 ring-app-surface ${color}`}
         aria-hidden
       />
       <div className="flex-1 min-w-0">
