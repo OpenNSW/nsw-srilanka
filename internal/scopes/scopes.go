@@ -19,6 +19,9 @@ const (
 	// workflow-engine state, unlike ConsignmentRead which is scoped to the caller's
 	// own trader/CHA-owned consignments.
 	ConsignmentAdminRead = "nsw:consignment:adminread"
+	// ConsignmentAdminWrite grants ops/admin the ability to resolve a node parked
+	// in AWAITING_ADMIN (RETRY/OVERRIDE/SKIP/ABORT) on any consignment's workflow.
+	ConsignmentAdminWrite = "nsw:consignment:adminwrite"
 
 	// Task resource.
 	TaskRead  = "nsw:task:read"

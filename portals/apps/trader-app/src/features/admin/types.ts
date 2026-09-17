@@ -37,3 +37,14 @@ export interface EngineStatus {
   // the backend) — the same snapshot regardless of which node you're looking at.
   global_variables?: Record<string, unknown>
 }
+
+// How an admin resolves a node parked in AWAITING_ADMIN (see core/workflow.AdminResolutionAction
+// on the backend). SKIP and OVERRIDE are rejected by the engine for GATEWAY nodes — a gateway's
+// routing can't be skipped/overridden without bypassing its own condition logic.
+export type AdminResolutionAction = 'RETRY' | 'OVERRIDE' | 'SKIP' | 'ABORT'
+
+export interface AdminResolutionRequest {
+  action: AdminResolutionAction
+  overrides?: Record<string, unknown>
+  reason: string
+}
