@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Button, Dialog, Spinner, Text } from '@radix-ui/themes'
-import { ChevronRightIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { Badge, Button, Dialog, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import { ChevronRightIcon, EyeNoneIcon, EyeOpenIcon, ReloadIcon } from '@radix-ui/react-icons'
 import {
   getConsignmentEngineStatus,
   getConsignmentForAdmin,
@@ -27,6 +27,17 @@ const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 
 
 // Shared grid so NodeRow's columns line up under the header regardless of nesting depth.
 const NODE_ROW_GRID = 'grid grid-cols-[1fr_110px_130px_150px_1fr] gap-2 items-center'
+
+// START/END carry no ops-actionable signal of their own — whether a workflow reached END is
+// already visible from its own status badge (COMPLETED), and a START simply means "this
+// execution began," true of every non-empty node list. Hidden by default at every nesting level
+// (root, child branches, task workflows alike) to cut noise; the eye toggle in the header shows
+// them all when actually needed (e.g. checking a START/END's own timestamp).
+const NOISY_NODE_TYPES = new Set(['START', 'END'])
+
+function visibleNodes(nodes: EngineNode[], showAllNodes: boolean): EngineNode[] {
+  return showAllNodes ? nodes : nodes.filter((node) => !NOISY_NODE_TYPES.has(node.type))
+}
 
 // A fetch either found the workflow, didn't (404 — normal for a not-yet-started or already-gone
 // execution), or failed for some other reason.
@@ -66,6 +77,9 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<FetchError>(null)
   const [variablesTarget, setVariablesTarget] = useState<WorkflowVariablesTarget | null>(null)
+  // Applies at every nesting level (root, child branches, task workflows) — see
+  // NOISY_NODE_TYPES.
+  const [showAllNodes, setShowAllNodes] = useState(false)
   // Supplementary business-side context (name, state, trader) fetched independently of the
   // engine status — best-effort only, so a failure here just hides this section rather than
   // blocking the ops view the admin actually came here for.
@@ -150,6 +164,8 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
     )
   }
 
+  const topLevelNodes = visibleNodes(status.nodes, showAllNodes)
+
   return (
     <div className="p-4 md:p-6">
       <div className="mb-1 flex items-center justify-between">
@@ -173,6 +189,17 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
             <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
             Refresh
           </Button>
+          <Tooltip content={showAllNodes ? 'Hide START/END nodes' : 'Show START/END nodes'}>
+            <IconButton
+              variant="ghost"
+              color="gray"
+              size="2"
+              onClick={() => setShowAllNodes((prev) => !prev)}
+              aria-label={showAllNodes ? 'Hide START/END nodes' : 'Show START/END nodes'}
+            >
+              {showAllNodes ? <EyeOpenIcon /> : <EyeNoneIcon />}
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
 
@@ -211,13 +238,19 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
           <div className="p-3 font-medium text-foreground-subtle text-sm">Last error</div>
         </div>
         <div className="min-w-[700px]">
-          {status.nodes.length === 0 ? (
+          {topLevelNodes.length === 0 ? (
             <Text size="2" color="gray" className="block p-3">
               No active or completed nodes yet.
             </Text>
           ) : (
-            status.nodes.map((node) => (
-              <NodeRow key={node.id} node={node} depth={0} onOpenVariables={setVariablesTarget} />
+            topLevelNodes.map((node) => (
+              <NodeRow
+                key={node.id}
+                node={node}
+                depth={0}
+                showAllNodes={showAllNodes}
+                onOpenVariables={setVariablesTarget}
+              />
             ))
           )}
         </div>
@@ -365,10 +398,12 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind) {
 function NodeRow({
   node,
   depth,
+  showAllNodes,
   onOpenVariables,
 }: {
   node: EngineNode
   depth: number
+  showAllNodes: boolean
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   const childIds = node.child_workflow_ids ?? []
@@ -419,7 +454,13 @@ function NodeRow({
         </div>
       </div>
       {childIds.map((childId) => (
-        <ChildWorkflowBranch key={childId} workflowId={childId} depth={depth + 1} onOpenVariables={onOpenVariables} />
+        <ChildWorkflowBranch
+          key={childId}
+          workflowId={childId}
+          depth={depth + 1}
+          showAllNodes={showAllNodes}
+          onOpenVariables={onOpenVariables}
+        />
       ))}
       {node.task_workflow_id && taskBranch.expanded && (
         <TaskWorkflowPanel
@@ -428,6 +469,7 @@ function NodeRow({
           loading={taskBranch.loading}
           status={taskBranch.status}
           error={taskBranch.error}
+          showAllNodes={showAllNodes}
           onOpenVariables={onOpenVariables}
         />
       )}
@@ -442,10 +484,12 @@ function NodeRow({
 function ChildWorkflowBranch({
   workflowId,
   depth,
+  showAllNodes,
   onOpenVariables,
 }: {
   workflowId: string
   depth: number
+  showAllNodes: boolean
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   const { expanded, toggle, loading, status, error } = useExpandableWorkflow(workflowId, 'child')
@@ -488,6 +532,7 @@ function ChildWorkflowBranch({
           loading={loading}
           status={status}
           error={error}
+          showAllNodes={showAllNodes}
           onOpenVariables={onOpenVariables}
         />
       )}
@@ -506,6 +551,7 @@ function TaskWorkflowPanel({
   loading,
   status,
   error,
+  showAllNodes,
   onOpenVariables,
 }: {
   workflowId: string
@@ -513,6 +559,7 @@ function TaskWorkflowPanel({
   loading: boolean
   status: EngineStatus | null
   error: FetchError
+  showAllNodes: boolean
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
   // The header is indented via its own margin, not a wrapper around the body below — see
@@ -544,6 +591,7 @@ function TaskWorkflowPanel({
         loading={loading}
         status={status}
         error={error}
+        showAllNodes={showAllNodes}
         onOpenVariables={onOpenVariables}
       />
     </>
@@ -557,14 +605,17 @@ function WorkflowBranchBody({
   loading,
   status,
   error,
+  showAllNodes,
   onOpenVariables,
 }: {
   depth: number
   loading: boolean
   status: EngineStatus | null
   error: FetchError
+  showAllNodes: boolean
   onOpenVariables: (target: WorkflowVariablesTarget) => void
 }) {
+  const nodes = status ? visibleNodes(status.nodes, showAllNodes) : []
   return (
     <div className="pb-1">
       {loading && (
@@ -581,13 +632,19 @@ function WorkflowBranchBody({
         </Text>
       )}
       {status &&
-        (status.nodes.length === 0 ? (
+        (nodes.length === 0 ? (
           <Text size="1" color="gray" className="block py-1 px-3" style={{ paddingLeft: 20 }}>
             No active or completed nodes yet.
           </Text>
         ) : (
-          status.nodes.map((node) => (
-            <NodeRow key={node.id} node={node} depth={depth + 1} onOpenVariables={onOpenVariables} />
+          nodes.map((node) => (
+            <NodeRow
+              key={node.id}
+              node={node}
+              depth={depth + 1}
+              showAllNodes={showAllNodes}
+              onOpenVariables={onOpenVariables}
+            />
           ))
         ))}
     </div>
