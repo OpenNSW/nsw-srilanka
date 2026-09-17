@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Button, Dialog, IconButton, Popover, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import { Badge, Button, Dialog, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import {
   ChevronRightIcon,
   DoubleArrowDownIcon,
@@ -460,6 +460,36 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, exp
   return { expanded, toggle, loading, status, error }
 }
 
+// A node's last_error, collapsed to one truncated line by default (most errors are noise you
+// just need to confirm exists) with a small toggle to expand it in place — wrapped, full-width,
+// plain selectable text — rather than a popover, so highlighting and copying the message doesn't
+// fight a floating layer that can dismiss mid-selection.
+function ErrorCell({ message }: { message: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="flex items-start gap-1">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        title={expanded ? 'Collapse error' : 'Expand error'}
+        className="shrink-0 mt-0.5 text-foreground-muted hover:text-foreground"
+      >
+        <ChevronRightIcon
+          className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
+          width={14}
+          height={14}
+          aria-hidden
+        />
+      </button>
+      {expanded ? (
+        <span className="whitespace-pre-wrap break-all">{message}</span>
+      ) : (
+        <span className="min-w-0 truncate">{message}</span>
+      )}
+    </div>
+  )
+}
+
 // One engine node's row. A native engine child (SPLIT_TASK/BATCH_SPLIT/PARALLEL_SPLIT) gets a
 // full-width expandable branch below, since those are rare and structurally significant. A TASK
 // node's own task workflow (task_workflow_id) is common — nearly every TASK node that has
@@ -522,20 +552,7 @@ function NodeRow({
         </div>
         <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
         <div className="px-3 text-xs text-red-600 min-w-0">
-          {node.last_error ? (
-            <Popover.Root>
-              <Popover.Trigger>
-                <button type="button" className="block w-full truncate text-left hover:underline">
-                  {node.last_error}
-                </button>
-              </Popover.Trigger>
-              <Popover.Content maxWidth="480px">
-                <Text size="1" className="font-mono whitespace-pre-wrap break-all">
-                  {node.last_error}
-                </Text>
-              </Popover.Content>
-            </Popover.Root>
-          ) : null}
+          {node.last_error && <ErrorCell message={node.last_error} />}
         </div>
       </div>
       {childIds.map((childId) => (
