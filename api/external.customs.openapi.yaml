@@ -5,7 +5,7 @@ info:
     OpenAPI 3.0 specification for National Single Window (NSW) inbound ASYCUDA / SLC Edge webhook endpoints.
 
     All callback events are delivered through a single central endpoint (`POST /webhooks/slce`) and dynamically routed based on the `eventType` discriminator field.
-  version: 1.2.0
+  version: 1.3.0
 
 paths:
   /webhooks/slce:
@@ -44,7 +44,7 @@ paths:
                   payload:
                     edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
                     integrated: true
-                    cusdecRef:
+                    cusDecRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
@@ -73,7 +73,7 @@ paths:
                   eventType: "PAYMENT_CONFIRMED"
                   processedAt: "2026-04-26T11:15:22Z"
                   payload:
-                    cusdecRef:
+                    cusDecRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
@@ -87,7 +87,7 @@ paths:
                   eventType: "WARRANTING_COMPLETED"
                   processedAt: "2026-04-26T11:15:22Z"
                   payload:
-                    cusdecRef:
+                    cusDecRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
@@ -100,7 +100,7 @@ paths:
                   eventType: "EXPORT_RELEASED"
                   processedAt: "2026-04-26T11:15:22Z"
                   payload:
-                    cusdecRef:
+                    cusDecRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
@@ -135,9 +135,19 @@ paths:
                       number: 28237
       responses:
         '200':
-          description: OK. Callback payload validated and processed successfully.
+          description: |
+            OK. Either the callback was validated and processed successfully, or
+            (for the (6.5) CusdecEventRequest / CDNAcknowledgmentRequest event
+            types only) it repeats an event already applied to the declaration
+            or dispatch note — acknowledged as a no-op rather than re-run.
+        '202':
+          description: |
+            Accepted. CUSDEC_INTEGRATED only: this edgeId's integration result was
+            already recorded by an earlier delivery. §2 has SLC Edge retry a
+            callback up to four times, so a repeat is expected whenever a prior
+            200 was lost in transit — it is acknowledged and nothing is re-run.
         '400':
-          description: Bad Request. Malformed JSON, missing mandatory fields, or validation failure.
+          description: Bad Request. Malformed JSON, missing mandatory fields, validation failure, or an unrecognized `eventType`.
           content:
             application/json:
               schema:
@@ -163,6 +173,38 @@ paths:
                   error:
                     type: string
                     example: "unauthorized"
+        '404':
+          description: |
+            Not Found. No task workflow matches the callback's `edgeId`
+            (CUSDEC_INTEGRATED, CDN_INTEGRATED), or no dispatch note matches the
+            `cdnRef` (CDN_INTEGRATED). Permanent — SLC Edge should not retry.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                    example: "workflow not found"
+        '503':
+          description: |
+            Service Unavailable. The declaration named by `cusDecRef`
+            (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
+            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED) does not exist yet
+            — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
+            callback for the same document. Transient: SLC Edge should retry.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                    example: "declaration not found, retry later"
 
 components:
   schemas:
@@ -214,9 +256,13 @@ components:
         §6.2 Declaration Integration Result. Carries the outcome of processing the
         submission identified by `edgeId`.
 
-        On success: `integrated` = true; `cusdecRef` present; `taxes` populated; `errors` = {}.
-        On failure: `integrated` = false; `cusdecRef` absent/null; `taxes` empty; `errors` populated
+        On success: `integrated` = true; `cusDecRef` present; `taxes` populated; `errors` = {}.
+        On failure: `integrated` = false; `cusDecRef` absent/null; `taxes` empty; `errors` populated
         and keyed by segment. Success and errors are mutually exclusive.
+
+        `cusDecRef` is the canonical field name; a `cusdecRef` (lowercase `d`)
+        alias is also accepted for compatibility with an earlier draft of this
+        contract, but `cusDecRef` should be sent going forward.
       required:
         - eventType
         - processedAt
@@ -248,7 +294,7 @@ components:
               type: boolean
               description: true on success, false on failure.
               example: true
-            cusdecRef:
+            cusDecRef:
               description: Registered reference (§4.1). Present on success; absent/null on failure.
             taxes:
               type: array
@@ -262,13 +308,13 @@ components:
           oneOf:
             - title: Integrated
               required:
-                - cusdecRef
+                - cusDecRef
                 - taxes
                 - errors
               properties:
                 integrated:
                   enum: [true]
-                cusdecRef:
+                cusDecRef:
                   $ref: '#/components/schemas/DocumentReference'
                 taxes:
                   type: array
@@ -286,7 +332,7 @@ components:
               properties:
                 integrated:
                   enum: [false]
-                cusdecRef:
+                cusDecRef:
                   type: object
                   nullable: true
                   enum: [null]
@@ -316,9 +362,9 @@ components:
         payload:
           type: object
           required:
-            - cusdecRef
+            - cusDecRef
           properties:
-            cusdecRef:
+            cusDecRef:
               $ref: '#/components/schemas/DocumentReference'
             amountPaid:
               type: number
@@ -347,9 +393,9 @@ components:
         payload:
           type: object
           required:
-            - cusdecRef
+            - cusDecRef
           properties:
-            cusdecRef:
+            cusDecRef:
               $ref: '#/components/schemas/DocumentReference'
             releaseOrderNo:
               type: string
@@ -375,9 +421,9 @@ components:
         payload:
           type: object
           required:
-            - cusdecRef
+            - cusDecRef
           properties:
-            cusdecRef:
+            cusDecRef:
               $ref: '#/components/schemas/DocumentReference'
             vesselName:
               type: string
