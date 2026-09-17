@@ -29,11 +29,11 @@ type EngineNodeDTO struct {
 	// whether that child has since completed.
 	ChildWorkflowIDs []string `json:"child_workflow_ids,omitempty"`
 	// TaskWorkflowID is set only for a TASK node whose task has actually started (there's a
-	// matching store.TaskRecord) — the Temporal workflow ID of the independent per-task ("micro")
-	// workflow spawned to fulfill it, on a separate manager/task queue from this node's own
-	// workflow (see Service.taskWm). Fetch it via the task-workflow engine-status endpoint to
-	// drill down — a node parked inside it is otherwise invisible here, since from this node's
-	// own workflow's point of view the TASK node is just an Activity pending completion.
+	// matching store.TaskRecord) — the workflow ID of the independent per-task ("micro") workflow
+	// spawned to fulfill it, on a separate manager/task queue from this node's own workflow (see
+	// Service.taskWm). Fetch it via the task-workflow engine-status endpoint to drill down — a
+	// node parked inside it is otherwise invisible here, since from this node's own workflow's
+	// point of view the TASK node is just pending completion.
 	TaskWorkflowID string `json:"task_workflow_id,omitempty"`
 }
 
@@ -56,10 +56,9 @@ var ErrEngineWorkflowNotFound = errors.New("workflow execution not found")
 
 // GetEngineStatus returns the raw engine state for workflowID — the consignment's root workflow,
 // or (queried the same way, via this same endpoint) a nested child spawned by a SPLIT_TASK/
-// BATCH_SPLIT/PARALLEL_SPLIT node — straight from the registered workflow.Manager (Temporal
-// today, but Manager is an interface so this stays agnostic to whatever runtime backs it).
-// Unlike GetConsignmentByID, it performs no trader/CHA ownership check — see the TODO on the
-// route wiring in router.go.
+// BATCH_SPLIT/PARALLEL_SPLIT node — straight from the registered workflow.Manager, an interface
+// so this stays agnostic to whatever engine actually backs it. Unlike GetConsignmentByID, it
+// performs no trader/CHA ownership check — see the TODO on the route wiring in router.go.
 //
 // Each TASK node's DTO is additionally enriched with TaskWorkflowID, when its task has actually
 // started — resolved via the task store rather than reconstructed from core/taskflow's
@@ -84,10 +83,10 @@ func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*Engi
 
 // GetTaskWorkflowEngineStatus returns the raw engine state for taskWorkflowID — the independent
 // per-task ("micro") workflow a TASK node spawned to fulfill it (see EngineNodeDTO.TaskWorkflowID)
-// — from the registered task-workflow manager, a separate Temporal task queue from the one
+// — from the registered task-workflow manager, a separate manager/task queue from the one
 // GetEngineStatus queries. A node parked for admin intervention inside a task workflow is
-// otherwise invisible: from its owning TASK node's own workflow, the node is just an Activity
-// pending completion.
+// otherwise invisible: from its owning TASK node's own workflow, the node is just pending
+// completion.
 func (s *Service) GetTaskWorkflowEngineStatus(ctx context.Context, taskWorkflowID string) (*EngineStatusDTO, error) {
 	if s.taskWm == nil {
 		return nil, fmt.Errorf("no task workflow manager registered for ConsignmentService")

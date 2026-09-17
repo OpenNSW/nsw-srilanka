@@ -37,7 +37,7 @@ type Service struct {
 	artifactRegistry *artifact.Registry
 	wm               workflow.Manager
 	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
-	// Temporal task queue from wm. Each TASK node in wm's own workflow spawns an independent
+	// manager/task queue from wm. Each TASK node in wm's own workflow spawns an independent
 	// workflow execution here (see engine_status.go's TaskWorkflowID lookup), so a node parked
 	// for admin intervention inside one is invisible to wm.GetStatus and needs this second
 	// manager to query.

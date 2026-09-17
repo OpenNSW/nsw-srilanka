@@ -19,7 +19,7 @@ export interface EngineNode {
   // be looked up via the same engine-status endpoint to drill down, whether or not it has since
   // completed.
   child_workflow_ids?: string[]
-  // Set only for a TASK node whose task has actually started — the Temporal workflow ID of the
+  // Set only for a TASK node whose task has actually started — the workflow ID of the
   // independent per-task ("micro") workflow spawned to fulfill it. A separate ID space/manager
   // from child_workflow_ids above: fetch it via getTaskWorkflowEngineStatus, not
   // getConsignmentEngineStatus, to drill down (see EngineNodeDTO.TaskWorkflowID on the backend).
