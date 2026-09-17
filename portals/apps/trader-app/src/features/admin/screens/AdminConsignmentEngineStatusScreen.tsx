@@ -33,7 +33,17 @@ const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 
 }
 
 // Shared grid so NodeRow's columns line up under the header regardless of nesting depth.
-const NODE_ROW_GRID = 'grid grid-cols-[1fr_110px_130px_150px_1fr] gap-2 items-center'
+const NODE_ROW_GRID = 'grid grid-cols-[1fr_150px_130px_150px_1fr] gap-2 items-center'
+
+// node.type/gateway_type are shouty-snake-case engine identifiers (SPLIT_TASK, PARALLEL_SPLIT,
+// EXCLUSIVE_JOIN, ...) — humanized for display rather than shown as-is.
+function humanizeNodeType(type: string): string {
+  return type
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
 
 // START/END carry no ops-actionable signal of their own — whether a workflow reached END is
 // already visible from its own status badge (COMPLETED), and a START simply means "this
@@ -536,7 +546,9 @@ function NodeRow({
               node.task_workflow_id ? 'hover:bg-app-surface-muted cursor-pointer' : 'cursor-default'
             }`}
           >
-            <span className="truncate">{node.gateway_type ?? node.type}</span>
+            <span className="truncate" title={humanizeNodeType(node.gateway_type ?? node.type)}>
+              {humanizeNodeType(node.gateway_type ?? node.type)}
+            </span>
             <ChevronRightIcon
               className={`shrink-0 transition-transform ${node.task_workflow_id ? 'text-foreground' : 'invisible'} ${
                 taskBranch.expanded ? 'rotate-90' : ''
