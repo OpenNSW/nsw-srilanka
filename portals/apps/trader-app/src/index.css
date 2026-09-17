@@ -27,11 +27,12 @@
   --font-sans:
     'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Brand (primary - iris, Radix Themes' accent). -dark is the deep surface
-   * (e.g. sidebar); the bright base pops on it, and bright-at-opacity gives
-   * visible hovers. Kept in sync with the Theme accentColor in main.tsx so
-   * Radix components (incl. every JSONForms field) and Tailwind utilities
-   * read as one palette. */
+  /* Brand (primary). These are the "Modern" scheme's values and the default
+   * whenever no `data-theme` override applies — see the color-scheme block
+   * below for the other options and services/colorSchemeContextCore.ts for
+   * how <Theme accentColor> is kept in sync with whichever one is active.
+   * -dark is for deep surfaces (gradients, hero overlays); the bright base
+   * pops against it, and bright-at-opacity gives visible hovers. */
   --color-primary-subtle: #f0f0ff;
   --color-primary: #5b5bd6;
   --color-primary-hover: #4a4ac7;
@@ -110,6 +111,48 @@
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-fade-in-delayed: fade-in 0.8s ease-out 0.3s both;
   --animate-loading-bar: loading-bar 2s ease-in-out infinite;
+}
+
+/* =========================================================================
+ * COLOR SCHEMES — alternates to the "Modern" default above, switched at
+ * runtime via ColorSchemeProvider setting `data-theme` on <html>. Each
+ * block only needs to redefine the brand rungs (all the semantic/neutral
+ * tokens stay shared) plus the form-field fill, so every component built
+ * on bg-primary/text-primary/border-primary-subtle/etc. — cards, buttons,
+ * badges, gradients, and every JSONForms field — repaints automatically.
+ * Keep these in step with the `accentColor` each scheme maps to in
+ * services/colorSchemeContextCore.ts, so Radix's own components (which
+ * don't read these Tailwind tokens) land on a matching hue.
+ * ========================================================================= */
+
+/* Maritime Trade — navy & slate, a conventional customs/trade-portal look. */
+:root[data-theme='maritime'] {
+  --color-primary-subtle: #eaf0fb;
+  --color-primary: #1e3a8a;
+  --color-primary-hover: #16306f;
+  --color-primary-dark: #0f2547;
+  --color-field-bg: #eef2fa;
+  --color-field-bg-hover: #e3e9f5;
+}
+
+/* Ceylon Regal — maroon & gold, echoing the national flag's lion panel. */
+:root[data-theme='regal'] {
+  --color-primary-subtle: #fbedea;
+  --color-primary: #7a2430;
+  --color-primary-hover: #641d27;
+  --color-primary-dark: #3c1116;
+  --color-field-bg: #f7ecea;
+  --color-field-bg-hover: #f0dfdc;
+}
+
+/* Emerald Trade — deep teal-green. */
+:root[data-theme='emerald'] {
+  --color-primary-subtle: #e7f5f0;
+  --color-primary: #0f6a52;
+  --color-primary-hover: #0c5843;
+  --color-primary-dark: #0a3f30;
+  --color-field-bg: #eaf6f2;
+  --color-field-bg-hover: #dceee8;
 }
 
 body {
@@ -318,12 +361,20 @@ label.rt-Text {
 }
 
 /* Primary buttons get a subtle gradient + tinted shadow instead of a flat
- * fill — scoped to the theme's own default accent (iris) so semantic
- * color overrides (danger/success buttons) are untouched. */
-.rt-BaseButton.rt-variant-solid[data-accent-color='iris'] {
-  background-image: linear-gradient(135deg, var(--color-primary), #7c6ff0) !important;
+ * fill — scoped to whichever accent color the active color scheme uses as
+ * its default (see ColorSchemeContext), so semantic color overrides
+ * (danger/success buttons) are untouched regardless of which scheme is
+ * selected. */
+.rt-BaseButton.rt-variant-solid[data-accent-color='iris'],
+.rt-BaseButton.rt-variant-solid[data-accent-color='blue'],
+.rt-BaseButton.rt-variant-solid[data-accent-color='ruby'],
+.rt-BaseButton.rt-variant-solid[data-accent-color='jade'] {
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)) !important;
   box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 55%, transparent) !important;
 }
-.rt-BaseButton.rt-variant-solid[data-accent-color='iris']:hover {
+.rt-BaseButton.rt-variant-solid[data-accent-color='iris']:hover,
+.rt-BaseButton.rt-variant-solid[data-accent-color='blue']:hover,
+.rt-BaseButton.rt-variant-solid[data-accent-color='ruby']:hover,
+.rt-BaseButton.rt-variant-solid[data-accent-color='jade']:hover {
   background-image: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary)) !important;
 }

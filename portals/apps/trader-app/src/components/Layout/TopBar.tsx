@@ -14,7 +14,7 @@ function BrandMark() {
   }
   const initial = displayName.trim().charAt(0).toUpperCase() || 'N'
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#7c6ff0] text-sm font-bold text-white shadow-md shadow-primary/30">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-white shadow-md shadow-primary/30">
       {initial}
     </span>
   )
