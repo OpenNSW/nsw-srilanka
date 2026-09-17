@@ -13,23 +13,18 @@ import (
 // routed through remote.Manager so service base URLs, auth, and timeouts
 // live in services.json rather than in template configs — template configs
 // specify only service_id + path.
-//
-// In devMode, dispatch errors are logged and swallowed so local workflows
-// can still progress when the receiving OGA portal isn't running.
 
 // dispatchHelper bundles outbound HTTP behaviour shared by plugins in this
 // package.
 type dispatchHelper struct {
 	manager        *remote.Manager
 	backendBaseURL string
-	devMode        bool
 }
 
-func newDispatchHelper(manager *remote.Manager, backendBaseURL string, devMode bool) *dispatchHelper {
+func newDispatchHelper(manager *remote.Manager, backendBaseURL string) *dispatchHelper {
 	return &dispatchHelper{
 		manager:        manager,
 		backendBaseURL: backendBaseURL,
-		devMode:        devMode,
 	}
 }
 
@@ -45,27 +40,19 @@ func (h *dispatchHelper) callbackTasksURL() string {
 	return joined
 }
 
-// post sends body as JSON to the resolved service+path. In devMode, dispatch
-// errors are logged and swallowed.
+// post sends body as JSON to the resolved service+path. Errors always
+// propagate: this dispatch is a precondition for ErrSuspended (the caller is
+// about to park the subtask awaiting a callback that only the receiving
+// service can send), so a failed dispatch must fail the step rather than
+// suspend it — the task engine's own retry is what lets the workflow recover
+// once the receiving service comes up.
 func (h *dispatchHelper) post(ctx context.Context, serviceID, path string, body any) error {
 	req := remote.Request{
 		Method: "POST",
 		Path:   path,
 		Body:   remote.JSONBody{V: body},
 	}
-	if err := h.manager.Call(ctx, serviceID, req, nil); err != nil {
-		return h.dispatchOrSwallow(serviceID, path, err)
-	}
-	return nil
-}
-
-func (h *dispatchHelper) dispatchOrSwallow(serviceID, path string, err error) error {
-	if h.devMode {
-		slog.Warn("taskv2 plugin: dispatch failed (dev mode — swallowing)",
-			"serviceId", serviceID, "path", path, "error", err)
-		return nil
-	}
-	return err
+	return h.manager.Call(ctx, serviceID, req, nil)
 }
 
 type pluginContext = flowplugins.PluginContext
