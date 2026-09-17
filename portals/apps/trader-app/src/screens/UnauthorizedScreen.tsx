@@ -1,7 +1,6 @@
 import { Button } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
-import { Footer } from '@/components/Layout/Footer'
 
 export function UnauthorizedScreen() {
   const handleSignOut = useSignOutHandler()
@@ -20,7 +19,6 @@ export function UnauthorizedScreen() {
           </div>
         </div>
       </main>
-      <Footer />
     </div>
   )
 }

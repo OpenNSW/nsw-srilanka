@@ -2,7 +2,6 @@ import { useEffect, useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { useTranslation } from 'react-i18next'
 import { appConfig, displayName } from '@/config'
-import { Footer } from '@/components/Layout/Footer'
 import { LanguageSwitcher } from '@/components/Layout/LanguageSwitcher'
 import { supportedLanguages } from '@/i18n'
 
@@ -104,8 +103,6 @@ export function LoginScreen() {
           )}
         </div>
       </div>
-
-      <Footer />
     </div>
   )
 }

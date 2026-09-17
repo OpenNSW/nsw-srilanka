@@ -3,14 +3,14 @@ import { appConfig } from '@/config'
 
 // Deliberately tiny — a thin white bar, not a full government footer. Fixed
 // full-width across the bottom of the viewport (z-30: above Sidebar's z-20,
-// below TopBar's z-50 — see those components), so it's the same one instance
-// regardless of what's rendered above it — see Layout.tsx and LoginScreen.tsx.
+// below TopBar's z-50 — see those components). Mounted once in App.tsx
+// alongside <Routes>, so it's the same one instance across every screen.
 //
 // Height contract: h-16 (64px) below sm, sm:h-8 (32px) at sm+ breakpoints.
-// Anything that reserves space for this footer (Layout.tsx, LoginScreen.tsx,
-// UnauthorizedScreen.tsx, Sidebar.tsx) must use `pb-16 sm:pb-8` (or the
-// equivalent `h-[calc(...-64px)] sm:h-[calc(...-32px)]` for Sidebar) so the
-// reserve stays in sync with this component.
+// Every screen (Layout.tsx, LoginScreen.tsx, UnauthorizedScreen.tsx,
+// ZonePreviewScreen.tsx) must reserve space for it with `pb-16 sm:pb-8` (or
+// the equivalent `h-[calc(...-64px)] sm:h-[calc(...-32px)]` for Sidebar) so
+// the reserve stays in sync with this component.
 export function Footer() {
   const { t } = useTranslation()
   const footerLinks = appConfig.branding.footerLinks ?? []
