@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
@@ -78,5 +79,105 @@ func TestConsignmentService_GetEngineStatus_NoWorkflowManager(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	_, err := svc.GetEngineStatus(context.Background(), uuid.NewString())
+	assert.Error(t, err)
+}
+
+// A TASK node's TaskWorkflowID is filled in from the task store, keyed off
+// workflow.VarRootWorkflowID rather than the queried workflow ID itself — this matters when
+// GetEngineStatus is called on a nested child branch, not just the consignment root.
+func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	mockTaskStore := new(MockTaskStore)
+	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	rootWorkflowID := uuid.NewString()
+	childWorkflowID := uuid.NewString()
+
+	instance := &workflow.WorkflowInstance{
+		ID:     childWorkflowID,
+		Status: workflow.StatusRunning,
+		WorkflowVariables: map[string]any{
+			workflow.VarRootWorkflowID: rootWorkflowID,
+		},
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"officer_review": {ID: "officer_review", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+			"gateway_node":   {ID: "gateway_node", Type: workflow.NodeTypeGateway, Status: workflow.NodeStatusCompleted},
+		},
+	}
+	mockWM.On("GetStatus", ctx, childWorkflowID).Return(instance, nil)
+	mockTaskStore.On("GetAllTasks", ctx, rootWorkflowID).Return([]store.TaskRecord{
+		{TaskID: "officer_review", TaskWorkflowID: "task-wf-officer_review"},
+	})
+
+	result, err := svc.GetEngineStatus(ctx, childWorkflowID)
+	require.NoError(t, err)
+	require.Len(t, result.Nodes, 2)
+	byID := map[string]EngineNodeDTO{result.Nodes[0].ID: result.Nodes[0], result.Nodes[1].ID: result.Nodes[1]}
+	assert.Equal(t, "task-wf-officer_review", byID["officer_review"].TaskWorkflowID)
+	// Not a TASK node — must not get a TaskWorkflowID even though nothing prevents the map
+	// lookup from matching by coincidence.
+	assert.Empty(t, byID["gateway_node"].TaskWorkflowID)
+	mockWM.AssertExpectations(t)
+	mockTaskStore.AssertExpectations(t)
+}
+
+func TestConsignmentService_GetTaskWorkflowEngineStatus(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockTaskWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterTaskWorkflowManager(mockTaskWM))
+
+	ctx := context.Background()
+	taskWorkflowID := "task-wf-officer_review"
+	instance := &workflow.WorkflowInstance{
+		ID:     taskWorkflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"map_output": {ID: "map_output", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin, LastError: "output mapping error"},
+		},
+	}
+	mockTaskWM.On("GetStatus", ctx, taskWorkflowID).Return(instance, nil)
+
+	result, err := svc.GetTaskWorkflowEngineStatus(ctx, taskWorkflowID)
+	require.NoError(t, err)
+	assert.Equal(t, taskWorkflowID, result.ConsignmentID)
+	require.Len(t, result.Nodes, 1)
+	assert.Equal(t, "AWAITING_ADMIN", result.Nodes[0].Status)
+	assert.Equal(t, "output mapping error", result.Nodes[0].LastError)
+	mockTaskWM.AssertExpectations(t)
+}
+
+func TestConsignmentService_GetTaskWorkflowEngineStatus_NotFound(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockTaskWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterTaskWorkflowManager(mockTaskWM))
+
+	ctx := context.Background()
+	taskWorkflowID := "task-wf-missing"
+	mockTaskWM.On("GetStatus", ctx, taskWorkflowID).Return((*workflow.WorkflowInstance)(nil), fmt.Errorf("%w: workflow not found", workflow.ErrWorkflowNotFound))
+
+	_, err := svc.GetTaskWorkflowEngineStatus(ctx, taskWorkflowID)
+	assert.ErrorIs(t, err, ErrEngineWorkflowNotFound)
+	mockTaskWM.AssertExpectations(t)
+}
+
+func TestConsignmentService_GetTaskWorkflowEngineStatus_NoManager(t *testing.T) {
+	db, _ := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+
+	_, err := svc.GetTaskWorkflowEngineStatus(context.Background(), "task-wf-officer_review")
+	assert.Error(t, err)
+}
+
+func TestConsignmentService_RegisterTaskWorkflowManager_AlreadyRegistered(t *testing.T) {
+	db, _ := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterTaskWorkflowManager(new(MockWM)))
+
+	err := svc.RegisterTaskWorkflowManager(new(MockWM))
 	assert.Error(t, err)
 }
