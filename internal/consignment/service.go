@@ -36,11 +36,14 @@ type Service struct {
 	db               *gorm.DB
 	artifactRegistry *artifact.Registry
 	wm               workflow.Manager
-	chaService       cha.Service
-	companyService   company.Service
-	userService      user.Service
-	taskStore        TaskStore
-	roles            map[string]string // logical name ("trader"/"cha") -> IdP token role
+	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
+	// manager/task queue from wm.
+	taskWm         workflow.Manager
+	chaService     cha.Service
+	companyService company.Service
+	userService    user.Service
+	taskStore      TaskStore
+	roles          map[string]string // logical name ("trader"/"cha") -> IdP token role
 }
 
 // NewService creates a new instance of Service. roles is the global catalog's Roles
@@ -79,6 +82,19 @@ func (s *Service) RegisterWorkflowManager(wm workflow.Manager) error {
 		return fmt.Errorf("workflow manager cannot be nil")
 	}
 	s.wm = wm
+	return nil
+}
+
+// RegisterTaskWorkflowManager registers the workflow manager for the per-task ("micro")
+// workflow runner.
+func (s *Service) RegisterTaskWorkflowManager(wm workflow.Manager) error {
+	if s.taskWm != nil {
+		return fmt.Errorf("task workflow manager already registered for ConsignmentService")
+	}
+	if wm == nil {
+		return fmt.Errorf("task workflow manager cannot be nil")
+	}
+	s.taskWm = wm
 	return nil
 }
 
