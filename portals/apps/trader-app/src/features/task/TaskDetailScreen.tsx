@@ -242,9 +242,9 @@ export function TaskDetailScreen() {
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
                   const zv = await fetchTask()
-                  // SAVE_AS_DRAFT persists a partial form and stays PENDING_USER;
-                  // the submit-success banner is only for a real application submit.
-                  if (command !== 'SAVE_AS_DRAFT' && zv && !hasRejection(zv)) {
+                  // Show the success banner only when the task moved out of PENDING_USER.
+                  // A draft save leaves it there, a real submission advances it.
+                  if (zv && zv.state !== 'PENDING_USER' && !hasRejection(zv)) {
                     setShowSubmitSuccess(true)
                     setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
                   }

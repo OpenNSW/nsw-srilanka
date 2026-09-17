@@ -85,9 +85,9 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
-    // Save as Draft (and any other secondary_action) must accept a partial
-    // form. Submit still hits schema required and surfaces field errors.
-    const skipRequired = h.command === 'SAVE_AS_DRAFT' || h.element === 'secondary_action'
+    // secondary_action handles (e.g. drafts) accept a partial form.
+    // primary_action and danger_action handles require valid data.
+    const skipRequired = h.element === 'secondary_action'
     if (!skipRequired && !isValid) {
       setShowErrors(true)
       return
