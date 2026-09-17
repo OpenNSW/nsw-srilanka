@@ -1,0 +1,251 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / SLPA Cargo Management System Webhook
+  description: |
+    OpenAPI 3.0 specification for the inbound webhook that receives what
+    SLPA's Cargo Management System (CMS) reports back: the approvals a
+    service order goes through, and the invoice raised once one is approved
+    and later paid.
+
+    Unlike the IdP-authenticated OGA portal routes, this endpoint carries no
+    bearer token: SLPA signs each call with a secret shared out of band (see
+    `securitySchemes.SLPASignature`), and that signature is the whole of its
+    authentication.
+  version: 1.0.0
+
+security:
+  - SLPASignature: []
+
+paths:
+  /webhooks/slpa:
+    post:
+      summary: Receive an SLPA CMS service-order or invoice event
+      description: |
+        One signed route carries both lifecycles the CMS sends: service-order
+        approval decisions (`event` prefixed `service_order.`) and invoice
+        events (`event` prefixed `invoice.`). Which envelope a body is
+        decides only who reads it — see the `oneOf` discriminator below.
+
+        Every event resumes the task step waiting on it. A decision that
+        does not end a lifecycle (e.g. approved by the clerk, still with the
+        accountant) is applied as non-final, and the task's own workflow
+        gateway sends it straight back to the same wait — so the trader sees
+        it move without any record being edited in place.
+      operationId: handleSLPAWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/OrderEvent'
+                - $ref: '#/components/schemas/InvoiceEvent'
+              discriminator:
+                propertyName: event
+                mapping:
+                  service_order.approved_by_accounts_clerk: '#/components/schemas/OrderEvent'
+                  service_order.rejected_by_accounts_clerk: '#/components/schemas/OrderEvent'
+                  service_order.approved_by_accountant: '#/components/schemas/OrderEvent'
+                  service_order.rejected_by_accountant: '#/components/schemas/OrderEvent'
+                  service_order.rejected_to_accounts_clerk: '#/components/schemas/OrderEvent'
+                  invoice.paid: '#/components/schemas/InvoiceEvent'
+            examples:
+              approvedByAccountsClerk:
+                summary: Service order approved by the accounts clerk, still with the accountant
+                value:
+                  event: "service_order.approved_by_accounts_clerk"
+                  slug: "c4b6f8e2-7d1a-4e3b-9c5d-1a2b3c4d5e6f"
+                  service_order_no: "SO/2026/001234"
+                  cusdec_serial: "E"
+                  status: "actclk_approve_act"
+                  timestamp: "2026-06-26T04:04:52Z"
+              approvedByAccountant:
+                summary: Service order approved by the accountant (final)
+                value:
+                  event: "service_order.approved_by_accountant"
+                  slug: "c4b6f8e2-7d1a-4e3b-9c5d-1a2b3c4d5e6f"
+                  service_order_no: "SO/2026/001234"
+                  invoice_no: "INV/2026/005678"
+                  total_amount: 15000.00
+                  timestamp: "2026-06-26T05:10:00Z"
+              rejectedByAccountant:
+                summary: Service order rejected by the accountant (final)
+                value:
+                  event: "service_order.rejected_by_accountant"
+                  slug: "c4b6f8e2-7d1a-4e3b-9c5d-1a2b3c4d5e6f"
+                  service_order_no: "SO/2026/001234"
+                  timestamp: "2026-06-26T05:10:00Z"
+              invoicePaid:
+                summary: Invoice paid, with a receipt
+                value:
+                  event: "invoice.paid"
+                  slug: "c4b6f8e2-7d1a-4e3b-9c5d-1a2b3c4d5e6f"
+                  service_order_no: "SO/2026/001234"
+                  invoice_no: "INV/2026/005678"
+                  status: "paid"
+                  total_amount: 15000.00
+                  timestamp: "2026-06-26T06:00:00Z"
+                  payment_receipt:
+                    invoice_no: "INV/2026/005678"
+                    invoice_serial: "E"
+                    paid_amount: 15000.00
+                    paid_datetime: "2026-06-26T06:00:00Z"
+                    payment_receipt: "100415624"
+                    service_order_no: "SO/2026/001234"
+      responses:
+        '200':
+          description: OK. The event was applied (or, for a redelivery of an already-settled approval/invoice, acknowledged as a no-op).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+        '400':
+          description: Malformed JSON, or `event` is not one this route models.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: The `X-NSW-Signature` header is missing or does not match the request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No service order matches the event's correlator (slug, or order number). The CMS should retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The consignment holds the order but is not yet waiting on this event — the previous event is still being applied. The CMS should retry shortly.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error applying the event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    SLPASignature:
+      type: apiKey
+      in: header
+      name: X-NSW-Signature
+      description: |
+        `sha256=<hex HMAC-SHA256 of the raw request body, keyed with the
+        shared secret>` — GitHub-style. Verified with a constant-time
+        comparison.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "signature verification failed"
+
+    OrderEvent:
+      type: object
+      description: A decision on a service order as it moves through SLPA's approvals.
+      required:
+        - event
+        - slug
+      properties:
+        event:
+          type: string
+          enum:
+            - service_order.approved_by_accounts_clerk
+            - service_order.rejected_by_accounts_clerk
+            - service_order.approved_by_accountant
+            - service_order.rejected_by_accountant
+            - service_order.rejected_to_accounts_clerk
+        slug:
+          type: string
+          description: Correlator recorded when the order was raised.
+        service_order_no:
+          type: string
+        cusdec_serial:
+          type: string
+        status:
+          type: string
+          description: The CMS's own internal status code, e.g. "actclk_approve_act".
+        invoice_no:
+          type: string
+          description: Set once an approval also raises the invoice.
+        total_amount:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    InvoiceEvent:
+      type: object
+      description: |
+        The one invoice event this integration acts on: `invoice.paid`. What
+        SLPA bills for is settled outside the Single Window (bank transfer),
+        so this is the CMS's announcement that the money landed. The
+        payload is intentionally flat on the envelope (`payment_receipt`),
+        but an older, nested shape (`details.invoice_details`) is also
+        tolerated for a deployment still sending it.
+      required:
+        - event
+      properties:
+        event:
+          type: string
+          enum: [invoice.paid]
+        slug:
+          type: string
+          description: Correlator; falls back to `service_order_no` when absent.
+        status:
+          type: string
+        service_order_no:
+          type: string
+        invoice_no:
+          type: string
+        cusdec_serial:
+          type: string
+        total_amount:
+          type: number
+          description: The order's priced amount — not necessarily what was paid. See `payment_receipt.paid_amount`.
+        invoice_url:
+          type: string
+          format: uri
+        timestamp:
+          type: string
+          format: date-time
+        payment_receipt:
+          type: object
+          description: The receipt the CMS issues when the payment lands.
+          properties:
+            invoice_no:
+              type: string
+            invoice_serial:
+              type: string
+            paid_amount:
+              type: number
+            paid_datetime:
+              type: string
+              format: date-time
+            payment_receipt:
+              type: string
+              description: A receipt reference number, not a link.
+            service_order_no:
+              type: string
+        details:
+          type: object
+          description: Legacy nested shape; read only when the flat fields above are absent.
+          properties:
+            invoice_details:
+              type: object
+              additionalProperties: true
