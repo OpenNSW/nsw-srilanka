@@ -19,9 +19,6 @@ const en = {
         consignments: 'Consignments',
         verifiedDocs: 'Verified Docs',
       },
-      version: {
-        label: 'NSW',
-      },
       toggle: {
         collapse: 'Collapse',
         expand: 'Expand',
@@ -168,6 +165,15 @@ const en = {
         minutesAgo: '{{mins}}m ago',
         hoursAgo: '{{hours}}h ago',
         daysAgo: '{{days}}d ago',
+      },
+    },
+
+    // Footer.tsx. Labels are resolved by footerLinks[].key, not carried in branding.json.
+    footer: {
+      links: {
+        policy: 'Policy',
+        accessibility: 'Accessibility',
+        support: 'Support',
       },
     },
 

@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import './App.css'
 import { Layout } from './components/Layout'
+import { Footer } from '@/components/Layout'
 import { ConsignmentScreen } from './features/consignment/screens/ConsignmentScreen.tsx'
 import { ConsignmentDetailScreen } from './features/consignment/screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
@@ -74,22 +75,26 @@ function App() {
   }, [])
 
   return (
-    <Routes>
-      {import.meta.env.DEV && <Route path="/dev/zones" element={<ZonePreviewScreen />} />}
-      <Route path="/login" element={<SignedOutRoute />} />
+    <>
+      <Routes>
+        {import.meta.env.DEV && <Route path="/dev/zones" element={<ZonePreviewScreen />} />}
+        <Route path="/login" element={<SignedOutRoute />} />
 
-      <Route element={<ProtectedLayout />}>
-        <Route path="/" element={<Navigate to="/consignments" replace />} />
-        <Route path="/consignments" element={<ConsignmentScreen />} />
-        <Route path="/consignments/:consignmentId" element={<ConsignmentDetailScreen />} />
-        <Route path="/consignments/:consignmentId/tasks/:taskId" element={<TaskDetailScreen />} />
-        {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
-        <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />
-        <Route path="/admin/consignments/:consignmentId/view" element={<AdminConsignmentDetailScreen />} />
-      </Route>
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<Navigate to="/consignments" replace />} />
+          <Route path="/consignments" element={<ConsignmentScreen />} />
+          <Route path="/consignments/:consignmentId" element={<ConsignmentDetailScreen />} />
+          <Route path="/consignments/:consignmentId/tasks/:taskId" element={<TaskDetailScreen />} />
+          {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
+          <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />
+          <Route path="/admin/consignments/:consignmentId/view" element={<AdminConsignmentDetailScreen />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+
+      <Footer />
+    </>
   )
 }
 
