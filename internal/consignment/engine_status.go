@@ -77,6 +77,12 @@ func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*Engi
 	}
 
 	dto := buildEngineStatusDTO(workflowID, instance)
+	// Fetches every task record for the whole consignment, not just the ones under workflowID's
+	// own branch — the task store only supports filtering by root workflow ID (see
+	// attachTaskWorkflowIDs), so a nested child-branch call re-fetches the same consignment-wide
+	// list. Acceptable for an admin screen opened manually and rarely; would need a narrower
+	// query on the task store itself (TaskRecord.ParentWorkflowID already holds the more specific
+	// ID, but nothing queries by it) if this ever shows up as an actual cost.
 	s.attachTaskWorkflowIDs(ctx, instance, dto.Nodes)
 	return dto, nil
 }
