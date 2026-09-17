@@ -22,13 +22,6 @@ export interface ColorScheme {
 
 export const COLOR_SCHEMES: ColorScheme[] = [
   {
-    id: 'iris',
-    label: 'Modern',
-    description: 'The current violet-blue palette.',
-    accentColor: 'iris',
-    swatch: '#5b5bd6',
-  },
-  {
     id: 'maritime',
     label: 'Maritime Trade',
     description: 'Navy & slate — a conventional trade/customs-portal palette.',
@@ -49,9 +42,16 @@ export const COLOR_SCHEMES: ColorScheme[] = [
     accentColor: 'jade',
     swatch: '#0f6a52',
   },
+  {
+    id: 'iris',
+    label: 'Modern',
+    description: 'The original violet-blue palette.',
+    accentColor: 'iris',
+    swatch: '#5b5bd6',
+  },
 ]
 
-export const DEFAULT_COLOR_SCHEME_ID = COLOR_SCHEMES[0].id
+export const DEFAULT_COLOR_SCHEME_ID = 'maritime'
 
 export interface ColorSchemeContextType {
   scheme: ColorScheme
