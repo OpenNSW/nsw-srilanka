@@ -259,18 +259,23 @@ components:
           description: Alias for `transactionID` accepted by some GovPay+ environments.
         subinstId:
           type: string
+          pattern: '\S'
           description: Sub-institution ID this reference must be registered under.
         suinstId:
           type: string
+          pattern: '\S'
           description: Alias for `subinstId` accepted by some GovPay+ environments.
         serviceid:
           type: string
+          pattern: '\S'
           description: Service ID this reference must be registered under.
         serviceId:
           type: string
+          pattern: '\S'
           description: Alias for `serviceid` accepted by some GovPay+ environments.
         serviced:
           type: string
+          pattern: '\S'
           description: Alias for `serviceid` accepted by some GovPay+ environments.
         serviceName:
           type: string
@@ -324,16 +329,21 @@ components:
           description: Alias for `transactionID` accepted by some GovPay+ environments.
         subinstId:
           type: string
+          pattern: '\S'
         suinstId:
           type: string
+          pattern: '\S'
           description: Alias for `subinstId` accepted by some GovPay+ environments.
         serviceid:
           type: string
+          pattern: '\S'
         serviceId:
           type: string
+          pattern: '\S'
           description: Alias for `serviceid` accepted by some GovPay+ environments.
         serviced:
           type: string
+          pattern: '\S'
           description: Alias for `serviceid` accepted by some GovPay+ environments.
         serviceName:
           type: string

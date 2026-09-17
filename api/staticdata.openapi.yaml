@@ -20,9 +20,10 @@ paths:
       summary: Get a static reference-data artifact
       description: |
         Returns the raw JSON artifact registered under `id` at the given
-        `version`. The response is cacheable indefinitely by the caller's own
-        browser — `(id, version)` identifies immutable content — but marked
-        `private` since this endpoint is scope-protected.
+        `version`. The response is cacheable by the caller's own browser for
+        up to one year (see the `Cache-Control` response header) —
+        `(id, version)` identifies immutable content — but marked `private`
+        since this endpoint is scope-protected.
 
         Requires scope `nsw:task:read`.
       operationId: getStaticData
