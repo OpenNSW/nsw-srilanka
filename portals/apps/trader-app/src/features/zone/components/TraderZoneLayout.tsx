@@ -2,6 +2,7 @@ import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from '@
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
+import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 
 type Props = {
@@ -198,12 +199,12 @@ function formatRelative(iso: string, t: TFunction): string {
 function Header({ task }: { task: ZoneView }) {
   const { t } = useTranslation()
   const statusKey = workflowStatusI18nKey(task.state)
-  const statusLabel = statusKey ? t(statusKey) : task.state
+  const statusLabel = statusKey ? t(statusKey) : humanizeStatus(task.state)
   return (
     <div className="border-b border-border pb-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{task.task_type}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{humanizeStatus(task.task_type)}</h1>
           <p className="text-xs text-foreground-muted mt-1 font-mono">{task.task_id}</p>
         </div>
         <span className="inline-flex items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary border border-primary-subtle">

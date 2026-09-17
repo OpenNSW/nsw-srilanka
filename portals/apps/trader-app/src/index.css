@@ -122,9 +122,16 @@ body {
  * which would otherwise win over the body rule above for every Radix
  * component — including every JSONForms field, since the renderer package
  * is built on Radix Themes. Overriding the variable keeps Inter consistent
- * everywhere instead of just in plain page text. */
+ * everywhere instead of just in plain page text.
+ *
+ * `!important` is load-bearing here, not decorative: this rule and Radix's
+ * own tie in specificity (both a bare `.radix-themes` selector, neither
+ * layered), so without it the winner is whichever stylesheet the bundler
+ * happens to emit later — today that's Radix's, which is why plain buttons
+ * ("Back", pagination) were rendering in the system font while body text
+ * correctly showed Inter. */
 .radix-themes {
-  --default-font-family: var(--font-sans);
+  --default-font-family: var(--font-sans) !important;
 }
 
 /* Custom Scrollbar Utility */

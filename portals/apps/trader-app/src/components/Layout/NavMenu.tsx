@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DashboardIcon, ChevronDownIcon, HamburgerMenuIcon } from '@radix-ui/react-icons'
 import { type ReactNode, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -74,6 +74,31 @@ export function NavMenu() {
     return t('nav.menu')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredNavStructure, location.pathname, t])
+
+  // A dropdown that opens to reveal the one destination you're either
+  // already on or about to go to is just noise — same call the app already
+  // makes for RoleSwitcher/LanguageSwitcher when there's only one option.
+  // Show it as a plain link instead, and only promote to the full menu once
+  // there's an actual choice (a second item, or any group).
+  const destinationCount = filteredNavStructure.reduce(
+    (count, item) => count + (isNavGroup(item) ? item.items.length : 1),
+    0,
+  )
+  if (destinationCount <= 1) {
+    const only = filteredNavStructure[0]
+    if (!only) return null
+    const target = isNavGroup(only) ? only.items[0] : only
+    if (!target) return null
+    return (
+      <Link
+        to={target.path}
+        className="flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl hover:bg-app-surface-muted text-sm font-semibold text-foreground transition-colors"
+      >
+        <span className="text-foreground-subtle">{target.icon}</span>
+        <span>{target.name}</span>
+      </Link>
+    )
+  }
 
   return (
     <DropdownMenu.Root>
