@@ -423,6 +423,11 @@ func (c *Router) handleEngineStatus(
 		return
 	}
 
+	// TODO(#477): for HandleGetTaskWorkflowEngineStatus, id is a Temporal task-workflow ID
+	// (e.g. "task-wf-n1_apply:..."), not a consignment ID — this mislabels TargetID under
+	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
+	// TaskRecord.RootWorkflowID) that doesn't exist yet; see the issue for why the obvious
+	// GlobalVariables[VarRootWorkflowID] shortcut doesn't work here.
 	c.audit.Record(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
