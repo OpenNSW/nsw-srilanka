@@ -13,7 +13,6 @@ import (
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
-	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
@@ -198,7 +197,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to build consignment service: %w", err)
 	}
-	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.DevMode)
+	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -655,7 +654,7 @@ func initTask(
 
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService); err != nil {
@@ -703,7 +702,7 @@ func initTask(
 	}
 
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}, cfg.Server.Debug); err != nil {
+	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}); err != nil {
 		return nil, nil, fmt.Errorf("register notification extension: %w", err)
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
@@ -728,72 +727,27 @@ func initTask(
 	}, stop, nil
 }
 
-// fallbackLoader queries the primary loader first, falling back to local disk
-// if not found. This allows local test artifacts to resolve seamlessly even when
-// the primary loader points to a remote source (GitHub, S3).
-type fallbackLoader struct {
-	primary artifact.Loader
-	local   artifact.Loader
-}
-
-func (fl fallbackLoader) Load(ctx context.Context, path string) ([]byte, error) {
-	data, err := fl.primary.Load(ctx, path)
-	if err == nil {
-		return data, nil
-	}
-	if fl.local != nil && errors.Is(err, artifact.ErrNotFound) {
-		if localData, localErr := fl.local.Load(ctx, path); localErr == nil {
-			return localData, nil
-		}
-	}
-	return nil, err
-}
-
 // initArtifactRegistry initializes the artifact loader, registry, and registers
-// the primary manifest (plus any test manifests if in development mode).
+// the manifest.
 func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Registry, error) {
-	primaryLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
+	artifactLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
 	}
 
-	artifactLoader := primaryLoader
-	manifestPaths := []string{artifact.ManifestFilename}
+	data, err := artifactLoader.Load(ctx, artifact.ManifestFilename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load root manifest %q: %w", artifact.ManifestFilename, err)
+	}
 
-	if cfg.DevMode {
-		// In development, fallback to local disk so test artifacts under test/
-		// can be resolved even when the primary loader is remote (e.g. GitHub or S3).
-		if localFallback, err := local.New(local.Config{Root: "."}); err == nil {
-			artifactLoader = fallbackLoader{primary: primaryLoader, local: localFallback}
-		}
-		manifestPaths = append(manifestPaths, cfg.TestManifestPaths...)
+	var manifestCfg artifact.ManifestConfig
+	if err := json.Unmarshal(data, &manifestCfg); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest %q: %w", artifact.ManifestFilename, err)
 	}
 
 	artifactRegistry := artifact.NewRegistry(artifactLoader)
-	for _, path := range manifestPaths {
-		if path == "" {
-			continue
-		}
-		data, err := artifactLoader.Load(ctx, path)
-		if err != nil {
-			if path == artifact.ManifestFilename {
-				return nil, fmt.Errorf("failed to load root manifest %q: %w", path, err)
-			}
-			if errors.Is(err, artifact.ErrNotFound) {
-				log.Printf("info: optional manifest %q not found, skipping", path)
-				continue
-			}
-			return nil, fmt.Errorf("failed to load optional manifest %q: %w", path, err)
-		}
-
-		var manifestCfg artifact.ManifestConfig
-		if err := json.Unmarshal(data, &manifestCfg); err != nil {
-			return nil, fmt.Errorf("failed to parse manifest %q: %w", path, err)
-		}
-
-		if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
-			return nil, fmt.Errorf("failed to register manifest %q: %w", path, err)
-		}
+	if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
+		return nil, fmt.Errorf("failed to register manifest %q: %w", artifact.ManifestFilename, err)
 	}
 
 	return artifactRegistry, nil
