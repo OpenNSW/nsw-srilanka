@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import { createAjv, type JsonSchema } from '@jsonforms/core'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
@@ -13,6 +13,23 @@ import { getBooleanEnv } from '@/runtimeConfig'
 // during validation, so defaulted fields (e.g. a single-option country field)
 // are pre-filled without the trader touching them.
 const ajv = createAjv({ useDefaults: true })
+
+// A stable empty array, not a fresh `[]` literal at the call site.
+//
+// @jsonforms/core's JsonFormsStateProvider re-syncs its internal store
+// whenever `data`, `additionalErrors`, or `validationMode` changes reference
+// (they're all in one effect's dependency array) by dispatching `updateCore`
+// — which unconditionally overwrites its own internal data with whatever
+// `data` prop it's handed, with no check for whether that's older than
+// what it already has. A literal `[]` is a new reference on every render of
+// this component for any reason at all, which forces that resync (and a
+// possible overwrite of newer internal state with this component's own,
+// possibly-stale `data`) far more often than `additionalErrors` actually
+// changes. Reusing one stable reference means the dependency only changes
+// when the error list itself does. `dataSeed` below is the other half of
+// guarding against the same reducer behavior, for when `data` itself is what
+// changes.
+const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
 
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
@@ -57,6 +74,17 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // do *not* clobber in-flight edits — there is no server-side draft to merge
   // back in, so re-syncing payload.data would silently destroy user input.
   const [data, setData] = useState<Record<string, unknown>>(payload.data ?? {})
+  // What actually gets handed to <JsonForms data={...}> — NOT the same as
+  // `data` above, and not updated on every onChange either (see the sync
+  // effect below). Same UPDATE_CORE reducer behavior EMPTY_ADDITIONAL_ERRORS
+  // guards against above, the other half of it: `data` itself legitimately
+  // changes on every edit, and re-rendering with a `data` prop that's behind
+  // JsonForms's own more recent internal state (e.g. mid-burst, before its
+  // 10ms-debounced onChange has reported the latest) gets that newer state
+  // silently overwritten. A plain ref updated on every onChange doesn't help
+  // — it churns the fed-back reference just as often as state would. Only
+  // deliberately lagging behind (see the debounce below) avoids it.
+  const [dataSeed, setDataSeed] = useState<Record<string, unknown>>(data)
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
@@ -78,8 +106,26 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('VITE_SHOW_AUTOFILL_BUTTON', false)
 
+  // Re-sync dataSeed to the latest known data — but only once `data` has held
+  // still for a while, not on every change. This delay is invisible to the
+  // user: it doesn't affect what typing shows (that's JsonForms's own
+  // internal state, rendered directly, independent of this prop) or
+  // submit-gating (isValid/requiredErrors read `data`, never `dataSeed`) —
+  // dataSeed exists solely to give JsonForms's own internal store a safe,
+  // settled snapshot to reconcile against on the rare renders (e.g.
+  // showErrors toggling) that also touch additionalErrors or validationMode.
+  // 500ms is generous on purpose: safety here costs nothing visible, so
+  // there's no reason to cut it close.
+  useEffect(() => {
+    const timeout = setTimeout(() => setDataSeed(data), 500)
+    return () => clearTimeout(timeout)
+  }, [data])
+
   const handleAutoFill = () => {
     const next = autoFillForm(payload.schema, data) as Record<string, unknown>
+    // A deliberate seed change: apply it to both, the same as a settled
+    // onChange round trip would.
+    setDataSeed(next)
     setData(next)
   }
 
@@ -112,11 +158,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
         <JsonForms
           schema={payload.schema}
           uischema={payload.uiSchema}
-          data={data}
+          data={dataSeed}
           ajv={ajv}
           renderers={radixRenderers}
           readonly={!interactive}
-          additionalErrors={showErrors ? additionalRequiredErrors : []}
+          additionalErrors={showErrors ? additionalRequiredErrors : EMPTY_ADDITIONAL_ERRORS}
           validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
