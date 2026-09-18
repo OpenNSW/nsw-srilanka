@@ -30,13 +30,13 @@ type SPSCertificate struct {
 }
 
 type ExchangedDocument struct {
-	Name          string        `xml:"ram:Name"` // NON-PC, present for schema (empty)
-	ID            string        `xml:"ram:ID"`
-	TypeCode      string        `xml:"ram:TypeCode"`
-	StatusCode    string        `xml:"ram:StatusCode"`
-	IssueDateTime DateTime      `xml:"ram:IssueDateTime"`
-	Issuer        NameParty     `xml:"ram:IssuerSPSParty"`
-	Notes         []Note        `xml:"ram:IncludedSPSNote,omitempty"`
+	Name          string    `xml:"ram:Name"` // NON-PC, present for schema (empty)
+	ID            string    `xml:"ram:ID"`
+	TypeCode      string    `xml:"ram:TypeCode"`
+	StatusCode    string    `xml:"ram:StatusCode"`
+	IssueDateTime DateTime  `xml:"ram:IssueDateTime"`
+	Issuer        NameParty `xml:"ram:IssuerSPSParty"`
+	Notes         []Note    `xml:"ram:IncludedSPSNote,omitempty"`
 	// ReferenceSPSReferencedDocument must precede SignatorySPSAuthentication:
 	// the schema closes the SPSExchangedDocument sequence with the (repeatable)
 	// signatory, so an attachment emitted after it fails validation with
