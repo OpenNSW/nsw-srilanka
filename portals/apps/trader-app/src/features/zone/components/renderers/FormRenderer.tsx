@@ -135,6 +135,16 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     // primary_action and danger_action handles require valid data.
     const skipRequired = h.element === 'secondary_action'
     if (!skipRequired && !isValid) {
+      // Catch dataSeed up to the current data BEFORE flipping showErrors:
+      // that flip changes additionalErrors/validationMode, which — like
+      // dataSeed itself — is a dependency of JsonForms's own resync effect
+      // (see EMPTY_ADDITIONAL_ERRORS above). If dataSeed is still mid-debounce
+      // at this exact moment, that resync would hand JsonForms a stale
+      // snapshot and it would overwrite its own newer internal state with
+      // it, discarding whatever the user just typed. React batches both
+      // calls into the same render, so JsonForms never sees the old
+      // dataSeed paired with the new validation props.
+      setDataSeed(data)
       setShowErrors(true)
       return
     }
