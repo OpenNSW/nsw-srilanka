@@ -37,8 +37,12 @@ type ExchangedDocument struct {
 	IssueDateTime DateTime      `xml:"ram:IssueDateTime"`
 	Issuer        NameParty     `xml:"ram:IssuerSPSParty"`
 	Notes         []Note        `xml:"ram:IncludedSPSNote,omitempty"`
-	Signatory     Signatory     `xml:"ram:SignatorySPSAuthentication"`
-	Attachments   []RefDocument `xml:"ram:ReferenceSPSReferencedDocument,omitempty"`
+	// ReferenceSPSReferencedDocument must precede SignatorySPSAuthentication:
+	// the schema closes the SPSExchangedDocument sequence with the (repeatable)
+	// signatory, so an attachment emitted after it fails validation with
+	// cvc-complex-type.2.4.a. Field order here IS the element order Go emits.
+	Attachments []RefDocument `xml:"ram:ReferenceSPSReferencedDocument,omitempty"`
+	Signatory   Signatory     `xml:"ram:SignatorySPSAuthentication"`
 }
 
 type NameParty struct {
