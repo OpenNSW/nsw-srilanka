@@ -671,14 +671,9 @@ func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attach
 // documentURLs normalises a document's url — either a single string or an
 // array of them — into the distinct, non-empty URLs it names, in order.
 func documentURLs(v any) []string {
-	var raw []any
-	switch t := v.(type) {
-	case string:
-		raw = []any{t}
-	case []any:
-		raw = t
-	default:
-		return nil
+	raw := asSlice(v)
+	if raw == nil {
+		raw = []any{v}
 	}
 
 	var out []string
