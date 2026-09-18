@@ -215,6 +215,14 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 // It re-fetches the current engine status first to confirm the node is actually parked (and, if
 // it's a GATEWAY, that the requested action is one core's engine will actually apply) before
 // signaling — see ErrNodeNotParked and ErrAdminActionUnsupportedForGateway.
+//
+// sig.NodeID arrives as EngineNodeDTO.ID — the "<template ID>:<uuid>" composite core generates
+// fresh for every node on every execution (see GraphInterpreterWorkflow), which is what an admin
+// actually sees and submits back. Core's own signal routing, though, keys pendingAdminResolutions
+// by the plain template ID (instance.NodeInfo's map key, not the composite value at
+// NodeInfo.ID) — sig.NodeID must be translated back to that template ID before either the status
+// check below or the signal itself, or core silently drops the signal as routed to an unknown
+// node.
 func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error {
 	if s.wm == nil {
 		return fmt.Errorf("no workflow manager registered for ConsignmentService")
@@ -231,16 +239,30 @@ func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID strin
 		}
 		return fmt.Errorf("failed to verify node %s is parked on workflow %s: %w", sig.NodeID, workflowID, err)
 	}
-	node, ok := instance.NodeInfo[sig.NodeID]
+	templateID, node, ok := findNodeByCompositeID(instance.NodeInfo, sig.NodeID)
 	if !ok || node.Status != workflow.NodeStatusAwaitingAdmin {
 		return ErrNodeNotParked
 	}
 	if node.Type == workflow.NodeTypeGateway && (sig.Action == workflow.AdminActionSkip || sig.Action == workflow.AdminActionOverride) {
 		return ErrAdminActionUnsupportedForGateway
 	}
+	sig.NodeID = templateID
 
 	if err := resolver.ResolveAdminIntervention(ctx, workflowID, "", sig); err != nil {
 		return fmt.Errorf("failed to resolve admin intervention for workflow %s node %s: %w", workflowID, sig.NodeID, err)
 	}
 	return nil
+}
+
+// findNodeByCompositeID looks up a node by the composite ID an admin was actually shown
+// (EngineNodeDTO.ID, i.e. NodeInfo.ID) rather than by nodeInfo's own map key (the plain template
+// ID) — see ResolveAdminIntervention. A linear scan, not a reverse index, since nodeInfo is at
+// most a few dozen entries for any single workflow instance.
+func findNodeByCompositeID(nodeInfo map[string]*workflow.NodeInfo, compositeID string) (templateID string, node *workflow.NodeInfo, ok bool) {
+	for id, n := range nodeInfo {
+		if n.ID == compositeID {
+			return id, n, true
+		}
+	}
+	return "", nil, false
 }
