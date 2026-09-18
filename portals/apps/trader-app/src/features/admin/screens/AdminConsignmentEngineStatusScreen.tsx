@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Button, Dialog, IconButton, Spinner, Text, TextArea, Tooltip } from '@radix-ui/themes'
+import { AlertDialog, Badge, Button, Dialog, IconButton, Spinner, Text, TextArea, Tooltip } from '@radix-ui/themes'
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
@@ -8,6 +8,7 @@ import {
   DoubleArrowUpIcon,
   EyeNoneIcon,
   EyeOpenIcon,
+  InfoCircledIcon,
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
@@ -442,6 +443,11 @@ function GlobalVariablesButton({
 interface DiffLine {
   type: 'unchanged' | 'added' | 'removed'
   text: string
+  // 1-based, matching how an editor would number them — null on the side a line doesn't exist
+  // on (an added line has no oldLineNo, a removed line has no newLineNo), same as GitHub's
+  // split gutter.
+  oldLineNo: number | null
+  newLineNo: number | null
 }
 
 const MAX_DIFF_CELLS = 200_000
@@ -465,53 +471,304 @@ function diffLines(oldText: string, newText: string): DiffLine[] | null {
   let j = 0
   while (i < m && j < n) {
     if (oldLines[i] === newLines[j]) {
-      result.push({ type: 'unchanged', text: oldLines[i] })
+      result.push({ type: 'unchanged', text: oldLines[i], oldLineNo: i + 1, newLineNo: j + 1 })
       i++
       j++
     } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      result.push({ type: 'removed', text: oldLines[i] })
+      result.push({ type: 'removed', text: oldLines[i], oldLineNo: i + 1, newLineNo: null })
       i++
     } else {
-      result.push({ type: 'added', text: newLines[j] })
+      result.push({ type: 'added', text: newLines[j], oldLineNo: null, newLineNo: j + 1 })
       j++
     }
   }
   while (i < m) {
-    result.push({ type: 'removed', text: oldLines[i] })
+    result.push({ type: 'removed', text: oldLines[i], oldLineNo: i + 1, newLineNo: null })
     i++
   }
   while (j < n) {
-    result.push({ type: 'added', text: newLines[j] })
+    result.push({ type: 'added', text: newLines[j], oldLineNo: null, newLineNo: j + 1 })
     j++
   }
   return result
 }
 
-const DIFF_LINE_CLASS: Record<DiffLine['type'], string> = {
-  unchanged: '',
-  added: 'bg-green-2',
-  removed: 'bg-red-2 text-foreground-muted line-through decoration-red-6',
+// Only added/removed — unchanged lines are filtered out of the rendered diff entirely (see
+// toDiffRows), so there's nothing that ever needs to style or prefix one.
+const DIFF_LINE_CLASS: Record<'added' | 'removed', string> = {
+  added: 'bg-success-subtle text-success-strong',
+  removed: 'bg-error-subtle text-error-strong',
 }
 
-const DIFF_LINE_PREFIX: Record<DiffLine['type'], string> = {
-  unchanged: ' ',
+const DIFF_LINE_PREFIX: Record<'added' | 'removed', string> = {
   added: '+',
   removed: '−',
 }
 
+// Character-level diff, same LCS approach as diffLines but over individual characters instead
+// of lines — used only to highlight exactly what changed within a paired removed/added line
+// (see toDiffRows' "replace" rows), not for the line-level diff itself. Consecutive same-type
+// characters are merged into one segment, so rendering is one <span> per changed/unchanged run
+// rather than one per character. A much smaller cell budget than MAX_DIFF_CELLS: this only ever
+// runs on a single line's worth of text, not the whole document.
+interface CharDiffSegment {
+  type: 'unchanged' | 'added' | 'removed'
+  text: string
+}
+
+const MAX_CHAR_DIFF_CELLS = 20_000
+
+function diffChars(oldStr: string, newStr: string): CharDiffSegment[] | null {
+  const oldChars = Array.from(oldStr)
+  const newChars = Array.from(newStr)
+  const m = oldChars.length
+  const n = newChars.length
+  if (m * n > MAX_CHAR_DIFF_CELLS) return null
+
+  const lcs: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      lcs[i][j] = oldChars[i] === newChars[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    }
+  }
+
+  const segments: CharDiffSegment[] = []
+  const push = (type: CharDiffSegment['type'], char: string) => {
+    const last = segments[segments.length - 1]
+    if (last && last.type === type) {
+      last.text += char
+    } else {
+      segments.push({ type, text: char })
+    }
+  }
+
+  let i = 0
+  let j = 0
+  while (i < m && j < n) {
+    if (oldChars[i] === newChars[j]) {
+      push('unchanged', oldChars[i])
+      i++
+      j++
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      push('removed', oldChars[i])
+      i++
+    } else {
+      push('added', newChars[j])
+      j++
+    }
+  }
+  while (i < m) {
+    push('removed', oldChars[i])
+    i++
+  }
+  while (j < n) {
+    push('added', newChars[j])
+    j++
+  }
+  return segments
+}
+
+// A collapsed run of unchanged lines between two visible changes, rendered as a single "⋯ N
+// unchanged lines" marker instead of showing every line — the point of hiding unchanged lines at
+// all is a concise diff, so a long untouched stretch shouldn't silently re-inflate it back to a
+// wall of text. "replace" pairs a removed line with the added line immediately below it (see
+// toDiffRows) so the two can be rendered with a character-level highlight instead of two
+// unrelated whole-line ones — much clearer for a typo-sized edit like a single field rename.
+type DiffRow =
+  | { kind: 'line'; line: DiffLine & { type: 'added' | 'removed' } }
+  | { kind: 'gap'; count: number }
+  | {
+      kind: 'replace'
+      removed: DiffLine & { type: 'removed' }
+      added: DiffLine & { type: 'added' }
+      charDiff: CharDiffSegment[] | null
+    }
+
+// Reduces a full line-by-line diff to just the rows worth showing. A removed run immediately
+// followed by an added run (core's LCS output always orders a "line changed" this way) is a
+// stronger signal that those lines replace each other than that they're unrelated deletions and
+// insertions, so they're paired 1:1 (shortest run wins; any leftover lines on the longer side
+// fall back to plain whole-line rows) and each pair gets a character-level diff to highlight
+// exactly what changed. A gap marker fills any stretch of unchanged lines skipped in between.
+function toDiffRows(diff: DiffLine[]): DiffRow[] {
+  const rows: DiffRow[] = []
+  let lastVisible = -1
+  let i = 0
+  while (i < diff.length) {
+    const line = diff[i]
+    if (line.type === 'unchanged') {
+      i++
+      continue
+    }
+    if (lastVisible !== -1 && i - lastVisible > 1) {
+      rows.push({ kind: 'gap', count: i - lastVisible - 1 })
+    }
+
+    if (line.type === 'added') {
+      // An added run with nothing removed directly before it (a pure insertion) — the removed
+      // branch below already consumes any added run that immediately follows a removed one.
+      rows.push({ kind: 'line', line: line as DiffLine & { type: 'added' } })
+      lastVisible = i
+      i++
+      continue
+    }
+
+    let removedEnd = i
+    while (removedEnd < diff.length && diff[removedEnd].type === 'removed') removedEnd++
+    let addedEnd = removedEnd
+    while (addedEnd < diff.length && diff[addedEnd].type === 'added') addedEnd++
+
+    const removedLines = diff.slice(i, removedEnd) as (DiffLine & { type: 'removed' })[]
+    const addedLines = diff.slice(removedEnd, addedEnd) as (DiffLine & { type: 'added' })[]
+    const pairCount = Math.min(removedLines.length, addedLines.length)
+    for (let k = 0; k < pairCount; k++) {
+      const removed = removedLines[k]
+      const added = addedLines[k]
+      rows.push({ kind: 'replace', removed, added, charDiff: diffChars(removed.text, added.text) })
+    }
+    for (let k = pairCount; k < removedLines.length; k++) rows.push({ kind: 'line', line: removedLines[k] })
+    for (let k = pairCount; k < addedLines.length; k++) rows.push({ kind: 'line', line: addedLines[k] })
+
+    lastVisible = addedEnd - 1
+    i = addedEnd
+  }
+  return rows
+}
+
+// Stronger-highlight classes for just the character-level segments that differ within a
+// "replace" row's two lines — layered on top of DIFF_LINE_CLASS's whole-line tint, which stays
+// as the backdrop for the segments that didn't change. White text on the saturated background
+// keeps this readable — text-success-strong/text-error-strong (dark green/red) on top of an
+// already-saturated bg-success/bg-error is too little contrast to read comfortably.
+const CHAR_DIFF_CLASS: Record<'added' | 'removed', string> = {
+  added: 'bg-success text-white rounded-sm',
+  removed: 'bg-error text-white rounded-sm',
+}
+
+// Renders one side (old or new) of a character-level diff: the unchanged run plain, and only
+// that side's own changed run highlighted — a "removed" segment never appears on the added side
+// and vice versa, since those characters never existed there.
+function renderCharDiff(segments: CharDiffSegment[], side: 'added' | 'removed') {
+  return segments
+    .filter((segment) => segment.type === 'unchanged' || segment.type === side)
+    .map((segment, i) => (
+      <span key={i} className={segment.type === side ? CHAR_DIFF_CLASS[side] : undefined}>
+        {segment.text}
+      </span>
+    ))
+}
+
+// One row of the diff panel's split gutter — shared by a plain added/removed DiffRow and each
+// half of a "replace" pair, so the two only ever differ in what they pass as children (plain
+// text vs. a character-highlighted one).
+function DiffLineRow({
+  oldLineNo,
+  newLineNo,
+  type,
+  children,
+}: {
+  oldLineNo: number | null
+  newLineNo: number | null
+  type: 'added' | 'removed'
+  children: React.ReactNode
+}) {
+  return (
+    <div className={`grid grid-cols-[2rem_2rem_auto] gap-2 px-1 -mx-1 whitespace-pre ${DIFF_LINE_CLASS[type]}`}>
+      <span className="text-right text-foreground-subtle select-none">{oldLineNo ?? ''}</span>
+      <span className="text-right text-foreground-subtle select-none">{newLineNo ?? ''}</span>
+      <span>
+        <span className="select-none mr-1 opacity-70">{DIFF_LINE_PREFIX[type]}</span>
+        {children}
+      </span>
+    </div>
+  )
+}
+
+// A plain <textarea> with a synced line-number gutter, standing in for Radix's TextArea only in
+// the Overrides editor (see ResolveAdminInterventionView) — Radix's own component doesn't expose
+// the scroll position a gutter needs to stay in sync. Wrapping is deliberately off (wrap="off" +
+// white-space: pre + horizontal scroll) rather than left to wrap: with it on, a long line's
+// wrapped continuation would visually sit under whichever number happens to be next, since a
+// gutter line only ever corresponds to one real line — the same reason the read-only diff panel
+// next to this editor doesn't wrap either.
+function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
+  const lineCount = value.split('\n').length
+
+  const syncGutterScroll = () => {
+    if (textareaRef.current && gutterRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }
+
+  return (
+    // The border lives on this wrapper, not the <textarea> — a bare <textarea> carries its own
+    // UA-default border independent of any wrapper border, which without an explicit border-0
+    // shows through as a second, darker (often black) border nested just inside this one.
+    <div className="flex border border-app-border rounded overflow-hidden font-mono text-xs h-72 focus-within:border-primary">
+      <div ref={gutterRef} className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-subtle select-none" aria-hidden>
+        {Array.from({ length: lineCount }, (_, i) => (
+          <div key={i} className="leading-5">
+            {i + 1}
+          </div>
+        ))}
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={syncGutterScroll}
+        spellCheck={false}
+        wrap="off"
+        className="flex-1 min-w-0 resize-none border-0 p-2 leading-5 outline-none whitespace-pre overflow-auto bg-transparent"
+      />
+    </div>
+  )
+}
+
 // Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
 // gateway's routing can't be skipped/overridden without bypassing its own condition logic — see
-// core/workflow.parkNodeForAdmin).
+// core/workflow.parkNodeForAdmin). description is shown via an info icon next to each button —
+// see the ADMIN_ACTIONS.map below.
 const ADMIN_ACTIONS: {
   action: AdminResolutionAction
   label: string
   color: 'blue' | 'green' | 'gray' | 'red'
   disabledForGateway: boolean
+  description: string
 }[] = [
-  { action: 'RETRY', label: 'Retry', color: 'blue', disabledForGateway: false },
-  { action: 'OVERRIDE', label: 'Override', color: 'green', disabledForGateway: true },
-  { action: 'SKIP', label: 'Skip', color: 'gray', disabledForGateway: true },
-  { action: 'ABORT', label: 'Abort', color: 'red', disabledForGateway: false },
+  {
+    action: 'RETRY',
+    label: 'Retry',
+    color: 'blue',
+    disabledForGateway: false,
+    description:
+      "Re-runs the node for real — re-calls the Activity for a TASK node, or re-evaluates the routing condition for a GATEWAY. Override Inputs (if provided below) are merged into workflow variables first and used as input to that run, not as the result — e.g. to correct a variable a GATEWAY's condition depends on before it re-evaluates.",
+  },
+  {
+    action: 'OVERRIDE',
+    label: 'Override',
+    color: 'green',
+    disabledForGateway: true,
+    description:
+      "Skips re-running anything — merges the Override Outputs below directly into workflow variables as if they were the node's final output, then marks it completed. Unavailable for GATEWAY nodes: completing this way always takes the first outgoing edge, which would silently ignore a gateway's actual routing condition.",
+  },
+  {
+    action: 'SKIP',
+    label: 'Skip',
+    color: 'gray',
+    disabledForGateway: true,
+    description:
+      "Marks the node completed without setting any workflow variables, then continues down its first outgoing edge. Unavailable for GATEWAY nodes, for the same reason as Override — it can't decide the correct edge without evaluating the condition.",
+  },
+  {
+    action: 'ABORT',
+    label: 'Abort',
+    color: 'red',
+    disabledForGateway: false,
+    description: "Fails this node and the whole workflow with the node's original error. Use when the workflow genuinely can't continue.",
+  },
 ]
 
 // Lets an admin resolve one AWAITING_ADMIN node (see NodeRow's "Resolve" button) by picking one
@@ -533,6 +790,10 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
   const [overridesText, setOverridesText] = useState(originalPretty)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Gates the actual submit behind an explicit re-confirmation — this mutates a live workflow
+  // (possibly irreversibly for ABORT) and there's no undo, so "Submit" opens this dialog instead
+  // of calling submit() directly.
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   // Only used to warn under the edit box — the diff panel itself works on raw text and tolerates
   // mid-edit invalid JSON fine, but a final invalid JSON would fail on submit.
@@ -546,18 +807,24 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
   }, [overridesText])
 
   const overridesDiff = useMemo(() => diffLines(originalPretty, overridesText), [originalPretty, overridesText])
+  const overridesDiffRows = useMemo(() => (overridesDiff ? toDiffRows(overridesDiff) : null), [overridesDiff])
 
   const submit = async () => {
     if (!action) return
+    // Only OVERRIDE/RETRY actually consume Overrides (see the ADMIN_ACTIONS descriptions above)
+    // — for SKIP/ABORT, overridesText is just its unshown default (the cached result, or '{}'),
+    // not anything the admin chose to send, so it must not go out on the wire.
     let overrides: Record<string, unknown> | undefined
-    if (overridesText.trim()) {
+    if ((action === 'OVERRIDE' || action === 'RETRY') && overridesText.trim()) {
       try {
         overrides = JSON.parse(overridesText) as Record<string, unknown>
       } catch {
+        setConfirmOpen(false)
         setError('Overrides must be valid JSON.')
         return
       }
     }
+    setConfirmOpen(false)
     setSubmitting(true)
     setError(null)
     try {
@@ -600,7 +867,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
         })}
       </div>
 
-      <div className="bg-app-surface rounded-lg shadow p-4 md:p-6 max-w-3xl">
+      <div className="bg-app-surface rounded-lg shadow p-4 md:p-6 max-w-5xl">
         {target.lastError && (
           <>
             <Text size="2" weight="medium" className="block mb-1">
@@ -628,22 +895,26 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
         <Text size="2" weight="medium" className="block mb-1">
           Action
         </Text>
-        <div className="flex gap-2 mb-4 flex-wrap">
-          {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway }) => {
+        <div className="flex gap-3 mb-4 flex-wrap">
+          {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway, description }) => {
             const disabled = target.isGateway && disabledForGateway
             return (
-              <Button
-                key={candidate}
-                type="button"
-                variant={action === candidate ? 'solid' : 'soft'}
-                color={color}
-                size="2"
-                disabled={disabled}
-                title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
-                onClick={() => setAction(candidate)}
-              >
-                {label}
-              </Button>
+              <div key={candidate} className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant={action === candidate ? 'solid' : 'soft'}
+                  color={color}
+                  size="2"
+                  disabled={disabled}
+                  title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
+                  onClick={() => setAction(candidate)}
+                >
+                  {label}
+                </Button>
+                <Tooltip content={description} maxWidth="320px">
+                  <InfoCircledIcon className="text-foreground-muted cursor-help" width={15} height={15} aria-label={`What ${label} does`} />
+                </Tooltip>
+              </div>
             )
           })}
         </div>
@@ -659,13 +930,18 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
           className="mb-4"
         />
 
-        {/* Overrides only applies to OVERRIDE — for the other actions there's nothing to edit or
-            diff, so this only shows up once that's the chosen action. */}
-        {action === 'OVERRIDE' && (
+        {/* Overrides only apply to OVERRIDE and RETRY (see core's parkNodeForAdmin — SKIP always
+            discards them, and ABORT never gets to signal anything) — so this only shows up once
+            one of those is the chosen action. The heading reflects which direction the values
+            flow: OVERRIDE merges them straight into workflow variables as the node's final
+            output, skipping the handler entirely; RETRY merges them in *before* re-running the
+            real handler, so they're consumed as input (e.g. what a TASK node's input_mapping
+            reads, or what a GATEWAY's routing condition reads) rather than the result. */}
+        {(action === 'OVERRIDE' || action === 'RETRY') && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1">
               <Text size="2" weight="medium">
-                Overrides (JSON)
+                {action === 'OVERRIDE' ? 'Override Outputs (JSON)' : 'Override Inputs (JSON)'}
               </Text>
               <Button type="button" variant="ghost" size="1" onClick={resetOverridesToCachedValue}>
                 Reset to cached value
@@ -676,12 +952,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                 <Text size="1" color="gray" className="block mb-1">
                   Edit
                 </Text>
-                <TextArea
-                  value={overridesText}
-                  onChange={(e) => setOverridesText(e.target.value)}
-                  rows={12}
-                  className="font-mono text-xs"
-                />
+                <LineNumberedTextArea value={overridesText} onChange={setOverridesText} />
                 {overridesJSONError && (
                   <Text size="1" color="red" className="block mt-1">
                     {overridesJSONError}
@@ -692,18 +963,42 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                 <Text size="1" color="gray" className="block mb-1">
                   Diff vs cached value
                 </Text>
-                <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-[17rem] whitespace-pre-wrap">
+                <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto h-72">
                   {overridesDiff === null ? (
                     <Text size="1" color="gray">
                       Too large to diff.
                     </Text>
+                  ) : overridesDiffRows && overridesDiffRows.length === 0 ? (
+                    <Text size="1" color="gray">
+                      No differences from the cached value.
+                    </Text>
                   ) : (
-                    overridesDiff.map((line, i) => (
-                      <div key={i} className={`px-1 -mx-1 rounded ${DIFF_LINE_CLASS[line.type]}`}>
-                        <span className="select-none text-foreground-subtle mr-1">{DIFF_LINE_PREFIX[line.type]}</span>
-                        {line.text || ' '}
-                      </div>
-                    ))
+                    overridesDiffRows?.map((row, i) => {
+                      if (row.kind === 'gap') {
+                        return (
+                          <div key={`gap-${i}`} className="text-foreground-subtle select-none py-0.5">
+                            ⋯ {row.count} unchanged line{row.count === 1 ? '' : 's'}
+                          </div>
+                        )
+                      }
+                      if (row.kind === 'replace') {
+                        return (
+                          <Fragment key={i}>
+                            <DiffLineRow oldLineNo={row.removed.oldLineNo} newLineNo={null} type="removed">
+                              {row.charDiff ? renderCharDiff(row.charDiff, 'removed') : row.removed.text || ' '}
+                            </DiffLineRow>
+                            <DiffLineRow oldLineNo={null} newLineNo={row.added.newLineNo} type="added">
+                              {row.charDiff ? renderCharDiff(row.charDiff, 'added') : row.added.text || ' '}
+                            </DiffLineRow>
+                          </Fragment>
+                        )
+                      }
+                      return (
+                        <DiffLineRow key={i} oldLineNo={row.line.oldLineNo} newLineNo={row.line.newLineNo} type={row.line.type}>
+                          {row.line.text || ' '}
+                        </DiffLineRow>
+                      )
+                    })
                   )}
                 </div>
               </div>
@@ -721,10 +1016,46 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
           <Button variant="soft" color="gray" onClick={onBack} disabled={submitting}>
             Cancel
           </Button>
-          <Button disabled={!action || !reason.trim() || submitting} onClick={() => void submit()}>
+          <Button disabled={!action || !reason.trim() || submitting} onClick={() => setConfirmOpen(true)}>
             {submitting ? 'Submitting…' : 'Submit'}
           </Button>
         </div>
+
+        {/* A live workflow signal, not a draft — there's no undo once it's sent (ABORT fails the
+            whole workflow outright), so Submit opens this instead of calling submit() directly. */}
+        <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialog.Content maxWidth="440px">
+            {action && (
+              <>
+                <AlertDialog.Title>Confirm {ADMIN_ACTIONS.find((a) => a.action === action)?.label}</AlertDialog.Title>
+                <AlertDialog.Description size="2" className="mb-2">
+                  You're about to <strong>{action}</strong> node{' '}
+                  <span className="font-mono break-all">{target.nodeId}</span> on workflow{' '}
+                  <span className="font-mono break-all">{target.workflowId}</span>. This takes effect immediately
+                  and can't be undone.
+                </AlertDialog.Description>
+                <AlertDialog.Description size="2" color="gray" className="block mb-4">
+                  {ADMIN_ACTIONS.find((a) => a.action === action)?.description}
+                </AlertDialog.Description>
+                <div className="flex justify-end gap-2">
+                  <AlertDialog.Cancel>
+                    <Button variant="soft" color="gray">
+                      Cancel
+                    </Button>
+                  </AlertDialog.Cancel>
+                  <AlertDialog.Action>
+                    <Button
+                      color={ADMIN_ACTIONS.find((a) => a.action === action)?.color}
+                      onClick={() => void submit()}
+                    >
+                      Yes, {ADMIN_ACTIONS.find((a) => a.action === action)?.label.toLowerCase()}
+                    </Button>
+                  </AlertDialog.Action>
+                </div>
+              </>
+            )}
+          </AlertDialog.Content>
+        </AlertDialog.Root>
       </div>
     </div>
   )
