@@ -53,13 +53,48 @@ func sendingDocument(name, url string, send any) map[string]any {
 // A document the trader said yes to travels inside the certificate: base64
 // content, the filename, and the MIME type the Hub's validator requires.
 func TestBuildEnvelope_AttachesTheSelectedDocuments(t *testing.T) {
+	pdf := []byte("%PDF-1.7 commercial invoice")
+	files := &stubFiles{
+		content:     map[string][]byte{"storage/docs/invoice.pdf": pdf},
+		contentType: "application/pdf",
+	}
+
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("commercial_invoice", "storage/docs/invoice.pdf", true))
+	if err != nil {
+		t.Fatalf("BuildEnvelope: %v", err)
+	}
+
+	if got := files.asked; len(got) != 1 || got[0] != "storage/docs/invoice.pdf" {
+		t.Fatalf("storage reads = %v", got)
+	}
+	for _, want := range []string{
+		`mimeCode="application/pdf"`,
+		`filename="invoice.pdf"`,
+		base64.StdEncoding.EncodeToString(pdf),
+		"<ram:ID>Commercial Invoice</ram:ID>",
+	} {
+		if !strings.Contains(envelope, want) {
+			t.Errorf("envelope is missing %q", want)
+		}
+	}
+}
+
+// The treatment certificate travels the same way once it is uploaded — base64
+// content, filename, MIME type — but its file comes off the commodities the
+// upload was for (CommoditiesInput), not off a DocumentsInput entry: see
+// buildAttachments and NPQSStampTreatmentDocumentsFunc for why a flat value
+// cannot hold it.
+func TestBuildEnvelope_AttachesTheTreatmentCertificateFromCommodities(t *testing.T) {
 	pdf := []byte("%PDF-1.7 fumigation certificate")
 	files := &stubFiles{
 		content:     map[string][]byte{"storage/certs/fumigation.pdf": pdf},
 		contentType: "application/pdf",
 	}
 
-	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("treatment_certificate", "storage/certs/fumigation.pdf", true))
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
+		DocumentsInput:   map[string]any{"treatment_certificate": map[string]any{"send": true}},
+		CommoditiesInput: []any{map[string]any{"id": "item-1", "treatment_certificate_url": "storage/certs/fumigation.pdf"}},
+	}))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
 	}

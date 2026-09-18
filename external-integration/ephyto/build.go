@@ -568,26 +568,57 @@ func isAlpha(s string) bool {
 
 // --- trader-submitted documents ----------------------------------------------
 
-// DocumentsInput is the task input the trader's uploadable documents arrive
-// under: one entry per document, each with the storage reference of the upload
-// and the trader's answer to whether it travels with the certificate.
+// DocumentsInput is the task input most of the trader's uploadable documents
+// arrive under: one entry per document, each with the storage reference of the
+// upload and the trader's answer to whether it travels with the certificate.
 //
 //	"documents": {
-//	  "treatment_certificate": {"url": "…", "send": true},
-//	  "commercial_invoice":    {"url": "…", "send": false}
+//	  "commercial_invoice": {"url": "…", "send": false}
 //	}
 //
 // Described by the workflow rather than listed here, so a document the NPQS
 // flow gains later is two lines of input mapping and no change to this package:
 //
-//	"treatment_certificate_url?":               "documents.treatment_certificate.url"
-//	"traderinput.send_treatment_certificate?":  "documents.treatment_certificate.send"
+//	"invoice_file_url?":                 "documents.commercial_invoice.url"
+//	"traderinput.send_invoice?":         "documents.commercial_invoice.send"
 //
 // The entry's name is what the receiving NPPO reads as the document's ID, in
-// title case — "treatment_certificate" becomes "Treatment Certificate" — so the
+// title case — "commercial_invoice" becomes "Commercial Invoice" — so the
 // artifact names the document and nothing here has to know what documents
 // exist.
+//
+// The treatment certificate and its supervision report are the exception —
+// see CommoditiesInput — because a single value here cannot represent them:
+// npqs-upload-treatment-certs runs once per group of commodities sent through
+// external treatment together, and a batch consignment can go through it more
+// than once, with a different file each time.
 const DocumentsInput = "documents"
+
+// CommoditiesInput is the consignment's item array, carrying — on whichever
+// commodities went through external treatment — the treatment_certificate_url
+// and supervision_report_url the trader uploaded for them.
+//
+// NPQSStampTreatmentDocumentsFunc (internal/tasks/plugins) is what puts them
+// there: npqs-upload-treatment-certs runs inside a BATCH_SPLIT on
+// item.treatment_provider, and a BATCH_JOIN merges back only the items array a
+// child workflow was given — not the plain workflow variable the upload step
+// itself records its answer in. Stamping the URLs onto the commodities the
+// upload was for is what lets them survive that merge; reading them there
+// again is the other half.
+const CommoditiesInput = "commodities"
+
+// treatmentCertificateField and supervisionReportField are the commodity
+// fields NPQSStampTreatmentDocumentsFunc writes. treatmentCertificateName and
+// supervisionReportName are what the same two documents would be called if
+// they were DocumentsInput entries — fed through documentLabel so their ID on
+// the certificate is worded the same as every other document's, even though
+// neither is actually a DocumentsInput entry.
+const (
+	treatmentCertificateField = "treatment_certificate_url"
+	treatmentCertificateName  = "treatment_certificate"
+	supervisionReportField    = "supervision_report_url"
+	supervisionReportName     = "treatment_supervision_report"
+)
 
 // sendApplicationDocuments is the ePhyto form field covering the files attached
 // to the application itself. They are one answer rather than one per file: the
@@ -632,12 +663,25 @@ func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attach
 		}
 	}
 
-	// One entry per document the flow can produce, in name order: a certificate
-	// built twice from the same answers lists its documents the same way, which
-	// map iteration alone would not give.
 	documents := asMap(inputs[DocumentsInput])
+
+	// The treatment certificate and its supervision report read the trader's
+	// yes/no from DocumentsInput like every other document, but their file(s)
+	// from CommoditiesInput instead — see CommoditiesInput for why a single
+	// value cannot hold them.
+	out = append(out, treatmentDocumentAttachments(inputs, treatmentCertificateField, treatmentCertificateName,
+		saidYes(asMap(documents[treatmentCertificateName])["send"]))...)
+	out = append(out, treatmentDocumentAttachments(inputs, supervisionReportField, supervisionReportName,
+		saidYes(asMap(documents[supervisionReportName])["send"]))...)
+
+	// One entry per remaining document the flow can produce, in name order: a
+	// certificate built twice from the same answers lists its documents the
+	// same way, which map iteration alone would not give.
 	names := make([]string, 0, len(documents))
 	for name := range documents {
+		if name == treatmentCertificateName || name == supervisionReportName {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -656,6 +700,40 @@ func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attach
 		})
 	}
 
+	return out
+}
+
+// treatmentDocumentAttachments lists, once each, the file named by field on
+// every commodity that carries one — deduplicated by URL, since every
+// commodity a single upload covered carries the identical file.
+//
+// A flat "one URL per document" model, which is what the other documents in
+// buildAttachments use, cannot represent this: a batch consignment can send
+// commodities through external treatment more than once, in more than one
+// group (a review outcome of "needs more info" re-partitions and re-asks), and
+// each group's upload is a genuinely different file. Reading every commodity
+// rather than one is what lets more than one survive; deduplicating is what
+// stops the commodities that shared an upload from listing it twice.
+func treatmentDocumentAttachments(inputs map[string]any, field, name string, send bool) []spscert.Attachment {
+	if !send {
+		return nil
+	}
+
+	var out []spscert.Attachment
+	seen := make(map[string]bool)
+	for _, raw := range asSlice(inputs[CommoditiesInput]) {
+		url := asString(asMap(raw)[field])
+		if url == "" || seen[url] {
+			continue
+		}
+		seen[url] = true
+		out = append(out, spscert.Attachment{
+			RelationshipTypeCode: attachmentRelationship,
+			ID:                   documentLabel(name),
+			Filename:             documentFilename(url),
+			Key:                  url,
+		})
+	}
 	return out
 }
 

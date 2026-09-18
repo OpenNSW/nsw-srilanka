@@ -302,9 +302,7 @@ func TestBuildInput_ListsTheDocumentsTheTraderSaidYesTo(t *testing.T) {
 
 		"send_application_documents": true,
 		"documents": map[string]any{
-			"treatment_certificate": map[string]any{
-				"url": "storage/certs/treatment-cert-1092.pdf", "send": true,
-			},
+			"treatment_certificate": map[string]any{"send": true},
 			"commercial_invoice": map[string]any{
 				"url": "storage/docs/invoice.pdf", "send": true,
 			},
@@ -314,6 +312,11 @@ func TestBuildInput_ListsTheDocumentsTheTraderSaidYesTo(t *testing.T) {
 			},
 			// Said yes, but nothing was ever uploaded.
 			"treatment_supervision_report": map[string]any{"send": true},
+		},
+		// The treatment certificate's file rides on the commodity it was
+		// uploaded for, not on the documents map — see CommoditiesInput.
+		"commodities": []any{
+			map[string]any{"id": "item-1", "treatment_certificate_url": "storage/certs/treatment-cert-1092.pdf"},
 		},
 	})
 
@@ -339,13 +342,14 @@ func TestBuildInput_ListsTheDocumentsTheTraderSaidYesTo(t *testing.T) {
 		t.Errorf("untyped attachment = %+v", got[1])
 	}
 
-	// The workflow names each document and the name becomes its ID, listed in
-	// name order so one set of answers always builds the same certificate.
-	if got[2].ID != "Commercial Invoice" || got[2].Filename != "invoice.pdf" {
-		t.Errorf("commercial invoice = %+v", got[2])
+	// The treatment certificate is read off the commodity it was uploaded for
+	// (see CommoditiesInput) and appended before the rest of DocumentsInput is
+	// sorted by name, so it leads rather than sitting alphabetically among them.
+	if got[2].ID != "Treatment Certificate" || got[2].Filename != "treatment-cert-1092.pdf" {
+		t.Errorf("treatment certificate = %+v", got[2])
 	}
-	if got[3].ID != "Treatment Certificate" || got[3].Filename != "treatment-cert-1092.pdf" {
-		t.Errorf("treatment certificate = %+v", got[3])
+	if got[3].ID != "Commercial Invoice" || got[3].Filename != "invoice.pdf" {
+		t.Errorf("commercial invoice = %+v", got[3])
 	}
 
 	for _, a := range got {
@@ -382,9 +386,8 @@ func TestBuildInput_AcceptsAStringifiedYes(t *testing.T) {
 	in := BuildInput(map[string]any{
 		"userform":       sampleUserform(),
 		"certificate_id": "PC-2026-0003",
-		"documents": map[string]any{"treatment_certificate": map[string]any{
-			"url": "storage/certs/fumigation.pdf", "send": "true",
-		}},
+		"documents":      map[string]any{"treatment_certificate": map[string]any{"send": "true"}},
+		"commodities":    []any{map[string]any{"id": "item-1", "treatment_certificate_url": "storage/certs/fumigation.pdf"}},
 	})
 	if len(in.Certificate.Attachments) != 1 {
 		t.Fatalf("expected the treatment certificate, got %+v", in.Certificate.Attachments)
@@ -455,18 +458,26 @@ func TestBuildInput_ListsDocumentsInNameOrder(t *testing.T) {
 	documents := map[string]any{
 		"packing_list":          map[string]any{"url": "b.pdf", "send": true},
 		"commercial_invoice":    map[string]any{"url": "a.pdf", "send": true},
-		"treatment_certificate": map[string]any{"url": "c.pdf", "send": true},
+		"treatment_certificate": map[string]any{"send": true},
 	}
+	commodities := []any{map[string]any{"id": "item-1", "treatment_certificate_url": "c.pdf"}}
 
 	for i := 0; i < 5; i++ {
 		in := BuildInput(map[string]any{
-			"userform": sampleUserform(), "certificate_id": "PC-2026-0005", "documents": documents,
+			"userform": sampleUserform(), "certificate_id": "PC-2026-0005",
+			"documents": documents, "commodities": commodities,
 		})
 		var ids []string
 		for _, a := range in.Certificate.Attachments {
 			ids = append(ids, a.ID)
 		}
-		want := []string{"Commercial Invoice", "Packing List", "Treatment Certificate"}
+		// The treatment certificate and its supervision report are read off
+		// commodities before the rest of DocumentsInput is sorted, so they lead
+		// rather than sitting alphabetically among the map-ordered names — see
+		// buildAttachments. The order is still fixed run to run, which is the
+		// property this test exists to check: one set of answers always builds
+		// the same certificate.
+		want := []string{"Treatment Certificate", "Commercial Invoice", "Packing List"}
 		if len(ids) != len(want) {
 			t.Fatalf("got %v", ids)
 		}
