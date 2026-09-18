@@ -1,0 +1,275 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / Profile API
+  description: |
+    OpenAPI 3.0 specification for the identity/profile-adjacent read
+    endpoints: the caller's own user profile, the CHA directory, and the
+    company directory. These are small, closely related reference-data
+    reads mounted together in `internal/bootstrap/app.go`; the handlers
+    themselves live in `internal/profile`, `internal/profile/cha` and
+    `internal/profile/company`.
+
+    All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
+    carrying the scope named on each operation. Every error response uses the
+    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+  version: 1.0.0
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/users/me:
+    get:
+      summary: Get the caller's own user profile
+      description: |
+        Returns the authenticated caller's own profile, trimmed to
+        caller-facing fields, with the caller's company summary nested when
+        the user is associated with one.
+
+        Requires scope `nsw:profile:read`.
+      operationId: getMyProfile
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:profile:read`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No persisted user profile exists for the caller.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/chas:
+    get:
+      summary: List Customs House Agents
+      description: |
+        Returns every registered Customs House Agent. Unpaginated.
+
+        Requires scope `nsw:cha:read`.
+      operationId: listCHAs
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CHARecord'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:cha:read`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/companies:
+    get:
+      summary: List companies
+      description: |
+        Returns a paginated, filterable directory of companies (e.g. for the
+        trader-app's CHA-company picker).
+
+        Requires scope `nsw:company:read`.
+      operationId: listCompanies
+      parameters:
+        - name: has_cha
+          in: query
+          description: Filter to companies whose `hasCha` flag matches.
+          schema:
+            type: boolean
+        - name: name
+          in: query
+          description: Case-insensitive substring filter on company name.
+          schema:
+            type: string
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyListResult'
+        '400':
+          description: Invalid `has_cha`, or invalid pagination parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:company:read`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - correlationId
+      properties:
+        error:
+          type: string
+          example: "unauthorized"
+        correlationId:
+          type: string
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    CompanySummary:
+      type: object
+      required:
+        - id
+        - name
+        - hasCha
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        hasCha:
+          type: boolean
+
+    UserProfile:
+      type: object
+      required:
+        - id
+        - email
+        - phoneNumber
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        phoneNumber:
+          type: string
+        data:
+          type: object
+          description: Free-form persisted user attributes.
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        company:
+          $ref: '#/components/schemas/CompanySummary'
+
+    CHARecord:
+      type: object
+      description: A Customs House Agent's persisted profile.
+      required:
+        - id
+        - name
+        - companyId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        email:
+          type: string
+          format: email
+        companyId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CompanyListResult:
+      type: object
+      description: Pagination envelope returned by the list-companies endpoint.
+      required:
+        - items
+        - total
+        - offset
+        - limit
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanySummary'
+        total:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+        limit:
+          type: integer
