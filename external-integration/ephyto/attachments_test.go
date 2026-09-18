@@ -79,12 +79,13 @@ func TestBuildEnvelope_AttachesTheSelectedDocuments(t *testing.T) {
 	}
 }
 
-// The treatment certificate travels the same way once it is uploaded — base64
-// content, filename, MIME type — but its file comes off the commodities the
-// upload was for (CommoditiesInput), not off a DocumentsInput entry: see
-// buildAttachments and NPQSStampTreatmentDocumentsFunc for why a flat value
-// cannot hold it.
-func TestBuildEnvelope_AttachesTheTreatmentCertificateFromCommodities(t *testing.T) {
+// A document whose url is an array attaches every file it names, each with
+// the same base64 content/filename/MIME handling as a single-url document —
+// this is how the flow attaches a document uploaded more than once under the
+// same name (the treatment certificate, one upload per group of commodities
+// sent through external treatment together), without this package knowing
+// that document by name.
+func TestBuildEnvelope_AttachesEveryURLOfAnArrayDocument(t *testing.T) {
 	pdf := []byte("%PDF-1.7 fumigation certificate")
 	files := &stubFiles{
 		content:     map[string][]byte{"storage/certs/fumigation.pdf": pdf},
@@ -92,8 +93,12 @@ func TestBuildEnvelope_AttachesTheTreatmentCertificateFromCommodities(t *testing
 	}
 
 	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sending(map[string]any{
-		DocumentsInput:   map[string]any{"treatment_certificate": map[string]any{"send": true}},
-		CommoditiesInput: []any{map[string]any{"id": "item-1", "treatment_certificate_url": "storage/certs/fumigation.pdf"}},
+		DocumentsInput: map[string]any{
+			"treatment_certificate": map[string]any{
+				"send": true,
+				"url":  []any{"storage/certs/fumigation.pdf"},
+			},
+		},
 	}))
 	if err != nil {
 		t.Fatalf("BuildEnvelope: %v", err)
