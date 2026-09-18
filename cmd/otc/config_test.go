@@ -91,7 +91,7 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Database.Username", cfg.Database.Username, "postgres"},
 		{"Database.Password", cfg.Database.Password, "testpassword"},
 		{"Database.Name", cfg.Database.Name, "nsw_db"},
-		{"Database.SSLMode", cfg.Database.SSLMode, "disable"},
+		{"Database.SSLMode", cfg.Database.SSLMode, "require"},
 		{"Database.MaxIdleConns", cfg.Database.MaxIdleConns, 10},
 		{"Database.MaxOpenConns", cfg.Database.MaxOpenConns, 100},
 		{"Database.MaxConnLifetimeSeconds", cfg.Database.MaxConnLifetimeSeconds, 3600},
