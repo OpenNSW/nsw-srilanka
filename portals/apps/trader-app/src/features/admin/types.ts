@@ -24,6 +24,11 @@ export interface EngineNode {
   // from child_workflow_ids above: fetch it via getTaskWorkflowEngineStatus, not
   // getConsignmentEngineStatus, to drill down (see EngineNodeDTO.TaskWorkflowID on the backend).
   task_workflow_id?: string
+  // The most recent raw Activity result for a TASK node, if its Activity already ran — cleared
+  // once the node fully completes. When present on a node AWAITING_ADMIN, the Activity has
+  // already happened, so OVERRIDE (supply data in its place) is usually preferable to RETRY
+  // (re-runs it) — see ResolveAdminInterventionForm.
+  cached_task_result?: Record<string, unknown>
 }
 
 export type EngineWorkflowStatus = 'RUNNING' | 'COMPLETED' | 'FAILED'

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Badge, Button, Dialog, IconButton, Spinner, Text, TextArea, Tooltip } from '@radix-ui/themes'
 import {
+  ArrowLeftIcon,
   ChevronRightIcon,
   DoubleArrowDownIcon,
   DoubleArrowUpIcon,
@@ -50,6 +51,16 @@ function humanizeNodeType(type: string): string {
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
+}
+
+// Workflow/node ids are "<name>:<uuid>" composites — the name is what an admin actually
+// recognizes at a glance; the uuid matters for exact lookups but is unreadable noise inline, so
+// it's split off here to be shown smaller/muted with the full id in a title tooltip instead.
+function splitIDName(id: string): { name: string; uuid: string | null } {
+  const separatorIndex = id.lastIndexOf(':')
+  return separatorIndex === -1
+    ? { name: id, uuid: null }
+    : { name: id.slice(0, separatorIndex), uuid: id.slice(separatorIndex + 1) }
 }
 
 // START/END carry no ops-actionable signal of their own — whether a workflow reached END is
@@ -111,11 +122,14 @@ interface WorkflowVariablesTarget {
 
 // Identifies the node an admin is resolving, plus which workflow instance it belongs to (root,
 // a child branch, or a task workflow — see NodeRow) and how to refresh that instance's view once
-// resolved.
+// resolved. lastError and cachedTaskResult are carried along purely so the resolve view can show
+// them without a second fetch — see ResolveAdminInterventionView.
 interface AdminResolutionTarget {
   workflowId: string
   nodeId: string
   isGateway: boolean
+  lastError?: string
+  cachedTaskResult?: Record<string, unknown>
   onResolved: () => void
 }
 
@@ -219,6 +233,13 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
         </div>
       </div>
     )
+  }
+
+  // Resolving a node takes over the whole screen rather than opening a dialog — there's enough
+  // detail here (last error, cached task result, overrides JSON) that a modal crowds it. Back and
+  // Cancel both just clear resolveTarget, returning to this same debugger view underneath.
+  if (resolveTarget) {
+    return <ResolveAdminInterventionView target={resolveTarget} onBack={() => setResolveTarget(null)} />
   }
 
   const topLevelNodes = visibleNodes(status.nodes, showAllNodes)
@@ -346,7 +367,6 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
       </div>
 
       <WorkflowVariablesDialog target={variablesTarget} onClose={() => setVariablesTarget(null)} />
-      <ResolveAdminInterventionDialog target={resolveTarget} onClose={() => setResolveTarget(null)} />
     </div>
   )
 }
@@ -414,6 +434,71 @@ function GlobalVariablesButton({
   )
 }
 
+// Line-level diff between the cached value's pretty-printed JSON and the override draft being
+// typed, via the standard LCS/longest-common-subsequence algorithm — so an inserted or deleted
+// line shifts the rest of the comparison instead of misaligning everything after it, the way a
+// naive index-by-index line comparison would. O(m·n); MAX_DIFF_CELLS below guards against a
+// pathological paste making that quadratic cost actually matter.
+interface DiffLine {
+  type: 'unchanged' | 'added' | 'removed'
+  text: string
+}
+
+const MAX_DIFF_CELLS = 200_000
+
+function diffLines(oldText: string, newText: string): DiffLine[] | null {
+  const oldLines = oldText.split('\n')
+  const newLines = newText.split('\n')
+  const m = oldLines.length
+  const n = newLines.length
+  if (m * n > MAX_DIFF_CELLS) return null
+
+  const lcs: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      lcs[i][j] = oldLines[i] === newLines[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+    }
+  }
+
+  const result: DiffLine[] = []
+  let i = 0
+  let j = 0
+  while (i < m && j < n) {
+    if (oldLines[i] === newLines[j]) {
+      result.push({ type: 'unchanged', text: oldLines[i] })
+      i++
+      j++
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      result.push({ type: 'removed', text: oldLines[i] })
+      i++
+    } else {
+      result.push({ type: 'added', text: newLines[j] })
+      j++
+    }
+  }
+  while (i < m) {
+    result.push({ type: 'removed', text: oldLines[i] })
+    i++
+  }
+  while (j < n) {
+    result.push({ type: 'added', text: newLines[j] })
+    j++
+  }
+  return result
+}
+
+const DIFF_LINE_CLASS: Record<DiffLine['type'], string> = {
+  unchanged: '',
+  added: 'bg-green-2',
+  removed: 'bg-red-2 text-foreground-muted line-through decoration-red-6',
+}
+
+const DIFF_LINE_PREFIX: Record<DiffLine['type'], string> = {
+  unchanged: ' ',
+  added: '+',
+  removed: '−',
+}
+
 // Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
 // gateway's routing can't be skipped/overridden without bypassing its own condition logic — see
 // core/workflow.parkNodeForAdmin).
@@ -430,38 +515,37 @@ const ADMIN_ACTIONS: {
 ]
 
 // Lets an admin resolve one AWAITING_ADMIN node (see NodeRow's "Resolve" button) by picking one
-// of RETRY/OVERRIDE/SKIP/ABORT, a required reason, and optional JSON overrides. Calls
-// target.onResolved() on success so the caller can refresh just the affected instance's view.
-function ResolveAdminInterventionDialog({
-  target,
-  onClose,
-}: {
-  target: AdminResolutionTarget | null
-  onClose: () => void
-}) {
-  return (
-    <Dialog.Root open={target !== null} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content maxWidth="500px">
-        {target && (
-          // Keyed on the target node's identity so switching to a different node remounts this
-          // form with fresh state, instead of an effect resetting state on an existing instance.
-          <ResolveAdminInterventionForm
-            key={`${target.workflowId}:${target.nodeId}`}
-            target={target}
-            onClose={onClose}
-          />
-        )}
-      </Dialog.Content>
-    </Dialog.Root>
-  )
-}
-
-function ResolveAdminInterventionForm({ target, onClose }: { target: AdminResolutionTarget; onClose: () => void }) {
+// of RETRY/OVERRIDE/SKIP/ABORT, a required reason, and optional JSON overrides. Takes over the
+// whole screen (see EngineStatusView) rather than a dialog — last error, cached task result, and
+// overrides JSON add up to more than a modal comfortably holds. Calls target.onResolved() on
+// success so the caller can refresh just the affected instance's view, then onBack() — same as
+// Back/Cancel, which both just return to the debugger view underneath without resolving anything.
+function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolutionTarget; onBack: () => void }) {
   const [action, setAction] = useState<AdminResolutionAction | null>(null)
   const [reason, setReason] = useState('')
-  const [overridesText, setOverridesText] = useState('')
+  // Pretty-printed cached value, or '{}' when there's nothing cached — the fixed baseline the
+  // diff panel below always compares the edit box against. Same formatting on both sides of the
+  // diff (see overridesText's initial value) is what makes the line-level comparison meaningful
+  // rather than showing every line as changed over an indentation mismatch.
+  const originalPretty = target.cachedTaskResult ? JSON.stringify(target.cachedTaskResult, null, 2) : '{}'
+  // Starts pre-filled with the current cached value (or '{}') so an admin edits from the real
+  // data instead of blank JSON — see the "Reset" button to get back here after editing.
+  const [overridesText, setOverridesText] = useState(originalPretty)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Only used to warn under the edit box — the diff panel itself works on raw text and tolerates
+  // mid-edit invalid JSON fine, but a final invalid JSON would fail on submit.
+  const overridesJSONError = useMemo(() => {
+    try {
+      JSON.parse(overridesText)
+      return null
+    } catch {
+      return 'Not valid JSON yet.'
+    }
+  }, [overridesText])
+
+  const overridesDiff = useMemo(() => diffLines(originalPretty, overridesText), [originalPretty, overridesText])
 
   const submit = async () => {
     if (!action) return
@@ -479,7 +563,7 @@ function ResolveAdminInterventionForm({ target, onClose }: { target: AdminResolu
     try {
       await resolveAdminIntervention(target.workflowId, target.nodeId, { action, overrides, reason })
       target.onResolved()
-      onClose()
+      onBack()
     } catch (err) {
       console.error('Failed to resolve admin intervention:', err)
       setError(err instanceof Error ? err.message : 'Failed to resolve admin intervention.')
@@ -488,75 +572,161 @@ function ResolveAdminInterventionForm({ target, onClose }: { target: AdminResolu
     }
   }
 
-  return (
-    <>
-      <Dialog.Title>Resolve admin intervention</Dialog.Title>
-      <Dialog.Description size="2" color="gray" className="font-mono break-all mb-4">
-        {target.workflowId} · node {target.nodeId}
-      </Dialog.Description>
+  const resetOverridesToCachedValue = () => setOverridesText(originalPretty)
 
-      <Text size="2" weight="medium" className="block mb-1">
-        Action
-      </Text>
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway }) => {
-          const disabled = target.isGateway && disabledForGateway
+  return (
+    <div className="p-4 md:p-6">
+      <div className="mb-4">
+        <Button variant="ghost" color="gray" onClick={onBack} disabled={submitting}>
+          <ArrowLeftIcon />
+          Back
+        </Button>
+      </div>
+
+      <h1 className="text-xl font-semibold text-foreground mb-2">Resolve admin intervention</h1>
+      <div className="flex flex-wrap gap-6 mb-6">
+        {[
+          { label: 'Workflow', id: target.workflowId },
+          { label: 'Node', id: target.nodeId },
+        ].map(({ label, id }) => {
+          const { name, uuid } = splitIDName(id)
           return (
-            <Button
-              key={candidate}
-              type="button"
-              variant={action === candidate ? 'solid' : 'soft'}
-              color={color}
-              size="2"
-              disabled={disabled}
-              title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
-              onClick={() => setAction(candidate)}
-            >
-              {label}
-            </Button>
+            <div key={label} title={id}>
+              <span className="text-xs text-foreground-subtle">{label}</span>
+              <div className="font-mono text-sm text-foreground">{name}</div>
+              {uuid && <div className="font-mono text-xs text-foreground-muted">{uuid}</div>}
+            </div>
           )
         })}
       </div>
 
-      <Text size="2" weight="medium" className="block mb-1">
-        Reason (required)
-      </Text>
-      <TextArea
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        rows={2}
-        placeholder="Why are you resolving this node?"
-        className="mb-4"
-      />
+      <div className="bg-app-surface rounded-lg shadow p-4 md:p-6 max-w-3xl">
+        {target.lastError && (
+          <>
+            <Text size="2" weight="medium" className="block mb-1">
+              Last error
+            </Text>
+            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all mb-4">
+              {target.lastError}
+            </pre>
+          </>
+        )}
 
-      <Text size="2" weight="medium" className="block mb-1">
-        Overrides (optional JSON)
-      </Text>
-      <TextArea
-        value={overridesText}
-        onChange={(e) => setOverridesText(e.target.value)}
-        rows={4}
-        placeholder='{"key": "value"}'
-        className="mb-2 font-mono text-xs"
-      />
-
-      {error && (
-        <Text size="2" color="red" className="block mb-2">
-          {error}
+        <Text size="2" weight="medium" className="block mb-1">
+          Cached task result
         </Text>
-      )}
+        {target.cachedTaskResult ? (
+          <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 whitespace-pre-wrap break-all mb-4">
+            {JSON.stringify(target.cachedTaskResult, null, 2)}
+          </pre>
+        ) : (
+          <Text size="2" color="gray" className="block mb-4">
+            No cached results for this node.
+          </Text>
+        )}
 
-      <div className="flex justify-end gap-2 mt-4">
-        <Dialog.Close>
-          <Button variant="soft" color="gray" disabled={submitting}>
+        <Text size="2" weight="medium" className="block mb-1">
+          Action
+        </Text>
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway }) => {
+            const disabled = target.isGateway && disabledForGateway
+            return (
+              <Button
+                key={candidate}
+                type="button"
+                variant={action === candidate ? 'solid' : 'soft'}
+                color={color}
+                size="2"
+                disabled={disabled}
+                title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
+                onClick={() => setAction(candidate)}
+              >
+                {label}
+              </Button>
+            )
+          })}
+        </div>
+
+        <Text size="2" weight="medium" className="block mb-1">
+          Reason (required)
+        </Text>
+        <TextArea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Why are you resolving this node?"
+          className="mb-4"
+        />
+
+        {/* Overrides only applies to OVERRIDE — for the other actions there's nothing to edit or
+            diff, so this only shows up once that's the chosen action. */}
+        {action === 'OVERRIDE' && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <Text size="2" weight="medium">
+                Overrides (JSON)
+              </Text>
+              <Button type="button" variant="ghost" size="1" onClick={resetOverridesToCachedValue}>
+                Reset to cached value
+              </Button>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <Text size="1" color="gray" className="block mb-1">
+                  Edit
+                </Text>
+                <TextArea
+                  value={overridesText}
+                  onChange={(e) => setOverridesText(e.target.value)}
+                  rows={12}
+                  className="font-mono text-xs"
+                />
+                {overridesJSONError && (
+                  <Text size="1" color="red" className="block mt-1">
+                    {overridesJSONError}
+                  </Text>
+                )}
+              </div>
+              <div>
+                <Text size="1" color="gray" className="block mb-1">
+                  Diff vs cached value
+                </Text>
+                <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-[17rem] whitespace-pre-wrap">
+                  {overridesDiff === null ? (
+                    <Text size="1" color="gray">
+                      Too large to diff.
+                    </Text>
+                  ) : (
+                    overridesDiff.map((line, i) => (
+                      <div key={i} className={`px-1 -mx-1 rounded ${DIFF_LINE_CLASS[line.type]}`}>
+                        <span className="select-none text-foreground-subtle mr-1">{DIFF_LINE_PREFIX[line.type]}</span>
+                        {line.text || ' '}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <Text size="2" color="red" className="block mb-2">
+            {error}
+          </Text>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="soft" color="gray" onClick={onBack} disabled={submitting}>
             Cancel
           </Button>
-        </Dialog.Close>
-        <Button disabled={!action || !reason.trim() || submitting} onClick={() => void submit()}>
-          {submitting ? 'Submitting…' : 'Submit'}
-        </Button>
+          <Button disabled={!action || !reason.trim() || submitting} onClick={() => void submit()}>
+            {submitting ? 'Submitting…' : 'Submit'}
+          </Button>
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -746,7 +916,7 @@ function NodeRow({
             />
           </button>
         </div>
-        <div className="px-3 flex items-center gap-2">
+        <div className="px-3 flex flex-col items-start gap-1">
           <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
           {node.status === 'AWAITING_ADMIN' && (
             <Button
@@ -758,6 +928,8 @@ function NodeRow({
                   workflowId,
                   nodeId: node.id,
                   isGateway: node.type === 'GATEWAY',
+                  lastError: node.last_error,
+                  cachedTaskResult: node.cached_task_result,
                   onResolved: onRefresh,
                 })
               }

@@ -35,6 +35,12 @@ type EngineNodeDTO struct {
 	// node parked inside it is otherwise invisible here, since from this node's own workflow's
 	// point of view the TASK node is just pending completion.
 	TaskWorkflowID string `json:"task_workflow_id,omitempty"`
+	// CachedTaskResult is the most recent raw Activity result for a TASK node (see
+	// workflow.NodeInfo.CachedTaskResult) — populated once the Activity has already run and
+	// cleared once the node fully completes. Surfaced so an admin resolving a parked node can see
+	// what actually came back before choosing RETRY (re-runs the Activity) vs OVERRIDE (supplies
+	// data in its place without re-running it).
+	CachedTaskResult map[string]any `json:"cached_task_result,omitempty"`
 }
 
 // EngineStatusDTO is the root workflow's raw engine state for a consignment.
@@ -145,6 +151,7 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 			CreatedAt:        n.CreatedAt,
 			UpdatedAt:        n.UpdatedAt,
 			ChildWorkflowIDs: n.ChildWorkflowIDs,
+			CachedTaskResult: n.CachedTaskResult,
 		})
 	}
 	// NodeInfo is a map; sort for a stable, readable response instead of
