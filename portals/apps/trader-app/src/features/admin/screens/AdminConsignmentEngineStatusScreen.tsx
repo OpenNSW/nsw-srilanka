@@ -413,7 +413,11 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, exp
   const [error, setError] = useState<FetchError>(null)
 
   const ensureFetched = useCallback(() => {
-    if (fetched || loading) return
+    // Most nodes have no task workflow (START/END/GATEWAY/SPLIT_TASK, or a TASK node that hasn't
+    // started yet) and are passed in as '' — see NodeRow's `node.task_workflow_id ?? ''`. The
+    // toggle button is disabled for those, but "Expand all" drives every mounted instance via
+    // expandSignal regardless, so without this check it would fetch an empty-id URL per node.
+    if (!workflowId || fetched || loading) return
     setLoading(true)
     BRANCH_FETCHER[kind](workflowId)
       .then((result) => {
