@@ -61,6 +61,16 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 		return ErrDuplicateIntegrationResult
 	}
 
+	// The edgeId threads one round-trip; cusdecRef is the declaration itself
+	// (§2.1). Two edgeIds resolving to one reference means ASYCUDA answered
+	// twice for the same registered declaration — a resend it did not suppress,
+	// or a redelivery under a fresh correlation id. Recording it again would
+	// give one CusDec two rows and complete its review twice, so it is
+	// acknowledged like any other duplicate.
+	if err := s.refusePreviouslyRegistered(ctx, req); err != nil {
+		return err
+	}
+
 	decl, originalStatus, err := s.updateCusdecDeclaration(ctx, req)
 	if err != nil {
 		return err
@@ -75,6 +85,44 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 		"integrated", req.Integrated,
 	)
 	return nil
+}
+
+// refusePreviouslyRegistered reports whether this result's cusdecRef is already
+// held by a different declaration that integrated.
+//
+// Two conditions narrow it, and both matter:
+//
+//   - Only a successful result carries a reference — §6.2 has cusdecRef absent
+//     on failure — so there is nothing to compare on a rejection.
+//   - Only a held row that integrated counts. One that failed is a submission
+//     ASYCUDA rejected; the trader corrects it and resubmits, and that new
+//     round-trip carries a new edgeId against the same reference.
+func (s *webhookService) refusePreviouslyRegistered(ctx context.Context, req CusdecIntegrationResultRequest) error {
+	if !req.Integrated || !req.Payload.CusdecRef.IsValid() {
+		return nil
+	}
+
+	held, err := s.repo.GetByCusdecRef(ctx, req.Payload.CusdecRef)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve CusDec declaration by reference %v: %w", req.Payload.CusdecRef, err)
+	}
+	if held == nil || held.EdgeID == req.EdgeID {
+		return nil
+	}
+	// Only a declaration that actually integrated is one this would be
+	// double-counting. A reference left on a failed row belongs to a submission
+	// ASYCUDA rejected: the trader corrects it and resubmits, which is a new
+	// round-trip with a new edgeId and every right to be recorded.
+	if held.Status != CusdecStatusIntegrated {
+		return nil
+	}
+
+	// Logged at warn: the retry schedule explains a repeated edgeId, but two
+	// edgeIds on one reference means a submission was registered twice, which
+	// is worth seeing even though the callback is answered normally.
+	slog.WarnContext(ctx, "integration result carries a cusdecRef another declaration already holds",
+		"edge_id", req.EdgeID, "held_by_edge_id", held.EdgeID, "cusdec_ref", req.Payload.CusdecRef)
+	return ErrDuplicateRegisteredReference
 }
 
 func (s *webhookService) updateCusdecDeclaration(ctx context.Context, req CusdecIntegrationResultRequest) (*CusdecDeclaration, CusdecStatus, error) {
