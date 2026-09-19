@@ -10,8 +10,9 @@ separately — component env just points at their in-cluster Service names or
 external URLs.
 
 **Start from [`../values-example.yaml`](../values-example.yaml)** — a
-complete, ready-to-edit override file covering every env var each component
-reads, which secrets to create, and route/ingress setup. Don't hand-assemble
+complete, ready-to-edit override file covering every config value each
+component reads, which secrets to create, and route/ingress setup. Don't
+hand-assemble
 your own values from `values.yaml` + the templates; the example file already
 did that reverse-engineering for you.
 
@@ -19,7 +20,9 @@ did that reverse-engineering for you.
 
 Templates are grouped by component under `templates/backend/` and `templates/frontend/` (Helm renders `templates/` recursively, so subdirectories are purely organizational):
 
-- **[backend/deployment.yaml](templates/backend/deployment.yaml)** / **[frontend/deployment.yaml](templates/frontend/deployment.yaml)**: Deployment, container, ports, environment variables, mounts, and probes for each component.
+- **[backend/deployment.yaml](templates/backend/deployment.yaml)**: Deployment, container, ports, environment variables, mounts, and probes for the backend.
+- **[frontend/deployment.yaml](templates/frontend/deployment.yaml)**: Deployment, container, ports, mounts, and probes for the frontend — its runtime config comes from the mounted ConfigMap below, not container env vars.
+- **[frontend/configmap.yaml](templates/frontend/configmap.yaml)**: Renders `frontend.config` into `config.js`, mounted into the frontend container for the browser to read (see "Frontend runtime config, not secrets" below).
 - **[backend/service.yaml](templates/backend/service.yaml)** / **[frontend/service.yaml](templates/frontend/service.yaml)**: Exposes each component's container port as a cluster-internal Service.
 - **[backend/migration-job.yaml](templates/backend/migration-job.yaml)**: Runs schema migrations as a pre-install/pre-upgrade hook (off by default). No frontend equivalent — the portal has no database.
 - **[backend/route.yaml](templates/backend/route.yaml)** / **[frontend/route.yaml](templates/frontend/route.yaml)**: Exposes each component externally via an OpenShift Route (when `<component>.route.enabled`).
@@ -95,16 +98,16 @@ kubectl create secret generic nsw-secrets \
 
 See [`.env.example`](../../../.env.example) for what each of these secrets
 backs and the full set of non-secret config the backend reads. The frontend
-needs no secrets — its `env` is all public SPA config (see below).
+needs no secrets — its `config` is all public SPA config (see below).
 
 ### Frontend runtime config, not secrets
 
-`frontend.env` holds no secrets. The values are `VITE_*` config written into
-`runtime-env.js` at container start (see
-[`apps/trader-app/docker-entrypoint.sh`](../../../portals/apps/trader-app/docker-entrypoint.sh))
-and read directly by the browser — so every URL must be the one the browser
-will actually hit (e.g. the public backend host), not an in-cluster Service
-name.
+`frontend.config` holds no secrets. Unlike `backend.env`, it never becomes a
+container environment variable — the values are public SPA config rendered
+into a ConfigMap and mounted at `/usr/share/nginx/html/config.js` (see
+[`templates/frontend/configmap.yaml`](templates/frontend/configmap.yaml)),
+read directly by the browser — so every URL must be the one the browser will
+actually hit (e.g. the public backend host), not an in-cluster Service name.
 
 ### Frontend branding
 
