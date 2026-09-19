@@ -293,3 +293,61 @@ func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	assert.Contains(t, payload["error"], "Missing office Code")
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
+
+// The callback can beat the step it answers: the submission's 202 and
+// ASYCUDA's result are separate round-trips and nothing orders them. On
+// staging the gap ran from 23ms to 447ms, and a first lookup that missed was
+// answered 200 — which left nine tasks parked on results that had already
+// arrived. The lookup waits instead.
+func TestProcessIntegrationResult_WaitsForATaskThatParksLate(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	recorder := &resumeRecorder{}
+	svc := NewCDNWebhookService(&mockRepository{byEdgeID: map[string]*DispatchNote{}}, db, recorder)
+
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
+	// Not parked on the first look, parked by the second.
+	sqlMock.ExpectQuery(`task_records_v2`).WillReturnError(gorm.ErrRecordNotFound)
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("create_cdn:late"))
+
+	req := CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED",
+		Payload: integrationResultPayload{
+			EdgeID:     "edge-late",
+			Integrated: true,
+			CDNRef:     DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 65581},
+		},
+	}
+	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), req))
+
+	payload, ok := recorder.completed["create_cdn:late"]
+	require.True(t, ok, "the task parked a moment later and was still not resumed")
+	assert.Equal(t, "CBEX1/2026/C/65581", payload["cdn_number"])
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// A task that never parks within the budget is not acknowledged. SLC Edge
+// retries a failed delivery (§2), and the retry finds it parked; answering 200
+// spends the only recovery there is.
+func TestProcessIntegrationResult_AsksForARetryWhenNothingParks(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	recorder := &resumeRecorder{}
+	svc := NewCDNWebhookService(&mockRepository{byEdgeID: map[string]*DispatchNote{}}, db, recorder)
+
+	sqlMock.ExpectQuery(`task_records_v2`).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
+	for i := 0; i < parkPollAttempts; i++ {
+		sqlMock.ExpectQuery(`task_records_v2`).WillReturnError(gorm.ErrRecordNotFound)
+	}
+
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event:   "CDN_INTEGRATED",
+		Payload: integrationResultPayload{EdgeID: "edge-never", Integrated: true},
+	})
+
+	require.ErrorIs(t, err, ErrTaskNotParkedYet,
+		"the delivery must not be acknowledged, or it is lost")
+	assert.Empty(t, recorder.completed)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}

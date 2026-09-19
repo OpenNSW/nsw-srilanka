@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -98,29 +99,82 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 		return fmt.Errorf("failed to locate CDN workflow by edgeId %s: %w", look.edgeID, err)
 	}
 
-	var task struct {
-		TaskID string `gorm:"column:task_id"`
-	}
-	err = s.db.WithContext(ctx).
-		Table("task_records_v2").
-		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
-			record.ParentWorkflowID, look.templateID, stateQueuedExternally).
-		Select("task_id").
-		First(&task).Error
+	taskID, err := s.awaitParkedTask(ctx, record.ParentWorkflowID, look.templateID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.InfoContext(ctx, "cdn: no parked task to resume",
+		return err
+	}
+	if taskID == "" {
+		if alreadyProcessed {
+			// A redelivery of something already applied. The wait it answered
+			// has moved on, which is the expected shape of a retry after our
+			// 200 was lost rather than never sent.
+			slog.InfoContext(ctx, "cdn: no parked task for an already-processed callback, acknowledging",
 				"edge_id", look.edgeID, "template", look.templateID, "workflow_id", record.ParentWorkflowID)
 			return nil
 		}
-		return fmt.Errorf("failed to locate parked CDN task for workflow %s: %w", record.ParentWorkflowID, err)
+
+		// The callback won the race with the step it answers. Asking for a
+		// retry is the whole recovery: the next delivery finds the task parked.
+		// Answering 200 here is what stranded a task on a result that had
+		// already arrived — see ErrTaskNotParkedYet.
+		slog.WarnContext(ctx, "cdn: callback arrived before the task parked, asking for a retry",
+			"edge_id", look.edgeID, "template", look.templateID, "workflow_id", record.ParentWorkflowID)
+		return fmt.Errorf("workflow %s, template %s: %w",
+			record.ParentWorkflowID, look.templateID, ErrTaskNotParkedYet)
 	}
 
-	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, look.payload); err != nil {
-		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
+	if err := s.taskManager.CompleteTaskStep(ctx, taskID, look.payload); err != nil {
+		return fmt.Errorf("failed to complete task step for task %s: %w", taskID, err)
 	}
 
 	slog.InfoContext(ctx, "cdn: resumed parked task",
-		"task_id", task.TaskID, "template", look.templateID, "edge_id", look.edgeID)
+		"task_id", taskID, "template", look.templateID, "edge_id", look.edgeID)
 	return nil
+}
+
+// parkPollAttempts and parkPollDelay bound the wait for a task to park.
+//
+// A callback can arrive before the step it answers has parked: the submission's
+// 202 and ASYCUDA's result are separate round-trips, and nothing orders them.
+// Observed gaps have run from 23ms to 447ms, so a second covers them with room
+// to spare. It is deliberately not longer — the callback is a synchronous
+// request from SLC Edge and this holds their connection open.
+//
+// The shape matches taskflow's own waitForActiveSubtask, which waits the same
+// way for a subtask to attach once a task id is in hand.
+const (
+	parkPollAttempts = 5
+	parkPollDelay    = 200 * time.Millisecond
+)
+
+// awaitParkedTask returns the id of the task parked on templateID, waiting
+// briefly for it to appear. An empty id with no error means it never parked
+// within the budget — the caller decides what that means.
+func (s *cdnWebhookService) awaitParkedTask(ctx context.Context, workflowID, templateID string) (string, error) {
+	for attempt := 0; ; attempt++ {
+		var task struct {
+			TaskID string `gorm:"column:task_id"`
+		}
+		err := s.db.WithContext(ctx).
+			Table("task_records_v2").
+			Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
+				workflowID, templateID, stateQueuedExternally).
+			Select("task_id").
+			First(&task).Error
+		if err == nil {
+			return task.TaskID, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", fmt.Errorf("failed to locate parked CDN task for workflow %s: %w", workflowID, err)
+		}
+
+		if attempt == parkPollAttempts-1 {
+			return "", nil
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(parkPollDelay):
+		}
+	}
 }
