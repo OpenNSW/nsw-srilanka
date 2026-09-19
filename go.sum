@@ -4,8 +4,8 @@ github.com/LSFLK/argus/pkg/audit v0.1.0 h1:UjPm6Bsa0r/4mi9XtN2Q8lHsBrQmboyxuOLoY
 github.com/LSFLK/argus/pkg/audit v0.1.0/go.mod h1:4VVVpK0P7nFEQLP+QU44rezK+Ds9PzE42ZyKw07abl0=
 github.com/OpenNSW/core v0.0.0-20260917040059-2faab773920d h1:awRhj7BY81KW03dXql4utr6Ml8otSCjLtVcxdyLI56g=
 github.com/OpenNSW/core v0.0.0-20260917040059-2faab773920d/go.mod h1:JvanZQ9FwSLypNbJMPv/98kHIY1sHd8/xUrOF89gUZk=
-github.com/OpenNSW/core/authn v0.2.0 h1:hNiD7H/f/qln/E9zq8rbnC+Sru1CvC/Z1rDhR/qrUhE=
-github.com/OpenNSW/core/authn v0.2.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
+github.com/OpenNSW/core/authn v0.3.0 h1:3IuKH2IQm0/GYoDBJFzVMSVWvzVJPLOnmxScHL76B+8=
+github.com/OpenNSW/core/authn v0.3.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
 github.com/OpenNSW/core/authz v0.1.0/go.mod h1:/LbQLPZtCGJ4DICQvLea8XFtSCe2M3xZCO+0SxTYsog=
 github.com/OpenNSW/core/database v0.1.0 h1:WzVZ2XcqfbdLD3g4+jvpUiHLBVDsi2eR2es+1P/+sRE=
