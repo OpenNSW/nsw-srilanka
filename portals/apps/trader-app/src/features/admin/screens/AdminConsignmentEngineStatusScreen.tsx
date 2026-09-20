@@ -24,6 +24,7 @@ import type {
   EngineNodeStatus,
   EngineStatus,
   EngineWorkflowStatus,
+  ParkCategory,
 } from '@/features/admin/types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
@@ -139,13 +140,16 @@ interface WorkflowVariablesTarget {
 
 // Identifies the node an admin is resolving, plus which workflow instance it belongs to (root,
 // a child branch, or a task workflow — see NodeRow) and how to refresh that instance's view once
-// resolved. lastError and cachedTaskResult are carried along purely so the resolve view can show
-// them without a second fetch — see ResolveAdminInterventionView.
+// resolved. lastError, parkCategory, the mappings and cachedTaskResult are carried along purely so
+// the resolve view can show them without a second fetch — see ResolveAdminInterventionView.
 interface AdminResolutionTarget {
   workflowId: string
   nodeId: string
   isGateway: boolean
   lastError?: string
+  parkCategory?: ParkCategory
+  inputMapping?: Record<string, string>
+  outputMapping?: Record<string, string>
   cachedTaskResult?: Record<string, unknown>
   // This node's own outgoing edges, condition included — only meaningful (and only shown) for a
   // GATEWAY, where "no matching conditions" is otherwise a dead end: the admin has no way to see
@@ -498,6 +502,81 @@ function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (v
   )
 }
 
+// How each park_category reads on the resolve screen: a short label plus what an admin can usually
+// do about it. The hints follow core's ParkCategory docs (workflow/park_category.go); they steer
+// rather than prescribe, since the last error is still the ground truth.
+const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; color: 'amber' | 'red' | 'gray'; hint: string }> = {
+  INPUT_MAPPING: {
+    label: 'Missing input',
+    color: 'amber',
+    hint: "A variable this node reads isn't set. Set it in the variables and Retry.",
+  },
+  OUTPUT_MAPPING: {
+    label: 'Missing output',
+    color: 'amber',
+    hint: 'The task ran, but its result lacks a field the node maps. Complete sets the variables without running it again; Retry runs the task again.',
+  },
+  TASK_FAILURE: {
+    label: 'Task failed',
+    color: 'amber',
+    hint: "The node's own work failed. Retry runs it again; Complete moves past it.",
+  },
+  GATEWAY_CONDITION: {
+    label: 'Gateway condition',
+    color: 'amber',
+    hint: 'A routing condition failed to evaluate, or no outgoing edge matched. Fix a variable it reads and Retry.',
+  },
+  SPLIT_DATA: {
+    label: 'Split data',
+    color: 'amber',
+    hint: 'The items or branch data a split or join needs is missing or malformed. Fix the variable and Retry.',
+  },
+  CHILD_FAILURE: {
+    label: 'Child workflow failed',
+    color: 'amber',
+    hint: "A spawned child workflow failed. Open that child's own status to see why.",
+  },
+  DEFINITION_ERROR: {
+    label: 'Definition error',
+    color: 'red',
+    hint: "The workflow definition itself is invalid, so setting variables won't fix it.",
+  },
+  UNKNOWN: {
+    label: 'Unclassified',
+    color: 'gray',
+    hint: "This error wasn't categorized; the last error is the only guide.",
+  },
+}
+
+// One of a parked node's mappings as "from → to" rows, sorted so the list is stable across
+// refreshes. A trailing "?" on a key marks it optional in the node's definition; it is shown as a
+// note rather than as part of the name, since the name is what an admin would type into a patch.
+function MappingList({ title, note, mapping }: { title: string; note: string; mapping: Record<string, string> }) {
+  const rows = Object.entries(mapping).sort(([a], [b]) => a.localeCompare(b))
+  return (
+    <div className="mb-4">
+      <Text size="2" weight="medium" className="block mb-1">
+        {title}
+      </Text>
+      <Text size="1" color="gray" className="block mb-1">
+        {note}
+      </Text>
+      <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48">
+        {rows.map(([rawKey, value]) => {
+          const optional = rawKey.endsWith('?')
+          const key = optional ? rawKey.slice(0, -1) : rawKey
+          return (
+            <div key={rawKey} className="whitespace-pre-wrap break-all py-0.5">
+              {key}
+              {optional && <span className="text-foreground-subtle"> (optional)</span>} → {value}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
 // gateway's routing can't be completed without bypassing its own condition logic — see
 // core/workflow.parkNodeForAdmin). description is shown via an info icon next to each button —
@@ -541,6 +620,10 @@ const ADMIN_ACTIONS: {
 // success so the caller can refresh just the affected instance's view, then onBack() — same as
 // Back/Cancel, which both just return to the debugger view underneath without resolving anything.
 function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolutionTarget; onBack: () => void }) {
+  // Falls back to UNKNOWN for a category this UI predates, rather than rendering nothing.
+  const parkInfo = target.parkCategory
+    ? (PARK_CATEGORY_INFO[target.parkCategory] ?? PARK_CATEGORY_INFO.UNKNOWN)
+    : undefined
   const [action, setAction] = useState<AdminResolutionAction | null>(null)
   const [reason, setReason] = useState('')
   // Starts empty rather than pre-filled from the cached task result: that result is in the
@@ -584,7 +667,11 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
     setSubmitting(true)
     setError(null)
     try {
-      await resolveAdminIntervention(target.workflowId, target.nodeId, { action, global_variables_patch: globalVariablesPatch, reason })
+      await resolveAdminIntervention(target.workflowId, target.nodeId, {
+        action,
+        global_variables_patch: globalVariablesPatch,
+        reason,
+      })
       target.onResolved()
       onBack()
     } catch (err) {
@@ -611,6 +698,20 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
       </div>
 
       <div className="bg-app-surface rounded-lg shadow p-4 md:p-6 max-w-5xl">
+        {parkInfo && (
+          <div className="mb-4">
+            <Text size="2" weight="medium" className="block mb-1">
+              Why it parked
+            </Text>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge color={parkInfo.color}>{parkInfo.label}</Badge>
+              <Text size="2" color="gray">
+                {parkInfo.hint}
+              </Text>
+            </div>
+          </div>
+        )}
+
         {target.lastError && (
           <>
             <Text size="2" weight="medium" className="block mb-1">
@@ -659,6 +760,22 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
               <Text size="2" color="gray" className="block mb-4">
                 No cached results for this node.
               </Text>
+            )}
+            {/* Which workflow variables a Retry reads and a Complete patch should write — see
+                EngineNode.input_mapping / output_mapping for which side of each row is which. */}
+            {target.inputMapping && Object.keys(target.inputMapping).length > 0 && (
+              <MappingList
+                title="Input mapping"
+                note="Workflow variable → task input. Retry reads these variables, so set any that are missing."
+                mapping={target.inputMapping}
+              />
+            )}
+            {target.outputMapping && Object.keys(target.outputMapping).length > 0 && (
+              <MappingList
+                title="Output mapping"
+                note="Task result field → workflow variable. A Complete patch should set the variables on the right."
+                mapping={target.outputMapping}
+              />
             )}
           </>
         )}
@@ -710,11 +827,13 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
         {(action === 'COMPLETE' || action === 'RETRY') && (
           <div className="mb-4">
             <Text size="2" weight="medium" className="block mb-1">
-              {action === 'COMPLETE' ? "Set variables as this node's output (JSON)" : 'Set variables, then re-run (JSON)'}
+              {action === 'COMPLETE'
+                ? "Set variables as this node's output (JSON)"
+                : 'Set variables, then re-run (JSON)'}
             </Text>
             <Text size="1" color="gray" className="block mb-1">
-              Dotted paths to values, e.g. {'{"review.outcome": "APPROVED"}'}. Only the variables named are changed,
-              and they stay changed for the rest of the workflow.
+              Dotted paths to values, e.g. {'{"review.outcome": "APPROVED"}'}. Only the variables named are changed, and
+              they stay changed for the rest of the workflow.
             </Text>
             <LineNumberedTextArea value={variablesPatchText} onChange={setVariablesPatchText} />
             {variablesPatchJSONError && (
@@ -995,6 +1114,9 @@ function NodeRow({
                   nodeId: node.id,
                   isGateway: node.type === 'GATEWAY',
                   lastError: node.last_error,
+                  parkCategory: node.park_category,
+                  inputMapping: node.input_mapping,
+                  outputMapping: node.output_mapping,
                   cachedTaskResult: node.cached_task_result,
                   outgoingEdges: edges.filter((e) => e.source_id === node.id),
                   onResolved: onRefresh,

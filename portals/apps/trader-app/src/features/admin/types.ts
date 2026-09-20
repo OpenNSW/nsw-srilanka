@@ -4,6 +4,18 @@
 // reflects task-store/business state instead.
 export type EngineNodeStatus = 'NOT_STARTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'AWAITING_ADMIN'
 
+// Why a node parked in AWAITING_ADMIN (workflow.ParkCategory on the backend) — lets the resolve
+// screen say what went wrong without parsing last_error.
+export type ParkCategory =
+  | 'INPUT_MAPPING'
+  | 'OUTPUT_MAPPING'
+  | 'TASK_FAILURE'
+  | 'GATEWAY_CONDITION'
+  | 'SPLIT_DATA'
+  | 'CHILD_FAILURE'
+  | 'DEFINITION_ERROR'
+  | 'UNKNOWN'
+
 export interface EngineNode {
   id: string
   type: string
@@ -13,6 +25,15 @@ export interface EngineNode {
   task_template_id?: string
   status: EngineNodeStatus
   last_error?: string
+  // Set together with last_error, only while the node is AWAITING_ADMIN.
+  park_category?: ParkCategory
+  // The node's mappings, present only while it is parked. input_mapping is keyed by the workflow
+  // variable it reads (a trailing "?" marks it optional) with the task input it fills as the
+  // value; output_mapping is keyed by the task result field (same "?" rule) with the workflow
+  // variable it writes as the value. So a RETRY fixes input_mapping keys, and a COMPLETE patch
+  // supplies output_mapping values.
+  input_mapping?: Record<string, string>
+  output_mapping?: Record<string, string>
   created_at: string
   updated_at: string
   // IDs of any child workflow executions this node spawned (SPLIT_TASK / BATCH_SPLIT). Each can
