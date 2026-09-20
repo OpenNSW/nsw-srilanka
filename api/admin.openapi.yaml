@@ -180,6 +180,101 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve:
+    post:
+      summary: "[Admin] Resolve a node parked for admin intervention"
+      description: |
+        Resolves a node that is parked in `AWAITING_ADMIN` (see
+        `EngineNodeDTO.park_category` and `last_error` for why it parked):
+        retry it, complete it without running it, or abort it. See `action`
+        on the request body.
+
+        `{id}` is the ID of the workflow instance that contains the node, not
+        a consignment record ID (for a consignment's root workflow the two
+        are the same). It is the root workflow, a child-branch workflow
+        (`EngineNodeDTO.child_workflow_ids`) or a task workflow
+        (`EngineNodeDTO.task_workflow_id`). `{nodeId}` is the node's
+        composite ID, `EngineNodeDTO.id`, from that workflow's own
+        engine-status response.
+
+        The node is re-checked to be parked before the resolution is sent.
+        `204` means the resolution was handed to the workflow, not that it has
+        been applied: fetch the engine status again to see the outcome. Two
+        admins resolving the same node at the same moment can both receive
+        `204` although only the first takes effect; resolution is expected to
+        be done by one admin at a time.
+
+        Requires scope `nsw:consignment:adminwrite`.
+      operationId: resolveAdminIntervention
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: >-
+            The ID of the workflow instance containing the node (see above),
+            not a consignment record ID.
+          schema:
+            type: string
+        - name: nodeId
+          in: path
+          required: true
+          description: The node's composite ID (`EngineNodeDTO.id`), of the form `<template ID>:<uuid>`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveAdminInterventionRequest'
+      responses:
+        '204':
+          description: The resolution was handed to the workflow.
+        '400':
+          description: >-
+            Missing path ID; an invalid request body (malformed JSON, an
+            unknown field, or anything after the JSON value); an `action`
+            other than `RETRY`, `COMPLETE` or `ABORT`; a missing or blank
+            `reason`; or `COMPLETE` on a GATEWAY node.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. No usable principal on the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No workflow execution exists for `{id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            The node is not currently awaiting admin intervention: it was
+            already resolved, has not parked yet, or `{nodeId}` matches no node
+            in this workflow (including an ID from before a retry re-ran the
+            node, which gets a new one).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -321,6 +416,63 @@ components:
           type: string
         last_error:
           type: string
+        park_category:
+          type: string
+          enum:
+            - INPUT_MAPPING
+            - OUTPUT_MAPPING
+            - TASK_FAILURE
+            - GATEWAY_CONDITION
+            - SPLIT_DATA
+            - CHILD_FAILURE
+            - DEFINITION_ERROR
+            - UNKNOWN
+          description: |
+            Why a node in `AWAITING_ADMIN` parked, set together with
+            `last_error`.
+
+            - `INPUT_MAPPING`: a workflow variable the node's input mapping
+              requires is not set.
+            - `OUTPUT_MAPPING`: the Activity ran, but its result lacks a field
+              the output mapping requires.
+            - `TASK_FAILURE`: the node's own work (the Activity, a signal send)
+              failed.
+            - `GATEWAY_CONDITION`: a gateway condition failed to evaluate, or
+              no edge matched.
+            - `SPLIT_DATA`: the items or branch data a split or join needs is
+              missing or malformed.
+            - `CHILD_FAILURE`: a spawned child workflow failed.
+            - `DEFINITION_ERROR`: the workflow definition itself is invalid, so
+              no variable fixes it.
+            - `UNKNOWN`: the error was not categorized.
+        input_mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            The node's input mapping, present only while it is parked (and left
+            on a node an admin aborted). Each key is a workflow variable the
+            node reads, dotted-path style, with a trailing `?` if it is
+            optional; each value is the task input it fills. A `RETRY` that
+            follows an `INPUT_MAPPING` park needs the missing keys set.
+        output_mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            The node's output mapping, present only while it is parked (and
+            left on a node an admin aborted). Each key is a field of the task
+            result, with a trailing `?` if it is optional; each value is the
+            workflow variable it writes. A `COMPLETE` stands in for the node's
+            output, so its `global_variables_patch` should set these variables.
+        cached_task_result:
+          type: object
+          additionalProperties: true
+          description: |
+            The raw Activity result of a TASK node whose Activity already ran,
+            until the node completes. It shows what came back before choosing
+            between `RETRY` (which runs the Activity again) and `COMPLETE`. May
+            hold business/PII data.
         created_at:
           type: string
           format: date-time
@@ -364,3 +516,69 @@ components:
             The workflow instance's shared, dynamic business data —
             workflow-wide, not per node. May contain business/PII data.
           additionalProperties: true
+        edges:
+          type: array
+          description: |
+            The workflow's graph connections, so an admin can see what a parked
+            GATEWAY's outgoing edges check.
+          items:
+            $ref: '#/components/schemas/EngineEdgeDTO'
+
+    EngineEdgeDTO:
+      type: object
+      required:
+        - id
+        - source_id
+        - target_id
+      properties:
+        id:
+          type: string
+        source_id:
+          type: string
+          description: The composite ID of the source node (`EngineNodeDTO.id`).
+        target_id:
+          type: string
+          description: The composite ID of the target node (`EngineNodeDTO.id`).
+        condition:
+          type: string
+          description: >-
+            The expression evaluated against `global_variables`, verbatim.
+            Absent for an edge with no condition.
+
+    ResolveAdminInterventionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+        - reason
+      properties:
+        action:
+          type: string
+          enum: [RETRY, COMPLETE, ABORT]
+          description: |
+            - `RETRY` re-runs the node from scratch, after applying
+              `global_variables_patch`: it calls the Activity again for a TASK
+              node, or re-evaluates the conditions of a GATEWAY. Making that
+              safe is the admin's job; a TASK with a `cached_task_result` has
+              already run its Activity.
+            - `COMPLETE` applies `global_variables_patch`, then marks the node
+              completed without running it and continues down its first
+              outgoing edge. The patch stands in for the node's output; an
+              empty patch just moves past the node. Not allowed for GATEWAY
+              nodes (`400`), since that would skip their routing.
+            - `ABORT` fails the node and the workflow with the node's
+              original error.
+        global_variables_patch:
+          type: object
+          additionalProperties: true
+          description: |
+            Only used by `RETRY` and `COMPLETE`. A patch, not the full variable
+            set: each key is a dotted path (for example `review.outcome`) and
+            each value is written there. A map value is merged into an existing
+            map at that path, and any other value replaces it. Variables it
+            does not name are untouched. The variables are workflow-wide and
+            persist, so they affect every later node too.
+        reason:
+          type: string
+          minLength: 1
+          description: Why the admin is doing this. Required, and must not be blank.
