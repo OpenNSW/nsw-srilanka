@@ -27,9 +27,9 @@ export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<Eng
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${taskWorkflowId}/engine-status`)
 }
 
-// Resolves a node currently AWAITING_ADMIN on workflowId (root or, for a node nested inside a
-// BATCH_SPLIT/PARALLEL_SPLIT branch, that child workflow's own id — same convention as
-// getConsignmentEngineStatus). Requires nsw:consignment:adminwrite.
+// Resolves a node AWAITING_ADMIN. workflowId is the workflow instance containing the node: the
+// root, a child branch (child_workflow_ids) or a task workflow (task_workflow_id). Requires
+// nsw:consignment:adminwrite.
 export async function resolveAdminIntervention(
   workflowId: string,
   nodeId: string,
