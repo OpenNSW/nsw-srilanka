@@ -39,7 +39,7 @@ type EngineNodeDTO struct {
 	// point of view the TASK node is just pending completion.
 	TaskWorkflowID string `json:"task_workflow_id,omitempty"`
 	// CachedTaskResult is the raw Activity result of a TASK node whose Activity already ran, until
-	// the node completes. It shows an admin what came back before choosing RETRY or OVERRIDE.
+	// the node completes. It shows an admin what came back before choosing RETRY or COMPLETE.
 	CachedTaskResult map[string]any `json:"cached_task_result,omitempty"`
 }
 
@@ -68,9 +68,9 @@ var ErrEngineWorkflowNotFound = errors.New("workflow execution not found")
 // (wrong ID, or already resolved). Core silently drops a signal for such a node, so we check first.
 var ErrNodeNotParked = errors.New("node is not currently awaiting admin intervention")
 
-// ErrAdminActionUnsupportedForGateway is returned for SKIP or OVERRIDE on a GATEWAY, which core
-// would only log and re-park: a gateway's routing can't be bypassed.
-var ErrAdminActionUnsupportedForGateway = errors.New("skip/override are not supported for GATEWAY nodes; use retry or abort")
+// ErrAdminActionUnsupportedForGateway is returned for COMPLETE on a GATEWAY, which core would only
+// log and re-park: a gateway's routing can't be bypassed.
+var ErrAdminActionUnsupportedForGateway = errors.New("complete is not supported for GATEWAY nodes; use retry or abort")
 
 // ErrAdminInterventionUnsupported is returned when the workflow manager doesn't implement
 // workflow.AdminInterventionResolver.
@@ -204,9 +204,9 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 	}
 }
 
-// ResolveAdminIntervention sends an admin's decision (RETRY/OVERRIDE/SKIP/ABORT) to a node parked
+// ResolveAdminIntervention sends an admin's decision (RETRY/COMPLETE/ABORT) to a node parked
 // in AWAITING_ADMIN on workflowID, which can be a root, child-branch or task workflow. It first
-// confirms the node is parked and that a GATEWAY isn't asked to SKIP/OVERRIDE.
+// confirms the node is parked and that a GATEWAY isn't asked to COMPLETE.
 //
 // sig.NodeID arrives as the composite "<template ID>:<uuid>" (EngineNodeDTO.ID), but core routes
 // signals by the plain template ID, so it is translated back before the check and the signal.
@@ -238,7 +238,7 @@ func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID strin
 	if !ok || node.Status != workflow.NodeStatusAwaitingAdmin {
 		return ErrNodeNotParked
 	}
-	if node.Type == workflow.NodeTypeGateway && (sig.Action == workflow.AdminActionSkip || sig.Action == workflow.AdminActionOverride) {
+	if node.Type == workflow.NodeTypeGateway && sig.Action == workflow.AdminActionComplete {
 		return ErrAdminActionUnsupportedForGateway
 	}
 	sig.NodeID = templateID

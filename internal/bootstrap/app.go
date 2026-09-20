@@ -401,8 +401,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// workflow.Manager from the consignment/child-workflow route above (see
 	// EngineNodeDTO.TaskWorkflowID).
 	mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetTaskWorkflowEngineStatus))))
-	// Resolving a parked node can mutate workflow data (Overrides) or force it down a path the
-	// interpreter never chose (Skip/Abort), so this sits behind ConsignmentAdminWrite, a
+	// Resolving a parked node can mutate workflow data (GlobalVariablesPatch) or force it down a path the
+	// interpreter never chose (Complete/Abort), so this sits behind ConsignmentAdminWrite, a
 	// stricter scope than the read-only admin views above.
 	mux.Handle("POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveAdminIntervention))))
 

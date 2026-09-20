@@ -31,7 +31,7 @@ const (
 	errWorkflowNotFound      = "workflow execution not found"
 	errNodeIDRequired        = "node ID is required"
 	errInvalidRequestBody    = "invalid request body"
-	errInvalidAdminAction    = "action must be one of RETRY, OVERRIDE, SKIP, ABORT"
+	errInvalidAdminAction    = "action must be one of RETRY, COMPLETE, ABORT"
 	errReasonRequired        = "reason is required"
 )
 
@@ -39,8 +39,7 @@ const (
 // doubles as the allowlist HandleResolveAdminIntervention validates against.
 var validAdminActions = map[string]workflow.AdminResolutionAction{
 	string(workflow.AdminActionRetry):    workflow.AdminActionRetry,
-	string(workflow.AdminActionOverride): workflow.AdminActionOverride,
-	string(workflow.AdminActionSkip):     workflow.AdminActionSkip,
+	string(workflow.AdminActionComplete): workflow.AdminActionComplete,
 	string(workflow.AdminActionAbort):    workflow.AdminActionAbort,
 }
 
@@ -441,10 +440,16 @@ func (c *Router) handleEngineStatus(
 }
 
 // ResolveAdminInterventionRequest is the request body for HandleResolveAdminIntervention.
+//
+// GlobalVariablesPatch is a patch, not the full variable set: dotted paths (e.g.
+// "review.outcome") mapped to the values to write, applied before RETRY re-runs the node or
+// COMPLETE marks it done. A map value is merged into an existing map at that path and any other
+// value replaces it. Variables it doesn't name are untouched, and what it writes is
+// workflow-wide, so it affects later nodes too.
 type ResolveAdminInterventionRequest struct {
-	Action    string         `json:"action"`
-	Overrides map[string]any `json:"overrides,omitempty"`
-	Reason    string         `json:"reason"`
+	Action               string         `json:"action"`
+	GlobalVariablesPatch map[string]any `json:"global_variables_patch,omitempty"`
+	Reason               string         `json:"reason"`
 }
 
 // HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve.
@@ -454,7 +459,7 @@ type ResolveAdminInterventionRequest struct {
 // that workflow's engine status.
 //
 // Requires scopes.ConsignmentAdminWrite (see bootstrap/app.go): resolving can change workflow data
-// (Overrides) or force a path the interpreter didn't choose (Skip/Abort).
+// (GlobalVariablesPatch) or force a path the interpreter didn't choose (Complete/Abort).
 func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
@@ -512,10 +517,10 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 	}
 
 	sig := workflow.AdminResolutionSignal{
-		NodeID:    nodeID,
-		Action:    action,
-		Overrides: req.Overrides,
-		Reason:    req.Reason,
+		NodeID:                 nodeID,
+		Action:                 action,
+		WorkflowVariablesPatch: req.GlobalVariablesPatch,
+		Reason:                 req.Reason,
 	}
 	if err := c.cs.ResolveAdminIntervention(ctx, workflowID, sig); err != nil {
 		switch {

@@ -222,7 +222,7 @@ func TestConsignmentService_ResolveAdminIntervention_TranslatesCompositeNodeID(t
 
 	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
 		NodeID: compositeNodeID,
-		Action: workflow.AdminActionOverride,
+		Action: workflow.AdminActionComplete,
 		Reason: "activity already ran, supplying result manually",
 	})
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestConsignmentService_ResolveAdminIntervention_NodeNotAwaitingAdmin(t *tes
 	mockWM.AssertExpectations(t)
 }
 
-func TestConsignmentService_ResolveAdminIntervention_GatewaySkipUnsupported(t *testing.T) {
+func TestConsignmentService_ResolveAdminIntervention_GatewayCompleteUnsupported(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockWM := new(MockWM)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
@@ -300,8 +300,8 @@ func TestConsignmentService_ResolveAdminIntervention_GatewaySkipUnsupported(t *t
 
 	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
 		NodeID: "gw1:some-uuid",
-		Action: workflow.AdminActionSkip,
-		Reason: "skip",
+		Action: workflow.AdminActionComplete,
+		Reason: "complete",
 	})
 	assert.ErrorIs(t, err, ErrAdminActionUnsupportedForGateway)
 	// ResolveAdminIntervention on the manager must never be called for a rejected action — no

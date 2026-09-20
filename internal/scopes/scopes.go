@@ -20,7 +20,7 @@ const (
 	// own trader/CHA-owned consignments.
 	ConsignmentAdminRead = "nsw:consignment:adminread"
 	// ConsignmentAdminWrite grants ops/admin the ability to resolve a node parked
-	// in AWAITING_ADMIN (RETRY/OVERRIDE/SKIP/ABORT) on any consignment's workflow.
+	// in AWAITING_ADMIN (RETRY/COMPLETE/ABORT) on any consignment's workflow.
 	ConsignmentAdminWrite = "nsw:consignment:adminwrite"
 
 	// Task resource.
