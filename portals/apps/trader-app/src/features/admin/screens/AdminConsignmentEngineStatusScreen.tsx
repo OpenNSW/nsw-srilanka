@@ -1,20 +1,30 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Badge, Button, Dialog, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
+import { AlertDialog, Badge, Button, Dialog, IconButton, Spinner, Text, TextArea, Tooltip } from '@radix-ui/themes'
 import {
+  ArrowLeftIcon,
   ChevronRightIcon,
   DoubleArrowDownIcon,
   DoubleArrowUpIcon,
   EyeNoneIcon,
   EyeOpenIcon,
+  InfoCircledIcon,
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
   getConsignmentEngineStatus,
   getConsignmentForAdmin,
   getTaskWorkflowEngineStatus,
+  resolveAdminIntervention,
 } from '@/features/admin/service'
-import type { EngineNode, EngineNodeStatus, EngineStatus, EngineWorkflowStatus } from '@/features/admin/types'
+import type {
+  AdminResolutionAction,
+  EngineEdge,
+  EngineNode,
+  EngineNodeStatus,
+  EngineStatus,
+  EngineWorkflowStatus,
+} from '@/features/admin/types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
 
@@ -43,6 +53,31 @@ function humanizeNodeType(type: string): string {
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
+}
+
+// Workflow/node ids are "<name>:<uuid>" composites — the name is what an admin actually
+// recognizes at a glance; the uuid matters for exact lookups but is unreadable noise inline, so
+// it's split off here to be shown smaller/muted with the full id in a title tooltip instead.
+function splitIDName(id: string): { name: string; uuid: string | null } {
+  const separatorIndex = id.lastIndexOf(':')
+  return separatorIndex === -1
+    ? { name: id, uuid: null }
+    : { name: id.slice(0, separatorIndex), uuid: id.slice(separatorIndex + 1) }
+}
+
+// Shared rendering for one labeled workflow/node id (see splitIDName) — used both in the resolve
+// view's header and its confirm dialog. Name and uuid render at the same size; de-emphasizing the
+// uuid is color's job (text-foreground-muted), not a smaller size next to the name's — a size
+// jump between two lines of the same id read as a rendering glitch, not emphasis.
+function IdentityField({ label, id }: { label: string; id: string }) {
+  const { name, uuid } = splitIDName(id)
+  return (
+    <div title={id} className="min-w-0">
+      <span className="text-xs text-foreground-subtle">{label}</span>
+      <div className="font-mono text-sm text-foreground break-all">{name}</div>
+      {uuid && <div className="font-mono text-sm text-foreground-muted break-all">{uuid}</div>}
+    </div>
+  )
 }
 
 // START/END carry no ops-actionable signal of their own — whether a workflow reached END is
@@ -102,12 +137,30 @@ interface WorkflowVariablesTarget {
   variables?: Record<string, unknown>
 }
 
+// Identifies the node an admin is resolving, plus which workflow instance it belongs to (root,
+// a child branch, or a task workflow — see NodeRow) and how to refresh that instance's view once
+// resolved. lastError and cachedTaskResult are carried along purely so the resolve view can show
+// them without a second fetch — see ResolveAdminInterventionView.
+interface AdminResolutionTarget {
+  workflowId: string
+  nodeId: string
+  isGateway: boolean
+  lastError?: string
+  cachedTaskResult?: Record<string, unknown>
+  // This node's own outgoing edges, condition included — only meaningful (and only shown) for a
+  // GATEWAY, where "no matching conditions" is otherwise a dead end: the admin has no way to see
+  // what each edge actually checks without this.
+  outgoingEdges?: EngineEdge[]
+  onResolved: () => void
+}
+
 function EngineStatusView({ workflowId }: { workflowId: string }) {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<FetchError>(null)
   const [variablesTarget, setVariablesTarget] = useState<WorkflowVariablesTarget | null>(null)
+  const [resolveTarget, setResolveTarget] = useState<AdminResolutionTarget | null>(null)
   // Applies at every nesting level (root, child branches, task workflows) — see
   // NOISY_NODE_TYPES.
   const [showAllNodes, setShowAllNodes] = useState(false)
@@ -201,6 +254,13 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
         </div>
       </div>
     )
+  }
+
+  // Resolving a node takes over the whole screen rather than opening a dialog — there's enough
+  // detail here (last error, cached task result, overrides JSON) that a modal crowds it. Back and
+  // Cancel both just clear resolveTarget, returning to this same debugger view underneath.
+  if (resolveTarget) {
+    return <ResolveAdminInterventionView target={resolveTarget} onBack={() => setResolveTarget(null)} />
   }
 
   const topLevelNodes = visibleNodes(status.nodes, showAllNodes)
@@ -298,9 +358,13 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
                 key={node.id}
                 node={node}
                 depth={0}
+                workflowId={workflowId}
+                edges={status.edges ?? []}
                 showAllNodes={showAllNodes}
                 expandSignal={expandSignal}
                 onOpenVariables={setVariablesTarget}
+                onOpenResolve={setResolveTarget}
+                onRefresh={() => void refresh()}
               />
             ))
           )}
@@ -392,6 +456,346 @@ function GlobalVariablesButton({
   )
 }
 
+// A plain <textarea> with a synced line-number gutter, standing in for Radix's TextArea only in
+// the Overrides editor (see ResolveAdminInterventionView) — Radix's own component doesn't expose
+// the scroll position a gutter needs to stay in sync. Wrapping is deliberately off (wrap="off" +
+// white-space: pre + horizontal scroll) rather than left to wrap: with it on, a long line's
+// wrapped continuation would visually sit under whichever number happens to be next, since a
+// gutter line only ever corresponds to one real line.
+function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
+  const lineCount = value.split('\n').length
+
+  const syncGutterScroll = () => {
+    if (textareaRef.current && gutterRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }
+
+  return (
+    // The border lives on this wrapper, not the <textarea> — a bare <textarea> carries its own
+    // UA-default border independent of any wrapper border, which without an explicit border-0
+    // shows through as a second, darker (often black) border nested just inside this one.
+    <div className="flex border border-app-border rounded overflow-hidden font-mono text-xs h-48 focus-within:border-primary">
+      <div ref={gutterRef} className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-subtle select-none" aria-hidden>
+        {Array.from({ length: lineCount }, (_, i) => (
+          <div key={i} className="leading-5">
+            {i + 1}
+          </div>
+        ))}
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={syncGutterScroll}
+        spellCheck={false}
+        wrap="off"
+        className="flex-1 min-w-0 resize-none border-0 p-2 leading-5 outline-none whitespace-pre overflow-auto bg-transparent"
+      />
+    </div>
+  )
+}
+
+// Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
+// gateway's routing can't be skipped/overridden without bypassing its own condition logic — see
+// core/workflow.parkNodeForAdmin). description is shown via an info icon next to each button —
+// see the ADMIN_ACTIONS.map below.
+const ADMIN_ACTIONS: {
+  action: AdminResolutionAction
+  label: string
+  color: 'blue' | 'green' | 'gray' | 'red'
+  disabledForGateway: boolean
+  description: string
+}[] = [
+  {
+    action: 'RETRY',
+    label: 'Retry',
+    color: 'blue',
+    disabledForGateway: false,
+    description:
+      "Re-runs the node for real — re-calls the Activity for a TASK node, or re-evaluates the routing condition for a GATEWAY. Override Inputs (if provided below) are merged into workflow variables first and used as input to that run, not as the result — e.g. to correct a variable a GATEWAY's condition depends on before it re-evaluates.",
+  },
+  {
+    action: 'OVERRIDE',
+    label: 'Override',
+    color: 'green',
+    disabledForGateway: true,
+    description:
+      "Skips re-running anything — merges the Override Outputs below directly into workflow variables as if they were the node's final output, then marks it completed. Unavailable for GATEWAY nodes: completing this way always takes the first outgoing edge, which would silently ignore a gateway's actual routing condition.",
+  },
+  {
+    action: 'SKIP',
+    label: 'Skip',
+    color: 'gray',
+    disabledForGateway: true,
+    description:
+      "Marks the node completed without setting any workflow variables, then continues down its first outgoing edge. Unavailable for GATEWAY nodes, for the same reason as Override — it can't decide the correct edge without evaluating the condition.",
+  },
+  {
+    action: 'ABORT',
+    label: 'Abort',
+    color: 'red',
+    disabledForGateway: false,
+    description: "Fails this node and the whole workflow with the node's original error. Use when the workflow genuinely can't continue.",
+  },
+]
+
+// Lets an admin resolve one AWAITING_ADMIN node (see NodeRow's "Resolve" button) by picking one
+// of RETRY/OVERRIDE/SKIP/ABORT, a required reason, and optional JSON overrides. Takes over the
+// whole screen (see EngineStatusView) rather than a dialog — last error, cached task result, and
+// overrides JSON add up to more than a modal comfortably holds. Calls target.onResolved() on
+// success so the caller can refresh just the affected instance's view, then onBack() — same as
+// Back/Cancel, which both just return to the debugger view underneath without resolving anything.
+function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolutionTarget; onBack: () => void }) {
+  const [action, setAction] = useState<AdminResolutionAction | null>(null)
+  const [reason, setReason] = useState('')
+  // Starts empty rather than pre-filled from the cached task result: that result is in the
+  // task's own key names, while overrides are written under global variable paths, so editing
+  // it into shape invites writing the wrong key.
+  const [overridesText, setOverridesText] = useState('{}')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // Gates the actual submit behind an explicit re-confirmation — this mutates a live workflow
+  // (possibly irreversibly for ABORT) and there's no undo, so "Submit" opens this dialog instead
+  // of calling submit() directly.
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  // Warns under the edit box while the draft isn't valid JSON — an invalid final value would
+  // fail on submit.
+  const overridesJSONError = useMemo(() => {
+    try {
+      JSON.parse(overridesText)
+      return null
+    } catch {
+      return 'Not valid JSON yet.'
+    }
+  }, [overridesText])
+
+  const submit = async () => {
+    if (!action) return
+    // Only OVERRIDE/RETRY actually consume Overrides (see the ADMIN_ACTIONS descriptions above)
+    // — for SKIP/ABORT the editor isn't shown, so whatever it holds isn't anything the admin
+    // chose to send and must not go out on the wire.
+    let overrides: Record<string, unknown> | undefined
+    if ((action === 'OVERRIDE' || action === 'RETRY') && overridesText.trim()) {
+      try {
+        overrides = JSON.parse(overridesText) as Record<string, unknown>
+      } catch {
+        setConfirmOpen(false)
+        setError('Overrides must be valid JSON.')
+        return
+      }
+    }
+    setConfirmOpen(false)
+    setSubmitting(true)
+    setError(null)
+    try {
+      await resolveAdminIntervention(target.workflowId, target.nodeId, { action, overrides, reason })
+      target.onResolved()
+      onBack()
+    } catch (err) {
+      console.error('Failed to resolve admin intervention:', err)
+      setError(err instanceof Error ? err.message : 'Failed to resolve admin intervention.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="p-4 md:p-6">
+      <div className="mb-4">
+        <Button variant="ghost" color="gray" onClick={onBack} disabled={submitting}>
+          <ArrowLeftIcon />
+          Back
+        </Button>
+      </div>
+
+      <h1 className="text-xl font-semibold text-foreground mb-2">Resolve admin intervention</h1>
+      <div className="flex flex-wrap gap-6 mb-6">
+        <IdentityField label="Workflow" id={target.workflowId} />
+        <IdentityField label="Node" id={target.nodeId} />
+      </div>
+
+      <div className="bg-app-surface rounded-lg shadow p-4 md:p-6 max-w-5xl">
+        {target.lastError && (
+          <>
+            <Text size="2" weight="medium" className="block mb-1">
+              Last error
+            </Text>
+            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all mb-4">
+              {target.lastError}
+            </pre>
+          </>
+        )}
+
+        {target.isGateway ? (
+          <>
+            <Text size="2" weight="medium" className="block mb-1">
+              Outgoing conditions
+            </Text>
+            {/* GATEWAY nodes have no CachedTaskResult (there's no Activity to run) — what an
+                admin actually needs here is what each outgoing edge checks, since a "no matching
+                conditions" park otherwise gives no way to know which variable to correct. Raw
+                expr-lang text, not parsed — naming the variable(s) it references is enough to
+                act on; evaluating it client-side isn't the point. */}
+            {target.outgoingEdges && target.outgoingEdges.length > 0 ? (
+              <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 mb-4">
+                {target.outgoingEdges.map((edge) => (
+                  <div key={edge.id} className="whitespace-pre-wrap break-all py-0.5">
+                    {edge.condition ? edge.condition : <span className="text-foreground-subtle">(default — no condition)</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Text size="2" color="gray" className="block mb-4">
+                No outgoing edges found for this node.
+              </Text>
+            )}
+          </>
+        ) : (
+          <>
+            <Text size="2" weight="medium" className="block mb-1">
+              Cached task result
+            </Text>
+            {target.cachedTaskResult ? (
+              <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 whitespace-pre-wrap break-all mb-4">
+                {JSON.stringify(target.cachedTaskResult, null, 2)}
+              </pre>
+            ) : (
+              <Text size="2" color="gray" className="block mb-4">
+                No cached results for this node.
+              </Text>
+            )}
+          </>
+        )}
+
+        <Text size="2" weight="medium" className="block mb-1">
+          Action
+        </Text>
+        <div className="flex gap-3 mb-4 flex-wrap">
+          {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway, description }) => {
+            const disabled = target.isGateway && disabledForGateway
+            return (
+              <div key={candidate} className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant={action === candidate ? 'solid' : 'soft'}
+                  color={color}
+                  size="2"
+                  disabled={disabled}
+                  title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
+                  onClick={() => setAction(candidate)}
+                >
+                  {label}
+                </Button>
+                <Tooltip content={description} maxWidth="320px">
+                  <InfoCircledIcon className="text-foreground-muted cursor-help" width={15} height={15} aria-label={`What ${label} does`} />
+                </Tooltip>
+              </div>
+            )
+          })}
+        </div>
+
+        <Text size="2" weight="medium" className="block mb-1">
+          Reason (required)
+        </Text>
+        <TextArea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Why are you resolving this node?"
+          className="mb-4"
+        />
+
+        {/* Overrides only apply to OVERRIDE and RETRY (see core's parkNodeForAdmin — SKIP always
+            discards them, and ABORT never gets to signal anything) — so this only shows up once
+            one of those is the chosen action. The heading reflects which direction the values
+            flow: OVERRIDE merges them straight into workflow variables as the node's final
+            output, skipping the handler entirely; RETRY merges them in *before* re-running the
+            real handler, so they're consumed as input (e.g. what a TASK node's input_mapping
+            reads, or what a GATEWAY's routing condition reads) rather than the result. */}
+        {(action === 'OVERRIDE' || action === 'RETRY') && (
+          <div className="mb-4">
+            <Text size="2" weight="medium" className="block mb-1">
+              {action === 'OVERRIDE' ? 'Override Outputs (JSON)' : 'Override Inputs (JSON)'}
+            </Text>
+            <LineNumberedTextArea value={overridesText} onChange={setOverridesText} />
+            {overridesJSONError && (
+              <Text size="1" color="red" className="block mt-1">
+                {overridesJSONError}
+              </Text>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <Text size="2" color="red" className="block mb-2">
+            {error}
+          </Text>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="soft" color="gray" onClick={onBack} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button disabled={!action || !reason.trim() || submitting} onClick={() => setConfirmOpen(true)}>
+            {submitting ? 'Submitting…' : 'Submit'}
+          </Button>
+        </div>
+
+        {/* A live workflow signal, not a draft — there's no undo once it's sent (ABORT fails the
+            whole workflow outright), so Submit opens this instead of calling submit() directly. */}
+        <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialog.Content maxWidth="480px">
+            {action &&
+              (() => {
+                const currentAction = ADMIN_ACTIONS.find((a) => a.action === action)
+                return (
+                  <>
+                    <AlertDialog.Title className="mb-3">Confirm {currentAction?.label}</AlertDialog.Title>
+                    {/* One AlertDialog.Description only — it's what the dialog's aria-describedby
+                        points at, so the fuller explanation below is plain text instead of a
+                        second one. Kept free of the raw workflow/node IDs that made this a wall
+                        of text before; those get their own compact block, same layout as the
+                        Workflow/Node identity block in the header above. */}
+                    <AlertDialog.Description size="2" className="mb-4">
+                      You're about to <strong>{action}</strong> this node. This takes effect immediately and can't
+                      be undone.
+                    </AlertDialog.Description>
+
+                    <div className="flex flex-wrap gap-4 mb-4 p-3 bg-app-surface-muted rounded">
+                      <IdentityField label="Workflow" id={target.workflowId} />
+                      <IdentityField label="Node" id={target.nodeId} />
+                    </div>
+
+                    <Text as="p" size="2" color="gray" className="mb-4">
+                      {currentAction?.description}
+                    </Text>
+
+                    <div className="flex justify-end gap-2 mt-2">
+                      <AlertDialog.Cancel>
+                        <Button variant="soft" color="gray">
+                          Cancel
+                        </Button>
+                      </AlertDialog.Cancel>
+                      <AlertDialog.Action>
+                        <Button color={currentAction?.color} onClick={() => void submit()}>
+                          Yes, {currentAction?.label.toLowerCase()}
+                        </Button>
+                      </AlertDialog.Action>
+                    </div>
+                  </>
+                )
+              })()}
+          </AlertDialog.Content>
+        </AlertDialog.Root>
+      </div>
+    </div>
+  )
+}
+
 // Which nested-workflow drilldown a branch renders: a native engine child (SPLIT_TASK/
 // BATCH_SPLIT/PARALLEL_SPLIT, fetched via getConsignmentEngineStatus) or a TASK node's own task
 // workflow (a separate ID space/manager, fetched via getTaskWorkflowEngineStatus).
@@ -404,7 +808,9 @@ const BRANCH_FETCHER: Record<WorkflowBranchKind, (id: string) => Promise<EngineS
 
 // Fetch-on-first-expand state shared by the "child workflow" full-width branch and the compact
 // inline "task workflow" toggle — same lifecycle, different presentation (see NodeRow/
-// ChildWorkflowBranch).
+// ChildWorkflowBranch). Exposes both a cache-respecting ensureFetched (used by toggle/expand-all)
+// and a cache-bypassing refetch, the latter used to refresh this specific instance's rows after
+// an admin resolves a node inside it.
 function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, expandSignal: ExpandSignal) {
   const [expanded, setExpanded] = useState(false)
   const [fetched, setFetched] = useState(false)
@@ -412,12 +818,7 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, exp
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [error, setError] = useState<FetchError>(null)
 
-  const ensureFetched = useCallback(() => {
-    // Most nodes have no task workflow (START/END/GATEWAY/SPLIT_TASK, or a TASK node that hasn't
-    // started yet) and are passed in as '' — see NodeRow's `node.task_workflow_id ?? ''`. The
-    // toggle button is disabled for those, but "Expand all" drives every mounted instance via
-    // expandSignal regardless, so without this check it would fetch an empty-id URL per node.
-    if (!workflowId || fetched || loading) return
+  const refetch = useCallback(() => {
     setLoading(true)
     BRANCH_FETCHER[kind](workflowId)
       .then((result) => {
@@ -432,7 +833,16 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, exp
       .finally(() => {
         setLoading(false)
       })
-  }, [workflowId, kind, fetched, loading])
+  }, [workflowId, kind])
+
+  const ensureFetched = useCallback(() => {
+    // Most nodes have no task workflow (START/END/GATEWAY/SPLIT_TASK, or a TASK node that hasn't
+    // started yet) and are passed in as '' — see NodeRow's `node.task_workflow_id ?? ''`. The
+    // toggle button is disabled for those, but "Expand all" drives every mounted instance via
+    // expandSignal regardless, so without this check it would fetch an empty-id URL per node.
+    if (!workflowId || fetched || loading) return
+    refetch()
+  }, [workflowId, fetched, loading, refetch])
 
   const toggle = useCallback(() => {
     setExpanded((prev) => {
@@ -470,7 +880,7 @@ function useExpandableWorkflow(workflowId: string, kind: WorkflowBranchKind, exp
     if (expandSignal.gen !== 0 && expandSignal.expand) ensureFetchedRef.current()
   }, [expandSignal])
 
-  return { expanded, toggle, loading, status, error }
+  return { expanded, toggle, loading, status, error, refetch }
 }
 
 // A node's last_error, collapsed to one truncated line by default (most errors are noise you
@@ -511,15 +921,30 @@ function ErrorCell({ message }: { message: string }) {
 function NodeRow({
   node,
   depth,
+  workflowId,
+  edges,
   showAllNodes,
   expandSignal,
   onOpenVariables,
+  onOpenResolve,
+  onRefresh,
 }: {
   node: EngineNode
   depth: number
+  // The workflow instance this node belongs to — the root, a child branch, or a task workflow.
+  // Needed to address a resolve request at the right instance, since a node id alone isn't
+  // unique across the whole tree.
+  workflowId: string
+  // This workflow instance's full edge list (same instance as workflowId, not the whole tree) —
+  // filtered down to node's own outgoing edges when opening the resolve view, so a GATEWAY parked
+  // on "no matching conditions" can show an admin exactly what each edge checks.
+  edges: EngineEdge[]
   showAllNodes: boolean
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
+  onOpenResolve: (target: AdminResolutionTarget) => void
+  // Refreshes this node's own workflow instance (not its children) after an admin resolves it.
+  onRefresh: () => void
 }) {
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
@@ -562,8 +987,28 @@ function NodeRow({
             />
           </button>
         </div>
-        <div className="px-3">
+        <div className="px-3 flex flex-col items-start gap-1">
           <Badge color={NODE_STATUS_COLOR[node.status]}>{node.status}</Badge>
+          {node.status === 'AWAITING_ADMIN' && (
+            <Button
+              variant="soft"
+              color="amber"
+              size="1"
+              onClick={() =>
+                onOpenResolve({
+                  workflowId,
+                  nodeId: node.id,
+                  isGateway: node.type === 'GATEWAY',
+                  lastError: node.last_error,
+                  cachedTaskResult: node.cached_task_result,
+                  outgoingEdges: edges.filter((e) => e.source_id === node.id),
+                  onResolved: onRefresh,
+                })
+              }
+            >
+              Resolve
+            </Button>
+          )}
         </div>
         <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
         <div className="px-3 text-xs text-red-600 min-w-0">
@@ -578,6 +1023,7 @@ function NodeRow({
           showAllNodes={showAllNodes}
           expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
+          onOpenResolve={onOpenResolve}
         />
       ))}
       {node.task_workflow_id && taskBranch.expanded && (
@@ -590,6 +1036,8 @@ function NodeRow({
           showAllNodes={showAllNodes}
           expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
+          onOpenResolve={onOpenResolve}
+          onRefresh={taskBranch.refetch}
         />
       )}
     </div>
@@ -606,14 +1054,16 @@ function ChildWorkflowBranch({
   showAllNodes,
   expandSignal,
   onOpenVariables,
+  onOpenResolve,
 }: {
   workflowId: string
   depth: number
   showAllNodes: boolean
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
+  onOpenResolve: (target: AdminResolutionTarget) => void
 }) {
-  const { expanded, toggle, loading, status, error } = useExpandableWorkflow(workflowId, 'child', expandSignal)
+  const { expanded, toggle, loading, status, error, refetch } = useExpandableWorkflow(workflowId, 'child', expandSignal)
 
   return (
     <>
@@ -649,6 +1099,7 @@ function ChildWorkflowBranch({
 
       {expanded && (
         <WorkflowBranchBody
+          workflowId={workflowId}
           depth={depth}
           loading={loading}
           status={status}
@@ -656,6 +1107,8 @@ function ChildWorkflowBranch({
           showAllNodes={showAllNodes}
           expandSignal={expandSignal}
           onOpenVariables={onOpenVariables}
+          onOpenResolve={onOpenResolve}
+          onRefresh={refetch}
         />
       )}
     </>
@@ -676,6 +1129,8 @@ function TaskWorkflowPanel({
   showAllNodes,
   expandSignal,
   onOpenVariables,
+  onOpenResolve,
+  onRefresh,
 }: {
   workflowId: string
   depth: number
@@ -685,6 +1140,8 @@ function TaskWorkflowPanel({
   showAllNodes: boolean
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
+  onOpenResolve: (target: AdminResolutionTarget) => void
+  onRefresh: () => void
 }) {
   // The header is indented via its own margin, not a wrapper around the body below — see
   // ChildWorkflowBranch's comment on why NodeRow's grid rows must never sit inside a
@@ -711,6 +1168,7 @@ function TaskWorkflowPanel({
         )}
       </div>
       <WorkflowBranchBody
+        workflowId={workflowId}
         depth={depth}
         loading={loading}
         status={status}
@@ -718,6 +1176,8 @@ function TaskWorkflowPanel({
         showAllNodes={showAllNodes}
         expandSignal={expandSignal}
         onOpenVariables={onOpenVariables}
+        onOpenResolve={onOpenResolve}
+        onRefresh={onRefresh}
       />
     </>
   )
@@ -726,6 +1186,7 @@ function TaskWorkflowPanel({
 // The loading/error/node-list body shared by ChildWorkflowBranch and TaskWorkflowPanel once
 // expanded.
 function WorkflowBranchBody({
+  workflowId,
   depth,
   loading,
   status,
@@ -733,7 +1194,10 @@ function WorkflowBranchBody({
   showAllNodes,
   expandSignal,
   onOpenVariables,
+  onOpenResolve,
+  onRefresh,
 }: {
+  workflowId: string
   depth: number
   loading: boolean
   status: EngineStatus | null
@@ -741,6 +1205,8 @@ function WorkflowBranchBody({
   showAllNodes: boolean
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
+  onOpenResolve: (target: AdminResolutionTarget) => void
+  onRefresh: () => void
 }) {
   const nodes = status ? visibleNodes(status.nodes, showAllNodes) : []
   return (
@@ -769,9 +1235,13 @@ function WorkflowBranchBody({
               key={node.id}
               node={node}
               depth={depth + 1}
+              workflowId={workflowId}
+              edges={status.edges ?? []}
               showAllNodes={showAllNodes}
               expandSignal={expandSignal}
               onOpenVariables={onOpenVariables}
+              onOpenResolve={onOpenResolve}
+              onRefresh={onRefresh}
             />
           ))
         ))}

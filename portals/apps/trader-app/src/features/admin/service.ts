@@ -1,6 +1,6 @@
 import { http, HttpError } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
-import type { EngineStatus } from './types'
+import type { AdminResolutionRequest, EngineStatus } from './types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 
 // Every admin lookup here treats a 404 as "not found" (null) rather than an error to throw —
@@ -25,6 +25,22 @@ export function getConsignmentEngineStatus(consignmentId: string): Promise<Engin
 // separate ID space/manager from getConsignmentEngineStatus's consignment/child-workflow IDs.
 export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<EngineStatus | null> {
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${taskWorkflowId}/engine-status`)
+}
+
+// Resolves a node currently AWAITING_ADMIN on workflowId (root or, for a node nested inside a
+// BATCH_SPLIT/PARALLEL_SPLIT branch, that child workflow's own id — same convention as
+// getConsignmentEngineStatus). Requires nsw:consignment:adminwrite.
+export async function resolveAdminIntervention(
+  workflowId: string,
+  nodeId: string,
+  request: AdminResolutionRequest,
+): Promise<void> {
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/admin/consignments/${workflowId}/nodes/${nodeId}/resolve`,
+    method: 'POST',
+    data: request,
+    attachToken: true,
+  })
 }
 
 // Ops/admin view of the full consignment detail, no trader/CHA ownership check — not the
