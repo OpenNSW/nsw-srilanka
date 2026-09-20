@@ -2,6 +2,7 @@ package consignment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
+	workflow "github.com/OpenNSW/core/workflow"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -26,7 +28,20 @@ const (
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
 	errWorkflowNotFound      = "workflow execution not found"
+	errNodeIDRequired        = "node ID is required"
+	errInvalidRequestBody    = "invalid request body"
+	errInvalidAdminAction    = "action must be one of RETRY, OVERRIDE, SKIP, ABORT"
+	errReasonRequired        = "reason is required"
 )
+
+// validAdminActions maps the wire-format action string onto the core/workflow constant, and
+// doubles as the allowlist HandleResolveAdminIntervention validates against.
+var validAdminActions = map[string]workflow.AdminResolutionAction{
+	string(workflow.AdminActionRetry):    workflow.AdminActionRetry,
+	string(workflow.AdminActionOverride): workflow.AdminActionOverride,
+	string(workflow.AdminActionSkip):     workflow.AdminActionSkip,
+	string(workflow.AdminActionAbort):    workflow.AdminActionAbort,
+}
 
 type Router struct {
 	cs      *Service
@@ -422,4 +437,109 @@ func (c *Router) handleEngineStatus(
 		},
 	})
 	httputil.JSON(w, http.StatusOK, status)
+}
+
+// ResolveAdminInterventionRequest is the request body for HandleResolveAdminIntervention.
+type ResolveAdminInterventionRequest struct {
+	Action    string         `json:"action"`
+	Overrides map[string]any `json:"overrides,omitempty"`
+	Reason    string         `json:"reason"`
+}
+
+// HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve.
+// {id} is a workflow ID, not necessarily the consignment record's own ID — the root workflow or,
+// for a node nested inside a BATCH_SPLIT/PARALLEL_SPLIT branch, that child workflow's own ID
+// (same convention as HandleGetConsignmentEngineStatus, whose response is where an admin gets
+// {id} and {nodeId} from in the first place).
+//
+// Gated on scopes.ConsignmentAdminWrite at the route (see bootstrap/app.go) — a stricter scope
+// than ConsignmentAdminRead, since this can mutate a workflow's business data via Overrides or
+// force it down a path the interpreter itself never chose (Skip/Abort).
+func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.Type() == "" {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	workflowID := r.PathValue("id")
+	nodeID := r.PathValue("nodeId")
+	if workflowID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+	if nodeID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errNodeIDRequired)
+		return
+	}
+
+	var req ResolveAdminInterventionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+	action, ok := validAdminActions[req.Action]
+	if !ok {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidAdminAction)
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errReasonRequired)
+		return
+	}
+
+	auditFail := func(errMsg string) {
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetConsignment,
+			TargetID:   workflowID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"view":   "admin-resolve",
+				"nodeId": nodeID,
+				"action": req.Action,
+				"error":  errMsg,
+			},
+		})
+	}
+
+	sig := workflow.AdminResolutionSignal{
+		NodeID:    nodeID,
+		Action:    action,
+		Overrides: req.Overrides,
+		Reason:    req.Reason,
+	}
+	if err := c.cs.ResolveAdminIntervention(ctx, workflowID, sig); err != nil {
+		switch {
+		case errors.Is(err, ErrEngineWorkflowNotFound):
+			auditFail(errWorkflowNotFound)
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+		case errors.Is(err, ErrNodeNotParked):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusConflict, err.Error())
+		case errors.Is(err, ErrAdminActionUnsupportedForGateway):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusBadRequest, err.Error())
+		default:
+			auditFail(err.Error())
+			httputil.InternalServerError(w, r, "failed to resolve admin intervention", err)
+		}
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionUpdate,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   workflowID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"view":   "admin-resolve",
+			"nodeId": nodeID,
+			"action": req.Action,
+			"reason": req.Reason,
+		},
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
