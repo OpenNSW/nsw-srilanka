@@ -447,14 +447,13 @@ type ResolveAdminInterventionRequest struct {
 }
 
 // HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve.
-// {id} is a workflow ID, not necessarily the consignment record's own ID — the root workflow or,
-// for a node nested inside a BATCH_SPLIT/PARALLEL_SPLIT branch, that child workflow's own ID
-// (same convention as HandleGetConsignmentEngineStatus, whose response is where an admin gets
-// {id} and {nodeId} from in the first place).
+// {id} is the ID of the workflow instance containing the node: the consignment's root workflow, a
+// child-branch workflow (a node's child_workflow_ids) or a task workflow (a node's
+// task_workflow_id). It is not a consignment record ID. {nodeId} is the node's composite ID from
+// that workflow's engine status.
 //
-// Gated on scopes.ConsignmentAdminWrite at the route (see bootstrap/app.go) — a stricter scope
-// than ConsignmentAdminRead, since this can mutate a workflow's business data via Overrides or
-// force it down a path the interpreter itself never chose (Skip/Abort).
+// Requires scopes.ConsignmentAdminWrite (see bootstrap/app.go): resolving can change workflow data
+// (Overrides) or force a path the interpreter didn't choose (Skip/Abort).
 func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
