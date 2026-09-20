@@ -479,11 +479,20 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 	}
 
 	var req ResolveAdminInterventionRequest
+	// Unknown fields are rejected rather than ignored: a patch sent under a wrong or old key (e.g.
+	// the pre-rename "overrides") would otherwise be dropped while the action still succeeded.
 	// Decode only parses the first JSON value, so a second Decode is needed to reject a body
 	// with anything trailing it (e.g. two concatenated objects).
 	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		msg := errInvalidRequestBody
+		// encoding/json has no typed error for this, and naming the field is what tells the
+		// caller what to fix.
+		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			msg += ": unknown field " + field
+		}
+		httputil.Error(w, r, http.StatusBadRequest, msg)
 		return
 	}
 	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {

@@ -349,6 +349,23 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_RejectsTrailingData(t 
 	assert.Contains(t, w.Body.String(), errInvalidRequestBody)
 }
 
+// A patch sent under a field the endpoint doesn't define (here the pre-rename "overrides") must be
+// rejected, not dropped while the action goes ahead with an empty patch.
+func TestConsignmentRouter_HandleResolveAdminIntervention_RejectsUnknownField(t *testing.T) {
+	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+
+	body := `{"action":"COMPLETE","overrides":{"review.outcome":"APPROVED"},"reason":"stale client"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/wf-1/nodes/node-1/resolve", strings.NewReader(body))
+	req.SetPathValue("id", "wf-1")
+	req.SetPathValue("nodeId", "node-1")
+	req = req.WithContext(withAuthContext(req.Context(), "admin-1"))
+	w := httptest.NewRecorder()
+	r.HandleResolveAdminIntervention(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), `unknown field \"overrides\"`)
+}
+
 func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
