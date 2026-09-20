@@ -67,6 +67,51 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 	mockWM.AssertExpectations(t)
 }
 
+// A parked node's category and mappings pass straight through — the resolve UI reads them to tell
+// an admin why the node parked and which workflow variables a RETRY reads or a COMPLETE writes.
+func TestConsignmentService_GetEngineStatus_ParkContext(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	consignmentID := uuid.NewString()
+	now := time.Now()
+
+	instance := &workflow.WorkflowInstance{
+		ID:     consignmentID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"review": {
+				ID: "review:uuid-1", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin, CreatedAt: now, UpdatedAt: now,
+				LastError:     "output mapping error: required task variable 'status' not found in task result",
+				ParkCategory:  workflow.ParkCategoryOutputMapping,
+				InputMapping:  map[string]string{"applicant?": "applicant_ref"},
+				OutputMapping: map[string]string{"status": "review.outcome"},
+			},
+			"intake": {ID: "intake:uuid-2", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusCompleted, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)},
+		},
+	}
+	mockWM.On("GetStatus", ctx, consignmentID).Return(instance, nil)
+
+	result, err := svc.GetEngineStatus(ctx, consignmentID)
+	require.NoError(t, err)
+	require.Len(t, result.Nodes, 2)
+
+	parked := result.Nodes[0]
+	assert.Equal(t, "review:uuid-1", parked.ID)
+	assert.Equal(t, "OUTPUT_MAPPING", parked.ParkCategory)
+	assert.Equal(t, map[string]string{"applicant?": "applicant_ref"}, parked.InputMapping)
+	assert.Equal(t, map[string]string{"status": "review.outcome"}, parked.OutputMapping)
+
+	// A node that isn't parked carries none of it.
+	assert.Empty(t, result.Nodes[1].ParkCategory)
+	assert.Nil(t, result.Nodes[1].InputMapping)
+	assert.Nil(t, result.Nodes[1].OutputMapping)
+	mockWM.AssertExpectations(t)
+}
+
 func TestConsignmentService_GetEngineStatus_NotFound(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockWM := new(MockWM)

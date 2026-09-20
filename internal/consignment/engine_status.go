@@ -15,17 +15,29 @@ import (
 // WorkflowNodeResponseDTO, which is derived from the task store and reflects
 // business/task semantics instead.
 //
-// TODO: ID, LastError, CreatedAt, UpdatedAt, ChildWorkflowIDs and CachedTaskResult are plain
-// copies of workflow.NodeInfo fields; revisit whether they need their own struct.
+// TODO: ID, LastError, ParkCategory, InputMapping, OutputMapping, CreatedAt, UpdatedAt,
+// ChildWorkflowIDs and CachedTaskResult are plain copies of workflow.NodeInfo fields; revisit
+// whether they need their own struct.
 type EngineNodeDTO struct {
-	ID             string    `json:"id"`
-	Type           string    `json:"type"`
-	GatewayType    string    `json:"gateway_type,omitempty"`
-	TaskTemplateID string    `json:"task_template_id,omitempty"`
-	Status         string    `json:"status"`
-	LastError      string    `json:"last_error,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string `json:"id"`
+	Type           string `json:"type"`
+	GatewayType    string `json:"gateway_type,omitempty"`
+	TaskTemplateID string `json:"task_template_id,omitempty"`
+	Status         string `json:"status"`
+	LastError      string `json:"last_error,omitempty"`
+	// ParkCategory says why a node in AWAITING_ADMIN parked (INPUT_MAPPING, OUTPUT_MAPPING,
+	// TASK_FAILURE, GATEWAY_CONDITION, SPLIT_DATA, CHILD_FAILURE, DEFINITION_ERROR or UNKNOWN), so
+	// the UI can guide an admin without parsing LastError.
+	ParkCategory string `json:"park_category,omitempty"`
+	// InputMapping and OutputMapping are the node's mappings, set only while it is parked. In
+	// InputMapping the key is the workflow variable read (a trailing "?" marks it optional) and
+	// the value is the task input it fills; in OutputMapping the key is the task result field
+	// (same "?" convention) and the value is the workflow variable it writes. So a RETRY fixes
+	// InputMapping keys, and a COMPLETE patch supplies OutputMapping values.
+	InputMapping  map[string]string `json:"input_mapping,omitempty"`
+	OutputMapping map[string]string `json:"output_mapping,omitempty"`
+	CreatedAt     time.Time         `json:"created_at"`
+	UpdatedAt     time.Time         `json:"updated_at"`
 	// ChildWorkflowIDs lists any child workflow executions spawned by this node (SPLIT_TASK /
 	// BATCH_SPLIT). Each ID can be fetched via the same engine-status endpoint (it treats the
 	// path parameter as a workflow ID, not a consignment record) to drill down, regardless of
@@ -146,6 +158,9 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 			TaskTemplateID:   n.TaskTemplateID,
 			Status:           string(n.Status),
 			LastError:        n.LastError,
+			ParkCategory:     string(n.ParkCategory),
+			InputMapping:     n.InputMapping,
+			OutputMapping:    n.OutputMapping,
 			CreatedAt:        n.CreatedAt,
 			UpdatedAt:        n.UpdatedAt,
 			ChildWorkflowIDs: n.ChildWorkflowIDs,
