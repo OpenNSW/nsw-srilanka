@@ -33,6 +33,16 @@ export interface EngineNode {
 
 export type EngineWorkflowStatus = 'RUNNING' | 'COMPLETED' | 'FAILED'
 
+// This workflow instance's own graph connections (workflow.Edge on the backend) — source_id/
+// target_id already resolved to the composite node IDs in EngineStatus.nodes[i].id. condition is
+// the raw expr-lang expression evaluated against global_variables, verbatim.
+export interface EngineEdge {
+  id: string
+  source_id: string
+  target_id: string
+  condition?: string
+}
+
 export interface EngineStatus {
   consignment_id: string
   status: EngineWorkflowStatus
@@ -41,6 +51,7 @@ export interface EngineStatus {
   // Workflow-wide shared/dynamic business data (workflow.WorkflowInstance.WorkflowVariables on
   // the backend) — the same snapshot regardless of which node you're looking at.
   global_variables?: Record<string, unknown>
+  edges?: EngineEdge[]
 }
 
 // How an admin resolves a node parked in AWAITING_ADMIN (see core/workflow.AdminResolutionAction

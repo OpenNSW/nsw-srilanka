@@ -14,6 +14,14 @@ import (
 // tracked by the workflow engine itself (workflow.NodeInfo) — distinct from
 // WorkflowNodeResponseDTO, which is derived from the task store and reflects
 // business/task semantics instead.
+//
+// TODO: revisit which of these fields still earn their own copy now that EngineStatusDTO.Edges
+// uses workflow.Edge directly instead of a hand-duplicated DTO (see that field's comment for
+// why). ID/LastError/CreatedAt/UpdatedAt/ChildWorkflowIDs/CachedTaskResult are today plain 1:1
+// copies of the same-named workflow.NodeInfo fields with no transformation — the same "adds no
+// real decoupling" argument likely applies to them. Type/GatewayType/Status (enum → string) and
+// TaskWorkflowID (synthesized from the task store, not NodeInfo at all) are the ones that
+// actually do something and should stay.
 type EngineNodeDTO struct {
 	ID             string    `json:"id"`
 	Type           string    `json:"type"`
@@ -54,6 +62,19 @@ type EngineStatusDTO struct {
 	// this workflow sees the same snapshot. May hold business/PII data, hence ConsignmentAdminRead
 	// rather than the trader/CHA-facing ConsignmentRead scope.
 	GlobalVariables map[string]any `json:"global_variables,omitempty"`
+	// Edges is this workflow instance's own graph connections, straight from
+	// workflow.WorkflowInstance.Edges — source/target already resolved to the composite node IDs
+	// in Nodes[i].ID, condition expressions included verbatim. Used directly rather than copied
+	// into a hand-rolled DTO: unlike EngineNodeDTO (which does real transformation — enum-to-
+	// string conversion, TaskWorkflowID synthesized from a different source entirely), a copy
+	// here would just be workflow.Edge's four fields typed out a second time, buying no actual
+	// decoupling — a renamed/removed field would fail to compile through a hand-copied struct
+	// literal exactly as it would through a direct reference, and that's the failure mode worth
+	// protecting against; an *added* upstream field is not worth hiding for a plain structural
+	// type like this one. Surfaced so an admin resolving a GATEWAY parked on "no matching
+	// conditions" can see exactly what each outgoing edge actually checks, instead of
+	// reverse-engineering it from the generic park error alone.
+	Edges []workflow.Edge `json:"edges,omitempty"`
 }
 
 // ErrEngineWorkflowNotFound is returned by GetEngineStatus when no workflow
@@ -169,6 +190,7 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 		Nodes:           nodes,
 		AuditTrail:      instance.AuditTrail,
 		GlobalVariables: instance.WorkflowVariables,
+		Edges:           instance.Edges,
 	}
 }
 

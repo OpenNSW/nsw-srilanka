@@ -39,6 +39,9 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 			"node-c": {ID: "node-c", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusNotStarted, CreatedAt: now.Add(2 * time.Second), UpdatedAt: now.Add(2 * time.Second)},
 		},
 		AuditTrail: []string{"workflow started"},
+		Edges: []workflow.Edge{
+			{ID: "e1", SourceID: "node-a", TargetID: "node-b", Condition: "declared_value > 500"},
+		},
 	}
 	mockWM.On("GetStatus", ctx, consignmentID).Return(instance, nil)
 
@@ -57,6 +60,10 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 	assert.Equal(t, "node-b", result.Nodes[1].ID)
 	assert.Equal(t, "RUNNING", result.Nodes[1].Status)
 	assert.Empty(t, result.Nodes[1].ChildWorkflowIDs)
+	// Edges pass straight through, condition included — an admin resolving a GATEWAY parked on
+	// "no matching conditions" needs to see exactly what each outgoing edge actually checks.
+	require.Len(t, result.Edges, 1)
+	assert.Equal(t, workflow.Edge{ID: "e1", SourceID: "node-a", TargetID: "node-b", Condition: "declared_value > 500"}, result.Edges[0])
 	mockWM.AssertExpectations(t)
 }
 
