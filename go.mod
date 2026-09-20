@@ -5,6 +5,9 @@ go 1.27
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.1.0
+	// TEMPORARY: pinned to the head of core's feat/admin-park-context branch (core#214, which
+	// includes core#215) for the COMPLETE action, variables patch and park category/mappings.
+	// Re-bump to the merged core commit before merging nsw-srilanka#489 and #490.
 	github.com/OpenNSW/core v0.0.0-20260920145514-2afbc1388572
 	github.com/OpenNSW/core/authn v0.2.0
 	github.com/OpenNSW/core/authz v0.1.0
