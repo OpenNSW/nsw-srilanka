@@ -210,6 +210,14 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 //
 // sig.NodeID arrives as the composite "<template ID>:<uuid>" (EngineNodeDTO.ID), but core routes
 // signals by the plain template ID, so it is translated back before the check and the signal.
+//
+// The parked check and the signal are not atomic: the manager's ResolveAdminIntervention is a
+// fire-and-forget Temporal signal, and core drops a signal for a node that is no longer parked
+// without reporting it. If two admins resolve the same node at once, both can pass the check and
+// both get success, though only the first signal takes effect. We accept this because admin
+// resolution is expected to be a single admin acting at a time, not concurrent. TODO: fix this
+// properly in core with an acknowledged Temporal Update that rejects a node that is no longer
+// parked, then map that rejection to ErrNodeNotParked so the stale request gets a 409.
 func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error {
 	if s.wm == nil {
 		return fmt.Errorf("no workflow manager registered for ConsignmentService")

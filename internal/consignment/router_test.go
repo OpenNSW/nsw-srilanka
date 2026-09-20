@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -331,6 +332,21 @@ func TestConsignmentRouter_HandleCreateConsignment_Unauthorized(t *testing.T) {
 	r.HandleCreateConsignment(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestConsignmentRouter_HandleResolveAdminIntervention_RejectsTrailingData(t *testing.T) {
+	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+
+	body := `{"action":"RETRY","reason":"first"}{"action":"ABORT","reason":"second"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/wf-1/nodes/node-1/resolve", strings.NewReader(body))
+	req.SetPathValue("id", "wf-1")
+	req.SetPathValue("nodeId", "node-1")
+	req = req.WithContext(withAuthContext(req.Context(), "admin-1"))
+	w := httptest.NewRecorder()
+	r.HandleResolveAdminIntervention(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), errInvalidRequestBody)
 }
 
 func TestConsignmentRouter_HandleGetConsignmentByID_NotFound(t *testing.T) {

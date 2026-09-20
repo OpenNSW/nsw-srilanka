@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -473,7 +474,14 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 	}
 
 	var req ResolveAdminInterventionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// Decode only parses the first JSON value, so a second Decode is needed to reject a body
+	// with anything trailing it (e.g. two concatenated objects).
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
 		return
 	}
