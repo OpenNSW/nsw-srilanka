@@ -9,7 +9,6 @@ import { createConsignment, getAllConsignments } from '@/features/consignment/se
 import { useRole } from '@/services/useRole'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
-import { getBooleanEnv } from '@/runtimeConfig.ts'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -44,10 +43,10 @@ export function ConsignmentScreen() {
     setPage(0)
   }
 
-  const handleCreateConsignment = async (templateId?: string) => {
+  const handleCreateConsignment = async () => {
     setCreating(true)
     try {
-      const response = await createConsignment(templateId)
+      const response = await createConsignment()
       void navigate(`/consignments/${response.id}`)
     } catch (error) {
       console.error('Failed to create consignment:', error)
@@ -102,22 +101,10 @@ export function ConsignmentScreen() {
         </div>
         <div className="flex gap-2">
           {role === 'cha' ? null : (
-            <>
-              {getBooleanEnv('VITE_DEV_ENABLE_TEST_FLOW', import.meta.env.DEV) && (
-                <Button
-                  variant="soft"
-                  color="amber"
-                  onClick={() => void handleCreateConsignment('test-single-node-v1')}
-                  disabled={creating}
-                >
-                  🧪 Test Flow
-                </Button>
-              )}
-              <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-                <PlusIcon />
-                {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-              </Button>
-            </>
+            <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+              <PlusIcon />
+              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+            </Button>
           )}
         </div>
       </div>

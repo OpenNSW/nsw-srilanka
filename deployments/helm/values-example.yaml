@@ -239,10 +239,27 @@ frontend:
     # The `resource` value must equal AUTH_AUDIENCE / the NSW_API resource-server identifier.
     VITE_IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     VITE_APP_URL: "https://trader.example.com"
-    VITE_IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read"
+    VITE_IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread"
     VITE_IDP_TRADER_GROUP_NAME: "Traders"
     VITE_IDP_CHA_GROUP_NAME: "CHA"
     VITE_SHOW_AUTOFILL_BUTTON: "false"
+
+  # Overrides the image's baked-in public/configs/branding.json (see
+  # values.yaml and the chart README). Replace these example.com links with
+  # your environment's real policy/accessibility/support pages.
+  branding:
+    systemName: "NSW"
+    appName: "Trader Portal"
+    portalName: "Trader Portal"
+    description: "A unified digital platform enabling seamless and secure trade facilitation services."
+    footerLinks:
+      - key: policy
+        url: "https://gov.example.lk/policy"
+      - key: accessibility
+        url: "https://gov.example.lk/accessibility"
+      - key: support
+        url: "https://gov.example.lk/support"
+    copyrightNotice: "© 2026 Trader Portal. All rights reserved."
 
   # Expose the portal. Enable the one that matches your platform.
   #

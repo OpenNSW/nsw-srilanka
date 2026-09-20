@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / Tasks API
+  description: |
+    OpenAPI 3.0 specification for the task-orchestrator HTTP surface: reading
+    a single task's rendered "zone view" and advancing it by submitting a
+    step. A task is one node of a consignment's workflow; access is derived
+    from the caller's role-tied ownership of the task's consignment.
+
+    All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
+    carrying the scope named on each operation. Every error response uses the
+    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+  version: 1.0.0
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/tasks/{id}:
+    get:
+      summary: Get a task's rendered zone view
+      description: |
+        Returns the ZoneView payload for a single task, scoped to the
+        caller: they must own the task's consignment in a role the task's
+        render config admits. A task the caller may not read is reported the
+        same as one that does not exist (404), so the response cannot be
+        used to probe which task IDs exist.
+
+        Requires scope `nsw:task:read`.
+      operationId: getTask
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneView'
+        '400':
+          description: Missing task ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. No usable principal on the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:task:read`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            No such task, or the caller may not read it (indistinguishable
+            from "not found" by design).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error resolving access or assembling the view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Advance a task by submitting a step
+      description: |
+        Submits a command (and optional payload) to advance the task's
+        underlying workflow. The request body must contain exactly one JSON
+        value; trailing data after it is rejected.
+
+        Requires scope `nsw:task:write`.
+      operationId: completeTaskStep
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteTaskStepRequest'
+      responses:
+        '204':
+          description: No Content. The step was applied.
+        '400':
+          description: |
+            Missing task ID, malformed JSON, unexpected trailing data, a
+            missing/empty `command`, or a `payload` that sets the reserved
+            `__command` key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The caller may not perform this action on this task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured maximum size.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error completing the step.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    TaskID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "task not found"
+        correlationId:
+          type: string
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    CompleteTaskStepRequest:
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          minLength: 1
+          description: The step command to submit, e.g. "submit".
+          example: "submit"
+        payload:
+          type: object
+          description: |
+            Command-specific data. Genuinely dynamic per task type; must not
+            set the reserved `__command` key, which the server adds itself.
+          additionalProperties: true
+          not:
+            required:
+              - __command
+
+    HandleClaim:
+      type: object
+      description: One zone's binding of a command to a renderer-defined screen element.
+      required:
+        - command
+        - label
+      properties:
+        command:
+          type: string
+        label:
+          type: string
+        element:
+          type: string
+
+    EnrichedComponent:
+      type: object
+      description: The per-zone wire shape after merging projector output with the zone's legal handles.
+      required:
+        - type
+        - payload
+      properties:
+        type:
+          type: string
+        handles:
+          type: array
+          description: Present (non-empty) iff this zone is interactive in the task's current state.
+          items:
+            $ref: '#/components/schemas/HandleClaim'
+        payload:
+          description: Renderer-defined payload for this zone's component type.
+          additionalProperties: true
+
+    ZoneView:
+      type: object
+      description: |
+        The wire shape the trader-app's zone renderer consumes. `view` is a
+        map of slot name -> EnrichedComponent; there is no separate top-level
+        actions list — actions ship inside their claiming zone's `handles`.
+      required:
+        - task_id
+        - task_type
+        - state
+        - view
+        - created_at
+        - updated_at
+      properties:
+        task_id:
+          type: string
+        task_type:
+          type: string
+        state:
+          type: string
+          description: e.g. PENDING_USER, QUEUED_EXTERNALLY, COMPLETED.
+        view:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/EnrichedComponent'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time

@@ -1,10 +1,9 @@
 package consignment
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -26,11 +25,8 @@ const (
 	errForbiddenRole         = "caller does not hold the requested role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
+	errWorkflowNotFound      = "workflow execution not found"
 )
-
-type CreateConsignmentRequest struct {
-	TemplateID string `json:"template_id,omitempty"`
-}
 
 type Router struct {
 	cs      *Service
@@ -38,21 +34,16 @@ type Router struct {
 	company company.Service
 	audit   *nswaudit.Recorder
 	roles   map[string]string // logical name ("trader"/"cha") -> IdP token role
-	devMode bool
 }
 
 // NewRouter builds the router. roles is the global catalog's Roles map; it must
 // define "trader" and "cha" — HandleGetConsignments resolves a caller's ?role=
 // query param through it.
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string, devMode ...bool) (*Router, error) {
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string) (*Router, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
-	isDev := false
-	if len(devMode) > 0 {
-		isDev = devMode[0]
-	}
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles, devMode: isDev}, nil
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles}, nil
 }
 
 // validateRoles reports an error if roles (the global catalog's Roles map) omits
@@ -83,14 +74,8 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	templateID, err := c.resolveTemplateID(r)
-	if err != nil {
-		httputil.Error(w, r, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	traderID := authCtx.User.ID
-	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, templateID)
+	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, defaultExportWorkflowTemplateID)
 	if err != nil {
 		c.audit.Record(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
@@ -280,6 +265,44 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
+// HandleAdminGetConsignmentByID handles GET /api/v1/admin/consignments/{id}. Ops/admin callers
+// holding ConsignmentAdminRead (enforced at the route, see bootstrap/app.go) may fetch the full
+// consignment detail for any consignment, with no trader/CHA ownership check — unlike
+// HandleGetConsignmentByID above, which is scoped to the caller's own trader/CHA-owned
+// consignments.
+func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.User == nil {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	consignment, err := c.cs.GetConsignmentByIDForAdmin(ctx, consignmentID)
+	if err != nil {
+		if errors.Is(err, ErrConsignmentNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to retrieve consignment", err)
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignmentID,
+		Metadata:   map[string]any{"view": "admin"},
+	})
+	httputil.JSON(w, http.StatusOK, consignment)
+}
+
 // HandleGetConsignmentAgency handles GET /api/v1/consignments/{id}/agency.
 // Authenticated M2M (or user) callers with nsw:consignment:read may fetch the
 // allowlisted display names. Knowing the unguessable UUID is sufficient; there
@@ -331,25 +354,72 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 	httputil.JSON(w, http.StatusOK, dto)
 }
 
-// resolveTemplateID extracts and validates the workflow template ID from the request.
-// In production (!c.devMode), it always returns defaultExportWorkflowTemplateID without
-// parsing the body. In dev mode, it accepts optional test-* templates.
-func (c *Router) resolveTemplateID(r *http.Request) (string, error) {
-	if !c.devMode || r.Body == nil || r.ContentLength == 0 {
-		return defaultExportWorkflowTemplateID, nil
+// HandleGetConsignmentEngineStatus handles GET /api/v1/admin/consignments/{id}/engine-status.
+// Returns the root workflow's raw engine state (per-node status straight from the workflow
+// manager, e.g. RUNNING/COMPLETED/AWAITING_ADMIN) — an ops/admin view distinct from the
+// trader-facing GetConsignmentByID, which reflects task-store/business state instead.
+//
+// Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go), not on the
+// trader/CHA nsw:consignment:read scope — this performs no per-consignment ownership
+// check, so any caller holding the admin scope can view any consignment's engine state
+// by design.
+func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http.Request) {
+	c.handleEngineStatus(w, r, "engine-status", c.cs.GetEngineStatus)
+}
+
+// HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task/{id}/engine-status.
+// {id} is a task workflow's own workflow ID (see EngineNodeDTO.TaskWorkflowID, surfaced by
+// HandleGetConsignmentEngineStatus on the TASK node that spawned it) — a separate ID space and
+// workflow.Manager from the consignment/child-workflow IDs HandleGetConsignmentEngineStatus
+// queries. Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go).
+func (c *Router) HandleGetTaskWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
+	c.handleEngineStatus(w, r, "task-workflow-engine-status", c.cs.GetTaskWorkflowEngineStatus)
+}
+
+// handleEngineStatus is the common request/response handling shared by
+// HandleGetConsignmentEngineStatus and HandleGetTaskWorkflowEngineStatus — they differ only in
+// which Service method resolves {id} into an *EngineStatusDTO and the audit "view" label.
+func (c *Router) handleEngineStatus(
+	w http.ResponseWriter, r *http.Request,
+	view string,
+	fetch func(ctx context.Context, id string) (*EngineStatusDTO, error),
+) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.Type() == "" {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
 	}
 
-	var req CreateConsignmentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-		return "", errors.New("invalid request body")
-	}
-
-	if req.TemplateID != "" && req.TemplateID != defaultExportWorkflowTemplateID {
-		if !strings.HasPrefix(req.TemplateID, "test-") {
-			return "", errors.New("only test-* workflow templates are allowed")
+	status, err := fetch(ctx, id)
+	if err != nil {
+		if errors.Is(err, ErrEngineWorkflowNotFound) {
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+			return
 		}
-		return req.TemplateID, nil
+		httputil.InternalServerError(w, r, "failed to retrieve "+view, err)
+		return
 	}
 
-	return defaultExportWorkflowTemplateID, nil
+	// TODO(#477): for HandleGetTaskWorkflowEngineStatus, id is a Temporal task-workflow ID
+	// (e.g. "task-wf-n1_apply:..."), not a consignment ID — this mislabels TargetID under
+	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
+	// TaskRecord.RootWorkflowID) that doesn't exist yet; see the issue for why the obvious
+	// GlobalVariables[VarRootWorkflowID] shortcut doesn't work here.
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   id,
+		Failure:    false,
+		Metadata: map[string]any{
+			"view": view,
+		},
+	})
+	httputil.JSON(w, http.StatusOK, status)
 }

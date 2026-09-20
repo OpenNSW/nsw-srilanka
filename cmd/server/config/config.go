@@ -38,14 +38,6 @@ type Config struct {
 	Integrations integrations.Config
 
 	ArtifactLoader loaders.Config
-
-	// DevMode indicates whether the application is running in development mode (APP_ENV=development).
-	DevMode bool
-
-	// TestManifestPaths holds optional relative paths to test/sandbox manifest files
-	// (e.g. "test/single_node/manifest.json") loaded alongside the primary manifest
-	// when DevMode is true.
-	TestManifestPaths []string
 }
 
 // ServerConfig holds server configuration.
@@ -101,7 +93,7 @@ func Load() (*Config, error) {
 			Username:               getEnvOrDefault("DB_USERNAME", "postgres"),
 			Password:               os.Getenv("DB_PASSWORD"), // No default for security
 			Name:                   getEnvOrDefault("DB_NAME", "nsw_db"),
-			SSLMode:                getEnvOrDefault("DB_SSLMODE", "disable"),
+			SSLMode:                getEnvOrDefault("DB_SSLMODE", "require"),
 			MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
 			MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
 			MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),
@@ -189,8 +181,6 @@ func Load() (*Config, error) {
 				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
 			},
 		},
-		DevMode:           isDevEnvironment(),
-		TestManifestPaths: parseCommaSeparated(getEnvOrDefault("DEV_TEST_MANIFEST_PATHS", "")),
 	}
 
 	// Validate required fields

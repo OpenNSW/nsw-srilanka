@@ -141,6 +141,53 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
+// GetConsignmentByIDForAdmin must return the full detail with no trader/CHA ownership check —
+// unlike GetConsignmentByID, it takes no callerCompanyID/roles at all, since the router only
+// reaches this path for a ConsignmentAdminRead-scoped caller (see HandleGetConsignmentByID).
+func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockWM := new(MockWM)
+	mockTaskStore := new(MockTaskStore)
+	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	consignmentID := uuid.NewString()
+
+	// Row belongs to a company entirely unrelated to whoever's inspecting it — there is no
+	// caller company to even compare against here, which is the point of this path.
+	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+		WithArgs(consignmentID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
+			AddRow(consignmentID, "Someone Else's Consignment", "IMPORT", "trader1", "some-other-company", "IN_PROGRESS", time.Now(), time.Now()))
+
+	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
+	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
+
+	result, err := svc.GetConsignmentByIDForAdmin(ctx, consignmentID)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, consignmentID, result.ID)
+	assert.Equal(t, "Someone Else's Consignment", result.Name)
+	mockWM.AssertExpectations(t)
+	mockTaskStore.AssertExpectations(t)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestConsignmentService_GetConsignmentByIDForAdmin_NotFound(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+
+	id := uuid.NewString()
+	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+		WithArgs(id, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	_, err := svc.GetConsignmentByIDForAdmin(context.Background(), id)
+	assert.ErrorIs(t, err, ErrConsignmentNotFound)
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
 func TestConsignmentService_GetConsignmentByID_AccessDenied(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)

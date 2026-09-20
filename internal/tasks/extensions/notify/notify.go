@@ -30,18 +30,20 @@ type templateLoader interface {
 // NotificationExtension fires an SMS or email when a workflow step completes.
 // The recipient is taken from the completing step's payload under the
 // "notifyRecipient" key. The send is a side-effect only and never mutates
-// record. Transport failures are returned to the orchestrator (logged, never
-// blocking); in devMode they are swallowed.
+// record, and it never blocks the workflow: a failure (bad template config or
+// a transport error) is logged and swallowed rather than returned to the
+// orchestrator, since a notification is best-effort and should never fail the
+// underlying task. No retry is attempted here — a configurable retry policy,
+// if needed, belongs at the task level rather than hardcoded per extension.
 type NotificationExtension struct {
-	sender  sender
-	loader  templateLoader
-	devMode bool
+	sender sender
+	loader templateLoader
 }
 
 // NewNotificationExtension builds the extension. s and loader must be non-nil;
 // Register enforces this.
-func NewNotificationExtension(s sender, loader templateLoader, devMode bool) *NotificationExtension {
-	return &NotificationExtension{sender: s, loader: loader, devMode: devMode}
+func NewNotificationExtension(s sender, loader templateLoader) *NotificationExtension {
+	return &NotificationExtension{sender: s, loader: loader}
 }
 
 type notificationConfig struct {
@@ -74,7 +76,8 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 	if cfg.TemplateID != "" {
 		var err error
 		if tmpl, err = e.renderTemplate(ctx, cfg.TemplateID, record); err != nil {
-			return e.swallowInDevMode(record, err)
+			e.swallow(record, err)
+			return nil
 		}
 	}
 
@@ -95,7 +98,8 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 		"taskId", record.TaskID, "channel", req.Channel)
 
 	if err := e.sender.Send(ctx, req); err != nil {
-		return e.swallowInDevMode(record, fmt.Errorf("notification: send: %w", err))
+		e.swallow(record, fmt.Errorf("notification: send: %w", err))
+		return nil
 	}
 
 	slog.Info("notification extension: sent",
@@ -103,16 +107,11 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 	return nil
 }
 
-// swallowInDevMode returns err unchanged in normal mode; in dev mode it logs and
-// swallows it so a misconfigured template or flaky gateway never blocks local
-// workflows.
-func (e *NotificationExtension) swallowInDevMode(record *store.TaskRecord, err error) error {
-	if !e.devMode {
-		return err
-	}
-	slog.Warn("notification extension: error (dev mode — swallowing)",
+// swallow logs a best-effort failure. Notifications never fail the
+// underlying task, so callers always proceed as if Execute returned nil.
+func (e *NotificationExtension) swallow(record *store.TaskRecord, err error) {
+	slog.Warn("notification extension: error (best-effort, swallowing)",
 		"taskId", record.TaskID, "error", err)
-	return nil
 }
 
 // renderedTemplate holds the interpolated fields of a template document; a field

@@ -18,8 +18,8 @@ type ExternalReviewPlugin struct {
 
 // NewExternalReviewPlugin builds a plugin that POSTs the trader's submitted
 // form to the configured service+path with a rich body shape.
-func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string, devMode bool) *ExternalReviewPlugin {
-	return &ExternalReviewPlugin{client: newDispatchHelper(manager, backendBaseURL, devMode)}
+func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string) *ExternalReviewPlugin {
+	return &ExternalReviewPlugin{client: newDispatchHelper(manager, backendBaseURL)}
 }
 
 type externalReviewConfig struct {

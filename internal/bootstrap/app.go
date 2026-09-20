@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
-	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
@@ -198,7 +198,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to build consignment service: %w", err)
 	}
-	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles, cfg.DevMode)
+	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -228,6 +228,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		temporalClient.Close()
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to register workflow manager with consignment service: %w", err)
+	}
+	if err := consignmentService.RegisterTaskWorkflowManager(task.Runner); err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
 	}
 
 	// -------------------------------------------------------------------
@@ -383,6 +390,18 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
 	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
+	// Ops/admin views of consignment data — gated behind the dedicated admin scope, not the
+	// trader/CHA-facing consignment read scope, and with no per-consignment ownership check.
+	// Kept together (and as their own handlers, not scope branches on the routes above) so this
+	// distinct trust boundary — a small admin group that can read any consignment — stays easy
+	// to audit as a group rather than spread through the general consignment API.
+	mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
+	mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleAdminGetConsignmentByID))))
+	// A TASK node's independent per-task ("micro") workflow — separate ID space and
+	// workflow.Manager from the consignment/child-workflow route above (see
+	// EngineNodeDTO.TaskWorkflowID).
+	mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetTaskWorkflowEngineStatus))))
+
 	// Storage
 	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
 	mux.Handle("GET /api/v1/storage/{key}", withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
@@ -478,6 +497,34 @@ type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }
 
+// newAdminParkLogger builds the AdminParkHandler registered on a Temporal worker. It is the
+// only place that currently reacts to a node parking for admin intervention — core's engine
+// itself only records the event on the workflow's own in-memory AuditTrail, which nothing
+// surfaces proactively. slog.Error here is deliberate: this should be loud and land wherever
+// this service's error-level logs are already aggregated/alerted on, since today there is no
+// other way to learn a node parked short of already suspecting a specific workflow ID and
+// querying its engine status.
+//
+// scope identifies which runner registered this handler ("top-level workflow" or "task
+// workflow"), since that can't be inferred from the payload itself.
+func newAdminParkLogger(scope string) func(workflow.AdminParkPayload) error {
+	return func(payload workflow.AdminParkPayload) error {
+		// TODO: also persist this park event to a DB (keyed on workflow_id/node_id, cleared on
+		// resolution) so currently-parked nodes can be queried on demand instead of only being
+		// discoverable via these logs.
+		slog.Error(scope+" parked for admin intervention",
+			"workflow_id", payload.WorkflowID,
+			"run_id", payload.RunID,
+			"root_workflow_id", payload.RootWorkflowID,
+			"node_id", payload.NodeID,
+			"node_type", payload.NodeType,
+			"task_template_id", payload.TaskTemplateID,
+			"cause", payload.Cause,
+		)
+		return nil
+	}
+}
+
 // wireParentRunner wires the core/workflow port of workflow.WireParentRunner.
 // core ships no wrapper for this, so the wiring is inlined here, the only
 // place that needs it.
@@ -507,6 +554,7 @@ func wireParentRunner(c client.Client, activator parentTaskActivator, upstream p
 	}
 
 	runner := workflow.NewTemporalManager(c, parentWorkflowQueue, onActivation, onCompletion)
+	runner.RegisterAdminParkHandler(newAdminParkLogger("top-level workflow"))
 	if err := runner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start parent workflow worker: %w", err)
 	}
@@ -647,7 +695,7 @@ func initTask(
 
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL, cfg.Server.Debug); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService); err != nil {
@@ -687,6 +735,7 @@ func initTask(
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
+	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
 
 	notifManager, err := notification.NewManager(cfg.Notification,
 		providers.NewEmailProvider(), providers.NewSMSProvider())
@@ -695,7 +744,7 @@ func initTask(
 	}
 
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}, cfg.Server.Debug); err != nil {
+	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}); err != nil {
 		return nil, nil, fmt.Errorf("register notification extension: %w", err)
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
@@ -720,72 +769,27 @@ func initTask(
 	}, stop, nil
 }
 
-// fallbackLoader queries the primary loader first, falling back to local disk
-// if not found. This allows local test artifacts to resolve seamlessly even when
-// the primary loader points to a remote source (GitHub, S3).
-type fallbackLoader struct {
-	primary artifact.Loader
-	local   artifact.Loader
-}
-
-func (fl fallbackLoader) Load(ctx context.Context, path string) ([]byte, error) {
-	data, err := fl.primary.Load(ctx, path)
-	if err == nil {
-		return data, nil
-	}
-	if fl.local != nil && errors.Is(err, artifact.ErrNotFound) {
-		if localData, localErr := fl.local.Load(ctx, path); localErr == nil {
-			return localData, nil
-		}
-	}
-	return nil, err
-}
-
 // initArtifactRegistry initializes the artifact loader, registry, and registers
-// the primary manifest (plus any test manifests if in development mode).
+// the manifest.
 func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Registry, error) {
-	primaryLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
+	artifactLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
 	}
 
-	artifactLoader := primaryLoader
-	manifestPaths := []string{artifact.ManifestFilename}
+	data, err := artifactLoader.Load(ctx, artifact.ManifestFilename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load root manifest %q: %w", artifact.ManifestFilename, err)
+	}
 
-	if cfg.DevMode {
-		// In development, fallback to local disk so test artifacts under test/
-		// can be resolved even when the primary loader is remote (e.g. GitHub or S3).
-		if localFallback, err := local.New(local.Config{Root: "."}); err == nil {
-			artifactLoader = fallbackLoader{primary: primaryLoader, local: localFallback}
-		}
-		manifestPaths = append(manifestPaths, cfg.TestManifestPaths...)
+	var manifestCfg artifact.ManifestConfig
+	if err := json.Unmarshal(data, &manifestCfg); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest %q: %w", artifact.ManifestFilename, err)
 	}
 
 	artifactRegistry := artifact.NewRegistry(artifactLoader)
-	for _, path := range manifestPaths {
-		if path == "" {
-			continue
-		}
-		data, err := artifactLoader.Load(ctx, path)
-		if err != nil {
-			if path == artifact.ManifestFilename {
-				return nil, fmt.Errorf("failed to load root manifest %q: %w", path, err)
-			}
-			if errors.Is(err, artifact.ErrNotFound) {
-				log.Printf("info: optional manifest %q not found, skipping", path)
-				continue
-			}
-			return nil, fmt.Errorf("failed to load optional manifest %q: %w", path, err)
-		}
-
-		var manifestCfg artifact.ManifestConfig
-		if err := json.Unmarshal(data, &manifestCfg); err != nil {
-			return nil, fmt.Errorf("failed to parse manifest %q: %w", path, err)
-		}
-
-		if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
-			return nil, fmt.Errorf("failed to register manifest %q: %w", path, err)
-		}
+	if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
+		return nil, fmt.Errorf("failed to register manifest %q: %w", artifact.ManifestFilename, err)
 	}
 
 	return artifactRegistry, nil
