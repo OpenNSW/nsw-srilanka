@@ -257,7 +257,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   }
 
   // Resolving a node takes over the whole screen rather than opening a dialog — there's enough
-  // detail here (last error, cached task result, overrides JSON) that a modal crowds it. Back and
+  // detail here (last error, cached task result, variables patch) that a modal crowds it. Back and
   // Cancel both just clear resolveTarget, returning to this same debugger view underneath.
   if (resolveTarget) {
     return <ResolveAdminInterventionView target={resolveTarget} onBack={() => setResolveTarget(null)} />
@@ -457,7 +457,7 @@ function GlobalVariablesButton({
 }
 
 // A plain <textarea> with a synced line-number gutter, standing in for Radix's TextArea only in
-// the Overrides editor (see ResolveAdminInterventionView) — Radix's own component doesn't expose
+// the variables patch editor (see ResolveAdminInterventionView) — Radix's own component doesn't expose
 // the scroll position a gutter needs to stay in sync. Wrapping is deliberately off (wrap="off" +
 // white-space: pre + horizontal scroll) rather than left to wrap: with it on, a long line's
 // wrapped continuation would visually sit under whichever number happens to be next, since a
@@ -499,7 +499,7 @@ function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (v
 }
 
 // Which resolution actions exist and whether core's engine rejects them for a GATEWAY node (a
-// gateway's routing can't be skipped/overridden without bypassing its own condition logic — see
+// gateway's routing can't be completed without bypassing its own condition logic — see
 // core/workflow.parkNodeForAdmin). description is shown via an info icon next to each button —
 // see the ADMIN_ACTIONS.map below.
 const ADMIN_ACTIONS: {
@@ -515,23 +515,15 @@ const ADMIN_ACTIONS: {
     color: 'blue',
     disabledForGateway: false,
     description:
-      "Re-runs the node for real — re-calls the Activity for a TASK node, or re-evaluates the routing condition for a GATEWAY. Override Inputs (if provided below) are merged into workflow variables first and used as input to that run, not as the result — e.g. to correct a variable a GATEWAY's condition depends on before it re-evaluates.",
+      "Re-runs the node for real — re-calls the Activity for a TASK node, or re-evaluates the routing condition for a GATEWAY. Any variables you set below are written first, so use it to fix a variable the node reads (e.g. one a GATEWAY's condition depends on) before it runs again.",
   },
   {
-    action: 'OVERRIDE',
-    label: 'Override',
+    action: 'COMPLETE',
+    label: 'Complete',
     color: 'green',
     disabledForGateway: true,
     description:
-      "Skips re-running anything — merges the Override Outputs below directly into workflow variables as if they were the node's final output, then marks it completed. Unavailable for GATEWAY nodes: completing this way always takes the first outgoing edge, which would silently ignore a gateway's actual routing condition.",
-  },
-  {
-    action: 'SKIP',
-    label: 'Skip',
-    color: 'gray',
-    disabledForGateway: true,
-    description:
-      "Marks the node completed without setting any workflow variables, then continues down its first outgoing edge. Unavailable for GATEWAY nodes, for the same reason as Override — it can't decide the correct edge without evaluating the condition.",
+      "Marks the node completed without running it (or running it again), then continues down its first outgoing edge. Any variables you set below are written first, standing in for the output the node would have produced; leave them empty to just move past the node. Unavailable for GATEWAY nodes: completing this way always takes the first outgoing edge, which would silently ignore a gateway's actual routing condition.",
   },
   {
     action: 'ABORT',
@@ -543,18 +535,18 @@ const ADMIN_ACTIONS: {
 ]
 
 // Lets an admin resolve one AWAITING_ADMIN node (see NodeRow's "Resolve" button) by picking one
-// of RETRY/OVERRIDE/SKIP/ABORT, a required reason, and optional JSON overrides. Takes over the
+// of RETRY/COMPLETE/ABORT, a required reason, and an optional JSON variables patch. Takes over the
 // whole screen (see EngineStatusView) rather than a dialog — last error, cached task result, and
-// overrides JSON add up to more than a modal comfortably holds. Calls target.onResolved() on
+// the patch JSON add up to more than a modal comfortably holds. Calls target.onResolved() on
 // success so the caller can refresh just the affected instance's view, then onBack() — same as
 // Back/Cancel, which both just return to the debugger view underneath without resolving anything.
 function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolutionTarget; onBack: () => void }) {
   const [action, setAction] = useState<AdminResolutionAction | null>(null)
   const [reason, setReason] = useState('')
   // Starts empty rather than pre-filled from the cached task result: that result is in the
-  // task's own key names, while overrides are written under global variable paths, so editing
+  // task's own key names, while the patch is written under global variable paths, so editing
   // it into shape invites writing the wrong key.
-  const [overridesText, setOverridesText] = useState('{}')
+  const [variablesPatchText, setVariablesPatchText] = useState('{}')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Gates the actual submit behind an explicit re-confirmation — this mutates a live workflow
@@ -564,27 +556,27 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
 
   // Warns under the edit box while the draft isn't valid JSON — an invalid final value would
   // fail on submit.
-  const overridesJSONError = useMemo(() => {
+  const variablesPatchJSONError = useMemo(() => {
     try {
-      JSON.parse(overridesText)
+      JSON.parse(variablesPatchText)
       return null
     } catch {
       return 'Not valid JSON yet.'
     }
-  }, [overridesText])
+  }, [variablesPatchText])
 
   const submit = async () => {
     if (!action) return
-    // Only OVERRIDE/RETRY actually consume Overrides (see the ADMIN_ACTIONS descriptions above)
-    // — for SKIP/ABORT the editor isn't shown, so whatever it holds isn't anything the admin
-    // chose to send and must not go out on the wire.
-    let overrides: Record<string, unknown> | undefined
-    if ((action === 'OVERRIDE' || action === 'RETRY') && overridesText.trim()) {
+    // Only COMPLETE/RETRY actually consume the patch (see the ADMIN_ACTIONS descriptions above)
+    // — for ABORT the editor isn't shown, so whatever it holds isn't anything the admin chose to
+    // send and must not go out on the wire.
+    let globalVariablesPatch: Record<string, unknown> | undefined
+    if ((action === 'COMPLETE' || action === 'RETRY') && variablesPatchText.trim()) {
       try {
-        overrides = JSON.parse(overridesText) as Record<string, unknown>
+        globalVariablesPatch = JSON.parse(variablesPatchText) as Record<string, unknown>
       } catch {
         setConfirmOpen(false)
-        setError('Overrides must be valid JSON.')
+        setError('Variables must be valid JSON.')
         return
       }
     }
@@ -592,7 +584,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
     setSubmitting(true)
     setError(null)
     try {
-      await resolveAdminIntervention(target.workflowId, target.nodeId, { action, overrides, reason })
+      await resolveAdminIntervention(target.workflowId, target.nodeId, { action, global_variables_patch: globalVariablesPatch, reason })
       target.onResolved()
       onBack()
     } catch (err) {
@@ -709,22 +701,25 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
           className="mb-4"
         />
 
-        {/* Overrides only apply to OVERRIDE and RETRY (see core's parkNodeForAdmin — SKIP always
-            discards them, and ABORT never gets to signal anything) — so this only shows up once
-            one of those is the chosen action. The heading reflects which direction the values
-            flow: OVERRIDE merges them straight into workflow variables as the node's final
-            output, skipping the handler entirely; RETRY merges them in *before* re-running the
-            real handler, so they're consumed as input (e.g. what a TASK node's input_mapping
-            reads, or what a GATEWAY's routing condition reads) rather than the result. */}
-        {(action === 'OVERRIDE' || action === 'RETRY') && (
+        {/* The patch only applies to COMPLETE and RETRY (ABORT never gets to signal anything) —
+            so this only shows up once one of those is the chosen action. It is the same field
+            either way — dotted paths written into the workflow's variables — and only the label
+            differs by what happens next: RETRY writes them *before* re-running the node, so it
+            reads them (e.g. through its input_mapping, or a GATEWAY's routing condition);
+            COMPLETE writes them and skips running the node, so they stand in for its output. */}
+        {(action === 'COMPLETE' || action === 'RETRY') && (
           <div className="mb-4">
             <Text size="2" weight="medium" className="block mb-1">
-              {action === 'OVERRIDE' ? 'Override Outputs (JSON)' : 'Override Inputs (JSON)'}
+              {action === 'COMPLETE' ? "Set variables as this node's output (JSON)" : 'Set variables, then re-run (JSON)'}
             </Text>
-            <LineNumberedTextArea value={overridesText} onChange={setOverridesText} />
-            {overridesJSONError && (
+            <Text size="1" color="gray" className="block mb-1">
+              Dotted paths to values, e.g. {'{"review.outcome": "APPROVED"}'}. Only the variables named are changed,
+              and they stay changed for the rest of the workflow.
+            </Text>
+            <LineNumberedTextArea value={variablesPatchText} onChange={setVariablesPatchText} />
+            {variablesPatchJSONError && (
               <Text size="1" color="red" className="block mt-1">
-                {overridesJSONError}
+                {variablesPatchJSONError}
               </Text>
             )}
           </div>

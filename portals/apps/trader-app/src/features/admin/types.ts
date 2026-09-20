@@ -26,7 +26,7 @@ export interface EngineNode {
   task_workflow_id?: string
   // The most recent raw Activity result for a TASK node, if its Activity already ran — cleared
   // once the node fully completes. When present on a node AWAITING_ADMIN, the Activity has
-  // already happened, so OVERRIDE (supply data in its place) is usually preferable to RETRY
+  // already happened, so COMPLETE (supply its output in the patch) is usually preferable to RETRY
   // (re-runs it) — see ResolveAdminInterventionForm.
   cached_task_result?: Record<string, unknown>
 }
@@ -55,12 +55,16 @@ export interface EngineStatus {
 }
 
 // How an admin resolves a node parked in AWAITING_ADMIN (see core/workflow.AdminResolutionAction
-// on the backend). SKIP and OVERRIDE are rejected by the engine for GATEWAY nodes — a gateway's
-// routing can't be skipped/overridden without bypassing its own condition logic.
-export type AdminResolutionAction = 'RETRY' | 'OVERRIDE' | 'SKIP' | 'ABORT'
+// on the backend). COMPLETE is rejected by the engine for GATEWAY nodes — a gateway's routing
+// can't be completed without bypassing its own condition logic.
+export type AdminResolutionAction = 'RETRY' | 'COMPLETE' | 'ABORT'
 
 export interface AdminResolutionRequest {
   action: AdminResolutionAction
-  overrides?: Record<string, unknown>
+  // A patch, not the full set of global variables: dotted paths (e.g. "review.outcome") to the
+  // values to write, applied before RETRY re-runs the node or COMPLETE marks it done. A map value
+  // is merged into an existing map at that path; any other value replaces it. What it writes is
+  // workflow-wide and persists, so it affects later nodes too. Only RETRY and COMPLETE use it.
+  global_variables_patch?: Record<string, unknown>
   reason: string
 }
