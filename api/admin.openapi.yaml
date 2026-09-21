@@ -191,11 +191,13 @@ paths:
 
         `{id}` is the ID of the workflow instance that contains the node, not
         a consignment record ID (for a consignment's root workflow the two
-        are the same). It is the root workflow, a child-branch workflow
-        (`EngineNodeDTO.child_workflow_ids`) or a task workflow
-        (`EngineNodeDTO.task_workflow_id`). `{nodeId}` is the node's
-        composite ID, `EngineNodeDTO.id`, from that workflow's own
-        engine-status response.
+        are the same). It is the root workflow or a child-branch workflow
+        (`EngineNodeDTO.child_workflow_ids`). A node inside a task workflow
+        is resolved through
+        `POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve` instead, which
+        takes the task workflow's own ID. `{nodeId}` is the node's composite
+        ID, `EngineNodeDTO.id`, from that workflow's own engine-status
+        response.
 
         The node is re-checked to be parked before the resolution is sent.
         `204` means the resolution was handed to the workflow, not that it has
@@ -211,8 +213,104 @@ paths:
           in: path
           required: true
           description: >-
-            The ID of the workflow instance containing the node (see above),
-            not a consignment record ID.
+            The ID of the root or child-branch workflow instance containing the
+            node (see above), not a consignment record ID.
+          schema:
+            type: string
+        - name: nodeId
+          in: path
+          required: true
+          description: The node's composite ID (`EngineNodeDTO.id`), of the form `<template ID>:<uuid>`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveAdminInterventionRequest'
+      responses:
+        '204':
+          description: The resolution was handed to the workflow.
+        '400':
+          description: >-
+            Missing path ID; an invalid request body (malformed JSON, an
+            unknown field, or anything after the JSON value); an `action`
+            other than `RETRY`, `COMPLETE` or `ABORT`; a missing or blank
+            `reason`; or `COMPLETE` on a GATEWAY node.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. No usable principal on the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No workflow execution exists for `{id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            The node is not currently awaiting admin intervention: it was
+            already resolved, has not parked yet, or `{nodeId}` matches no node
+            in this workflow (including an ID from before a retry re-ran the
+            node, which gets a new one).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/task/{id}/nodes/{nodeId}/resolve:
+    post:
+      summary: "[Admin] Resolve a node parked inside a task workflow"
+      description: |
+        Resolves a node that is parked in `AWAITING_ADMIN` (see
+        `EngineNodeDTO.park_category` and `last_error` for why it parked):
+        retry it, complete it without running it, or abort it. See `action`
+        on the request body.
+
+        `{id}` is a task workflow's own workflow ID, from
+        `EngineNodeDTO.task_workflow_id` on the TASK node that spawned it: a
+        separate ID space and workflow manager from the consignment and
+        child-workflow IDs of
+        `POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve`, the
+        same split as the two engine-status endpoints. `{nodeId}` is the
+        node's composite ID, `EngineNodeDTO.id`, from that task workflow's
+        response to `GET /api/v1/admin/task/{id}/engine-status`.
+
+        The node is re-checked to be parked before the resolution is sent.
+        `204` means the resolution was handed to the workflow, not that it has
+        been applied: fetch the engine status again to see the outcome. Two
+        admins resolving the same node at the same moment can both receive
+        `204` although only the first takes effect; resolution is expected to
+        be done by one admin at a time.
+
+        Requires scope `nsw:consignment:adminwrite`.
+      operationId: resolveTaskWorkflowAdminIntervention
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: >-
+            A task workflow's own workflow ID (see
+            `EngineNodeDTO.task_workflow_id`).
           schema:
             type: string
         - name: nodeId
