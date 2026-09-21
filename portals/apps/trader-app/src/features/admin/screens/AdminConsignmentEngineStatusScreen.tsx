@@ -486,7 +486,11 @@ function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (v
     // UA-default border independent of any wrapper border, which without an explicit border-0
     // shows through as a second, darker (often black) border nested just inside this one.
     <div className="flex border border-app-border rounded overflow-hidden font-mono text-xs h-48 focus-within:border-primary">
-      <div ref={gutterRef} className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-subtle select-none" aria-hidden>
+      <div
+        ref={gutterRef}
+        className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-subtle select-none"
+        aria-hidden
+      >
         {Array.from({ length: lineCount }, (_, i) => (
           <div key={i} className="leading-5">
             {i + 1}
@@ -629,7 +633,8 @@ const ADMIN_ACTIONS: {
     label: 'Abort',
     color: 'red',
     disabledForGateway: false,
-    description: "Fails this node and the whole workflow with the node's original error. Use when the workflow genuinely can't continue.",
+    description:
+      "Fails this node and the whole workflow with the node's original error. Use when the workflow genuinely can't continue.",
   },
 ]
 
@@ -748,7 +753,11 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
               <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48">
                 {target.outgoingEdges.map((edge) => (
                   <div key={edge.id} className="whitespace-pre-wrap break-all py-0.5">
-                    {edge.condition ? edge.condition : <span className="text-foreground-subtle">(default — no condition)</span>}
+                    {edge.condition ? (
+                      edge.condition
+                    ) : (
+                      <span className="text-foreground-subtle">(default — no condition)</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -827,7 +836,12 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                     {label}
                   </Button>
                   <Tooltip content={description} maxWidth="320px">
-                    <InfoCircledIcon className="text-foreground-muted cursor-help" width={15} height={15} aria-label={`What ${label} does`} />
+                    <InfoCircledIcon
+                      className="text-foreground-muted cursor-help"
+                      width={15}
+                      height={15}
+                      aria-label={`What ${label} does`}
+                    />
                   </Tooltip>
                 </div>
               )
@@ -900,8 +914,8 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                         of text before; those get their own compact block, same layout as the
                         Workflow/Node identity block in the header above. */}
                     <AlertDialog.Description size="2" className="mb-4">
-                      You're about to <strong>{action}</strong> this node. This takes effect immediately and can't
-                      be undone.
+                      You're about to <strong>{action}</strong> this node. This takes effect immediately and can't be
+                      undone.
                     </AlertDialog.Description>
 
                     <div className="flex flex-wrap gap-4 mb-4 p-3 bg-app-surface-muted rounded">
