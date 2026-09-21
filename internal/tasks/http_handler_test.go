@@ -11,11 +11,11 @@ import (
 	"testing"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -257,13 +257,11 @@ func TestHandleGetTask_DeniedAudited(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
 	req.SetPathValue("id", testTaskID)
 	ctx := taskauthz.WithInput(req.Context(), in)
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:    "user-trader-1",
-			Email: "trader@example.com",
-		},
-	}
-	ctx = context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	ctx = authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "user-trader-1",
+		Email:  "trader@example.com",
+	})
 	req = req.WithContext(ctx)
 
 	recorder := httptest.NewRecorder()

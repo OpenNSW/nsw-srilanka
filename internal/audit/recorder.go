@@ -6,8 +6,9 @@ import (
 	"log/slog"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/trace"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 // Recorder is the single entry point handlers use to emit audit events.
@@ -84,19 +85,19 @@ func (r *Recorder) Record(ctx context.Context, e Event) {
 }
 
 func actorFrom(ctx context.Context) (ActorType, string) {
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil {
+	principal, ok := authn.FromContext(ctx)
+	if !ok {
 		return ActorSystem, "anonymous"
 	}
 
-	switch authCtx.Type() {
-	case authn.ClientPrincipalType:
-		return ActorService, authCtx.Subject()
-	case authn.UserPrincipalType:
+	switch principal.Kind {
+	case authn.KindClient:
+		return ActorService, principal.Subject()
+	case authn.KindUser:
 		// Treated as ActorMember for now as no Admin role is defined in this phase.
-		return ActorMember, authCtx.Subject()
+		return ActorMember, principal.Subject()
 	default:
-		slog.ErrorContext(ctx, "audit: unrecognized principal type encountered", "type", authCtx.Type())
-		return ActorSystem, authCtx.Subject()
+		slog.ErrorContext(ctx, "audit: unrecognized principal kind encountered", "kind", principal.Kind)
+		return ActorSystem, principal.Subject()
 	}
 }
