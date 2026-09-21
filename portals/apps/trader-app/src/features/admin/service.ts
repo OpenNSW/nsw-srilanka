@@ -1,6 +1,6 @@
 import { http, HttpError } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
-import type { AdminResolutionRequest, EngineStatus } from './types'
+import type { AdminResolutionRequest, AdminWorkflowKind, EngineStatus } from './types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 
 // Ids are interpolated into URL paths through encodeURIComponent throughout this file. Workflow and
@@ -33,16 +33,21 @@ export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<Eng
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${encodeURIComponent(taskWorkflowId)}/engine-status`)
 }
 
-// Resolves a node AWAITING_ADMIN. workflowId is the workflow instance containing the node: the
-// root, a child branch (child_workflow_ids) or a task workflow (task_workflow_id). Requires
+// Resolves a node AWAITING_ADMIN. workflowId is the workflow instance containing the node, and
+// workflowKind says which route family it belongs to: 'consignment' for the root or a child branch
+// (child_workflow_ids), 'task' for a task workflow (task_workflow_id), which is a separate ID space
+// with its own route, like the two engine-status functions above. Required rather than defaulted, so
+// a caller can't silently address a task workflow through the consignment route. Requires
 // nsw:consignment:adminwrite.
 export async function resolveAdminIntervention(
   workflowId: string,
   nodeId: string,
   request: AdminResolutionRequest,
+  workflowKind: AdminWorkflowKind,
 ): Promise<void> {
+  const route = workflowKind === 'task' ? 'task' : 'consignments'
   await http.request({
-    url: `${API_BASE_URL}/api/v1/admin/consignments/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/resolve`,
+    url: `${API_BASE_URL}/api/v1/admin/${route}/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/resolve`,
     method: 'POST',
     data: request,
     attachToken: true,

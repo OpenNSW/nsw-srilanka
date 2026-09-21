@@ -75,6 +75,12 @@ export interface EngineStatus {
   edges?: EngineEdge[]
 }
 
+// Which family of admin routes addresses a workflow instance. 'consignment' covers a consignment's
+// root workflow and its child-branch workflows; 'task' is a TASK node's own task workflow
+// (EngineNode.task_workflow_id), a separate ID space on a separate workflow manager. The
+// engine-status and resolve endpoints are split the same way.
+export type AdminWorkflowKind = 'consignment' | 'task'
+
 // How an admin resolves a node parked in AWAITING_ADMIN (see core/workflow.AdminResolutionAction
 // on the backend). COMPLETE is rejected by the engine for GATEWAY nodes — a gateway's routing
 // can't be completed without bypassing its own condition logic.

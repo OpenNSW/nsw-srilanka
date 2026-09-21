@@ -19,6 +19,7 @@ import {
 } from '@/features/admin/service'
 import type {
   AdminResolutionAction,
+  AdminWorkflowKind,
   EngineEdge,
   EngineNode,
   EngineNodeStatus,
@@ -144,6 +145,9 @@ interface WorkflowVariablesTarget {
 // the resolve view can show them without a second fetch — see ResolveAdminInterventionView.
 interface AdminResolutionTarget {
   workflowId: string
+  // Which route family addresses workflowId (see AdminWorkflowKind): the resolve request goes to a
+  // different endpoint for a task workflow than for the root or a child branch.
+  workflowKind: AdminWorkflowKind
   nodeId: string
   isGateway: boolean
   lastError?: string
@@ -366,6 +370,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
                 node={node}
                 depth={0}
                 workflowId={workflowId}
+                workflowKind="consignment"
                 edges={status.edges ?? []}
                 variables={status.global_variables}
                 showAllNodes={showAllNodes}
@@ -707,11 +712,12 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
     setSubmitting(true)
     setError(null)
     try {
-      await resolveAdminIntervention(target.workflowId, target.nodeId, {
-        action,
-        global_variables_patch: globalVariablesPatch,
-        reason,
-      })
+      await resolveAdminIntervention(
+        target.workflowId,
+        target.nodeId,
+        { action, global_variables_patch: globalVariablesPatch, reason },
+        target.workflowKind,
+      )
       target.onResolved()
       onBack()
     } catch (err) {
@@ -1089,6 +1095,7 @@ function NodeRow({
   node,
   depth,
   workflowId,
+  workflowKind,
   edges,
   variables,
   showAllNodes,
@@ -1103,6 +1110,8 @@ function NodeRow({
   // Needed to address a resolve request at the right instance, since a node id alone isn't
   // unique across the whole tree.
   workflowId: string
+  // Which route family addresses workflowId; passed on to the resolve view.
+  workflowKind: AdminWorkflowKind
   // This workflow instance's full edge list (same instance as workflowId, not the whole tree) —
   // filtered down to node's own outgoing edges when opening the resolve view, so a GATEWAY parked
   // on "no matching conditions" can show an admin exactly what each edge checks.
@@ -1168,6 +1177,7 @@ function NodeRow({
               onClick={() =>
                 onOpenResolve({
                   workflowId,
+                  workflowKind,
                   nodeId: node.id,
                   isGateway: node.type === 'GATEWAY',
                   lastError: node.last_error,
@@ -1275,6 +1285,7 @@ function ChildWorkflowBranch({
       {expanded && (
         <WorkflowBranchBody
           workflowId={workflowId}
+          workflowKind="consignment"
           depth={depth}
           loading={loading}
           status={status}
@@ -1344,6 +1355,7 @@ function TaskWorkflowPanel({
       </div>
       <WorkflowBranchBody
         workflowId={workflowId}
+        workflowKind="task"
         depth={depth}
         loading={loading}
         status={status}
@@ -1362,6 +1374,7 @@ function TaskWorkflowPanel({
 // expanded.
 function WorkflowBranchBody({
   workflowId,
+  workflowKind,
   depth,
   loading,
   status,
@@ -1373,6 +1386,8 @@ function WorkflowBranchBody({
   onRefresh,
 }: {
   workflowId: string
+  // The kind of workflow this body lists the nodes of; each NodeRow passes it on when opening resolve.
+  workflowKind: AdminWorkflowKind
   depth: number
   loading: boolean
   status: EngineStatus | null
@@ -1411,6 +1426,7 @@ function WorkflowBranchBody({
               node={node}
               depth={depth + 1}
               workflowId={workflowId}
+              workflowKind={workflowKind}
               edges={status.edges ?? []}
               variables={status.global_variables}
               showAllNodes={showAllNodes}
