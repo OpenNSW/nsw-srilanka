@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AlertDialog, Badge, Button, Dialog, IconButton, Spinner, Text, TextArea, Tooltip } from '@radix-ui/themes'
 import {
@@ -151,6 +151,9 @@ interface AdminResolutionTarget {
   inputMapping?: Record<string, string>
   outputMapping?: Record<string, string>
   cachedTaskResult?: Record<string, unknown>
+  // The variables of the workflow instance the node is in (the one at workflowId), so an admin can
+  // see what a Retry will read and what a patch will change without going back to the debugger.
+  globalVariables?: Record<string, unknown>
   // This node's own outgoing edges, condition included — only meaningful (and only shown) for a
   // GATEWAY, where "no matching conditions" is otherwise a dead end: the admin has no way to see
   // what each edge actually checks without this.
@@ -364,6 +367,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
                 depth={0}
                 workflowId={workflowId}
                 edges={status.edges ?? []}
+                variables={status.global_variables}
                 showAllNodes={showAllNodes}
                 expandSignal={expandSignal}
                 onOpenVariables={setVariablesTarget}
@@ -548,19 +552,35 @@ const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; color: 'amber' |
   },
 }
 
+// One titled block of the resolve screen, with an optional grey note under the title. It owns the
+// spacing (the gap to the next block, and title to content) on wrapper divs on purpose: a margin
+// class on a Radix <Text> is not applied — its own margin reset wins — so relying on `mb-*` there
+// left blocks with a text placeholder touching the block after them.
+function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
+  return (
+    <div className="mb-4">
+      <div className="mb-1">
+        <Text size="2" weight="medium" className="block">
+          {title}
+        </Text>
+        {note && (
+          <Text size="1" color="gray" className="block">
+            {note}
+          </Text>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 // One of a parked node's mappings as "from → to" rows, sorted so the list is stable across
 // refreshes. A trailing "?" on a key marks it optional in the node's definition; it is shown as a
 // note rather than as part of the name, since the name is what an admin would type into a patch.
 function MappingList({ title, note, mapping }: { title: string; note: string; mapping: Record<string, string> }) {
   const rows = Object.entries(mapping).sort(([a], [b]) => a.localeCompare(b))
   return (
-    <div className="mb-4">
-      <Text size="2" weight="medium" className="block mb-1">
-        {title}
-      </Text>
-      <Text size="1" color="gray" className="block mb-1">
-        {note}
-      </Text>
+    <Section title={title} note={note}>
       <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48">
         {rows.map(([rawKey, value]) => {
           const optional = rawKey.endsWith('?')
@@ -573,7 +593,7 @@ function MappingList({ title, note, mapping }: { title: string; note: string; ma
           )
         })}
       </div>
-    </div>
+    </Section>
   )
 }
 
@@ -699,42 +719,33 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
 
       <div className="bg-app-surface rounded-lg shadow p-4 md:p-6 max-w-5xl">
         {parkInfo && (
-          <div className="mb-4">
-            <Text size="2" weight="medium" className="block mb-1">
-              Why it parked
-            </Text>
+          <Section title="Why it parked">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge color={parkInfo.color}>{parkInfo.label}</Badge>
               <Text size="2" color="gray">
                 {parkInfo.hint}
               </Text>
             </div>
-          </div>
+          </Section>
         )}
 
         {target.lastError && (
-          <>
-            <Text size="2" weight="medium" className="block mb-1">
-              Last error
-            </Text>
-            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all mb-4">
+          <Section title="Last error">
+            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all">
               {target.lastError}
             </pre>
-          </>
+          </Section>
         )}
 
         {target.isGateway ? (
-          <>
-            <Text size="2" weight="medium" className="block mb-1">
-              Outgoing conditions
-            </Text>
+          <Section title="Outgoing conditions">
             {/* GATEWAY nodes have no CachedTaskResult (there's no Activity to run) — what an
                 admin actually needs here is what each outgoing edge checks, since a "no matching
                 conditions" park otherwise gives no way to know which variable to correct. Raw
                 expr-lang text, not parsed — naming the variable(s) it references is enough to
                 act on; evaluating it client-side isn't the point. */}
             {target.outgoingEdges && target.outgoingEdges.length > 0 ? (
-              <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 mb-4">
+              <div className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48">
                 {target.outgoingEdges.map((edge) => (
                   <div key={edge.id} className="whitespace-pre-wrap break-all py-0.5">
                     {edge.condition ? edge.condition : <span className="text-foreground-subtle">(default — no condition)</span>}
@@ -742,25 +753,24 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                 ))}
               </div>
             ) : (
-              <Text size="2" color="gray" className="block mb-4">
+              <Text size="2" color="gray" className="block">
                 No outgoing edges found for this node.
               </Text>
             )}
-          </>
+          </Section>
         ) : (
           <>
-            <Text size="2" weight="medium" className="block mb-1">
-              Cached task result
-            </Text>
-            {target.cachedTaskResult ? (
-              <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 whitespace-pre-wrap break-all mb-4">
-                {JSON.stringify(target.cachedTaskResult, null, 2)}
-              </pre>
-            ) : (
-              <Text size="2" color="gray" className="block mb-4">
-                No cached results for this node.
-              </Text>
-            )}
+            <Section title="Cached task result">
+              {target.cachedTaskResult ? (
+                <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                  {JSON.stringify(target.cachedTaskResult, null, 2)}
+                </pre>
+              ) : (
+                <Text size="2" color="gray" className="block">
+                  No cached results for this node.
+                </Text>
+              )}
+            </Section>
             {/* Which workflow variables a Retry reads and a Complete patch should write — see
                 EngineNode.input_mapping / output_mapping for which side of each row is which. */}
             {target.inputMapping && Object.keys(target.inputMapping).length > 0 && (
@@ -780,43 +790,59 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
           </>
         )}
 
-        <Text size="2" weight="medium" className="block mb-1">
-          Action
-        </Text>
-        <div className="flex gap-3 mb-4 flex-wrap">
-          {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway, description }) => {
-            const disabled = target.isGateway && disabledForGateway
-            return (
-              <div key={candidate} className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant={action === candidate ? 'solid' : 'soft'}
-                  color={color}
-                  size="2"
-                  disabled={disabled}
-                  title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
-                  onClick={() => setAction(candidate)}
-                >
-                  {label}
-                </Button>
-                <Tooltip content={description} maxWidth="320px">
-                  <InfoCircledIcon className="text-foreground-muted cursor-help" width={15} height={15} aria-label={`What ${label} does`} />
-                </Tooltip>
-              </div>
-            )
-          })}
-        </div>
+        {/* For every node, gateways included: a gateway parked on "no matching conditions" is fixed by
+            finding which variable its conditions read is unset or wrong, and an input-mapping park by
+            seeing which of the mapped variables exist. Same instance as the node (see
+            AdminResolutionTarget.globalVariables), which is what a patch writes into. */}
+        <Section
+          title="Workflow variables"
+          note="Current values in this workflow instance. A patch is written into these and stays for the rest of the workflow."
+        >
+          {target.globalVariables && Object.keys(target.globalVariables).length > 0 ? (
+            <pre className="bg-app-surface-muted rounded p-3 text-xs font-mono overflow-auto max-h-64 whitespace-pre-wrap break-all">
+              {JSON.stringify(target.globalVariables, null, 2)}
+            </pre>
+          ) : (
+            <Text size="2" color="gray" className="block">
+              No variables recorded for this workflow.
+            </Text>
+          )}
+        </Section>
 
-        <Text size="2" weight="medium" className="block mb-1">
-          Reason (required)
-        </Text>
-        <TextArea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={2}
-          placeholder="Why are you resolving this node?"
-          className="mb-4"
-        />
+        <Section title="Action">
+          <div className="flex gap-3 flex-wrap">
+            {ADMIN_ACTIONS.map(({ action: candidate, label, color, disabledForGateway, description }) => {
+              const disabled = target.isGateway && disabledForGateway
+              return (
+                <div key={candidate} className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant={action === candidate ? 'solid' : 'soft'}
+                    color={color}
+                    size="2"
+                    disabled={disabled}
+                    title={disabled ? 'Not supported for GATEWAY nodes — use Retry or Abort' : undefined}
+                    onClick={() => setAction(candidate)}
+                  >
+                    {label}
+                  </Button>
+                  <Tooltip content={description} maxWidth="320px">
+                    <InfoCircledIcon className="text-foreground-muted cursor-help" width={15} height={15} aria-label={`What ${label} does`} />
+                  </Tooltip>
+                </div>
+              )
+            })}
+          </div>
+        </Section>
+
+        <Section title="Reason (required)">
+          <TextArea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="Why are you resolving this node?"
+          />
+        </Section>
 
         {/* The patch only applies to COMPLETE and RETRY (ABORT never gets to signal anything) —
             so this only shows up once one of those is the chosen action. It is the same field
@@ -825,23 +851,22 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
             reads them (e.g. through its input_mapping, or a GATEWAY's routing condition);
             COMPLETE writes them and skips running the node, so they stand in for its output. */}
         {(action === 'COMPLETE' || action === 'RETRY') && (
-          <div className="mb-4">
-            <Text size="2" weight="medium" className="block mb-1">
-              {action === 'COMPLETE'
-                ? "Set variables as this node's output (JSON)"
-                : 'Set variables, then re-run (JSON)'}
-            </Text>
-            <Text size="1" color="gray" className="block mb-1">
-              Dotted paths to values, e.g. {'{"review.outcome": "APPROVED"}'}. Only the variables named are changed, and
-              they stay changed for the rest of the workflow.
-            </Text>
+          <Section
+            title={
+              action === 'COMPLETE' ? "Set variables as this node's output (JSON)" : 'Set variables, then re-run (JSON)'
+            }
+            note={
+              'Dotted paths to values, e.g. {"review.outcome": "APPROVED"}. Only the variables named are changed, ' +
+              'and they stay changed for the rest of the workflow.'
+            }
+          >
             <LineNumberedTextArea value={variablesPatchText} onChange={setVariablesPatchText} />
             {variablesPatchJSONError && (
               <Text size="1" color="red" className="block mt-1">
                 {variablesPatchJSONError}
               </Text>
             )}
-          </div>
+          </Section>
         )}
 
         {error && (
@@ -1037,6 +1062,7 @@ function NodeRow({
   depth,
   workflowId,
   edges,
+  variables,
   showAllNodes,
   expandSignal,
   onOpenVariables,
@@ -1053,6 +1079,9 @@ function NodeRow({
   // filtered down to node's own outgoing edges when opening the resolve view, so a GATEWAY parked
   // on "no matching conditions" can show an admin exactly what each edge checks.
   edges: EngineEdge[]
+  // This workflow instance's global variables (same instance as workflowId), passed on to the
+  // resolve view.
+  variables?: Record<string, unknown>
   showAllNodes: boolean
   expandSignal: ExpandSignal
   onOpenVariables: (target: WorkflowVariablesTarget) => void
@@ -1118,6 +1147,7 @@ function NodeRow({
                   inputMapping: node.input_mapping,
                   outputMapping: node.output_mapping,
                   cachedTaskResult: node.cached_task_result,
+                  globalVariables: variables,
                   outgoingEdges: edges.filter((e) => e.source_id === node.id),
                   onResolved: onRefresh,
                 })
@@ -1354,6 +1384,7 @@ function WorkflowBranchBody({
               depth={depth + 1}
               workflowId={workflowId}
               edges={status.edges ?? []}
+              variables={status.global_variables}
               showAllNodes={showAllNodes}
               expandSignal={expandSignal}
               onOpenVariables={onOpenVariables}
