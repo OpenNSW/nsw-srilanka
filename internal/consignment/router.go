@@ -11,11 +11,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
 	workflow "github.com/OpenNSW/core/workflow"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -83,13 +83,13 @@ const defaultExportWorkflowTemplateID = "trade-export-v1"
 // is collected up front; the workflow's own tasks collect those later. Response: DetailDTO.
 func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.User == nil {
+	p, ok := authn.FromContext(ctx)
+	if !ok || p.Kind != authn.KindUser {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
 
-	traderID := authCtx.User.ID
+	traderID := p.UserID
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, defaultExportWorkflowTemplateID)
 	if err != nil {
 		c.audit.Record(ctx, nswaudit.Event{
@@ -156,8 +156,8 @@ func buildConsignmentFilter(r *http.Request, offset, limit *int) Filter {
 // the JWT role that maps to the requested role, or the request is forbidden.
 func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.User == nil {
+	p, ok := authn.FromContext(ctx)
+	if !ok || p.Kind != authn.KindUser {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
@@ -184,23 +184,23 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	// param — resolved through the global catalog, not hardcoded, so it stays in
 	// step with the same "trader"/"cha" -> token-role mapping the task-authz
 	// layer (internal/tasks/taskauthz) uses.
-	requiredTokenRole, ok := c.roles[role]
-	if !ok {
+	requiredTokenRole, roleOK := c.roles[role]
+	if !roleOK {
 		httputil.InternalServerError(w, r, "role not configured in catalog", fmt.Errorf("catalog has no mapping for role %q", role))
 		return
 	}
-	if !slices.Contains(authCtx.User.Roles, requiredTokenRole) {
+	if !slices.Contains(p.Roles, requiredTokenRole) {
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return
 	}
 
-	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
-		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", authCtx.User.OUHandle)
+		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", p.OUHandle)
 		return
 	}
 
@@ -221,8 +221,8 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 // HandleGetConsignmentByID handles GET /api/v1/consignments/{id}.
 func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.User == nil {
+	p, ok := authn.FromContext(ctx)
+	if !ok || p.Kind != authn.KindUser {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
@@ -234,20 +234,20 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 
 	// Resolve the caller's company. Fail closed on any identity problem: a missing
 	// company profile or an unusable OU handle must not grant access.
-	userCompany, err := c.company.GetCompanyByOUHandle(ctx, authCtx.User.OUHandle)
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
-		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", authCtx.User.OUHandle)
+		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", p.OUHandle)
 		return
 	}
 
 	// Fetch the consignment scoped to the caller's company and JWT role. GetConsignmentByID
 	// enforces role-tied ownership on the single row read and returns ErrAccessDenied for a
 	// cross-company or wrong-role caller before doing any workflow-engine or task-store work.
-	consignment, err := c.cs.GetConsignmentByID(ctx, consignmentID, userCompany.ID, authCtx.User.Roles)
+	consignment, err := c.cs.GetConsignmentByID(ctx, consignmentID, userCompany.ID, p.Roles)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccessDenied):
@@ -287,8 +287,8 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 // consignments.
 func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.User == nil {
+	p, ok := authn.FromContext(ctx)
+	if !ok || p.Kind != authn.KindUser {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
@@ -324,8 +324,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 // is no trader/CHA company ownership check. Access is audit-logged.
 func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.Type() == "" {
+	if _, ok := authn.FromContext(ctx); !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
@@ -400,8 +399,7 @@ func (c *Router) handleEngineStatus(
 	fetch func(ctx context.Context, id string) (*EngineStatusDTO, error),
 ) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.Type() == "" {
+	if _, ok := authn.FromContext(ctx); !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
