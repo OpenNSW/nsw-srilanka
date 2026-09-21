@@ -159,8 +159,8 @@ endif
 tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
 	@echo Installing Go quality tools...
 ifeq ($(OS),Windows_NT)
-	@where golangci-lint >nul 2>&1 || (echo ERROR: golangci-lint v2 is required. See CONTRIBUTING.md && exit 1)
-	@golangci-lint --version | findstr /C:"version v1" >nul && (echo ERROR: golangci-lint v1 is not supported. Install v2. && exit 1) || ver >nul
+	@where golangci-lint >nul 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	@golangci-lint --version | findstr /C:"version 1." /C:"version v1." >nul && (echo ERROR: golangci-lint v1 is not supported. Install v2. && exit 1) || ver >nul
 else
 	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
 		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
