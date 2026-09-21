@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto/hub"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto/spscert"
 )
 
 // sampleUserform mirrors the shape the NPQS apply step
@@ -230,6 +231,7 @@ func TestBuildCertXML_EmitsTheTransportMovement(t *testing.T) {
 func TestBuildInput_ReExportSelectsType657(t *testing.T) {
 	uf := sampleUserform()
 	uf["certificate_type"] = "re-export"
+	uf["commodities"].([]any)[0].(map[string]any)["id"] = "item-1"
 	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PCR-1"})
 	if in.SOAP.CertificateType != 657 || in.Certificate.TypeCode != "657" {
 		t.Errorf("re-export type = %d / %q, want 657", in.SOAP.CertificateType, in.Certificate.TypeCode)
@@ -483,6 +485,185 @@ func TestBuildInput_ListsDocumentsInNameOrder(t *testing.T) {
 			if ids[j] != want[j] {
 				t.Fatalf("run %d: got %v, want %v", i, ids, want)
 			}
+		}
+	}
+}
+
+// --- re-export ---------------------------------------------------------------
+
+// reExportUserform is the sample consignment re-declared as a re-export, with
+// the section the trader fills in only for one.
+func reExportUserform() map[string]any {
+	uf := sampleUserform()
+	uf["certificate_type"] = "re-export"
+	uf[ReExportInput] = map[string]any{
+		"statement_code":                "3",
+		"original_certificate_number":   "IN-PC-2026-778812",
+		"original_certificate_form":     "certified_true_copy",
+		"packing":                       "repacked",
+		"containers":                    "new",
+		"original_certificate_attached": true,
+		"additional_inspection":         true,
+	}
+	return uf
+}
+
+// firstReExport returns the declaration carried by the consignment's first
+// commodity, failing the test if there is no commodity at all.
+func firstReExport(t *testing.T, in spscert.Input) *spscert.ReExport {
+	t.Helper()
+	if len(in.Certificate.Consignment.Items) == 0 {
+		t.Fatal("the certificate carries no commodities")
+	}
+	return in.Certificate.Consignment.Items[0].TradeLines[0].ReExport
+}
+
+// A re-export goes out as a PC-R (657) carrying the trader's declaration on the
+// commodity: before this the type code changed but every RPC* answer the trader
+// gave was dropped, so the certificate said nothing about what was re-exported.
+func TestBuildInput_CarriesTheReExportDeclaration(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":       reExportUserform(),
+		"certificate_id": "PC-2026-0007",
+	})
+
+	if in.Certificate.TypeCode != "657" {
+		t.Errorf("type code = %q, want 657 (PC-R)", in.Certificate.TypeCode)
+	}
+
+	re := firstReExport(t, in)
+	if re == nil {
+		t.Fatal("the commodity carries no re-export declaration")
+	}
+
+	if re.StatementCode != "3" {
+		t.Errorf("statement code = %q", re.StatementCode)
+	}
+	if len(re.OriginalCertRefs) != 1 || re.OriginalCertRefs[0] != "IN-PC-2026-778812" {
+		t.Errorf("original certificate references = %v", re.OriginalCertRefs)
+	}
+
+	// The country of origin is the one part answered per commodity, so it comes
+	// off the commodity rather than the re-export section.
+	if len(re.CountriesOfOrigin) != 1 || re.CountriesOfOrigin[0] != "LK" {
+		t.Errorf("countries of origin = %v, want the commodity's own", re.CountriesOfOrigin)
+	}
+
+	// Each either/or answer sets exactly one of the pair it drives; declaring a
+	// consignment both packed and repacked is what asking them as one choice
+	// each prevents.
+	for _, c := range []struct {
+		name string
+		got  bool
+		want bool
+	}{
+		{"IsOriginal", re.IsOriginal, false},
+		{"CertifiedTrueCopy", re.CertifiedTrueCopy, true},
+		{"Packed", re.Packed, false},
+		{"Repacked", re.Repacked, true},
+		{"OriginalContainers", re.OriginalContainers, false},
+		{"NewContainers", re.NewContainers, true},
+		{"OriginalPCAttached", re.OriginalPCAttached, true},
+		{"AdditionalInspection", re.AdditionalInspection, true},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+}
+
+// The other side of each choice, so the mapping is not just reading one branch.
+func TestBuildInput_ReadsTheOtherSideOfEachReExportChoice(t *testing.T) {
+	uf := reExportUserform()
+	uf[ReExportInput] = map[string]any{
+		"original_certificate_form": "original",
+		"packing":                   "packed",
+		"containers":                "original",
+	}
+
+	re := firstReExport(t, BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-2026-0008"}))
+	if re == nil {
+		t.Fatal("the commodity carries no re-export declaration")
+	}
+
+	if !re.IsOriginal || re.CertifiedTrueCopy {
+		t.Errorf("original/true-copy = %v/%v", re.IsOriginal, re.CertifiedTrueCopy)
+	}
+	if !re.Packed || re.Repacked {
+		t.Errorf("packed/repacked = %v/%v", re.Packed, re.Repacked)
+	}
+	if !re.OriginalContainers || re.NewContainers {
+		t.Errorf("original/new containers = %v/%v", re.OriginalContainers, re.NewContainers)
+	}
+}
+
+// A consolidated re-export can be covered by more than one incoming
+// certificate, and the certificate lists them separately.
+func TestBuildInput_ListsEveryOriginalCertificateReference(t *testing.T) {
+	uf := reExportUserform()
+	asMap(uf[ReExportInput])["original_certificate_number"] = " IN-PC-2026-778812 , LK-PC-2026-99 ,, "
+
+	re := firstReExport(t, BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-2026-0009"}))
+	if re == nil {
+		t.Fatal("the commodity carries no re-export declaration")
+	}
+
+	want := []string{"IN-PC-2026-778812", "LK-PC-2026-99"}
+	if len(re.OriginalCertRefs) != len(want) {
+		t.Fatalf("references = %v, want %v (blanks and spaces are not numbers)", re.OriginalCertRefs, want)
+	}
+	for i := range want {
+		if re.OriginalCertRefs[i] != want[i] {
+			t.Errorf("reference %d = %q, want %q", i, re.OriginalCertRefs[i], want[i])
+		}
+	}
+}
+
+// An ordinary export carries no re-export declaration at all: the RPC* notes
+// belong only on a PC-R, and a section left behind on the form after the trader
+// switched back must not put them on an 851.
+func TestBuildInput_AnOrdinaryExportDeclaresNoReExport(t *testing.T) {
+	uf := reExportUserform()
+	uf["certificate_type"] = "export"
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-2026-0010"})
+
+	if in.Certificate.TypeCode != "851" {
+		t.Errorf("type code = %q, want 851", in.Certificate.TypeCode)
+	}
+	if re := firstReExport(t, in); re != nil {
+		t.Errorf("an export certificate declared a re-export: %+v", re)
+	}
+}
+
+// Every commodity repeats the declaration against its own origin — the notes
+// live inside the trade line, so a second commodity with nothing on it would go
+// out undeclared.
+func TestBuildInput_DeclaresEveryCommodityOfAReExport(t *testing.T) {
+	uf := reExportUserform()
+	commodities := uf["commodities"].([]any)
+	uf["commodities"] = append(commodities, map[string]any{
+		"commodity_description": "Black pepper, whole dried berries",
+		"origin_country":        "India",
+	})
+
+	items := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-2026-0011"}).
+		Certificate.Consignment.Items
+	if len(items) != 2 {
+		t.Fatalf("expected both commodities, got %d", len(items))
+	}
+
+	for i, want := range []string{"LK", "IN"} {
+		re := items[i].TradeLines[0].ReExport
+		if re == nil {
+			t.Errorf("commodity %d carries no declaration", i+1)
+			continue
+		}
+		if len(re.CountriesOfOrigin) != 1 || re.CountriesOfOrigin[0] != want {
+			t.Errorf("commodity %d origin = %v, want %q", i+1, re.CountriesOfOrigin, want)
+		}
+		if !re.Repacked {
+			t.Errorf("commodity %d lost the consignment's answers", i+1)
 		}
 	}
 }
