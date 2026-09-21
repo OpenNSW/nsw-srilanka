@@ -9,7 +9,7 @@ type Props = {
   onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
 }
 
-const ZONE_ORDER = ['instructions', 'workspace', 'reference']
+const ZONE_ORDER = ['instructions', 'status_awaiting', 'review_history', 'workspace', 'reference']
 
 export function TraderZoneLayout({ task, onSubmitForm }: Props) {
   const zones = orderedZones(task.view)
