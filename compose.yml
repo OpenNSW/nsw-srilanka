@@ -242,7 +242,7 @@ services:
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-changeme}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-    command: ["otc", "company", "apply", "-f", "configs/companies.example.json"]
+    command: ["otc", "company", "apply", "-f", "configs/companies.json"]
     depends_on:
       migrate:
         condition: service_completed_successfully

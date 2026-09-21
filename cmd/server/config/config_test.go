@@ -390,6 +390,7 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Server.CatalogConfigPath", cfg.Server.CatalogConfigPath, "configs/catalog.json"},
 		{"Database.Host", cfg.Database.Host, "localhost"},
 		{"Database.Password", cfg.Database.Password, "testpassword"},
+		{"Database.SSLMode", cfg.Database.SSLMode, "require"},
 		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
 		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
 	} {
