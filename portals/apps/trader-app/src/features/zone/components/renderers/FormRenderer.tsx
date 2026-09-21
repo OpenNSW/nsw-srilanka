@@ -119,7 +119,19 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           additionalErrors={showErrors ? additionalRequiredErrors : []}
           validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
           onChange={({ data, errors }) => {
-            const next = (data ?? {}) as Record<string, unknown>
+            // A shallow copy, not `data` directly: ajv's `useDefaults` (see
+            // the ajv instance above) fills in missing `default`s by
+            // mutating the very data object JsonForms holds internally,
+            // in place — the object reported here is the *same reference*
+            // as what this component already has in `data` state, just
+            // with the defaults now written onto it. Passing that
+            // reference straight to setData is a no-op to React (same
+            // identity in, same identity out), which means
+            // requiredErrors/additionalRequiredErrors below — memoized on
+            // `data`'s reference — would recompute exactly never, and
+            // would consider ajv-defaulted required fields permanently
+            // missing for the rest of the session.
+            const next = { ...((data ?? {}) as Record<string, unknown>) }
             setData(next)
             setErrors(errors ?? [])
           }}
