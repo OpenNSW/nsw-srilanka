@@ -453,14 +453,35 @@ type ResolveAdminInterventionRequest struct {
 }
 
 // HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve.
-// {id} is the ID of the workflow instance containing the node: the consignment's root workflow, a
-// child-branch workflow (a node's child_workflow_ids) or a task workflow (a node's
-// task_workflow_id). It is not a consignment record ID. {nodeId} is the node's composite ID from
-// that workflow's engine status.
+// {id} is the ID of the workflow instance containing the node: the consignment's root workflow or a
+// child-branch workflow (a node's child_workflow_ids). It is not a consignment record ID. {nodeId}
+// is the node's composite ID from that workflow's engine status. A node inside a task workflow is
+// resolved through HandleResolveTaskWorkflowAdminIntervention instead.
 //
 // Requires scopes.ConsignmentAdminWrite (see bootstrap/app.go): resolving can change workflow data
 // (GlobalVariablesPatch) or force a path the interpreter didn't choose (Complete/Abort).
 func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.Request) {
+	c.handleResolveAdminIntervention(w, r, "admin-resolve", c.cs.ResolveAdminIntervention)
+}
+
+// HandleResolveTaskWorkflowAdminIntervention handles
+// POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve. {id} is a task workflow's own workflow ID
+// (a TASK node's task_workflow_id) — a separate ID space and workflow.Manager from the
+// consignment/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
+// engine-status routes. Otherwise identical, and gated on the same scope.
+func (c *Router) HandleResolveTaskWorkflowAdminIntervention(w http.ResponseWriter, r *http.Request) {
+	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention)
+}
+
+// handleResolveAdminIntervention is the request handling the two resolve routes share; they differ
+// only in which Service method resolves {id} and the audit "view" label. As in handleEngineStatus,
+// the audit TargetID is the workflow ID, which for the task route is a task-workflow ID rather than
+// a consignment ID (see TODO(#477) there).
+func (c *Router) handleResolveAdminIntervention(
+	w http.ResponseWriter, r *http.Request,
+	view string,
+	resolve func(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error,
+) {
 	ctx := r.Context()
 	authCtx := authn.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.Type() == "" {
@@ -517,7 +538,7 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 			TargetID:   workflowID,
 			Failure:    true,
 			Metadata: map[string]any{
-				"view":   "admin-resolve",
+				"view":   view,
 				"nodeId": nodeID,
 				"action": req.Action,
 				"error":  errMsg,
@@ -531,7 +552,7 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 		WorkflowVariablesPatch: req.GlobalVariablesPatch,
 		Reason:                 req.Reason,
 	}
-	if err := c.cs.ResolveAdminIntervention(ctx, workflowID, sig); err != nil {
+	if err := resolve(ctx, workflowID, sig); err != nil {
 		switch {
 		case errors.Is(err, ErrEngineWorkflowNotFound):
 			auditFail(errWorkflowNotFound)
@@ -556,7 +577,7 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 		TargetID:   workflowID,
 		Failure:    false,
 		Metadata: map[string]any{
-			"view":   "admin-resolve",
+			"view":   view,
 			"nodeId": nodeID,
 			"action": req.Action,
 			"reason": req.Reason,

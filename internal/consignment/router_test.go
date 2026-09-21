@@ -341,8 +341,32 @@ const (
 	resolveTestCompositeNodeID = "officer_review:6aad0417-9a6d-4407-9509-2e51d8fcae99"
 )
 
-// newResolveRequest builds a POST to the resolve endpoint as an authenticated admin, addressing
-// resolveTestCompositeNodeID on resolveTestWorkflowID.
+// managerSlot registers a mock as one of the service's two workflow managers: the root one, for a
+// consignment's root and child-branch workflows, or the task one, for task workflows.
+type managerSlot func(svc *Service, m *MockWM) error
+
+var (
+	rootManager managerSlot = func(svc *Service, m *MockWM) error { return svc.RegisterWorkflowManager(m) }
+	taskManager managerSlot = func(svc *Service, m *MockWM) error { return svc.RegisterTaskWorkflowManager(m) }
+)
+
+// resolveRoute is one of the two resolve endpoints. They share all their request handling and
+// differ only in which of the service's managers they use, so most tests below run against both.
+type resolveRoute struct {
+	name    string
+	own     managerSlot // the manager this route must use
+	other   managerSlot // the manager it must never touch
+	handler func(r *Router) http.HandlerFunc
+}
+
+var resolveRoutes = []resolveRoute{
+	{"consignment route", rootManager, taskManager, func(r *Router) http.HandlerFunc { return r.HandleResolveAdminIntervention }},
+	{"task workflow route", taskManager, rootManager, func(r *Router) http.HandlerFunc { return r.HandleResolveTaskWorkflowAdminIntervention }},
+}
+
+// newResolveRequest builds a POST to a resolve endpoint as an authenticated admin, addressing
+// resolveTestCompositeNodeID on resolveTestWorkflowID. The handlers read their path values, not the
+// URL, so the same request serves both routes.
 func newResolveRequest(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/"+resolveTestWorkflowID+"/nodes/"+resolveTestCompositeNodeID+"/resolve", strings.NewReader(body))
 	req.SetPathValue("id", resolveTestWorkflowID)
@@ -350,12 +374,12 @@ func newResolveRequest(body string) *http.Request {
 	return req.WithContext(withAuthContext(req.Context(), "admin-1"))
 }
 
-// newResolveRouter builds a Router whose service has mockWM registered as the workflow manager.
-func newResolveRouter(t *testing.T, mockWM *MockWM) *Router {
+// newResolveRouter builds a Router whose service has mockWM registered as the manager route uses.
+func newResolveRouter(t *testing.T, route resolveRoute, mockWM *MockWM) *Router {
 	t.Helper()
 	db, _ := setupTestDB(t)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+	require.NoError(t, route.own(svc, mockWM))
 	return mustNewRouter(t, svc, nil, nil, nswaudit.NewRecorder(nil))
 }
 
@@ -376,26 +400,77 @@ func parkedInstance(nodeType workflow.NodeType) *workflow.WorkflowInstance {
 // to the template ID. A slip in this mapping would drop the admin's variables while still
 // returning 204, so assert the whole signal rather than just that one was sent.
 func TestConsignmentRouter_HandleResolveAdminIntervention_ForwardsRequestToSignal(t *testing.T) {
-	mockWM := new(MockWM)
-	r := newResolveRouter(t, mockWM)
-	mockWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(parkedInstance(workflow.NodeTypeTask), nil)
-	var got workflow.AdminResolutionSignal
-	mockWM.On("ResolveAdminIntervention", mock.Anything, resolveTestWorkflowID, "", mock.Anything).
-		Run(func(args mock.Arguments) { got = args.Get(3).(workflow.AdminResolutionSignal) }).
-		Return(nil)
+	for _, route := range resolveRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			mockWM := new(MockWM)
+			r := newResolveRouter(t, route, mockWM)
+			mockWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(parkedInstance(workflow.NodeTypeTask), nil)
+			var got workflow.AdminResolutionSignal
+			mockWM.On("ResolveAdminIntervention", mock.Anything, resolveTestWorkflowID, "", mock.Anything).
+				Run(func(args mock.Arguments) { got = args.Get(3).(workflow.AdminResolutionSignal) }).
+				Return(nil)
 
-	body := `{"action":"COMPLETE","global_variables_patch":{"review.outcome":"APPROVED"},"reason":"result was recorded under the wrong key"}`
-	w := httptest.NewRecorder()
-	r.HandleResolveAdminIntervention(w, newResolveRequest(body))
+			body := `{"action":"COMPLETE","global_variables_patch":{"review.outcome":"APPROVED"},"reason":"result was recorded under the wrong key"}`
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newResolveRequest(body))
 
-	assert.Equal(t, http.StatusNoContent, w.Code)
-	assert.Equal(t, workflow.AdminResolutionSignal{
-		NodeID:                 "officer_review",
-		Action:                 workflow.AdminActionComplete,
-		WorkflowVariablesPatch: map[string]any{"review.outcome": "APPROVED"},
-		Reason:                 "result was recorded under the wrong key",
-	}, got)
-	mockWM.AssertExpectations(t)
+			assert.Equal(t, http.StatusNoContent, w.Code)
+			assert.Equal(t, workflow.AdminResolutionSignal{
+				NodeID:                 "officer_review",
+				Action:                 workflow.AdminActionComplete,
+				WorkflowVariablesPatch: map[string]any{"review.outcome": "APPROVED"},
+				Reason:                 "result was recorded under the wrong key",
+			}, got)
+			mockWM.AssertExpectations(t)
+		})
+	}
+}
+
+// Each route resolves through its own manager and never the other's. Both are registered here, and
+// only the route's own one has expectations, so a call to the other one fails the test.
+func TestConsignmentRouter_HandleResolveAdminIntervention_UsesOnlyItsOwnManager(t *testing.T) {
+	for _, route := range resolveRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			ownWM, otherWM := new(MockWM), new(MockWM)
+			otherWM.Test(t) // an unexpected call fails this test cleanly instead of panicking
+			db, _ := setupTestDB(t)
+			svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+			require.NoError(t, route.own(svc, ownWM))
+			require.NoError(t, route.other(svc, otherWM))
+			r := mustNewRouter(t, svc, nil, nil, nswaudit.NewRecorder(nil))
+			ownWM.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(parkedInstance(workflow.NodeTypeTask), nil)
+			ownWM.On("ResolveAdminIntervention", mock.Anything, resolveTestWorkflowID, "", mock.Anything).Return(nil)
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newResolveRequest(`{"action":"RETRY","reason":"retry"}`))
+
+			assert.Equal(t, http.StatusNoContent, w.Code)
+			ownWM.AssertExpectations(t)
+			otherWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+			otherWM.AssertNotCalled(t, "ResolveAdminIntervention", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		})
+	}
+}
+
+// A route whose own manager isn't registered fails, rather than quietly resolving through the
+// other one: the two ID spaces are not interchangeable as far as the service is concerned.
+func TestConsignmentRouter_HandleResolveAdminIntervention_DoesNotFallBackToTheOtherManager(t *testing.T) {
+	for _, route := range resolveRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			otherWM := new(MockWM)
+			otherWM.Test(t) // an unexpected call fails this test cleanly instead of panicking
+			db, _ := setupTestDB(t)
+			svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+			require.NoError(t, route.other(svc, otherWM))
+			r := mustNewRouter(t, svc, nil, nil, nswaudit.NewRecorder(nil))
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, newResolveRequest(`{"action":"RETRY","reason":"retry"}`))
+
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			otherWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+		})
+	}
 }
 
 func TestConsignmentRouter_HandleResolveAdminIntervention_MapsServiceErrors(t *testing.T) {
@@ -452,18 +527,20 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_MapsServiceErrors(t *t
 			wantStatus: http.StatusInternalServerError,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockWM := new(MockWM)
-			r := newResolveRouter(t, mockWM)
-			tt.setup(mockWM)
+	for _, route := range resolveRoutes {
+		for _, tt := range tests {
+			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
+				mockWM := new(MockWM)
+				r := newResolveRouter(t, route, mockWM)
+				tt.setup(mockWM)
 
-			w := httptest.NewRecorder()
-			r.HandleResolveAdminIntervention(w, newResolveRequest(tt.body))
+				w := httptest.NewRecorder()
+				route.handler(r)(w, newResolveRequest(tt.body))
 
-			assert.Equal(t, tt.wantStatus, w.Code)
-			mockWM.AssertExpectations(t)
-		})
+				assert.Equal(t, tt.wantStatus, w.Code)
+				mockWM.AssertExpectations(t)
+			})
+		}
 	}
 }
 
@@ -486,16 +563,18 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_RejectsInvalidRequest(
 		// "overrides") must be rejected, not dropped while the action goes ahead with an empty patch.
 		{"an unknown field", `{"action":"COMPLETE","overrides":{"review.outcome":"APPROVED"},"reason":"stale client"}`, `unknown field \"overrides\"`},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+	for _, route := range resolveRoutes {
+		for _, tt := range tests {
+			t.Run(route.name+"/"+tt.name, func(t *testing.T) {
+				r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
 
-			w := httptest.NewRecorder()
-			r.HandleResolveAdminIntervention(w, newResolveRequest(tt.body))
+				w := httptest.NewRecorder()
+				route.handler(r)(w, newResolveRequest(tt.body))
 
-			assert.Equal(t, http.StatusBadRequest, w.Code)
-			assert.Contains(t, w.Body.String(), tt.wantErr)
-		})
+				assert.Equal(t, http.StatusBadRequest, w.Code)
+				assert.Contains(t, w.Body.String(), tt.wantErr)
+			})
+		}
 	}
 }
 

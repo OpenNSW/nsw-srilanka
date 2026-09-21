@@ -274,6 +274,57 @@ func TestConsignmentService_ResolveAdminIntervention_TranslatesCompositeNodeID(t
 	mockWM.AssertExpectations(t)
 }
 
+// A node parked inside a task workflow is resolved through the task workflow manager, with the
+// same composite-to-template ID translation, and the root manager is never consulted.
+func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager(t *testing.T) {
+	db, _ := setupTestDB(t)
+	rootWM, taskWM := new(MockWM), new(MockWM)
+	rootWM.Test(t) // any call to it fails the test
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
+	require.NoError(t, svc.RegisterTaskWorkflowManager(taskWM))
+
+	ctx := context.Background()
+	taskWorkflowID := "task-wf-n1_apply:ca7ed707-1dba-43ca-94bf-10eddf00df3c"
+	compositeNodeID := "review_step:6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	taskWM.On("GetStatus", ctx, taskWorkflowID).Return(&workflow.WorkflowInstance{
+		ID:     taskWorkflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"review_step": {ID: compositeNodeID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+		},
+	}, nil)
+	taskWM.On("ResolveAdminIntervention", ctx, taskWorkflowID, "", mock.MatchedBy(func(sig workflow.AdminResolutionSignal) bool {
+		return sig.NodeID == "review_step"
+	})).Return(nil)
+
+	err := svc.ResolveTaskWorkflowAdminIntervention(ctx, taskWorkflowID, workflow.AdminResolutionSignal{
+		NodeID: compositeNodeID,
+		Action: workflow.AdminActionRetry,
+		Reason: "retry",
+	})
+	require.NoError(t, err)
+	taskWM.AssertExpectations(t)
+	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+}
+
+func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t *testing.T) {
+	db, _ := setupTestDB(t)
+	rootWM := new(MockWM)
+	rootWM.Test(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
+
+	err := svc.ResolveTaskWorkflowAdminIntervention(context.Background(), "task-wf-1", workflow.AdminResolutionSignal{
+		NodeID: "review_step:x",
+		Action: workflow.AdminActionRetry,
+		Reason: "retry",
+	})
+	// Not resolved through the root manager instead: that would be a silent fallback.
+	assert.ErrorContains(t, err, "no task workflow manager registered")
+	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+}
+
 func TestConsignmentService_ResolveAdminIntervention_UnknownNodeID(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockWM := new(MockWM)

@@ -220,8 +220,28 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 }
 
 // ResolveAdminIntervention sends an admin's decision (RETRY/COMPLETE/ABORT) to a node parked
-// in AWAITING_ADMIN on workflowID, which can be a root, child-branch or task workflow. It first
-// confirms the node is parked and that a GATEWAY isn't asked to COMPLETE.
+// in AWAITING_ADMIN on workflowID, a consignment's root workflow or one of its child-branch
+// workflows, through the same manager GetEngineStatus queries. A task workflow is a separate ID
+// space on its own manager: see ResolveTaskWorkflowAdminIntervention.
+func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error {
+	if s.wm == nil {
+		return fmt.Errorf("no workflow manager registered for ConsignmentService")
+	}
+	return resolveAdminIntervention(ctx, s.wm, workflowID, sig)
+}
+
+// ResolveTaskWorkflowAdminIntervention is ResolveAdminIntervention for a node parked inside a task
+// workflow (see EngineNodeDTO.TaskWorkflowID), resolved through the task workflow manager, the same
+// one GetTaskWorkflowEngineStatus queries.
+func (s *Service) ResolveTaskWorkflowAdminIntervention(ctx context.Context, taskWorkflowID string, sig workflow.AdminResolutionSignal) error {
+	if s.taskWm == nil {
+		return fmt.Errorf("no task workflow manager registered for ConsignmentService")
+	}
+	return resolveAdminIntervention(ctx, s.taskWm, taskWorkflowID, sig)
+}
+
+// resolveAdminIntervention is the body both resolve methods share, run against whichever manager
+// owns workflowID. It first confirms the node is parked and that a GATEWAY isn't asked to COMPLETE.
 //
 // sig.NodeID arrives as the composite "<template ID>:<uuid>" (EngineNodeDTO.ID), but core routes
 // signals by the plain template ID, so it is translated back before the check and the signal.
@@ -233,16 +253,13 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 // resolution is expected to be a single admin acting at a time, not concurrent. TODO: fix this
 // properly in core with an acknowledged Temporal Update that rejects a node that is no longer
 // parked, then map that rejection to ErrNodeNotParked so the stale request gets a 409.
-func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error {
-	if s.wm == nil {
-		return fmt.Errorf("no workflow manager registered for ConsignmentService")
-	}
-	resolver, ok := s.wm.(workflow.AdminInterventionResolver)
+func resolveAdminIntervention(ctx context.Context, mgr workflow.Manager, workflowID string, sig workflow.AdminResolutionSignal) error {
+	resolver, ok := mgr.(workflow.AdminInterventionResolver)
 	if !ok {
 		return ErrAdminInterventionUnsupported
 	}
 
-	instance, err := s.wm.GetStatus(ctx, workflowID)
+	instance, err := mgr.GetStatus(ctx, workflowID)
 	if err != nil {
 		if errors.Is(err, workflow.ErrWorkflowNotFound) {
 			return ErrEngineWorkflowNotFound

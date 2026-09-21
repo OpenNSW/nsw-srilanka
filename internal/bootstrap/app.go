@@ -405,6 +405,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// interpreter never chose (Complete/Abort), so this sits behind ConsignmentAdminWrite, a
 	// stricter scope than the read-only admin views above.
 	mux.Handle("POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveAdminIntervention))))
+	// Same, for a node inside a task workflow, which lives in its own ID space on the task workflow
+	// manager (mirrors the two engine-status routes above).
+	mux.Handle("POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveTaskWorkflowAdminIntervention))))
 
 	// Storage
 	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
