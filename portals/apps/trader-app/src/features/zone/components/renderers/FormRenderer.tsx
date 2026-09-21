@@ -114,6 +114,28 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     () => requiredErrors.filter((error) => isPresentEmpty(data, error)),
     [requiredErrors, data],
   )
+  // additionalRequiredErrors is a fresh array reference on every edit even
+  // when it's functionally empty (the memo above is keyed on `data`, which
+  // changes on every keystroke) — falling back to EMPTY_ADDITIONAL_ERRORS
+  // whenever there's nothing to show keeps the prop actually stable once
+  // showErrors is true, not just before it.
+  const stableAdditionalErrors =
+    showErrors && additionalRequiredErrors.length > 0 ? additionalRequiredErrors : EMPTY_ADDITIONAL_ERRORS
+  // Catch dataSeed up to data, synchronously, for as long as showErrors is
+  // true. showErrors only ever flips true once per session and then stays
+  // true (see handleAction below), and for that whole rest of the session
+  // validationMode is 'ValidateAndShow' and additionalErrors may be a fresh
+  // non-empty reference on every edit (stableAdditionalErrors above) — both
+  // are dependencies of JsonForms's own resync effect. Without this, every
+  // edit made after one failed submit attempt would keep reintroducing the
+  // exact hazard EMPTY_ADDITIONAL_ERRORS/dataSeed otherwise guard against,
+  // not just the one showErrors transition. This is React's sanctioned
+  // "adjust state during render" pattern: it bails out via Object.is once
+  // dataSeed has caught up, so it doesn't cause an extra render on settled
+  // data.
+  if (showErrors && dataSeed !== data) {
+    setDataSeed(data)
+  }
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
   // collapses interactivity, readonly, and button visibility into a single
@@ -151,16 +173,12 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     // primary_action and danger_action handles require valid data.
     const skipRequired = h.element === 'secondary_action'
     if (!skipRequired && !isValid) {
-      // Catch dataSeed up to the current data BEFORE flipping showErrors:
-      // that flip changes additionalErrors/validationMode, which — like
-      // dataSeed itself — is a dependency of JsonForms's own resync effect
-      // (see EMPTY_ADDITIONAL_ERRORS above). If dataSeed is still mid-debounce
-      // at this exact moment, that resync would hand JsonForms a stale
-      // snapshot and it would overwrite its own newer internal state with
-      // it, discarding whatever the user just typed. React batches both
-      // calls into the same render, so JsonForms never sees the old
-      // dataSeed paired with the new validation props.
-      setDataSeed(data)
+      // Flipping showErrors changes additionalErrors/validationMode, both
+      // dependencies of JsonForms's own resync effect (see
+      // EMPTY_ADDITIONAL_ERRORS above) — but the `showErrors && dataSeed !==
+      // data` check above already catches dataSeed up to data on the very
+      // next render whenever that happens, so this doesn't need its own copy
+      // of that logic.
       setShowErrors(true)
       return
     }
@@ -188,7 +206,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           ajv={ajv}
           renderers={radixRenderers}
           readonly={!interactive}
-          additionalErrors={showErrors ? additionalRequiredErrors : EMPTY_ADDITIONAL_ERRORS}
+          additionalErrors={stableAdditionalErrors}
           validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
