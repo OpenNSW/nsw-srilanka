@@ -196,7 +196,7 @@ func resolvePaymentAmount(input any, configured decimal.Decimal) (decimal.Decima
 // variables cross a JSON boundary at least once (from form submission -> stored
 // task data -> input_mapping copy), so a number arrives here as float64;
 // string and json.Number are accepted defensively for callers that pass
-// amounts as quoted values. 
+// amounts as quoted values.
 func decimalFromAny(v any) (decimal.Decimal, error) {
 	switch x := v.(type) {
 	case float64:
