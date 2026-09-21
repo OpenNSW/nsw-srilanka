@@ -102,7 +102,7 @@ export const SAMPLE_TASK: ZoneView = {
     workspace: {
       type: 'FORM',
       handles: [
-        { command: 'save_as_draft', label: 'Save as Draft', element: 'secondary_action' },
+        { command: 'SAVE_AS_DRAFT', label: 'Save as Draft', element: 'secondary_action' },
         { command: 'SUBMISSION', label: 'Submit Form', element: 'primary_action' },
       ],
       payload: {
