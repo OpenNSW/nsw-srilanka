@@ -469,8 +469,18 @@ function GlobalVariablesButton({
 // the scroll position a gutter needs to stay in sync. Wrapping is deliberately off (wrap="off" +
 // white-space: pre + horizontal scroll) rather than left to wrap: with it on, a long line's
 // wrapped continuation would visually sit under whichever number happens to be next, since a
-// gutter line only ever corresponds to one real line.
-function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+// gutter line only ever corresponds to one real line. label is the textarea's accessible name: the
+// visible title above it (see Section) is not associated with it, so a screen reader would
+// otherwise announce an unnamed edit field.
+function LineNumberedTextArea({
+  value,
+  onChange,
+  label,
+}: {
+  value: string
+  onChange: (value: string) => void
+  label: string
+}) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
   const lineCount = value.split('\n').length
@@ -499,6 +509,7 @@ function LineNumberedTextArea({ value, onChange }: { value: string; onChange: (v
       </div>
       <textarea
         ref={textareaRef}
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onScroll={syncGutterScroll}
@@ -650,6 +661,10 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
     ? (PARK_CATEGORY_INFO[target.parkCategory] ?? PARK_CATEGORY_INFO.UNKNOWN)
     : undefined
   const [action, setAction] = useState<AdminResolutionAction | null>(null)
+  // What the patch editor is called: it is also the editor's accessible name, so it lives in one
+  // place rather than being spelled out twice.
+  const patchTitle =
+    action === 'COMPLETE' ? "Set variables as this node's output (JSON)" : 'Set variables, then re-run (JSON)'
   const [reason, setReason] = useState('')
   // Starts empty rather than pre-filled from the cached task result: that result is in the
   // task's own key names, while the patch is written under global variable paths, so editing
@@ -851,6 +866,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
 
         <Section title="Reason (required)">
           <TextArea
+            aria-label="Reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
@@ -866,15 +882,13 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
             COMPLETE writes them and skips running the node, so they stand in for its output. */}
         {(action === 'COMPLETE' || action === 'RETRY') && (
           <Section
-            title={
-              action === 'COMPLETE' ? "Set variables as this node's output (JSON)" : 'Set variables, then re-run (JSON)'
-            }
+            title={patchTitle}
             note={
               'Dotted paths to values, e.g. {"review.outcome": "APPROVED"}. Only the variables named are changed, ' +
               'and they stay changed for the rest of the workflow.'
             }
           >
-            <LineNumberedTextArea value={variablesPatchText} onChange={setVariablesPatchText} />
+            <LineNumberedTextArea value={variablesPatchText} onChange={setVariablesPatchText} label={patchTitle} />
             {variablesPatchJSONError && (
               <Text size="1" color="red" className="block mt-1">
                 {variablesPatchJSONError}
