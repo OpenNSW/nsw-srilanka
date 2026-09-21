@@ -7,6 +7,7 @@ interface ClaimsWithGroups {
 
 const TRADER_ROLE: Role = 'trader'
 const CHA_ROLE: Role = 'cha'
+const NSW_ADMIN_ROLE: Role = 'nswAdmin'
 
 function toGroupSet(groupsClaim: unknown): Set<string> {
   if (!Array.isArray(groupsClaim)) {
@@ -22,6 +23,10 @@ export function mapGroupsToRoles(groupsClaim: unknown, config: IdpRoleGroupConfi
 
   if (groups.has(config.traderGroupName)) {
     roles.push(TRADER_ROLE)
+  }
+
+  if (groups.has(config.nswAdminGroupName)) {
+    roles.push(NSW_ADMIN_ROLE)
   }
 
   if (groups.has(config.chaGroupName)) {
