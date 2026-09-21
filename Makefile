@@ -117,13 +117,28 @@ help: ## Show this help
 # Go code quality (mirrors the backend CI pipeline)
 # Prepend GOPATH/bin so tools installed by `make tools` are found without
 # requiring the developer to manually update their shell profile.
+# Windows uses ';' as PATH separator; Unix uses ':'.
 # ---------------------------------------------------------------------------
 
-export PATH := $(shell go env GOPATH)/bin:$(PATH)
+ifeq ($(OS),Windows_NT)
+  export PATH := $(shell go env GOPATH)/bin;$(PATH)
+else
+  export PATH := $(shell go env GOPATH)/bin:$(PATH)
+endif
 
 .PHONY: setup
 setup: tools ## First-time setup: install tools, configure git hooks, seed config files from examples
 	git config core.hooksPath .githooks
+ifeq ($(OS),Windows_NT)
+	@echo Git hooks configured: .githooks/
+	@if exist .env.example if not exist .env copy /Y .env.example .env
+	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
+	@if exist configs\notification.example.json if not exist configs\notification.json copy /Y configs\notification.example.json configs\notification.json
+	@if exist configs\services.docker.example.json if not exist configs\services.docker.json copy /Y configs\services.docker.example.json configs\services.docker.json
+	@if exist configs\payment_methods.example.json if not exist configs\payment_methods.json copy /Y configs\payment_methods.example.json configs\payment_methods.json
+	@if exist configs\catalog.example.json if not exist configs\catalog.json copy /Y configs\catalog.example.json configs\catalog.json
+	@if exist configs\companies.example.json if not exist configs\companies.json copy /Y configs\companies.example.json configs\companies.json
+else
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
 	@for f in .env.example idp/.env.example; do \
@@ -138,16 +153,22 @@ setup: tools ## First-time setup: install tools, configure git hooks, seed confi
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
+endif
 
 .PHONY: tools
 tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
-	@echo "Installing Go quality tools..."
+	@echo Installing Go quality tools...
+ifeq ($(OS),Windows_NT)
+	@where golangci-lint >nul 2>&1 || (echo ERROR: golangci-lint v2 is required. See CONTRIBUTING.md && exit 1)
+	@golangci-lint --version | findstr /C:"version v1" >nul && (echo ERROR: golangci-lint v1 is not supported. Install v2. && exit 1) || ver >nul
+else
 	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
 		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
+endif
 	go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
 	go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 	go install github.com/zricethezav/gitleaks/v8@v8.30.1
-	@echo "Tools installed."
+	@echo Tools installed.
 
 .PHONY: fmt
 fmt: ## Format all Go source files with gofmt
