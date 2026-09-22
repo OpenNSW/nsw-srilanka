@@ -459,7 +459,20 @@ func buildReExport(uf map[string]any) *spscert.ReExport {
 		return nil
 	}
 
+	// An empty section declares nothing. A consignment can be marked as a
+	// re-export before anyone has answered these questions -- an application
+	// that predates the section, or one where the trader chose Re-Export and
+	// has not filled it in yet -- and the answers all default to false. Sent,
+	// that reads as a consignment which is neither packed nor repacked, in
+	// containers that are neither the original ones nor new: a declaration no
+	// consignment can satisfy. Saying nothing is the honest answer, and the
+	// certificate is still a PC-R either way, since the type code comes from
+	// certificate_type rather than from here.
 	re := asMap(uf[ReExportInput])
+	if len(re) == 0 {
+		return nil
+	}
+
 	return &spscert.ReExport{
 		StatementCode:        asString(re["statement_code"]),
 		OriginalCertRefs:     splitRefs(asString(re["original_certificate_number"])),

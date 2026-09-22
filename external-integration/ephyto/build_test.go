@@ -572,6 +572,50 @@ func TestBuildInput_CarriesTheReExportDeclaration(t *testing.T) {
 	}
 }
 
+// A consignment can be a re-export before anyone has answered the re-export
+// questions: an application that predates the section, or one where the trader
+// picked Re-Export and has not filled it in. It is still a PC-R, but it
+// declares nothing.
+//
+// Defaulting the answers instead would send RPCPK and RPCRP both False -- a
+// consignment neither packed nor repacked -- along with containers that are
+// neither the original ones nor new, to the NPPO receiving it.
+func TestBuildInput_AReExportWithNoDetailsDeclaresNothing(t *testing.T) {
+	for name, section := range map[string]any{
+		"the section is absent": nil,
+		"the section is empty":  map[string]any{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			uf := reExportUserform()
+			if section == nil {
+				delete(uf, ReExportInput)
+			} else {
+				uf[ReExportInput] = section
+			}
+
+			// A second commodity, since the declaration is carried per trade line.
+			uf["commodities"] = append(uf["commodities"].([]any), map[string]any{
+				"commodity_description": "Black pepper, whole dried berries",
+				"origin_country":        "India",
+			})
+
+			in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-2026-0012"})
+
+			if in.Certificate.TypeCode != "657" {
+				t.Errorf("type code = %q, want 657 -- the certificate is still a re-export", in.Certificate.TypeCode)
+			}
+			if len(in.Certificate.Consignment.Items) != 2 {
+				t.Fatalf("expected both commodities, got %d", len(in.Certificate.Consignment.Items))
+			}
+			for i, item := range in.Certificate.Consignment.Items {
+				if re := item.TradeLines[0].ReExport; re != nil {
+					t.Errorf("commodity %d declared %+v, want nothing", i+1, re)
+				}
+			}
+		})
+	}
+}
+
 // The other side of each choice, so the mapping is not just reading one branch.
 func TestBuildInput_ReadsTheOtherSideOfEachReExportChoice(t *testing.T) {
 	uf := reExportUserform()
