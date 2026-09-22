@@ -73,10 +73,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		selectedMethod = "govpay"
 	}
 
-	// 2. Transition task state to PENDING_PAYMENT
-	ctx.Record.State = "PENDING_PAYMENT"
-
-	// 3. Resolve the amount to charge. If a workflow input is available, it takes
+	// 2. Resolve the amount to charge. If a workflow input is available, it takes
 	// precedence over the artifact's static amount. This is the last
 	// checkpoint before it becomes an actual charge so the logical validation is done to
 	// make sure the payment amount is acceptable.
@@ -86,10 +83,13 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	}
 	currency := cfg.Currency
 
+	// 3. Transition task state to PENDING_PAYMENT
+	ctx.Record.State = "PENDING_PAYMENT"
+
 	slog.Info("task payment: initiating checkout session",
 		"taskId", ctx.Record.TaskID, "taskCode", cfg.TaskCode, "amount", amount, "method", selectedMethod)
 
-	// 3. Create the checkout session via core/payment. The selected gateway is
+	// 4. Create the checkout session via core/payment. The selected gateway is
 	// passed as GatewayID; the service generates the TNSW- reference and (for
 	// instruction-flow gateways) returns the instructions to display. An unknown
 	// gateway surfaces here as an error, as does a fee whose gateway_metadata
