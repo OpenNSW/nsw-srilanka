@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,6 +20,28 @@ import (
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 )
+
+// notificationExampleConfigPath points Load()-calling tests at the repo's own committed example
+// (configs/notification.example.json) instead of shipping a redundant test-only fixture. Relative
+// to this package's own directory, which is what `go test` sets as the working directory
+// regardless of where it's invoked from.
+const notificationExampleConfigPath = "../../../configs/notification.example.json"
+
+// TestMain points NOTIFICATIONS_CONFIG_PATH at notificationExampleConfigPath as this whole test
+// binary's default, so every test that calls Load() gets a real, parseable file unless it
+// overrides the var itself — as the two TestLoad_NotificationConfig* tests below do, to point at
+// a missing/malformed one instead; t.Setenv correctly restores this default afterward. Load reads
+// this file eagerly (see loadNotificationProviders): Config.Validate requires Providers
+// non-empty, unlike the other *ConfigPath fields in this package, which are just stored and read
+// later, downstream.
+func TestMain(m *testing.M) {
+	if _, err := os.Stat(notificationExampleConfigPath); err != nil {
+		fmt.Fprintf(os.Stderr, "notification example config fixture: %v\n", err)
+		os.Exit(1)
+	}
+	os.Setenv("NOTIFICATIONS_CONFIG_PATH", notificationExampleConfigPath)
+	os.Exit(m.Run())
+}
 
 // validConfig returns a minimal Config that passes Validate().
 func validConfig() *Config {
@@ -360,7 +383,8 @@ func TestLoad_Defaults(t *testing.T) {
 		"STORAGE_S3_SECRET_KEY", "STORAGE_S3_USE_SSL", "STORAGE_S3_PUBLIC_URL",
 		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
 		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
-		"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
+		"AUTH_JWKS_INSECURE_SKIP_VERIFY",
+		// NOTIFICATIONS_CONFIG_PATH deliberately stays unlisted — see TestMain.
 		"CATALOG_CONFIG_PATH", "TEMPORAL_HOST", "TEMPORAL_PORT",
 		"TEMPORAL_NAMESPACE",
 	}
