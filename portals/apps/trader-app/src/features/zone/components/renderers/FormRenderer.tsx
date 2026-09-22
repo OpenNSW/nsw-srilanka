@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import { createAjv, type JsonSchema } from '@jsonforms/core'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
@@ -33,18 +33,15 @@ function seedWithDefaults(
 // A stable empty array, not a fresh `[]` literal at the call site.
 //
 // @jsonforms/core's JsonFormsStateProvider re-syncs its internal store
-// whenever `data`, `additionalErrors`, or `validationMode` changes reference
-// (they're all in one effect's dependency array) by dispatching `updateCore`
-// — which unconditionally overwrites its own internal data with whatever
-// `data` prop it's handed, with no check for whether that's older than
-// what it already has. A literal `[]` is a new reference on every render of
-// this component for any reason at all, which forces that resync (and a
-// possible overwrite of newer internal state with this component's own,
-// possibly-stale `data`) far more often than `additionalErrors` actually
-// changes. Reusing one stable reference means the dependency only changes
-// when the error list itself does. `dataSeed` below is the other half of
-// guarding against the same reducer behavior, for when `data` itself is what
-// changes.
+// whenever the `data`, `additionalErrors`, or `validationMode` props it's
+// given change reference (they're all in one effect's dependency array) by
+// dispatching `updateCore` — which unconditionally overwrites its own
+// internal data with whatever `data` prop it's handed, with no check for
+// whether that's older than what it already has. Two things below keep both
+// of those props from changing reference except when they genuinely must:
+// this constant (so an empty error list is always the same reference), and
+// `stableAdditionalErrors`'s content-based memoization for when it's
+// non-empty (see its own comment, further down).
 const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
 
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
@@ -91,15 +88,16 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // back in, so re-syncing payload.data would silently destroy user input.
   const [data, setData] = useState<Record<string, unknown>>(() => seedWithDefaults(payload.schema, payload.data))
   // What actually gets handed to <JsonForms data={...}> — NOT the same as
-  // `data` above, and not updated on every onChange either (see the sync
-  // effect below). Same UPDATE_CORE reducer behavior EMPTY_ADDITIONAL_ERRORS
-  // guards against above, the other half of it: `data` itself legitimately
-  // changes on every edit, and re-rendering with a `data` prop that's behind
-  // JsonForms's own more recent internal state (e.g. mid-burst, before its
-  // 10ms-debounced onChange has reported the latest) gets that newer state
-  // silently overwritten. A plain ref updated on every onChange doesn't help
-  // — it churns the fed-back reference just as often as state would. Only
-  // deliberately lagging behind (see the debounce below) avoids it.
+  // `data` above, and not updated on every onChange either (see the
+  // lastFed sync below). Same UPDATE_CORE reducer behavior
+  // EMPTY_ADDITIONAL_ERRORS guards against above, the other half of it:
+  // `data` itself legitimately changes on every edit, and re-rendering with
+  // a `data` prop that's behind JsonForms's own more recent internal state
+  // (e.g. mid-burst, before its 10ms-debounced onChange has reported the
+  // latest) gets that newer state silently overwritten. Only resyncing at
+  // the exact moments JsonForms's resync effect is about to fire anyway
+  // (see lastFed below) avoids it, rather than resyncing continuously or
+  // on a wall-clock timer.
   const [dataSeed, setDataSeed] = useState<Record<string, unknown>>(data)
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -115,27 +113,62 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     [requiredErrors, data],
   )
   // additionalRequiredErrors is a fresh array reference on every edit even
-  // when it's functionally empty (the memo above is keyed on `data`, which
-  // changes on every keystroke) — falling back to EMPTY_ADDITIONAL_ERRORS
-  // whenever there's nothing to show keeps the prop actually stable once
-  // showErrors is true, not just before it.
-  const stableAdditionalErrors =
+  // when its CONTENT is unchanged (the memo above is keyed on `data`, which
+  // changes on every keystroke). additionalErrors is a dependency of
+  // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above), so an
+  // unstable reference here would force that resync far more often than the
+  // missing-fields set actually changes — reusing the previous array
+  // whenever the set is unchanged keeps the reference, and therefore the
+  // resync, tied to genuine content changes only. State, not a ref: this
+  // project's lint rules (React Compiler-compatible) disallow touching a
+  // ref's `.current` during render, so "remember what render-N computed" has
+  // to go through the same sanctioned "adjust state during render" pattern
+  // used below for lastFed, not a ref-based memo.
+  const [prevStableErrors, setPrevStableErrors] = useState<RequiredFieldError[]>(EMPTY_ADDITIONAL_ERRORS)
+  const candidateErrors =
     showErrors && additionalRequiredErrors.length > 0 ? additionalRequiredErrors : EMPTY_ADDITIONAL_ERRORS
-  // Catch dataSeed up to data, synchronously, for as long as showErrors is
-  // true. showErrors only ever flips true once per session and then stays
-  // true (see handleAction below), and for that whole rest of the session
-  // validationMode is 'ValidateAndShow' and additionalErrors may be a fresh
-  // non-empty reference on every edit (stableAdditionalErrors above) — both
-  // are dependencies of JsonForms's own resync effect. Without this, every
-  // edit made after one failed submit attempt would keep reintroducing the
-  // exact hazard EMPTY_ADDITIONAL_ERRORS/dataSeed otherwise guard against,
-  // not just the one showErrors transition. This is React's sanctioned
-  // "adjust state during render" pattern: it bails out via Object.is once
-  // dataSeed has caught up, so it doesn't cause an extra render on settled
-  // data.
-  if (showErrors && dataSeed !== data) {
-    setDataSeed(data)
+  const stableAdditionalErrors =
+    missingFieldsSignature(candidateErrors) === missingFieldsSignature(prevStableErrors)
+      ? prevStableErrors
+      : candidateErrors
+  if (stableAdditionalErrors !== prevStableErrors) {
+    setPrevStableErrors(stableAdditionalErrors)
   }
+
+  const validationMode: 'ValidateAndShow' | 'ValidateAndHide' = showErrors ? 'ValidateAndShow' : 'ValidateAndHide'
+
+  // Catch dataSeed up to data, synchronously, exactly when additionalErrors
+  // or validationMode is about to change — the only moments JsonForms's
+  // resync effect actually fires (see EMPTY_ADDITIONAL_ERRORS above).
+  // Outside of those moments dataSeed simply stays put: JsonForms's own
+  // internal reducer is the source of truth for what's being typed
+  // regardless of what this prop holds, so there's nothing to gain from
+  // resyncing more often, and every extra resync is one more chance to feed
+  // back a snapshot that's behind a still-in-flight async write (e.g. an
+  // XML import triggering a SpreadsheetControl formula evaluation — see
+  // "Residual risk" below). This is React's sanctioned "adjust state during
+  // render" pattern: both setState calls below bail out via Object.is once
+  // caught up, so there's no extra render once settled.
+  //
+  // Residual risk, deliberately accepted: at the exact render this fires,
+  // `data` can still be up to @jsonforms/react's own ~10ms onChange debounce
+  // behind JsonForms's true internal state — an irreducible floor from
+  // outside this codebase, not fixable here. Verified live against the SLTB
+  // blend sheet form (XML import -> SpreadsheetControl -> ComputedControl
+  // cascade): clicking Submit at realistic human timing (>=100ms after
+  // starting the upload) never corrupted the final computed totals across
+  // repeated runs; only an unrealistic zero-delay, script-driven click
+  // (impossible for an actual person, who needs time to see the file dialog
+  // close and move to the button) hit this floor, and rarely even then.
+  const [lastFed, setLastFed] = useState<{
+    additionalErrors: RequiredFieldError[]
+    validationMode: 'ValidateAndShow' | 'ValidateAndHide'
+  }>({ additionalErrors: EMPTY_ADDITIONAL_ERRORS, validationMode: 'ValidateAndHide' })
+  if (lastFed.additionalErrors !== stableAdditionalErrors || lastFed.validationMode !== validationMode) {
+    if (dataSeed !== data) setDataSeed(data)
+    setLastFed({ additionalErrors: stableAdditionalErrors, validationMode })
+  }
+
   // A FORM zone is editable iff it has at least one legal handle and a
   // dispatch callback; otherwise it renders read-only with no footer. This
   // collapses interactivity, readonly, and button visibility into a single
@@ -143,21 +176,6 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const isValid = errors.length === 0 && requiredErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('VITE_SHOW_AUTOFILL_BUTTON', false)
-
-  // Re-sync dataSeed to the latest known data — but only once `data` has held
-  // still for a while, not on every change. This delay is invisible to the
-  // user: it doesn't affect what typing shows (that's JsonForms's own
-  // internal state, rendered directly, independent of this prop) or
-  // submit-gating (isValid/requiredErrors read `data`, never `dataSeed`) —
-  // dataSeed exists solely to give JsonForms's own internal store a safe,
-  // settled snapshot to reconcile against on the rare renders (e.g.
-  // showErrors toggling) that also touch additionalErrors or validationMode.
-  // 500ms is generous on purpose: safety here costs nothing visible, so
-  // there's no reason to cut it close.
-  useEffect(() => {
-    const timeout = setTimeout(() => setDataSeed(data), 500)
-    return () => clearTimeout(timeout)
-  }, [data])
 
   const handleAutoFill = () => {
     const next = autoFillForm(payload.schema, data) as Record<string, unknown>
@@ -173,12 +191,11 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     // primary_action and danger_action handles require valid data.
     const skipRequired = h.element === 'secondary_action'
     if (!skipRequired && !isValid) {
-      // Flipping showErrors changes additionalErrors/validationMode, both
-      // dependencies of JsonForms's own resync effect (see
-      // EMPTY_ADDITIONAL_ERRORS above) — but the `showErrors && dataSeed !==
-      // data` check above already catches dataSeed up to data on the very
-      // next render whenever that happens, so this doesn't need its own copy
-      // of that logic.
+      // Flipping showErrors changes validationMode, a dependency of
+      // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above) —
+      // but the lastFed check above already catches dataSeed up to data on
+      // the very next render whenever that happens, so this doesn't need
+      // its own copy of that logic.
       setShowErrors(true)
       return
     }
@@ -207,7 +224,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           renderers={radixRenderers}
           readonly={!interactive}
           additionalErrors={stableAdditionalErrors}
-          validationMode={showErrors ? 'ValidateAndShow' : 'ValidateAndHide'}
+          validationMode={validationMode}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
             setData(next)
@@ -313,6 +330,16 @@ function collectRequiredErrors(schema: JsonSchema | undefined, data: unknown, in
   }
 
   return out
+}
+
+// A cheap content key for a required-errors list: `instancePath` and
+// `missingProperty` are the only fields that ever vary between calls
+// (schemaPath/keyword/message are the same literals every time), so this is
+// enough to tell "the missing-fields set is unchanged" from "it changed" —
+// see stableAdditionalErrors, which uses it to reuse the previous array
+// reference whenever the set hasn't moved.
+function missingFieldsSignature(errors: RequiredFieldError[]): string {
+  return errors.map((error) => `${error.instancePath}:${error.params.missingProperty}`).join(',')
 }
 
 // True when the required property exists on the instance but is empty, so
