@@ -8,6 +8,7 @@ import type { Role } from '@/services/RoleContext'
 const ROLE_ICONS: Record<Role, ReactNode> = {
   trader: <BackpackIcon className="text-info-strong" />,
   cha: <IdCardIcon className="text-warning-strong" />,
+  nswAdmin: <IdCardIcon className="text-success-strong" />,
 }
 
 function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel: boolean }) {
