@@ -1,0 +1,12 @@
+{
+  "email": {
+    "baseURL": "https://email.example.com",
+    "token": "test-token"
+  },
+  "sms": {
+    "baseURL": "https://sms.example.com",
+    "userName": "test-user",
+    "password": "test-password",
+    "sidCode": "test-sid"
+  }
+}

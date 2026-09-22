@@ -57,7 +57,9 @@ func validConfig() *Config {
 			ClientIDs: []string{"client1"},
 		},
 		Notification: notification.Config{
-			Path: "configs/notification.json",
+			Providers: map[notification.ChannelType]map[string]any{
+				"email": {"baseURL": "https://email.example.com"},
+			},
 		},
 		Temporal: temporal.Config{
 			Host:      "localhost",
@@ -563,6 +565,42 @@ func TestLoad_DatabaseValidationError(t *testing.T) {
 	}
 }
 
+func TestLoad_NotificationConfigMissingFile(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("NOTIFICATIONS_CONFIG_PATH", filepath.Join(t.TempDir(), "does-not-exist.json"))
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for a missing notification config file, got nil")
+	}
+	if !containsString(err.Error(), "notification") {
+		t.Errorf("expected error mentioning 'notification', got: %v", err)
+	}
+}
+
+func TestLoad_NotificationConfigMalformedJSON(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	badFile := filepath.Join(t.TempDir(), "notification.json")
+	if err := os.WriteFile(badFile, []byte("not json"), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	t.Setenv("NOTIFICATIONS_CONFIG_PATH", badFile)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for a malformed notification config file, got nil")
+	}
+	if !containsString(err.Error(), "notification") {
+		t.Errorf("expected error mentioning 'notification', got: %v", err)
+	}
+}
+
 // --- Config.Validate ---
 
 func TestConfigValidate_Success(t *testing.T) {
@@ -666,12 +704,12 @@ func TestConfigValidate_CORSWildcardCredentialsError(t *testing.T) {
 
 func TestConfigValidate_NotificationError(t *testing.T) {
 	cfg := validConfig()
-	cfg.Notification = notification.Config{} // empty Path → error
+	cfg.Notification = notification.Config{} // no Providers → error
 	err := cfg.Validate()
 	if err == nil {
 		t.Fatal("expected notification config error")
 	}
-	if !errors.Is(err, notification.ErrConfigPathRequired) && !containsString(err.Error(), "invalid notification configuration") {
+	if !errors.Is(err, notification.ErrProvidersRequired) && !containsString(err.Error(), "invalid notification configuration") {
 		t.Errorf("expected notification config error, got: %v", err)
 	}
 }
