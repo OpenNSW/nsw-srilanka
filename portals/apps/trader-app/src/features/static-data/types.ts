@@ -3,6 +3,9 @@
 export interface StaticDataOption {
   const: string
   title: string
+  // Values of the sibling field this option belongs to (e.g. commodity codes).
+  // The renderer reads x-search.dependsOn and sends that field's current value
+  // as params.parent; search() keeps options whose parents include it.
   parents?: string[]
 }
 
