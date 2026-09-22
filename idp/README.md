@@ -148,7 +148,7 @@ or **by hand** against any deployment. A bare `docker compose up thunderid` does
 That script creates:
   - **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
   - **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / Customs / SLTB** child OUs
-  - **`Private_User`** and **`Government_User`** user types
+  - **`Private_User`**, **`Government_User`**, and **`Admin_User`** user types
   - **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
     matching groups — role inheritance is group-based)
   - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
@@ -157,7 +157,7 @@ That script creates:
   - **`NSW_API`** and **`AGENCY_API`** OAuth2 resource servers (scopes + token audiences)
   - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
     `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
-    `sltb_officer` (government OUs) — `suresh` is also in `NSW Admins`
+    `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
   - **SPA applications** and **M2M applications** (see below)
 
 ## Seeding sample resources
@@ -264,7 +264,9 @@ idp/resources/
     resource-servers.json      NSW_API, AGENCY_API (+ nested resources -> actions)
     m2m-roles.json             AgencyM2M
   admin/
+    user-types.json            Admin_User
     groups-roles.json          NSW Admins group + NSW Admin role
+    users.json                 nswadmin
   private-sector/
     ous.json  user-types.json  groups-roles.json  users.json  apps.json
   government/
