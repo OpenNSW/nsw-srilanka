@@ -37,10 +37,8 @@ func TestCDNResultsCollector_IgnoresUnregisteredNotes(t *testing.T) {
 	assert.Equal(t, []any{"CBEX1/2026/C/28237"}, d["cdn_numbers"],
 		"the trader's own note number must never stand in for a registered one")
 	assert.Equal(t, "CBEX1/2026/C/28237", d["cdn_number"])
-	require.Len(t, d["containers"], 2, "one boat-note row per branch, including an unregistered note")
-	rows := d["containers"].([]map[string]any)
-	assert.Equal(t, "CBEX1/2026/C/28237", rows[0]["cdn_number"])
-	assert.Equal(t, "", rows[1]["cdn_number"])
+	require.Len(t, d["containers"], 1, "unregistered notes must not occupy a boat-note row")
+	assert.Equal(t, "CBEX1/2026/C/28237", d["containers"].([]map[string]any)[0]["cdn_number"])
 }
 
 func TestCDNResultsCollector_FlattensEveryBranch(t *testing.T) {
@@ -96,8 +94,7 @@ func TestCDNResultsCollector_AlwaysEmitsCDNNumber(t *testing.T) {
 	d := ctx.Record.Data
 	require.Contains(t, d, "cdn_number")
 	assert.Equal(t, "", d["cdn_number"])
-	require.Len(t, d["containers"], 1)
-	assert.Equal(t, "", d["containers"].([]map[string]any)[0]["cdn_number"])
+	require.Len(t, d["containers"], 0, "a halted branch has no registered note, so no boat-note row")
 }
 
 // A branch that halted carries an error instead of variables; it must be
@@ -112,10 +109,8 @@ func TestCDNResultsCollector_HandlesFailedBranch(t *testing.T) {
 	d := ctx.Record.Data
 	assert.Equal(t, []any{"CDN-2"}, d["cdn_numbers"])
 	assert.Equal(t, "CDN-2", d["cdn_number"])
-	require.Len(t, d["containers"], 2)
-	rows := d["containers"].([]map[string]any)
-	assert.Equal(t, "", rows[0]["cdn_number"])
-	assert.Equal(t, "CDN-2", rows[1]["cdn_number"])
+	require.Len(t, d["containers"], 1, "the halted branch is omitted; only the registered note is a row")
+	assert.Equal(t, "CDN-2", d["containers"].([]map[string]any)[0]["cdn_number"])
 }
 
 func TestCDNResultsCollector_RejectsUnusableInput(t *testing.T) {

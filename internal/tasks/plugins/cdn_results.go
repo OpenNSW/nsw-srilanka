@@ -20,12 +20,14 @@ const TaskTypeCDNResultsCollector = "CDN_RESULTS_COLLECTOR"
 // can reach into that structure on its own. This flattens it:
 //
 //   - cdn_numbers: every branch's dispatch note, in container order.
-//   - containers: one boat-note form row per branch, in that same order, so
-//     the boat-note USER_INPUT can bind the array as-is. JSON Forms cannot
-//     size an array from a sibling field, and input_mapping cannot loop, so
-//     the rows have to exist before that form opens. A branch with no
-//     registered number still occupies a row — marks and seal stay empty
-//     for the trader.
+//   - containers: one boat-note form row per registered note, in that same
+//     order, so the boat-note USER_INPUT can bind the array as-is. JSON Forms
+//     cannot size an array from a sibling field, and input_mapping cannot
+//     loop, so the rows have to exist before that form opens. Unregistered
+//     and failed branches are omitted: the form locks the CDN string and
+//     requires it, so a blank row would either force the trader to invent a
+//     number Customs never registered, or block submit once the field is
+//     read-only.
 //   - cdn_userform / cdn_number: the first accepted note, so the
 //     acknowledgement step can keep the single-note input it was built for.
 func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error {
@@ -46,19 +48,17 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 
 		accepted, _ := cig["accepted"].(bool)
 
-		row := map[string]any{"cdn_number": ""}
-
 		// Only the reference Customs registered counts. Downstream steps quote it
 		// back to Customs, so the trader's own note number — which the form also
 		// collects, for the printed note — would be a reference they cannot
 		// resolve. A branch with no registered number has no dispatch note at
-		// Customs, and contributes nothing to cdn_numbers — but it still gets a
-		// boat-note row, so the form length matches the declaration.
+		// Customs, and contributes nothing to cdn_numbers or containers — the
+		// boat-note form cannot add, remove, or edit the CDN string, so a blank
+		// row would be unsubmittable.
 		if num := userform["registeredCdnNumber"]; num != nil && num != "" {
 			numbers = append(numbers, num)
-			row["cdn_number"] = num
+			containers = append(containers, map[string]any{"cdn_number": num})
 		}
-		containers = append(containers, row)
 		if accepted && firstOK == nil {
 			firstOK = userform
 		}
