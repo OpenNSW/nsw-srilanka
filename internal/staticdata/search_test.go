@@ -45,6 +45,56 @@ func TestRank_ConstPrefixBeforeTitleContains(t *testing.T) {
 	}
 }
 
+func TestRank_WordBoundaryBeforeSubstring(t *testing.T) {
+	options := []Option{
+		{Const: "USSJL", Title: "SOUTHAMPTON"},
+		{Const: "USHTO", Title: "EAST HAMPTON"},
+		{Const: "USPHF", Title: "HAMPTON/HAMPTON ROADS"},
+	}
+
+	got := rank(options, "hampton")
+	if len(got) != 3 || got[0].Const != "USPHF" || got[1].Const != "USHTO" || got[2].Const != "USSJL" {
+		t.Fatalf("expected prefix, then a later word, then a substring, got %+v", got)
+	}
+}
+
+func TestRank_WordBoundaryRoads(t *testing.T) {
+	options := []Option{
+		{Const: "USUJS", Title: "HAMPTON"},
+		{Const: "USPHF", Title: "HAMPTON/HAMPTON ROADS"},
+	}
+
+	got := rank(options, "roads")
+	if len(got) != 1 || got[0].Const != "USPHF" {
+		t.Fatalf("expected the word-boundary match, got %+v", got)
+	}
+}
+
+func TestRank_ShorterTitleThenConst(t *testing.T) {
+	options := []Option{
+		{Const: "USHPN", Title: "HAMPTON"},
+		{Const: "GBHMP", Title: "HAMPTON"},
+		{Const: "USHPF", Title: "HAMPTON FALLS"},
+	}
+
+	got := rank(options, "hamp")
+	if len(got) != 3 || got[0].Const != "GBHMP" || got[1].Const != "USHPN" || got[2].Const != "USHPF" {
+		t.Fatalf("expected shorter titles, then const, got %+v", got)
+	}
+}
+
+func TestRank_ExactConst(t *testing.T) {
+	options := []Option{
+		{Const: "USUJS", Title: "HAMPTON"},
+		{Const: "GBHMP", Title: "HAMPTON"},
+	}
+
+	got := rank(options, "usujs")
+	if len(got) != 1 || got[0].Const != "USUJS" {
+		t.Fatalf("expected the exact const, got %+v", got)
+	}
+}
+
 func TestRank_EmptyQueryKeepsArtifactOrder(t *testing.T) {
 	options := []Option{
 		{Const: "b", Title: "Beta"},

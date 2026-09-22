@@ -54,8 +54,9 @@ func parseOptions(raw json.RawMessage) ([]Option, error) {
 	return options, nil
 }
 
-// rank scores a lowercased query as: exact title, title prefix, exact or
-// prefix const, title contains, const contains. Ties keep artifact order.
+// rank scores a lowercased query in four tiers: exact title or const, prefix
+// of title or const, a later word in the title, then a substring of either.
+// Equal scores prefer the shorter title, then const, which is the unique key.
 func rank(options []Option, query string) []Option {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -65,21 +66,26 @@ func rank(options []Option, query string) []Option {
 	type scored struct {
 		opt   Option
 		score int
-		idx   int
 	}
 	matched := make([]scored, 0, len(options))
-	for i, opt := range options {
+	for _, opt := range options {
 		score, ok := matchScore(opt, q)
 		if !ok {
 			continue
 		}
-		matched = append(matched, scored{opt: opt, score: score, idx: i})
+		matched = append(matched, scored{opt: opt, score: score})
 	}
 	sort.SliceStable(matched, func(i, j int) bool {
 		if matched[i].score != matched[j].score {
 			return matched[i].score < matched[j].score
 		}
-		return matched[i].idx < matched[j].idx
+		if len(matched[i].opt.Title) != len(matched[j].opt.Title) {
+			return len(matched[i].opt.Title) < len(matched[j].opt.Title)
+		}
+		if cmp := strings.Compare(strings.ToLower(matched[i].opt.Title), strings.ToLower(matched[j].opt.Title)); cmp != 0 {
+			return cmp < 0
+		}
+		return strings.ToLower(matched[i].opt.Const) < strings.ToLower(matched[j].opt.Const)
 	})
 
 	out := make([]Option, len(matched))
@@ -93,19 +99,35 @@ func matchScore(opt Option, q string) (int, bool) {
 	title := strings.ToLower(opt.Title)
 	code := strings.ToLower(opt.Const)
 	switch {
-	case title == q:
+	case title == q || code == q:
 		return 0, true
-	case strings.HasPrefix(title, q):
+	case strings.HasPrefix(title, q) || strings.HasPrefix(code, q):
 		return 1, true
-	case code == q || strings.HasPrefix(code, q):
+	case wordBoundary(title, q):
 		return 2, true
-	case strings.Contains(title, q):
+	case strings.Contains(title, q) || strings.Contains(code, q):
 		return 3, true
-	case strings.Contains(code, q):
-		return 4, true
 	default:
 		return 0, false
 	}
+}
+
+// wordBoundary reports whether q starts a word after the first. The first word
+// is a prefix of the whole title, so the prefix tier already covers it.
+// Separators are space, slash, and hyphen.
+func wordBoundary(title, q string) bool {
+	words := strings.FieldsFunc(title, func(r rune) bool {
+		return r == ' ' || r == '/' || r == '-'
+	})
+	if len(words) < 2 {
+		return false
+	}
+	for _, word := range words[1:] {
+		if strings.HasPrefix(word, q) {
+			return true
+		}
+	}
+	return false
 }
 
 func pageOptions(options []Option, offset, limit int) []Option {

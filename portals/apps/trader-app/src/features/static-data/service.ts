@@ -1,7 +1,10 @@
 import { http } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
+import type { PaginatedResponse } from '@/services/types/common'
 import type { SearchService } from '@opennsw/jsonforms-renderers'
 import type { StaticDataOption, StaticDataResponse } from './types'
+
+const SEARCH_LIMIT = 20
 
 function staticDataParams(params: Record<string, unknown> | undefined): { id: string; version: string } {
   const id = params?.id
@@ -13,7 +16,7 @@ function staticDataParams(params: Record<string, unknown> | undefined): { id: st
 }
 
 // The artifact source isn't type-checked against this contract, so a malformed entry (a bare
-// string, a missing/non-string field) is dropped here rather than reaching `.toLowerCase()` below.
+// string, a missing/non-string field) is dropped here rather than being offered as an option.
 function isStaticDataOption(value: unknown): value is StaticDataOption {
   return (
     typeof value === 'object' &&
@@ -52,18 +55,42 @@ function fetchOptions(id: string, version: string): Promise<StaticDataOption[]> 
   return promise
 }
 
+// Titles are not unique (several ports are named HAMPTON). Show the code beside
+// the title so each row can be told apart. Identical code and title stay as one label.
+function toSearchOptions(options: StaticDataOption[]) {
+  return options.map((option) => ({
+    id: option.const,
+    name: option.const === option.title ? option.title : `${option.const}-${option.title}`,
+  }))
+}
+
 // Generic search service for `x-search.service: "static-data"` fields. One field's artifact
 // (id + version) is selected entirely via x-search.params, so this single registration backs
 // every static-data field in every form.
+//
+// An empty query with no cursor still downloads the artifact, which is what small lists do on
+// open. A typed query, or "load more", sends q, offset, and limit so the API ranks one page.
 export const staticDataSearchService: SearchService = {
-  async search({ query, params }) {
+  async search({ query, cursor, signal, params }) {
     const { id, version } = staticDataParams(params)
-    const options = await fetchOptions(id, version)
+    const q = query.trim()
+    const offset = typeof cursor === 'number' ? cursor : 0
+    if (!q && offset === 0) {
+      const options = await fetchOptions(id, version)
+      return { options: toSearchOptions(options) }
+    }
 
-    const q = query.trim().toLowerCase()
-    const filtered = q ? options.filter((option) => option.title.toLowerCase().includes(q)) : options
-
-    return { options: filtered.map((option) => ({ id: option.const, name: option.title })) }
+    const { data } = await http.request<PaginatedResponse<StaticDataOption>>({
+      url: `${API_BASE_URL}/api/v1/static-data/${encodeURIComponent(id)}`,
+      params: { version, q: q || undefined, offset, limit: SEARCH_LIMIT },
+      attachToken: true,
+      signal,
+    })
+    const nextOffset = offset + data.items.length
+    return {
+      options: toSearchOptions(data.items),
+      nextCursor: nextOffset < data.total ? nextOffset : undefined,
+    }
   },
 
   async resolve(value, params) {

@@ -24,7 +24,7 @@ func sampleUserform() map[string]any {
 		"consignee_address":        "456 Main St, Andorra la Vella, Andorra",
 		"consignee_country":        "Andorra - AD",
 		"distinguishing_marks":     "EXP-NPQS-2026-A",
-		"point_of_entry_port":      "Andorra la Vella",
+		"point_of_entry_port":      map[string]any{"value": "USTMR", "label": "USTMR-ALTHEIMER"},
 		"seal_number":              "SL-CUSTOMS-93820",
 		"transport_mode":           "3",
 		"import_permit_number":     "IP-ANDORRA-2026-948",
@@ -82,6 +82,9 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 	// trader's selected importing country.
 	if c.Consignment.ImportCountry != "LK" {
 		t.Errorf("import country = %q, want LK", c.Consignment.ImportCountry)
+	}
+	if c.Consignment.PointOfEntry == nil || c.Consignment.PointOfEntry.Name != "USTMR-ALTHEIMER" {
+		t.Errorf("point of entry = %+v, want USTMR-ALTHEIMER", c.Consignment.PointOfEntry)
 	}
 	if len(c.Consignment.Items) != 1 || len(c.Consignment.Items[0].TradeLines) != 1 {
 		t.Fatalf("expected 1 item with 1 trade line, got %+v", c.Consignment.Items)
