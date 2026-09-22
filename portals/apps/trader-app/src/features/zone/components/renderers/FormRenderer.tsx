@@ -14,6 +14,22 @@ import { getBooleanEnv } from '@/runtimeConfig'
 // are pre-filled without the trader touching them.
 const ajv = createAjv({ useDefaults: true })
 
+// useDefaults mutates the object it validates, in place, which React cannot
+// observe: a memo keyed on that object's reference (requiredErrors) would
+// keep the value it computed before the defaults landed, and a required field
+// satisfied only by its default would stay flagged as missing. Applying the
+// defaults to a private copy up front means state already holds them on the
+// first render. Later edits are unaffected — JsonForms builds a new data
+// object for every change, so the reference changes then anyway.
+function seedWithDefaults(
+  schema: JsonSchema | undefined,
+  seed: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const seeded = structuredClone(seed ?? {})
+  if (schema) ajv.validate(schema, seeded)
+  return seeded
+}
+
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
 // exact string to "<label> is required".
@@ -56,7 +72,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // re-seeds from the fresh payload. Same-state background polls intentionally
   // do *not* clobber in-flight edits — there is no server-side draft to merge
   // back in, so re-syncing payload.data would silently destroy user input.
-  const [data, setData] = useState<Record<string, unknown>>(payload.data ?? {})
+  const [data, setData] = useState<Record<string, unknown>>(() => seedWithDefaults(payload.schema, payload.data))
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
