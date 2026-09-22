@@ -21,26 +21,32 @@ import (
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 )
 
-// notificationExampleConfigPath points Load()-calling tests at the repo's own committed example
-// (configs/notification.example.json) instead of shipping a redundant test-only fixture. Relative
-// to this package's own directory, which is what `go test` sets as the working directory
-// regardless of where it's invoked from.
-const notificationExampleConfigPath = "../../../configs/notification.example.json"
-
-// TestMain points NOTIFICATIONS_CONFIG_PATH at notificationExampleConfigPath as this whole test
-// binary's default, so every test that calls Load() gets a real, parseable file unless it
-// overrides the var itself — as the two TestLoad_NotificationConfig* tests below do, to point at
-// a missing/malformed one instead; t.Setenv correctly restores this default afterward. Load reads
-// this file eagerly (see loadNotificationProviders): Config.Validate requires Providers
-// non-empty, unlike the other *ConfigPath fields in this package, which are just stored and read
-// later, downstream.
+// TestMain writes a throwaway notification config to a temp dir and points
+// NOTIFICATIONS_CONFIG_PATH at it as this whole test binary's default, so every test that calls
+// Load() gets a real, parseable file unless it overrides the var itself — as the two
+// TestLoad_NotificationConfig* tests below do, to point at a missing/malformed one instead;
+// t.Setenv correctly restores this default afterward. Load reads this file eagerly (see
+// loadNotificationProviders): Config.Validate requires Providers non-empty, unlike the other
+// *ConfigPath fields in this package, which are just stored and read later, downstream.
 func TestMain(m *testing.M) {
-	if _, err := os.Stat(notificationExampleConfigPath); err != nil {
-		fmt.Fprintf(os.Stderr, "notification example config fixture: %v\n", err)
+	dir, err := os.MkdirTemp("", "notification-config-test-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create temp dir for notification config fixture: %v\n", err)
 		os.Exit(1)
 	}
-	os.Setenv("NOTIFICATIONS_CONFIG_PATH", notificationExampleConfigPath)
-	os.Exit(m.Run())
+	path := filepath.Join(dir, "notification.json")
+	if err := os.WriteFile(path, []byte(`{"email":{"baseURL":"https://email.example.com"}}`), 0o600); err != nil {
+		os.RemoveAll(dir)
+		fmt.Fprintf(os.Stderr, "failed to write notification config fixture: %v\n", err)
+		os.Exit(1)
+	}
+	os.Setenv("NOTIFICATIONS_CONFIG_PATH", path)
+
+	// os.Exit skips deferred calls, so m.Run must be captured and cleanup done explicitly rather
+	// than via defer.
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // validConfig returns a minimal Config that passes Validate().
