@@ -459,32 +459,50 @@ func buildReExport(uf map[string]any) *spscert.ReExport {
 		return nil
 	}
 
-	// An empty section declares nothing. A consignment can be marked as a
-	// re-export before anyone has answered these questions -- an application
-	// that predates the section, or one where the trader chose Re-Export and
-	// has not filled it in yet -- and the answers all default to false. Sent,
-	// that reads as a consignment which is neither packed nor repacked, in
-	// containers that are neither the original ones nor new: a declaration no
-	// consignment can satisfy. Saying nothing is the honest answer, and the
-	// certificate is still a PC-R either way, since the type code comes from
+	// A declaration is made only once all three either/or questions have been
+	// answered. A consignment can be marked as a re-export well before that --
+	// an application that predates the section, or one the trader is part way
+	// through -- and an unanswered question reads as false on both of its
+	// sides. Sent, that says the consignment is neither packed nor repacked,
+	// in containers that are neither the original ones nor new: a declaration
+	// no consignment can satisfy.
+	//
+	// Counting the keys is not enough to tell the two apart, because a trader
+	// who has typed only the certificate number leaves a section that is
+	// non-empty and still unanswered.
+	//
+	// Saying nothing until the answers are there is the honest reading, and
+	// the certificate is a PC-R either way: the type code comes from
 	// certificate_type rather than from here.
 	re := asMap(uf[ReExportInput])
-	if len(re) == 0 {
+	form, formAnswered := reExportChoice(re, "original_certificate_form", "original", "certified_true_copy")
+	packing, packingAnswered := reExportChoice(re, "packing", "packed", "repacked")
+	containers, containersAnswered := reExportChoice(re, "containers", "original", "new")
+	if !formAnswered || !packingAnswered || !containersAnswered {
 		return nil
 	}
 
 	return &spscert.ReExport{
 		StatementCode:        asString(re["statement_code"]),
 		OriginalCertRefs:     splitRefs(asString(re["original_certificate_number"])),
-		IsOriginal:           asString(re["original_certificate_form"]) == "original",
-		CertifiedTrueCopy:    asString(re["original_certificate_form"]) == "certified_true_copy",
-		Packed:               asString(re["packing"]) == "packed",
-		Repacked:             asString(re["packing"]) == "repacked",
-		OriginalContainers:   asString(re["containers"]) == "original",
-		NewContainers:        asString(re["containers"]) == "new",
+		IsOriginal:           form == "original",
+		CertifiedTrueCopy:    form == "certified_true_copy",
+		Packed:               packing == "packed",
+		Repacked:             packing == "repacked",
+		OriginalContainers:   containers == "original",
+		NewContainers:        containers == "new",
 		OriginalPCAttached:   saidYes(re["original_certificate_attached"]),
 		AdditionalInspection: saidYes(re["additional_inspection"]),
 	}
+}
+
+// reExportChoice reads one of the declaration's either/or answers, reporting
+// whether it was answered at all. Anything other than the two values the form
+// offers -- blank, absent, or a value from an older version of the form --
+// counts as unanswered rather than as the side it is not.
+func reExportChoice(re map[string]any, field, one, other string) (string, bool) {
+	answer := asString(re[field])
+	return answer, answer == one || answer == other
 }
 
 // splitRefs reads the certificate numbers a re-export is covered by out of the

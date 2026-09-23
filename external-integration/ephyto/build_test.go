@@ -572,18 +572,50 @@ func TestBuildInput_CarriesTheReExportDeclaration(t *testing.T) {
 	}
 }
 
-// A consignment can be a re-export before anyone has answered the re-export
-// questions: an application that predates the section, or one where the trader
-// picked Re-Export and has not filled it in. It is still a PC-R, but it
-// declares nothing.
+// A consignment can be a re-export well before the re-export questions are
+// answered: an application that predates the section, one the trader picked
+// Re-Export on and has not filled in, or one they are part way through. It is
+// still a PC-R, but it declares nothing until the answers are there.
 //
-// Defaulting the answers instead would send RPCPK and RPCRP both False -- a
+// Declaring what is there instead would send RPCPK and RPCRP both False -- a
 // consignment neither packed nor repacked -- along with containers that are
-// neither the original ones nor new, to the NPPO receiving it.
-func TestBuildInput_AReExportWithNoDetailsDeclaresNothing(t *testing.T) {
+// neither the original ones nor new, to the NPPO receiving it. Counting the
+// section's keys does not separate these cases: a trader who has typed only
+// the certificate number leaves one that is non-empty and still unanswered.
+func TestBuildInput_AnIncompleteReExportDeclaresNothing(t *testing.T) {
+	answered := map[string]any{
+		"original_certificate_form": "certified_true_copy",
+		"packing":                   "repacked",
+		"containers":                "new",
+	}
+	without := func(field string) map[string]any {
+		section := map[string]any{}
+		for k, v := range answered {
+			if k != field {
+				section[k] = v
+			}
+		}
+		return section
+	}
+
 	for name, section := range map[string]any{
-		"the section is absent": nil,
-		"the section is empty":  map[string]any{},
+		"the section is absent":                 nil,
+		"the section is empty":                  map[string]any{},
+		"only the certificate number":           map[string]any{"original_certificate_number": "IN-PC-2026-778812"},
+		"only the checkboxes":                   map[string]any{"original_certificate_attached": true, "additional_inspection": true},
+		"the packing question unanswered":       without("packing"),
+		"the container question unanswered":     without("containers"),
+		"the original/copy question unanswered": without("original_certificate_form"),
+		"an answer the form does not offer": map[string]any{
+			"original_certificate_form": "certified_true_copy",
+			"packing":                   "part-repacked",
+			"containers":                "new",
+		},
+		"a blank answer": map[string]any{
+			"original_certificate_form": "certified_true_copy",
+			"packing":                   "   ",
+			"containers":                "new",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			uf := reExportUserform()
@@ -613,6 +645,25 @@ func TestBuildInput_AReExportWithNoDetailsDeclaresNothing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The three answers together are what make a declaration, so all three present
+// is the case that must still produce one.
+func TestBuildInput_TheThreeAnswersAreEnoughToDeclare(t *testing.T) {
+	uf := reExportUserform()
+	uf[ReExportInput] = map[string]any{
+		"original_certificate_form": "original",
+		"packing":                   "packed",
+		"containers":                "original",
+	}
+
+	re := firstReExport(t, BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-2026-0013"}))
+	if re == nil {
+		t.Fatal("a fully answered section declared nothing")
+	}
+	if !re.IsOriginal || !re.Packed || !re.OriginalContainers {
+		t.Errorf("declaration = %+v", re)
 	}
 }
 
