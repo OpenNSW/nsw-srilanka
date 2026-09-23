@@ -37,6 +37,8 @@ func TestCDNResultsCollector_IgnoresUnregisteredNotes(t *testing.T) {
 	assert.Equal(t, []any{"CBEX1/2026/C/28237"}, d["cdn_numbers"],
 		"the trader's own note number must never stand in for a registered one")
 	assert.Equal(t, "CBEX1/2026/C/28237", d["cdn_number"])
+	require.Len(t, d["containers"], 1, "unregistered notes must not occupy a boat-note row")
+	assert.Equal(t, "CBEX1/2026/C/28237", d["containers"].([]map[string]any)[0]["cdn_number"])
 }
 
 func TestCDNResultsCollector_FlattensEveryBranch(t *testing.T) {
@@ -49,6 +51,8 @@ func TestCDNResultsCollector_FlattensEveryBranch(t *testing.T) {
 
 	d := ctx.Record.Data
 	assert.Equal(t, []any{"CDN-1", "CDN-2", "CDN-3"}, d["cdn_numbers"])
+	require.Len(t, d["containers"], 3)
+	assert.Equal(t, "CDN-2", d["containers"].([]map[string]any)[1]["cdn_number"])
 
 	// Steps still shaped around one note read the first accepted one.
 	assert.Equal(t, "CDN-1", d["cdn_number"])
@@ -75,8 +79,8 @@ func TestCDNResultsCollector_AllRejectedStillPopulates(t *testing.T) {
 
 	d := ctx.Record.Data
 	require.NotNil(t, d["cdn_userform"], "downstream steps must not be handed a nil form")
-	// The boat-note step maps cdn_number as required, so it must always exist.
 	assert.Equal(t, "CDN-1", d["cdn_number"])
+	require.Len(t, d["containers"], 1)
 }
 
 // With no dispatch note number anywhere, cdn_number must still be written: a
@@ -90,6 +94,7 @@ func TestCDNResultsCollector_AlwaysEmitsCDNNumber(t *testing.T) {
 	d := ctx.Record.Data
 	require.Contains(t, d, "cdn_number")
 	assert.Equal(t, "", d["cdn_number"])
+	require.Len(t, d["containers"], 0, "a halted branch has no registered note, so no boat-note row")
 }
 
 // A branch that halted carries an error instead of variables; it must be
@@ -104,6 +109,8 @@ func TestCDNResultsCollector_HandlesFailedBranch(t *testing.T) {
 	d := ctx.Record.Data
 	assert.Equal(t, []any{"CDN-2"}, d["cdn_numbers"])
 	assert.Equal(t, "CDN-2", d["cdn_number"])
+	require.Len(t, d["containers"], 1, "the halted branch is omitted; only the registered note is a row")
+	assert.Equal(t, "CDN-2", d["containers"].([]map[string]any)[0]["cdn_number"])
 }
 
 func TestCDNResultsCollector_RejectsUnusableInput(t *testing.T) {

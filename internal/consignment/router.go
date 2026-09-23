@@ -2,8 +2,10 @@ package consignment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -12,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
+	workflow "github.com/OpenNSW/core/workflow"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -26,7 +29,19 @@ const (
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
 	errWorkflowNotFound      = "workflow execution not found"
+	errNodeIDRequired        = "node ID is required"
+	errInvalidRequestBody    = "invalid request body"
+	errInvalidAdminAction    = "action must be one of RETRY, COMPLETE, ABORT"
+	errReasonRequired        = "reason is required"
 )
+
+// validAdminActions maps the wire-format action string onto the core/workflow constant, and
+// doubles as the allowlist HandleResolveAdminIntervention validates against.
+var validAdminActions = map[string]workflow.AdminResolutionAction{
+	string(workflow.AdminActionRetry):    workflow.AdminActionRetry,
+	string(workflow.AdminActionComplete): workflow.AdminActionComplete,
+	string(workflow.AdminActionAbort):    workflow.AdminActionAbort,
+}
 
 type Router struct {
 	cs      *Service
@@ -422,4 +437,151 @@ func (c *Router) handleEngineStatus(
 		},
 	})
 	httputil.JSON(w, http.StatusOK, status)
+}
+
+// ResolveAdminInterventionRequest is the request body for HandleResolveAdminIntervention.
+//
+// GlobalVariablesPatch is a patch, not the full variable set: dotted paths (e.g.
+// "review.outcome") mapped to the values to write, applied before RETRY re-runs the node or
+// COMPLETE marks it done. A map value is merged into an existing map at that path and any other
+// value replaces it. Variables it doesn't name are untouched, and what it writes is
+// workflow-wide, so it affects later nodes too.
+type ResolveAdminInterventionRequest struct {
+	Action               string         `json:"action"`
+	GlobalVariablesPatch map[string]any `json:"global_variables_patch,omitempty"`
+	Reason               string         `json:"reason"`
+}
+
+// HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve.
+// {id} is the ID of the workflow instance containing the node: the consignment's root workflow or a
+// child-branch workflow (a node's child_workflow_ids). It is not a consignment record ID. {nodeId}
+// is the node's composite ID from that workflow's engine status. A node inside a task workflow is
+// resolved through HandleResolveTaskWorkflowAdminIntervention instead.
+//
+// Requires scopes.ConsignmentAdminWrite (see bootstrap/app.go): resolving can change workflow data
+// (GlobalVariablesPatch) or force a path the interpreter didn't choose (Complete/Abort).
+func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.Request) {
+	c.handleResolveAdminIntervention(w, r, "admin-resolve", c.cs.ResolveAdminIntervention)
+}
+
+// HandleResolveTaskWorkflowAdminIntervention handles
+// POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve. {id} is a task workflow's own workflow ID
+// (a TASK node's task_workflow_id) — a separate ID space and workflow.Manager from the
+// consignment/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
+// engine-status routes. Otherwise identical, and gated on the same scope.
+func (c *Router) HandleResolveTaskWorkflowAdminIntervention(w http.ResponseWriter, r *http.Request) {
+	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention)
+}
+
+// handleResolveAdminIntervention is the request handling the two resolve routes share; they differ
+// only in which Service method resolves {id} and the audit "view" label. As in handleEngineStatus,
+// the audit TargetID is the workflow ID, which for the task route is a task-workflow ID rather than
+// a consignment ID (see TODO(#477) there).
+func (c *Router) handleResolveAdminIntervention(
+	w http.ResponseWriter, r *http.Request,
+	view string,
+	resolve func(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error,
+) {
+	ctx := r.Context()
+	authCtx := authn.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.Type() == "" {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	workflowID := r.PathValue("id")
+	nodeID := r.PathValue("nodeId")
+	if workflowID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+	if nodeID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errNodeIDRequired)
+		return
+	}
+
+	var req ResolveAdminInterventionRequest
+	// Unknown fields are rejected rather than ignored: a patch sent under a wrong or old key (e.g.
+	// the pre-rename "overrides") would otherwise be dropped while the action still succeeded.
+	// Decode only parses the first JSON value, so a second Decode is needed to reject a body
+	// with anything trailing it (e.g. two concatenated objects).
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		msg := errInvalidRequestBody
+		// encoding/json has no typed error for this, and naming the field is what tells the
+		// caller what to fix.
+		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			msg += ": unknown field " + field
+		}
+		httputil.Error(w, r, http.StatusBadRequest, msg)
+		return
+	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+	action, ok := validAdminActions[req.Action]
+	if !ok {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidAdminAction)
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errReasonRequired)
+		return
+	}
+
+	auditFail := func(errMsg string) {
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetConsignment,
+			TargetID:   workflowID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"view":   view,
+				"nodeId": nodeID,
+				"action": req.Action,
+				"error":  errMsg,
+			},
+		})
+	}
+
+	sig := workflow.AdminResolutionSignal{
+		NodeID:                 nodeID,
+		Action:                 action,
+		WorkflowVariablesPatch: req.GlobalVariablesPatch,
+		Reason:                 req.Reason,
+	}
+	if err := resolve(ctx, workflowID, sig); err != nil {
+		switch {
+		case errors.Is(err, ErrEngineWorkflowNotFound):
+			auditFail(errWorkflowNotFound)
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+		case errors.Is(err, ErrNodeNotParked):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusConflict, err.Error())
+		case errors.Is(err, ErrAdminActionUnsupportedForGateway):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusBadRequest, err.Error())
+		default:
+			auditFail(err.Error())
+			httputil.InternalServerError(w, r, "failed to resolve admin intervention", err)
+		}
+		return
+	}
+
+	c.audit.Record(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionUpdate,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   workflowID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"view":   view,
+			"nodeId": nodeID,
+			"action": req.Action,
+			"reason": req.Reason,
+		},
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
