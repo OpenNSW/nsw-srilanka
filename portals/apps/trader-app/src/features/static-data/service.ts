@@ -55,13 +55,8 @@ function fetchOptions(id: string, version: string): Promise<StaticDataOption[]> 
   return promise
 }
 
-// Titles are not unique (several ports are named HAMPTON). Show the code beside
-// the title so each row can be told apart. Identical code and title stay as one label.
 function toSearchOptions(options: StaticDataOption[]) {
-  return options.map((option) => ({
-    id: option.const,
-    name: option.const === option.title ? option.title : `${option.const}-${option.title}`,
-  }))
+  return options.map((option) => ({ id: option.const, name: option.title }))
 }
 
 // Generic search service for `x-search.service: "static-data"` fields. One field's artifact
