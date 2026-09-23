@@ -339,7 +339,9 @@ func buildConsignment(uf map[string]any, importISO string, certificateItems any)
 			c.TransitCountries = append(c.TransitCountries, code)
 		}
 	}
-	if poe := asString(uf["point_of_entry_port"]); poe != "" {
+	port := asMap(uf["point_of_entry_port"])
+	poe := asString(port["value"])
+	if poe != "" {
 		c.PointOfEntry = &spscert.PointOfEntry{Name: poe}
 	}
 	// MainCarriageSPSTransportMovement is mandatory in an SPSCertificate — the Hub
