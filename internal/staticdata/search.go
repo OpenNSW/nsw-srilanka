@@ -82,9 +82,6 @@ func rank(options []Option, query string) []Option {
 		if len(matched[i].opt.Title) != len(matched[j].opt.Title) {
 			return len(matched[i].opt.Title) < len(matched[j].opt.Title)
 		}
-		if cmp := strings.Compare(strings.ToLower(matched[i].opt.Title), strings.ToLower(matched[j].opt.Title)); cmp != 0 {
-			return cmp < 0
-		}
 		return strings.ToLower(matched[i].opt.Const) < strings.ToLower(matched[j].opt.Const)
 	})
 

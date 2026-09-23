@@ -83,6 +83,18 @@ func TestRank_ShorterTitleThenConst(t *testing.T) {
 	}
 }
 
+func TestRank_EqualLengthOrdersByConstNotTitle(t *testing.T) {
+	options := []Option{
+		{Const: "Z", Title: "PORT A"},
+		{Const: "A", Title: "PORT B"},
+	}
+
+	got := rank(options, "port")
+	if len(got) != 2 || got[0].Const != "A" || got[1].Const != "Z" {
+		t.Fatalf("expected const order for equal-length titles, got %+v", got)
+	}
+}
+
 func TestRank_ExactConst(t *testing.T) {
 	options := []Option{
 		{Const: "USUJS", Title: "HAMPTON"},
