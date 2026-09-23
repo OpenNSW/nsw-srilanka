@@ -83,8 +83,8 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 	if c.Consignment.ImportCountry != "LK" {
 		t.Errorf("import country = %q, want LK", c.Consignment.ImportCountry)
 	}
-	if c.Consignment.PointOfEntry == nil || c.Consignment.PointOfEntry.Name != "USTMR-ALTHEIMER" {
-		t.Errorf("point of entry = %+v, want USTMR-ALTHEIMER", c.Consignment.PointOfEntry)
+	if c.Consignment.PointOfEntry == nil || c.Consignment.PointOfEntry.Name != "USTMR" {
+		t.Errorf("point of entry = %+v, want USTMR", c.Consignment.PointOfEntry)
 	}
 	if len(c.Consignment.Items) != 1 || len(c.Consignment.Items[0].TradeLines) != 1 {
 		t.Fatalf("expected 1 item with 1 trade line, got %+v", c.Consignment.Items)
