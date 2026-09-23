@@ -294,7 +294,6 @@ services:
       - TEMPORAL_NAMESPACE=${TEMPORAL_NAMESPACE:-default}
       # Context variables translated directly from old start-dev parameters
       - SERVER_PORT=8080
-      - SERVER_DEBUG=${SERVER_DEBUG:-true}
       - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
       - SERVICE_URL=${SERVICE_URL:-http://localhost:${BACKEND_PORT:-8080}}
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).

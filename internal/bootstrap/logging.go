@@ -22,7 +22,7 @@ func ConfigureLogging(cfg *config.Config) {
 // configureLogging is ConfigureLogging with an injectable log destination.
 func configureLogging(cfg *config.Config, dest io.Writer) {
 	opts := &slog.HandlerOptions{
-		AddSource: cfg.Server.Debug,
+		AddSource: cfg.Server.LogLevel <= slog.LevelDebug,
 		Level:     cfg.Server.LogLevel,
 	}
 	logHandler := slog.NewTextHandler(dest, opts)
