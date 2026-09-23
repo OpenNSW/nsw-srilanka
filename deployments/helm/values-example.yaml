@@ -48,7 +48,6 @@ backend:
 
   env:
     SERVER_PORT: "8080"
-    SERVER_DEBUG: "false"
     SERVER_LOG_LEVEL: "info"
     SERVICE_URL: "https://nsw-api.example.com"
 
