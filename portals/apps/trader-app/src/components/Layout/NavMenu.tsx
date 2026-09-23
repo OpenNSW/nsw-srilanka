@@ -94,9 +94,7 @@ export function NavMenu() {
       <Link
         to={target.path}
         className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
-          isItemActive(target)
-            ? 'bg-primary-subtle text-primary'
-            : 'text-foreground hover:bg-app-surface-muted'
+          isItemActive(target) ? 'bg-primary-subtle text-primary' : 'text-foreground hover:bg-app-surface-muted'
         }`}
       >
         <span className={isItemActive(target) ? '' : 'text-foreground-subtle'}>{target.icon}</span>

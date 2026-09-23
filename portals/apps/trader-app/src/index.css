@@ -24,8 +24,7 @@
 
   /* Typography — Inter, self-hosted so first paint never blocks on a
    * third-party font CDN (this app also has to run on restricted networks). */
-  --font-sans:
-    'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Brand (primary). These are the "Modern" scheme's values and the default
    * whenever no `data-theme` override applies — see the color-scheme block
