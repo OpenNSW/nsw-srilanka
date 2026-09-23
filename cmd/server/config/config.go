@@ -47,7 +47,6 @@ type ServerConfig struct {
 	ServicesConfigPath       string
 	PaymentMethodsConfigPath string
 	CatalogConfigPath        string
-	Debug                    bool
 	LogLevel                 slog.Level
 	MaxRequestBytes          int64
 	ReadHeaderTimeout        time.Duration
@@ -114,7 +113,6 @@ func Load() (*Config, error) {
 			ServicesConfigPath:       getEnvOrDefault("SERVICES_CONFIG_PATH", "configs/services.json"),
 			PaymentMethodsConfigPath: getEnvOrDefault("PAYMENT_METHODS_CONFIG_PATH", "configs/payment_methods.json"),
 			CatalogConfigPath:        getEnvOrDefault("CATALOG_CONFIG_PATH", "configs/catalog.json"),
-			Debug:                    getBoolOrDefault("SERVER_DEBUG", true),
 			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
 			MaxRequestBytes:          int64(getIntEnvOrDefault("SERVER_MAX_REQUEST_BYTES", 33554432)), // 32 MiB
 			ReadHeaderTimeout:        getDurationOrDefault("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
