@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/OpenNSW/core/taskflow/store"
@@ -38,6 +39,9 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 			"node-c": {ID: "node-c", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusNotStarted, CreatedAt: now.Add(2 * time.Second), UpdatedAt: now.Add(2 * time.Second)},
 		},
 		AuditTrail: []string{"workflow started"},
+		Edges: []workflow.Edge{
+			{ID: "e1", SourceID: "node-a", TargetID: "node-b", Condition: "declared_value > 500"},
+		},
 	}
 	mockWM.On("GetStatus", ctx, consignmentID).Return(instance, nil)
 
@@ -56,6 +60,55 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 	assert.Equal(t, "node-b", result.Nodes[1].ID)
 	assert.Equal(t, "RUNNING", result.Nodes[1].Status)
 	assert.Empty(t, result.Nodes[1].ChildWorkflowIDs)
+	// Edges pass straight through, condition included — an admin resolving a GATEWAY parked on
+	// "no matching conditions" needs to see exactly what each outgoing edge actually checks.
+	require.Len(t, result.Edges, 1)
+	assert.Equal(t, workflow.Edge{ID: "e1", SourceID: "node-a", TargetID: "node-b", Condition: "declared_value > 500"}, result.Edges[0])
+	mockWM.AssertExpectations(t)
+}
+
+// A parked node's category and mappings pass straight through — the resolve UI reads them to tell
+// an admin why the node parked and which workflow variables a RETRY reads or a COMPLETE writes.
+func TestConsignmentService_GetEngineStatus_ParkContext(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	consignmentID := uuid.NewString()
+	now := time.Now()
+
+	instance := &workflow.WorkflowInstance{
+		ID:     consignmentID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"review": {
+				ID: "review:uuid-1", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin, CreatedAt: now, UpdatedAt: now,
+				LastError:     "output mapping error: required task variable 'status' not found in task result",
+				ParkCategory:  workflow.ParkCategoryOutputMapping,
+				InputMapping:  map[string]string{"applicant?": "applicant_ref"},
+				OutputMapping: map[string]string{"status": "review.outcome"},
+			},
+			"intake": {ID: "intake:uuid-2", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusCompleted, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)},
+		},
+	}
+	mockWM.On("GetStatus", ctx, consignmentID).Return(instance, nil)
+
+	result, err := svc.GetEngineStatus(ctx, consignmentID)
+	require.NoError(t, err)
+	require.Len(t, result.Nodes, 2)
+
+	parked := result.Nodes[0]
+	assert.Equal(t, "review:uuid-1", parked.ID)
+	assert.Equal(t, "OUTPUT_MAPPING", parked.ParkCategory)
+	assert.Equal(t, map[string]string{"applicant?": "applicant_ref"}, parked.InputMapping)
+	assert.Equal(t, map[string]string{"status": "review.outcome"}, parked.OutputMapping)
+
+	// A node that isn't parked carries none of it.
+	assert.Empty(t, result.Nodes[1].ParkCategory)
+	assert.Nil(t, result.Nodes[1].InputMapping)
+	assert.Nil(t, result.Nodes[1].OutputMapping)
 	mockWM.AssertExpectations(t)
 }
 
@@ -180,4 +233,174 @@ func TestConsignmentService_RegisterTaskWorkflowManager_AlreadyRegistered(t *tes
 
 	err := svc.RegisterTaskWorkflowManager(new(MockWM))
 	assert.Error(t, err)
+}
+
+// TestConsignmentService_ResolveAdminIntervention_TranslatesCompositeNodeID guards the actual
+// bug: an admin submits the composite "<template ID>:<uuid>" ID they were shown (EngineNodeDTO.ID
+// — see NodeInfo.ID in core's GraphInterpreterWorkflow), but core's own signal routing
+// (pendingAdminResolutions) keys on the plain template ID — nodeInfo's map key, not its .ID
+// field. Without translating back, core silently drops the signal as routed to an unknown node
+// and the admin's action never applies.
+func TestConsignmentService_ResolveAdminIntervention_TranslatesCompositeNodeID(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	workflowID := "task-wf-n1_apply:ca7ed707-1dba-43ca-94bf-10eddf00df3c"
+	compositeNodeID := "officer_review:6aad0417-9a6d-4407-9509-2e51d8fcae99"
+
+	instance := &workflow.WorkflowInstance{
+		ID:     workflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			// Keyed by the plain template ID — NodeInfo.ID itself is the composite value an
+			// admin actually sees and submits back (see workflow.go's GraphInterpreterWorkflow).
+			"officer_review": {ID: compositeNodeID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+		},
+	}
+	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
+	mockWM.On("ResolveAdminIntervention", ctx, workflowID, "", mock.MatchedBy(func(sig workflow.AdminResolutionSignal) bool {
+		return sig.NodeID == "officer_review"
+	})).Return(nil)
+
+	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		NodeID: compositeNodeID,
+		Action: workflow.AdminActionComplete,
+		Reason: "activity already ran, supplying result manually",
+	})
+	require.NoError(t, err)
+	mockWM.AssertExpectations(t)
+}
+
+// A node parked inside a task workflow is resolved through the task workflow manager, with the
+// same composite-to-template ID translation, and the root manager is never consulted.
+func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager(t *testing.T) {
+	db, _ := setupTestDB(t)
+	rootWM, taskWM := new(MockWM), new(MockWM)
+	rootWM.Test(t) // any call to it fails the test
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
+	require.NoError(t, svc.RegisterTaskWorkflowManager(taskWM))
+
+	ctx := context.Background()
+	taskWorkflowID := "task-wf-n1_apply:ca7ed707-1dba-43ca-94bf-10eddf00df3c"
+	compositeNodeID := "review_step:6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	taskWM.On("GetStatus", ctx, taskWorkflowID).Return(&workflow.WorkflowInstance{
+		ID:     taskWorkflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"review_step": {ID: compositeNodeID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+		},
+	}, nil)
+	taskWM.On("ResolveAdminIntervention", ctx, taskWorkflowID, "", mock.MatchedBy(func(sig workflow.AdminResolutionSignal) bool {
+		return sig.NodeID == "review_step"
+	})).Return(nil)
+
+	err := svc.ResolveTaskWorkflowAdminIntervention(ctx, taskWorkflowID, workflow.AdminResolutionSignal{
+		NodeID: compositeNodeID,
+		Action: workflow.AdminActionRetry,
+		Reason: "retry",
+	})
+	require.NoError(t, err)
+	taskWM.AssertExpectations(t)
+	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+}
+
+func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t *testing.T) {
+	db, _ := setupTestDB(t)
+	rootWM := new(MockWM)
+	rootWM.Test(t)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
+
+	err := svc.ResolveTaskWorkflowAdminIntervention(context.Background(), "task-wf-1", workflow.AdminResolutionSignal{
+		NodeID: "review_step:x",
+		Action: workflow.AdminActionRetry,
+		Reason: "retry",
+	})
+	// Not resolved through the root manager instead: that would be a silent fallback.
+	assert.ErrorContains(t, err, "no task workflow manager registered")
+	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+}
+
+func TestConsignmentService_ResolveAdminIntervention_UnknownNodeID(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	workflowID := "consignment-1"
+	instance := &workflow.WorkflowInstance{
+		ID:     workflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"officer_review": {ID: "officer_review:known-uuid", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+		},
+	}
+	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
+
+	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		NodeID: "officer_review:stale-uuid-from-a-prior-run",
+		Action: workflow.AdminActionRetry,
+		Reason: "retry",
+	})
+	assert.ErrorIs(t, err, ErrNodeNotParked)
+	mockWM.AssertExpectations(t)
+}
+
+func TestConsignmentService_ResolveAdminIntervention_NodeNotAwaitingAdmin(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	workflowID := "consignment-1"
+	instance := &workflow.WorkflowInstance{
+		ID:     workflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"officer_review": {ID: "officer_review:some-uuid", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusRunning},
+		},
+	}
+	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
+
+	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		NodeID: "officer_review:some-uuid",
+		Action: workflow.AdminActionRetry,
+		Reason: "retry",
+	})
+	assert.ErrorIs(t, err, ErrNodeNotParked)
+	mockWM.AssertExpectations(t)
+}
+
+func TestConsignmentService_ResolveAdminIntervention_GatewayCompleteUnsupported(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	workflowID := "consignment-1"
+	instance := &workflow.WorkflowInstance{
+		ID:     workflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"gw1": {ID: "gw1:some-uuid", Type: workflow.NodeTypeGateway, Status: workflow.NodeStatusAwaitingAdmin},
+		},
+	}
+	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
+
+	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		NodeID: "gw1:some-uuid",
+		Action: workflow.AdminActionComplete,
+		Reason: "complete",
+	})
+	assert.ErrorIs(t, err, ErrAdminActionUnsupportedForGateway)
+	// ResolveAdminIntervention on the manager must never be called for a rejected action — no
+	// expectation was set for it above, so testify would panic on an unexpected call.
+	mockWM.AssertExpectations(t)
 }
