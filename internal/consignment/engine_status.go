@@ -14,15 +14,30 @@ import (
 // tracked by the workflow engine itself (workflow.NodeInfo) — distinct from
 // WorkflowNodeResponseDTO, which is derived from the task store and reflects
 // business/task semantics instead.
+//
+// TODO: ID, LastError, ParkCategory, InputMapping, OutputMapping, CreatedAt, UpdatedAt,
+// ChildWorkflowIDs and CachedTaskResult are plain copies of workflow.NodeInfo fields; revisit
+// whether they need their own struct.
 type EngineNodeDTO struct {
-	ID             string    `json:"id"`
-	Type           string    `json:"type"`
-	GatewayType    string    `json:"gateway_type,omitempty"`
-	TaskTemplateID string    `json:"task_template_id,omitempty"`
-	Status         string    `json:"status"`
-	LastError      string    `json:"last_error,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string `json:"id"`
+	Type           string `json:"type"`
+	GatewayType    string `json:"gateway_type,omitempty"`
+	TaskTemplateID string `json:"task_template_id,omitempty"`
+	Status         string `json:"status"`
+	LastError      string `json:"last_error,omitempty"`
+	// ParkCategory says why a node in AWAITING_ADMIN parked (INPUT_MAPPING, OUTPUT_MAPPING,
+	// TASK_FAILURE, GATEWAY_CONDITION, SPLIT_DATA, CHILD_FAILURE, DEFINITION_ERROR or UNKNOWN), so
+	// the UI can guide an admin without parsing LastError.
+	ParkCategory string `json:"park_category,omitempty"`
+	// InputMapping and OutputMapping are the node's mappings, set only while it is parked. In
+	// InputMapping the key is the workflow variable read (a trailing "?" marks it optional) and
+	// the value is the task input it fills; in OutputMapping the key is the task result field
+	// (same "?" convention) and the value is the workflow variable it writes. So a RETRY fixes
+	// InputMapping keys, and a COMPLETE patch supplies OutputMapping values.
+	InputMapping  map[string]string `json:"input_mapping,omitempty"`
+	OutputMapping map[string]string `json:"output_mapping,omitempty"`
+	CreatedAt     time.Time         `json:"created_at"`
+	UpdatedAt     time.Time         `json:"updated_at"`
 	// ChildWorkflowIDs lists any child workflow executions spawned by this node (SPLIT_TASK /
 	// BATCH_SPLIT). Each ID can be fetched via the same engine-status endpoint (it treats the
 	// path parameter as a workflow ID, not a consignment record) to drill down, regardless of
@@ -35,6 +50,9 @@ type EngineNodeDTO struct {
 	// node parked inside it is otherwise invisible here, since from this node's own workflow's
 	// point of view the TASK node is just pending completion.
 	TaskWorkflowID string `json:"task_workflow_id,omitempty"`
+	// CachedTaskResult is the raw Activity result of a TASK node whose Activity already ran, until
+	// the node completes. It shows an admin what came back before choosing RETRY or COMPLETE.
+	CachedTaskResult map[string]any `json:"cached_task_result,omitempty"`
 }
 
 // EngineStatusDTO is the root workflow's raw engine state for a consignment.
@@ -48,11 +66,27 @@ type EngineStatusDTO struct {
 	// this workflow sees the same snapshot. May hold business/PII data, hence ConsignmentAdminRead
 	// rather than the trader/CHA-facing ConsignmentRead scope.
 	GlobalVariables map[string]any `json:"global_variables,omitempty"`
+	// Edges are the workflow's graph connections (workflow.WorkflowInstance.Edges). Source and
+	// target are the composite IDs in Nodes[i].ID; conditions are verbatim. Lets an admin see what
+	// a parked GATEWAY's outgoing edges check.
+	Edges []workflow.Edge `json:"edges,omitempty"`
 }
 
 // ErrEngineWorkflowNotFound is returned by GetEngineStatus when no workflow
 // execution exists for the given ID on the registered workflow manager.
 var ErrEngineWorkflowNotFound = errors.New("workflow execution not found")
+
+// ErrNodeNotParked is returned by ResolveAdminIntervention when the node isn't AWAITING_ADMIN
+// (wrong ID, or already resolved). Core silently drops a signal for such a node, so we check first.
+var ErrNodeNotParked = errors.New("node is not currently awaiting admin intervention")
+
+// ErrAdminActionUnsupportedForGateway is returned for COMPLETE on a GATEWAY, which core would only
+// log and re-park: a gateway's routing can't be bypassed.
+var ErrAdminActionUnsupportedForGateway = errors.New("complete is not supported for GATEWAY nodes; use retry or abort")
+
+// ErrAdminInterventionUnsupported is returned when the workflow manager doesn't implement
+// workflow.AdminInterventionResolver.
+var ErrAdminInterventionUnsupported = errors.New("workflow manager does not support resolving admin interventions")
 
 // GetEngineStatus returns the raw engine state for workflowID — the consignment's root workflow,
 // or (queried the same way, via this same endpoint) a nested child spawned by a SPLIT_TASK/
@@ -124,9 +158,13 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 			TaskTemplateID:   n.TaskTemplateID,
 			Status:           string(n.Status),
 			LastError:        n.LastError,
+			ParkCategory:     string(n.ParkCategory),
+			InputMapping:     n.InputMapping,
+			OutputMapping:    n.OutputMapping,
 			CreatedAt:        n.CreatedAt,
 			UpdatedAt:        n.UpdatedAt,
 			ChildWorkflowIDs: n.ChildWorkflowIDs,
+			CachedTaskResult: n.CachedTaskResult,
 		})
 	}
 	// NodeInfo is a map; sort for a stable, readable response instead of
@@ -144,6 +182,7 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 		Nodes:           nodes,
 		AuditTrail:      instance.AuditTrail,
 		GlobalVariables: instance.WorkflowVariables,
+		Edges:           instance.Edges,
 	}
 }
 
@@ -178,4 +217,77 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 			nodes[i].TaskWorkflowID = taskWorkflowID
 		}
 	}
+}
+
+// ResolveAdminIntervention sends an admin's decision (RETRY/COMPLETE/ABORT) to a node parked
+// in AWAITING_ADMIN on workflowID, a consignment's root workflow or one of its child-branch
+// workflows, through the same manager GetEngineStatus queries. A task workflow is a separate ID
+// space on its own manager: see ResolveTaskWorkflowAdminIntervention.
+func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error {
+	if s.wm == nil {
+		return fmt.Errorf("no workflow manager registered for ConsignmentService")
+	}
+	return resolveAdminIntervention(ctx, s.wm, workflowID, sig)
+}
+
+// ResolveTaskWorkflowAdminIntervention is ResolveAdminIntervention for a node parked inside a task
+// workflow (see EngineNodeDTO.TaskWorkflowID), resolved through the task workflow manager, the same
+// one GetTaskWorkflowEngineStatus queries.
+func (s *Service) ResolveTaskWorkflowAdminIntervention(ctx context.Context, taskWorkflowID string, sig workflow.AdminResolutionSignal) error {
+	if s.taskWm == nil {
+		return fmt.Errorf("no task workflow manager registered for ConsignmentService")
+	}
+	return resolveAdminIntervention(ctx, s.taskWm, taskWorkflowID, sig)
+}
+
+// resolveAdminIntervention is the body both resolve methods share, run against whichever manager
+// owns workflowID. It first confirms the node is parked and that a GATEWAY isn't asked to COMPLETE.
+//
+// sig.NodeID arrives as the composite "<template ID>:<uuid>" (EngineNodeDTO.ID), but core routes
+// signals by the plain template ID, so it is translated back before the check and the signal.
+//
+// The parked check and the signal are not atomic: the manager's ResolveAdminIntervention is a
+// fire-and-forget Temporal signal, and core drops a signal for a node that is no longer parked
+// without reporting it. If two admins resolve the same node at once, both can pass the check and
+// both get success, though only the first signal takes effect. We accept this because admin
+// resolution is expected to be a single admin acting at a time, not concurrent. TODO: fix this
+// properly in core with an acknowledged Temporal Update that rejects a node that is no longer
+// parked, then map that rejection to ErrNodeNotParked so the stale request gets a 409.
+func resolveAdminIntervention(ctx context.Context, mgr workflow.Manager, workflowID string, sig workflow.AdminResolutionSignal) error {
+	resolver, ok := mgr.(workflow.AdminInterventionResolver)
+	if !ok {
+		return ErrAdminInterventionUnsupported
+	}
+
+	instance, err := mgr.GetStatus(ctx, workflowID)
+	if err != nil {
+		if errors.Is(err, workflow.ErrWorkflowNotFound) {
+			return ErrEngineWorkflowNotFound
+		}
+		return fmt.Errorf("failed to verify node %s is parked on workflow %s: %w", sig.NodeID, workflowID, err)
+	}
+	templateID, node, ok := findNodeByCompositeID(instance.NodeInfo, sig.NodeID)
+	if !ok || node.Status != workflow.NodeStatusAwaitingAdmin {
+		return ErrNodeNotParked
+	}
+	if node.Type == workflow.NodeTypeGateway && sig.Action == workflow.AdminActionComplete {
+		return ErrAdminActionUnsupportedForGateway
+	}
+	sig.NodeID = templateID
+
+	if err := resolver.ResolveAdminIntervention(ctx, workflowID, "", sig); err != nil {
+		return fmt.Errorf("failed to resolve admin intervention for workflow %s node %s: %w", workflowID, sig.NodeID, err)
+	}
+	return nil
+}
+
+// findNodeByCompositeID finds a node by its composite NodeInfo.ID and returns its template ID (the
+// nodeInfo map key). A scan is fine: nodeInfo is small.
+func findNodeByCompositeID(nodeInfo map[string]*workflow.NodeInfo, compositeID string) (templateID string, node *workflow.NodeInfo, ok bool) {
+	for id, n := range nodeInfo {
+		if n.ID == compositeID {
+			return id, n, true
+		}
+	}
+	return "", nil, false
 }
