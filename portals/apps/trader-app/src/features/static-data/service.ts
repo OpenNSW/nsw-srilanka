@@ -60,8 +60,11 @@ export const staticDataSearchService: SearchService = {
     const { id, version } = staticDataParams(params)
     const options = await fetchOptions(id, version)
 
+    const parent = typeof params?.parent === 'string' && params.parent.length > 0 ? params.parent : undefined
+    const scoped = parent ? options.filter((option) => option.parents?.includes(parent)) : options
+
     const q = query.trim().toLowerCase()
-    const filtered = q ? options.filter((option) => option.title.toLowerCase().includes(q)) : options
+    const filtered = q ? scoped.filter((option) => option.title.toLowerCase().includes(q)) : scoped
 
     return { options: filtered.map((option) => ({ id: option.const, name: option.title })) }
   },
