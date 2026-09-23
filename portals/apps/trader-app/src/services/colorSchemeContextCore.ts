@@ -20,6 +20,7 @@ export interface ColorScheme {
   swatch: string
 }
 
+// Index 0 is the default scheme (see ColorSchemeContext's resolveScheme).
 export const COLOR_SCHEMES: ColorScheme[] = [
   {
     id: 'maritime',
@@ -50,8 +51,6 @@ export const COLOR_SCHEMES: ColorScheme[] = [
     swatch: '#5b5bd6',
   },
 ]
-
-export const DEFAULT_COLOR_SCHEME_ID = 'maritime'
 
 export interface ColorSchemeContextType {
   scheme: ColorScheme

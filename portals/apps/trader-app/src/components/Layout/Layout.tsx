@@ -8,7 +8,9 @@ import { TopBar } from './TopBar'
 // numbers wherever content needs to clear the bar.
 const GAP_PX = 12
 const TOPBAR_HEIGHT_PX = 64
-const CONTENT_TOP_PX = TOPBAR_HEIGHT_PX + GAP_PX * 2
+// Exported so screens that manage their own scroll container (rather than relying on
+// <main>'s own height above) can clear the bar by the same amount instead of hardcoding it.
+export const CONTENT_TOP_PX = TOPBAR_HEIGHT_PX + GAP_PX * 2
 
 export function Layout() {
   return (

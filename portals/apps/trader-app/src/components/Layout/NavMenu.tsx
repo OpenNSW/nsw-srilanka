@@ -60,7 +60,8 @@ export function NavMenu() {
     [role, navStructure],
   )
 
-  const isItemActive = (item: NavItem) => location.pathname.startsWith(item.path)
+  const isItemActive = (item: NavItem) =>
+    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
 
   const currentLabel = useMemo(() => {
     for (const item of filteredNavStructure) {
@@ -92,9 +93,13 @@ export function NavMenu() {
     return (
       <Link
         to={target.path}
-        className="flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl hover:bg-app-surface-muted text-sm font-semibold text-foreground transition-colors"
+        className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
+          isItemActive(target)
+            ? 'bg-primary-subtle text-primary'
+            : 'text-foreground hover:bg-app-surface-muted'
+        }`}
       >
-        <span className="text-foreground-subtle">{target.icon}</span>
+        <span className={isItemActive(target) ? '' : 'text-foreground-subtle'}>{target.icon}</span>
         <span>{target.name}</span>
       </Link>
     )

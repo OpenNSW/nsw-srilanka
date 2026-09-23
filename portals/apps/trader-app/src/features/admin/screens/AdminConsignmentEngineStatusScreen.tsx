@@ -29,6 +29,7 @@ import type {
 } from '@/features/admin/types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
+import { humanizeStatus } from '@/utils/formatStatus'
 
 const WORKFLOW_STATUS_COLOR: Record<EngineWorkflowStatus, 'orange' | 'green' | 'red'> = {
   RUNNING: 'orange',
@@ -46,16 +47,6 @@ const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 
 
 // Shared grid so NodeRow's columns line up under the header regardless of nesting depth.
 const NODE_ROW_GRID = 'grid grid-cols-[1fr_150px_130px_150px_1fr] gap-2 items-center'
-
-// node.type/gateway_type are shouty-snake-case engine identifiers (SPLIT_TASK, PARALLEL_SPLIT,
-// EXCLUSIVE_JOIN, ...) — humanized for display rather than shown as-is.
-function humanizeNodeType(type: string): string {
-  return type
-    .toLowerCase()
-    .split('_')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
 
 // Workflow/node ids are "<name>:<uuid>" composites — the name is what an admin actually
 // recognizes at a glance; the uuid matters for exact lookups but is unreadable noise inline, so
@@ -1154,8 +1145,8 @@ function NodeRow({
               node.task_workflow_id ? 'hover:bg-app-surface-muted cursor-pointer' : 'cursor-default'
             }`}
           >
-            <span className="truncate" title={humanizeNodeType(node.gateway_type ?? node.type)}>
-              {humanizeNodeType(node.gateway_type ?? node.type)}
+            <span className="truncate" title={humanizeStatus(node.gateway_type ?? node.type)}>
+              {humanizeStatus(node.gateway_type ?? node.type)}
             </span>
             <ChevronRightIcon
               className={`shrink-0 transition-transform ${node.task_workflow_id ? 'text-foreground' : 'invisible'} ${

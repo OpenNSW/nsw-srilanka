@@ -7,6 +7,7 @@ import { ActionListView } from '@/features/consignment/components/WorkflowViewer
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { CONTENT_TOP_PX } from '@/components/Layout'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 
@@ -253,7 +254,10 @@ export function ConsignmentDetailScreen({
   const workflowNodes = consignment.workflowNodes || []
 
   return (
-    <div className="p-4 md:p-6 h-[calc(100vh-88px)] max-w-5xl mx-auto w-full flex flex-col">
+    <div
+      style={{ height: `calc(100vh - ${CONTENT_TOP_PX}px)` }}
+      className="p-4 md:p-6 max-w-5xl mx-auto w-full flex flex-col"
+    >
       <div className="mb-3 flex items-center justify-between">
         <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)} aria-label={backLabel}>
           <ArrowLeftIcon />

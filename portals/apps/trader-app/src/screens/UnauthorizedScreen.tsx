@@ -8,7 +8,8 @@ export function UnauthorizedScreen() {
 
   return (
     <div className="min-h-screen bg-app-bg relative pb-16 sm:pb-8">
-      <main className="mt-16 min-h-[calc(100vh-64px)] flex items-center justify-center px-6">
+      {/* No TopBar is rendered above this screen, so no top offset is reserved here. */}
+      <main className="min-h-screen flex items-center justify-center px-6">
         <div className="w-full max-w-lg rounded-2xl bg-app-surface p-8 shadow-md text-center">
           <h1 className="text-2xl font-semibold text-foreground">{t('auth.unauthorized.title')}</h1>
           <p className="mt-3 text-foreground-muted">{t('auth.unauthorized.message')}</p>
