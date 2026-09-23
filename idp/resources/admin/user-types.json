@@ -1,0 +1,19 @@
+{
+  "userTypes": [
+    {
+      "key": "Admin_User",
+      "name": "Admin_User",
+      "ou": "default",
+      "allowSelfRegistration": false,
+      "schema": {
+        "username": { "type": "string", "required": true, "unique": true },
+        "password": { "type": "string", "required": true, "credential": true },
+        "email": { "type": "string", "required": true, "unique": true, "regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" },
+        "phone_number": { "type": "string", "required": false, "regex": "^\\+?[1-9]\\d{1,14}$" },
+        "given_name": { "type": "string", "required": false },
+        "family_name": { "type": "string", "required": false }
+      },
+      "systemAttributes": { "display": "username" }
+    }
+  ]
+}

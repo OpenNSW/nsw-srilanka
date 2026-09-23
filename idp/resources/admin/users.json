@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "key": "nswadmin",
+      "type": "Admin_User",
+      "ou": "default",
+      "username": "nswadmin",
+      "email": "nswadmin@default.dev",
+      "givenName": "NSW",
+      "familyName": "Admin",
+      "phoneNumber": "+94770000000",
+      "passwordEnv": { "override": "SAMPLE_NSW_ADMIN_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["NSW Admins"]
+    }
+  ]
+}
