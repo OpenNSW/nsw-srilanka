@@ -1,41 +1,33 @@
 import { Outlet } from 'react-router-dom'
-import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
-import { useState } from 'react'
+
+// The TopBar floats free of the viewport edge (see its own component)
+// rather than sitting flush against it. GAP_PX is the margin that
+// separates it from the edges; CONTENT_TOP_PX derives from it plus the
+// bar's own height so the two stay in lockstep without duplicating magic
+// numbers wherever content needs to clear the bar.
+const GAP_PX = 12
+const TOPBAR_HEIGHT_PX = 64
+// Exported so screens that manage their own scroll container (rather than relying on
+// <main>'s own height above) can clear the bar by the same amount instead of hardcoding it.
+export const CONTENT_TOP_PX = TOPBAR_HEIGHT_PX + GAP_PX * 2
 
 export function Layout() {
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => {
-    const savedState = localStorage.getItem('sidebarExpanded')
-    // Default to true if no saved state is found
-    return savedState !== null ? savedState === 'true' : true
-  })
-
-  const sidebarWidth = isSidebarExpanded ? 256 : 80 // w-64 = 256px, w-20 = 80px
-  // Save sidebar state to localStorage when it changes
-  const handleToggleSidebar = () => {
-    setIsSidebarExpanded((prev) => {
-      const newState = !prev
-      localStorage.setItem('sidebarExpanded', String(newState))
-      return newState
-    })
-  }
-
   return (
     <div className="min-h-screen bg-app-bg">
       <TopBar />
 
-      <div className="flex">
-        <Sidebar isExpanded={isSidebarExpanded} onToggle={handleToggleSidebar} />
-
-        <main
-          style={{ marginLeft: `${sidebarWidth}px`, width: `calc(100% - ${sidebarWidth}px)` }}
-          className="min-h-[calc(100vh-64px)] transition-all duration-300 mt-16 bg-app-bg pb-16 sm:pb-8"
-        >
-          <div className="max-w-360 mx-auto">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+      <main
+        style={{
+          marginTop: `${CONTENT_TOP_PX}px`,
+          minHeight: `calc(100vh - ${CONTENT_TOP_PX}px)`,
+        }}
+        className="bg-app-bg pb-16 sm:pb-8"
+      >
+        <div className="max-w-7xl mx-auto">
+          <Outlet />
+        </div>
+      </main>
     </div>
   )
 }
