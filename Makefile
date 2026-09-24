@@ -170,9 +170,21 @@ endif
 	go install github.com/zricethezav/gitleaks/v8@v8.30.1
 	@echo Tools installed.
 
+# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
+# and keep the Unix find recipe. cmd's find is FIND.EXE, so it cannot walk files.
+ifeq ($(OS),Windows_NT)
+ifeq ($(MSYSTEM),)
+  FMT_USE_CMD := 1
+endif
+endif
+
 .PHONY: fmt
 fmt: ## Format all Go source files with gofmt
+ifdef FMT_USE_CMD
+	powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter *.go | Where-Object { $$_.FullName -notlike '*\vendor\*' } | ForEach-Object { gofmt -w $$_.FullName }"
+else
 	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
+endif
 
 .PHONY: lint
 lint: export GOWORK = off
