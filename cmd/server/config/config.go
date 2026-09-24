@@ -47,7 +47,6 @@ type ServerConfig struct {
 	ServicesConfigPath       string
 	PaymentMethodsConfigPath string
 	CatalogConfigPath        string
-	Debug                    bool
 	LogLevel                 slog.Level
 	MaxRequestBytes          int64
 	ReadHeaderTimeout        time.Duration
@@ -86,6 +85,16 @@ func (s ServerConfig) Validate() error {
 func Load() (*Config, error) {
 	serverPort := getIntEnvOrDefault("SERVER_PORT", 8080)
 
+	// Unlike ServicesConfigPath/PaymentMethodsConfigPath/CatalogConfigPath below (stored as a
+	// path string and read later, downstream), notification.Config carries the provider blocks
+	// directly (core dropped its own Path-based loading — core#227) and Validate below requires
+	// Providers to be non-empty, so it has to be read here, synchronously, for Load itself to
+	// fail closed on a missing/malformed file rather than at first send.
+	notificationProviders, err := loadNotificationProviders(getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load notification config: %w", err)
+	}
+
 	cfg := &Config{
 		Database: database.Config{
 			Host:                   getEnvOrDefault("DB_HOST", "localhost"),
@@ -104,7 +113,6 @@ func Load() (*Config, error) {
 			ServicesConfigPath:       getEnvOrDefault("SERVICES_CONFIG_PATH", "configs/services.json"),
 			PaymentMethodsConfigPath: getEnvOrDefault("PAYMENT_METHODS_CONFIG_PATH", "configs/payment_methods.json"),
 			CatalogConfigPath:        getEnvOrDefault("CATALOG_CONFIG_PATH", "configs/catalog.json"),
-			Debug:                    getBoolOrDefault("SERVER_DEBUG", true),
 			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
 			MaxRequestBytes:          int64(getIntEnvOrDefault("SERVER_MAX_REQUEST_BYTES", 33554432)), // 32 MiB
 			ReadHeaderTimeout:        getDurationOrDefault("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
@@ -141,7 +149,7 @@ func Load() (*Config, error) {
 			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
 		},
 		Notification: notification.Config{
-			Path: getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"),
+			Providers: notificationProviders,
 		},
 		Temporal: temporal.Config{
 			Host:      getEnvOrDefault("TEMPORAL_HOST", "localhost"),
@@ -270,6 +278,21 @@ func guardServicesConfigTLS(path string) error {
 		}
 	}
 	return nil
+}
+
+// loadNotificationProviders reads path — one settings block per channel, e.g.
+// {"email": {...}, "sms": {...}} — into notification.Config's Providers map. The file's own
+// shape is unchanged from before core#227; only how this app hands it to core did.
+func loadNotificationProviders(path string) (map[notification.ChannelType]map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var providers map[notification.ChannelType]map[string]any
+	if err := json.Unmarshal(data, &providers); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return providers, nil
 }
 
 // getEnvOrDefault returns the trimmed value of an environment variable or a default value.

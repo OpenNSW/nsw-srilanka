@@ -17,9 +17,7 @@ export function Zone({ name, component, onAction }: Props) {
   return (
     <section className="space-y-2">
       <h2 className="text-xs font-semibold uppercase tracking-widest text-foreground-subtle">{name}</h2>
-      <div className="bg-app-surface rounded-lg shadow-sm border border-border">
-        {renderZoneComponent(component, { onAction })}
-      </div>
+      <div className="bg-app-surface rounded-2xl shadow-md">{renderZoneComponent(component, { onAction })}</div>
     </section>
   )
 }
