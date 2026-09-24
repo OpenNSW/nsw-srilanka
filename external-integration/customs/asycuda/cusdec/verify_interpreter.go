@@ -139,8 +139,8 @@ func renderDuties(d verifyDuties) string {
 	}
 
 	if len(d.GlobalDuties) > 0 {
-		b.WriteString("\n#### Declaration charges\n\n")
-		writeDutyTable(&b, d.GlobalDuties)
+		b.WriteString("\n**Declaration charges**\n\n")
+		writeDutyLines(&b, d.GlobalDuties)
 	}
 
 	// Sorted so the same assessment always reads the same way, whatever order
@@ -153,19 +153,21 @@ func renderDuties(d verifyDuties) string {
 		if len(item.DutyTaxFees) == 0 {
 			continue
 		}
-		fmt.Fprintf(&b, "\n#### Item %d\n\n", item.ItemSequenceNumeric)
-		writeDutyTable(&b, item.DutyTaxFees)
+		fmt.Fprintf(&b, "\n**Item %d**\n\n", item.ItemSequenceNumeric)
+		writeDutyLines(&b, item.DutyTaxFees)
 	}
 
 	fmt.Fprintf(&b, "\n**Total assessed: %s**\n", money(d.total()))
 	return b.String()
 }
 
-func writeDutyTable(b *strings.Builder, lines []dutyLine) {
-	b.WriteString("| Charge | Base | Rate | Assessed |\n|---|---:|---:|---:|\n")
+// writeDutyLines writes the charges as a list rather than a table. The panel
+// renders CommonMark without the GFM extension, so a pipe table arrives as a
+// row of literal pipes on one line; a list is read the same by both.
+func writeDutyLines(b *strings.Builder, lines []dutyLine) {
 	for _, l := range lines {
-		fmt.Fprintf(b, "| %s | %s | %s | %s |\n",
-			l.TypeCode, money(l.TaxBaseAmount), rate(l.TaxRateNumeric), money(l.TaxAssessedAmount))
+		fmt.Fprintf(b, "- **%s** — %s assessed (base %s, rate %s)\n",
+			l.TypeCode, money(l.TaxAssessedAmount), money(l.TaxBaseAmount), rate(l.TaxRateNumeric))
 	}
 }
 

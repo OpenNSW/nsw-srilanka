@@ -51,17 +51,19 @@ func TestVerifyInterpreter_ReadsTheAssessment(t *testing.T) {
 	summary, _ := out["summary"].(string)
 	for _, want := range []string{
 		"### Verified",
-		"#### Declaration charges",
-		"| EPF | 550 | 2 | 1100 |",
-		"| COM | 1 | 250 | 250 |",
-		"#### Item 1",
-		"| CED | 125 | 0 | 0 |",
+		"**Declaration charges**",
+		"- **EPF** — 1100 assessed (base 550, rate 2)",
+		"- **COM** — 250 assessed (base 1, rate 250)",
+		"**Item 1**",
+		"- **CED** — 0 assessed (base 125, rate 0)",
 		"**Total assessed: 1350**",
 	} {
 		assert.Contains(t, summary, want)
 	}
 	assert.Contains(t, summary, "Nothing has been submitted",
 		"verifying must not read as having filed the declaration")
+	assert.NotContains(t, summary, "|---",
+		"the panel renders CommonMark without GFM, so a pipe table arrives as literal text")
 }
 
 // The endpoint answers a failed verification with the submission's own
@@ -123,7 +125,7 @@ func TestVerifyInterpreter_OrdersItemsBySequence(t *testing.T) {
     }`))
 
 	summary, _ := out["summary"].(string)
-	assert.Less(t, strings.Index(summary, "#### Item 1"), strings.Index(summary, "#### Item 2"))
+	assert.Less(t, strings.Index(summary, "**Item 1**"), strings.Index(summary, "**Item 2**"))
 	assert.Equal(t, float64(15), out["total"])
 }
 
