@@ -117,10 +117,18 @@ help: ## Show this help
 # Go code quality (mirrors the backend CI pipeline)
 # Prepend GOPATH/bin so tools installed by `make tools` are found without
 # requiring the developer to manually update their shell profile.
-# Windows uses ';' as PATH separator; Unix uses ':'.
+# cmd.exe uses ';'. Git Bash / MSYS set MSYSTEM and keep ':'.
 # ---------------------------------------------------------------------------
 
+# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
+# and keep Unix recipes. cmd's find is FIND.EXE, so it cannot walk files.
 ifeq ($(OS),Windows_NT)
+ifeq ($(MSYSTEM),)
+  USE_CMD := 1
+endif
+endif
+
+ifdef USE_CMD
   export PATH := $(shell go env GOPATH)/bin;$(PATH)
 else
   export PATH := $(shell go env GOPATH)/bin:$(PATH)
@@ -129,7 +137,7 @@ endif
 .PHONY: setup
 setup: tools ## First-time setup: install tools, configure git hooks, seed config files from examples
 	git config core.hooksPath .githooks
-ifeq ($(OS),Windows_NT)
+ifdef USE_CMD
 	@echo Git hooks configured: .githooks/
 	@if exist .env.example if not exist .env copy /Y .env.example .env
 	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
@@ -155,14 +163,6 @@ else
 	done
 endif
 
-# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
-# and keep Unix recipes. cmd's find is FIND.EXE, so it cannot walk files.
-ifeq ($(OS),Windows_NT)
-ifeq ($(MSYSTEM),)
-  USE_CMD := 1
-endif
-endif
-
 .PHONY: tools
 tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
 	@echo Installing Go quality tools...
@@ -170,7 +170,7 @@ ifdef USE_CMD
 	@where golangci-lint >nul 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	@golangci-lint --version | findstr /C:"version 1." /C:"version v1." >nul && (echo ERROR: golangci-lint v1 is not supported. Install v2. && exit 1) || ver >nul
 else
-	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -Eqv 'has version v?1\.' \
 		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
 endif
 	go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
