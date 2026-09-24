@@ -10,7 +10,18 @@ type Props = {
   onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
 }
 
-const ZONE_ORDER = ['instructions', 'status_awaiting', 'review_history', 'workspace', 'reference']
+// Slots render in this order; anything not named here follows, alphabetically
+// by slot, which is the order a Go map reaches us in. verify_result leads: it
+// answers the button the trader just pressed, and on its own name it would
+// sort below the form that carries that button.
+const ZONE_ORDER = [
+  'verify_result',
+  'instructions',
+  'status_awaiting',
+  'review_history',
+  'workspace',
+  'reference',
+]
 
 export function TraderZoneLayout({ task, onSubmitForm }: Props) {
   const zones = orderedZones(task.view)
