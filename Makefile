@@ -181,7 +181,7 @@ endif
 .PHONY: fmt
 fmt: ## Format all Go source files with gofmt
 ifdef USE_CMD
-	powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter *.go | Where-Object { $$_.FullName -notlike '*\vendor\*' } | ForEach-Object { gofmt -w $$_.FullName }"
+	powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter *.go | Where-Object { $$_.FullName -notlike '*\vendor\*' } | ForEach-Object { gofmt -w $$_.FullName; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE } }"
 else
 	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
 endif
