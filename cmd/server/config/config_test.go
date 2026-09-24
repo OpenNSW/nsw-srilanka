@@ -11,7 +11,6 @@ import (
 
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/artifact/loaders/local"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 // TestMain writes a throwaway notification config to a temp dir and points

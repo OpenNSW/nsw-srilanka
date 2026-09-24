@@ -7,8 +7,9 @@ import (
 	"testing"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/trace"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 type mockAuditor struct {
@@ -59,13 +60,11 @@ func TestRecorder_Record_Member(t *testing.T) {
 	client := &mockAuditor{enabled: true}
 	recorder := NewRecorder(client)
 
-	userCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:    "user-1",
-			Roles: []string{"trader"},
-		},
-	}
-	ctx := context.WithValue(context.Background(), authn.AuthContextKey, userCtx)
+	ctx := authn.ContextWithPrincipal(context.Background(), &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "user-1",
+		Roles:  []string{"trader"},
+	})
 	ctx = trace.ContextWithTraceID(ctx, "trace-1")
 
 	recorder.Record(ctx, Event{
@@ -101,13 +100,11 @@ func TestRecorder_Record_Admin(t *testing.T) {
 	client := &mockAuditor{enabled: true}
 	recorder := NewRecorder(client)
 
-	adminCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:    "admin-1",
-			Roles: []string{"admin"},
-		},
-	}
-	ctx := context.WithValue(context.Background(), authn.AuthContextKey, adminCtx)
+	ctx := authn.ContextWithPrincipal(context.Background(), &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "admin-1",
+		Roles:  []string{"admin"},
+	})
 	recorder.Record(ctx, Event{
 		EventType:  EventConsignment,
 		Action:     ActionCreate,
@@ -133,12 +130,10 @@ func TestRecorder_Record_Service(t *testing.T) {
 	client := &mockAuditor{enabled: true}
 	recorder := NewRecorder(client)
 
-	clientCtx := &authn.AuthContext{
-		Client: &authn.ClientContext{
-			ClientID: "service-1",
-		},
-	}
-	ctx := context.WithValue(context.Background(), authn.AuthContextKey, clientCtx)
+	ctx := authn.ContextWithPrincipal(context.Background(), &authn.Principal{
+		Kind:     authn.KindClient,
+		ClientID: "service-1",
+	})
 	recorder.Record(ctx, Event{
 		EventType:  EventTask,
 		Action:     ActionUpdate,

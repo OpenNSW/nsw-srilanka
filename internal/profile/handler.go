@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/httputil"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
@@ -46,19 +46,19 @@ type UserProfile struct {
 // HandleGetProfile handles GET /api/v1/users/me.
 func (h *Handler) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.User == nil {
+	p, ok := authn.FromContext(ctx)
+	if !ok || p.Kind != authn.KindUser {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
 
-	uRecord, err := h.userSvc.GetUser(ctx, authCtx.User.ID)
+	uRecord, err := h.userSvc.GetUser(ctx, p.UserID)
 	if err != nil {
 		if errors.Is(err, user.ErrUserNotFound) {
 			httputil.Error(w, r, http.StatusNotFound, "user profile not found")
 			return
 		}
-		httputil.InternalServerError(w, r, "failed to retrieve user profile", err, "userId", authCtx.User.ID)
+		httputil.InternalServerError(w, r, "failed to retrieve user profile", err, "userId", p.UserID)
 		return
 	}
 	if uRecord == nil {

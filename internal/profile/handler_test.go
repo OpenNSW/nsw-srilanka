@@ -7,8 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/OpenNSW/core/authn"
-
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
@@ -63,8 +62,8 @@ func (s *stubCompanyService) UpsertCompany(_ context.Context, _ *company.Record)
 }
 
 func withAuthContext(r *http.Request, userID, ouHandle string) *http.Request {
-	authCtx := &authn.AuthContext{User: &authn.UserContext{ID: userID, OUHandle: ouHandle}}
-	return r.WithContext(context.WithValue(r.Context(), authn.AuthContextKey, authCtx))
+	p := &authn.Principal{Kind: authn.KindUser, UserID: userID, OUHandle: ouHandle}
+	return r.WithContext(authn.ContextWithPrincipal(r.Context(), p))
 }
 
 func TestHandler_HandleGetProfile_Unauthorized(t *testing.T) {

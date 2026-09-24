@@ -20,11 +20,11 @@ import (
 
 	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
@@ -46,45 +46,36 @@ func mustNewRouter(t *testing.T, cs *Service, chaService cha.Service, companySer
 }
 
 func withAuthContext(ctx context.Context, userID string) context.Context {
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:    userID,
-			Email: userID + "@example.com",
-		},
-	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	return authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: userID,
+		Email:  userID + "@example.com",
+	})
 }
 
 func withAuthContextOU(ctx context.Context, userID, ouHandle string) context.Context {
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:       userID,
-			Email:    userID + "@example.com",
-			OUHandle: ouHandle,
-		},
-	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	return authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:     authn.KindUser,
+		UserID:   userID,
+		Email:    userID + "@example.com",
+		OUHandle: ouHandle,
+	})
 }
 
 // withAuthContextRoles is withAuthContextOU plus the caller's JWT roles, for
 // tests exercising role-entitlement checks.
 func withAuthContextRoles(ctx context.Context, userID, ouHandle string, roles ...string) context.Context {
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:       userID,
-			Email:    userID + "@example.com",
-			OUHandle: ouHandle,
-			Roles:    roles,
-		},
-	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	return authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:     authn.KindUser,
+		UserID:   userID,
+		Email:    userID + "@example.com",
+		OUHandle: ouHandle,
+		Roles:    roles,
+	})
 }
 
 func withAuthContextClient(ctx context.Context, clientID string) context.Context {
-	authCtx := &authn.AuthContext{
-		Client: &authn.ClientContext{ClientID: clientID},
-	}
-	return context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	return authn.ContextWithPrincipal(ctx, &authn.Principal{Kind: authn.KindClient, ClientID: clientID})
 }
 
 func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
