@@ -225,24 +225,28 @@ frontend:
     type: ClusterIP
     port: 80
 
-  # Mirrors the TRADER_PORTAL_*/VITE_* vars in .env.example. These are all
-  # public SPA config injected into runtime-env.js at container start (see
-  # apps/trader-app/docker-entrypoint.sh) and read by the browser — none of
-  # these are secrets, and they must point at the host-exposed URLs the
-  # browser will actually use (not in-cluster Service names).
-  env:
-    VITE_API_BASE_URL: "https://nsw-api.example.com"
-    VITE_IDP_BASE_URL: "https://idp.example.com"
-    VITE_IDP_CLIENT_ID: "TRADER_PORTAL_APP"
+  # Same keys as apps/trader-app/public/config.example.js (the local dev
+  # equivalent of this config block). Rendered into a ConfigMap and mounted
+  # as config.js (see templates/frontend/configmap.yaml) for the browser to
+  # read — none of these are secrets, and they must point at the
+  # host-exposed URLs the browser will actually use (not in-cluster Service
+  # names). No VITE_ prefix: nothing here goes through Vite's build-time
+  # import.meta.env, so the prefix would be misleading. DEV_ENABLE_TEST_FLOW
+  # is deliberately omitted here — that's a dev-only "🧪 Test Flow" button,
+  # not something a real deployment wants.
+  config:
+    API_BASE_URL: "https://nsw-api.example.com"
+    IDP_BASE_URL: "https://idp.example.com"
+    IDP_CLIENT_ID: "TRADER_PORTAL_APP"
     # Extra /authorize parameters, query-string encoded (use "&" for more than one).
     # The `resource` value must equal AUTH_AUDIENCE / the NSW_API resource-server identifier.
-    VITE_IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
-    VITE_APP_URL: "https://trader.example.com"
-    VITE_IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
-    VITE_IDP_TRADER_GROUP_NAME: "Traders"
-    VITE_IDP_CHA_GROUP_NAME: "CHA"
-    VITE_IDP_NSW_ADMIN_GROUP_NAME: "NSW Admins"
-    VITE_SHOW_AUTOFILL_BUTTON: "false"
+    IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
+    APP_URL: "https://trader.example.com"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
+    IDP_TRADER_GROUP_NAME: "Traders"
+    IDP_CHA_GROUP_NAME: "CHA"
+    IDP_NSW_ADMIN_GROUP_NAME: "NSW Admins"
+    SHOW_AUTOFILL_BUTTON: "false"
 
   # Overrides the image's baked-in public/configs/branding.json (see
   # values.yaml and the chart README). Replace these example.com links with
