@@ -19,59 +19,40 @@ import (
 // event the route does not model.
 const EventInvoicePaid = "invoice.paid"
 
-// InvoiceEvent is the part of the CMS's invoice webhook this integration acts on.
+// InvoiceEvent is the CMS's invoice webhook, as they send it.
 //
-// Their live payload is flat: the receipt sits on the envelope as
-// payment_receipt, and the invoice it settles is named beside it. An earlier
-// draft of the contract nested the same facts under details.invoice_details, so
-// both are read — a deployment still sending the older shape must not silently
-// settle a step with nothing on it.
+// Everything worth keeping sits on payment_receipt: the money that moved, when
+// it moved, the reference it moved under, and the link to the receipt itself.
+// The envelope carries the correlation fields and little else.
 //
-// Two fields are traps, and are read through the methods below rather than
-// directly. total_amount on the envelope is the dollar figure, not what was
-// transferred; payment_receipt.payment_receipt is a receipt number, not a link
-// to one.
+// One field is a trap and is not read at all. total_amount on the envelope is
+// the order priced in dollars, not what was transferred -- their live payment
+// carries total_amount 132 beside a paid_amount of 39402. Reading it, even as a
+// last resort, would put "LKR 132.00" on a settled panel.
 type InvoiceEvent struct {
-	Event          string  `json:"event"`
-	Slug           string  `json:"slug"`
-	Status         string  `json:"status"`
-	ServiceOrderNo string  `json:"service_order_no"`
-	InvoiceNo      string  `json:"invoice_no"`
-	CusdecSerial   string  `json:"cusdec_serial"`
-	TotalAmount    float64 `json:"total_amount"`
-	InvoiceURLFlat string  `json:"invoice_url"`
-	Timestamp      string  `json:"timestamp"`
+	Event          string `json:"event"`
+	Slug           string `json:"slug"`
+	Status         string `json:"status"`
+	ServiceOrderNo string `json:"service_order_no"`
+	InvoiceNo      string `json:"invoice_no"`
+	CusdecSerial   string `json:"cusdec_serial"`
+	Timestamp      string `json:"timestamp"`
 
-	// Receipt is what the CMS issues when the money lands, on the envelope.
+	// Receipt is what the CMS issues when the money lands.
 	Receipt struct {
-		InvoiceNo      string  `json:"invoice_no"`
-		InvoiceSerial  string  `json:"invoice_serial"`
-		PaidAmount     float64 `json:"paid_amount"`
-		PaidDateTime   string  `json:"paid_datetime"`
-		ReceiptNo      string  `json:"payment_receipt"`
-		ServiceOrderNo string  `json:"service_order_no"`
+		ReceiptNo        string  `json:"payment_receipt"`
+		ReceiptURL       string  `json:"payment_receipt_url"`
+		PaidAmount       float64 `json:"paid_amount"`
+		PaidDateTime     string  `json:"paid_datetime"`
+		InvoiceNo        string  `json:"invoice_no"`
+		InvoiceSerial    string  `json:"invoice_serial"`
+		InvoiceType      string  `json:"invoice_type"`
+		ServiceOrderNo   string  `json:"service_order_no"`
+		CusdecNo         string  `json:"cusdec_no"`
+		Shipper          string  `json:"shipper"`
+		Consignee        string  `json:"consignee"`
+		ConsigneeAddress string  `json:"consignee_address"`
 	} `json:"payment_receipt"`
-
-	Details struct {
-		InvoiceDetails struct {
-			InvoiceNo       string  `json:"invoice_no"`
-			InvoiceSerial   string  `json:"invoice_serial"`
-			Status          string  `json:"status"`
-			TotalLKR        float64 `json:"total_lkr"`
-			TotalPayableLKR float64 `json:"total_payable_lkr"`
-			ExchangeRate    float64 `json:"exchange_rate"`
-			InvoiceURL      string  `json:"invoice_url"`
-			PaymentSlipURL  string  `json:"payment_slip_url"`
-			GeneratedAt     string  `json:"invoice_generated_at"`
-			PaidAt          string  `json:"invoice_paid_at"`
-
-			PaymentReceipt struct {
-				PaymentReceipt string  `json:"payment_receipt"`
-				PaidAmount     float64 `json:"paid_amount"`
-				PaidDateTime   string  `json:"paid_datetime"`
-			} `json:"payment_receipt"`
-		} `json:"invoice_details"`
-	} `json:"details"`
 }
 
 // Validate reports whether the event can be acted on at all.
@@ -96,98 +77,6 @@ func (e InvoiceEvent) correlator() string {
 		return slug
 	}
 	return strings.TrimSpace(e.ServiceOrderNo)
-}
-
-// Number is the invoice number, from wherever the CMS put it.
-func (e InvoiceEvent) Number() string {
-	if no := strings.TrimSpace(e.InvoiceNo); no != "" {
-		return no
-	}
-	return strings.TrimSpace(e.Details.InvoiceDetails.InvoiceNo)
-}
-
-// InvoiceURL is where the trader downloads the invoice to pay against.
-func (e InvoiceEvent) InvoiceURL() string {
-	return firstLink(e.InvoiceURLFlat, e.Details.InvoiceDetails.InvoiceURL)
-}
-
-// ReceiptURL is where the trader downloads the proof that it was paid, when the
-// CMS sends a link at all — their live payment sends none, and the receipt
-// number stands in.
-//
-// Only values that are links are offered. payment_receipt was read here once,
-// which put a bare "100415624" behind a Download link that could go nowhere.
-func (e InvoiceEvent) ReceiptURL() string {
-	return firstLink(
-		e.Details.InvoiceDetails.PaymentSlipURL,
-		e.Details.InvoiceDetails.InvoiceURL,
-		e.InvoiceURLFlat,
-	)
-}
-
-// firstLink returns the first value that is a URL, so a reference number never
-// reaches the panel as something to click.
-func firstLink(values ...string) string {
-	for _, v := range values {
-		v = strings.TrimSpace(v)
-		if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
-			return v
-		}
-	}
-	return ""
-}
-
-// Payable is what was actually transferred, in rupees.
-//
-// Every candidate here is a rupee figure. The envelope's total_amount is not:
-// their live payment carries total_amount 16 beside a paid_amount of 4776, which
-// is the order priced in dollars next to the rupees that left the account. Read
-// as a fallback it would put "LKR 16.00" on a settled panel, so it is not read
-// at all — a missing amount shows nothing, which is the honest outcome.
-func (e InvoiceEvent) Payable() float64 {
-	d := e.Details.InvoiceDetails
-	for _, amount := range []float64{
-		e.Receipt.PaidAmount,
-		d.TotalPayableLKR,
-		d.PaymentReceipt.PaidAmount,
-		d.TotalLKR,
-	} {
-		if amount != 0 {
-			return amount
-		}
-	}
-	return 0
-}
-
-// ReceiptNo is the reference the CMS issues against the payment — "100415624".
-// It is not a document: SLPA sends no link to one on this event, and the trader
-// quotes this number at the terminal instead.
-func (e InvoiceEvent) ReceiptNo() string {
-	return firstOf(e.Receipt.ReceiptNo, e.Details.InvoiceDetails.PaymentReceipt.PaymentReceipt)
-}
-
-// Serial is the invoice serial, from wherever the CMS put it.
-func (e InvoiceEvent) Serial() string {
-	return firstOf(e.Receipt.InvoiceSerial, e.Details.InvoiceDetails.InvoiceSerial)
-}
-
-// PaidAt is when the money moved.
-func (e InvoiceEvent) PaidAt() string {
-	return firstOf(
-		e.Receipt.PaidDateTime,
-		e.Details.InvoiceDetails.PaidAt,
-		e.Details.InvoiceDetails.PaymentReceipt.PaidDateTime,
-		e.Timestamp,
-	)
-}
-
-func firstOf(values ...string) string {
-	for _, v := range values {
-		if v = strings.TrimSpace(v); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // PaymentWaitTemplateID is the subtask the invoice task parks on, from the moment
@@ -232,30 +121,30 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 		return nil
 	}
 
-	details := event.Details.InvoiceDetails
+	receipt := event.Receipt
 	payload := map[string]any{
 		"__command":        "submit",
 		"paid":             true,
-		"invoice_no":       event.Number(),
-		"service_order_no": firstOf(event.ServiceOrderNo, event.Receipt.ServiceOrderNo),
-		"paid_at":          event.PaidAt(),
-	}
+		"invoice_no":       event.InvoiceNo,
+		"invoice_serial":   receipt.InvoiceSerial,
+		"service_order_no": event.ServiceOrderNo,
+		"cms_status":       event.Status,
+		"paid_at":          receipt.PaidDateTime,
+		"payable_lkr":      receipt.PaidAmount,
 
-	// Sent only when the CMS did. Completing the step rewrites what it recorded,
-	// so what the payment restates is what the settled panel keeps — but a field
-	// they left out must not blank one the trader could read a moment ago.
-	putIf(payload, "cms_status", firstOf(event.Status, details.Status))
-	putIf(payload, "invoice_serial", event.Serial())
-	putIf(payload, "receipt_no", event.ReceiptNo())
-	putIf(payload, "receipt_url", event.ReceiptURL())
-	putIf(payload, "invoice_url", event.InvoiceURL())
-	putIf(payload, "payment_slip_url", details.PaymentSlipURL)
-	putIf(payload, "generated_at", details.GeneratedAt)
-	if payable := event.Payable(); payable != 0 {
-		payload["payable_lkr"] = payable
-	}
-	if details.ExchangeRate != 0 {
-		payload["exchange_rate"] = details.ExchangeRate
+		// The receipt proper. It used to fall back to the payment slip or the
+		// invoice when no receipt link was found, which put the wrong document
+		// behind a "receipt" link -- the CMS does send one, on the receipt
+		// block, and that is the only thing read now.
+		"receipt_no":  receipt.ReceiptNo,
+		"receipt_url": receipt.ReceiptURL,
+
+		// Who paid, and against what. Stated on the settled panel so the
+		// payment can be reconciled without opening the PDF.
+		"cusdec_no":    receipt.CusdecNo,
+		"invoice_type": receipt.InvoiceType,
+		"shipper":      receipt.Shipper,
+		"consignee":    receipt.Consignee,
 	}
 
 	if err := s.tasks.CompleteTaskStep(ctx, taskID, payload); err != nil {
@@ -263,13 +152,6 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 	}
 
 	slog.InfoContext(ctx, "slpa webhook: invoice paid",
-		"task_id", taskID, "invoice_no", event.Number(), "correlator", correlator)
+		"task_id", taskID, "invoice_no", event.InvoiceNo, "correlator", correlator)
 	return nil
-}
-
-// putIf records a value on the payload only when the CMS sent one.
-func putIf(payload map[string]any, key, value string) {
-	if v := strings.TrimSpace(value); v != "" {
-		payload[key] = v
-	}
 }
