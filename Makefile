@@ -155,10 +155,18 @@ else
 	done
 endif
 
+# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
+# and keep Unix recipes. cmd's find is FIND.EXE, so it cannot walk files.
+ifeq ($(OS),Windows_NT)
+ifeq ($(MSYSTEM),)
+  USE_CMD := 1
+endif
+endif
+
 .PHONY: tools
 tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
 	@echo Installing Go quality tools...
-ifeq ($(OS),Windows_NT)
+ifdef USE_CMD
 	@where golangci-lint >nul 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	@golangci-lint --version | findstr /C:"version 1." /C:"version v1." >nul && (echo ERROR: golangci-lint v1 is not supported. Install v2. && exit 1) || ver >nul
 else
@@ -170,17 +178,9 @@ endif
 	go install github.com/zricethezav/gitleaks/v8@v8.30.1
 	@echo Tools installed.
 
-# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
-# and keep the Unix find recipe. cmd's find is FIND.EXE, so it cannot walk files.
-ifeq ($(OS),Windows_NT)
-ifeq ($(MSYSTEM),)
-  FMT_USE_CMD := 1
-endif
-endif
-
 .PHONY: fmt
 fmt: ## Format all Go source files with gofmt
-ifdef FMT_USE_CMD
+ifdef USE_CMD
 	powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter *.go | Where-Object { $$_.FullName -notlike '*\vendor\*' } | ForEach-Object { gofmt -w $$_.FullName }"
 else
 	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
