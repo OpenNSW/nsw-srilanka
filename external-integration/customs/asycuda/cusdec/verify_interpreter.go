@@ -10,9 +10,6 @@ import (
 	"github.com/OpenNSW/core/remote"
 )
 
-// eventVerified is the discriminator SLC Edge puts on a verify response.
-const eventVerified = "CUSDEC_VERIFIED"
-
 // VerifyInterpreter adapts the generic API-call plugin to the SLC Edge
 // declaration verify endpoint (POST /api/declaration/v1/verify).
 //
@@ -83,6 +80,10 @@ func (VerifyInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 // notification envelope (§4.6) even though this arrives on the response to the
 // call rather than as a pushed event.
 type verifyResponse struct {
+	// EventType is CUSDEC_VERIFIED. Read for the record rather than branched
+	// on: this is the response to a call made against the verify endpoint, so
+	// there is nothing else it could be, and rejecting a response that omitted
+	// it would lose an assessment over a field that carries no information.
 	EventType   string `json:"eventType"`
 	ProcessedAt string `json:"processedAt"`
 	Payload     struct {

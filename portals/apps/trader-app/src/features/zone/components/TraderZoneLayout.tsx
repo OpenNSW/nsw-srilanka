@@ -18,14 +18,7 @@ type Props = {
 // by slot, which is the order a Go map reaches us in. verify_result leads: it
 // answers the button the trader just pressed, and on its own name it would
 // sort below the form that carries that button.
-const ZONE_ORDER = [
-  'verify_result',
-  'instructions',
-  'status_awaiting',
-  'review_history',
-  'workspace',
-  'reference',
-]
+const ZONE_ORDER = ['verify_result', 'instructions', 'status_awaiting', 'review_history', 'workspace', 'reference']
 
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
   const zones = orderedZones(task.view)
@@ -35,7 +28,12 @@ export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {zones.map(([name, component]) => (
-        <Zone key={`${name}:${task.task_id}:${task.state}:${formEpoch}`} name={name} component={component} onAction={onSubmitForm} />
+        <Zone
+          key={`${name}:${task.task_id}:${task.state}:${formEpoch}`}
+          name={name}
+          component={component}
+          onAction={onSubmitForm}
+        />
       ))}
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>
