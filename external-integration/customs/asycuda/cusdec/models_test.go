@@ -211,3 +211,59 @@ func TestCusdecEventRequest_DualFieldUnmarshaling(t *testing.T) {
 	assert.Equal(t, "CBEX1", req.Payload.CusdecRef.Office)
 	assert.NoError(t, req.Validate())
 }
+
+// --- spec v1.7 amountToPay ---------------------------------------------------
+
+// §6.2 gained amountToPay in v1.7. It is the assessment, so it wins over any
+// sum this side computes -- the spec's own example has the two disagree, 1254
+// against tax lines totalling 1244.
+func TestAmountToPay_PrefersWhatASYCUDASent(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+	require.NoError(t, json.Unmarshal([]byte(`{
+      "eventType": "CUSDEC_INTEGRATED",
+      "payload": {
+        "edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+        "integrated": true,
+        "amountToPay": 1254,
+        "taxes": [
+          { "code": "tax1", "rate": 1, "amount": 222 },
+          { "code": "tax2", "rate": 1, "amount": 1022 }
+        ]
+      }
+    }`), &req))
+
+	assert.Equal(t, float64(1254), amountToPay(req.Payload))
+	assert.Equal(t, float64(1244), totalTaxes(req.Payload.Taxes),
+		"the tax lines are still read; they are simply not the assessment")
+}
+
+// Every result sent against v1.6 carries no such field, and summing the lines
+// stays the answer for those.
+func TestAmountToPay_FallsBackToTheTaxLines(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+	require.NoError(t, json.Unmarshal([]byte(`{
+      "payload": {
+        "integrated": true,
+        "taxes": [ { "code": "tax1", "rate": 1, "amount": 222 } ]
+      }
+    }`), &req))
+
+	assert.Nil(t, req.Payload.AmountToPay)
+	assert.Equal(t, float64(222), amountToPay(req.Payload))
+}
+
+// Nothing to pay is a real assessment, not a missing one, so an explicit zero
+// must not fall through to the tax lines.
+func TestAmountToPay_ZeroIsAnAnswer(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+	require.NoError(t, json.Unmarshal([]byte(`{
+      "payload": {
+        "integrated": true,
+        "amountToPay": 0,
+        "taxes": [ { "code": "tax1", "rate": 1, "amount": 222 } ]
+      }
+    }`), &req))
+
+	require.NotNil(t, req.Payload.AmountToPay)
+	assert.Equal(t, float64(0), amountToPay(req.Payload))
+}

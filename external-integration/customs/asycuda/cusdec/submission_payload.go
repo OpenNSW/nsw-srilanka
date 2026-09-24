@@ -16,13 +16,9 @@ import (
 // below is the translation between the two; nothing else in the flow should
 // need to know either shape.
 //
-// Two places where Annex A and the working sample payload disagree, resolved
-// in favour of the sample because it is what the endpoint actually accepts:
+// One place where Annex A and the working sample payload disagree, resolved in
+// favour of the sample because it is what the endpoint actually accepts:
 //
-//   - Annex A types totalCustomsValuation and goodsShipments[].customsValue as
-//     a single AmountType. The accepted payload sends a six-part valuation
-//     object (chargeAmount, externalFreight, internalFreight, insurance,
-//     otherCost, deductions), which is what Valuation models below.
 //   - Annex A names the remittance block "Remittance. 1" (singular); the
 //     accepted payload sends "remittances" as an array.
 type Submission struct {
@@ -43,7 +39,7 @@ type Properties struct {
 	NswID     string `json:"nswId"`
 }
 
-// Amount is Annex A §4.2 AmountType. CurrencyID is omitted when empty: the
+// Amount is Annex A §4.3 AmountType. CurrencyID is omitted when empty: the
 // spec makes it mandatory only where a value is present, and the accepted
 // payload sends bare {"value":0} for the unused cost lines.
 type Amount struct {
@@ -51,14 +47,18 @@ type Amount struct {
 	CurrencyID string  `json:"currencyID,omitempty"`
 }
 
-// Measure is Annex A §4.3 MeasureType.
+// Measure is Annex A §4.4 MeasureType.
 type Measure struct {
 	Value    float64 `json:"value"`
 	UnitCode string  `json:"unitCode,omitempty"`
 }
 
-// Valuation is the customs-value breakdown carried by both the general segment
-// (totalCustomsValuation) and each item (customsValue).
+// Valuation is §4.2 CustomsValuation, the customs-value breakdown carried by
+// both the general segment (totalCustomsValuation) and each item
+// (customsValue). Every element is an Amount (§4.3).
+//
+// Spec v1.6 typed both fields as a bare AmountType and this package followed
+// the accepted payload instead; v1.7 adds §4.2 and the two now agree.
 type Valuation struct {
 	ChargeAmount    Amount `json:"chargeAmount"`
 	ExternalFreight Amount `json:"externalFreight"`
@@ -94,8 +94,8 @@ type GeneralSeg struct {
 	CountryFirstDestination        string    `json:"countryFirstDestination"`
 	TransportVesselName            string    `json:"transportVesselName"`
 	TransportVesselNameNationality string    `json:"transportVesselNameNationality"`
-	TransportVoageName             string    `json:"transportVoageName"`
-	TransportVoageNameNationality  string    `json:"transportVoageNameNationality"`
+	TransportVoyageName            string    `json:"transportVoyageName"`
+	TransportVoyageNameNationality string    `json:"transportVoyageNameNationality"`
 	DeliveryTerms                  string    `json:"deliveryTerms"`
 	DeliveryTermsPlace             string    `json:"deliveryTermsPlace"`
 	ModeOfTransportAtBorder        string    `json:"modeOfTransportAtBorder"`
@@ -136,7 +136,6 @@ type GoodsItem struct {
 	CountryOfOriginCode string              `json:"countryOfOriginCode"`
 	GoodsPreference     string              `json:"goodsPreference"`
 	ItemPackage         Measure             `json:"itemPackage"`
-	NumberOfUnits       int                 `json:"numberOfUnits"`
 	Bol                 string              `json:"bol"`
 	BolSplit            string              `json:"bolSplit"`
 	MarksAndNumbers     string              `json:"marksAndNumbers"`
@@ -149,17 +148,42 @@ type Remittance struct {
 	RemittanceValue Amount `json:"remittanceValue"`
 }
 
-// SupportDoc is one entry of the supportingDocuments array. FileName must match
-// the filename on the corresponding fileN multipart part (§6.1.2), which
-// BuildPayload guarantees by deriving both from the same storage key.
+// SupportDoc is one entry of the supportingDocuments array.
+//
+// §8 recognises two kinds, told apart by the fields the entry carries:
+//
+//   - a scanned document, which needs fileName and documentCode and has a
+//     matching fileN part in the multipart request; and
+//   - a metadata document, which references a document held elsewhere and
+//     needs itemSequence, documentCode, documentId and dateAsString, with no
+//     file attached at all.
+//
+// An entry may be both, in which case it satisfies both sets.
+//
+// FileName must match the filename on the corresponding fileN part (§6.1.2),
+// which BuildPayload guarantees by deriving both from the same storage key.
 type SupportDoc struct {
-	FileName       string `json:"fileName"`
-	DocumentCode   string `json:"documentCode"`
 	SequenceNumber int    `json:"sequenceNumber"`
+	DocumentCode   string `json:"documentCode"`
+	FileName       string `json:"fileName,omitempty"`
 
-	// storageKey is where the bytes live; it never reaches the wire.
+	// The metadata half. ItemSequence is the item the document applies to and
+	// must match a goodsShipments[].sequenceNumeric in the same declaration.
+	// DateAsString is dd/MM/yyyy, which is not the ISO-8601 the rest of the
+	// interface uses.
+	ItemSequence int    `json:"itemSequence,omitempty"`
+	DocumentID   string `json:"documentId,omitempty"`
+	DateAsString string `json:"dateAsString,omitempty"`
+
+	// storageKey is where the bytes live; it never reaches the wire. Empty for
+	// a metadata document, which is what tells the two apart when the caller
+	// collects the files to attach.
 	storageKey string
 }
+
+// HasFile reports whether this entry expects a fileN part in the multipart
+// request. A metadata document does not.
+func (d SupportDoc) HasFile() bool { return d.storageKey != "" }
 
 // Constants the form does not collect because they never vary for this flow.
 const (
@@ -240,8 +264,8 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 			CountryFirstDestination:        str(general, "countryOfFirstDestination"),
 			TransportVesselName:            str(transport, "vesselName"),
 			TransportVesselNameNationality: str(transport, "transportNationality"),
-			TransportVoageName:             str(transport, "voyageNo"),
-			TransportVoageNameNationality:  str(transport, "voyageNationality"),
+			TransportVoyageName:            str(transport, "voyageNo"),
+			TransportVoyageNameNationality: str(transport, "voyageNationality"),
 			DeliveryTerms:                  str(transport, "deliveryTermsCode"),
 			DeliveryTermsPlace:             str(transport, "deliveryTermsPlace"),
 			ModeOfTransportAtBorder:        str(transport, "modeOfTransport"),
@@ -368,7 +392,6 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 				Value:    float64(integer(pkg, "quantity")),
 				UnitCode: str(pkg, "kindCode"),
 			},
-			NumberOfUnits:   integer(m, "numberOfUnits"),
 			Bol:             str(m, "bol"),
 			BolSplit:        str(m, "bolSplit"),
 			MarksAndNumbers: str(m, "marksAndNumbers"),
@@ -388,7 +411,7 @@ func buildRemittances(financial map[string]any, currency string) []Remittance {
 		Reference:      str(financial, "bankReference"),
 		TermsOfPayment: str(financial, "paymentTermsCode"),
 	}
-	// AmountType pairs the value with its currency (§4.2). The form declares
+	// AmountType pairs the value with its currency (§4.3). The form declares
 	// one currency for the whole declaration, on the valuation block.
 	if amount != 0 {
 		r.RemittanceValue = Amount{Value: amount, CurrencyID: currency}
@@ -421,19 +444,27 @@ func buildSupportDocs(form map[string]any) ([]SupportDoc, error) {
 			return nil, fmt.Errorf("customs: supporting document %d is not an object", i+1)
 		}
 
-		key := strings.TrimSpace(str(m, "file"))
-		if key == "" {
-			// A row with a document code but no file would promise an
-			// attachment that is not there, which the endpoint rejects (400).
-			return nil, fmt.Errorf("customs: supporting document %d has no attached file", i+1)
+		doc := SupportDoc{
+			SequenceNumber: i + 1,
+			DocumentCode:   str(m, "documentCode"),
+			ItemSequence:   integer(m, "itemSequence"),
+			DocumentID:     strings.TrimSpace(str(m, "documentId")),
+			DateAsString:   strings.TrimSpace(str(m, "dateAsString")),
 		}
 
-		docs = append(docs, SupportDoc{
-			FileName:       key,
-			DocumentCode:   str(m, "documentCode"),
-			SequenceNumber: i + 1,
-			storageKey:     key,
-		})
+		// A file makes it a scanned document (§8); without one it has to stand
+		// as a metadata document instead, and those carry the reference in
+		// place of the bytes. A row with neither promises an attachment that is
+		// not there, which the endpoint rejects (400).
+		if key := strings.TrimSpace(str(m, "file")); key != "" {
+			doc.FileName = key
+			doc.storageKey = key
+		} else if doc.DocumentID == "" || doc.DateAsString == "" || doc.ItemSequence == 0 {
+			return nil, fmt.Errorf(
+				"customs: supporting document %d has no attached file, and is missing the item number, reference or date a document without one needs", i+1)
+		}
+
+		docs = append(docs, doc)
 	}
 	return docs, nil
 }
