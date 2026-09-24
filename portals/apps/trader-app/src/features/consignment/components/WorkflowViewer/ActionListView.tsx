@@ -123,12 +123,7 @@ export function ActionListView({
             ) : null}
 
             {groups.active.length === 0 && groups.inReview.length === 0 && filteredSteps.length > 0 ? (
-              <Box
-                py="8"
-                px="6"
-                mb="6"
-                className="text-center bg-app-surface rounded-xl border border-border border-dashed shadow-sm relative"
-              >
+              <Box py="8" px="6" mb="6" className="text-center relative">
                 {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
                 <ClockIcon className="w-12 h-12 text-foreground-subtle mx-auto mb-3" />
                 <Heading size="3" color="gray" mb="1">

@@ -4,39 +4,51 @@ import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Au
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
 import { RoleSwitcher } from './RoleSwitcher'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { NavMenu } from './NavMenu'
 import { appConfig, displayName } from '@/config'
 import { useProfile } from '@/services/useProfile'
+
+function BrandMark() {
+  if (appConfig.branding.systemLogoUrl) {
+    return <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
+  }
+  const initial = displayName.trim().charAt(0).toUpperCase() || 'N'
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-white shadow-md shadow-primary/30">
+      {initial}
+    </span>
+  )
+}
 
 function TopBarShell({ children }: { children: ReactNode }) {
   const { profile } = useProfile()
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-app-surface border-b border-border flex items-center justify-between px-6">
-      <div className="flex items-center gap-3 min-w-0">
-        {appConfig.branding.systemLogoUrl && (
-          <img src={appConfig.branding.systemLogoUrl} alt={displayName} className="h-8 w-auto object-contain" />
-        )}
-        <span className="text-xl font-bold text-foreground">{displayName}</span>
+    <header className="fixed top-3 left-3 right-3 z-50 h-16 rounded-2xl bg-app-surface/80 shadow-lg backdrop-blur-xl flex items-center justify-between px-6">
+      <div className="flex items-center gap-6 min-w-0">
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <span className="text-xl font-bold text-foreground tracking-tight">{displayName}</span>
+        </div>
+        <NavMenu />
         {profile?.company?.name && (
-          <div className="flex items-center pl-4 ml-1 border-l border-border h-6 min-w-0">
-            <span
-              className="inline-flex items-center max-w-72 truncate rounded-full bg-primary-subtle px-3 py-1 text-sm font-medium text-primary border border-primary-subtle"
-              title={profile.company.name}
-            >
-              {profile.company.name}
-            </span>
-          </div>
+          <span
+            className="inline-flex items-center max-w-72 truncate rounded-full bg-primary-subtle px-3 py-1 text-sm font-medium text-primary"
+            title={profile.company.name}
+          >
+            {profile.company.name}
+          </span>
         )}
       </div>
 
-      <div className="flex items-center gap-4">{children}</div>
+      <div className="flex items-center gap-5">{children}</div>
     </header>
   )
 }
 
-function TopBarUserActions({ onSignOut, withDivider = true }: { onSignOut: () => void; withDivider?: boolean }) {
+function TopBarUserActions({ onSignOut }: { onSignOut: () => void }) {
   return (
-    <div className={`flex items-center gap-3 ${withDivider ? 'pl-3 border-l border-border' : ''}`}>
+    <div className="flex items-center gap-3">
       <SignedIn>
         <UserDropdown onSignOut={onSignOut} />
       </SignedIn>

@@ -1,6 +1,5 @@
 import { type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import './App.css'
 import { Layout } from './components/Layout'
 import { Footer } from '@/components/Layout'
 import { ConsignmentScreen } from './features/consignment/screens/ConsignmentScreen.tsx'

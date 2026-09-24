@@ -73,11 +73,11 @@ export interface ActionCardProps {
 // brand status tokens (green→success, blue→info, orange→warning, red→error,
 // gray→secondary). See the token block in index.css.
 const statusStyles: Record<string, string> = {
-  green: 'bg-success-subtle text-success-strong border-success-subtle',
-  blue: 'bg-info-subtle text-info-strong border-info-subtle',
-  orange: 'bg-warning-subtle text-warning-strong border-warning-subtle',
-  gray: 'bg-app-bg text-foreground-muted border-border',
-  red: 'bg-error-subtle text-error-strong border-error-subtle',
+  green: 'bg-success-subtle text-success-strong',
+  blue: 'bg-info-subtle text-info-strong',
+  orange: 'bg-warning-subtle text-warning-strong',
+  gray: 'bg-app-bg text-foreground-muted',
+  red: 'bg-error-subtle text-error-strong',
 }
 
 export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
@@ -92,7 +92,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
 
   return (
     <Card
-      variant="classic"
+      variant="ghost"
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : -1}
       onClick={isClickable ? handleOpen : undefined}
@@ -106,17 +106,17 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
             }
           : undefined
       }
-      className={`mb-3 transition-all duration-200 border shadow-sm group
+      className={`mb-3 transition-all duration-200 shadow-sm group
         ${
           isClickable
-            ? 'bg-app-surface border-border hover:border-info/40 hover:bg-info-subtle/40 hover:shadow-md cursor-pointer active:scale-[0.98] active:shadow-sm'
-            : 'bg-app-bg border-border opacity-50 cursor-not-allowed'
+            ? 'bg-app-surface hover:bg-info-subtle/40 hover:shadow-md cursor-pointer active:scale-[0.98] active:shadow-sm'
+            : 'bg-app-bg opacity-50 shadow-none cursor-not-allowed'
         }`}
     >
       <Flex direction="column" gap="3">
         <Flex align="center" justify="between" gap="3">
           <Flex align="center" gap="3" className="flex-1 min-w-0">
-            <Box className={`p-2.5 rounded-lg border ${statusStyles[config.color] || statusStyles.gray}`}>
+            <Box className={`p-2.5 rounded-lg ${statusStyles[config.color] || statusStyles.gray}`}>
               {nodeTypeIcons[step.workflowNodeTemplate.type] || <FileTextIcon className="w-5 h-5" />}
             </Box>
             <Box className="flex-1 min-w-0">
