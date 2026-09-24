@@ -130,6 +130,9 @@ endif
 
 ifdef USE_CMD
   export PATH := $(shell go env GOPATH)/bin;$(PATH)
+else ifneq ($(MSYSTEM),)
+  # go env GOPATH is C:\... here. cygpath makes /c/... so the drive colon is not a PATH separator.
+  export PATH := $(shell cygpath -u "$$(go env GOPATH)")/bin:$(PATH)
 else
   export PATH := $(shell go env GOPATH)/bin:$(PATH)
 endif
