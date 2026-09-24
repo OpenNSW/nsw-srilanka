@@ -36,107 +36,117 @@ func (i *GenerateInterpreter) BuildHeaders(inputs map[string]any) map[string]str
 // Interpret reports whether the CMS issued the invoice and records what the
 // trader needs to pay it.
 //
+// Every field is read from the one place the CMS documents it. An earlier
+// version tried several keys per value, which hid a real fault: the payment
+// slip link lives on the payment_slip block, not beside it, so the fallback
+// quietly produced nothing and the trader was shown an invoice with no way to
+// pay it.
+//
 // Only the rupee figures are kept. The CMS prices the order in dollars and
 // converts, but what is transferred to SLPA's account is the rupee amount, and
 // showing both invites a trader to pay the wrong one. The exchange rate is kept
 // so the conversion on the invoice document can be checked against the panel.
 func (i *GenerateInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
 	body := cms.Flatten(resp)
-	out := map[string]any{}
-
-	details := detailsOf(body)
-	number := firstOf(cms.String(body, "invoice_no"), cms.String(details, "invoice_no"))
+	details := mapAt(body, "details")
+	number := cms.String(details, "invoice_no")
 
 	// The CMS answers an order it has already invoiced with that same invoice
 	// rather than an error, so a repeated call is not a failure: the number is
 	// what says an invoice exists.
-	issued := callErr == nil && !cms.HasErrors(body) && number != ""
-	if !issued {
-		out["error"] = describeFailure(callErr, body)
-		return false, out
+	if callErr != nil || cms.HasErrors(body) || number == "" {
+		return false, map[string]any{"error": describeFailure(callErr, body)}
 	}
 
-	out["invoice_no"] = number
-	out["service_order_no"] = cms.String(body, "service_order_no")
-	out["cms_status"] = firstOf(cms.String(details, "status"), cms.String(body, "so_status"))
+	slip := mapAt(details, "payment_slip")
+	out := map[string]any{
+		"invoice_no":       number,
+		"service_order_no": cms.String(body, "service_order_no"),
+		"cms_status":       cms.String(details, "status"),
+		"invoice_serial":   cms.String(details, "invoice_serial"),
+		"generated_at":     cms.String(details, "invoice_generated_at"),
+		"payable_lkr":      number64(details, "total_payable_lkr"),
+		"exchange_rate":    number64(details, "exchange_rate"),
 
-	// Recorded only when the CMS sent them: a panel showing an empty serial or a
-	// zero payable reads as a fact about the invoice rather than a gap in the
-	// answer.
-	put(out, "invoice_serial", cms.String(details, "invoice_serial"))
-	put(out, "generated_at", cms.String(details, "invoice_generated_at"))
-	put(out, "payment_slip_url", cms.String(details, "payment_slip_url"))
-	put(out, "invoice_url", cms.String(details, "invoice_url"))
+		// The one link the trader acts on. The invoice document is not offered
+		// beside it: two links, one of which cannot be paid against, is how a
+		// trader ends up transferring against the wrong document.
+		"payment_slip_url": cms.String(slip, "payment_slip_url"),
 
-	if payable, ok := number64(details, "total_payable_lkr", "total_lkr"); ok {
-		out["payable_lkr"] = payable
+		"items":        lineItems(details),
+		"payment_slip": paymentSlip(slip),
+
+		// The order is invoiced but not yet paid, and the step that follows waits
+		// for SLPA to say it has been. Stated here so the workflow's gateway reads
+		// one value whether it arrives from this call or from the payment webhook.
+		"paid": cms.String(details, "invoice_paid_at") != "",
 	}
-	if rate, ok := number64(details, "exchange_rate"); ok {
-		out["exchange_rate"] = rate
-	}
-
-	// The order is invoiced but not yet paid, and the step that follows waits for
-	// SLPA to say it has been. Stated here so the workflow's gateway reads one
-	// value whether it arrives from this call or from the payment webhook.
-	out["paid"] = paidFlag(body, details)
 	return true, out
 }
 
-// detailsOf reads the block the CMS puts the invoice itself in. A missing block
-// is an empty one, so every read below answers "" or zero rather than panicking
-// on an answer shaped differently than expected.
-func detailsOf(body map[string]any) map[string]any {
-	details, _ := body["details"].(map[string]any)
-	if details == nil {
+// lineItems is the invoice broken down the way it was priced: one entry per
+// container, since that is the unit SLPA charges for and the one a trader
+// checks a total against.
+func lineItems(details map[string]any) []map[string]any {
+	raw, _ := details["items"].([]any)
+	items := make([]map[string]any, 0, len(raw))
+	for _, entry := range raw {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		items = append(items, map[string]any{
+			"container_no":   cms.String(item, "container_no"),
+			"container_size": cms.String(item, "container_size"),
+			"container_type": cms.String(item, "container_type"),
+			"service_name":   cms.String(item, "service_name"),
+			"quantity":       cms.String(item, "quantity"),
+			"total_lkr":      number64(item, "total_lkr"),
+		})
+	}
+	return items
+}
+
+// paymentSlip is what the bank is handed: who is paying, against which
+// reference, for how much. Recorded so the panel can state it rather than
+// sending the trader into the PDF to find out what they are transferring.
+func paymentSlip(slip map[string]any) map[string]any {
+	return map[string]any{
+		"number":      cms.String(slip, "number"),
+		"number_type": cms.String(slip, "number_type"),
+		"shipper":     cms.String(slip, "shipper"),
+		"consignee":   cms.String(slip, "consignee"),
+		"total":       cms.String(slip, "total"),
+		"date":        cms.String(slip, "date"),
+		"time":        cms.String(slip, "time"),
+	}
+}
+
+// mapAt reads a nested object. A missing one is an empty map, so every read
+// through it answers "" or zero rather than panicking on an answer shaped
+// differently than expected.
+func mapAt(m map[string]any, key string) map[string]any {
+	nested, _ := m[key].(map[string]any)
+	if nested == nil {
 		return map[string]any{}
 	}
-	return details
+	return nested
 }
 
-// paidFlag reads whether the CMS considers the invoice settled already. It
-// normally is not — the invoice has just been raised — but an order invoiced and
-// paid before this call ran must not send the trader to wait for a payment that
-// has happened.
-func paidFlag(body, details map[string]any) bool {
-	if paid, ok := body["is_paid"].(bool); ok && paid {
-		return true
-	}
-	return strings.TrimSpace(cms.String(details, "invoice_paid_at")) != ""
-}
-
-// number64 reads the first of keys the CMS sent as a number, reporting whether
-// any of them was there. JSON numbers arrive as float64; an amount sent as a
+// number64 reads an amount. JSON numbers arrive as float64; one sent as a
 // string is read too, since the CMS has been seen to send both.
-func number64(m map[string]any, keys ...string) (float64, bool) {
-	for _, k := range keys {
-		switch v := m[k].(type) {
-		case float64:
-			return v, true
-		case int:
-			return float64(v), true
-		case string:
-			if f, err := parseFloat(v); err == nil {
-				return f, true
-			}
+func number64(m map[string]any, key string) float64 {
+	switch v := m[key].(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case string:
+		if f, err := parseFloat(v); err == nil {
+			return f
 		}
 	}
-	return 0, false
-}
-
-// put records a value only when the CMS sent one.
-func put(out map[string]any, key, value string) {
-	if v := strings.TrimSpace(value); v != "" {
-		out[key] = v
-	}
-}
-
-func firstOf(values ...string) string {
-	for _, v := range values {
-		if v = strings.TrimSpace(v); v != "" {
-			return v
-		}
-	}
-	return ""
+	return 0
 }
 
 // describeFailure builds the trader-facing message for an invoice the CMS did
