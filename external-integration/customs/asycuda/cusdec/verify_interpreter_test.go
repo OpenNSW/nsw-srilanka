@@ -1,6 +1,7 @@
 package cusdec
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -142,9 +143,18 @@ func TestVerifyInterpreter_SendsTheDeclarationAsJSON(t *testing.T) {
 	assert.Contains(t, string(encoded), `"baseGeneralSegment"`)
 	assert.Contains(t, string(encoded), `"goodsShipments"`)
 
-	// Implementing BuildParts is what routes an interpreter to multipart.
+	// Implementing BuildParts is what routes an interpreter to multipart, so
+	// the signature here has to be the one the plugin switches on --
+	// plugins.MultipartInterpreter's, down to the context.Context. Go matches
+	// method sets exactly: written with any in place of context.Context this
+	// assertion can never hold, and would pass just as readily on an
+	// interpreter that had gained the method.
+	//
+	// The interface is restated rather than imported because
+	// internal/tasks/plugins imports this package, so naming it here would be
+	// a cycle.
 	_, isMultipart := any(VerifyInterpreter{}).(interface {
-		BuildParts(any, map[string]any) ([]remote.Part, error)
+		BuildParts(context.Context, map[string]any) ([]remote.Part, error)
 	})
-	assert.False(t, isMultipart)
+	assert.False(t, isMultipart, "verify must not go out as multipart")
 }
