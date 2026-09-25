@@ -141,7 +141,7 @@ func TestBuildXML_ContainerNumber(t *testing.T) {
 	t.Run("synthesized when the trader gives none", func(t *testing.T) {
 		doc, err := BuildXML(fullForm())
 		require.NoError(t, err)
-		assert.Contains(t, doc, "<ContainerNumber>CBEX12026E1050_2026-08-19_1</ContainerNumber>")
+		assert.Contains(t, doc, "<ContainerNumber>CBEX12026E1050-2026-08-19-01</ContainerNumber>")
 	})
 
 	t.Run("the trader's own number is kept", func(t *testing.T) {
@@ -160,8 +160,8 @@ func TestBuildXML_ContainerNumber(t *testing.T) {
 
 		doc, err := BuildXML(form)
 		require.NoError(t, err)
-		assert.Contains(t, doc, "_1</ContainerNumber>")
-		assert.Contains(t, doc, "_2</ContainerNumber>")
+		assert.Contains(t, doc, "-01</ContainerNumber>")
+		assert.Contains(t, doc, "-02</ContainerNumber>")
 	})
 }
 

@@ -66,7 +66,13 @@ type cusdecResultPayload struct {
 	EdgeID     string            `json:"edgeId"`
 	Integrated *bool             `json:"integrated"`
 	Taxes      []TaxEntry        `json:"taxes,omitempty"`
-	Errors     json.RawMessage   `json:"errors,omitempty"`
+	// AmountToPay is what ASYCUDA says is owed (spec v1.7 §6.2). A pointer
+	// because absent and zero mean different things: a declaration can carry
+	// no duty at all, and only an absent field should fall back to summing the
+	// tax lines. Spec v1.6 had no such field, so a sender that predates it
+	// omits this.
+	AmountToPay *float64        `json:"amountToPay,omitempty"`
+	Errors      json.RawMessage `json:"errors,omitempty"`
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
