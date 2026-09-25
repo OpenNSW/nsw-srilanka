@@ -59,25 +59,36 @@ function toSearchOptions(options: StaticDataOption[]) {
   return options.map((option) => ({ id: option.const, name: option.title }))
 }
 
+// x-search.dependsOn arrives as params.parent. An empty value means no constraint.
+// Options with no parents list are kept only when nothing is constraining them.
+function parentParam(params: Record<string, unknown> | undefined): string | undefined {
+  const parent = params?.parent
+  return typeof parent === 'string' && parent.length > 0 ? parent : undefined
+}
+
 // Generic search service for `x-search.service: "static-data"` fields. One field's artifact
 // (id + version) is selected entirely via x-search.params, so this single registration backs
 // every static-data field in every form.
 //
 // An empty query with no cursor still downloads the artifact, which is what small lists do on
 // open. A typed query, or "load more", sends q, offset, and limit so the API ranks one page.
+// params.parent is applied on the cached list, and on the server query before that page is cut,
+// so the returned page and its total stay inside the parent scope.
 export const staticDataSearchService: SearchService = {
   async search({ query, cursor, signal, params }) {
     const { id, version } = staticDataParams(params)
     const q = query.trim()
     const offset = typeof cursor === 'number' ? cursor : 0
+    const parent = parentParam(params)
     if (!q && offset === 0) {
       const options = await fetchOptions(id, version)
-      return { options: toSearchOptions(options) }
+      const scoped = parent ? options.filter((option) => option.parents?.includes(parent)) : options
+      return { options: toSearchOptions(scoped) }
     }
 
     const { data } = await http.request<PaginatedResponse<StaticDataOption>>({
       url: `${API_BASE_URL}/api/v1/static-data/${encodeURIComponent(id)}`,
-      params: { version, q: q || undefined, offset, limit: SEARCH_LIMIT },
+      params: { version, q: q || undefined, offset, limit: SEARCH_LIMIT, parent },
       attachToken: true,
       signal,
     })

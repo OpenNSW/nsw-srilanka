@@ -3,6 +3,7 @@ package staticdata
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,8 +12,9 @@ import (
 
 // Option is one selectable row in a static_data artifact.
 type Option struct {
-	Const string `json:"const"`
-	Title string `json:"title"`
+	Const   string   `json:"const"`
+	Title   string   `json:"title"`
+	Parents []string `json:"parents,omitempty"`
 }
 
 // SearchResult is the pagination envelope returned when a static-data request
@@ -20,17 +22,34 @@ type Option struct {
 type SearchResult = pagination.Page[Option]
 
 // Search loads nothing itself: raw is one static_data artifact body. It keeps
-// object entries that have a non-empty const and title, ranks them against
-// query, and returns one page. query is matched case-insensitively against
-// title and const. An empty query keeps artifact order.
-func Search(raw json.RawMessage, query string, offset, limit int) (SearchResult, error) {
+// object entries that have a non-empty const and title, drops rows whose
+// parents list does not include parent (an empty parent keeps every row),
+// ranks the remainder against query, and returns one page. query is matched
+// case-insensitively against title and const. An empty query keeps artifact order.
+func Search(raw json.RawMessage, query, parent string, offset, limit int) (SearchResult, error) {
 	options, err := parseOptions(raw)
 	if err != nil {
 		return SearchResult{}, err
 	}
-	matched := rank(options, query)
+	scoped := filterByParent(options, parent)
+	matched := rank(scoped, query)
 	page := pageOptions(matched, offset, limit)
 	return pagination.NewPageResult(page, int64(len(matched)), offset, limit), nil
+}
+
+// filterByParent runs before ranking and pagination so page contents and total
+// describe the same parent scope. A row with no parents list does not match.
+func filterByParent(options []Option, parent string) []Option {
+	if parent == "" {
+		return options
+	}
+	scoped := make([]Option, 0, len(options))
+	for _, opt := range options {
+		if slices.Contains(opt.Parents, parent) {
+			scoped = append(scoped, opt)
+		}
+	}
+	return scoped
 }
 
 func parseOptions(raw json.RawMessage) ([]Option, error) {

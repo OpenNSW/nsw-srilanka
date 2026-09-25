@@ -31,7 +31,8 @@ func NewHandler(reg *artifact.Registry) *Handler {
 
 // HandleGet handles GET /api/v1/static-data/{id}?version=.
 // Without q, offset, or limit it returns the raw artifact. With any of those
-// it loads the artifact, ranks string matches, and returns one page.
+// it loads the artifact, applies parent when present, ranks string matches,
+// and returns one page.
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	version := r.URL.Query().Get("version")
@@ -72,7 +73,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, id, versi
 		return
 	}
 
-	result, err := Search(raw, strings.TrimSpace(r.URL.Query().Get("q")), finalOffset, finalLimit)
+	result, err := Search(raw, strings.TrimSpace(r.URL.Query().Get("q")), r.URL.Query().Get("parent"), finalOffset, finalLimit)
 	if err != nil {
 		httputil.InternalServerError(w, r, "failed to search static data", err, "id", id, "version", version)
 		return

@@ -128,7 +128,7 @@ func TestSearch_LimitAndOffset(t *testing.T) {
 		{"const":"4","title":"Galle"}
 	]}`)
 
-	got, err := Search(raw, "colombo", 1, 1)
+	got, err := Search(raw, "colombo", "", 1, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,11 +143,36 @@ func TestSearch_LimitAndOffset(t *testing.T) {
 func TestSearch_SkipsEntriesWithoutConstAndTitle(t *testing.T) {
 	raw := json.RawMessage(`{"data":["0101",{"const":"LK"},{"title":"Sri Lanka"},{"const":"GB","title":"United Kingdom"}]}`)
 
-	got, err := Search(raw, "", 0, 20)
+	got, err := Search(raw, "", "", 0, 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Const != "GB" {
 		t.Fatalf("expected only the complete option, got %+v", got)
+	}
+}
+
+func TestSearch_ParentScopesPageAndTotal(t *testing.T) {
+	raw := json.RawMessage(`{"data":[
+		{"const":"a","title":"Tea Plant","parents":["Tea"]},
+		{"const":"b","title":"Tea Bush","parents":["Tea","Camellia"]},
+		{"const":"c","title":"Coconut","parents":["Palm"]},
+		{"const":"d","title":"Unscoped"}
+	]}`)
+
+	got, err := Search(raw, "", "Tea", 1, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Total != 2 || got.Offset != 1 || got.Limit != 1 || len(got.Items) != 1 || got.Items[0].Const != "b" {
+		t.Fatalf("expected the second Tea row and a scoped total, got %+v", got)
+	}
+
+	all, err := Search(raw, "", "", 0, 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if all.Total != 4 {
+		t.Fatalf("expected an empty parent to keep every row, got total %d", all.Total)
 	}
 }

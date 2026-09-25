@@ -87,6 +87,32 @@ func TestHandler_HandleGet_Search(t *testing.T) {
 	}
 }
 
+func TestHandler_HandleGet_SearchParent(t *testing.T) {
+	body := []byte(`{"data":[
+		{"const":"a","title":"Tea Plant","parents":["Tea"]},
+		{"const":"b","title":"Tea Bush","parents":["Tea"]},
+		{"const":"c","title":"Coconut","parents":["Palm"]}
+	]}`)
+	reg := newTestRegistry(t, "names", "1.0.0", "refdata/names/1.0.0.json", body)
+	h := NewHandler(reg)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/static-data/names?version=1.0.0&q=&parent=Tea&limit=1", nil)
+	req.SetPathValue("id", "names")
+	w := httptest.NewRecorder()
+	h.HandleGet(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var got SearchResult
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Total != 2 || len(got.Items) != 1 || got.Items[0].Const != "a" {
+		t.Fatalf("expected parent to scope the page and total, got %+v", got)
+	}
+}
+
 func TestHandler_HandleGet_SearchOffset(t *testing.T) {
 	body := []byte(`{"data":[{"const":"1","title":"Port of Colombo"},{"const":"2","title":"Colombo"}]}`)
 	reg := newTestRegistry(t, "ports", "1.0.0", "refdata/ports/1.0.0.json", body)
