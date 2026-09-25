@@ -245,3 +245,43 @@ func TestVerifyInterpreter_OnlyAnEmptyBodyIsAnOutage(t *testing.T) {
 		assert.Contains(t, summary, "could not be reached")
 	})
 }
+
+// An answer that arrived but could not be read is neither a rejection nor an
+// outage. Reporting it as "not verified" puts words in Customs' mouth: the
+// trader is told their declaration would be refused when nothing of the sort
+// was said.
+func TestVerifyInterpreter_AnUnreadableAnswerIsNotARejection(t *testing.T) {
+	for name, raw := range map[string]string{
+		"the verdict is the wrong type": `{"payload": {"verified": "yes"}}`,
+		"there is no verdict at all":    `{"payload": {"duties": {}}}`,
+		"the payload is not an object":  `{"payload": "ok"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			accepted, out := VerifyInterpreter{}.Interpret(nil, decoded(t, raw))
+
+			assert.False(t, accepted)
+			summary, _ := out["summary"].(string)
+			assert.Contains(t, summary, "could not be read")
+			assert.NotContains(t, summary, "would reject this declaration",
+				"an unreadable answer must not be reported as Customs refusing")
+			assert.NotContains(t, summary, "could not be reached",
+				"the service answered; it is not an outage")
+		})
+	}
+}
+
+// The charges are currency. Summing them as float64 is how 0.1 and 0.2 become
+// 0.30000000000000004, which would otherwise be printed in full on a panel the
+// trader reads as an amount.
+func TestVerifyInterpreter_TotalsToTheCent(t *testing.T) {
+	_, out := VerifyInterpreter{}.Interpret(nil, decoded(t, `{
+      "payload": {"verified": true, "duties": {"globalDuties": [
+        {"typeCode": "A", "taxAssessedAmount": 0.1},
+        {"typeCode": "B", "taxAssessedAmount": 0.2}
+      ]}}
+    }`))
+
+	assert.Equal(t, 0.3, out["total"])
+	assert.Contains(t, out["summary"], "**Total assessed: 0.3**")
+	assert.NotContains(t, out["summary"], "0.30000000000000004")
+}

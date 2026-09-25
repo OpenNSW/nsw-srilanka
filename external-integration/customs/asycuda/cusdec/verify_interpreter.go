@@ -3,6 +3,7 @@ package cusdec
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,12 +63,12 @@ func (VerifyInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 		return false, map[string]any{"summary": describeFailedCall(resp)}
 	}
 
-	var r verifyResponse
-	if raw, err := json.Marshal(resp); err == nil {
-		_ = json.Unmarshal(raw, &r)
+	r, err := readVerifyResponse(resp)
+	if err != nil {
+		return false, map[string]any{"summary": describeUnreadable()}
 	}
 
-	if r.Payload.Verified {
+	if *r.Payload.Verified {
 		return true, map[string]any{
 			"verified": true,
 			"summary":  renderDuties(r.Payload.Duties),
@@ -79,6 +80,33 @@ func (VerifyInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 		"verified": false,
 		"summary":  renderVerifyErrors(r.Payload.Errors),
 	}
+}
+
+// readVerifyResponse re-reads the decoded body into the shape this expects,
+// refusing an answer that does not carry a verdict.
+func readVerifyResponse(resp map[string]any) (verifyResponse, error) {
+	var r verifyResponse
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return r, err
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return r, err
+	}
+	if r.Payload.Verified == nil {
+		return r, fmt.Errorf("verify: the response carries no verdict")
+	}
+	return r, nil
+}
+
+// describeUnreadable reports an answer that arrived but could not be read. It
+// is neither a rejection nor an outage: saying "not verified" would put words
+// in Customs' mouth, and saying "unavailable" would send the trader away to
+// wait for a service that answered.
+func describeUnreadable() string {
+	return "### Verification could not be read\n\nSri Lanka Customs answered, but not in a form this " +
+		"could understand, so there is no verdict to report.\n\nNothing has been submitted. " +
+		"Submitting the declaration will have it checked on arrival.\n"
 }
 
 // describeFailedCall reports a call that did not come back with a
@@ -154,7 +182,11 @@ type verifyResponse struct {
 	EventType   string `json:"eventType"`
 	ProcessedAt string `json:"processedAt"`
 	Payload     struct {
-		Verified bool            `json:"verified"`
+		// A pointer because absent and false mean different things: false is
+		// Customs saying no, absent is an answer this could not read, and
+		// telling a trader their declaration was rejected when it was not is
+		// worse than telling them nothing.
+		Verified *bool           `json:"verified"`
 		Duties   verifyDuties    `json:"duties"`
 		Errors   json.RawMessage `json:"errors"`
 	} `json:"payload"`
@@ -190,7 +222,10 @@ func (d verifyDuties) total() float64 {
 			t += l.TaxAssessedAmount
 		}
 	}
-	return t
+	// Rounded to the cent. These are currency amounts decoded as float64, and
+	// summing them is how 0.1 and 0.2 become 0.30000000000000004 -- which
+	// money() would then print in full, on a panel a trader reads as an amount.
+	return math.Round(t*100) / 100
 }
 
 // renderDuties writes the assessment as markdown. A verified declaration with
