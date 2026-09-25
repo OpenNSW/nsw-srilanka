@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,11 +12,17 @@ import (
 	"testing"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
+	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/authn"
+	flowextensions "github.com/OpenNSW/core/taskflow/extensions"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
+	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
+	workflow "github.com/OpenNSW/core/workflow"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	authzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,6 +66,215 @@ func TestHandleCompleteTaskStep_RejectsTrailingDataAfterJSON(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), errInvalidRequestBody) {
 		t.Fatalf("expected error body to mention %q, got %s", errInvalidRequestBody, recorder.Body.String())
+	}
+}
+
+// completeTaskHandler wires a real TaskManager over the in-memory store with
+// the authz extension registered, so the tests exercise the same PRE_RESUME
+// authorization path production uses. Each case registers its own minimal
+// subtask template (per-task properties) and seeds the task record.
+type testTaskStore struct {
+	mu     sync.Mutex
+	byID   map[string]store.TaskRecord
+	byWFID map[string]store.TaskRecord
+}
+
+func newTestTaskStore() *testTaskStore {
+	return &testTaskStore{
+		byID:   make(map[string]store.TaskRecord),
+		byWFID: make(map[string]store.TaskRecord),
+	}
+}
+
+func (s *testTaskStore) SaveTask(_ context.Context, record store.TaskRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byID[record.TaskID] = record
+	s.byWFID[record.TaskWorkflowID] = record
+}
+
+func (s *testTaskStore) GetTask(_ context.Context, taskID string) (store.TaskRecord, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.byID[taskID]
+	return rec, ok
+}
+
+func (s *testTaskStore) GetTaskByWorkflowID(_ context.Context, workflowID string) (store.TaskRecord, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.byWFID[workflowID]
+	return rec, ok
+}
+
+func (s *testTaskStore) GetAllTasks(context.Context, string) []store.TaskRecord {
+	return nil
+}
+
+// noopWorkflowRunner satisfies workflow.TemporalManager by doing nothing: the
+// audited outcomes below are decided before any workflow interaction.
+type noopWorkflowRunner struct{}
+
+func (noopWorkflowRunner) StartWorkflow(context.Context, string, workflow.WorkflowDefinition, map[string]any) error {
+	return nil
+}
+
+func (noopWorkflowRunner) TaskDone(context.Context, string, string, string, map[string]any) error {
+	return nil
+}
+
+func (noopWorkflowRunner) TaskUpdate(context.Context, string, string, workflow.UpdateEvent) error {
+	return nil
+}
+
+func (noopWorkflowRunner) GetStatus(context.Context, string) (*workflow.WorkflowInstance, error) {
+	return nil, nil
+}
+
+func (noopWorkflowRunner) RegisterDefinitionHandler(func(string) (workflow.WorkflowDefinition, error)) {
+}
+
+func (noopWorkflowRunner) StartWorker() error { return nil }
+
+func (noopWorkflowRunner) StopWorker() {}
+
+// testTaskArtifactID is the id of the subtask template the test task records
+// point at; the authz rules live in the template's extension properties.
+const testTaskArtifactID = "test-subtask"
+
+// testSubtaskProps names "trader" as the only logical principal allowed to run
+// the "submit" command in state PENDING_USER.
+const testSubtaskProps = `{"PENDING_USER": {"submit": ["trader"]}}`
+
+// testLoader is a minimal artifact.Loader serving canned bytes by path.
+type testLoader struct {
+	content map[string][]byte
+}
+
+func (l *testLoader) Load(_ context.Context, path string) ([]byte, error) {
+	if data, ok := l.content[path]; ok {
+		return data, nil
+	}
+	return nil, fmt.Errorf("test artifact not found at path: %s", path)
+}
+
+// noopPlugin is a do-nothing subtask plugin; the audited outcomes below are
+// decided by the authz extension before any plugin runs.
+type noopPlugin struct{}
+
+func (noopPlugin) Execute(ctx flowplugins.PluginContext, _ json.RawMessage) error {
+	if ctx.Record != nil {
+		ctx.Record.State = "DONE"
+	}
+	return nil
+}
+
+// completeTaskHandler builds the handler under test: a real TaskManager whose
+// authz extension is backed by catalog, an in-memory store seeded with a task
+// parked at the active subtask step, and the given audit recorder.
+func completeTaskHandler(t *testing.T, catalog taskauthz.Catalog, auditor *mockAuditor) (*HTTPHandler, *testTaskStore) {
+	t.Helper()
+
+	loader := &testLoader{content: map[string][]byte{
+		"subtasks/test-subtask": []byte(`{
+			"id": "test-subtask",
+			"task_type": "TEST_PLUGIN",
+			"plugin_properties": {},
+			"output_namespace": "ns",
+			"extensions": [{"id": "authz", "phase": "PRE_RESUME", "properties": ` + testSubtaskProps + `}]
+		}`),
+	}}
+
+	reg := artifact.NewRegistry(loader)
+	reg.RegisterArtifact(testTaskArtifactID, "subtask_template", "", "subtasks/test-subtask")
+
+	extensionsRegistry := flowextensions.NewRegistry()
+	if err := authzext.Register(extensionsRegistry, catalog); err != nil {
+		t.Fatalf("register authz extension: %v", err)
+	}
+
+	pluginsRegistry := flowplugins.NewRegistry()
+	if err := pluginsRegistry.Register("TEST_PLUGIN", noopPlugin{}); err != nil {
+		t.Fatalf("register test plugin: %v", err)
+	}
+
+	db := newTestTaskStore()
+	tm := orchestrator.NewTaskManager(db, reg, pluginsRegistry, extensionsRegistry, noopWorkflowRunner{}, nil, nil)
+	db.SaveTask(context.Background(), store.TaskRecord{
+		TaskID:               testTaskID,
+		TaskType:             "APPLICATION",
+		State:                "PENDING_USER",
+		RootWorkflowID:       testConsignmentID,
+		TaskWorkflowID:       "task-wf-" + testTaskID,
+		TaskRunID:            "run-1",
+		SubTaskNodeID:        "node-1",
+		ActiveTaskTemplateID: testTaskArtifactID,
+	})
+
+	return &HTTPHandler{
+		Manager:         tm,
+		MaxRequestBytes: 1024,
+		Audit:           nswaudit.NewRecorder(auditor),
+	}, db
+}
+
+// testWriteCatalog is the write-side catalog: token roles map to logical owner
+// role names, mirroring the global catalog shape.
+func testWriteCatalog() taskauthz.Catalog {
+	return taskauthz.Catalog{
+		Roles:   map[string]string{"trader": "Trader", "cha": "CHA"},
+		Clients: map[string]string{"fcau": "FCAU_TO_NSW"},
+	}
+}
+
+// withGateInput attaches the Input Layer 1 (authzgate) would attach, so the
+// extension can resolve the caller. A nil in denotes "the gate dropped the
+// principal" — the unauthenticated shape.
+func withGateInput(ctx context.Context, in *taskauthz.Input) context.Context {
+	if in == nil {
+		return ctx
+	}
+	return taskauthz.WithInput(ctx, *in)
+}
+
+// completeTask performs a POST /api/v1/tasks/{id}/commands/{command} against h
+// as an authenticated user, with the gate's Input attached when present.
+func completeTask(t *testing.T, h *HTTPHandler, in *taskauthz.Input, command string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/commands/"+command, nil)
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("command", command)
+	ctx := context.WithValue(req.Context(), authn.AuthContextKey, &authn.AuthContext{
+		User: &authn.UserContext{ID: "user-1", Roles: []string{"Trader"}},
+	})
+	req = req.WithContext(withGateInput(ctx, in))
+	recorder := httptest.NewRecorder()
+	h.HandleCompleteTaskStep(recorder, req)
+	return recorder
+}
+
+// requireSingleAuditEvent asserts the shared shape of the audited outcomes and
+// returns the one event for outcome-specific assertions.
+func requireSingleAuditEvent(t *testing.T, auditor *mockAuditor) *argus.AuditLogRequest {
+	t.Helper()
+	events := auditor.getEvents()
+	require.Len(t, events, 1, "expected exactly one audit event")
+	ev := events[0]
+	require.NotNil(t, ev.TargetID)
+	assert.Equal(t, testTaskID, *ev.TargetID)
+	assert.Equal(t, string(nswaudit.EventTask), ev.EventType)
+	assert.Equal(t, string(nswaudit.ActionUpdate), ev.Action)
+	assert.Equal(t, string(nswaudit.TargetTask), ev.TargetType)
+	assert.Equal(t, string(nswaudit.ActorMember), ev.ActorType)
+	assert.Equal(t, "user-1", ev.ActorID)
+	assert.NotEmpty(t, ev.Timestamp)
+	return ev
+}
+
+// ownedRoles resolves to the given per-role ownership flags.
+func ownedRoles(owned map[string]bool) taskauthz.OwnedRolesFunc {
+	return func(context.Context, string) (map[string]bool, error) {
+		return owned, nil
 	}
 }
 
@@ -518,4 +734,134 @@ func (m *mockAuditor) VerifyIntegrity(event *argus.AuditLogRequest, publicKey cr
 
 func (m *mockAuditor) Close(ctx context.Context) error {
 	return nil
+}
+
+// getEvents snapshots the recorded events.
+func (m *mockAuditor) getEvents() []*argus.AuditLogRequest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.events
+}
+
+// A 401 from the write extension (no principal on the request context) must
+// emit a failure audit event, not just the slog warning.
+func TestHandleCompleteTaskStep_UnauthenticatedAudited(t *testing.T) {
+	auditor := &mockAuditor{}
+	handler, _ := completeTaskHandler(t, testWriteCatalog(), auditor)
+
+	// No gate Input on the context: the extension denies as unauthenticated.
+	recorder := completeTask(t, handler, nil, "submit")
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d, want 401", recorder.Code)
+	}
+	ev := requireSingleAuditEvent(t, auditor)
+	assert.Equal(t, argus.StatusFailure, ev.Status)
+	assert.Equal(t, "submit", ev.Metadata["command"])
+	assert.Equal(t, "task_cmd_unauthenticated", ev.Metadata["error_code"])
+	assert.Contains(t, ev.Metadata, "error")
+}
+
+// The extension denies a caller whose company does not own the consignment in
+// an allowed role: 403 plus a failure audit event.
+func TestHandleCompleteTaskStep_ForbiddenAudited(t *testing.T) {
+	auditor := &mockAuditor{}
+	handler, _ := completeTaskHandler(t, testWriteCatalog(), auditor)
+	in := taskauthz.Input{
+		Kind:       taskauthz.KindUser,
+		Roles:      []string{"Trader"},
+		OwnedRoles: ownedRoles(map[string]bool{"trader": false, "cha": false}),
+	}
+
+	recorder := completeTask(t, handler, &in, "submit")
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("got %d, want 403", recorder.Code)
+	}
+	ev := requireSingleAuditEvent(t, auditor)
+	assert.Equal(t, argus.StatusFailure, ev.Status)
+	assert.Equal(t, "submit", ev.Metadata["command"])
+	assert.Equal(t, "task_cmd_forbidden", ev.Metadata["error_code"])
+	assert.Contains(t, ev.Metadata, "error")
+}
+
+// A permitted, successfully completed command is audited as a success.
+func TestHandleCompleteTaskStep_SuccessAudited(t *testing.T) {
+	auditor := &mockAuditor{}
+	handler, _ := completeTaskHandler(t, testWriteCatalog(), auditor)
+	in := taskauthz.Input{
+		Kind:       taskauthz.KindUser,
+		Roles:      []string{"Trader"},
+		OwnedRoles: ownedRoles(map[string]bool{"trader": true, "cha": false}),
+	}
+
+	recorder := completeTask(t, handler, &in, "submit")
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("got %d, want 204: %s", recorder.Code, recorder.Body.String())
+	}
+	ev := requireSingleAuditEvent(t, auditor)
+	assert.Equal(t, argus.StatusSuccess, ev.Status)
+	assert.Equal(t, "submit", ev.Metadata["command"])
+	assert.NotContains(t, ev.Metadata, "error")
+}
+
+// A (state, command) pair with no rule is deny-by-default (403), and the
+// denial is audited like any other forbidden command.
+
+// With handler.Audit nil, the write path must still deny (401/403) and serve a
+// successful completion (204) without panicking, mirroring the read-path
+// nil-audit guarantee: audit failures or a missing auditor never take the
+// endpoint down.
+func TestHandleCompleteTaskStep_NilAuditDoesNotPanic(t *testing.T) {
+	auditor := &mockAuditor{}
+	handler, _ := completeTaskHandler(t, testWriteCatalog(), auditor)
+	handler.Audit = nil
+
+	// 403: caller does not own the task in the required role.
+	denied := taskauthz.Input{
+		Kind:       taskauthz.KindUser,
+		Roles:      []string{"Trader"},
+		OwnedRoles: ownedRoles(map[string]bool{"trader": false, "cha": false}),
+	}
+	recorder := completeTask(t, handler, &denied, "submit")
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("denied request: got %d, want 403", recorder.Code)
+	}
+
+	// 401: no principal resolved on the request context.
+	recorder = completeTask(t, handler, nil, "submit")
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated request: got %d, want 401", recorder.Code)
+	}
+
+	// 204: a permitted command still completes successfully.
+	allowed := taskauthz.Input{
+		Kind:       taskauthz.KindUser,
+		Roles:      []string{"Trader"},
+		OwnedRoles: ownedRoles(map[string]bool{"trader": true, "cha": false}),
+	}
+	recorder = completeTask(t, handler, &allowed, "submit")
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("permitted request: got %d, want 204", recorder.Code)
+	}
+}
+
+func TestHandleCompleteTaskStep_UnrulableCommandDeniedAndAudited(t *testing.T) {
+	auditor := &mockAuditor{}
+	handler, _ := completeTaskHandler(t, testWriteCatalog(), auditor)
+	in := taskauthz.Input{
+		Kind:       taskauthz.KindUser,
+		Roles:      []string{"Trader"},
+		OwnedRoles: ownedRoles(map[string]bool{"trader": true, "cha": true}),
+	}
+
+	recorder := completeTask(t, handler, &in, "escalate")
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("got %d, want 403", recorder.Code)
+	}
+	ev := requireSingleAuditEvent(t, auditor)
+	assert.Equal(t, argus.StatusFailure, ev.Status)
+	assert.Equal(t, "escalate", ev.Metadata["command"])
 }
