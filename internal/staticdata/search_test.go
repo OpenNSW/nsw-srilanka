@@ -140,15 +140,21 @@ func TestSearch_LimitAndOffset(t *testing.T) {
 	}
 }
 
-func TestSearch_SkipsEntriesWithoutConstAndTitle(t *testing.T) {
-	raw := json.RawMessage(`{"data":["0101",{"const":"LK"},{"title":"Sri Lanka"},{"const":"GB","title":"United Kingdom"}]}`)
-
-	got, err := Search(raw, "", "", 0, 20)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestSearch_ErrorsWhenConstOrTitleMissing(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{name: "missing title", raw: `{"data":[{"const":"LK"},{"const":"GB","title":"United Kingdom"}]}`},
+		{name: "missing const", raw: `{"data":[{"title":"Sri Lanka"}]}`},
+		{name: "empty title", raw: `{"data":[{"const":"LK","title":""}]}`},
 	}
-	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].Const != "GB" {
-		t.Fatalf("expected only the complete option, got %+v", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Search(json.RawMessage(tc.raw), "", "", 0, 20); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
 	}
 }
 

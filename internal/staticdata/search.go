@@ -21,10 +21,11 @@ type Option struct {
 // includes q, offset, or limit.
 type SearchResult = pagination.Page[Option]
 
-// Search loads nothing itself: raw is one static_data artifact body. It keeps
-// object entries that have a non-empty const and title, drops rows whose
-// parents list does not include parent (an empty parent keeps every row),
-// ranks the remainder against query, and returns one page. query is matched
+// Search loads nothing itself: raw is one static_data artifact body. An object
+// entry must have a non-empty const and title; a row that lacks either is an
+// error. Non-object entries are skipped. It then drops rows whose parents list
+// does not include parent (an empty parent keeps every row), ranks the
+// remainder against query, and returns one page. query is matched
 // case-insensitively against title and const. An empty query keeps artifact order.
 func Search(raw json.RawMessage, query, parent string, offset, limit int) (SearchResult, error) {
 	options, err := parseOptions(raw)
@@ -60,13 +61,13 @@ func parseOptions(raw json.RawMessage) ([]Option, error) {
 		return nil, fmt.Errorf("parse static data options: %w", err)
 	}
 	options := make([]Option, 0, len(envelope.Data))
-	for _, item := range envelope.Data {
+	for i, item := range envelope.Data {
 		var opt Option
 		if err := json.Unmarshal(item, &opt); err != nil {
 			continue
 		}
 		if opt.Const == "" || opt.Title == "" {
-			continue
+			return nil, fmt.Errorf("static data option at index %d must have a non-empty const and title", i)
 		}
 		options = append(options, opt)
 	}
