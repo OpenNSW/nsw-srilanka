@@ -14,17 +14,10 @@ const en = {
       },
     },
 
-    sidebar: {
-      nav: {
-        consignments: 'Consignments',
-        verifiedDocs: 'Verified Docs',
-      },
-      toggle: {
-        collapse: 'Collapse',
-        expand: 'Expand',
-        collapseTitle: 'Collapse sidebar',
-        expandTitle: 'Expand sidebar',
-      },
+    nav: {
+      menu: 'Menu',
+      consignments: 'Consignments',
+      verifiedDocs: 'Verified Docs',
     },
 
     roles: {

@@ -26,7 +26,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 	certID := asString(inputs["certificate_id"])
 
 	certType := "851" // Phytosanitary Certificate
-	if asString(uf["certificate_type"]) == "re-export" {
+	if isReExport(uf) {
 		certType = "657" // Phytosanitary Certificate for Re-Export
 	}
 	// The Hub destination is a connection code (e.g. "LK2"), chosen by the trader
@@ -353,6 +353,7 @@ func buildConsignment(uf map[string]any, importISO string, certificateItems any)
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])
+	reExport := buildReExport(uf)
 	excluded := excludedItemIDs(certificateItems)
 	seq := 0
 	for _, raw := range asSlice(uf["commodities"]) {
@@ -362,13 +363,13 @@ func buildConsignment(uf map[string]any, importISO string, certificateItems any)
 		}
 		seq++
 		c.Items = append(c.Items, spscert.ItemInput{
-			TradeLines: []spscert.TradeLineInput{buildTradeLine(com, seq, treatment)},
+			TradeLines: []spscert.TradeLineInput{buildTradeLine(com, seq, treatment, reExport)},
 		})
 	}
 	return c
 }
 
-func buildTradeLine(com map[string]any, seq int, treatment string) spscert.TradeLineInput {
+func buildTradeLine(com map[string]any, seq int, treatment string, reExport *spscert.ReExport) spscert.TradeLineInput {
 	description := asString(com["commodity_description"])
 	if description == "" {
 		description = asString(com["commodity_common_name"])
@@ -414,7 +415,111 @@ func buildTradeLine(com map[string]any, seq int, treatment string) spscert.Trade
 	if treatment != "" {
 		tl.Treatments = []spscert.Treatment{{FullTreatment: treatment, LanguageID: "en"}}
 	}
+
+	// The re-export declaration is answered once for the consignment but is
+	// carried per trade line (the RPC* notes live inside the item), so each
+	// line repeats it against its own country of origin.
+	if reExport != nil {
+		perLine := *reExport
+		perLine.CountriesOfOrigin = tl.OriginCountries
+		tl.ReExport = &perLine
+	}
 	return tl
+}
+
+// --- re-export ---------------------------------------------------------------
+
+// ReExportInput is the form section describing a re-export, filled in only when
+// the trader chose a re-export certificate. It is asked once for the
+// consignment even though the certificate carries it per commodity.
+const ReExportInput = "re_export"
+
+// certificateTypeReExport is the value the apply form's certificate_type takes
+// when the trader is re-exporting rather than exporting.
+const certificateTypeReExport = "re-export"
+
+// isReExport reports whether the trader asked for a re-export certificate
+// (657/PC-R) rather than an ordinary phytosanitary certificate (851).
+func isReExport(uf map[string]any) bool {
+	return asString(uf["certificate_type"]) == certificateTypeReExport
+}
+
+// buildReExport maps the trader's re-export answers onto the declaration the
+// certificate carries, or returns nil for an ordinary export — which leaves
+// every RPC* note off the certificate entirely.
+//
+// The three either/or answers each drive a pair of statements the IPPC model
+// keeps separate (original vs certified true copy, packed vs repacked,
+// original vs new containers). Asking them as one choice each is what stops a
+// consignment from being declared both packed and repacked.
+//
+// CountriesOfOrigin is left empty here: it is the one part of the declaration
+// that genuinely differs per commodity, so buildTradeLine fills it from the
+// country of origin that commodity already carries.
+func buildReExport(uf map[string]any) *spscert.ReExport {
+	if !isReExport(uf) {
+		return nil
+	}
+
+	// A declaration is made only once all three either/or questions have been
+	// answered. A consignment can be marked as a re-export well before that --
+	// an application that predates the section, or one the trader is part way
+	// through -- and an unanswered question reads as false on both of its
+	// sides. Sent, that says the consignment is neither packed nor repacked,
+	// in containers that are neither the original ones nor new: a declaration
+	// no consignment can satisfy.
+	//
+	// Counting the keys is not enough to tell the two apart, because a trader
+	// who has typed only the certificate number leaves a section that is
+	// non-empty and still unanswered.
+	//
+	// Saying nothing until the answers are there is the honest reading, and
+	// the certificate is a PC-R either way: the type code comes from
+	// certificate_type rather than from here.
+	re := asMap(uf[ReExportInput])
+	form, formAnswered := reExportChoice(re, "original_certificate_form", "original", "certified_true_copy")
+	packing, packingAnswered := reExportChoice(re, "packing", "packed", "repacked")
+	containers, containersAnswered := reExportChoice(re, "containers", "original", "new")
+	if !formAnswered || !packingAnswered || !containersAnswered {
+		return nil
+	}
+
+	return &spscert.ReExport{
+		StatementCode:        asString(re["statement_code"]),
+		OriginalCertRefs:     splitRefs(asString(re["original_certificate_number"])),
+		IsOriginal:           form == "original",
+		CertifiedTrueCopy:    form == "certified_true_copy",
+		Packed:               packing == "packed",
+		Repacked:             packing == "repacked",
+		OriginalContainers:   containers == "original",
+		NewContainers:        containers == "new",
+		OriginalPCAttached:   saidYes(re["original_certificate_attached"]),
+		AdditionalInspection: saidYes(re["additional_inspection"]),
+	}
+}
+
+// reExportChoice reads one of the declaration's either/or answers, reporting
+// whether it was answered at all. Anything other than the two values the form
+// offers -- blank, absent, or a value from an older version of the form --
+// counts as unanswered rather than as the side it is not.
+func reExportChoice(re map[string]any, field, one, other string) (string, bool) {
+	answer := asString(re[field])
+	return answer, answer == one || answer == other
+}
+
+// splitRefs reads the certificate numbers a re-export is covered by out of the
+// single field the form asks for them in. A consolidated consignment can be
+// covered by more than one, and the certificate lists them separately, so the
+// field is documented as comma-separated rather than adding a repeating
+// control the trader has to discover.
+func splitRefs(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if ref := strings.TrimSpace(part); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -706,9 +811,8 @@ func documentLabel(name string) string {
 	return strings.Join(words, " ")
 }
 
-// saidYes reports whether the trader ticked this document at the ephyto step.
-// A checkbox arrives as a bool from JSON; a form that stringifies its values
-// has been seen to send "true".
+// saidYes reports whether the trader ticked a checkbox. It arrives as a bool
+// from JSON; a form that stringifies its values has been seen to send "true".
 func saidYes(value any) bool {
 	switch v := value.(type) {
 	case bool:

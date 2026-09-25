@@ -110,7 +110,7 @@ type buildError struct{ msg string }
 
 func (e *buildError) Error() string { return e.msg }
 
-// hasErrors reports whether the response carries error detail. §4.4 defines
+// hasErrors reports whether the response carries error detail. §4.5 defines
 // errors as a segment-keyed object that is empty on success, but the submission
 // acknowledgement predates that shape and some responses still send an array,
 // so both are read as a rejection when non-empty.
@@ -139,7 +139,7 @@ func statusIsAccepted(resp map[string]any) bool {
 
 // describeFailure builds a trader-facing, markdown message for a rejected
 // submission. It prefers the SLC Edge error detail in the response body — an
-// {"error": "<reason>"} string, a §4.4 segment-keyed errors object, an errors
+// {"error": "<reason>"} string, a §4.5 segment-keyed errors object, an errors
 // array of {code,message,fieldRef}, or a problem+json "detail"/"title" — and
 // falls back to distinguishing a transport failure from an unexplained
 // rejection.

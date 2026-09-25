@@ -43,7 +43,7 @@ export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         <button className="flex items-center gap-2 p-1 rounded-full hover:bg-app-surface-muted transition-colors cursor-pointer focus:outline-none">
-          <Avatar size="2" fallback={initials} radius="full" color="indigo" />
+          <Avatar size="2" fallback={initials} radius="full" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" size="2" style={{ minWidth: 200 }}>
