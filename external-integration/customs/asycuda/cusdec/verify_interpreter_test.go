@@ -206,3 +206,42 @@ func TestVerifyInterpreter_AFailedCallStillReportsTheReasons(t *testing.T) {
 	assert.Contains(t, summary, "Invalid importer code")
 	assert.NotContains(t, summary, "could not be reached")
 }
+
+// The client decodes the body before returning a non-2xx as an error, so a
+// rejection in a shape this does not recognise still arrives with something in
+// it. Calling that an outage sends the trader away to wait when the declaration
+// is what needs fixing -- only an empty body is unreachable.
+func TestVerifyInterpreter_OnlyAnEmptyBodyIsAnOutage(t *testing.T) {
+	failed := errors.New("400 bad request")
+
+	t.Run("a shape with no reason in it is still a rejection", func(t *testing.T) {
+		_, out := VerifyInterpreter{}.Interpret(failed, decoded(t, `{"traceId": "abc", "status": 400}`))
+
+		summary, _ := out["summary"].(string)
+		assert.Contains(t, summary, "### Not verified")
+		assert.NotContains(t, summary, "could not be reached")
+	})
+
+	t.Run("problem+json detail is read", func(t *testing.T) {
+		_, out := VerifyInterpreter{}.Interpret(failed, decoded(t, `{"detail": "officeCode is not a known office"}`))
+
+		summary, _ := out["summary"].(string)
+		assert.Contains(t, summary, "officeCode is not a known office")
+		assert.NotContains(t, summary, "could not be reached")
+	})
+
+	t.Run("an empty errors object is not a reason", func(t *testing.T) {
+		_, out := VerifyInterpreter{}.Interpret(failed, decoded(t, `{"errors": {}}`))
+
+		summary, _ := out["summary"].(string)
+		assert.Contains(t, summary, "without saying why")
+	})
+
+	t.Run("no body at all is unreachable", func(t *testing.T) {
+		_, out := VerifyInterpreter{}.Interpret(failed, map[string]any{})
+
+		summary, _ := out["summary"].(string)
+		assert.Contains(t, summary, "### Verification unavailable")
+		assert.Contains(t, summary, "could not be reached")
+	})
+}

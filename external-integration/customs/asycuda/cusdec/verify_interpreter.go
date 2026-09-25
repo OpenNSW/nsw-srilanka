@@ -81,29 +81,66 @@ func (VerifyInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 	}
 }
 
-// describeFailedCall reports a call that did not come back with a verification.
+// describeFailedCall reports a call that did not come back with a
+// verification.
 //
-// A refusal at the boundary is not the same as an unreachable service, and
-// saying so matters here: the trader's next move is to correct the declaration
-// in one case and to wait in the other. §6.1.4 states a boundary refusal as
-// {"error": "<reason>"}, and a rejection during checking as the segment-keyed
-// errors object, so both are read before falling back to the generic wording.
+// The client decodes the response body before returning a non-2xx as an error,
+// so a failed call usually still carries Customs' reasons. Reporting every one
+// of them as an outage, which this did, tells the trader to wait when what they
+// need to do is fix the declaration.
+//
+// Only a failure with no body at all is unreachable. A rejection whose body is
+// in a shape not recognised here is still a rejection, and says so -- the same
+// line describeFailure draws for the submission.
 func describeFailedCall(resp map[string]any) string {
 	const nothingSent = "\n\nNothing has been submitted."
 
-	if errs, ok := resp["errors"]; ok {
-		if raw, err := json.Marshal(errs); err == nil {
-			return "### Not verified\n\nSri Lanka Customs would reject this declaration as it stands." +
-				nothingSent + "\n\n" + describeErrors(raw) + "\n"
-		}
-	}
-	if reason, ok := resp["error"].(string); ok && strings.TrimSpace(reason) != "" {
-		return "### Not verified\n\nSri Lanka Customs could not read this declaration:" +
-			nothingSent + "\n\n- " + strings.TrimSpace(reason) + "\n"
+	if reasons := segmentedErrors(resp); reasons != "" {
+		return "### Not verified\n\nSri Lanka Customs would reject this declaration as it stands." +
+			nothingSent + "\n\n" + reasons + "\n"
 	}
 
-	return "### Verification unavailable\n\nSri Lanka Customs could not be reached." + nothingSent +
-		" Try again, or submit the declaration to have it checked on arrival.\n"
+	// §6.1.4 states a boundary refusal as {"error": "<reason>"}; detail and
+	// title are problem+json, which services here have been seen to answer with.
+	for _, key := range []string{"error", "detail", "title", "message"} {
+		if reason, _ := resp[key].(string); strings.TrimSpace(reason) != "" {
+			return "### Not verified\n\nSri Lanka Customs could not read this declaration:" +
+				nothingSent + "\n\n- " + strings.TrimSpace(reason) + "\n"
+		}
+	}
+
+	if len(resp) == 0 {
+		return "### Verification unavailable\n\nSri Lanka Customs could not be reached." + nothingSent +
+			" Try again, or submit the declaration to have it checked on arrival.\n"
+	}
+
+	return "### Not verified\n\nSri Lanka Customs refused this declaration without saying why." +
+		nothingSent + " Submitting it will return the same answer with their reasons.\n"
+}
+
+// segmentedErrors renders the §4.5 errors object, or "" when the response
+// carries none worth reporting. An empty object is the shape a success uses, so
+// it is not a reason.
+func segmentedErrors(resp map[string]any) string {
+	errs, ok := resp["errors"]
+	if !ok {
+		return ""
+	}
+	switch typed := errs.(type) {
+	case map[string]any:
+		if len(typed) == 0 {
+			return ""
+		}
+	case []any:
+		if len(typed) == 0 {
+			return ""
+		}
+	}
+	raw, err := json.Marshal(errs)
+	if err != nil {
+		return ""
+	}
+	return describeErrors(raw)
 }
 
 // verifyResponse is the verify endpoint's answer. The envelope matches the
