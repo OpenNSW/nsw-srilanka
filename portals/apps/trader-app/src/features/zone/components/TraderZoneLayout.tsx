@@ -8,11 +8,19 @@ import { Zone } from './Zone'
 type Props = {
   task: ZoneView
   onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
+  // Changes once an action's refetch has landed. Part of each zone's key, so a
+  // step returning to the same form remounts it against the refreshed data
+  // rather than leaving the values it mounted with on screen.
+  formEpoch?: number
 }
 
-const ZONE_ORDER = ['instructions', 'status_awaiting', 'review_history', 'workspace', 'reference']
+// Slots render in this order; anything not named here follows, alphabetically
+// by slot, which is the order a Go map reaches us in. verify_result leads: it
+// answers the button the trader just pressed, and on its own name it would
+// sort below the form that carries that button.
+const ZONE_ORDER = ['verify_result', 'instructions', 'status_awaiting', 'review_history', 'workspace', 'reference']
 
-export function TraderZoneLayout({ task, onSubmitForm }: Props) {
+export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
   const zones = orderedZones(task.view)
 
   return (
@@ -20,7 +28,12 @@ export function TraderZoneLayout({ task, onSubmitForm }: Props) {
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {zones.map(([name, component]) => (
-        <Zone key={`${name}:${task.task_id}:${task.state}`} name={name} component={component} onAction={onSubmitForm} />
+        <Zone
+          key={`${name}:${task.task_id}:${task.state}:${formEpoch}`}
+          name={name}
+          component={component}
+          onAction={onSubmitForm}
+        />
       ))}
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>
