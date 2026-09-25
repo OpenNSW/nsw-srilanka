@@ -158,3 +158,51 @@ func TestVerifyInterpreter_SendsTheDeclarationAsJSON(t *testing.T) {
 	})
 	assert.False(t, isMultipart, "verify must not go out as multipart")
 }
+
+// A form the mapper cannot read is still sent as a declaration, so Customs
+// answers with the fields it is missing. Sending the plugin's own input
+// envelope instead -- which this once did -- puts a shape Customs cannot parse
+// in front of it, and the rejection comes back to the trader as "unavailable"
+// rather than as the field-level answer a verify exists to get.
+func TestVerifyInterpreter_SendsADeclarationEvenWhenTheFormCannotBeMapped(t *testing.T) {
+	body := VerifyInterpreter{}.BuildRequest(map[string]any{"not_a_payload": 1})
+
+	jsonBody, ok := body.(remote.JSONBody)
+	require.True(t, ok)
+
+	encoded, err := json.Marshal(jsonBody.V)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(encoded), `"baseGeneralSegment"`,
+		"Customs must receive an Annex A document it can validate")
+	assert.NotContains(t, string(encoded), "not_a_payload",
+		"the task inputs are the plugin's envelope, not a declaration")
+}
+
+// A refusal at the boundary is not an unreachable service. The trader's next
+// move differs -- correct the declaration, or wait -- so the two must not read
+// the same.
+func TestVerifyInterpreter_ABoundaryRefusalIsNotAnOutage(t *testing.T) {
+	accepted, out := VerifyInterpreter{}.Interpret(
+		errors.New("400 bad request"),
+		decoded(t, `{"error": "declarationMode must be E"}`))
+
+	assert.False(t, accepted)
+	summary, _ := out["summary"].(string)
+	assert.Contains(t, summary, "### Not verified")
+	assert.Contains(t, summary, "declarationMode must be E")
+	assert.NotContains(t, summary, "could not be reached")
+}
+
+// A rejection during checking carries the segment-keyed errors, and they are
+// read the same way whether the call succeeded or failed.
+func TestVerifyInterpreter_AFailedCallStillReportsTheReasons(t *testing.T) {
+	accepted, out := VerifyInterpreter{}.Interpret(
+		errors.New("422"),
+		decoded(t, `{"errors": {"0": [{"code": 403, "description": "Invalid importer code"}]}}`))
+
+	assert.False(t, accepted)
+	summary, _ := out["summary"].(string)
+	assert.Contains(t, summary, "Invalid importer code")
+	assert.NotContains(t, summary, "could not be reached")
+}

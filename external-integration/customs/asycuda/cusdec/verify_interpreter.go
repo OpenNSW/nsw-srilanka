@@ -31,14 +31,22 @@ type VerifyInterpreter struct{}
 func NewVerifyInterpreter() VerifyInterpreter { return VerifyInterpreter{} }
 
 // BuildRequest maps the trader form onto the same Annex A payload the
-// submission sends. A form that cannot be mapped is sent as-is so the endpoint
-// answers with its own validation errors, which name fields far better than a
-// refusal assembled here could.
+// submission sends.
+//
+// A form that cannot be mapped is still sent as a declaration -- empty in the
+// parts that could not be built -- because the endpoint is the thing that
+// validates, and an Annex A document it can read earns a field-level answer
+// naming what is missing. That is what a verify is for.
+//
+// It previously fell back to sending the task inputs, on reasoning borrowed
+// from the submission interpreter. That reasoning does not transfer: the
+// submission implements BuildParts, so its BuildRequest is never called and the
+// fallback is unreachable there. Here it is the only path. The inputs are the
+// plugin's own envelope, not a declaration, so Customs could not parse them at
+// all -- no field-level validation, just a rejected request that reached the
+// trader as "unavailable".
 func (VerifyInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	payload, _, err := buildFromInputs(inputs)
-	if err != nil {
-		return remote.JSONBody{V: inputs}
-	}
+	payload, _, _ := buildFromInputs(inputs)
 	return remote.JSONBody{V: payload}
 }
 
@@ -51,10 +59,7 @@ func (VerifyInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 // of its own to give.
 func (VerifyInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
 	if callErr != nil {
-		return false, map[string]any{
-			"summary": "### Verification unavailable\n\nSri Lanka Customs could not be reached. " +
-				"Nothing has been submitted — try again, or submit the declaration to have it checked on arrival.",
-		}
+		return false, map[string]any{"summary": describeFailedCall(resp)}
 	}
 
 	var r verifyResponse
@@ -74,6 +79,31 @@ func (VerifyInterpreter) Interpret(callErr error, resp map[string]any) (bool, ma
 		"verified": false,
 		"summary":  renderVerifyErrors(r.Payload.Errors),
 	}
+}
+
+// describeFailedCall reports a call that did not come back with a verification.
+//
+// A refusal at the boundary is not the same as an unreachable service, and
+// saying so matters here: the trader's next move is to correct the declaration
+// in one case and to wait in the other. §6.1.4 states a boundary refusal as
+// {"error": "<reason>"}, and a rejection during checking as the segment-keyed
+// errors object, so both are read before falling back to the generic wording.
+func describeFailedCall(resp map[string]any) string {
+	const nothingSent = "\n\nNothing has been submitted."
+
+	if errs, ok := resp["errors"]; ok {
+		if raw, err := json.Marshal(errs); err == nil {
+			return "### Not verified\n\nSri Lanka Customs would reject this declaration as it stands." +
+				nothingSent + "\n\n" + describeErrors(raw) + "\n"
+		}
+	}
+	if reason, ok := resp["error"].(string); ok && strings.TrimSpace(reason) != "" {
+		return "### Not verified\n\nSri Lanka Customs could not read this declaration:" +
+			nothingSent + "\n\n- " + strings.TrimSpace(reason) + "\n"
+	}
+
+	return "### Verification unavailable\n\nSri Lanka Customs could not be reached." + nothingSent +
+		" Try again, or submit the declaration to have it checked on arrival.\n"
 }
 
 // verifyResponse is the verify endpoint's answer. The envelope matches the
