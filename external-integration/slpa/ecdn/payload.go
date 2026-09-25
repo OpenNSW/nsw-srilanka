@@ -197,9 +197,15 @@ func buildContainers(form map[string]any, cusdecNo, cusdecDate string) ([]Contai
 		number := fields.String(m, "containerNo")
 		if number == "" {
 			// SLPA's generator writes a per-declaration key here rather than the
-			// physical container number, which it carries in ContainerMark. Match
-			// that when the trader has not given one of their own.
-			number = fmt.Sprintf("%s_%s_%d", cusdecNo, cusdecDate, i+1)
+			// physical container number, which it carries in ContainerMark. The
+			// form numbers the rows as the trader adds them (x-autoNumber on
+			// containerNo), so this only covers a declaration that reached us
+			// without one -- an older draft, or a caller that is not the form.
+			//
+			// Numbering from the row's position is why it cannot be the only
+			// answer: delete a row and the rows after it would be renumbered
+			// onto keys already sent.
+			number = fmt.Sprintf("%s-%s-%02d", cusdecNo, cusdecDate, i+1)
 		}
 
 		containers = append(containers, Container{
