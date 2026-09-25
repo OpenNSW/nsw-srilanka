@@ -8,6 +8,23 @@ import (
 	"strings"
 )
 
+// amountToPay is what the trader is asked to settle on the payment step.
+//
+// ASYCUDA states it outright from spec v1.7 (§6.2 amountToPay) and that value
+// wins: it is the assessment, where a sum of the tax lines is only this side's
+// reconstruction of it. The spec's own example has the two disagree -- 1254
+// against tax lines totalling 1244 -- so reconstructing it is not safe even
+// when every line is present.
+//
+// Summing remains the fallback for a result that carries no such field, which
+// is every result sent against v1.6.
+func amountToPay(p cusdecResultPayload) float64 {
+	if p.AmountToPay != nil {
+		return *p.AmountToPay
+	}
+	return totalTaxes(p.Taxes)
+}
+
 // totalTaxes sums the assessed tax lines from a §6.2 integration result. The
 // spec carries the duty as a per-code breakdown, while the payment step that
 // follows asks the trader for a single figure.
@@ -19,7 +36,7 @@ func totalTaxes(taxes []TaxEntry) float64 {
 	return total
 }
 
-// describeErrors renders the §4.4 segment-keyed errors object as a readable
+// describeErrors renders the §4.5 segment-keyed errors object as a readable
 // message for the trader.
 //
 // The raw JSON was previously passed through verbatim, which put
