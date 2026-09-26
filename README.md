@@ -60,50 +60,18 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 > start** on them. For non-local environments, trust the IdP/agency certificate
 > chain, keep those flags off, and never set `APP_ENV=development`.
 
-### 1. Prepare local config files
-
-## Environment Setup
-
-Copy the environment files:
+### 1. First-time setup
 
 ```bash
-cp .env.example .env
+make setup
 ```
 
-```bash
-cp idp/.env.example idp/.env
-```
+This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds every local config file from its `*.example` template — `.env`, `idp/.env`, and `configs/{services.docker,payment_methods,notification,catalog,companies}.json`. Existing files are never overwritten, so it is safe to re-run.
 
-## Service Configuration
+> [!NOTE]
+> `make setup` requires **golangci-lint v2** to already be installed (`brew install golangci-lint`); it stops with an error otherwise.
 
-Choose **one** of the following depending on your setup.
-
-**Option A — Docker (default):**
-
-```bash
-cp configs/services.docker.example.json configs/services.docker.json
-```
-
-**Option B — Non-Docker (local development):**
-
-Use this if you need direct host DB access with `localhost` references instead of container hostnames.
-
-```bash
-cp configs/services.example.json configs/services.json
-```
-
-## Application Configuration
-
-Copy the remaining config files:
-
-```bash
-cp configs/payment_methods.example.json configs/payment_methods.json
-cp configs/notification.example.json configs/notification.json
-cp configs/catalog.example.json configs/catalog.json
-cp configs/companies.example.json configs/companies.json
-```
-
-Edit each seeded file for your environment before starting the stack.
+Edit the seeded files for your environment before starting the stack. See the [Configuration Reference](#configuration-reference) for what each one holds.
 
 ### 2. Start the Docker Stack
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
@@ -171,10 +139,11 @@ The dev container is hermetic: it builds from the pinned `go.mod` version, ignor
    ```bash
    go work init . ../core
    ```
-2. **Prepare env** — the template is already tuned for native runs (`DB_HOST=localhost`, `TEMPORAL_HOST=localhost`, `AUTH_JWKS_URL=https://localhost:8090`, `SERVICES_CONFIG_PATH=./configs/services.json`):
+2. **Prepare config** — the `.env` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`. The host binary also needs the `localhost` variant of the service endpoints, which `make setup` does not seed:
    ```bash
-   cp .env.example .env
+   cp configs/services.example.json configs/services.json
    ```
+   then in `.env`, switch `SERVICES_CONFIG_PATH` to the commented-out `./configs/services.json` line.
 3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
    ```bash
    make deps
@@ -308,15 +277,15 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 ## Configuration Reference
 
-| File                                  | Purpose                                                                         | Source of truth                               |
-|---------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
-| `.env`                                | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)           | `.env.example`                                |
-| `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/.env.example`                             |
-| `configs/services.docker.json`        | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json`       |
-| `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
-| `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
-| `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
-| `configs/catalog.json`                | Global catalog — logical names → IdP token roles and OAuth2 client ids          | `configs/catalog.example.json`                |
-| `configs/companies.json`              | Seed company/trader records (registration, VAT/TIN, per-agency IDs)             | `configs/companies.example.json`              |
+| File                           | Purpose                                                                          | Source of truth                        |
+|--------------------------------|----------------------------------------------------------------------------------|----------------------------------------|
+| `.env`                         | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)            | `.env.example`                         |
+| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                 | `idp/.env.example`                     |
+| `configs/services.docker.json` | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json` |
+| `configs/services.json`        | Outbound service endpoints — uses `localhost` (for native/host dev runs)         | `configs/services.example.json`        |
+| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)          | `configs/payment_methods.example.json` |
+| `configs/notification.json`    | Notification provider settings (SMS, email channels)                             | `configs/notification.example.json`    |
+| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids           | `configs/catalog.example.json`         |
+| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)              | `configs/companies.example.json`       |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
