@@ -60,7 +60,7 @@ func updateBody(refNo, status, amount, currency string) []byte {
 func TestGovPay_ParseWebhook_NormalizesStatus(t *testing.T) {
 	g := configuredGateway()
 
-	p, _, err := g.ParseWebhook(context.Background(), updateBody("TNSW1", "paid", "1500.00", "LKR"), nil)
+	p, _, err := g.parseWebhookEnc(t, updateBody("TNSW1", "paid", "1500.00", "LKR"), nil)
 	require.NoError(t, err)
 	assert.Equal(t, "TNSW1", p.ReferenceNumber)
 	assert.Equal(t, corepayment.WebhookStatusSuccess, p.Status)
@@ -72,20 +72,20 @@ func TestGovPay_ParseWebhook_NormalizesStatus(t *testing.T) {
 
 func TestGovPay_ParseWebhook_UnknownStatus(t *testing.T) {
 	g := configuredGateway()
-	_, _, err := g.ParseWebhook(context.Background(), updateBody("TNSW1", "weird", "1500.00", "LKR"), nil)
+	_, _, err := g.parseWebhookEnc(t, updateBody("TNSW1", "weird", "1500.00", "LKR"), nil)
 	require.ErrorIs(t, err, corepayment.ErrUnsupportedWebhookStatus)
 }
 
 func TestGovPay_ParseWebhook_MissingRefNo(t *testing.T) {
-	g := &GovPayGateway{}
+	g := newTestGateway()
 	body := []byte(`{"transactionID":"gw-tx-1","data":[{"paramName":"status","value":"paid"}]}`)
-	_, _, err := g.ParseWebhook(context.Background(), body, nil)
+	_, _, err := g.parseWebhookEnc(t, body, nil)
 	require.Error(t, err)
 }
 
 func TestGovPay_ParseWebhook_InvalidJSON(t *testing.T) {
-	g := &GovPayGateway{}
-	_, _, err := g.ParseWebhook(context.Background(), []byte(`not json`), nil)
+	g := newTestGateway()
+	_, _, err := g.parseWebhookEnc(t, []byte(`not json`), nil)
 	require.Error(t, err)
 }
 
@@ -93,7 +93,7 @@ func TestGovPay_ParseWebhook_Acknowledgement(t *testing.T) {
 	g := configuredGateway()
 	body := updateBody("TNSW1", "paid", "1500.00", "LKR")
 
-	_, resp, err := g.ParseWebhook(context.Background(), body, nil)
+	_, resp, err := g.parseWebhookEnc(t, body, nil)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, 200, resp.HTTPStatus)
@@ -105,9 +105,9 @@ func TestGovPay_ParseWebhook_Acknowledgement(t *testing.T) {
 	assert.Equal(t, "Success", out.Message)
 	// Echoed data[] (5 items) + receipt number + status.
 	require.Len(t, out.PaymentData, 7)
-	assert.Equal(t, "Receipt Number", out.PaymentData[5].Placeholder)
-	assert.Equal(t, "REC-gw-tx-1", out.PaymentData[5].InitialValue)
-	assert.Equal(t, "Status", out.PaymentData[6].Placeholder)
+	assert.Equal(t, "Receipt Number", decryptAsGovPay(t, out.PaymentData[5].Placeholder))
+	assert.Equal(t, "REC-gw-tx-1", decryptAsGovPay(t, out.PaymentData[5].InitialValue))
+	assert.Equal(t, "Status", decryptAsGovPay(t, out.PaymentData[6].Placeholder))
 }
 
 func presentmentBody(refNo string) []byte {
@@ -121,7 +121,7 @@ func presentmentBody(refNo string) []byte {
 }
 
 func TestGovPay_HandleValidateReference(t *testing.T) {
-	g := &GovPayGateway{}
+	g := newTestGateway()
 	reqData := presentmentBody("TNSW1")
 
 	t.Run("payable", func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 			Currency:        "LKR",
 			Metadata:        configured(wantSubInst, wantService),
 		}
-		resp, err := g.HandleValidateReference(context.Background(), tx, true, reqData)
+		resp, err := g.validateEnc(t, tx, true, reqData)
 		require.NoError(t, err)
 		assert.Equal(t, 200, resp.HTTPStatus)
 
@@ -141,13 +141,17 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 		assert.Equal(t, "abc", out.TransactionID)
 		assert.Equal(t, "sv1", out.ServiceID)
 		require.NotEmpty(t, out.PresentmentData)
-		assert.Equal(t, "TNSW1", out.PresentmentData[0].InitialValue)
-		assert.True(t, out.PresentmentData[0].IsPaymentReference)
-		assert.Equal(t, "refNo", out.PresentmentData[0].ReturnParam)
+		// presentmentData is encrypted on the wire, so assert on the plaintext
+		// GovPay+ would recover with the same transaction key.
+		assert.Equal(t, "TNSW1", decryptAsGovPay(t, out.PresentmentData[0].InitialValue))
+		assert.Equal(t, "true", decryptAsGovPay(t, out.PresentmentData[0].IsPaymentReference))
+		assert.Equal(t, "refNo", decryptAsGovPay(t, out.PresentmentData[0].ReturnParam))
+		// decimal.String() strips trailing zeros, so 1500.00 presents as "1500".
+		assert.Equal(t, "1500", decryptAsGovPay(t, out.PresentmentData[1].InitialValue))
 	})
 
 	t.Run("unknown reference", func(t *testing.T) {
-		resp, err := g.HandleValidateReference(context.Background(), nil, false, reqData)
+		resp, err := g.validateEnc(t, nil, false, reqData)
 		require.NoError(t, err)
 		assert.Equal(t, 404, resp.HTTPStatus)
 
@@ -157,7 +161,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 	})
 
 	t.Run("not payable", func(t *testing.T) {
-		resp, err := g.HandleValidateReference(context.Background(), &corepayment.ValidationTransaction{ReferenceNumber: "TNSW1", Metadata: configured(wantSubInst, wantService)}, false, reqData)
+		resp, err := g.validateEnc(t, &corepayment.ValidationTransaction{ReferenceNumber: "TNSW1", Metadata: configured(wantSubInst, wantService)}, false, reqData)
 		require.NoError(t, err)
 		assert.Equal(t, 409, resp.HTTPStatus)
 
@@ -168,21 +172,21 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 }
 
 func TestGovPay_ExtractReferenceNumber(t *testing.T) {
-	g := &GovPayGateway{}
+	g := newTestGateway()
 
-	ref, err := g.ExtractReferenceNumber(context.Background(), presentmentBody("TNSW1"))
+	ref, err := g.extractRefEnc(t, presentmentBody("TNSW1"))
 	require.NoError(t, err)
 	assert.Equal(t, "TNSW1", ref)
 
-	_, err = g.ExtractReferenceNumber(context.Background(), []byte(`{"transactionID":"abc"}`))
+	_, err = g.extractRefEnc(t, []byte(`{"transactionID":"abc"}`))
 	require.Error(t, err)
 
-	_, err = g.ExtractReferenceNumber(context.Background(), presentmentBody("TN SW!"))
+	_, err = g.extractRefEnc(t, presentmentBody("TN SW!"))
 	require.Error(t, err)
 }
 
 func TestGovPay_CreateSession(t *testing.T) {
-	g := &GovPayGateway{}
+	g := newTestGateway()
 	resp, err := g.CreateSession(context.Background(), corepayment.SessionRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, corepayment.FlowTypeInstruction, resp.Type)
@@ -201,13 +205,13 @@ func TestNewGovPayGateway(t *testing.T) {
 }
 
 func TestGovPay_ExtractReferenceNumber_InvalidJSON(t *testing.T) {
-	g := &GovPayGateway{}
-	_, err := g.ExtractReferenceNumber(context.Background(), []byte(`not json`))
+	g := newTestGateway()
+	_, err := g.extractRefEnc(t, []byte(`not json`))
 	require.Error(t, err)
 }
 
 func TestGovPay_HandleValidateReference_InvalidJSON(t *testing.T) {
-	g := &GovPayGateway{}
-	_, err := g.HandleValidateReference(context.Background(), nil, true, []byte(`not json`))
+	g := newTestGateway()
+	_, err := g.validateEnc(t, nil, true, []byte(`not json`))
 	require.Error(t, err)
 }
