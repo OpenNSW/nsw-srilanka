@@ -66,7 +66,7 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 	// the request itself — it echoes the submitted data[] and is the same
 	// regardless of how the service settles the transaction.
 	paymentData := buildPaymentData(req.Data, req.TransactionID)
-	if err := encryptPaymentItems(paymentData, aesKey); err != nil {
+	if err := encryptResponseObjects(paymentData, aesKey); err != nil {
 		return nil, nil, fmt.Errorf("encrypt update response: %w", err)
 	}
 
