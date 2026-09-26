@@ -22,6 +22,7 @@ const issued = `{
     "so_status": "client_generate_invoice",
     "is_paid": false,
     "details": {
+      "is_paid": false,
       "draft_invoice_no": "DRFT-INV-FCL-EXPORT-2026-257612",
       "invoice_no": "26211843262217",
       "invoice_serial": "26SEP_LD1_00000026",
@@ -177,15 +178,28 @@ func TestGenerate_UnreachableCMSSaysSo(t *testing.T) {
 
 // An order already invoiced and paid must not send the trader to wait for a
 // payment that has happened.
+//
+// Read from the CMS's own is_paid rather than inferred from a paid-at
+// timestamp: an answer that states it is settled but carries no timestamp
+// would otherwise be read as unpaid, and the step after this one waits
+// forever.
 func TestGenerate_ReadsAnInvoiceAlreadyPaid(t *testing.T) {
 	_, out := NewGenerateInterpreter().Interpret(nil, body(t, `{
 	  "status": 1,
 	  "data": {"is_paid": true,
-	           "details": {"invoice_no": "26211843261345", "total_payable_lkr": 4776,
-	                       "invoice_paid_at": "2026-09-11 16:02:11"}}
+	           "details": {"is_paid": true, "invoice_no": "26211843261345",
+	                       "total_payable_lkr": 4776}}
 	}`))
 
 	assert.Equal(t, true, out["paid"])
+}
+
+// A freshly raised invoice is not settled, and the step after this one is what
+// waits for SLPA to say that it is.
+func TestGenerate_AFreshInvoiceIsNotPaid(t *testing.T) {
+	_, out := NewGenerateInterpreter().Interpret(nil, body(t, issued))
+
+	assert.Equal(t, false, out["paid"])
 }
 
 // The client key identifies the company the invoice is raised for.

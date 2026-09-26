@@ -76,12 +76,25 @@ func (i *GenerateInterpreter) Interpret(callErr error, resp map[string]any) (boo
 		"items":        lineItems(details),
 		"payment_slip": paymentSlip(slip),
 
-		// The order is invoiced but not yet paid, and the step that follows waits
-		// for SLPA to say it has been. Stated here so the workflow's gateway reads
-		// one value whether it arrives from this call or from the payment webhook.
-		"paid": cms.String(details, "invoice_paid_at") != "",
+		// Whether the order is already settled, which the step that follows
+		// gates on: an invoice raised against a payment that has already landed
+		// must not park the trader waiting for one.
+		//
+		// Read from the CMS's own flag rather than inferred from
+		// invoice_paid_at. The timestamp is null on an unpaid invoice, so it
+		// happens to agree, but it answers "when" -- an answer that is already
+		// paid and states is_paid without a timestamp would be read as unpaid
+		// and wait forever.
+		"paid": paidFlag(details),
 	}
 	return true, out
+}
+
+// paidFlag reads data.details.is_paid, the CMS's statement of whether this
+// invoice has been settled.
+func paidFlag(details map[string]any) bool {
+	paid, _ := details["is_paid"].(bool)
+	return paid
 }
 
 // lineItems is the invoice broken down the way it was priced: one entry per
