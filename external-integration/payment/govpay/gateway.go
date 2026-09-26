@@ -15,6 +15,11 @@ import (
 // GovPayGateway implements corepayment.PaymentGateway for the GovPay+ aggregator.
 type GovPayGateway struct {
 	cfg Config
+	// decryptor holds this GO's RSA private key. GovPay+ encrypts every call
+	// (spec §3), so it is required in any deployment GovPay+ actually calls.
+	// It is nil when no key is configured; the callback paths then fail with
+	// ErrEncryptionNotConfigured, which names the cause instead of panicking.
+	decryptor *Decryptor
 	// resolveIdentity recovers the expected GovPay+ identity for a reference
 	// number. Optional: when nil the update (webhook) callback is accepted
 	// without an identity check, which is how the gateway behaves in tests and
@@ -42,8 +47,17 @@ func NewGovPayGatewayFactory(resolveIdentity IdentityResolver) corepayment.Facto
 			return nil, err
 		}
 
+		// A key that is configured but unreadable is a hard failure: starting
+		// up and failing every call later would be strictly worse than
+		// refusing to build the gateway now.
+		decryptor, err := loadDecryptor(config.PrivateKey, config.PrivateKeyFile)
+		if err != nil {
+			return nil, err
+		}
+
 		return &GovPayGateway{
 			cfg:             config,
+			decryptor:       decryptor,
 			resolveIdentity: resolveIdentity,
 		}, nil
 	}
@@ -83,7 +97,7 @@ func (g *GovPayGateway) CreateSession(ctx context.Context, req corepayment.Sessi
 // request. Per the GovPay+ contract the reference travels as the single data[]
 // item named "refNo".
 func (g *GovPayGateway) ExtractReferenceNumber(ctx context.Context, referenceData json.RawMessage) (string, error) {
-	req, err := parseGovPayRequest(referenceData)
+	req, _, err := g.decryptRequest(ctx, referenceData)
 	if err != nil {
 		return "", err
 	}
