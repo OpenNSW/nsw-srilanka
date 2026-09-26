@@ -194,6 +194,23 @@ func TestGenerate_ReadsAnInvoiceAlreadyPaid(t *testing.T) {
 	assert.Equal(t, true, out["paid"])
 }
 
+// The case the timestamp cannot answer: settled, with no paid-at recorded.
+//
+// Deriving paid from invoice_paid_at read this as unpaid and parked the trader
+// waiting for a payment webhook that was never coming. The envelope's is_paid
+// is left false here on purpose -- details.is_paid is the field read, and this
+// fails if anything falls back to the one beside it.
+func TestGenerate_ReadsPaidWhenThereIsNoPaidAtTimestamp(t *testing.T) {
+	_, out := NewGenerateInterpreter().Interpret(nil, body(t, `{
+	  "status": 1,
+	  "data": {"is_paid": false,
+	           "details": {"is_paid": true, "invoice_paid_at": null,
+	                       "invoice_no": "26211843261345", "total_payable_lkr": 4776}}
+	}`))
+
+	assert.Equal(t, true, out["paid"])
+}
+
 // A freshly raised invoice is not settled, and the step after this one is what
 // waits for SLPA to say that it is.
 func TestGenerate_AFreshInvoiceIsNotPaid(t *testing.T) {
