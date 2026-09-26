@@ -142,8 +142,11 @@ func TestHandleWebhook_RoutesByEventFamily(t *testing.T) {
 		"event": "invoice.paid",
 		"slug": "8d326f3a-643a-4a1d-8072-87130288b032",
 		"invoice_no": "INV-2026-04412",
-		"details": {"invoice_details": {"payment_slip_url": "https://slpacargoapi.slpa.lk/receipts/INV-2026-04412.pdf",
-		                                "total_payable_lkr": 4820.5}}
+		"payment_receipt": {
+			"paid_amount": 4820.5,
+			"payment_receipt": "100415624",
+			"payment_receipt_url": "https://slpacargoapi.slpa.lk/pdf/payment-receipt/INV-2026-04412?signature=eec7d7a5"
+		}
 	}`
 
 	h, tasks := handlerOver(t, true)
@@ -155,7 +158,7 @@ func TestHandleWebhook_RoutesByEventFamily(t *testing.T) {
 	// "decision" at all.
 	assert.NotContains(t, tasks.payload, "decision")
 	assert.Equal(t, true, tasks.payload["paid"])
-	assert.Equal(t, "https://slpacargoapi.slpa.lk/receipts/INV-2026-04412.pdf", tasks.payload["receipt_url"])
+	assert.Equal(t, "https://slpacargoapi.slpa.lk/pdf/payment-receipt/INV-2026-04412?signature=eec7d7a5", tasks.payload["receipt_url"])
 	assert.Equal(t, 4820.5, tasks.payload["payable_lkr"])
 }
 
