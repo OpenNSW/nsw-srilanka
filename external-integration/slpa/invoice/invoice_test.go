@@ -230,3 +230,24 @@ func TestGenerate_PresentsTheClientKey(t *testing.T) {
 func TestGenerate_SendsNoBody(t *testing.T) {
 	assert.Nil(t, NewGenerateInterpreter().BuildRequest(map[string]any{"service_order_no": "SO-FCL-EXPORT-2026-262342"}))
 }
+
+// A field the CMS has not issued is left off rather than recorded empty. The
+// panel hides what is absent: an empty link renders as a download that goes
+// nowhere, and a zero payable as an invoice with nothing to pay.
+func TestGenerate_OmitsWhatTheCMSHasNotIssuedYet(t *testing.T) {
+	_, out := NewGenerateInterpreter().Interpret(nil, body(t, `{
+	  "status": 1,
+	  "data": {"service_order_no": "SO-FCL-EXPORT-2026-262351",
+	           "details": {"invoice_no": "26211843262217", "is_paid": false,
+	                       "payment_slip": {"number": "BIBE1E40452026"}}}
+	}`))
+
+	assert.NotContains(t, out, "payment_slip_url", "an unissued slip is not a broken link")
+	assert.NotContains(t, out, "payable_lkr", "no amount is not an amount of zero")
+	assert.NotContains(t, out, "exchange_rate")
+	assert.NotContains(t, out, "invoice_serial")
+
+	// What the answer did carry is still recorded.
+	assert.Equal(t, "26211843262217", out["invoice_no"])
+	assert.Equal(t, false, out["paid"])
+}

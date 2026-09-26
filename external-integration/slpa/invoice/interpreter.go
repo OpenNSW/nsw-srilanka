@@ -65,18 +65,8 @@ func (i *GenerateInterpreter) Interpret(callErr error, resp map[string]any) (boo
 		"invoice_no":       number,
 		"service_order_no": cms.String(body, "service_order_no"),
 		"cms_status":       cms.String(details, "status"),
-		"invoice_serial":   cms.String(details, "invoice_serial"),
-		"generated_at":     cms.String(details, "invoice_generated_at"),
-		"payable_lkr":      number64(details, "total_payable_lkr"),
-		"exchange_rate":    number64(details, "exchange_rate"),
-
-		// The one link the trader acts on. The invoice document is not offered
-		// beside it: two links, one of which cannot be paid against, is how a
-		// trader ends up transferring against the wrong document.
-		"payment_slip_url": cms.String(slip, "payment_slip_url"),
-
-		"items":        lineItems(details),
-		"payment_slip": paymentSlip(slip),
+		"items":            lineItems(details),
+		"payment_slip":     paymentSlip(slip),
 
 		// Whether the order is already settled, which the step that follows
 		// gates on: an invoice raised against a payment that has already landed
@@ -88,6 +78,29 @@ func (i *GenerateInterpreter) Interpret(callErr error, resp map[string]any) (boo
 		// paid and states is_paid without a timestamp would be read as unpaid
 		// and wait forever.
 		"paid": paid,
+	}
+
+	// Recorded only when the CMS sent them. A panel showing an empty link or a
+	// zero payable states a fact about the invoice rather than a gap in the
+	// answer: "" behind a download reads as a document that failed, and LKR
+	// 0.00 as nothing to pay.
+	if v := cms.String(details, "invoice_serial"); v != "" {
+		out["invoice_serial"] = v
+	}
+	if v := cms.String(details, "invoice_generated_at"); v != "" {
+		out["generated_at"] = v
+	}
+	// The one link the trader acts on. The invoice document is not offered
+	// beside it: two links, one of which cannot be paid against, is how a
+	// trader ends up transferring against the wrong document.
+	if v := cms.String(slip, "payment_slip_url"); v != "" {
+		out["payment_slip_url"] = v
+	}
+	if v := number64(details, "total_payable_lkr"); v != 0 {
+		out["payable_lkr"] = v
+	}
+	if v := number64(details, "exchange_rate"); v != 0 {
+		out["exchange_rate"] = v
 	}
 	return true, out
 }
