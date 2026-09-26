@@ -69,7 +69,7 @@ func (g *GovPayGateway) HandleValidateReference(ctx context.Context, tx *corepay
 	// back without a key. Error envelopes above are likewise unencrypted — a
 	// caller whose key we could not read still has to be told why.
 	presentmentData := buildPresentmentData(tx)
-	if err := encryptPresentmentObjects(presentmentData, aesKey); err != nil {
+	if err := encryptResponseObjects(presentmentData, aesKey); err != nil {
 		return nil, fmt.Errorf("encrypt presentment response: %w", err)
 	}
 

@@ -13,29 +13,21 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 )
 
 // -----------------------------------------------------------------------------
 // GovPay+ data encryption (spec §3, "Security Standards for Data Encryption")
 //
-// GovPay+ encrypts every presentment/update call it makes to this GO:
+// GovPay+ generates a 32-character AES-256 transaction key per call, RSA-OAEP
+// encrypts it to this GO's public key in the "TransactionKey" header, and
+// AES-CBC encrypts every field of each request data[] item under it. This GO
+// decrypts the key, decrypts the request, and encrypts every field of the
+// response with the same key so GovPay+ can read it back.
 //
-//   - It generates a 32-character AES-256 transaction key per call, RSA-OAEP
-//     encrypts it with this GO's public key, and sends it base64-encoded in the
-//     "TransactionKey" HTTP header.
-//   - Every field of each request data[] item (seq, paramName, value) is
-//     AES-256-CBC encrypted with that transaction key, base64-encoded.
-//
-// This GO decrypts the transaction key with its RSA private key, decrypts each
-// request field, and encrypts every field of the response with the same AES key
-// so GovPay+ can read it back.
-//
-// Algorithm standards (spec §3.2):
-//   - TransactionKey: RSA / OAEP (SHA-256) / MGF1(SHA-256) / 2048-bit.
-//   - Payload:        AES / CBC / 256-bit, PKCS7 padding, with
-//     AES key = SHA-256(transaction key) and IV = the first 16 bytes of that
-//     derived key.
+// Algorithms (spec §3.2): RSA/OAEP(SHA-256)/MGF1(SHA-256)/2048 for the
+// transaction key; AES-256-CBC with PKCS7 padding for the payload.
 // -----------------------------------------------------------------------------
 
 // aesKeyLen is the length, in bytes, of the plaintext AES-256 transaction key
@@ -43,7 +35,7 @@ import (
 const aesKeyLen = 32
 
 // ivLen is the AES-CBC IV length. The IV is the first 16 bytes of the derived
-// AES key, SHA-256(transaction key) — see deriveAESKey.
+// AES key — see newCBC.
 const ivLen = 16
 
 // transactionKeyHeader is the HTTP header GovPay+ carries the RSA-encrypted
@@ -76,11 +68,22 @@ type Decryptor struct {
 // newDecryptor builds a Decryptor from a PEM-encoded RSA private key
 // (PKCS#8 or PKCS#1).
 func newDecryptor(pemData []byte) (*Decryptor, error) {
-	priv, err := parseRSAPrivateKey(pemData)
-	if err != nil {
-		return nil, err
+	block, _ := pem.Decode(pemData)
+	if block == nil {
+		return nil, fmt.Errorf("govpay private key: no PEM block found")
 	}
-	return &Decryptor{priv: priv}, nil
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return &Decryptor{priv: key}, nil
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse govpay private key: %w", err)
+	}
+	key, ok := parsed.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("govpay private key is not RSA")
+	}
+	return &Decryptor{priv: key}, nil
 }
 
 // loadDecryptor resolves the private key from an inline PEM first, then from a
@@ -100,25 +103,6 @@ func loadDecryptor(inlinePEM, path string) (*Decryptor, error) {
 		return nil, fmt.Errorf("read govpay private key (%s): %w", path, err)
 	}
 	return newDecryptor(data)
-}
-
-func parseRSAPrivateKey(pemData []byte) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode(pemData)
-	if block == nil {
-		return nil, fmt.Errorf("govpay private key: no PEM block found")
-	}
-	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
-		return key, nil
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse govpay private key: %w", err)
-	}
-	key, ok := parsed.(*rsa.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("govpay private key is not RSA")
-	}
-	return key, nil
 }
 
 // decryptTransactionKey decrypts the base64 RSA-OAEP "TransactionKey" header
@@ -151,106 +135,68 @@ func (d *Decryptor) decryptTransactionKey(header string) ([]byte, error) {
 // paramDecimal already accepts a string, so amounts still convert exactly.
 func decryptParams(params []govPayParam, key []byte) error {
 	for i := range params {
-		seq, err := aesCBCDecrypt(key, params[i].Seq)
-		if err != nil {
+		p := &params[i]
+
+		var err error
+		if p.Seq, err = aesCBCDecrypt(key, p.Seq); err != nil {
 			return fmt.Errorf("decrypt seq: %w", err)
 		}
-		params[i].Seq = seq
-
-		name, err := aesCBCDecrypt(key, params[i].ParamName)
-		if err != nil {
+		if p.ParamName, err = aesCBCDecrypt(key, p.ParamName); err != nil {
 			return fmt.Errorf("decrypt paramName: %w", err)
 		}
-		params[i].ParamName = name
 
-		ciphertext, ok := params[i].Value.(string)
+		ciphertext, ok := p.Value.(string)
 		if !ok {
-			return fmt.Errorf("encrypted value for %q must be a string, got %T",
-				params[i].ParamName, params[i].Value)
+			return fmt.Errorf("encrypted value for %q must be a string, got %T", p.ParamName, p.Value)
 		}
-		plain, err := aesCBCDecrypt(key, ciphertext)
-		if err != nil {
-			return fmt.Errorf("decrypt value for %q: %w", params[i].ParamName, err)
-		}
-		params[i].Value = plain
-	}
-	return nil
-}
-
-// encryptPresentmentObjects encrypts every field of every presentment object so
-// GovPay+ can decrypt them (spec §3.1.7). Empty fields are encrypted as empty
-// strings, keeping the wire shape uniform.
-func encryptPresentmentObjects(objs []PresentmentObject, key []byte) error {
-	for i := range objs {
-		o := &objs[i]
-		if err := encryptFields(key,
-			&o.ObjType, &o.Seq, &o.ID, &o.Placeholder, &o.InitialValue,
-			&o.DataType, &o.MaxLength, &o.SelectionType, &o.Mask, &o.NotNull,
-			&o.Enabled, &o.Returned, &o.Rows, &o.Cols, &o.ReturnParam,
-			&o.IsPaymentReference, &o.IsPaymentAmount, &o.ReturnValue,
-		); err != nil {
-			return err
-		}
-		if err := encryptObjExtras(key, o.ObjData, o.TableData); err != nil {
-			return err
+		if p.Value, err = aesCBCDecrypt(key, ciphertext); err != nil {
+			return fmt.Errorf("decrypt value for %q: %w", p.ParamName, err)
 		}
 	}
 	return nil
 }
 
-// encryptPaymentItems is encryptPresentmentObjects for the update receipt.
-func encryptPaymentItems(items []PaymentItem, key []byte) error {
-	for i := range items {
-		it := &items[i]
-		if err := encryptFields(key,
-			&it.ObjType, &it.Seq, &it.ID, &it.Placeholder, &it.InitialValue,
-			&it.DataType, &it.MaxLength, &it.SelectionType, &it.Mask,
-			&it.NotNull, &it.Enabled, &it.Returned, &it.Rows, &it.Cols,
-			&it.ReturnParam, &it.ReturnValue,
-		); err != nil {
-			return err
-		}
-		if err := encryptObjExtras(key, nil, it.TableData); err != nil {
-			return err
-		}
-	}
-	return nil
+// encryptResponseObjects AES-CBC encrypts every string reachable from objs, in
+// place, so GovPay+ can decrypt the response (spec §3.1.7).
+//
+// The response objects are string-typed throughout — every field is encrypted,
+// and AES output is base64 text — so the walk takes whole objects rather than a
+// hand-listed set of fields. A field added to PresentmentObject or PaymentItem
+// is then encrypted by construction instead of being silently sent in clear.
+// Empty fields encrypt to the ciphertext of "", keeping the wire shape uniform.
+func encryptResponseObjects[T any](objs []T, key []byte) error {
+	return encryptStrings(reflect.ValueOf(objs), key)
 }
 
-// encryptObjExtras encrypts the nested string fields of any combo items and
-// table data attached to a response object. These are empty in the current fee
-// flows, but are handled so that "every field is encrypted" holds for combo and
-// table objects too.
-func encryptObjExtras(key []byte, objData []ComboItem, table *TableDataObject) error {
-	for j := range objData {
-		if err := encryptFields(key, &objData[j].ID, &objData[j].Data); err != nil {
-			return err
-		}
-	}
-	if table == nil {
-		return nil
-	}
-	for j := range table.Header {
-		if err := encryptFields(key, &table.Header[j].DataType, &table.Header[j].Value, &table.Header[j].Enabled); err != nil {
-			return err
-		}
-	}
-	for j := range table.RowData {
-		if err := encryptFields(key, &table.RowData[j].DataType, &table.RowData[j].Value, &table.RowData[j].Enabled); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// encryptFields AES-CBC encrypts each referenced string in place.
-func encryptFields(key []byte, fields ...*string) error {
-	for _, f := range fields {
-		enc, err := aesCBCEncrypt(key, *f)
+func encryptStrings(v reflect.Value, key []byte) error {
+	switch v.Kind() {
+	case reflect.String:
+		enc, err := aesCBCEncrypt(key, v.String())
 		if err != nil {
 			return err
 		}
-		*f = enc
+		v.SetString(enc)
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			return encryptStrings(v.Elem(), key)
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			if err := encryptStrings(v.Index(i), key); err != nil {
+				return err
+			}
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			// An unexported field cannot be set, and none of the response
+			// types have one; skipping keeps the walk from panicking if that
+			// ever changes.
+			if v.Type().Field(i).IsExported() {
+				if err := encryptStrings(v.Field(i), key); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -283,30 +229,21 @@ func aesCBCDecrypt(key []byte, b64 string) (string, error) {
 	}
 	plaintext := make([]byte, len(ciphertext))
 	cipher.NewCBCDecrypter(block, iv).CryptBlocks(plaintext, ciphertext)
-	unpadded, err := pkcs7Unpad(plaintext, block.BlockSize())
-	if err != nil {
-		return "", err
-	}
-	return string(unpadded), nil
-}
-
-// deriveAESKey turns the 32-character transaction key into the actual AES-256
-// key: SHA-256 of the transaction key bytes. This is what GovPay+ does in
-// practice (verified against a live GovPay+ request), even though the spec
-// reads as if the transaction key were used directly.
-func deriveAESKey(txnKey []byte) []byte {
-	sum := sha256.Sum256(txnKey)
-	return sum[:]
+	return pkcs7Unpad(plaintext, block.BlockSize())
 }
 
 // newCBC returns an AES-256 cipher block keyed with SHA-256(txnKey), plus the
 // IV (the first 16 bytes of that derived key).
+//
+// Deriving the key by hashing is what GovPay+ does in practice (verified
+// against a live GovPay+ request), even though the spec reads as if the
+// transaction key were used directly.
 func newCBC(txnKey []byte) (cipher.Block, []byte, error) {
 	if len(txnKey) != aesKeyLen {
 		return nil, nil, fmt.Errorf("aes key must be %d bytes, got %d", aesKeyLen, len(txnKey))
 	}
-	key := deriveAESKey(txnKey)
-	block, err := aes.NewCipher(key)
+	key := sha256.Sum256(txnKey)
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, nil, err
 	}
@@ -320,19 +257,19 @@ func pkcs7Pad(data []byte, blockSize int) []byte {
 }
 
 // pkcs7Unpad removes and validates PKCS7 padding.
-func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
+func pkcs7Unpad(data []byte, blockSize int) (string, error) {
 	n := len(data)
 	if n == 0 || n%blockSize != 0 {
-		return nil, fmt.Errorf("invalid padded length")
+		return "", fmt.Errorf("invalid padded length")
 	}
 	pad := int(data[n-1])
 	if pad == 0 || pad > blockSize {
-		return nil, fmt.Errorf("invalid padding")
+		return "", fmt.Errorf("invalid padding")
 	}
 	for _, b := range data[n-pad:] {
 		if int(b) != pad {
-			return nil, fmt.Errorf("invalid padding")
+			return "", fmt.Errorf("invalid padding")
 		}
 	}
-	return data[:n-pad], nil
+	return string(data[:n-pad]), nil
 }
