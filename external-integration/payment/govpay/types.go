@@ -22,6 +22,13 @@ type Config struct {
 	// otherwise post against any gateway — so the gateway pins the caller to its
 	// own client. Required: without it a callback cannot be judged either way.
 	WebhookClientID string `json:"webhook_client_id"`
+
+	// PrivateKey / PrivateKeyFile locate this GO's RSA private key, the half
+	// of the pair whose public key GovPay+ holds. GovPay+ encrypts a fresh
+	// transaction key to it on every call (spec §3), so without it no call can
+	// be read. PrivateKey (inline PEM) takes precedence over PrivateKeyFile.
+	PrivateKey     string `json:"private_key"`
+	PrivateKeyFile string `json:"private_key_file"`
 }
 
 // MethodID is the payment method this gateway is registered under. The
@@ -79,26 +86,31 @@ type PresentmentResponse struct {
 }
 
 // PresentmentObject is one renderable field in a PresentmentResponse.
+//
+// Every field is a string because every field is encrypted on the wire
+// (spec §3.1.7) and AES-CBC output is base64 text. Numeric and boolean fields
+// therefore carry their string form ("50", "true") before encryption, and the
+// response uses the `returnedValue` field name (spec §3.4).
 type PresentmentObject struct {
 	ObjType            string           `json:"objType"`
 	Seq                string           `json:"seq"`
 	ID                 string           `json:"id"`
 	Placeholder        string           `json:"placeholder"`
-	InitialValue       interface{}      `json:"initialValue"`
+	InitialValue       string           `json:"initialValue"`
 	DataType           string           `json:"datatype"`
-	MaxLength          int              `json:"maxLength"`
+	MaxLength          string           `json:"maxLength"`
 	SelectionType      string           `json:"selectionType"`
 	Mask               string           `json:"mask"`
 	NotNull            string           `json:"notNull"`
 	Enabled            string           `json:"enabled"`
 	Returned           string           `json:"returned"`
-	Rows               int              `json:"rows"`
-	Cols               int              `json:"cols"`
+	Rows               string           `json:"rows"`
+	Cols               string           `json:"cols"`
 	ReturnParam        string           `json:"returnedParam"`
-	IsPaymentReference bool             `json:"isPaymentReference,omitempty"`
-	IsPaymentAmount    bool             `json:"isPaymentAmount,omitempty"`
-	ReturnValue        string           `json:"returnValue"`
-	ObjData            []ComboItem      `json:"objData"`
+	IsPaymentReference string           `json:"isPaymentReference,omitempty"`
+	IsPaymentAmount    string           `json:"isPaymentAmount,omitempty"`
+	ReturnValue        string           `json:"returnedValue"`
+	ObjData            []ComboItem      `json:"objData,omitempty"`
 	TableData          *TableDataObject `json:"tableData,omitempty"`
 }
 
@@ -135,23 +147,24 @@ type UpdateResponse struct {
 	PaymentData   []PaymentItem `json:"paymentData"`
 }
 
-// PaymentItem is one field in an UpdateResponse receipt.
+// PaymentItem is one field in an UpdateResponse receipt. It is all-string for
+// the same reason as PresentmentObject: every field is encrypted on the wire.
 type PaymentItem struct {
 	ObjType       string           `json:"objType"`
 	Seq           string           `json:"seq"`
 	ID            string           `json:"id"`
 	Placeholder   string           `json:"placeholder"`
-	InitialValue  interface{}      `json:"initialValue"`
+	InitialValue  string           `json:"initialValue"`
 	DataType      string           `json:"datatype"`
-	MaxLength     int              `json:"maxLength"`
+	MaxLength     string           `json:"maxLength"`
 	SelectionType string           `json:"selectionType"`
 	Mask          string           `json:"mask"`
 	NotNull       string           `json:"notNull"`
 	Enabled       string           `json:"enabled"`
 	Returned      string           `json:"returned"`
-	Rows          int              `json:"rows"`
-	Cols          int              `json:"cols"`
+	Rows          string           `json:"rows"`
+	Cols          string           `json:"cols"`
 	ReturnParam   string           `json:"returnedParam"`
-	ReturnValue   string           `json:"returnValue"`
+	ReturnValue   string           `json:"returnedValue"`
 	TableData     *TableDataObject `json:"tableData,omitempty"`
 }

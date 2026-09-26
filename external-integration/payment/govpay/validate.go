@@ -17,7 +17,7 @@ import (
 // otherwise it returns the GovPay+ error envelope with the matching HTTP status
 // (404 for an unknown/foreign reference, 409 for one already settled or expired).
 func (g *GovPayGateway) HandleValidateReference(ctx context.Context, tx *corepayment.ValidationTransaction, isPayable bool, reqData json.RawMessage) (*corepayment.ValidationResponse, error) {
-	req, err := parseGovPayRequest(reqData)
+	req, aesKey, err := g.decryptRequest(ctx, reqData)
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +64,22 @@ func (g *GovPayGateway) HandleValidateReference(ctx context.Context, tx *corepay
 		})
 	}
 
+	// Only presentmentData is encrypted: the protocol envelope (transactionID,
+	// ids, message) is echoed in clear, matching what GovPay+ expects to read
+	// back without a key. Error envelopes above are likewise unencrypted — a
+	// caller whose key we could not read still has to be told why.
+	presentmentData := buildPresentmentData(tx)
+	if err := encryptResponseObjects(presentmentData, aesKey); err != nil {
+		return nil, fmt.Errorf("encrypt presentment response: %w", err)
+	}
+
 	resp := PresentmentResponse{
 		TransactionID:   req.TransactionID,
 		SubInstID:       req.SubInstID,
 		ServiceID:       req.ServiceID,
 		ServiceName:     req.ServiceName,
 		Message:         "Success",
-		PresentmentData: buildPresentmentData(tx),
+		PresentmentData: presentmentData,
 	}
 	return jsonValidationResponse(200, resp)
 }
@@ -95,7 +104,7 @@ func buildPresentmentData(tx *corepayment.ValidationTransaction) []PresentmentOb
 
 // newPresentmentObject builds a single presentment object with the common
 // GovPay+ defaults, varying only the fields a caller cares about.
-func newPresentmentObject(seq int, objType, placeholder string, initialValue interface{}, dataType string, maxLength int, enabled, returned bool, returnParam string, isPaymentReference, isPaymentAmount bool) PresentmentObject {
+func newPresentmentObject(seq int, objType, placeholder, initialValue, dataType string, maxLength int, enabled, returned bool, returnParam string, isPaymentReference, isPaymentAmount bool) PresentmentObject {
 	return PresentmentObject{
 		ObjType:            objType,
 		Seq:                strconv.Itoa(seq),
@@ -103,17 +112,17 @@ func newPresentmentObject(seq int, objType, placeholder string, initialValue int
 		Placeholder:        placeholder,
 		InitialValue:       initialValue,
 		DataType:           dataType,
-		MaxLength:          maxLength,
+		MaxLength:          strconv.Itoa(maxLength),
 		SelectionType:      "SINGLE",
 		Mask:               "",
 		NotNull:            "true",
 		Enabled:            boolToFlag(enabled),
 		Returned:           boolToFlag(returned),
-		Rows:               1,
-		Cols:               1,
+		Rows:               "1",
+		Cols:               "1",
 		ReturnParam:        returnParam,
-		IsPaymentReference: isPaymentReference,
-		IsPaymentAmount:    isPaymentAmount,
+		IsPaymentReference: boolToFlag(isPaymentReference),
+		IsPaymentAmount:    boolToFlag(isPaymentAmount),
 		ReturnValue:        "",
 		ObjData:            []ComboItem{},
 	}
