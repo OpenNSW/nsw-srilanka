@@ -481,8 +481,7 @@ func (c *Router) handleResolveAdminIntervention(
 	resolve func(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error,
 ) {
 	ctx := r.Context()
-	authCtx := authn.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.Type() == "" {
+	if _, ok := authn.FromContext(ctx); !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
