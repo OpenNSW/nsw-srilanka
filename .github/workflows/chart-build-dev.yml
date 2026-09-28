@@ -2,7 +2,7 @@ name: Build and Push Development Helm Chart
 # Publishes a prerelease Helm chart to GHCR when the chart itself changes, so
 # chart changes can be tested before a release. Does NOT run on ordinary code
 # merges (dev images are handled by the build-*-dev.yaml workflows). Release
-# charts are handled by chart-release.yml.
+# charts are published by release.yml, in lockstep with the app.
 
 on:
   push:
@@ -44,7 +44,11 @@ jobs:
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Lint chart
-        run: helm lint ${{ env.CHART_DIR }} -f ${{ env.VALUES_EXAMPLE }}
+        # The source chart's appVersion is the 0.0.0 placeholder, which the
+        # templates refuse, so lint with stand-in tags.
+        run: >-
+          helm lint ${{ env.CHART_DIR }} -f ${{ env.VALUES_EXAMPLE }}
+          --set backend.image.tag=lint --set frontend.image.tag=lint
 
       - name: Log in to GHCR (Helm)
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
@@ -52,10 +56,10 @@ jobs:
       - name: Package chart
         # Chart version must be valid SemVer: 0.0.0-dev.<run> sorts below any
         # real release, so `helm install` skips it unless --devel is passed.
-        # appVersion is left as-is from Chart.yaml (metadata only). Both
-        # backend.image.tag and frontend.image.tag are required and have no
-        # default, so installers must set them to the dev images they want to
-        # test, e.g. --set backend.image.tag=dev-<run>-<sha>.
+        # appVersion stays the 0.0.0 placeholder, so installers must set
+        # backend.image.tag and frontend.image.tag to the dev images they want
+        # to test, e.g. --set backend.image.tag=dev-<run>-<sha>; the chart
+        # says so if they don't.
         run: |
           helm package ${{ env.CHART_DIR }} \
             --version "0.0.0-dev.${{ github.run_number }}" \

@@ -121,7 +121,7 @@ A tag pushed by hand still starts `release.yml`, but only releases if `version.t
 
 While on 0.x, a breaking change or a new feature bumps the minor version (0.2.0 → 0.3.0), and fixes alone bump the patch (0.2.0 → 0.2.1).
 
-The Helm chart is released separately: bump `version` in [`Chart.yaml`](deployments/helm/lk-tnsw/Chart.yaml), and `appVersion` to the app release it targets, then push a `chart-vX.Y.Z` tag.
+The Helm chart is released with the app, in lockstep: `release.yml` publishes `lk-tnsw` at the same version, with `appVersion` set to it, so chart X.Y.Z deploys the X.Y.Z images by default. [`Chart.yaml`](deployments/helm/lk-tnsw/Chart.yaml) holds only placeholders — don't bump it. A chart-only change ships in the next release.
 
 ## Code style
 

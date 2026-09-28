@@ -2,5 +2,9 @@ apiVersion: v2
 name: lk-tnsw
 description: Helm chart for the Trade National Single Window platform of Sri Lanka (Backend API + Trader Portal frontend)
 type: application
-version: 0.1.1
-appVersion: "0.1.0"
+# Placeholders. The chart is released with the app, in lockstep: release.yml
+# packages it with --version and --app-version set to the release in
+# version.txt, so chart 1.2.3 deploys the 1.2.3 images by default. Don't bump
+# these by hand.
+version: 0.0.0
+appVersion: "0.0.0"

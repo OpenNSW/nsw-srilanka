@@ -1,5 +1,6 @@
 name: Release - Build and Publish Images
-# Builds and publishes the platform Docker images (Trader Portal + Backend API) to GHCR.
+# Builds and publishes the platform Docker images (Trader Portal + Backend API)
+# to GHCR, and the lk-tnsw Helm chart at the same version.
 #
 # Triggers:
 #   - Automatic: merging a change to version.txt. auto-tag.yml tags the merge
@@ -461,12 +462,66 @@ jobs:
           retention-days: 1
 
   # ---------------------------------------------------------------------------
+  # STAGE 2b: Publish the Helm chart in lockstep with the app: chart X.Y.Z has
+  # appVersion X.Y.Z, so it deploys the X.Y.Z images unless told otherwise.
+  # Runs once the images exist; Chart.yaml only holds placeholders.
+  # ---------------------------------------------------------------------------
+  publish-chart:
+    name: Publish Helm Chart
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: needs.build-and-publish.outputs.release_enabled == 'true'
+    permissions:
+      contents: read
+      packages: write   # push the chart to GHCR
+    env:
+      CHART_NAME: lk-tnsw
+      CHART_DIR: deployments/helm/lk-tnsw
+      VALUES_EXAMPLE: deployments/helm/values-example.yaml
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v3.16.2
+
+      - name: Package and lint the chart
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_VERSION"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "CHART_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          helm package "$CHART_DIR" --version "$VERSION" --app-version "$VERSION" --destination .
+          # Linted as packaged, so the example values render against the real appVersion.
+          helm lint "${CHART_NAME}-${VERSION}.tgz" -f "$VALUES_EXAMPLE"
+
+      - name: Push the chart to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OWNER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "$GH_TOKEN" | helm registry login "$REGISTRY" --username "$GITHUB_ACTOR" --password-stdin
+          helm push "${CHART_NAME}-${CHART_VERSION}.tgz" "oci://${REGISTRY}/${OWNER}/charts"
+          {
+            echo "## Helm Chart"
+            echo ""
+            echo "- Chart: \`oci://${REGISTRY}/${OWNER}/charts/${CHART_NAME}\`, version ${CHART_VERSION} (appVersion ${CHART_VERSION})"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
   # STAGE 3: Create the GitHub Release entry and attach release-digests.json.
   # ---------------------------------------------------------------------------
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [release-notes, collate-digests]
+    needs: [release-notes, collate-digests, publish-chart]
     permissions:
       contents: write   # required to create a GitHub Release
     steps:
@@ -536,6 +591,12 @@ jobs:
             for IMG in $(jq -r 'keys[]' release-digests.json); do
               echo "docker pull ${{ env.REGISTRY }}/${OWNER}/${IMG}:${VERSION}"
             done
+            echo '```'
+            echo ""
+            echo "### Helm Chart"
+            echo "Chart ${VERSION} deploys the images above by default:"
+            echo '```bash'
+            echo "helm install lk-tnsw oci://${{ env.REGISTRY }}/${OWNER}/charts/lk-tnsw --version ${VERSION} -f values.yaml"
             echo '```'
             echo ""
             echo "### Supported Platforms"

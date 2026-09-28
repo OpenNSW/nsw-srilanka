@@ -18,10 +18,9 @@ backend:
   image:
     # Published image (see .github/workflows/release.yml).
     repository: ghcr.io/opennsw/tnsw-api
-    # REQUIRED — no default. Set the app version to deploy per environment or
-    # at install (--set backend.image.tag=1.4.0). Chart rendering fails if
-    # this is empty. appVersion is metadata only and is deliberately NOT used
-    # as the tag.
+    # Defaults to the chart's appVersion: chart 1.2.3 deploys the 1.2.3 images
+    # it was released with. Set it only to run other images, e.g. a dev build
+    # (--set backend.image.tag=dev-<run>-<sha>).
     tag: ""
     pullPolicy: IfNotPresent
 
@@ -72,7 +71,7 @@ backend:
     enabled: false
     image:
       repository: ghcr.io/opennsw/tnsw-migrate
-      # Defaults to backend.image.tag above when left empty.
+      # Defaults to backend.image.tag above, then the chart's appVersion.
       tag: ""
       pullPolicy: IfNotPresent
     # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
@@ -127,9 +126,7 @@ frontend:
   image:
     # Published image (see .github/workflows/release.yml).
     repository: ghcr.io/opennsw/tnsw-web
-    # REQUIRED — no default. Set the app version to deploy per environment or
-    # at install (--set frontend.image.tag=1.4.0). Chart rendering fails if
-    # this is empty.
+    # Defaults to the chart's appVersion, like backend.image.tag.
     tag: ""
     pullPolicy: IfNotPresent
 

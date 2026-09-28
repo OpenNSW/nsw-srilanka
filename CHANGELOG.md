@@ -17,11 +17,11 @@ This is the first tagged release of TNSW, and the baseline that later releases a
 | Backend API, including the `otc` CLI | `ghcr.io/opennsw/tnsw-api:0.1.0` |
 | Trader Portal | `ghcr.io/opennsw/tnsw-web:0.1.0` |
 | Schema migrator (16 migrations) | `ghcr.io/opennsw/tnsw-migrate:0.1.0` |
-| Helm chart `lk-tnsw` 0.1.1 | `oci://ghcr.io/opennsw/charts/lk-tnsw` |
+| Helm chart `lk-tnsw` | `oci://ghcr.io/opennsw/charts/lk-tnsw`, version `0.1.0` |
 
 - Every image is built for `linux/amd64` and `linux/arm64`, with an SBOM and SLSA provenance attached.
 - The API is built on [OpenNSW/core](https://github.com/OpenNSW/core) at `v0.0.0-20260924113947-9d0f524e49ee`.
-- The Helm chart is released on its own `chart-v*` tags. Chart 0.1.1 targets this release (`appVersion: 0.1.0`).
+- The Helm chart is released with the app, at the same version: chart 0.1.0 deploys the 0.1.0 images unless you set other image tags.
 
 ### What it does
 
@@ -49,7 +49,7 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 ### Deploying
 
 - **Migrations:** run `tnsw-migrate` (it runs `migrate up`) before the API starts. Docker Compose does this for you; with Helm, set `backend.migration.enabled=true` to run it as a pre-install and pre-upgrade hook.
-- **Image tags:** the chart has no default. Set `backend.image.tag` and `frontend.image.tag` to `0.1.0`.
+- **Image tags:** leave `backend.image.tag` and `frontend.image.tag` unset to deploy this release's images; set them only to run others.
 - **Config files:** the image holds only the `*.example.json` templates. Mount your own `services.json`, `payment_methods.json`, `notification.json` and `catalog.json` into `/app/configs` (with Helm, through `backend.volumes` and `backend.volumeMounts`). The API refuses to start without them. Load company records with `otc company apply -f <file>`.
 - **Environment:** start from [`.env.example`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.1.0/.env.example).
 - **Trader Portal:** its `VITE_*` settings are read when the container starts and default to `localhost`, so set every one of them. `VITE_IDP_SCOPES` must include the `nsw:*` scopes. Branding, including the copyright notice and footer links, is read from `/configs/branding.json` (with Helm, from `frontend.branding`).

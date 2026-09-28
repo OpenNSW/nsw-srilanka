@@ -8,7 +8,7 @@ set -euo pipefail
 tag="${1:?usage: check-version.sh vX.Y.Z [vPREVIOUS]}"
 previous="${2:-}"
 
-# "v" plus the full SemVer 2 grammar, as in chart-release.yml.
+# "v" plus the full SemVer 2 grammar (semver.org), in POSIX ERE.
 SEMVER_RE='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?(\+[0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*)?$'
 if ! [[ "$tag" =~ $SEMVER_RE ]]; then
   echo "version.txt holds '${tag}', which is not a version like v1.2.3." >&2
