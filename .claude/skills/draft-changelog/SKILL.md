@@ -43,7 +43,7 @@ Then read CONTRIBUTING.md's "Releasing" section for the conventions, and the new
 
 ## Write the section
 
-Put it directly under `## [Unreleased]` — moving in anything already there — headed `## [X.Y.Z] - YYYY-MM-DD` and dated today in UTC (`date -u +%F`): by convention a release is dated the day its release PR merges, in UTC, which can differ from the local date. Use these subsections in this order, and leave out any that would be empty:
+Put it directly under `## [Unreleased]` — moving in anything already there — headed `## [X.Y.Z] - YYYY-MM-DD` and dated today in Sri Lanka time (`TZ=Asia/Colombo date +%F`, not the machine's own date, which may be in another timezone): by convention a release is dated the day its release PR merges, in Sri Lanka time (UTC+05:30). Use these subsections in this order, and leave out any that would be empty:
 
 - `### Upgrade notes` — what a deployer must do or know when moving from the previous version: new migrations (say if one is slow or can't be rolled back), env vars and config keys that are new, renamed or removed (with defaults), config file format changes, IdP changes (scopes, clients, roles, groups), Helm values changes, and everything labelled `breaking change`. Say what to change, not only that something changed.
 - `### Added`, `### Changed`, `### Fixed` — the changes a deployer or an agency would notice, one line each with the PR linked. Fold related PRs (a backend and a frontend part, say) into one line. Don't list every PR; the release page already does.
@@ -73,4 +73,4 @@ Finally, update the link references at the foot of the file:
 
 ## Hand off
 
-Show the user the drafted section, then the open questions: PRs that look like they need an upgrade step but say nothing, PRs merged without a release-notes label, and anything you could not confirm. Don't commit unless asked. The release PR goes through the `create-pull-request` skill. Tell the user plainly that merging it releases `vX.Y.Z` — the merge commit is tagged and published automatically — so they merge only when ready to ship. If it won't merge today in UTC, tell them to update the heading's date on the day it does; the release run warns when the two differ.
+Show the user the drafted section, then the open questions: PRs that look like they need an upgrade step but say nothing, PRs merged without a release-notes label, and anything you could not confirm. Don't commit unless asked. The release PR goes through the `create-pull-request` skill. Tell the user plainly that merging it releases `vX.Y.Z` — the merge commit is tagged and published automatically — so they merge only when ready to ship. If it won't merge today (Sri Lanka time), tell them to update the heading's date on the day it does; the release run warns when the two differ.

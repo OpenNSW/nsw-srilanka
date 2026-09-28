@@ -112,10 +112,10 @@ Fill in the PR template's **Deployment Notes** whenever a deployer has to do som
 1. **Open a release PR** from `main` that does two things:
    - sets `version.txt` to the new version, e.g. `v0.2.0`;
    - moves `## [Unreleased]` under `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md, written for the people who deploy TNSW: upgrade notes first, then what was added, changed and fixed. In Claude Code, the `draft-changelog` skill drafts it from the merged PRs and their Deployment Notes. Use absolute links; the section is copied into the GitHub Release.
-   - dates that heading **the day the PR will merge, in UTC** (`date -u +%F`), the date GitHub gives the tag and the Release. In Sri Lanka, UTC is 5½ hours behind: a merge before 05:30 local time is still the previous day.
+   - dates that heading **the day the PR will merge, in Sri Lanka time** (UTC+05:30): `TZ=Asia/Colombo date +%F`.
 
    The **Release version** check confirms the version is valid, higher than the last one and not yet released, and that the PR writes its CHANGELOG section.
-2. **Merge it.** That is the release: the merge commit is tagged and released. Merge it only when you mean to ship, and if the PR has waited, update the heading's date to today in UTC first. The release run warns when the date and the merge day differ.
+2. **Merge it.** That is the release: the merge commit is tagged and released. Merge it only when you mean to ship, and if the PR has waited, update the heading's date to today first. The release run warns when the date and the merge day differ.
 3. **If the release fails at "Release Notes"**, nothing was built. Fix the cause in a new release PR; the tag is only created once the checks pass. To retry a release that failed later on, re-run the failed run of `release.yml`.
 
 A tag pushed by hand still starts `release.yml`, but only releases if `version.txt` and CHANGELOG.md at that commit agree with it. Never use `git push --tags`.
