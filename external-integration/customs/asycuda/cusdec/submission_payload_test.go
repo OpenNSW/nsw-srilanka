@@ -187,7 +187,7 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 	assert.Equal(t, "string", item["bol"])
 	assert.Equal(t, "string", item["bolSplit"])
 	assert.Equal(t, "test", item["marksAndNumbers"])
-	assert.Equal(t, float64(1), item["numberOfUnits"])
+	assert.NotContains(t, item, "numberOfUnits", "dropped from Annex A in spec v1.7")
 
 	// The item repeats the declaration's six-part valuation, not a lone charge.
 	customsValue := item["customsValue"].(map[string]any)
@@ -195,9 +195,95 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 	assert.Equal(t, float64(100), customsValue["externalFreight"].(map[string]any)["value"])
 	assert.Equal(t, "USD", customsValue["externalFreight"].(map[string]any)["currencyID"])
 
-	// remittanceValue is an AmountType (§4.2), not a bare number named amount.
+	// remittanceValue is an AmountType (§4.3), not a bare number named amount.
 	assert.NotContains(t, remittance, "amount", "the pre-v1.6 spelling is gone")
 	value := remittance["remittanceValue"].(map[string]any)
 	assert.Equal(t, float64(1500), value["value"])
 	assert.Equal(t, "USD", value["currencyID"], "the declaration's currency carries to the remittance")
+}
+
+// --- spec v1.7 ---------------------------------------------------------------
+
+// Annex A corrected the misspelled voyage fields in v1.7. The Go field names
+// are cosmetic; the JSON tags are the contract, so they are what is asserted.
+func TestBuildPayload_SendsTheCorrectedVoyageFieldNames(t *testing.T) {
+	form := sampleForm()
+	sub, _, err := BuildPayload(form, "")
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+	body := string(encoded)
+
+	assert.Contains(t, body, `"transportVoyageName":`)
+	assert.Contains(t, body, `"transportVoyageNameNationality":`)
+	assert.NotContains(t, body, "transportVoageName", "the v1.6 misspelling must not reach the wire")
+}
+
+// §8 metadata document: a supporting document held elsewhere, referenced rather
+// than attached. Before v1.7 a row with no file was refused outright.
+func TestBuildPayload_AcceptsAMetadataSupportingDocument(t *testing.T) {
+	form := minimalForm()
+	form["supportingDocuments"] = []any{
+		map[string]any{
+			"documentCode": "N380",
+			"itemSequence": float64(1),
+			"documentId":   "INV-2026-0042",
+			"dateAsString": "15/09/2026",
+		},
+	}
+
+	sub, _, err := BuildPayload(form, "")
+	require.NoError(t, err)
+	require.Len(t, sub.SupportingDocuments, 1)
+
+	doc := sub.SupportingDocuments[0]
+	assert.False(t, doc.HasFile(), "a metadata document sends no bytes")
+	assert.Equal(t, 1, doc.SequenceNumber)
+	assert.Equal(t, 1, doc.ItemSequence)
+	assert.Equal(t, "INV-2026-0042", doc.DocumentID)
+	assert.Equal(t, "15/09/2026", doc.DateAsString)
+
+	// fileName is omitted rather than sent empty: §6.1.2 matches part filenames
+	// against it, and an empty one would match a part that is not there.
+	encoded, err := json.Marshal(doc)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "fileName")
+}
+
+// A row that is neither: no file, and none of the reference fields a document
+// without one needs. Left to travel it would promise an attachment that is not
+// in the request, which the endpoint rejects with a 400.
+func TestBuildPayload_RefusesASupportingDocumentThatIsNeither(t *testing.T) {
+	for name, entry := range map[string]map[string]any{
+		"nothing but a code": {"documentCode": "N380"},
+		"no reference":       {"documentCode": "N380", "itemSequence": float64(1), "dateAsString": "15/09/2026"},
+		"no date":            {"documentCode": "N380", "itemSequence": float64(1), "documentId": "INV-1"},
+		"no item number":     {"documentCode": "N380", "documentId": "INV-1", "dateAsString": "15/09/2026"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			form := minimalForm()
+			form["supportingDocuments"] = []any{entry}
+
+			_, _, err := BuildPayload(form, "")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "no attached file")
+		})
+	}
+}
+
+// A scanned document still behaves as it did, and still carries its filename.
+func TestBuildPayload_AScannedSupportingDocumentStillCarriesItsFile(t *testing.T) {
+	form := minimalForm()
+	form["supportingDocuments"] = []any{
+		map[string]any{"documentCode": "N380", "file": "storage/docs/invoice.pdf"},
+	}
+
+	sub, _, err := BuildPayload(form, "")
+	require.NoError(t, err)
+	require.Len(t, sub.SupportingDocuments, 1)
+
+	doc := sub.SupportingDocuments[0]
+	assert.True(t, doc.HasFile())
+	assert.Equal(t, "storage/docs/invoice.pdf", doc.FileName)
 }

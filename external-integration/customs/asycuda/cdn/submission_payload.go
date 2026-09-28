@@ -75,7 +75,7 @@ type Party struct {
 //
 // Missing optional values become their zero value rather than an error: the
 // endpoint validates the note on integration and reports field-level problems
-// through the §4.4 errors object, which produces a far better trader message
+// through the §4.5 errors object, which produces a far better trader message
 // than a local guess at what Customs will accept. The two things checked here
 // are the ones the trader cannot see and cannot fix from an error message — an
 // empty form, and a declaration reference that does not parse.

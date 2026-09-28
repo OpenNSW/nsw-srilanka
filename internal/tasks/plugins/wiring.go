@@ -35,6 +35,11 @@ const (
 	// with the Sri Lanka Customs (SLC Edge) CusDec response interpreter.
 	TaskTypeCustomsCusdecDispatch = "CUSTOMS_CUSDEC_DISPATCH"
 
+	// TaskTypeCustomsCusdecVerify is the same plugin wired with the verify
+	// interpreter: the declaration is priced and validated without being
+	// registered, so the trader can check it before committing.
+	TaskTypeCustomsCusdecVerify = "CUSTOMS_CUSDEC_VERIFY"
+
 	// TaskTypeCustomsCDNDispatch is the generic AUTH_API_CALL plugin wired with
 	// the Sri Lanka Customs (SLC Edge) Cargo Dispatch Note interpreter. One
 	// dispatch note covers one container, so a consignment fans out to this task
@@ -139,6 +144,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
+		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},

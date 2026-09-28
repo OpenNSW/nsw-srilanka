@@ -54,6 +54,13 @@ export function TaskDetailScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const [showSubmitSuccess, setShowSubmitSuccess] = useState(false)
+  // Bumped once an action's refetch has landed, and mixed into the zone keys so
+  // the form remounts against what came back. A form seeds its data on mount
+  // and deliberately ignores later polls, which is what stops a background
+  // refresh clobbering someone mid-sentence -- but it also means a step that
+  // returns to the same form (verify, save) would otherwise keep displaying the
+  // values it mounted with, from before the submission was saved.
+  const [formEpoch, setFormEpoch] = useState(0)
   const [nextTaskId, setNextTaskId] = useState<string | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
@@ -227,6 +234,7 @@ export function TaskDetailScreen() {
       )}
       <TraderZoneLayout
         task={zoneView}
+        formEpoch={formEpoch}
         onSubmitForm={
           hasSubmitted
             ? undefined
@@ -242,6 +250,10 @@ export function TaskDetailScreen() {
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
                   const zv = await fetchTask()
+                  // Reseed from what the refetch returned, not from what the
+                  // form mounted with. Safe to discard the on-screen values
+                  // here: the submission that just succeeded carried them.
+                  setFormEpoch((n) => n + 1)
                   // Show the success banner only when the task moved out of PENDING_USER.
                   // A draft save leaves it there, a real submission advances it.
                   if (zv && zv.state !== 'PENDING_USER' && !hasRejection(zv)) {

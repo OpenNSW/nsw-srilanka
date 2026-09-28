@@ -28,8 +28,8 @@ importers:
         specifier: ^3.8.0
         version: 3.8.0(@jsonforms/core@3.8.0)(react@19.3.0)
       '@opennsw/jsonforms-renderers':
-        specifier: ^0.10.0
-        version: 0.10.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.11.0
+        version: 0.11.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-icons':
         specifier: ^1.3.2
         version: 1.3.2(react@19.3.0)
@@ -319,8 +319,8 @@ packages:
   '@nodable/entities@3.0.0':
     resolution: {integrity: sha512-8L9xFeTYKhm49xfIypoe2W5wV1m/3Z58kT+7kR9A8OyFxcPduI4VmxaUMQyKYrRjUoLLSXv6EKKID5Tvj9cUVw==}
 
-  '@opennsw/jsonforms-renderers@0.10.0':
-    resolution: {integrity: sha512-g1iLjWLd2ak3K1lkmFyKxMNGc0D9oKu3WF0jmfTBwsVmN3BEaZ5NTRXmQ2IF5oKsmlW4Yo4fkBPAA115ygtblw==}
+  '@opennsw/jsonforms-renderers@0.11.0':
+    resolution: {integrity: sha512-5krFI+T7UwYLRXwNbSS5lOUMuxh5Zu1fk9CyjZeKFqhZJ5xrGrLrMZZJXqBGPKzWAPGQyZ+qFFIxPwjjCEjLvA==}
     peerDependencies:
       '@jsonforms/core': ^3.2.1
       '@jsonforms/react': ^3.2.1
@@ -2670,7 +2670,7 @@ snapshots:
 
   '@nodable/entities@3.0.0': {}
 
-  '@opennsw/jsonforms-renderers@0.10.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@opennsw/jsonforms-renderers@0.11.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@e965/xlsx': 0.20.3
       '@formulajs/formulajs': 4.6.1

@@ -100,13 +100,25 @@ func (c CusdecInterpreter) BuildParts(ctx context.Context, inputs map[string]any
 		return nil, &buildError{err.Error()}
 	}
 
-	parts := make([]remote.Part, 0, len(docs)+2)
+	// Only a scanned document has a part; a metadata document (§8) references
+	// one held elsewhere and sends no bytes. Both still travel in the payload's
+	// supportingDocuments array, so the attached ones are collected separately
+	// here -- fileinfo counts parts, not entries, and fileN has to stay
+	// contiguous across the entries that have no file.
+	attached := make([]SupportDoc, 0, len(docs))
+	for _, doc := range docs {
+		if doc.HasFile() {
+			attached = append(attached, doc)
+		}
+	}
+
+	parts := make([]remote.Part, 0, len(attached)+2)
 	parts = append(parts, payloadPart,
 		// §6.1.1: the count must equal the number of file parts, and 0 is the
 		// correct value when there is nothing attached.
-		remote.Part{Name: "fileinfo", Content: []byte(strconv.Itoa(len(docs)))})
+		remote.Part{Name: "fileinfo", Content: []byte(strconv.Itoa(len(attached)))})
 
-	for i, doc := range docs {
+	for i, doc := range attached {
 		content, mime, err := c.fetch(ctx, doc)
 		if err != nil {
 			return nil, err

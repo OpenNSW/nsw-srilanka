@@ -8,15 +8,19 @@ import { Zone } from './Zone'
 type Props = {
   task: ZoneView
   onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
+  // Changes once an action's refetch has landed. Part of each zone's key, so a
+  // step returning to the same form remounts it against the refreshed data
+  // rather than leaving the values it mounted with on screen.
+  formEpoch?: number
 }
 
-export function TraderZoneLayout({ task, onSubmitForm }: Props) {
+export function TraderZoneLayout({ task, onSubmitForm,formEpoch = 0 }: Props) {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {task.view.map((component) => (
-        <Zone key={`${component.id}:${task.task_id}:${task.state}`} component={component} onAction={onSubmitForm} />
+        <Zone key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`} component={component} onAction={onSubmitForm} />
       ))}
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>

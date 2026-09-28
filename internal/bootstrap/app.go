@@ -206,7 +206,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to build consignment router: %w", err)
 	}
 
-	pr, stopParentRunner, err := wireParentRunner(temporalClient, tm, consignmentService)
+	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, consignmentService)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -541,7 +541,7 @@ func newAdminParkLogger(scope string) func(workflow.AdminParkPayload) error {
 // activator's StartTask is invoked to spawn the corresponding task workflow.
 // On parent-workflow completion, upstream.CompletionHandler is invoked so
 // consignment can advance its own state.
-func wireParentRunner(c client.Client, activator parentTaskActivator, upstream parentUpstreamService) (workflow.TemporalManager, func() error, error) {
+func wireParentRunner(c client.Client, namespace string, activator parentTaskActivator, upstream parentUpstreamService) (workflow.TemporalManager, func() error, error) {
 	if activator == nil {
 		return nil, nil, fmt.Errorf("parent task activator cannot be nil")
 	}
@@ -560,7 +560,7 @@ func wireParentRunner(c client.Client, activator parentTaskActivator, upstream p
 		return nil
 	}
 
-	runner := workflow.NewTemporalManager(c, parentWorkflowQueue, onActivation, onCompletion)
+	runner := workflow.NewTemporalManager(c, namespace, parentWorkflowQueue, onActivation, onCompletion)
 	runner.RegisterAdminParkHandler(newAdminParkLogger("top-level workflow"))
 	if err := runner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start parent workflow worker: %w", err)
@@ -741,7 +741,7 @@ func initTask(
 		return tm.HandleTaskCompletion(context.Background(), workflowID, finalVariables)
 	}
 
-	workflowRunner := workflow.NewTemporalManager(temporalClient, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
+	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
 
 	notifManager, err := notification.NewManager(cfg.Notification,

@@ -192,6 +192,19 @@ type apiCallConfig struct {
 	// mapped inputs as a body.
 	Method      string `json:"method,omitempty"`
 	ResultField string `json:"result_field,omitempty"` // record the accepted flag under this key
+
+	// RetainState keeps the task in the state it was already in for the
+	// duration of the call, instead of reporting QUEUED_EXTERNALLY.
+	//
+	// The default suits a call that hands the declaration to the agency: the
+	// flow moves straight on to a step that waits for them, so the "with the
+	// agency" panel covers the whole span. A call that comes straight back to
+	// the step it was made from — a validity or pricing check, say — is not
+	// that. Reporting it as queued would show the trader the waiting panel for
+	// a moment, and, because the portal keys a zone on task state, remount the
+	// form under them and reseed it from what was last saved, losing whatever
+	// they had typed since.
+	RetainState bool `json:"retain_state,omitempty"`
 }
 
 func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
@@ -213,11 +226,15 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return err
 	}
 
-	// The state a render config keys on while the call is out. Every flow that
-	// uses this plugin moves straight from it to a step that waits on the
-	// receiving agency, so reporting the same state here means the panel for
-	// "with the agency" covers the whole span rather than starting a beat late.
-	ctx.Record.State = "QUEUED_EXTERNALLY"
+	// The state a render config keys on while the call is out. A flow that
+	// hands the declaration over moves straight from here to a step that waits
+	// on the receiving agency, so reporting it now means the panel for "with
+	// the agency" covers the whole span rather than starting a beat late. A
+	// call that returns to the step it was made from sets retain_state and
+	// stays where it is — see the field's own comment.
+	if !cfg.RetainState {
+		ctx.Record.State = "QUEUED_EXTERNALLY"
+	}
 
 	var resp map[string]any
 	var callErr error

@@ -78,6 +78,7 @@ const paid = `{
 		"paid_datetime": "2026-09-11T15:43:07+05:30",
 		"invoice_serial": "26SEP_LD1_00000017",
 		"payment_receipt": "100415624",
+		"payment_receipt_url": "https://slpacargoapi.slpa.lk/pdf/payment-receipt/26211843261345?signature=eec7d7a5",
 		"service_order_no": "SO-FCL-EXPORT-2026-262342",
 		"consignee_address": "test",
 		"draft_requested_date": null,
@@ -125,82 +126,40 @@ func TestInvoiceEvents_PaidReleasesTheStep(t *testing.T) {
 	// payload carries total_amount 16, which a settled panel must never show.
 	assert.Equal(t, 4776.0, tasks.payload["payable_lkr"])
 
-	// The receipt is a reference, not a document: SLPA sends no link on this
-	// event, so nothing is offered as one.
+	// The receipt is both a reference and a document, and the link is the CMS's
+	// own receipt -- not the payment slip or the invoice, which is what an
+	// earlier fallback put behind this key.
 	assert.Equal(t, "100415624", tasks.payload["receipt_no"])
-	assert.NotContains(t, tasks.payload, "receipt_url")
+	assert.Equal(t,
+		"https://slpacargoapi.slpa.lk/pdf/payment-receipt/26211843261345?signature=eec7d7a5",
+		tasks.payload["receipt_url"])
 
 	// Restated by the payment, so the settled panel keeps them.
 	assert.Equal(t, "26SEP_LD1_00000017", tasks.payload["invoice_serial"])
+
+	// Who paid and against what, so the payment reconciles without the PDF.
+	assert.Equal(t, "BIBE1CBEX1-2026-E-32978892026", tasks.payload["cusdec_no"])
+	assert.Equal(t, "JOTHI COCONUT EXPORTERS", tasks.payload["shipper"])
+	assert.Equal(t, "TSNW Test user", tasks.payload["consignee"])
+	assert.Equal(t, "export", tasks.payload["invoice_type"])
 }
 
-// The envelope's total_amount is the order in dollars. Read as what was paid it
-// would put "LKR 16.00" under a receipt for 4,776 — so it is not read at all.
-func TestInvoiceEvent_NeverReportsTheDollarFigureAsPaid(t *testing.T) {
-	assert.Equal(t, 4776.0, invoiceEvent(t, paid).Payable())
+// The envelope's total_amount is the order priced in dollars. On this payload
+// it is 16 beside a paid_amount of 4776, so reading it -- even as a last
+// resort -- would put "LKR 16.00" under a receipt for 4,776. It is not read.
+func TestInvoiceEvents_NeverReportsTheDollarFigureAsPaid(t *testing.T) {
+	service, mock, tasks := newInvoiceEvents(t)
+	expectParkedInvoice(mock, "slpa_4_0_invoice:abc")
 
-	nothingInRupees := invoiceEvent(t, `{"event":"invoice.paid","slug":"s","total_amount":16}`)
-	assert.Equal(t, 0.0, nothingInRupees.Payable(),
-		"an amount only in dollars is no amount at all")
+	require.NoError(t, service.Handle(context.Background(), invoiceEvent(t, paid)))
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	assert.Equal(t, 4776.0, tasks.payload["payable_lkr"])
+	for key, value := range tasks.payload {
+		assert.NotEqual(t, 16.0, value, "the USD total reached the panel as %q", key)
+	}
 }
 
-// payment_receipt is "100415624". Behind a Download link it would go nowhere.
-func TestInvoiceEvent_DoesNotOfferAReferenceNumberAsADocument(t *testing.T) {
-	e := invoiceEvent(t, paid)
-	assert.Equal(t, "100415624", e.ReceiptNo())
-	assert.Empty(t, e.ReceiptURL())
-}
-
-// The older contract nested the same facts under details.invoice_details. A
-// deployment still sending that shape must settle the step just as completely.
-func TestInvoiceEvent_ReadsTheOlderNestedShapeToo(t *testing.T) {
-	e := invoiceEvent(t, `{
-		"event": "invoice.paid",
-		"slug": "s",
-		"details": {"invoice_details": {
-			"invoice_serial": "BIBE1/2026/04412",
-			"total_payable_lkr": 4820.5,
-			"payment_slip_url": "https://slpacargoapi.slpa.lk/receipts/INV.pdf",
-			"invoice_paid_at": "2026-08-27T09:15:00+05:30",
-			"payment_receipt": {"payment_receipt": "RCPT-88213", "paid_amount": 4820.5}
-		}}
-	}`)
-
-	assert.Equal(t, 4820.5, e.Payable())
-	assert.Equal(t, "BIBE1/2026/04412", e.Serial())
-	assert.Equal(t, "RCPT-88213", e.ReceiptNo())
-	assert.Equal(t, "https://slpacargoapi.slpa.lk/receipts/INV.pdf", e.ReceiptURL())
-	assert.Equal(t, "2026-08-27T09:15:00+05:30", e.PaidAt())
-}
-
-// A link that is there must be found; a value that is not a link must not be
-// offered as one.
-func TestInvoiceEvent_OffersOnlyWhatIsActuallyALink(t *testing.T) {
-	t.Run("the invoice on the envelope", func(t *testing.T) {
-		e := invoiceEvent(t, `{"event":"invoice.paid","slug":"s","invoice_url":"https://slpa/flat.pdf"}`)
-		assert.Equal(t, "https://slpa/flat.pdf", e.InvoiceURL())
-	})
-
-	t.Run("the payment slip inside the order", func(t *testing.T) {
-		e := invoiceEvent(t, `{"event":"invoice.paid","slug":"s","details":{"invoice_details":{"payment_slip_url":"https://slpa/slip.pdf"}}}`)
-		assert.Equal(t, "https://slpa/slip.pdf", e.ReceiptURL())
-	})
-
-	// A paid invoice is stamped as paid, so it stands in when no slip is sent.
-	t.Run("the invoice as the receipt of last resort", func(t *testing.T) {
-		e := invoiceEvent(t, `{"event":"invoice.paid","slug":"s","details":{"invoice_details":{"invoice_url":"https://slpa/inv.pdf"}}}`)
-		assert.Equal(t, "https://slpa/inv.pdf", e.ReceiptURL())
-	})
-
-	t.Run("a reference number is not a link", func(t *testing.T) {
-		e := invoiceEvent(t, `{"event":"invoice.paid","slug":"s","details":{"invoice_details":{"invoice_url":"100415624"}}}`)
-		assert.Empty(t, e.InvoiceURL())
-		assert.Empty(t, e.ReceiptURL())
-	})
-}
-
-// The slug is the correlator, but an event that carries only the order number is
-// still tied to the right consignment.
 func TestInvoiceEvents_MatchesOnTheOrderNumberWhenThereIsNoSlug(t *testing.T) {
 	service, mock, tasks := newInvoiceEvents(t)
 	expectParkedInvoice(mock, "task-1")

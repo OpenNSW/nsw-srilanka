@@ -5,7 +5,7 @@ go 1.27
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.1.0
-	github.com/OpenNSW/core v0.0.0-20260922111648-a2115101d160
+	github.com/OpenNSW/core v0.0.0-20260924113947-9d0f524e49ee
 	github.com/OpenNSW/core/authn v0.2.0
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/database v0.1.0
