@@ -1,0 +1,80 @@
+name: Release - Tag from version.txt
+# Merging a change to version.txt releases that version: this tags the merge
+# commit vX.Y.Z and starts release.yml on the tag, so nobody tags by hand.
+#
+# release.yml is started with workflow_dispatch because a tag pushed with
+# GITHUB_TOKEN does not trigger other workflows; dispatch is the exception. It
+# runs on the tag, so it builds exactly the tagged commit.
+
+on:
+  push:
+    branches: [main]
+    paths: [version.txt]
+
+permissions:
+  contents: write   # push the tag
+  actions: write    # start release.yml
+
+concurrency:
+  group: auto-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # release-notes.sh looks back for the commit that wrote the section
+
+      # version.txt holds the tag name (v1.2.3); CHANGELOG headings and the
+      # release workflow use the bare version (1.2.3).
+      - name: Read version.txt
+        id: version
+        run: |
+          TAG=$(tr -d '[:space:]' < version.txt)
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "::notice::${TAG} already exists, so there is nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The checks the release itself makes, run before the tag exists so a
+      # bad release PR leaves no tag behind. version-check.yml ran them in review.
+      - name: Check the release
+        if: steps.version.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if ! { bash .github/scripts/check-version.sh "$TAG" && \
+                 bash .github/scripts/release-notes.sh "$VERSION" > /dev/null; } 2> error.txt; then
+            echo "::error file=version.txt::$(tr '\n' ' ' < error.txt)"
+            exit 1
+          fi
+
+      - name: Tag the merge commit
+        if: steps.version.outputs.release == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "TNSW ${VERSION}" "$GITHUB_SHA"
+          git push origin "$TAG"
+
+      - name: Start the release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG" -f version="$VERSION"
+          echo "Started release.yml for ${TAG}: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/release.yml"

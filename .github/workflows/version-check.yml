@@ -1,0 +1,48 @@
+name: Version Check
+# A PR that changes version.txt is a release PR: merging it tags and releases
+# that version (auto-tag.yml). This makes the release's own checks in review,
+# so a bad release PR fails here rather than after the merge. PRs that leave
+# version.txt alone pass at once, so this can be a required check.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Release version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the base branch, and history for release-notes.sh
+
+      # HEAD is GitHub's preview of the merge, so HEAD^ is the base branch and
+      # release-notes.sh sees this PR as the commit that writes the section.
+      - name: Check the release
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          if git diff --quiet "$BASE" HEAD -- version.txt; then
+            echo "version.txt is unchanged, so this is not a release PR."
+            exit 0
+          fi
+          # version.txt holds the tag name (v1.2.3); the CHANGELOG heading is 1.2.3.
+          TAG=$(tr -d '[:space:]' < version.txt)
+          PREVIOUS=$(git show "${BASE}:version.txt" 2>/dev/null | tr -d '[:space:]' || true)
+          echo "Release PR: ${PREVIOUS:-no previous version} -> ${TAG}"
+
+          if ! { bash .github/scripts/check-version.sh "$TAG" "$PREVIOUS" && \
+                 bash .github/scripts/release-notes.sh "${TAG#v}" > /dev/null; } 2> error.txt; then
+            echo "::error file=version.txt::$(tr '\n' ' ' < error.txt)"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null; then
+            echo "::error file=version.txt::${TAG} is already released. Raise version.txt."
+            exit 1
+          fi
+          echo "Merging this PR tags ${TAG} and releases it."

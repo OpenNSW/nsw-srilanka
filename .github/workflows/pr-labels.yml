@@ -1,0 +1,97 @@
+name: PR Labels
+# Every PR needs a place in the release notes (.github/release.yml): a
+# category label, or skip-changelog to leave it out. This job fills in what the
+# PR's title and author already say, then fails until one such label is there.
+#
+# pull_request_target, not pull_request: PRs come from forks, and a fork's
+# pull_request token cannot write labels. That is safe only because nothing
+# from the PR is checked out or run — the title, author and labels are read as
+# data in JavaScript, never passed through a shell. Keep it that way.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  pull-requests: write   # add and remove labels on the PR
+
+# Serialised per PR and never cancelled, so each run's check sees the labels
+# the run before it added. Labels added with GITHUB_TOKEN start no new run,
+# which is also why labelling and checking share one job.
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  release-notes-label:
+    name: Release notes label
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label from title and author, then require a label
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // The labels that place a PR in the release notes (.github/release.yml).
+            const BREAKING = 'breaking change';
+            const SKIP = 'skip-changelog';
+            const RELEASE_LABELS = [BREAKING, 'Type/New Feature', 'Type/Improvement', 'Type/Bug', 'Type/Task'];
+            // Title types whose section is unambiguous. Anything else is left to a person.
+            const TYPE_LABELS = { feat: 'Type/New Feature', fix: 'Type/Bug' };
+
+            const pr = context.payload.pull_request;
+            const action = context.payload.action;
+            const issue = { ...context.repo, issue_number: pr.number };
+
+            const currentLabels = async () =>
+              new Set((await github.paginate(github.rest.issues.listLabelsOnIssue, { ...issue, per_page: 100 }))
+                .map((label) => label.name));
+            const isClassified = (labels) => labels.has(SKIP) || RELEASE_LABELS.some((name) => labels.has(name));
+
+            // 1. Fill in labels. The title is applied when the PR opens or its
+            //    title changes; otherwise only while the PR has no release-notes
+            //    label yet, which also picks up PRs opened before this workflow.
+            //    Label events never get here, so a label a person changed stays.
+            const before = await currentLabels();
+            const titleChanged = action === 'edited' && context.payload.changes?.title !== undefined;
+            const backfill = (action === 'reopened' || action === 'synchronize') && !isClassified(before);
+            if (action === 'opened' || titleChanged || backfill) {
+              const add = new Set();
+              // Bots and agents (Dependabot, Copilot's coding agent, claude[bot], …)
+              // stay out of the notes; a maintainer can remove the label to list one.
+              if (pr.user.type === 'Bot' && !isClassified(before)) add.add(SKIP);
+
+              const match = /^(\w+)(\([^)]*\))?(!)?:/.exec(pr.title);
+              const typeLabel = match && TYPE_LABELS[match[1]];
+              if (typeLabel) {
+                add.add(typeLabel);
+                for (const other of Object.values(TYPE_LABELS)) {
+                  if (other === typeLabel || !before.has(other)) continue;
+                  try {
+                    await github.rest.issues.removeLabel({ ...issue, name: other });
+                  } catch (error) {
+                    if (error.status !== 404) throw error; // already removed by someone else
+                  }
+                }
+              }
+              if (match && match[3]) add.add(BREAKING);
+
+              const missing = [...add].filter((name) => !before.has(name));
+              if (missing.length > 0) {
+                await github.rest.issues.addLabels({ ...issue, labels: missing });
+                core.info(`Added: ${missing.join(', ')}`);
+              }
+            }
+
+            // 2. Require a label. Read afresh: step 1, or a person, may have changed them.
+            const labels = await currentLabels();
+            if (labels.has(SKIP) && labels.has(BREAKING)) {
+              core.setFailed(`A breaking change must appear in the release notes. Remove "${SKIP}".`);
+            } else if (!isClassified(labels)) {
+              core.setFailed(
+                'Add a label that places this PR in the release notes: ' +
+                  '"Type/New Feature", "Type/Improvement", "Type/Bug" or "Type/Task" ' +
+                  `(and "${BREAKING}" if deployers must act on it), or "${SKIP}" to leave it out.`,
+              );
+            } else {
+              core.info(`Release notes labels: ${[...labels].filter((name) => name === SKIP || RELEASE_LABELS.includes(name)).join(', ')}`);
+            }

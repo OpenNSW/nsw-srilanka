@@ -28,7 +28,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ .Values.frontend.image.repository }}:{{ required "frontend.image.tag is required — set it per environment or at install (e.g. --set frontend.image.tag=1.4.0)" .Values.frontend.image.tag }}"
+          image: "{{ .Values.frontend.image.repository }}:{{ include "lk-tnsw.imageTag" (dict "tag" .Values.frontend.image.tag "root" .) }}"
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
           ports:
             - name: http

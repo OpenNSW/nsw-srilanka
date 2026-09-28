@@ -2,9 +2,7 @@
 
 ## Supported Versions
 
-**Note**: We do not currently have versioning implemented. Versioning support will be added in the future. For now, all security updates will be applied to the main branch.
-
-Once versioning is implemented, we will update this section with supported versions and their security update policies.
+Security fixes land on `main` and ship in the next release; [CHANGELOG.md](CHANGELOG.md) lists them under **Security**. While TNSW is on 0.x, only the latest release is supported, so upgrade to it to get a fix.
 
 ## Reporting a Vulnerability
 
