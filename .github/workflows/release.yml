@@ -90,6 +90,16 @@ jobs:
           echo "Release notes for ${VERSION}:"
           cat release-notes.md
 
+          # By convention a release is dated the day its release PR merges, in
+          # UTC: the merge commit's date. Warn, never fail, when the heading
+          # says otherwise, so CHANGELOG.md can be corrected in a later PR.
+          HEADING=$(awk -v h="## [${VERSION}]" 'index($0, h) == 1 { print; exit }' CHANGELOG.md)
+          HEADING_DATE=$(printf '%s\n' "$HEADING" | sed -nE 's/^## \[[^]]+\] - ([0-9]{4}-[0-9]{2}-[0-9]{2})[[:space:]]*$/\1/p')
+          MERGE_DATE=$(TZ=UTC git log -1 --date=format-local:%Y-%m-%d --format=%cd HEAD)
+          if [ "$HEADING_DATE" != "$MERGE_DATE" ]; then
+            echo "::warning file=CHANGELOG.md::CHANGELOG.md dates ${VERSION} '${HEADING_DATE:-no date}', but it was merged on ${MERGE_DATE} (UTC). Releases are dated the merge day in UTC; correct the heading in a later PR."
+          fi
+
       - name: Upload release notes
         uses: actions/upload-artifact@v7
         with:
