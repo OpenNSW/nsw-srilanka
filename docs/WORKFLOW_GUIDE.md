@@ -118,7 +118,7 @@ The child subworkflow defines the execution path of a single transaction stage.
 - `type`: A user-facing category for the view. `APPLICATION` (trader/applicant submission view) and `REVIEW` (officer review split pane) are the common ones; the shipped configs also use `PAYMENT`, `SYSTEM`, `LAB_TEST`, `SAMPLE_COLLECTION`, `VISUAL_ASSESSMENT`, and `CERTIFICATE_ISSUANCE`.
 - `title`: Human-readable name for the whole task view (e.g. `[Trade] Select HS Codes`).
 - `read`: **Who may read this task at all** — see [Read authorization](#read-authorization) below.
-- `sections`: Map of slots (e.g. `workspace`, `reference`, `instructions`). The slot key is the section's identifier: it is sent to the frontend as the `id` of the section's view entry, and `layouts` refer to sections by it. Sections have no `id` field of their own. 
+- `sections`: Map of slots (e.g. `user_form`, `status_messsage`). The slot key is the section's identifier: it is sent to the frontend as the `id` of the section's view entry, and `layouts` refer to sections by it. Sections have no `id` field of their own.
   - `templateId`: Identifies the schema file to display (maps to `id` in the respective `*_jsonform.json`).
   - `projector`: `FORM` (interactive JSONForm), `MARKDOWN` (static instructions), or `PAYMENT` (checkout page).
   - `dataKey`: Variable name matching the task's output namespace (e.g. `traderinput`, `reviewerform`). Omit it to hand the projector the whole variable map.
@@ -128,7 +128,7 @@ The child subworkflow defines the execution path of a single transaction stage.
     - `requireDataKey`: Section only renders if this **top-level** key exists and is non-null in the task's data. Not a dotted path.
     - `requireClaim`: Section only renders if the caller holds this claim — see [Read authorization](#read-authorization).
   - `handles`: **CRITICAL FOR EDITABILITY**. Defines what actions/buttons can be clicked on the form zone. **If `handles` is missing or empty, the frontend renders the form fields as read-only (non-interactive).** A handle only reaches the frontend if its section rendered *and* its `command` is legal in the current state, so hiding a section also removes its buttons.
-- `layouts`: Named orderings of the sections (e.g. `"layout_1": ["feedback", "user_form"]`). Each layout lists **all** section keys and expresses relative order only, never visibility. visibility stays with each section's `visibleWhen`. States that agree on the relative order of the sections they show can share one layout. 
+- `layouts`: Named orderings of the sections (e.g. `"layout_1": ["feedback", "user_form"]`). Each layout lists **all** section keys and expresses relative order only, never visibility. visibility stays with each section's `visibleWhen`. States that agree on the relative order of the sections they show can share one layout.
 - `states`: Defines the operational lifecycle.
   - `PENDING_USER`: Active state where user can perform actions.
     - `actions`: List of allowed commands (e.g. `{ "command": "submit" }`).
@@ -136,7 +136,7 @@ The child subworkflow defines the execution path of a single transaction stage.
 
 ### Section order
 
-The task view reaches the frontend as an **ordered list**, and the frontend renders it as-is.  The order is:
+The task view reaches the frontend as an **ordered list**, and the frontend renders it as-is. The order is:
 
 1. The current state's layout, filtered down to the sections visible right now.
 2. Then any visible section the layout doesn't list, sorted by key.

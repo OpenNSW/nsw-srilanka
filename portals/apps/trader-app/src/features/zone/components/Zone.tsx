@@ -15,9 +15,7 @@ type Props = {
 export function Zone({ component, onAction }: Props) {
   return (
     <section className="space-y-2">
-      {component.title && (
-        <h2 className="text-xs font-semibold text-foreground-subtle">{component.title}</h2>
-      )}
+      {component.title && <h2 className="text-xs font-semibold text-foreground-subtle">{component.title}</h2>}
       <div className="bg-app-surface rounded-2xl shadow-md">{renderZoneComponent(component, { onAction })}</div>
     </section>
   )
