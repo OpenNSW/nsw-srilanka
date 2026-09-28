@@ -29,7 +29,7 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
 function hasRejection(zv: ZoneView): boolean {
   const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
   if (variant === 'error') return true
-  return Object.keys(zv.view).some((name) => name.toLowerCase().includes('reject'))
+  return zv.view.some((zone) => zone.id.toLowerCase().includes('reject'))
 }
 
 export function TaskDetailScreen() {
