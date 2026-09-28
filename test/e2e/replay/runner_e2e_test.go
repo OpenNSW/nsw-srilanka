@@ -28,6 +28,34 @@ func TestReplay_FCAUApplicationApprove(t *testing.T) {
 	runFlow(t, h, "fcau_application_approve.json")
 }
 
+// TestReplay_SLTBApplicationApprove drives the SLTB blendsheet branch
+// end-to-end: submit the blend sheet → mock agency posts an "approve" callback
+// with levy + collection_method=none → select payment method → mock gateway
+// confirms the levy → pay-levy COMPLETED.
+func TestReplay_SLTBApplicationApprove(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "sltb_application_approve.json")
+}
+
+// TestReplay_SLTBApplicationRework sends the SLTB blend sheet back with
+// needs_more_info, then the trader resubmits and the agency approves, asserting
+// the workflow still advances to the pay-levy task.
+func TestReplay_SLTBApplicationRework(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "sltb_application_rework.json")
+}
+
+// TestReplay_SLTBApplicationReject drives the terminal reject branch: the
+// agency posts review_outcome=reject and the application task completes
+// without advancing to pay-levy.
+func TestReplay_SLTBApplicationReject(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "sltb_application_reject.json")
+}
+
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()
