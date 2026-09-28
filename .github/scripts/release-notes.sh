@@ -31,7 +31,7 @@ section_at() {
 head=$(git rev-parse --short HEAD)
 notes=$(bash "$here/changelog-section.sh" "$version" CHANGELOG.md)
 if [ -z "$notes" ]; then
-  echo "CHANGELOG.md at ${head} has no '## [${version}]' section, or it is empty. Add it, merge it, and tag the merge commit." >&2
+  echo "CHANGELOG.md at ${head} has no '## [${version}]' section, or it is empty. Write it in the same change that sets version.txt to v${version}." >&2
   exit 1
 fi
 
@@ -45,7 +45,7 @@ if [ "$(section_at HEAD)" = "$(section_at HEAD^)" ]; then
     fi
   done
   since=$(git rev-list --count "${wrote}..HEAD")
-  echo "${head} is not the commit that wrote the ${version} section of CHANGELOG.md; $(git log -1 --format='%h ("%s")' "$wrote") is, and the ${since} commit(s) after it would ship without being in the notes. Tag $(git rev-parse --short "$wrote") instead, or bring the section up to date and tag that merge commit." >&2
+  echo "${head} does not write the ${version} section of CHANGELOG.md; $(git log -1 --format='%h ("%s")' "$wrote") last did, and the ${since} commit(s) since would ship without being in the notes. Bring the section up to date in the same change that sets version.txt to v${version}." >&2
   exit 1
 fi
 
