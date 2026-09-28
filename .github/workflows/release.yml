@@ -2,8 +2,10 @@ name: Release - Build and Publish Images
 # Builds and publishes the platform Docker images (Trader Portal + Backend API) to GHCR.
 #
 # Triggers:
-#   - Automatic: pushing a SemVer tag (e.g. v1.2.0) triggers a full release.
-#   - Manual:    workflow_dispatch with a version input for hotfixes or re-releases.
+#   - Automatic: merging a change to version.txt. auto-tag.yml tags the merge
+#                commit and dispatches this workflow on that tag.
+#   - Manual:    pushing a SemVer tag (e.g. v1.2.0), or workflow_dispatch with a
+#                version input; either way version.txt must say that version.
 #
 # Release mode vs Dry Run:
 #   Images are only pushed when triggered by a tag push OR a manual dispatch
@@ -14,6 +16,14 @@ name: Release - Build and Publish Images
 #   The image digest is written to the GitHub Release as a JSON asset
 #   (release-digests.json). gitops.yaml reads this file to verify the image
 #   before updating ArgoCD manifests — no rebuild, no guesswork.
+#
+# Release notes:
+#   The released commit's CHANGELOG.md must have a `## [X.Y.Z]` section for the
+#   version, and must be the commit that wrote it (the release PR's merge
+#   commit), so nothing merged later ships undescribed. The section opens the
+#   GitHub Release body, and version.txt must name the same version. Otherwise
+#   the run fails before anything is built or pushed. To retry a release,
+#   re-run the failed run or dispatch on the tag.
 
 on:
   # Automatic: pushing a SemVer tag (e.g. v1.2.0) triggers a full release.
@@ -35,6 +45,58 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # STAGE 0: Take this version's section out of CHANGELOG.md. Everything else
+  # waits on it, so a version without notes — or tagged on a later commit than
+  # the one that wrote them — fails here, before any image is built or pushed.
+  # ---------------------------------------------------------------------------
+  release-notes:
+    name: Release Notes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # release-notes.sh looks back for the commit that wrote the section
+
+      - name: Extract the CHANGELOG section
+        env:
+          # Passed through env, never interpolated into the script.
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_VERSION"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${VERSION#v}"
+
+          FILE_VERSION=$(tr -d '[:space:]' < version.txt 2>/dev/null || true)
+          if [ "$FILE_VERSION" != "v${VERSION}" ]; then
+            echo "::error file=version.txt::Releasing v${VERSION}, but version.txt at this commit says '${FILE_VERSION}'. Release by merging a PR that sets version.txt."
+            exit 1
+          fi
+
+          # Fails unless this commit is the one that wrote the version's section,
+          # so the notes describe exactly what is being released.
+          if ! bash .github/scripts/release-notes.sh "$VERSION" > release-notes.md 2> error.txt; then
+            MESSAGE=$(cat error.txt)
+            MESSAGE=${MESSAGE//'%'/'%25'}
+            echo "::error file=CHANGELOG.md::${MESSAGE//$'\n'/'%0A'}"
+            exit 1
+          fi
+          echo "Release notes for ${VERSION}:"
+          cat release-notes.md
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
   # STAGE 1: Build, tag, and publish the image. Writes the image digest to a
   # file so Stage 2 can bundle it into release-digests.json and attach it to
   # the GitHub Release.
@@ -42,6 +104,7 @@ jobs:
   build-and-publish:
     name: Build and Publish - ${{ matrix.service_name }}
     runs-on: ubuntu-latest
+    needs: release-notes
     strategy:
       fail-fast: false
       matrix:
@@ -403,7 +466,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: collate-digests
+    needs: [release-notes, collate-digests]
     permissions:
       contents: write   # required to create a GitHub Release
     steps:
@@ -416,6 +479,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: release-digests
+          path: .
+
+      - name: Download release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
           path: .
 
       - name: Create git tag (workflow_dispatch only)
@@ -440,13 +509,19 @@ jobs:
       # digests can be read out of release-digests.json and shown next to each
       # image, instead of pointing the reader at an attachment. The image list is
       # taken from that file's keys too, so adding one to the build matrix needs no
-      # change here.
+      # change here. The version's CHANGELOG.md section comes first.
       - name: Render release body
         env:
           OWNER: ${{ steps.repo_owner.outputs.owner }}
           VERSION: ${{ needs.collate-digests.outputs.version }}
         run: |
           {
+            cat release-notes.md
+            echo ""
+            echo "_From [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/v${VERSION}/CHANGELOG.md)._"
+            echo ""
+            echo "---"
+            echo ""
             echo "### Published Images"
             echo ""
             echo "| Image | Digest |"
@@ -474,6 +549,24 @@ jobs:
           echo "Rendered release body:"
           cat release-body.md
 
+      # GitHub's generated notes list the PRs merged since the previous release.
+      # With no previous release they would list every PR in the repo's history,
+      # so the first release goes without them; its CHANGELOG section covers it.
+      - name: Check for an earlier release
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.collate-digests.outputs.version }}
+        run: |
+          COUNT=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 100 \
+            --json tagName --jq '[.[] | select(.tagName != env.TAG)] | length')
+          if [ "$COUNT" -gt 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No earlier release — GitHub's generated notes are left off this one."
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -481,15 +574,10 @@ jobs:
           name: TNSW ${{ needs.collate-digests.outputs.version }}
           body_path: release-body.md
           # Appends GitHub's own changelog — merged PRs since the previous release,
-          # plus a compare link. `body` above is PRE-pended and `name` is kept, so
-          # this only adds a section.
-          #
-          # No release exists in this repo yet, so GitHub has no base to diff from
-          # and the FIRST release will list every PR in the repo's history (~200).
-          # `previous_tag` cannot narrow that — the input requires a tag with a
-          # release attached, and none of the 8 tags here has one. Every release
-          # after the first is scoped normally, against the release before it.
-          generate_release_notes: true
+          # grouped by label per .github/release.yml, plus a compare link. `body`
+          # above is PRE-pended and `name` is kept, so this only adds a section.
+          # Off for the first release; see "Check for an earlier release".
+          generate_release_notes: ${{ steps.previous.outputs.exists == 'true' }}
           draft: false
           prerelease: ${{ needs.collate-digests.outputs.is_prerelease == 'true' }}
           # Attach the digest manifest so gitops.yaml can fetch it directly

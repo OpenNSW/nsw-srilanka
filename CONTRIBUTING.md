@@ -57,7 +57,7 @@ SKIP_TESTS=1 git push              # skip tests only
 
 ## CI pipeline
 
-Pull requests to `main` run three independent pipelines:
+Pull requests to `main` run these independent pipelines:
 
 ### Backend CI (`backend-ci.yml`)
 Triggers on `.go`, `go.mod`, `go.sum`, `Dockerfile`, `migrations/**` changes.
@@ -76,7 +76,52 @@ Triggers on `portals/**` changes.
 Triggers on `portals/**`, `Dockerfile`, Go source, or migration changes.
 Builds all three images (tnsw-web, tnsw-api, tnsw-migrate) without pushing.
 
+### PR Labels (`pr-labels.yml`)
+Runs on every PR. Labels it from its title and author, then fails the
+**Release notes label** check until it carries a release-notes label (see
+[Releasing](#releasing)).
+
+### Version Check (`version-check.yml`)
+Runs on every PR. When the PR changes `version.txt`, it runs the checks the
+release will run, so a bad release PR fails in review; otherwise it passes at
+once.
+
 All stages must pass before a PR can merge.
+
+## Releasing
+
+[`version.txt`](version.txt) holds the released version as its tag name (`v0.2.0`); CHANGELOG headings use the number alone (`## [0.2.0]`). Merging a PR that changes it releases that version: [`auto-tag.yml`](.github/workflows/auto-tag.yml) tags the merge commit and starts [`release.yml`](.github/workflows/release.yml), which builds and publishes the tnsw-api, tnsw-web and tnsw-migrate images, then creates the GitHub Release. The release opens with the version's section of [CHANGELOG.md](CHANGELOG.md), then the image digests, then GitHub's list of the PRs merged since the previous release. Nobody tags by hand.
+
+### Release-notes labels
+
+Every PR needs a label that places it in that list. PRs titled `feat` or `fix`, or marked breaking with `!`, are labelled for you; PRs opened by bots and agents get `skip-changelog`, which a maintainer can remove to list one.
+
+| Label | Section of the release notes |
+|--------------------|-------------------------------------------------------------------------|
+| `breaking change`  | Breaking changes. Add it next to another label whenever deployers must act. |
+| `Type/New Feature` | New features |
+| `Type/Improvement` | Improvements |
+| `Type/Bug`         | Bug fixes |
+| `Type/Task`        | Other changes |
+| `skip-changelog`   | Left out: CI, tests, refactors and anything else deployers won't notice. Not allowed with `breaking change`. |
+
+Fill in the PR template's **Deployment Notes** whenever a deployer has to do something — run a migration, set a new or changed env var or config file, change the IdP. The CHANGELOG is written from them.
+
+### Cutting a release
+
+1. **Open a release PR** from `main` that does two things:
+   - sets `version.txt` to the new version, e.g. `v0.2.0`;
+   - moves `## [Unreleased]` under `## [X.Y.Z] - YYYY-MM-DD` in CHANGELOG.md, written for the people who deploy TNSW: upgrade notes first, then what was added, changed and fixed. In Claude Code, the `draft-changelog` skill drafts it from the merged PRs and their Deployment Notes. Use absolute links; the section is copied into the GitHub Release.
+
+   The **Release version** check confirms the version is valid, higher than the last one and not yet released, and that the PR writes its CHANGELOG section.
+2. **Merge it.** That is the release: the merge commit is tagged and released. Merge it only when you mean to ship.
+3. **If the release fails at "Release Notes"**, nothing was built. Fix the cause in a new release PR; the tag is only created once the checks pass. To retry a release that failed later on, re-run the failed run of `release.yml`.
+
+A tag pushed by hand still starts `release.yml`, but only releases if `version.txt` and CHANGELOG.md at that commit agree with it. Never use `git push --tags`.
+
+While on 0.x, a breaking change or a new feature bumps the minor version (0.2.0 → 0.3.0), and fixes alone bump the patch (0.2.0 → 0.2.1).
+
+The Helm chart is released separately: bump `version` in [`Chart.yaml`](deployments/helm/lk-tnsw/Chart.yaml), and `appVersion` to the app release it targets, then push a `chart-vX.Y.Z` tag.
 
 ## Code style
 

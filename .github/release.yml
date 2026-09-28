@@ -1,0 +1,25 @@
+# Groups the pull request list GitHub generates for each release
+# (release.yml turns it on). pr-labels.yml makes sure every PR carries one of
+# these labels, or skip-changelog to leave it out; PRs opened by bots and
+# agents get skip-changelog automatically.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking change
+    - title: New features
+      labels:
+        - Type/New Feature
+    - title: Improvements
+      labels:
+        - Type/Improvement
+    - title: Bug fixes
+      labels:
+        - Type/Bug
+    # Type/Task lands here, as does anything that reached main unlabelled.
+    - title: Other changes
+      labels:
+        - "*"
