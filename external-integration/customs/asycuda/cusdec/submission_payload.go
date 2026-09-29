@@ -23,7 +23,6 @@ import (
 //     accepted payload sends "remittances" as an array.
 type Submission struct {
 	Properties          Properties   `json:"properties"`
-	Submitter           string       `json:"submitter"`
 	BaseGeneralSegment  BaseSegment  `json:"baseGeneralSegment"`
 	GeneralSegment      GeneralSeg   `json:"generalSegment"`
 	GoodsShipments      []GoodsItem  `json:"goodsShipments"`
@@ -231,7 +230,6 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 
 	sub := Submission{
 		Properties: Properties{Submitter: submitterChannel},
-		Submitter:  submitterChannel,
 		BaseGeneralSegment: BaseSegment{
 			DeclarationType:      str(ident, "declarationType"),
 			DeclarationProcedure: str(ident, "generalProcedureCode"),

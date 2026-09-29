@@ -39,12 +39,10 @@ func identifier(t *testing.T, form map[string]any, previousEdgeID string) string
 			Submitter string `json:"submitter"`
 			NswID     string `json:"nswId"`
 		} `json:"properties"`
-		Submitter string `json:"submitter"`
 	}
 	require.NoError(t, json.Unmarshal(encoded, &wire))
 	assert.Equal(t, submitterChannel, wire.Properties.Submitter,
-		"the channel is sent inside properties as well as at the top level")
-	assert.Equal(t, submitterChannel, wire.Submitter, "the top-level submitter is unchanged")
+		"the channel is sent inside properties")
 	return wire.Properties.NswID
 }
 
