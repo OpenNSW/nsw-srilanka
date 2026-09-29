@@ -243,6 +243,7 @@ func TestTransactionKeyWithoutConfiguredKey(t *testing.T) {
 	g := &GovPayGateway{}
 	_, err := g.transactionKey(context.Background())
 	require.ErrorIs(t, err, ErrEncryptionNotConfigured)
+	assert.NotErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
 }
 
 func TestTransactionKeyMissingHeader(t *testing.T) {
@@ -252,6 +253,18 @@ func TestTransactionKeyMissingHeader(t *testing.T) {
 
 	_, err := g.transactionKey(ctx)
 	require.ErrorIs(t, err, ErrTransactionKeyMissing)
+	assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
+}
+
+func TestTransactionKeyInvalidHeader(t *testing.T) {
+	g := newTestGateway()
+	r := httptest.NewRequest("POST", "/api/v1/payments/govpay/validate", nil)
+	r.Header.Set(transactionKeyHeader, strings.Repeat("K", aesKeyLen))
+	ctx := corepayment.ContextWithRequest(context.Background(), r)
+
+	_, err := g.transactionKey(ctx)
+	require.ErrorIs(t, err, ErrTransactionKeyInvalid)
+	assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
 }
 
 func TestDecryptParamsRejectsNonStringValue(t *testing.T) {

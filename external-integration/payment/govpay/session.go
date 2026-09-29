@@ -37,9 +37,22 @@ func (g *GovPayGateway) transactionKey(ctx context.Context) ([]byte, error) {
 
 	header := r.Header.Get(transactionKeyHeader)
 	if header == "" {
-		return nil, fmt.Errorf("govpay: %w", ErrTransactionKeyMissing)
+		return nil, rejectCaller(ErrTransactionKeyMissing)
 	}
-	return g.decryptor.decryptTransactionKey(header)
+	key, err := g.decryptor.decryptTransactionKey(header)
+	if err != nil {
+		return nil, rejectCaller(err)
+	}
+	return key, nil
+}
+
+// rejectCaller marks a missing or undecryptable TransactionKey as a
+// verification failure, so core/payment answers 401 rather than a 500 that
+// GovPay+ would retry: the same call will fail the same way every time. It
+// wraps both errors, keeping the govpay sentinel matchable alongside
+// corepayment.ErrWebhookVerificationFailed.
+func rejectCaller(err error) error {
+	return fmt.Errorf("govpay: %w: %w", err, corepayment.ErrWebhookVerificationFailed)
 }
 
 // decryptRequest parses a GovPay+ call and decrypts its data[] items, returning
