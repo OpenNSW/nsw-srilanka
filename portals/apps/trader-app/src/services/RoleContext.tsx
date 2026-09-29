@@ -6,7 +6,7 @@ export type { Role } from './roleContextCore'
 
 interface RoleProviderProps {
   children: ReactNode
-  availableGroups?: Role[]
+  availableRoles?: Role[]
   isLoading?: boolean
 }
 
@@ -14,15 +14,15 @@ interface RoleProviderProps {
  * Provides global role state for the application.
  * Decoupled from any specific Auth provider.
  */
-export function RoleProvider({ children, availableGroups = [], isLoading = false }: RoleProviderProps) {
+export function RoleProvider({ children, availableRoles: initialRoles = [], isLoading = false }: RoleProviderProps) {
   const [role, setRoleState] = useState<Role>(() => {
     const savedRole = localStorage.getItem('user-role') as Role
-    if (savedRole && availableGroups.includes(savedRole)) {
+    if (savedRole && initialRoles.includes(savedRole)) {
       return savedRole
     }
-    return availableGroups.length > 0 ? availableGroups[0] : 'trader'
+    return initialRoles.length > 0 ? initialRoles[0] : 'trader'
   })
-  const [availableRoles, setAvailableRolesState] = useState<Role[]>(availableGroups)
+  const [availableRoles, setAvailableRolesState] = useState<Role[]>(initialRoles)
 
   const setRole = (newRole: Role) => {
     if (availableRoles.includes(newRole)) {

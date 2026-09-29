@@ -13,8 +13,11 @@ window.__APP_CONFIG__ = {
   APP_URL: 'http://localhost:5173',
   IDP_SCOPES:
     'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite',
-  IDP_TRADER_GROUP_NAME: 'Traders',
-  IDP_CHA_GROUP_NAME: 'CHA',
+  // ID-token claim holding the roles (an array), and the role names in it. For an
+  // IdP that models roles as groups, set the claim to 'groups' and use the group names.
+  IDP_ROLE_CLAIM_NAME: 'roles',
+  IDP_TRADER_ROLE_NAME: 'Trader',
+  IDP_CHA_ROLE_NAME: 'CHA',
+  IDP_NSW_ADMIN_ROLE_NAME: 'NSW Admin',
   SHOW_AUTOFILL_BUTTON: 'true',
-  IDP_NSW_ADMIN_GROUP_NAME: 'NSW Admins',
 }
