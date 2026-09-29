@@ -11,20 +11,25 @@ name: PR Labels
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+  # The merge queue waits for required checks on its merge commit. These check
+  # the PR itself, so they skip there; a skipped required check counts as passed.
+  merge_group:
 
 permissions:
   pull-requests: write   # add and remove labels on the PR
 
 # Serialised per PR and never cancelled, so each run's check sees the labels
 # the run before it added. Labels added with GITHUB_TOKEN start no new run,
-# which is also why labelling and checking share one job.
+# which is also why labelling and checking share one job. Merge-queue runs have
+# no PR number, so each groups by its own ref rather than queueing behind the others.
 concurrency:
-  group: pr-labels-${{ github.event.pull_request.number }}
+  group: pr-labels-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   release-notes-label:
     name: Release notes label
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - name: Label from title and author, then require a label
