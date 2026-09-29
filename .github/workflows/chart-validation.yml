@@ -1,7 +1,7 @@
 name: Chart Validation CI
 # Validates that the Helm chart lints, renders, and packages successfully on
 # PRs to main. This workflow never publishes anything — that's chart-build-dev.yml
-# (push to main) and chart-release.yml (chart-v* tags). Purely a correctness
+# (push to main) and release.yml (each app release). Purely a correctness
 # check, so a broken chart (a template that fails to render or package) is
 # caught at PR time instead of at the next chart release.
 
@@ -37,19 +37,21 @@ jobs:
         with:
           version: v3.16.2
 
+      - name: Package chart
+        # Packaged the way release.yml packages it, with a throwaway version as
+        # both version and appVersion, so the steps below check the chart as
+        # released — including image tags defaulting to the appVersion.
+        # Nothing is published.
+        run: |
+          helm package ${{ env.CHART_DIR }} \
+            --version "0.0.0-pr.${{ github.event.pull_request.number }}" \
+            --app-version "0.0.0-pr.${{ github.event.pull_request.number }}" \
+            --destination /tmp/chart-validate
+
       - name: Lint chart
-        run: helm lint ${{ env.CHART_DIR }} -f ${{ env.VALUES_EXAMPLE }}
+        run: helm lint /tmp/chart-validate/${{ env.CHART_NAME }}-*.tgz -f ${{ env.VALUES_EXAMPLE }}
 
       - name: Render chart
         # helm lint doesn't fully render templates — this catches template
         # errors (bad refs, invalid YAML after rendering) lint can miss.
-        run: helm template ${{ env.CHART_NAME }} ${{ env.CHART_DIR }} -f ${{ env.VALUES_EXAMPLE }} > /dev/null
-
-      - name: Package chart
-        # Same packaging step as chart-release.yml, minus GHCR login/push —
-        # proves the chart packages cleanly with a throwaway version. Nothing
-        # is published.
-        run: |
-          helm package ${{ env.CHART_DIR }} \
-            --version "0.0.0-pr.${{ github.event.pull_request.number }}" \
-            --destination /tmp/chart-validate
+        run: helm template ${{ env.CHART_NAME }} /tmp/chart-validate/${{ env.CHART_NAME }}-*.tgz -f ${{ env.VALUES_EXAMPLE }} > /dev/null

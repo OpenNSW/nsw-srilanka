@@ -40,15 +40,27 @@ The example override lives one level up, outside the chart directory, so
 ## Usage
 
 ```bash
-helm install lk-tnsw ./lk-tnsw -f ../values-example.yaml
+helm install lk-tnsw oci://ghcr.io/opennsw/charts/lk-tnsw --version 0.1.0 -f values.yaml
 ```
 
+The chart is released with the app, at the same version: chart `0.1.0` has
+`appVersion: 0.1.0` and deploys the `0.1.0` images unless you set
+`backend.image.tag` or `frontend.image.tag`. See the
+[GitHub Releases](https://github.com/OpenNSW/nsw-srilanka/releases) for the
+versions.
+
 `values.yaml` holds only neutral defaults, split into `backend:` and
-`frontend:` sections. Copy the example file and fill in your environment's
-URLs and secrets. Note that **both `backend.image.tag` and
-`frontend.image.tag` are required** (there is no default for either); the
-example file sets both, or pass `--set backend.image.tag=1.4.0 --set
-frontend.image.tag=1.4.0`.
+`frontend:` sections. Copy [`values-example.yaml`](../values-example.yaml)
+and fill in your environment's URLs and secrets.
+
+To install from this directory instead — to test chart changes — set both
+image tags: the chart's `Chart.yaml` only holds `0.0.0` placeholders, which the
+templates refuse.
+
+```bash
+helm install lk-tnsw ./lk-tnsw -f ../values-example.yaml \
+  --set backend.image.tag=0.1.0 --set frontend.image.tag=0.1.0
+```
 
 ### Three images, one chart
 
@@ -73,7 +85,7 @@ image** from the backend Deployment — see `backend.migration.image` in
 `values.yaml`. It also uses **different DB env var names** than the backend
 (`DB_USER`, not `DB_USERNAME`) because it runs the external nsw-agency
 migrator's own binary, not this backend's code. `backend.migration.image.tag`
-defaults to `backend.image.tag` when left unset.
+defaults to `backend.image.tag`, then to the chart's `appVersion`.
 
 ### Prerequisite: secrets
 

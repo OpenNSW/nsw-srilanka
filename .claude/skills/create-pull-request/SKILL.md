@@ -37,16 +37,18 @@ Read `.github/pull_request_template.md` from repo root. If it doesn't exist, ask
 
 ## Fill it out
 
-- **Title**: concise, follows this repo's commit convention (`feat(scope): ...`, `fix(scope): ...`, etc. — check `git log` for the actual prevailing style).
+- **Title**: concise, follows this repo's commit convention (`feat(scope): ...`, `fix(scope): ...`, etc. — check `git log` for the actual prevailing style). Mark a breaking change with `!` (`feat(authz)!: ...`).
+- **Release-notes label**: the required **Release notes label** check fails until the PR has one (the table is in CONTRIBUTING.md, "Releasing"). The PR Labels workflow adds it by itself for `feat` → `Type/New Feature`, `fix` → `Type/Bug` and `!` → `breaking change`. For any other type, pick one: `Type/Improvement` or `Type/Task` if a deployer would notice the change, `skip-changelog` if not (CI, tests, internal refactors). Add `breaking change` whenever deployers must act, even without `!` in the title, and never together with `skip-changelog`.
 - **Summary**: what the PR does and why, in a sentence or two — not a changelog.
 - **Type of Change / Testing / Checklist**: per the hard rules above — full checkbox list, only concretely-true items checked.
 - **Changes Made**: bullet the actual diff (files/areas + what changed), not the commit messages restated.
 - **Related Issues**: check the branch name for an issue number (`fix/123-...`, `123-...`, etc.) and use `Closes #<n>` if found; otherwise ask the user once, or write `N/A` if they say there isn't one.
-- **Screenshots/Deployment/Additional Notes**: fill in if relevant, `N/A` if not — don't delete the sections.
+- **Deployment Notes**: what someone running TNSW must do for this change — a migration, a new or changed env var or config file, an IdP change (scopes, clients, roles), Helm values — and what to set. The next release's CHANGELOG is written from this section, so check the diff (`migrations/`, `.env.example`, `configs/`, `deployments/helm/`, `idp/`) rather than guessing. `N/A` only when nothing changes for a running deployment.
+- **Screenshots/Additional Notes**: fill in if relevant, `N/A` if not — don't delete the sections.
 
 ## Confirm before acting
 
-- Show the user the draft title + body before doing anything remote.
+- Show the user the draft title, body and release-notes label before doing anything remote.
 - **Always ask before `git push`**, even if this branch already has an open PR and you're just adding a follow-up commit — a prior push approval does not carry forward.
 - Ask whether the PR should be opened as a draft or ready for review. Default to `--draft` if the user doesn't say and there's no clear signal otherwise (e.g. they haven't asked for review yet).
 
@@ -58,15 +60,17 @@ git push -u origin <branch-name>   # always to origin, even in a fork — only a
 # same-repo clone:
 gh pr create [--draft] --repo OpenNSW/nsw-srilanka \
   --title "<title>" --body-file <scratchpad>/pr-body.md \
-  --base "<base-branch>" --head "<branch-name>"
+  --base "<base-branch>" --head "<branch-name>" [--label "<label>"]
 
 # fork clone (origin != OpenNSW/nsw-srilanka):
 gh pr create [--draft] --repo OpenNSW/nsw-srilanka \
   --title "<title>" --body-file <scratchpad>/pr-body.md \
-  --base "<base-branch>" --head "<origin-owner>:<branch-name>"
+  --base "<base-branch>" --head "<origin-owner>:<branch-name>" [--label "<label>"]
 ```
 
-If a PR already exists for this branch (`gh pr view --repo OpenNSW/nsw-srilanka <origin-owner>:<branch-name>` — or just `<branch-name>` in the same-repo case), use `gh pr edit --repo OpenNSW/nsw-srilanka <number> --body-file ...` instead of creating a second one.
+Pass `--label` for the labels the workflow won't add (everything except the `feat`/`fix`/`!` ones), once per label. Labelling needs triage access to `OpenNSW/nsw-srilanka`: if `gh` reports it couldn't add a label, the PR may still have been created — check with `gh pr view`, and tell the user a maintainer must add the label before the check can pass.
+
+If a PR already exists for this branch (`gh pr view --repo OpenNSW/nsw-srilanka <origin-owner>:<branch-name>` — or just `<branch-name>` in the same-repo case), use `gh pr edit --repo OpenNSW/nsw-srilanka <number> --body-file ...` instead of creating a second one, with `--add-label` / `--remove-label` if its label should change.
 
 Write the body file to the scratchpad directory, not the repo root — it's not project content and shouldn't risk being committed.
 

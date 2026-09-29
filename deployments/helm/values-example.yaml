@@ -30,10 +30,8 @@
 fullnameOverride: "tnsw"
 
 backend:
-  image:
-    # Required — pick the app version to deploy. There is no default; the
-    # chart fails to render if this is unset.
-    tag: "0.1.0"
+  # No image tag: the chart deploys the images of its own release (its
+  # appVersion). Set backend.image.tag only to run other images.
 
   # podSecurityContext / securityContext are intentionally left unset here so
   # the cluster decides the UID. The images run correctly under any UID, and on
@@ -110,7 +108,7 @@ backend:
     AUTH_JWKS_URL: "https://idp.example.com/oauth2/jwks"
     AUTH_ISSUER: "https://idp.example.com"
     AUTH_AUDIENCE: "https://api.nsw-srilanka.local"
-    AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW"
+    AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW"
     AUTH_JWKS_INSECURE_SKIP_VERIFY: "false"
 
     # Gates AUTH_JWKS_INSECURE_SKIP_VERIFY and services.json's per-service
@@ -211,10 +209,8 @@ backend:
     #      - nsw-api.example.com
 
 frontend:
-  image:
-    # Required — pick the app version to deploy. There is no default; the
-    # chart fails to render if this is unset.
-    tag: "0.1.0"
+  # No image tag: the chart deploys the images of its own release (its
+  # appVersion). Set frontend.image.tag only to run other images.
 
   # Left unset for the same reason as the backend above; the image writes only
   # to /tmp and to group-0 writable paths, so any assigned UID works.
