@@ -38,7 +38,7 @@ function ProtectedLayout() {
   if (!availableRoles || availableRoles.length === 0) return <UnauthorizedScreen />
 
   return (
-    <RoleProvider availableGroups={availableRoles} isLoading={isResolvingRoles}>
+    <RoleProvider availableRoles={availableRoles} isLoading={isResolvingRoles}>
       <ProfileProvider>
         <UploadWrapper>
           <Layout />

@@ -10,7 +10,7 @@ const IDP_SCOPES = rawScopes
       .split(',')
       .map((s: string) => s.trim())
       .join(' ')
-  : 'openid profile email group'
+  : 'openid profile email group role'
 
 // Named by config rather than hard-coded, so the portal is not tied to one IdP's
 // dialect: ThunderID wants RFC 8707 `resource`, another might want `audience`.
