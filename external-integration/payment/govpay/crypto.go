@@ -73,16 +73,20 @@ func newDecryptor(pemData []byte) (*Decryptor, error) {
 	if block == nil {
 		return nil, fmt.Errorf("govpay private key: no PEM block found")
 	}
-	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
-		return &Decryptor{priv: key}, nil
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("parse govpay private key: %w", err)
+		parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse govpay private key: %w", err)
+		}
+		var ok bool
+		if key, ok = parsed.(*rsa.PrivateKey); !ok {
+			return nil, fmt.Errorf("govpay private key is not RSA")
+		}
 	}
-	key, ok := parsed.(*rsa.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("govpay private key is not RSA")
+	// Spec §3.2 pins RSA/2048: larger keys are fine, smaller ones are rejected.
+	if bits := key.N.BitLen(); bits < 2048 {
+		return nil, fmt.Errorf("govpay private key is %d bits, must be at least 2048", bits)
 	}
 	return &Decryptor{priv: key}, nil
 }

@@ -207,6 +207,18 @@ func TestDecryptTransactionKeyRoundTrip(t *testing.T) {
 	assert.Equal(t, aesKey, got)
 }
 
+// Spec §3.2 pins RSA/2048, so a shorter key is refused when the gateway is
+// built rather than accepted and used.
+func TestNewDecryptorRejectsShortKey(t *testing.T) {
+	short, err := rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(short)
+	require.NoError(t, err)
+
+	_, err = newDecryptor(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	require.ErrorContains(t, err, "1024 bits")
+}
+
 // A plaintext key is exactly what this GO used to receive before the scheme
 // existed, so rejecting it is the behaviour that proves the upgrade took.
 func TestDecryptTransactionKeyRejectsPlaintext(t *testing.T) {
