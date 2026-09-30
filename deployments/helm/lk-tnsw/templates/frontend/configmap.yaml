@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lk-tnsw.frontend.fullname" . }}-config
+  labels:
+    {{- include "lk-tnsw.frontend.labels" . | nindent 4 }}
+data:
+  # Mounted at /usr/share/nginx/html/config.js (see deployment.yaml) — the
+  # browser reads this directly, so these must be public, non-secret values.
+  #
+  # Every value is coerced to a string: getEnv() in runtimeConfig.ts calls
+  # .trim() on whatever it reads, so an unquoted YAML bool/number here (e.g.
+  # SHOW_AUTOFILL_BUTTON: true instead of "true") would otherwise reach the
+  # browser as a real JS boolean/number and throw a TypeError.
+  config.js: |
+    {{- $config := dict }}
+    {{- range $key, $value := .Values.frontend.config }}
+    {{- $_ := set $config $key ($value | toString) }}
+    {{- end }}
+    window.__APP_CONFIG__ = {{ $config | toJson }};

@@ -4,7 +4,7 @@
 
 import { getRequiredEnv } from '@/runtimeConfig'
 
-export const API_BASE_URL = getRequiredEnv('VITE_API_BASE_URL')
+export const API_BASE_URL = getRequiredEnv('API_BASE_URL')
 
 // API Configuration
 export const API_CONFIG = {
