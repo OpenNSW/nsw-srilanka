@@ -15,8 +15,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/OpenNSW/core/authn"
-
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
@@ -72,24 +71,18 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 // resolve builds the authz.Input from the request's auth context. ok is false for
 // an unauthenticated request — no Input is attached and the extension denies 401.
 func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
-	ac := authn.GetAuthContext(ctx)
-	if ac == nil {
+	p, ok := authn.FromContext(ctx)
+	if !ok {
 		return taskauthz.Input{}, false
 	}
-	switch ac.Type() {
-	case authn.ClientPrincipalType:
-		if ac.Client == nil {
-			return taskauthz.Input{}, false
-		}
-		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: ac.Client.ClientID}, true
-	case authn.UserPrincipalType:
-		if ac.User == nil {
-			return taskauthz.Input{}, false
-		}
+	switch p.Kind {
+	case authn.KindClient:
+		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
+	case authn.KindUser:
 		return taskauthz.Input{
 			Kind:       taskauthz.KindUser,
-			Roles:      ac.User.Roles,
-			OwnedRoles: m.ownedRolesFor(ac.User.OUHandle),
+			Roles:      p.Roles,
+			OwnedRoles: m.ownedRolesFor(p.OUHandle),
 		}, true
 	default:
 		return taskauthz.Input{}, false

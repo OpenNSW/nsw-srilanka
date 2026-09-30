@@ -1,4 +1,8 @@
-.PHONY: help setup install clean dev-trader build build-trader lint format type-check preview-trader
+.PHONY: help setup install clean dev-trader build build-trader lint format type-check preview-trader ensure-frontend-config
+
+# trader-app's browser-facing runtime config (served from public/ by vite).
+CONFIG_JS         := apps/trader-app/public/config.js
+CONFIG_JS_EXAMPLE := apps/trader-app/public/config.example.js
 
 # Default target
 help:
@@ -54,7 +58,7 @@ clean:
 	@echo "✅ Cleaned!"
 
 # Development servers
-dev-trader:
+dev-trader: ensure-frontend-config
 	@echo "🚀 Starting Trader app..."
 	@pnpm --filter trader-app dev
 
@@ -82,6 +86,12 @@ type-check:
 	@pnpm run type-check
 
 # Preview production builds
-preview-trader:
+preview-trader: ensure-frontend-config
 	@echo "👀 Previewing Trader app..."
 	@pnpm --filter trader-app preview
+
+# Not listed in `help` — internal bootstrap, not a command someone runs
+# directly. Copies once and never again: re-copying whenever config.example.js
+# changes would clobber a developer's own edits to their local config.js.
+ensure-frontend-config:
+	@test -f $(CONFIG_JS) || cp $(CONFIG_JS_EXAMPLE) $(CONFIG_JS)

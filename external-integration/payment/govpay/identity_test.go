@@ -6,11 +6,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/OpenNSW/core/authn"
 	corepayment "github.com/OpenNSW/core/payment"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 // The shared bodies in govpay_test.go post subinstId "s1" and serviceid "sv1".
@@ -373,8 +374,7 @@ func TestValidateMetadata(t *testing.T) {
 // clientCtx builds the request context the authn middleware leaves behind for a
 // machine caller.
 func clientCtx(clientID string) context.Context {
-	return context.WithValue(context.Background(), authn.AuthContextKey,
-		&authn.AuthContext{Client: &authn.ClientContext{ClientID: clientID}})
+	return authn.ContextWithPrincipal(context.Background(), &authn.Principal{Kind: authn.KindClient, ClientID: clientID})
 }
 
 // TestVerifyWebhook covers the check that keeps a machine client holding the
@@ -403,8 +403,7 @@ func TestVerifyWebhook(t *testing.T) {
 	})
 
 	t.Run("a user token is rejected", func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), authn.AuthContextKey,
-			&authn.AuthContext{User: &authn.UserContext{IDPUserID: "u1"}})
+		ctx := authn.ContextWithPrincipal(context.Background(), &authn.Principal{Kind: authn.KindUser, IDPUserID: "u1"})
 		err := g.VerifyWebhook(ctx, nil, nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, corepayment.ErrWebhookVerificationFailed)
