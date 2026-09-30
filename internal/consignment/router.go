@@ -47,18 +47,18 @@ type Router struct {
 	cs      *Service
 	cha     cha.Service
 	company company.Service
-	audit   *nswaudit.Recorder
+	audit   nswaudit.Auditor
 	roles   map[string]string // logical name ("trader"/"cha") -> IdP token role
 }
 
 // NewRouter builds the router. roles is the global catalog's Roles map; it must
 // define "trader" and "cha" — HandleGetConsignments resolves a caller's ?role=
 // query param through it.
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string) (*Router, error) {
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor, roles map[string]string) (*Router, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles}, nil
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: auditor, roles: roles}, nil
 }
 
 // validateRoles reports an error if roles (the global catalog's Roles map) omits
@@ -92,7 +92,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	traderID := authCtx.User.ID
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, defaultExportWorkflowTemplateID)
 	if err != nil {
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionCreate,
 			TargetType: nswaudit.TargetConsignment,
@@ -105,7 +105,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if consignment == nil {
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionCreate,
 			TargetType: nswaudit.TargetConsignment,
@@ -118,7 +118,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionCreate,
 		TargetType: nswaudit.TargetConsignment,
@@ -251,7 +251,7 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccessDenied):
-			c.audit.Record(ctx, nswaudit.Event{
+			c.auditEvent(ctx, nswaudit.Event{
 				EventType:  nswaudit.EventConsignment,
 				Action:     nswaudit.ActionRead,
 				TargetType: nswaudit.TargetConsignment,
@@ -308,7 +308,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
@@ -338,7 +338,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 	dto, err := c.cs.GetAgencySummary(ctx, consignmentID)
 	if err != nil {
 		if errors.Is(err, ErrConsignmentNotFound) {
-			c.audit.Record(ctx, nswaudit.Event{
+			c.auditEvent(ctx, nswaudit.Event{
 				EventType:  nswaudit.EventConsignment,
 				Action:     nswaudit.ActionRead,
 				TargetType: nswaudit.TargetConsignment,
@@ -356,7 +356,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
@@ -426,7 +426,7 @@ func (c *Router) handleEngineStatus(
 	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
 	// TaskRecord.RootWorkflowID) that doesn't exist yet; see the issue for why the obvious
 	// GlobalVariables[VarRootWorkflowID] shortcut doesn't work here.
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
@@ -531,7 +531,7 @@ func (c *Router) handleResolveAdminIntervention(
 	}
 
 	auditFail := func(errMsg string) {
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetConsignment,
@@ -570,7 +570,7 @@ func (c *Router) handleResolveAdminIntervention(
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionUpdate,
 		TargetType: nswaudit.TargetConsignment,
@@ -584,4 +584,10 @@ func (c *Router) handleResolveAdminIntervention(
 		},
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *Router) auditEvent(ctx context.Context, e nswaudit.Event) {
+	if c.audit != nil {
+		c.audit.Audit(ctx, e)
+	}
 }

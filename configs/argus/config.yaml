@@ -11,6 +11,7 @@ enums:
     - READ
     - UPDATE
     - DELETE
+    - PRESIGN_UPLOAD
   actorTypes:
     - ADMIN
     - MEMBER          # authenticated user (trader / CHA / officer)

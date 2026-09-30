@@ -10,7 +10,14 @@ import (
 	"github.com/OpenNSW/core/trace"
 )
 
-// Recorder is the single entry point handlers use to emit audit events.
+// Auditor is the interface that services and handlers accept as an optional
+// dependency for recording audit events.  When the value is nil, no auditing
+// occurs — all implementations must be nil-receiver safe.
+type Auditor interface {
+	Audit(ctx context.Context, e Event)
+}
+
+// Recorder is the default Auditor implementation backed by the Argus client.
 type Recorder struct {
 	client argus.Auditor
 }
@@ -20,7 +27,7 @@ func NewRecorder(client argus.Auditor) *Recorder {
 	return &Recorder{client: client}
 }
 
-// Event is the domain-friendly shape a handler fills in.
+// Event is the domain-friendly shape a caller fills in.
 type Event struct {
 	EventType  EventType
 	Action     Action
@@ -31,13 +38,10 @@ type Event struct {
 	Metadata   map[string]any
 }
 
-// Record derives actor, trace ID, and timestamp from context, marshals the message,
+// Audit derives actor, trace ID, and timestamp from context, marshals the message,
 // and schedules the audit log asynchronously without blocking the call path.
-//
-// Direct Handler Auditing: Handlers should call this method directly (rather than relying on
-// the Wrap middleware) when the audit payload depends on runtime-specific parameters, validation
-// failures, or custom metadata details only accessible within the handler function itself.
-func (r *Recorder) Record(ctx context.Context, e Event) {
+// It is nil-receiver safe: a nil *Recorder is a valid no-op Auditor.
+func (r *Recorder) Audit(ctx context.Context, e Event) {
 	if r == nil || r.client == nil || !r.client.IsEnabled() {
 		return
 	}

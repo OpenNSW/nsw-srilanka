@@ -49,7 +49,7 @@ func (m *mockCDNService) ProcessAcknowledgment(ctx context.Context, req cdn.CDNA
 func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
 	cdnSvc := new(mockCDNService)
-	handler := NewHandler(cusdecSvc, cdnSvc)
+	handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 	payload := `{
 		"eventType": "CUSDEC_INTEGRATED",
@@ -180,7 +180,7 @@ func TestSLCEHandler_CusdecEventsSuccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cusdecSvc := new(mockCusdecService)
 			cdnSvc := new(mockCDNService)
-			handler := NewHandler(cusdecSvc, cdnSvc)
+			handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 			tt.setupMock(cusdecSvc)
 
@@ -201,7 +201,7 @@ func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 	t.Run("5. CDN_INTEGRATED (§7.2)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		payload := `{
 			"eventType": "CDN_INTEGRATED",
@@ -235,7 +235,7 @@ func TestSLCEHandler_CDNSuccessEvents(t *testing.T) {
 	t.Run("6. CDN_ACKNOWLEDGED (§7.3)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		payload := `{
 			"eventType": "CDN_ACKNOWLEDGED",
@@ -314,7 +314,7 @@ func TestSLCEHandler_ValidationFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cusdecSvc := new(mockCusdecService)
 			cdnSvc := new(mockCDNService)
-			handler := NewHandler(cusdecSvc, cdnSvc)
+			handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 			req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tt.payload))
 			req.Header.Set("Content-Type", "application/json")
@@ -332,7 +332,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 	t.Run("Unknown event type", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		payload := `{"eventType": "UNKNOWN_EVENT_TYPE", "processedAt": "2026-07-23T10:00:00Z"}`
 
@@ -349,7 +349,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 	t.Run("Invalid JSON body", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(`{invalid-json`))
 		req.Header.Set("Content-Type", "application/json")
@@ -363,7 +363,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 	t.Run("Workflow not found by edgeId (404 Not Found)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		payload := `{
 			"eventType": "CUSDEC_INTEGRATED",
@@ -389,7 +389,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 	t.Run("Cusdec not found by reference (503 Service Unavailable)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		payload := `{
 			"eventType": "PAYMENT_CONFIRMED",
@@ -411,7 +411,7 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 	t.Run("Internal DB failure (500 Internal Server Error)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)
-		handler := NewHandler(cusdecSvc, cdnSvc)
+		handler := NewHandler(cusdecSvc, cdnSvc, nil)
 
 		payload := `{
 			"eventType": "CUSDEC_INTEGRATED",
