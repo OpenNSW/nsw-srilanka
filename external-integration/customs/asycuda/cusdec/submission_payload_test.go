@@ -128,8 +128,13 @@ func sampleForm() map[string]any {
 			"deferredPayment": "DiffPaymentString",
 		},
 		"valuation": map[string]any{
-			"invoiceAmountForeign": float64(1500), "invoiceCurrencyCode": "USD",
-			"externalFreight": map[string]any{"amountForeign": float64(100), "currencyCode": "USD"},
+			"invoiceAmount":       map[string]any{"amount": float64(1500), "currencyCode": "USD"},
+			"externalFreight":     map[string]any{"amount": float64(100), "currencyCode": "USD"},
+			"internalFreight":     map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"insurance":           map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"otherCosts":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"deductions":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"invoiceCurrencyCode": "USD",
 		},
 		"packages": map[string]any{"totalPackages": float64(10)},
 		"items": []any{map[string]any{
@@ -197,6 +202,51 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 	value := remittance["remittanceValue"].(map[string]any)
 	assert.Equal(t, float64(1500), value["value"])
 	assert.Equal(t, "USD", value["currencyID"], "the declaration's currency carries to the remittance")
+}
+
+func TestBuildPayload_HeaderValuationMapsTotalCustomsValuation(t *testing.T) {
+	form := minimalForm()
+	form["valuation"] = map[string]any{
+		"invoiceAmount":    map[string]any{"amount": float64(2400), "currencyCode": "USD"},
+		"externalFreight":  map[string]any{"amount": float64(100), "currencyCode": "USD"},
+		"internalFreight":  map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"insurance":        map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"otherCosts":       map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"deductions":       map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"totalGrossWeight": float64(1500),
+	}
+
+	sub, _, err := BuildPayload(form, "")
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+
+	total := wire["generalSegment"].(map[string]any)["totalCustomsValuation"].(map[string]any)
+
+	assertAmount(t, total["chargeAmount"], 2400, "USD")
+	assertAmount(t, total["externalFreight"], 100, "USD")
+	assertZeroAmount(t, total["internalFreight"])
+	assertZeroAmount(t, total["insurance"])
+	assertZeroAmount(t, total["otherCost"])
+	assertZeroAmount(t, total["deductions"])
+}
+
+func assertAmount(t *testing.T, raw any, value float64, currency string) {
+	t.Helper()
+	m := raw.(map[string]any)
+	assert.Equal(t, value, m["value"])
+	assert.Equal(t, currency, m["currencyID"])
+}
+
+func assertZeroAmount(t *testing.T, raw any) {
+	t.Helper()
+	m := raw.(map[string]any)
+	assert.Equal(t, float64(0), m["value"])
+	assert.NotContains(t, m, "currencyID")
 }
 
 // --- spec v1.7 ---------------------------------------------------------------

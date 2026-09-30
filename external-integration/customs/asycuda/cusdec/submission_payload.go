@@ -39,8 +39,8 @@ type Properties struct {
 }
 
 // Amount is Annex A §4.3 AmountType. CurrencyID is omitted when empty: the
-// spec makes it mandatory only where a value is present, and the accepted
-// payload sends bare {"value":0} for the unused cost lines.
+// spec makes it mandatory only where a value is present, and unused cost
+// lines are sent as {"value":0}.
 type Amount struct {
 	Value      float64 `json:"value"`
 	CurrencyID string  `json:"currencyID,omitempty"`
@@ -269,7 +269,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 			ModeOfTransportAtBorder:        str(transport, "modeOfTransport"),
 			PlaceOfDischarge:               str(transport, "placeOfDischargeCode"),
 			BorderOffice:                   str(transport, "borderOfficeCode"),
-			TotalCustomsValuation:          buildValuation(valuation, str(valuation, "invoiceCurrencyCode")),
+			TotalCustomsValuation:          buildDeclarationValuation(valuation),
 			ContainerFlag:                  boolean(transport, "containerized"),
 			NumberOfContainers:             integer(form, "containerCount"),
 			WarehouseCode:                  str(transport, "warehouseCode"),
@@ -288,15 +288,32 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 	return sub, docs, nil
 }
 
-// buildValuation maps the form's foreign-currency valuation block onto the
-// six-part customs valuation. The form records each cost twice (foreign and
-// LKR); the foreign figure is the one sent, paired with the currency the
-// caller resolved, matching what the endpoint accepts.
-func buildValuation(v map[string]any, currency string) Valuation {
+// buildDeclarationValuation maps the header valuation onto
+// generalSegment.totalCustomsValuation. Each cost is amount + currencyCode.
+func buildDeclarationValuation(v map[string]any) Valuation {
+	section := func(key string) Amount {
+		s := nested(v, key)
+		val := number(s, "amount")
+		if val == 0 {
+			return Amount{Value: 0}
+		}
+		return Amount{Value: val, CurrencyID: str(s, "currencyCode")}
+	}
+	invoice := nested(v, "invoiceAmount")
+	return Valuation{
+		ChargeAmount:    Amount{Value: number(invoice, "amount"), CurrencyID: str(invoice, "currencyCode")},
+		ExternalFreight: section("externalFreight"),
+		InternalFreight: section("internalFreight"),
+		Insurance:       section("insurance"),
+		OtherCost:       section("otherCosts"),
+		Deductions:      section("deductions"),
+	}
+}
+
+// buildItemValuation maps an item line's valuation onto goodsShipments[].customsValue.
+func buildItemValuation(v map[string]any, currency string) Valuation {
 	extFreight := nested(v, "externalFreight")
 
-	// Only the invoice and external freight carry their own currency in the
-	// form. The rest are declared in the same currency as the invoice.
 	amount := func(section string) Amount {
 		s := nested(v, section)
 		val := number(s, "amountForeign")
@@ -345,19 +362,12 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 		supp := nested(tarif, "supplementaryUnit")
 
 		currency := str(val, "invoiceCurrencyCode")
-		if currency == "" {
-			currency = str(nested(form, "valuation"), "invoiceCurrencyCode")
-		}
-
 		itemValue := number(val, "invoiceAmountForeign")
 		if itemValue == 0 {
 			itemValue = number(tarif, "itemPrice")
 		}
 
-		// The item repeats the declaration's six-part valuation. Its charge
-		// amount is the item price, which buildValuation cannot read because
-		// the form spells it invoiceAmountForeign or itemPrice per item.
-		itemValuation := buildValuation(val, currency)
+		itemValuation := buildItemValuation(val, currency)
 		itemValuation.ChargeAmount = Amount{Value: itemValue, CurrencyID: currency}
 
 		items = append(items, GoodsItem{
