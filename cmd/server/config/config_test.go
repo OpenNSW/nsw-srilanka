@@ -21,26 +21,33 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
-// TestMain writes a throwaway notification config to a temp dir and points
-// NOTIFICATIONS_CONFIG_PATH at it as this whole test binary's default, so every test that calls
-// Load() gets a real, parseable file unless it overrides the var itself — as the two
-// TestLoad_NotificationConfig* tests below do, to point at a missing/malformed one instead;
-// t.Setenv correctly restores this default afterward. Load reads this file eagerly (see
-// loadNotificationProviders): Config.Validate requires Providers non-empty, unlike the other
-// *ConfigPath fields in this package, which are just stored and read later, downstream.
+// TestMain writes a throwaway notification config and config.yaml to a temp dir and points
+// NOTIFICATIONS_CONFIG_PATH and CONFIG_PATH at them as this whole test binary's defaults, so
+// every test that calls Load() gets real, parseable files unless it overrides a var itself — as
+// the TestLoad_NotificationConfig* and TestLoad_ConfigFile* tests do, to point at a
+// missing/malformed one instead; t.Setenv correctly restores these defaults afterward. Load
+// reads both files eagerly (see loadNotificationProviders and loadConfigFile): Config.Validate
+// requires Providers non-empty, and config.yaml is mandatory, unlike the other *ConfigPath
+// fields in this package, which are just stored and read later, downstream.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "notification-config-test-*")
+	dir, err := os.MkdirTemp("", "config-test-*")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create temp dir for notification config fixture: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to create temp dir for config fixtures: %v\n", err)
 		os.Exit(1)
 	}
-	path := filepath.Join(dir, "notification.json")
-	if err := os.WriteFile(path, []byte(`{"email":{"baseURL":"https://email.example.com"}}`), 0o600); err != nil {
-		os.RemoveAll(dir)
-		fmt.Fprintf(os.Stderr, "failed to write notification config fixture: %v\n", err)
-		os.Exit(1)
+	fixtures := []struct{ env, name, body string }{
+		{"NOTIFICATIONS_CONFIG_PATH", "notification.json", `{"email":{"baseURL":"https://email.example.com"}}`},
+		{"CONFIG_PATH", "config.yaml", "refid: {}\n"},
 	}
-	os.Setenv("NOTIFICATIONS_CONFIG_PATH", path)
+	for _, f := range fixtures {
+		path := filepath.Join(dir, f.name)
+		if err := os.WriteFile(path, []byte(f.body), 0o600); err != nil {
+			os.RemoveAll(dir)
+			fmt.Fprintf(os.Stderr, "failed to write %s fixture: %v\n", f.name, err)
+			os.Exit(1)
+		}
+		os.Setenv(f.env, path)
+	}
 
 	// os.Exit skips deferred calls, so m.Run must be captured and cleanup done explicitly rather
 	// than via defer.

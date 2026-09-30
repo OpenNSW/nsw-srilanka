@@ -286,5 +286,6 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `configs/notification.json`    | Notification provider settings (SMS, email channels)                             | `configs/notification.example.json`    |
 | `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids           | `configs/catalog.example.json`         |
 | `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)              | `configs/companies.example.json`       |
+| `configs/config.yaml`          | Server config file (mandatory; `CONFIG_PATH`) — reference ID formats (`refid`)   | `configs/config.example.yaml`          |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

@@ -278,6 +278,21 @@ Declares if the task is completed by the applicant (`USER_INPUT`) or another age
 }
 ```
 
+### Reference IDs (`REFID_GENERATOR`)
+Generates a reference ID from a format in the `refid` section of `configs/config.yaml` (see `configs/config.example.yaml`). The step is synchronous, and `plugin_properties` names the format by issuer and id type:
+```json
+{
+  "id": "trade-consignment-ref--generate",
+  "task_type": "REFID_GENERATOR",
+  "output_namespace": "refid",
+  "plugin_properties": { "issuer": "TNSW", "id_type": "consignment_ref" }
+}
+```
+- **Params:** every string input to the node is passed to the format. Name the `input_mapping` targets after the params the format uses: a list segment's `param`, or a `{name}` in a scope key.
+- **Output:** the ID is written to the task's own state at `<output_namespace>.reference_id`. It reaches the parent workflow only through the usual two mappings: the task workflow node's `"output_mapping": {"refid.reference_id": "reference_id"}`, then the parent TASK node's `"output_mapping": {"reference_id": "trade.reference_id"}`.
+- **Re-runs:** a task that already holds an ID keeps it. A re-run of the step (for example a Temporal retry) doesn't take another number.
+- **Not configured:** if the deployment has no `refid.issuers`, the step fails.
+
 ### JSONForm Schemas (`*_jsonform.json`)
 Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and `uiSchema` block:
 ```json

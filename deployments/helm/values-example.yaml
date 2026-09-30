@@ -162,6 +162,29 @@ backend:
           name: nsw-secrets
           key: argus-api-key
 
+  # The server's config.yaml, authored here as values; the chart mounts it and
+  # sets CONFIG_PATH (see values.yaml). Full schema and every option:
+  # configs/config.example.yaml.
+  config:
+    # Reference ID formats for the REFID_GENERATOR task plugin. Empty means
+    # generation is off, and any task using the plugin fails.
+    refid:
+      issuers: []
+      # issuers:
+      #   - issuer: TNSW
+      #     formats:
+      #       - idType: consignment_ref       # TNSW-CMB-20260930-000042
+      #         segments:
+      #           - {type: literal, value: "TNSW-"}
+      #           - {type: list, list: port, param: portCode}
+      #           - {type: literal, value: "-"}
+      #           - {type: date, layout: "20060102"}
+      #           - {type: literal, value: "-"}
+      #           - type: sequence
+      #             sequence: {scopeKey: "{issuer}:{idType}:{portCode}:{yyyyMMdd}", padding: 6}
+      # lists:
+      #   port: [CMB, HBT]
+
   # Run database migrations as a pre-upgrade hook before the server rolls out.
   # Uses the separate tnsw-migrate image (see values.yaml comments); note its
   # env uses DB_USER, not DB_USERNAME like the server above — that mismatch
