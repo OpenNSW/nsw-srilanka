@@ -76,6 +76,26 @@ This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.
 
 Edit the seeded files for your environment before starting the stack. See the [Configuration Reference](#configuration-reference) for what each one holds.
 
+#### GovPay+ encryption key
+
+GovPay+ encrypts every call to this GO (spec §3): a fresh AES key per call,
+RSA-encrypted to this GO's public key. The `govpay` gateway therefore needs this GO's
+RSA private key, and GovPay+ needs the matching public key. Generate the pair into the
+git-ignored `certs/govpay/` directory:
+
+```bash
+mkdir -p certs/govpay
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out certs/govpay/go_private.pem
+openssl pkey -in certs/govpay/go_private.pem -pubout -out certs/govpay/go_public.pem
+```
+
+`compose.yml` mounts that directory at `/certs/govpay`, which is where the example
+`private_key_file` points. For a non-Docker run, change `private_key_file` to the host
+path. Hand `go_public.pem` to GovPay+; keep `go_private.pem` out of version control.
+
+Without a key the server still starts, but every GovPay+ call fails with a 500. A key
+that is configured but unreadable stops the server at startup.
+
 ### 2. Start the Docker Stack
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
 
@@ -165,7 +185,9 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 
 ### 5. Simulating a payment webhook (dev only)
 
-INFO-type gateways (e.g. `govpay`) don't fire a real callback. To advance a `PENDING_PAYMENT` task manually:
+INFO-type gateways (e.g. `govpay`) don't fire a real callback. To advance a `PENDING_PAYMENT` task manually, post the callback yourself.
+
+> **Encrypted gateways:** the plaintext body below only works against a gateway that does not decrypt its calls. The `govpay` gateway expects every call encrypted as GovPay+ sends it (see [GovPay+ encryption key](#govpay-encryption-key)): a `TransactionKey` header carrying a 32-byte AES key RSA-OAEP-encrypted to `go_public.pem`, every `data[].value` AES-256-CBC-encrypted with that key, and a bearer token for the `webhook_client_id` client. Without these it answers 401.
 
 ```bash
 curl -X POST "http://localhost:8080/api/v1/payments/govpay/webhook" \

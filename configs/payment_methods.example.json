@@ -10,7 +10,8 @@
         "display_order": 1
       },
       "config": {
-        "webhook_client_id": "GOVPAY_TO_NSW"
+        "webhook_client_id": "GOVPAY_TO_NSW",
+        "private_key_file": "/certs/govpay/go_private.pem"
       }
     }
   ]
