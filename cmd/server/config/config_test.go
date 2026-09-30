@@ -77,13 +77,13 @@ func validConfig() *Config {
 		CORS: cors.Config{
 			AllowedOrigins: []string{"http://localhost:3000"},
 		},
-		Storage: storage.Config{
+		Storage: nswstorage.Config{Config: storage.Config{
 			Type:           "local",
 			LocalBaseDir:   "./bucket",
 			LocalPublicURL: "http://localhost:8080",
 			LocalPutSecret: "secret",
 			PresignTTL:     15 * time.Minute,
-		},
+		}},
 		Integrations: integrations.Config{
 			SLPAWebhookSecret: "a-secret-shared-with-slpa",
 		},
@@ -688,7 +688,7 @@ func TestConfigValidate_DatabaseError(t *testing.T) {
 
 func TestConfigValidate_StorageError(t *testing.T) {
 	cfg := validConfig()
-	cfg.Storage = storage.Config{Type: "local"} // missing LocalBaseDir
+	cfg.Storage = nswstorage.Config{Config: storage.Config{Type: "local"}} // missing LocalBaseDir
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid storage configuration") {
 		t.Errorf("expected storage config error, got: %v", err)
@@ -699,18 +699,20 @@ func TestConfigValidate_StorageProxy(t *testing.T) {
 	cfg := validConfig()
 	// Proxy mode validates the proxy settings, not the core/storage backend,
 	// which would reject "proxy" as an unknown backend type.
-	cfg.Storage = storage.Config{Type: nswstorage.TypeProxy}
-	cfg.StorageProxy = nswstorage.ProxyConfig{
-		Service:      "files-api",
-		UploadPath:   nswstorage.DefaultProxyUploadPath,
-		DownloadPath: nswstorage.DefaultProxyDownloadPath,
-		DeletePath:   nswstorage.DefaultProxyDeletePath,
+	cfg.Storage = nswstorage.Config{
+		Config: storage.Config{Type: nswstorage.TypeProxy},
+		Proxy: nswstorage.ProxyConfig{
+			Service:      "files-api",
+			UploadPath:   nswstorage.DefaultProxyUploadPath,
+			DownloadPath: nswstorage.DefaultProxyDownloadPath,
+			DeletePath:   nswstorage.DefaultProxyDeletePath,
+		},
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v, want nil for a complete proxy configuration", err)
 	}
 
-	cfg.StorageProxy.Service = ""
+	cfg.Storage.Proxy.Service = ""
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "STORAGE_PROXY_SERVICE") {
 		t.Errorf("expected STORAGE_PROXY_SERVICE error, got: %v", err)
@@ -738,8 +740,8 @@ func TestLoad_StorageProxyDefaults(t *testing.T) {
 		DownloadPath: "/api/v1/storage/{key}",
 		DeletePath:   "/api/v1/storage/{key}",
 	}
-	if cfg.StorageProxy != want {
-		t.Errorf("StorageProxy = %+v, want %+v", cfg.StorageProxy, want)
+	if cfg.Storage.Proxy != want {
+		t.Errorf("Storage.Proxy = %+v, want %+v", cfg.Storage.Proxy, want)
 	}
 }
 

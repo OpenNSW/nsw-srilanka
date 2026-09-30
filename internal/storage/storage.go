@@ -12,16 +12,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
 )
-
-// TypeProxy is the STORAGE_TYPE that serves storage from another service
-// instead of a backend of this deployment's own. Every other STORAGE_TYPE is
-// a core/storage backend type.
-const TypeProxy = "proxy"
 
 // Service is the file storage the rest of the application uses. It is
 // satisfied by core/storage's *Service and by ProxyService.
@@ -56,19 +50,19 @@ type Stack struct {
 	LocalContent *corestorage.HTTPHandler
 }
 
-// New builds the storage stack for backend.Type: a proxy onto another service
+// New builds the storage stack for cfg.Type: a proxy onto another service
 // when it is TypeProxy, otherwise the core/storage backend it names. caller
 // reaches the owning service and is only used in proxy mode.
-func New(ctx context.Context, backend corestorage.Config, proxy ProxyConfig, caller ServiceCaller) (*Stack, error) {
-	if strings.TrimSpace(backend.Type) == TypeProxy {
-		svc, err := NewProxyService(caller, proxy)
+func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) {
+	if cfg.IsProxy() {
+		svc, err := NewProxyService(caller, cfg.Proxy)
 		if err != nil {
 			return nil, err
 		}
 		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
 	}
 
-	driver, err := corestorage.NewStorageFromConfig(ctx, backend)
+	driver, err := corestorage.NewStorageFromConfig(ctx, cfg.Config)
 	if err != nil {
 		return nil, fmt.Errorf("storage backend: %w", err)
 	}

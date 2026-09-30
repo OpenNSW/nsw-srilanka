@@ -157,7 +157,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// through this service, so it has to exist before the task stack (Stage 4).
 	// STORAGE_TYPE picks a backend of this deployment's own or a proxy onto
 	// the service that owns the files.
-	storageStack, err := nswstorage.New(ctx, cfg.Storage, cfg.StorageProxy, remoteManager)
+	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager)
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)

@@ -94,7 +94,10 @@ func defaultProxyConfig() ProxyConfig {
 func newProxyStack(t *testing.T, token string) *Stack {
 	t.Helper()
 	owner := newOwningService(t)
-	stack, err := New(context.Background(), corestorage.Config{Type: TypeProxy}, defaultProxyConfig(), newRegistry(t, owner.URL, token))
+	stack, err := New(context.Background(), Config{
+		Config: corestorage.Config{Type: TypeProxy},
+		Proxy:  defaultProxyConfig(),
+	}, newRegistry(t, owner.URL, token))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -228,13 +231,13 @@ func TestNewProxyService_UnknownServiceFailsAtStartup(t *testing.T) {
 }
 
 func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
-	stack, err := New(context.Background(), corestorage.Config{
+	stack, err := New(context.Background(), Config{Config: corestorage.Config{
 		Type:           "local",
 		LocalBaseDir:   t.TempDir(),
 		LocalPublicURL: "http://localhost:8080",
 		LocalPutSecret: "secret",
 		PresignTTL:     15 * time.Minute,
-	}, ProxyConfig{}, nil)
+	}}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
