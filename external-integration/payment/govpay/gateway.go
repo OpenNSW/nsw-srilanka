@@ -50,7 +50,7 @@ func NewGovPayGatewayFactory(resolveIdentity IdentityResolver) corepayment.Facto
 		// A key that is configured but unreadable is a hard failure: starting
 		// up and failing every call later would be strictly worse than
 		// refusing to build the gateway now.
-		decryptor, err := loadDecryptor(config.PrivateKey, config.PrivateKeyFile)
+		decryptor, err := loadDecryptor(config.PrivateKey)
 		if err != nil {
 			return nil, err
 		}

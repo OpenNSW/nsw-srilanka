@@ -1,6 +1,10 @@
 package govpay
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/OpenNSW/core/secret"
+)
 
 // -----------------------------------------------------------------------------
 // GovPay+ wire types
@@ -23,12 +27,12 @@ type Config struct {
 	// own client. Required: without it a callback cannot be judged either way.
 	WebhookClientID string `json:"webhook_client_id"`
 
-	// PrivateKey / PrivateKeyFile locate this GO's RSA private key, the half
-	// of the pair whose public key GovPay+ holds. GovPay+ encrypts a fresh
-	// transaction key to it on every call (spec §3), so without it no call can
-	// be read. PrivateKey (inline PEM) takes precedence over PrivateKeyFile.
-	PrivateKey     string `json:"private_key"`
-	PrivateKeyFile string `json:"private_key_file"`
+	// PrivateKey locates this GO's RSA private key (PEM), the half of the pair
+	// whose public key GovPay+ holds. GovPay+ encrypts a fresh transaction key
+	// to it on every call (spec §3), so without it no call can be read. It must
+	// be a "file:" or "env:" reference, never the PEM itself: this config is a
+	// plain file, not a secret store.
+	PrivateKey secret.SecretRef `json:"private_key"`
 }
 
 // MethodID is the payment method this gateway is registered under. The

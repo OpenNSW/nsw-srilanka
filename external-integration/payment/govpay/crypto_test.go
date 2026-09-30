@@ -10,11 +10,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	corepayment "github.com/OpenNSW/core/payment"
+	"github.com/OpenNSW/core/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,6 +93,15 @@ func testPrivateKeyPEM(t *testing.T) string {
 	der, err := x509.MarshalPKCS8PrivateKey(testKeyPair(t))
 	require.NoError(t, err)
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+}
+
+// testPrivateKeyRef writes the ephemeral key to a temporary file and returns a
+// file: reference to it, the form a deployment configures.
+func testPrivateKeyRef(t *testing.T) secret.SecretRef {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "go_private.pem")
+	require.NoError(t, os.WriteFile(path, []byte(testPrivateKeyPEM(t)), 0o600))
+	return secret.SecretRef("file:" + path)
 }
 
 // encryptAsGovPay plays the GovPay+ side: it takes a plaintext request body,
@@ -214,25 +226,55 @@ func TestDecryptTransactionKeyRejectsGarbage(t *testing.T) {
 }
 
 func TestLoadDecryptor(t *testing.T) {
-	t.Run("inline pem", func(t *testing.T) {
-		d, err := loadDecryptor(testPrivateKeyPEM(t), "")
+	t.Run("file reference", func(t *testing.T) {
+		d, err := loadDecryptor(testPrivateKeyRef(t))
 		require.NoError(t, err)
 		require.NotNil(t, d)
 	})
 
-	t.Run("neither configured yields nil, not an error", func(t *testing.T) {
-		d, err := loadDecryptor("", "")
+	t.Run("env reference", func(t *testing.T) {
+		t.Setenv("GOVPAY_TEST_PRIVATE_KEY", testPrivateKeyPEM(t))
+		d, err := loadDecryptor("env:GOVPAY_TEST_PRIVATE_KEY")
+		require.NoError(t, err)
+		require.NotNil(t, d)
+	})
+
+	t.Run("unset yields nil, not an error", func(t *testing.T) {
+		d, err := loadDecryptor("")
 		require.NoError(t, err)
 		assert.Nil(t, d)
 	})
 
+	// An inline PEM would resolve as a SecretRef literal, putting the private
+	// key in payment_methods.json; it is refused, as is an explicit literal:.
+	t.Run("inline key is refused", func(t *testing.T) {
+		_, err := loadDecryptor(secret.SecretRef(testPrivateKeyPEM(t)))
+		require.Error(t, err)
+		_, err = loadDecryptor(secret.SecretRef("literal:" + testPrivateKeyPEM(t)))
+		require.Error(t, err)
+	})
+
 	t.Run("unreadable file is an error", func(t *testing.T) {
-		_, err := loadDecryptor("", "/nonexistent/go_private.pem")
+		_, err := loadDecryptor("file:/nonexistent/go_private.pem")
+		require.Error(t, err)
+	})
+
+	t.Run("empty file is an error", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "go_private.pem")
+		require.NoError(t, os.WriteFile(path, nil, 0o600))
+		_, err := loadDecryptor(secret.SecretRef("file:" + path))
+		require.Error(t, err)
+	})
+
+	t.Run("unset env var is an error", func(t *testing.T) {
+		_, err := loadDecryptor("env:GOVPAY_TEST_PRIVATE_KEY_UNSET")
 		require.Error(t, err)
 	})
 
 	t.Run("malformed pem is an error", func(t *testing.T) {
-		_, err := loadDecryptor("not a pem", "")
+		path := filepath.Join(t.TempDir(), "go_private.pem")
+		require.NoError(t, os.WriteFile(path, []byte("not a pem"), 0o600))
+		_, err := loadDecryptor(secret.SecretRef("file:" + path))
 		require.Error(t, err)
 	})
 }

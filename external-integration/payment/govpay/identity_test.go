@@ -317,7 +317,7 @@ func TestGovPay_NewGovPayGatewayFactory_WiresResolver(t *testing.T) {
 	// The gateway needs its private key to read the encrypted call at all, so
 	// the config carries one; without it both cases would fail on encryption
 	// before reaching the identity check under test.
-	cfg, err := json.Marshal(Config{PrivateKey: testPrivateKeyPEM(t)})
+	cfg, err := json.Marshal(Config{PrivateKey: testPrivateKeyRef(t)})
 	require.NoError(t, err)
 
 	factory := NewGovPayGatewayFactory(staticResolver(ExpectedIdentity{SubInstID: wantSubInst, ServiceID: "other"}, true, nil))

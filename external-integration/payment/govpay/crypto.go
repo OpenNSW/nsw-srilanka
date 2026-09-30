@@ -12,9 +12,10 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
+
+	"github.com/OpenNSW/core/secret"
 )
 
 // -----------------------------------------------------------------------------
@@ -86,23 +87,27 @@ func newDecryptor(pemData []byte) (*Decryptor, error) {
 	return &Decryptor{priv: key}, nil
 }
 
-// loadDecryptor resolves the private key from an inline PEM first, then from a
-// file path. It returns nil without error when neither is configured, so a
-// deployment that has not enabled encryption still builds — the missing key
-// surfaces as ErrEncryptionNotConfigured on the first call, naming the cause,
-// rather than as a nil dereference.
-func loadDecryptor(inlinePEM, path string) (*Decryptor, error) {
-	if pemData := strings.TrimSpace(inlinePEM); pemData != "" {
-		return newDecryptor([]byte(pemData))
-	}
-	if strings.TrimSpace(path) == "" {
+// loadDecryptor resolves the private key reference. It returns nil without
+// error when no key is configured, so a deployment that has not enabled
+// encryption still builds — the missing key surfaces as
+// ErrEncryptionNotConfigured on the first call, naming the cause, rather than
+// as a nil dereference.
+//
+// Only "file:" and "env:" references are accepted. A SecretRef without one of
+// those prefixes resolves as a literal, which here would mean a PEM private key
+// written into payment_methods.json.
+func loadDecryptor(ref secret.SecretRef) (*Decryptor, error) {
+	if strings.TrimSpace(string(ref)) == "" {
 		return nil, nil
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read govpay private key (%s): %w", path, err)
+	if !strings.HasPrefix(string(ref), "file:") && !strings.HasPrefix(string(ref), "env:") {
+		return nil, errors.New(`govpay private_key must be a "file:" or "env:" reference, not the key itself`)
 	}
-	return newDecryptor(data)
+	pemData, err := ref.Resolve()
+	if err != nil {
+		return nil, fmt.Errorf("govpay private key: %w", err)
+	}
+	return newDecryptor([]byte(pemData))
 }
 
 // decryptTransactionKey decrypts the base64 RSA-OAEP "TransactionKey" header

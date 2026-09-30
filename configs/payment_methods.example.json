@@ -11,7 +11,7 @@
       },
       "config": {
         "webhook_client_id": "GOVPAY_TO_NSW",
-        "private_key_file": "/certs/govpay/go_private.pem"
+        "private_key": "file:/certs/govpay/go_private.pem"
       }
     }
   ]
