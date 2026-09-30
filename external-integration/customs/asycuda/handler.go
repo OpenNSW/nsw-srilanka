@@ -46,34 +46,63 @@ type payloadEnvelope struct {
 	EventType string `json:"eventType"`
 }
 
+// statusWriter records the first final HTTP status so the webhook audit defer
+// can mark Failure from handler outcomes, not only from envelope parse errors.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	if w.status == 0 && code >= http.StatusOK {
+		w.status = code
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *statusWriter) Status() int {
+	if w.status == 0 {
+		return http.StatusOK
+	}
+	return w.status
+}
+
 // HandleWebhook is the central entry point for POST /webhooks/slce.
 // It inspects the eventType field in the incoming JSON payload and dispatches
 // execution to the appropriate domain service handler using a switch statement.
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	sw := &statusWriter{ResponseWriter: w}
 	var eventType string
-	var failure bool
 
 	defer func() {
 		if h.audit != nil {
+			status := sw.Status()
 			h.audit.Audit(ctx, nswaudit.Event{
 				EventType:  nswaudit.EventConsignment,
 				Action:     nswaudit.ActionUpdate,
 				TargetType: nswaudit.TargetConsignment,
-				Failure:    failure,
+				Failure:    status >= http.StatusBadRequest,
 				Metadata: map[string]any{
+					"status":    status,
 					"eventType": eventType,
 				},
 			})
 		}
 	}()
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
+	r.Body = http.MaxBytesReader(sw, r.Body, 1<<20) // 1 MB limit
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.WarnContext(ctx, "slce: failed to read request body", "error", err)
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
-		failure = true
+		httputil.Error(sw, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
@@ -83,8 +112,7 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	var env payloadEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
 		slog.WarnContext(ctx, "slce: failed to decode JSON envelope", "error", err)
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
-		failure = true
+		httputil.Error(sw, r, http.StatusBadRequest, errInvalidRequestPayload)
 		return
 	}
 
@@ -92,27 +120,26 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	switch eventType {
 	case "CUSDEC_INTEGRATED":
-		h.handleCusdecIntegrationResult(w, r, body)
+		h.handleCusdecIntegrationResult(sw, r, body)
 
 	case "PAYMENT_CONFIRMED":
-		h.handleCusdecEvent(w, r, body, "PAYMENT_CONFIRMED")
+		h.handleCusdecEvent(sw, r, body, "PAYMENT_CONFIRMED")
 
 	case "WARRANTING_COMPLETED":
-		h.handleCusdecEvent(w, r, body, "WARRANTING_COMPLETED")
+		h.handleCusdecEvent(sw, r, body, "WARRANTING_COMPLETED")
 
 	case "EXPORT_RELEASED":
-		h.handleCusdecEvent(w, r, body, "EXPORT_RELEASED")
+		h.handleCusdecEvent(sw, r, body, "EXPORT_RELEASED")
 
 	case "CDN_INTEGRATED":
-		h.handleCDNIntegrationResult(w, r, body)
+		h.handleCDNIntegrationResult(sw, r, body)
 
 	case "CDN_ACKNOWLEDGED":
-		h.handleCDNAcknowledgment(w, r, body)
+		h.handleCDNAcknowledgment(sw, r, body)
 
 	default:
 		slog.WarnContext(ctx, "slce: unknown or unsupported event type", "event", eventType)
-		httputil.Error(w, r, http.StatusBadRequest, errUnknownEventType)
-		failure = true
+		httputil.Error(sw, r, http.StatusBadRequest, errUnknownEventType)
 	}
 }
 
