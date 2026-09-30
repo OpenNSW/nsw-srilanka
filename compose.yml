@@ -275,15 +275,6 @@ services:
       # This GO's GovPay+ RSA private key (git-ignored), referenced by the govpay
       # gateway's "private_key": "file:/certs/govpay/go_private.pem" in
       # payment_methods.json.
-      #
-      # To test locally, generate a 2048-bit pair and give go_public.pem to the
-      # GovPay+ side (e.g. a local GovPay+ simulator) so it encrypts to this key:
-      #   mkdir -p certs/govpay
-      #   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out certs/govpay/go_private.pem
-      #   openssl pkey -in certs/govpay/go_private.pem -pubout -out certs/govpay/go_public.pem
-      # Then add "private_key": "file:/certs/govpay/go_private.pem" to the govpay
-      # config in configs/payment_methods.json and recreate the backend
-      # (docker compose up -d --force-recreate api).
       - ./certs/govpay:/certs/govpay:ro
       # Host-side artifacts dir for ARTIFACT_LOADER_TYPE=local — the tnsw/ dir of
       # a OpenNSW/one-trade-artifacts clone. Same .env variable a native run uses,
