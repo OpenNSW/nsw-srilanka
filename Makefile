@@ -144,6 +144,7 @@ ifdef USE_CMD
 	@echo Git hooks configured: .githooks/
 	@if exist .env.example if not exist .env copy /Y .env.example .env
 	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
+	@if exist portals\apps\trader-app\public\config.example.js if not exist portals\apps\trader-app\public\config.js copy /Y portals\apps\trader-app\public\config.example.js portals\apps\trader-app\public\config.js
 	@if exist configs\notification.example.json if not exist configs\notification.json copy /Y configs\notification.example.json configs\notification.json
 	@if exist configs\services.docker.example.json if not exist configs\services.docker.json copy /Y configs\services.docker.example.json configs\services.docker.json
 	@if exist configs\payment_methods.example.json if not exist configs\payment_methods.json copy /Y configs\payment_methods.example.json configs\payment_methods.json
