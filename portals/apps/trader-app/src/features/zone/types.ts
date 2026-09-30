@@ -33,7 +33,10 @@ export type Handle = {
   element?: string
 }
 
+// id is the section key from the task's render config. unique within a view.
 type ZoneComponentBase = {
+  id: string
+  title?: string
   handles?: Handle[]
 }
 
@@ -51,8 +54,8 @@ export type AuditEntry = {
   details?: string
 }
 
-// ZoneView is the wire shape served by GET /api/v1/tasks/{id}. There is no
-// separate top-level actions list — operations ship inside their claiming
+// ZoneView is the wire shape served by GET /api/v1/tasks/{id}. There is
+// no separate top-level actions list — operations ship inside their claiming
 // zone's handles (joined to state legality by the backend assembler).
 export type ZoneView = {
   task_id: string
@@ -60,7 +63,7 @@ export type ZoneView = {
   state: string
   alert?: Alert
   audit?: AuditEntry[]
-  view: Record<string, ZoneComponent>
+  view: ZoneComponent[]
   created_at: string
   updated_at: string
 }

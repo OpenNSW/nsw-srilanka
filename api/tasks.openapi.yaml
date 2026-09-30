@@ -190,9 +190,16 @@ components:
       type: object
       description: The per-zone wire shape after merging projector output with the zone's legal handles.
       required:
+        - id
         - type
         - payload
       properties:
+        id:
+          type: string
+          description: The section key from the task's render config. Unique within a view.
+        title:
+          type: string
+          description: Heading for the section. Omitted when the render config gives none.
         type:
           type: string
         handles:
@@ -207,9 +214,10 @@ components:
     ZoneView:
       type: object
       description: |
-        The wire shape the trader-app's zone renderer consumes. `view` is a
-        map of slot name -> EnrichedComponent; there is no separate top-level
-        actions list — actions ship inside their claiming zone's `handles`.
+        The wire shape the trader-app's zone renderer consumes. `view` is the
+        ordered list of EnrichedComponent to render, in the order the task's
+        render config lays them out for the current state; there is no separate
+        top-level actions list — actions ship inside their claiming zone's `handles`.
       required:
         - task_id
         - task_type
@@ -226,8 +234,9 @@ components:
           type: string
           description: e.g. PENDING_USER, QUEUED_EXTERNALLY, COMPLETED.
         view:
-          type: object
-          additionalProperties:
+          type: array
+          description: Sections in render order.
+          items:
             $ref: '#/components/schemas/EnrichedComponent'
         created_at:
           type: string

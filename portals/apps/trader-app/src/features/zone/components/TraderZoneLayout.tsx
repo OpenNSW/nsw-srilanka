@@ -1,4 +1,4 @@
-import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from '@/features/zone/types'
+import type { Alert, AlertVariant, AuditEntry, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
@@ -14,23 +14,14 @@ type Props = {
   formEpoch?: number
 }
 
-// Slots render in this order; anything not named here follows, alphabetically
-// by slot, which is the order a Go map reaches us in. verify_result leads: it
-// answers the button the trader just pressed, and on its own name it would
-// sort below the form that carries that button.
-const ZONE_ORDER = ['verify_result', 'instructions', 'status_awaiting', 'review_history', 'workspace', 'reference']
-
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
-  const zones = orderedZones(task.view)
-
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
-      {zones.map(([name, component]) => (
+      {task.view.map((component) => (
         <Zone
-          key={`${name}:${task.task_id}:${task.state}:${formEpoch}`}
-          name={name}
+          key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
           component={component}
           onAction={onSubmitForm}
         />
@@ -38,12 +29,6 @@ export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>
   )
-}
-
-function orderedZones(view: Record<string, ZoneComponent>): Array<[string, ZoneComponent]> {
-  const known = ZONE_ORDER.filter((k) => k in view).map((k) => [k, view[k]] as [string, ZoneComponent])
-  const extras = Object.entries(view).filter(([k]) => !ZONE_ORDER.includes(k))
-  return [...known, ...extras]
 }
 
 function AlertBanner({ alert }: { alert: Alert }) {

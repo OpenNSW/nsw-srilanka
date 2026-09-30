@@ -170,11 +170,20 @@ func decodeZoneView(t *testing.T, body string) zoneview.ZoneView {
 	return zv
 }
 
+// decodeSlots indexes the rendered view by each entry's id (its section key),
+// so assertions can ask which sections are present without depending on order.
 func decodeSlots(t *testing.T, zv zoneview.ZoneView) map[string]zoneview.EnrichedComponent {
 	t.Helper()
-	var view map[string]zoneview.EnrichedComponent
-	if err := json.Unmarshal(zv.View, &view); err != nil {
+	var entries []zoneview.EnrichedComponent
+	if err := json.Unmarshal(zv.View, &entries); err != nil {
 		t.Fatalf("decode view: %v", err)
+	}
+	view := make(map[string]zoneview.EnrichedComponent, len(entries))
+	for _, e := range entries {
+		if _, dup := view[e.ID]; dup {
+			t.Fatalf("duplicate view entry id %q", e.ID)
+		}
+		view[e.ID] = e
 	}
 	return view
 }
