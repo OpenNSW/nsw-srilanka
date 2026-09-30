@@ -24,14 +24,18 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
 // Config holds all configuration for the application.
 type Config struct {
-	Database     database.Config
-	Server       ServerConfig
-	CORS         cors.Config
-	Storage      storage.Config
+	Database database.Config
+	Server   ServerConfig
+	CORS     cors.Config
+	Storage  storage.Config
+	// StorageProxy is used instead of Storage when STORAGE_TYPE=proxy: files
+	// are served from another service that owns them.
+	StorageProxy nswstorage.ProxyConfig
 	Authn        authn.Config
 	Notification notification.Config
 	Temporal     temporal.Config
@@ -150,6 +154,12 @@ func Load() (*Config, error) {
 			LocalPutSecret: getEnvOrDefault("STORAGE_LOCAL_PUT_SECRET", "local-dev-secret"),
 			PresignTTL:     getDurationOrDefault("STORAGE_PRESIGN_TTL", 15*time.Minute),
 		},
+		StorageProxy: nswstorage.ProxyConfig{
+			Service:      getEnvOrDefault("STORAGE_PROXY_SERVICE", ""),
+			UploadPath:   getEnvOrDefault("STORAGE_PROXY_UPLOAD_PATH", nswstorage.DefaultProxyUploadPath),
+			DownloadPath: getEnvOrDefault("STORAGE_PROXY_DOWNLOAD_PATH", nswstorage.DefaultProxyDownloadPath),
+			DeletePath:   getEnvOrDefault("STORAGE_PROXY_DELETE_PATH", nswstorage.DefaultProxyDeletePath),
+		},
 		Authn: authn.Config{
 			JWKSURL:               getEnvOrDefault("AUTH_JWKS_URL", "https://localhost:8090/oauth2/jwks"),
 			Issuer:                getEnvOrDefault("AUTH_ISSUER", "https://localhost:8090"),
@@ -217,7 +227,7 @@ func (c *Config) Validate() error {
 	if err := c.Database.Validate(); err != nil {
 		return fmt.Errorf("invalid database configuration: %w", err)
 	}
-	if err := c.Storage.Validate(); err != nil {
+	if err := c.validateStorage(); err != nil {
 		return fmt.Errorf("invalid storage configuration: %w", err)
 	}
 	if err := c.Authn.Validate(); err != nil {
@@ -249,6 +259,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
 	}
 	return nil
+}
+
+// validateStorage checks the storage configuration STORAGE_TYPE selects: the
+// proxy settings in proxy mode, otherwise the core/storage backend's — which
+// would reject "proxy" as an unknown backend type.
+func (c *Config) validateStorage() error {
+	if strings.TrimSpace(c.Storage.Type) == nswstorage.TypeProxy {
+		return c.StorageProxy.Validate()
+	}
+	return c.Storage.Validate()
 }
 
 // servicesTLSProbe is a minimal view of the outbound services registry

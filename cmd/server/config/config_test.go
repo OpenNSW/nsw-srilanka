@@ -19,6 +19,7 @@ import (
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
 // TestMain writes a throwaway notification config and config.yaml to a temp dir and points
@@ -394,7 +395,9 @@ func TestLoad_Defaults(t *testing.T) {
 		"STORAGE_LOCAL_BASE_DIR", "STORAGE_LOCAL_PUBLIC_URL", "STORAGE_S3_ENDPOINT",
 		"STORAGE_S3_BUCKET", "STORAGE_S3_REGION", "STORAGE_S3_ACCESS_KEY",
 		"STORAGE_S3_SECRET_KEY", "STORAGE_S3_USE_SSL", "STORAGE_S3_PUBLIC_URL",
-		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
+		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "STORAGE_PROXY_SERVICE",
+		"STORAGE_PROXY_UPLOAD_PATH", "STORAGE_PROXY_DOWNLOAD_PATH",
+		"STORAGE_PROXY_DELETE_PATH", "AUTH_JWKS_URL",
 		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
 		"AUTH_JWKS_INSECURE_SKIP_VERIFY",
 		// NOTIFICATIONS_CONFIG_PATH deliberately stays unlisted — see TestMain.
@@ -689,6 +692,54 @@ func TestConfigValidate_StorageError(t *testing.T) {
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid storage configuration") {
 		t.Errorf("expected storage config error, got: %v", err)
+	}
+}
+
+func TestConfigValidate_StorageProxy(t *testing.T) {
+	cfg := validConfig()
+	// Proxy mode validates the proxy settings, not the core/storage backend,
+	// which would reject "proxy" as an unknown backend type.
+	cfg.Storage = storage.Config{Type: nswstorage.TypeProxy}
+	cfg.StorageProxy = nswstorage.ProxyConfig{
+		Service:      "files-api",
+		UploadPath:   nswstorage.DefaultProxyUploadPath,
+		DownloadPath: nswstorage.DefaultProxyDownloadPath,
+		DeletePath:   nswstorage.DefaultProxyDeletePath,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil for a complete proxy configuration", err)
+	}
+
+	cfg.StorageProxy.Service = ""
+	err := cfg.Validate()
+	if err == nil || !containsString(err.Error(), "STORAGE_PROXY_SERVICE") {
+		t.Errorf("expected STORAGE_PROXY_SERVICE error, got: %v", err)
+	}
+}
+
+func TestLoad_StorageProxyDefaults(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	for _, k := range []string{"STORAGE_PROXY_UPLOAD_PATH", "STORAGE_PROXY_DOWNLOAD_PATH", "STORAGE_PROXY_DELETE_PATH"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("STORAGE_TYPE", "proxy")
+	t.Setenv("STORAGE_PROXY_SERVICE", "files-api")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := nswstorage.ProxyConfig{
+		Service:      "files-api",
+		UploadPath:   "/api/v1/storage",
+		DownloadPath: "/api/v1/storage/{key}",
+		DeletePath:   "/api/v1/storage/{key}",
+	}
+	if cfg.StorageProxy != want {
+		t.Errorf("StorageProxy = %+v, want %+v", cfg.StorageProxy, want)
 	}
 }
 
