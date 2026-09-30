@@ -332,8 +332,9 @@ func buildItemValuation(v map[string]any, currency string) Valuation {
 		external = Amount{Value: val, CurrencyID: extCurrency}
 	}
 
+	charge := nested(v, "invoiceAmount")
 	return Valuation{
-		ChargeAmount:    Amount{Value: number(v, "invoiceAmountForeign"), CurrencyID: currency},
+		ChargeAmount:    Amount{Value: number(charge, "amount"), CurrencyID: str(charge, "currencyCode")},
 		ExternalFreight: external,
 		InternalFreight: amount("internalFreight"),
 		Insurance:       amount("insurance"),
@@ -361,14 +362,8 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 		pkg := nested(m, "packages")
 		supp := nested(tarif, "supplementaryUnit")
 
-		currency := str(val, "invoiceCurrencyCode")
-		itemValue := number(val, "invoiceAmountForeign")
-		if itemValue == 0 {
-			itemValue = number(tarif, "itemPrice")
-		}
-
+		currency := str(nested(val, "invoiceAmount"), "currencyCode")
 		itemValuation := buildItemValuation(val, currency)
-		itemValuation.ChargeAmount = Amount{Value: itemValue, CurrencyID: currency}
 
 		items = append(items, GoodsItem{
 			// Annex A requires a unique item number; position in the array is

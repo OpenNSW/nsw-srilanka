@@ -150,7 +150,7 @@ func sampleForm() map[string]any {
 			},
 			"valuation": map[string]any{
 				"grossWeight": float64(1500), "netWeight": float64(1300),
-				"invoiceAmountForeign": float64(1500), "invoiceCurrencyCode": "USD",
+				"invoiceAmount":   map[string]any{"amount": float64(1500), "currencyCode": "USD"},
 				"externalFreight": map[string]any{"amountForeign": float64(100), "currencyCode": "USD"},
 			},
 			"bol": "string", "bolSplit": "string",
@@ -193,7 +193,7 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 
 	// The item repeats the declaration's six-part valuation, not a lone charge.
 	customsValue := item["customsValue"].(map[string]any)
-	assert.Equal(t, float64(1500), customsValue["chargeAmount"].(map[string]any)["value"])
+	assertAmount(t, customsValue["chargeAmount"], 1500, "USD")
 	assert.Equal(t, float64(100), customsValue["externalFreight"].(map[string]any)["value"])
 	assert.Equal(t, "USD", customsValue["externalFreight"].(map[string]any)["currencyID"])
 
