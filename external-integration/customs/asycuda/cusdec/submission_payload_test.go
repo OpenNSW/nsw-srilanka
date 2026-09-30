@@ -34,18 +34,15 @@ func identifier(t *testing.T, form map[string]any, previousEdgeID string) string
 	encoded, err := json.Marshal(sub)
 	require.NoError(t, err)
 
-	var wire struct {
-		Properties struct {
-			Submitter string `json:"submitter"`
-			NswID     string `json:"nswId"`
-		} `json:"properties"`
-		Submitter string `json:"submitter"`
-	}
+	var wire map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &wire))
-	assert.Equal(t, submitterChannel, wire.Properties.Submitter,
-		"the channel is sent inside properties as well as at the top level")
-	assert.Equal(t, submitterChannel, wire.Submitter, "the top-level submitter is unchanged")
-	return wire.Properties.NswID
+	assert.NotContains(t, wire, "submitter",
+		"submitter belongs only inside properties")
+
+	props := wire["properties"].(map[string]any)
+	assert.Equal(t, submitterChannel, props["submitter"],
+		"the channel is sent inside properties")
+	return props["nswId"].(string)
 }
 
 // §2.2: a resend of the same attempt must carry the same identifier, which is
