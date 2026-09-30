@@ -8,10 +8,12 @@ require (
 	github.com/OpenNSW/core v0.0.0-20260929104034-c7b73d4a71ef
 	github.com/OpenNSW/core/authn v0.3.0
 	github.com/OpenNSW/core/authz v0.1.0
+	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
 	github.com/OpenNSW/core/database v0.2.0
 	github.com/OpenNSW/core/httputil v0.1.0
 	github.com/OpenNSW/core/pagination v0.1.0
 	github.com/OpenNSW/core/payment v0.2.0
+	github.com/OpenNSW/core/refid v0.2.0
 	github.com/OpenNSW/core/remote v0.8.0
 	github.com/OpenNSW/core/storage v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0
@@ -73,4 +75,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -140,9 +140,10 @@ COPY --chown=1001:0 --from=builder /out/server /app/server
 COPY --chown=1001:0 --from=builder /out/otc /usr/local/bin/otc
 
 # Bake the configs directory. Only the committed *.example.json templates
-# (services, payment_methods, notification, catalog) and argus/ land here — the
-# live *.json files they seed are excluded by .dockerignore because they carry
-# literal credentials, so no build bakes them regardless of the working tree.
+# (services, payment_methods, notification, catalog), config.example.yaml and
+# argus/ land here — the live files they seed are excluded by .dockerignore
+# because they carry literal credentials, so no build bakes them regardless of
+# the working tree.
 # Deployments supply the real files via ConfigMap or bind mount.
 # Workflow/form artifacts and the manifest are NOT baked either — they are
 # resolved at startup by the pluggable artifact loader, so the image does not

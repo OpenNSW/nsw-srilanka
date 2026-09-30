@@ -86,6 +86,9 @@ func newHarness(t *testing.T) *harness {
 	agencies := loadAgencyConfigs(t)
 	payments := loadPaymentConfigs(t)
 
+	// Load reads config.yaml itself, so unlike the paths overridden below it
+	// has to be redirected before the call, to the committed template.
+	t.Setenv("CONFIG_PATH", filepath.Join(root, "configs", "config.example.yaml"))
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)

@@ -21,6 +21,7 @@ did that reverse-engineering for you.
 Templates are grouped by component under `templates/backend/` and `templates/frontend/` (Helm renders `templates/` recursively, so subdirectories are purely organizational):
 
 - **[backend/deployment.yaml](templates/backend/deployment.yaml)**: Deployment, container, ports, environment variables, mounts, and probes for the backend.
+- **[backend/configmap.yaml](templates/backend/configmap.yaml)**: Renders `backend.config` into the server's `config.yaml`, mounted into the backend container (see "Backend config file" below).
 - **[frontend/deployment.yaml](templates/frontend/deployment.yaml)**: Deployment, container, ports, mounts, and probes for the frontend — its runtime config comes from the mounted ConfigMap below, not container env vars.
 - **[frontend/configmap.yaml](templates/frontend/configmap.yaml)**: Renders `frontend.config` into `config.js`, mounted into the frontend container for the browser to read (see "Frontend runtime config, not secrets" below).
 - **[backend/service.yaml](templates/backend/service.yaml)** / **[frontend/service.yaml](templates/frontend/service.yaml)**: Exposes each component's container port as a cluster-internal Service.
@@ -111,6 +112,23 @@ kubectl create secret generic nsw-secrets \
 See [`.env.example`](../../../.env.example) for what each of these secrets
 backs and the full set of non-secret config the backend reads. The frontend
 needs no secrets — its `config` is all public SPA config (see below).
+
+### Backend config file
+
+The server refuses to start without its `config.yaml`, so the chart always
+provides one. `backend.config` holds the file's content as values (the schema
+is [`configs/config.example.yaml`](../../../configs/config.example.yaml)). The
+chart renders it into a ConfigMap and mounts it read-only at
+`backend.configMountPath` (`/app/config`), then points `CONFIG_PATH` there.
+`backend.config` is empty by default, which is valid.
+
+- To use a file of your own instead, set `backend.env.CONFIG_PATH`. The chart
+  then leaves `CONFIG_PATH` alone.
+- No secrets go in `backend.config`. Write a placeholder instead, such as
+  `"{{env:NAME}}"` (with `NAME` set through `backend.env`) or
+  `"{{file:/path}}"`. Helm passes it through, and the server resolves it at
+  startup.
+- Changing `backend.config` rolls the pods.
 
 ### Frontend runtime config, not secrets
 

@@ -150,6 +150,7 @@ ifdef USE_CMD
 	@if exist configs\payment_methods.example.json if not exist configs\payment_methods.json copy /Y configs\payment_methods.example.json configs\payment_methods.json
 	@if exist configs\catalog.example.json if not exist configs\catalog.json copy /Y configs\catalog.example.json configs\catalog.json
 	@if exist configs\companies.example.json if not exist configs\companies.json copy /Y configs\companies.example.json configs\companies.json
+	@if exist configs\config.example.yaml if not exist configs\config.yaml copy /Y configs\config.example.yaml configs\config.yaml
 else
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
@@ -159,8 +160,8 @@ else
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
-	@for f in configs/notification.example.json configs/services.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/catalog.example.json configs/companies.example.json; do \
-		target=$$(echo $$f | sed 's/\.example\.json/.json/'); \
+	@for f in configs/notification.example.json configs/services.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/catalog.example.json configs/companies.example.json configs/config.example.yaml; do \
+		target=$$(echo $$f | sed 's/\.example\././'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \

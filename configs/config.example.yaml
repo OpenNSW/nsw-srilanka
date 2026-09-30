@@ -1,0 +1,60 @@
+# Server configuration file, read once at startup from CONFIG_PATH
+# (default: configs/config.yaml). The file is mandatory — the server refuses to
+# start without it — but every section in it is optional.
+#
+# This is the committed template; `make setup` copies it to the gitignored
+# configs/config.yaml.
+#
+# Never write a secret into this file. Any value may instead be a placeholder
+# resolved at startup: "{{env:NAME}}" reads an env var, "{{file:/path}}" reads a
+# mounted file. The placeholder must be the whole value, and an unset one fails
+# the boot.
+
+# Reference ID formats for the REFID_GENERATOR task plugin, in the schema of
+# github.com/OpenNSW/core/refid (see its example_config.yaml for every segment
+# option). A subtask template names one format by issuer and id type:
+#
+#   {"task_type": "REFID_GENERATOR", "output_namespace": "refid",
+#    "plugin_properties": {"issuer": "TNSW", "id_type": "consignment_ref"}}
+#
+# and the ID lands at refid.reference_id for the node's output_mapping. The
+# node's string inputs are the format's params (a list segment's `param`, or a
+# `{name}` in a scope key). With no issuers, the plugin fails every task that
+# uses it.
+refid:
+  issuers: []
+  # issuers:
+  #   - issuer: TNSW
+  #     formats:
+  #       # consignment_ref — resets daily per port. Produces: TNSW-CMB-20260930-000042
+  #       - idType: consignment_ref
+  #         segments:
+  #           - type: literal
+  #             value: "TNSW-"
+  #           - type: list
+  #             list: port
+  #             param: portCode          # input_mapping must supply portCode
+  #           - type: literal
+  #             value: "-"
+  #           - type: date
+  #             layout: "20060102"       # Go reference-date layout, UTC
+  #           - type: literal
+  #             value: "-"
+  #           - type: sequence
+  #             sequence:
+  #               scopeKey: "{issuer}:{idType}:{portCode}:{yyyyMMdd}"
+  #               padding: 6
+  #
+  #       # voucher_code — 8 random characters, unique per id type. Produces: TNSW-VCH-7K2QQXAB
+  #       - idType: voucher_code
+  #         segments:
+  #           - type: literal
+  #             value: "TNSW-VCH-"
+  #           - type: random
+  #             random:
+  #               scopeKey: "{issuer}:{idType}"
+  #               charset: alphanumeric  # numeric | alpha | alphanumeric
+  #               length: 8
+  #
+  # lists:
+  #   port: [CMB, HBT]

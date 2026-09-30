@@ -20,6 +20,7 @@ import (
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/notification/providers"
 	"github.com/OpenNSW/core/payment"
+	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
@@ -657,14 +658,14 @@ func (p registryTemplateProvider) GetTemplate(ctx context.Context, id string) ([
 // parent/macro workflow runner is owned by the workflow package and wired
 // separately (see Stage 5 below).
 // registerFlowPlugins installs the plugins this deployment adds on top of the
-// task-plugin set: the synchronous transforms that shape a fan-out, and the CHA
-// writer.
+// task-plugin set: the synchronous transforms that shape a fan-out, the CHA
+// writer, and the reference ID generator.
 //
 // A table rather than a run of near-identical registrations, as
 // taskplugins.Register does for the same reason — seven of them inline was most
 // of initTask's branching, and adding an eighth meant editing a function that
 // has nothing else to do with plugins.
-func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service) error {
+func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService company.Service, refIDs refid.Registry) error {
 	entries := []struct {
 		taskType string
 		plugin   plugins.TaskPlugin
@@ -675,6 +676,7 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		{taskplugins.TaskTypeSLPAConsolidationResolve, trade.NewGenericExecutorPlugin(taskplugins.SLPAConsolidationResolveFunc)},
 		{taskplugins.TaskTypeCDNResultsCollector, trade.NewGenericExecutorPlugin(taskplugins.CDNResultsCollectorFunc)},
 		{"CHA_PERSIST_WRITER", trade.NewCHAPersistPlugin(db, companyService)},
+		{taskplugins.TaskTypeRefIDGenerator, taskplugins.NewRefIDGeneratorPlugin(refIDs)},
 	}
 
 	for _, e := range entries {
@@ -707,7 +709,11 @@ func initTask(
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService); err != nil {
+	refIDs, err := initRefIDs(cfg.RefID, db)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs); err != nil {
 		return nil, nil, err
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
+	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
 
@@ -38,6 +39,8 @@ type Config struct {
 	Integrations integrations.Config
 
 	ArtifactLoader loaders.Config
+
+	RefID refid.Config
 }
 
 // ServerConfig holds server configuration.
@@ -93,6 +96,12 @@ func Load() (*Config, error) {
 	notificationProviders, err := loadNotificationProviders(getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load notification config: %w", err)
+	}
+
+	// config.yaml is mandatory too, so a missing or malformed file fails Load.
+	fileCfg, err := loadConfigFile(getEnvOrDefault("CONFIG_PATH", "configs/config.yaml"))
+	if err != nil {
+		return nil, err
 	}
 
 	cfg := &Config{
@@ -189,6 +198,7 @@ func Load() (*Config, error) {
 				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
 			},
 		},
+		RefID: fileCfg.RefID,
 	}
 
 	// Validate required fields
