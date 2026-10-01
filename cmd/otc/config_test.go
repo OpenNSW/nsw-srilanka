@@ -86,15 +86,15 @@ func TestLoad_Defaults(t *testing.T) {
 		got  any
 		want any
 	}{
-		{"Database.Host", cfg.Database.Host, "localhost"},
-		{"Database.Port", cfg.Database.Port, 5432},
-		{"Database.Username", cfg.Database.Username, "postgres"},
-		{"Database.Password", cfg.Database.Password, "testpassword"},
-		{"Database.Name", cfg.Database.Name, "nsw_db"},
-		{"Database.SSLMode", cfg.Database.SSLMode, "require"},
-		{"Database.MaxIdleConns", cfg.Database.MaxIdleConns, 10},
-		{"Database.MaxOpenConns", cfg.Database.MaxOpenConns, 100},
-		{"Database.MaxConnLifetimeSeconds", cfg.Database.MaxConnLifetimeSeconds, 3600},
+		{"Database.Host", cfg.Database.Postgres.Host, "localhost"},
+		{"Database.Port", cfg.Database.Postgres.Port, 5432},
+		{"Database.Username", cfg.Database.Postgres.User, "postgres"},
+		{"Database.Password", cfg.Database.Postgres.Password, "testpassword"},
+		{"Database.Name", cfg.Database.Postgres.Name, "nsw_db"},
+		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "require"},
+		{"Database.MaxIdleConns", cfg.Database.Postgres.Pool.MaxIdleConns, 10},
+		{"Database.MaxOpenConns", cfg.Database.Postgres.Pool.MaxOpenConns, 100},
+		{"Database.MaxConnLifetimeSeconds", cfg.Database.Postgres.Pool.MaxConnLifetimeSeconds, 3600},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
@@ -123,15 +123,15 @@ func TestLoad_CustomValues(t *testing.T) {
 		got  any
 		want any
 	}{
-		{"Database.Host", cfg.Database.Host, "db.example.com"},
-		{"Database.Port", cfg.Database.Port, 6543},
-		{"Database.Username", cfg.Database.Username, "otc_user"},
-		{"Database.Password", cfg.Database.Password, "otc_password"},
-		{"Database.Name", cfg.Database.Name, "otc_db"},
-		{"Database.SSLMode", cfg.Database.SSLMode, "require"},
-		{"Database.MaxIdleConns", cfg.Database.MaxIdleConns, 5},
-		{"Database.MaxOpenConns", cfg.Database.MaxOpenConns, 50},
-		{"Database.MaxConnLifetimeSeconds", cfg.Database.MaxConnLifetimeSeconds, 1800},
+		{"Database.Host", cfg.Database.Postgres.Host, "db.example.com"},
+		{"Database.Port", cfg.Database.Postgres.Port, 6543},
+		{"Database.Username", cfg.Database.Postgres.User, "otc_user"},
+		{"Database.Password", cfg.Database.Postgres.Password, "otc_password"},
+		{"Database.Name", cfg.Database.Postgres.Name, "otc_db"},
+		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "require"},
+		{"Database.MaxIdleConns", cfg.Database.Postgres.Pool.MaxIdleConns, 5},
+		{"Database.MaxOpenConns", cfg.Database.Postgres.Pool.MaxOpenConns, 50},
+		{"Database.MaxConnLifetimeSeconds", cfg.Database.Postgres.Pool.MaxConnLifetimeSeconds, 1800},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)

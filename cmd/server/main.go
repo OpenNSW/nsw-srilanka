@@ -24,10 +24,10 @@ func main() {
 	bootstrap.ConfigureLogging(cfg)
 
 	slog.Info("configuration loaded successfully",
-		"db_host", cfg.Database.Host,
-		"db_port", cfg.Database.Port,
-		"db_name", cfg.Database.Name,
-		"db_sslmode", cfg.Database.SSLMode,
+		"db_host", cfg.Database.Postgres.Host,
+		"db_port", cfg.Database.Postgres.Port,
+		"db_name", cfg.Database.Postgres.Name,
+		"db_sslmode", cfg.Database.Postgres.SSLMode,
 	)
 
 	slog.Info("CORS configuration",
