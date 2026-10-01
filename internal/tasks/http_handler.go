@@ -233,6 +233,18 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 			})
 			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 		default:
+			h.Audit.Record(r.Context(), nswaudit.Event{
+				EventType:  nswaudit.EventTask,
+				Action:     nswaudit.ActionUpdate,
+				TargetType: nswaudit.TargetTask,
+				TargetID:   taskID,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error_code": "task_cmd_internal_error",
+					"error":      err.Error(),
+					"command":    command,
+				},
+			})
 			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
 		}
 		return
