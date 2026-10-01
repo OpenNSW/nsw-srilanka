@@ -82,12 +82,22 @@ func (r *repository) Record(ctx context.Context, w Workflow) error {
 		ON CONFLICT (task_id) DO NOTHING
 	`
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec(insertCase, w.CaseID).Error; err != nil {
-			return err
+		caseResult := tx.Exec(insertCase, w.CaseID)
+		if caseResult.Error != nil {
+			return caseResult.Error
 		}
 		result := tx.Exec(insertWorkflow, w.TaskID, w.TaskCode, w.CaseID, StatusStarting, w.Payload)
-		if result.Error != nil || result.RowsAffected == 0 {
+		if result.Error != nil {
 			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			// A repeat taskId under a different consignmentId must not leave behind the
+			// empty case created above. Nothing else can reference that row yet: it is
+			// uncommitted, and a concurrent insert of the same id waits on it.
+			if caseResult.RowsAffected == 0 {
+				return nil
+			}
+			return tx.Exec(`DELETE FROM cases WHERE id = ?`, w.CaseID).Error
 		}
 		// A new workflow reopens a case that had finished.
 		return tx.Exec(`UPDATE cases SET state = ?, updated_at = now() WHERE id = ? AND state <> ?`,

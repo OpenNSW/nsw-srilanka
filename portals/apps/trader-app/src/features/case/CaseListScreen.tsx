@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Badge, Spinner, Text } from '@radix-ui/themes'
+import { Link, useNavigate } from 'react-router-dom'
+import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
@@ -16,7 +16,9 @@ export function CaseListScreen() {
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [page, setPage] = useState(0)
+  const [retryCount, setRetryCount] = useState(0)
   const limit = 50
   const requestIdRef = useRef(0)
 
@@ -29,16 +31,20 @@ export function CaseListScreen() {
         if (requestId !== requestIdRef.current) return
         setCases(data.items || [])
         setTotalCount(data.total || 0)
+        setFailed(false)
       } catch (error) {
         if (requestId !== requestIdRef.current) return
         console.error('Failed to fetch cases:', error)
+        // Show the failure rather than an empty list or the previous page's rows.
+        setCases([])
+        setFailed(true)
       } finally {
         if (requestId === requestIdRef.current) setLoading(false)
       }
     }
 
     void fetchCases()
-  }, [page])
+  }, [page, retryCount])
 
   const th = 'px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider'
 
@@ -63,7 +69,16 @@ export function CaseListScreen() {
               </Text>
             </div>
           )}
-          {cases.length === 0 ? (
+          {failed ? (
+            <div className="p-16 flex flex-col items-center gap-4 text-center">
+              <Text size="3" color="red">
+                {t('cases.list.error')}
+              </Text>
+              <Button variant="soft" onClick={() => setRetryCount((n) => n + 1)} disabled={loading}>
+                {t('cases.list.retry')}
+              </Button>
+            </div>
+          ) : cases.length === 0 ? (
             <div className="p-16 text-center">
               <Text size="3" color="gray">
                 {t('cases.list.empty')}
@@ -87,20 +102,27 @@ export function CaseListScreen() {
                       className="hover:bg-primary-subtle cursor-pointer transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {c.name ? (
-                          <div className="flex flex-col">
-                            <Text size="2" weight="bold" className="text-info-strong">
-                              {c.name}
-                            </Text>
-                            <Text size="1" color="gray" className="font-mono mt-0.5">
+                        {/* The row click is a mouse shortcut; this link is the keyboard path. */}
+                        <Link
+                          to={`/consignments/${c.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          {c.name ? (
+                            <div className="flex flex-col">
+                              <Text size="2" weight="bold" className="text-info-strong">
+                                {c.name}
+                              </Text>
+                              <Text size="1" color="gray" className="font-mono mt-0.5">
+                                {c.id}
+                              </Text>
+                            </div>
+                          ) : (
+                            <Text size="2" weight="medium" className="text-info-strong font-mono">
                               {c.id}
                             </Text>
-                          </div>
-                        ) : (
-                          <Text size="2" weight="medium" className="text-info-strong font-mono">
-                            {c.id}
-                          </Text>
-                        )}
+                          )}
+                        </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={getStateColor(c.state)}>

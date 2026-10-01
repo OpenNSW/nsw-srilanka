@@ -44,6 +44,8 @@ const en = {
         loading: 'Loading Cases...',
         title: 'Cases',
         empty: 'No cases yet.',
+        error: 'Could not load cases.',
+        retry: 'Try Again',
         table: {
           id: 'Case',
           state: 'State',
