@@ -34,7 +34,9 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           PATTERN: '^portals/|^Dockerfile$|\.go$|^go\.(mod|sum)$|^migrations/|^configs/|^\.dockerignore$|^\.github/workflows/docker-validation\.yml$'
         run: |
-          FILES=$(git diff --name-only "$BASE...$HEAD")
+          # --no-renames lists both paths of a rename, so a file moved out of a
+          # watched path still counts as a change to it.
+          FILES=$(git diff --no-renames --name-only "$BASE...$HEAD")
           if grep -qE "$PATTERN" <<< "$FILES"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else

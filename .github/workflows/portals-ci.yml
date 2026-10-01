@@ -31,7 +31,9 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           PATTERN: '^portals/|^\.github/workflows/portals-ci\.yml$'
         run: |
-          FILES=$(git diff --name-only "$BASE...$HEAD")
+          # --no-renames lists both paths of a rename, so a file moved out of a
+          # watched path still counts as a change to it.
+          FILES=$(git diff --no-renames --name-only "$BASE...$HEAD")
           if grep -qE "$PATTERN" <<< "$FILES"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
@@ -96,7 +98,7 @@ jobs:
   security-scan:
     name: Security Scan
     needs: qa-and-build
-    if: github.event_name != 'merge_group'
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.qa-and-build.result == 'success' }}
     runs-on: ubuntu-latest
     defaults:
       run:

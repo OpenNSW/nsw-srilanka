@@ -36,7 +36,9 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           PATTERN: '\.go$|^go\.(mod|sum)$|^Dockerfile$|^migrations/|^Makefile$|^\.github/workflows/backend-ci\.yml$'
         run: |
-          FILES=$(git diff --name-only "$BASE...$HEAD")
+          # --no-renames lists both paths of a rename, so a file moved out of a
+          # watched path still counts as a change to it.
+          FILES=$(git diff --no-renames --name-only "$BASE...$HEAD")
           if grep -qE "$PATTERN" <<< "$FILES"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
@@ -86,6 +88,9 @@ jobs:
     name: Test & Security
     runs-on: ubuntu-latest
     needs: quality-gate
+    # Without a status function the condition is success(), which also fails
+    # when Detect changes did, and would skip this stage.
+    if: ${{ !cancelled() && needs.quality-gate.result == 'success' }}
     permissions:
       security-events: write
     env:
@@ -126,7 +131,7 @@ jobs:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     needs: test-and-security
-    if: github.event_name != 'merge_group'
+    if: ${{ !cancelled() && github.event_name != 'merge_group' && needs.test-and-security.result == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
