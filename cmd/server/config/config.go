@@ -24,6 +24,7 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
 // Config holds all configuration for the application.
@@ -31,7 +32,7 @@ type Config struct {
 	Database     database.Config
 	Server       ServerConfig
 	CORS         cors.Config
-	Storage      storage.Config
+	Storage      nswstorage.Config
 	Authn        authn.Config
 	Notification notification.Config
 	Temporal     temporal.Config
@@ -136,19 +137,27 @@ func Load() (*Config, error) {
 			AllowCredentials: getBoolOrDefault("CORS_ALLOW_CREDENTIALS", true),
 			MaxAge:           getIntEnvOrDefault("CORS_MAX_AGE", 3600),
 		},
-		Storage: storage.Config{
-			Type:           getEnvOrDefault("STORAGE_TYPE", "local"),
-			LocalBaseDir:   getEnvOrDefault("STORAGE_LOCAL_BASE_DIR", "./bucket"),
-			LocalPublicURL: getEnvOrDefault("STORAGE_LOCAL_PUBLIC_URL", getEnvOrDefault("SERVICE_URL", fmt.Sprintf("http://localhost:%d", serverPort))),
-			S3Endpoint:     getEnvOrDefault("STORAGE_S3_ENDPOINT", ""),
-			S3Bucket:       getEnvOrDefault("STORAGE_S3_BUCKET", "nsw-uploads"),
-			S3Region:       getEnvOrDefault("STORAGE_S3_REGION", "us-east-1"),
-			S3AccessKey:    getEnvOrDefault("STORAGE_S3_ACCESS_KEY", ""),
-			S3SecretKey:    getEnvOrDefault("STORAGE_S3_SECRET_KEY", ""),
-			S3UseSSL:       getBoolOrDefault("STORAGE_S3_USE_SSL", true),
-			S3PublicURL:    getEnvOrDefault("STORAGE_S3_PUBLIC_URL", ""),
-			LocalPutSecret: getEnvOrDefault("STORAGE_LOCAL_PUT_SECRET", "local-dev-secret"),
-			PresignTTL:     getDurationOrDefault("STORAGE_PRESIGN_TTL", 15*time.Minute),
+		Storage: nswstorage.Config{
+			Config: storage.Config{
+				Type:           getEnvOrDefault("STORAGE_TYPE", "local"),
+				LocalBaseDir:   getEnvOrDefault("STORAGE_LOCAL_BASE_DIR", "./bucket"),
+				LocalPublicURL: getEnvOrDefault("STORAGE_LOCAL_PUBLIC_URL", getEnvOrDefault("SERVICE_URL", fmt.Sprintf("http://localhost:%d", serverPort))),
+				S3Endpoint:     getEnvOrDefault("STORAGE_S3_ENDPOINT", ""),
+				S3Bucket:       getEnvOrDefault("STORAGE_S3_BUCKET", "nsw-uploads"),
+				S3Region:       getEnvOrDefault("STORAGE_S3_REGION", "us-east-1"),
+				S3AccessKey:    getEnvOrDefault("STORAGE_S3_ACCESS_KEY", ""),
+				S3SecretKey:    getEnvOrDefault("STORAGE_S3_SECRET_KEY", ""),
+				S3UseSSL:       getBoolOrDefault("STORAGE_S3_USE_SSL", true),
+				S3PublicURL:    getEnvOrDefault("STORAGE_S3_PUBLIC_URL", ""),
+				LocalPutSecret: getEnvOrDefault("STORAGE_LOCAL_PUT_SECRET", "local-dev-secret"),
+				PresignTTL:     getDurationOrDefault("STORAGE_PRESIGN_TTL", 15*time.Minute),
+			},
+			Proxy: nswstorage.ProxyConfig{
+				Service:      getEnvOrDefault("STORAGE_PROXY_SERVICE", ""),
+				UploadPath:   getEnvOrDefault("STORAGE_PROXY_UPLOAD_PATH", nswstorage.DefaultProxyUploadPath),
+				DownloadPath: getEnvOrDefault("STORAGE_PROXY_DOWNLOAD_PATH", nswstorage.DefaultProxyDownloadPath),
+				DeletePath:   getEnvOrDefault("STORAGE_PROXY_DELETE_PATH", nswstorage.DefaultProxyDeletePath),
+			},
 		},
 		Authn: authn.Config{
 			JWKSURL:               getEnvOrDefault("AUTH_JWKS_URL", "https://localhost:8090/oauth2/jwks"),

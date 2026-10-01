@@ -22,8 +22,6 @@ import (
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
-	"github.com/OpenNSW/core/storage"
-	"github.com/OpenNSW/core/storage/drivers"
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
@@ -49,6 +47,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
+	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -145,15 +144,24 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyService := company.NewService(db)
 	userProfileService := user.NewService(db)
 
+	// Outbound HTTP caller configurations. Loaded before storage, which in
+	// proxy mode reaches the service that owns the files through it.
+	remoteManager := remote.NewManager()
+	if err := remoteManager.LoadServices(cfg.Server.ServicesConfigPath); err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to load remote services from %s: %w", cfg.Server.ServicesConfigPath, err)
+	}
+
 	// Storage is built here rather than alongside its HTTP handler further
 	// down: task plugins that attach uploaded files to an outbound call read
 	// through this service, so it has to exist before the task stack (Stage 4).
-	storageDriver, err := storage.NewStorageFromConfig(ctx, cfg.Storage)
+	// STORAGE_TYPE picks a backend of this deployment's own or a proxy onto
+	// the service that owns the files.
+	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager)
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	storageService := storage.NewService(storageDriver)
 
 	// -------------------------------------------------------------------
 	// Stage 3: Temporal Orchestration Engine Client
@@ -176,7 +184,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.TaskDone(context.Background(), parentWorkflowID, parentRunID, parentNodeID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, paymentService, companyService, storageService, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -296,10 +304,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyHandler := company.NewHandler(companyService)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
 	paymentHandler := payment.NewHTTPHandler(paymentService)
-	// The storage driver and service behind this handler are built in Stage 2 —
-	// task plugins that attach uploaded files to an outbound call read through
-	// the service, so it has to exist before the task stack (Stage 4).
-	storageHandler := storage.NewHTTPHandler(storageService)
+	// The storage service behind this handler is built in Stage 2 — task
+	// plugins that attach uploaded files to an outbound call read through the
+	// service, so it has to exist before the task stack (Stage 4).
+	storageHandler := storageStack.Handler
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), recorder, cfg.Server.MaxRequestBytes)
@@ -432,9 +440,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
 
 	// When using local storage, these endpoints serve as mocks for S3.
-	if _, ok := storageDriver.(*drivers.LocalFSDriver); ok {
-		mux.HandleFunc("PUT /api/v1/storage/{key}/content", storageHandler.UploadContentLocal)
-		mux.HandleFunc("GET /api/v1/storage/{key}/content", storageHandler.DownloadContent)
+	if localContent := storageStack.LocalContent; localContent != nil {
+		mux.HandleFunc("PUT /api/v1/storage/{key}/content", localContent.UploadContentLocal)
+		mux.HandleFunc("GET /api/v1/storage/{key}/content", localContent.DownloadContent)
 	}
 
 	// -------------------------------------------------------------------
@@ -690,20 +698,15 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 func initTask(
 	db *gorm.DB,
 	temporalClient client.Client,
+	remoteManager *remote.Manager,
 	paymentService payment.PaymentService,
 	companyService company.Service,
-	storageService *storage.Service,
+	storageService nswstorage.Service,
 	artifactRegistry *artifact.Registry,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
 ) (*taskStack, func() error, error) {
-	// Initialize outbound HTTP caller configurations
-	remoteManager := remote.NewManager()
-	if err := remoteManager.LoadServices(cfg.Server.ServicesConfigPath); err != nil {
-		return nil, nil, fmt.Errorf("failed to load remote services from %s: %w", cfg.Server.ServicesConfigPath, err)
-	}
-
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
