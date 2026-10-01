@@ -128,13 +128,12 @@ func sampleForm() map[string]any {
 			"deferredPayment": "DiffPaymentString",
 		},
 		"valuation": map[string]any{
-			"invoiceAmount":       map[string]any{"amount": float64(1500), "currencyCode": "USD"},
-			"externalFreight":     map[string]any{"amount": float64(100), "currencyCode": "USD"},
-			"internalFreight":     map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"insurance":           map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"otherCosts":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"deductions":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"invoiceCurrencyCode": "USD",
+			"invoiceAmount":   map[string]any{"amount": float64(1500), "currencyCode": "USD"},
+			"externalFreight": map[string]any{"amount": float64(100), "currencyCode": "USD"},
+			"internalFreight": map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"insurance":       map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"otherCosts":      map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"deductions":      map[string]any{"amount": float64(0), "currencyCode": "USD"},
 		},
 		"packages": map[string]any{"totalPackages": float64(10)},
 		"items": []any{map[string]any{
@@ -233,6 +232,32 @@ func TestBuildPayload_HeaderValuationMapsTotalCustomsValuation(t *testing.T) {
 	assertZeroAmount(t, total["insurance"])
 	assertZeroAmount(t, total["otherCost"])
 	assertZeroAmount(t, total["deductions"])
+}
+
+// Remittance currency comes from valuation.invoiceAmount.currencyCode. The
+// form no longer collects invoiceCurrencyCode, so the mapping must not depend
+// on that deleted field.
+func TestBuildPayload_RemittanceUsesInvoiceAmountCurrency(t *testing.T) {
+	form := minimalForm()
+	form["financial"] = map[string]any{
+		"bankCode": "6010", "bankReference": "RemRefTest",
+		"remittanceAmount": float64(1500), "paymentTermsCode": "10",
+	}
+	form["valuation"] = map[string]any{
+		"invoiceAmount": map[string]any{"amount": float64(2400), "currencyCode": "USD"},
+	}
+
+	sub, _, err := BuildPayload(form, "")
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+
+	remittance := wire["remittances"].([]any)[0].(map[string]any)
+	assertAmount(t, remittance["remittanceValue"], 1500, "USD")
 }
 
 func assertAmount(t *testing.T, raw any, value float64, currency string) {

@@ -277,7 +277,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 			DeferredPayment:                str(financial, "deferredPayment"),
 		},
 		GoodsShipments:      items,
-		Remittances:         buildRemittances(financial, str(valuation, "invoiceCurrencyCode")),
+		Remittances:         buildRemittances(financial, str(nested(valuation, "invoiceAmount"), "currencyCode")),
 		SupportingDocuments: docs,
 	}
 
@@ -415,7 +415,7 @@ func buildRemittances(financial map[string]any, currency string) []Remittance {
 		TermsOfPayment: str(financial, "paymentTermsCode"),
 	}
 	// AmountType pairs the value with its currency (§4.3). The form declares
-	// one currency for the whole declaration, on the valuation block.
+	// the invoice currency on valuation.invoiceAmount.
 	if amount != 0 {
 		r.RemittanceValue = Amount{Value: amount, CurrencyID: currency}
 	}
