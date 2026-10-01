@@ -57,24 +57,39 @@ SKIP_TESTS=1 git push              # skip tests only
 
 ## CI pipeline
 
-Pull requests to `main` run these independent pipelines:
+Pull requests to `main` run these pipelines. The code pipelines run only when
+their files change, and otherwise skip their jobs; a skipped check counts as
+passed.
 
 ### Backend CI (`backend-ci.yml`)
-Triggers on `.go`, `go.mod`, `go.sum`, `Dockerfile`, `migrations/**` changes.
+Runs when `.go` files, `go.mod`, `go.sum`, `Dockerfile`, `migrations/**` or `Makefile` change.
 
-1. **quality-gate** — go mod tidy check + golangci-lint
-2. **test-and-security** — go test -race + gosec (findings uploaded to GitHub Security)
-3. **govulncheck** + **secret-scan** (parallel)
+1. **Quality Gate** — go mod tidy check + golangci-lint
+2. **Test & Security** — go test -race + gosec (findings uploaded to GitHub Security)
+3. **Go Vulnerability Check** — govulncheck (advisory, PRs only)
 
 ### Portals CI (`portals-ci.yml`)
-Triggers on `portals/**` changes.
+Runs when `portals/**` changes.
 
-1. **qa-and-build** — TypeScript type-check + ESLint + Prettier + build
-2. **security-scan** — dependency review + pnpm audit
+1. **Quality Check & Build** — TypeScript type-check + ESLint + Prettier + build
+2. **Security Scan** — dependency review + pnpm audit (advisory, PRs only)
 
 ### Docker Validation (`docker-validation.yml`)
-Triggers on `portals/**`, `Dockerfile`, Go source, or migration changes.
-Builds all three images (tnsw-web, tnsw-api, tnsw-migrate) without pushing.
+Runs when `portals/**`, `Dockerfile`, Go source, `go.mod`/`go.sum`, `migrations/**`,
+`configs/**` or `.dockerignore` change. Builds all three images (tnsw-web,
+tnsw-api, tnsw-migrate) without pushing; **Docker images** reports the result.
+
+### Chart Validation (`chart-validation.yml`)
+Runs when `deployments/helm/**` changes. **Lint, Render & Package Helm Chart**
+packages the chart the way a release does, then lints and renders it.
+
+### Secret Scan (`secret-scan.yml`)
+Runs on every PR. **Secret Scan** checks the PR's commits for credentials with
+gitleaks.
+
+### PR Title (`pr-title.yml`)
+Runs on every PR. **Conventional Commit Title** checks the title follows
+Conventional Commits.
 
 ### PR Labels (`pr-labels.yml`)
 Runs on every PR. Labels it from its title and author, then fails the
@@ -86,7 +101,17 @@ Runs on every PR. When the PR changes `version.txt`, it runs the checks the
 release will run, so a bad release PR fails in review; otherwise it passes at
 once.
 
-All stages must pass before a PR can merge.
+### Required checks and the merge queue
+`main` merges through a merge queue, and these checks must pass:
+**Conventional Commit Title**, **Release notes label**, **Release version**,
+**Secret Scan**, **Quality Gate**, **Test & Security**, **Quality Check & Build**,
+**Docker images** and **Lint, Render & Package Helm Chart**.
+
+The queue tests each PR on top of `main` and the PRs queued ahead of it. The
+code checks and **Release version** run again there, when the combined change
+touches their files, so PRs that pass on their own but break together don't
+reach `main`. **Conventional Commit Title**, **Release notes label** and
+**Secret Scan** check the PR itself and skip in the queue.
 
 ## Releasing
 
