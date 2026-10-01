@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/OpenNSW/core/httputil"
 )
 
 // maxUploadRequestBytes caps the upload request body: it carries only the
@@ -37,19 +39,19 @@ func (h *ProxyHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		httputil.Error(w, r, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if req.Filename == "" {
-		writeJSONError(w, http.StatusBadRequest, "filename is required")
+		httputil.Error(w, r, http.StatusBadRequest, "filename is required")
 		return
 	}
 	if req.MimeType == "" {
-		writeJSONError(w, http.StatusBadRequest, "mime_type is required")
+		httputil.Error(w, r, http.StatusBadRequest, "mime_type is required")
 		return
 	}
 	if req.Size <= 0 {
-		writeJSONError(w, http.StatusBadRequest, "size must be greater than 0")
+		httputil.Error(w, r, http.StatusBadRequest, "size must be greater than 0")
 		return
 	}
 
@@ -58,7 +60,7 @@ func (h *ProxyHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		writeProxyError(w, r, err, "failed to prepare upload")
 		return
 	}
-	writeJSON(w, http.StatusOK, meta)
+	httputil.JSON(w, http.StatusOK, meta)
 }
 
 // Download returns the owning service's download URL for the key and when it
@@ -66,7 +68,7 @@ func (h *ProxyHandler) Upload(w http.ResponseWriter, r *http.Request) {
 func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	if key == "" {
-		writeJSONError(w, http.StatusBadRequest, "key is required")
+		httputil.Error(w, r, http.StatusBadRequest, "key is required")
 		return
 	}
 
@@ -75,7 +77,7 @@ func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 		writeProxyError(w, r, err, "failed to generate access")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.JSON(w, http.StatusOK, map[string]any{
 		"download_url": downloadURL,
 		"expires_at":   expiresAt,
 	})
@@ -85,7 +87,7 @@ func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 func (h *ProxyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	if key == "" {
-		writeJSONError(w, http.StatusBadRequest, "key is required")
+		httputil.Error(w, r, http.StatusBadRequest, "key is required")
 		return
 	}
 
@@ -107,21 +109,9 @@ func writeProxyError(w http.ResponseWriter, r *http.Request, err error, fallback
 		if message == "" {
 			message = fallback
 		}
-		writeJSONError(w, rejection.StatusCode, message)
+		httputil.Error(w, r, rejection.StatusCode, message)
 		return
 	}
 	slog.ErrorContext(r.Context(), "storage proxy request failed", "error", err)
-	writeJSONError(w, http.StatusBadGateway, fallback)
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Error("failed to encode storage response", "error", err)
-	}
+	httputil.Error(w, r, http.StatusBadGateway, fallback)
 }
