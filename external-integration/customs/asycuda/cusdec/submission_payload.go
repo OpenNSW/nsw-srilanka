@@ -310,36 +310,14 @@ func buildDeclarationValuation(v map[string]any) Valuation {
 	}
 }
 
-// buildItemValuation maps an item line's valuation onto goodsShipments[].customsValue.
-func buildItemValuation(v map[string]any, currency string) Valuation {
-	extFreight := nested(v, "externalFreight")
-
-	amount := func(section string) Amount {
-		s := nested(v, section)
-		val := number(s, "amountForeign")
-		if val == 0 {
-			return Amount{}
-		}
-		return Amount{Value: val, CurrencyID: currency}
-	}
-
-	extCurrency := str(extFreight, "currencyCode")
-	if extCurrency == "" {
-		extCurrency = currency
-	}
-	external := Amount{}
-	if val := number(extFreight, "amountForeign"); val != 0 {
-		external = Amount{Value: val, CurrencyID: extCurrency}
-	}
-
-	charge := nested(v, "invoiceAmount")
+// buildItemValuation maps an item line onto goodsShipments[].customsValue.
+// Annex A still requires the six-part block; the form only collects
+// invoiceAmount on the line, so chargeAmount is filled and the other five
+// costs travel as {"value":0}.
+func buildItemValuation(v map[string]any) Valuation {
+	invoice := nested(v, "invoiceAmount")
 	return Valuation{
-		ChargeAmount:    Amount{Value: number(charge, "amount"), CurrencyID: str(charge, "currencyCode")},
-		ExternalFreight: external,
-		InternalFreight: amount("internalFreight"),
-		Insurance:       amount("insurance"),
-		OtherCost:       amount("otherCost"),
-		Deductions:      amount("deduction"),
+		ChargeAmount: Amount{Value: number(invoice, "amount"), CurrencyID: str(invoice, "currencyCode")},
 	}
 }
 
@@ -362,8 +340,7 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 		pkg := nested(m, "packages")
 		supp := nested(tarif, "supplementaryUnit")
 
-		currency := str(nested(val, "invoiceAmount"), "currencyCode")
-		itemValuation := buildItemValuation(val, currency)
+		itemValuation := buildItemValuation(val)
 
 		items = append(items, GoodsItem{
 			// Annex A requires a unique item number; position in the array is

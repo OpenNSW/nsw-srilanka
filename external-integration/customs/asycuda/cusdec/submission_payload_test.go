@@ -148,9 +148,9 @@ func sampleForm() map[string]any {
 				"commercialDescription": "commercial", "commercialDescription1": "commercial",
 			},
 			"valuation": map[string]any{
-				"grossWeight": float64(1500), "netWeight": float64(1300),
-				"invoiceAmount":   map[string]any{"amount": float64(1500), "currencyCode": "USD"},
-				"externalFreight": map[string]any{"amountForeign": float64(100), "currencyCode": "USD"},
+				"grossWeight":   float64(1500),
+				"netWeight":     float64(1300),
+				"invoiceAmount": map[string]any{"amount": float64(1500), "currencyCode": "USD"},
 			},
 			"bol": "string", "bolSplit": "string",
 			"marksAndNumbers": "test", "numberOfUnits": float64(1),
@@ -190,11 +190,16 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 	assert.Equal(t, "test", item["marksAndNumbers"])
 	assert.NotContains(t, item, "numberOfUnits", "dropped from Annex A in spec v1.7")
 
-	// The item repeats the declaration's six-part valuation, not a lone charge.
+	// Annex A still requires the six-part item customsValue. The form only
+	// collects invoiceAmount on the line, so chargeAmount is filled and the
+	// other five costs are zeros.
 	customsValue := item["customsValue"].(map[string]any)
 	assertAmount(t, customsValue["chargeAmount"], 1500, "USD")
-	assert.Equal(t, float64(100), customsValue["externalFreight"].(map[string]any)["value"])
-	assert.Equal(t, "USD", customsValue["externalFreight"].(map[string]any)["currencyID"])
+	assertZeroAmount(t, customsValue["externalFreight"])
+	assertZeroAmount(t, customsValue["internalFreight"])
+	assertZeroAmount(t, customsValue["insurance"])
+	assertZeroAmount(t, customsValue["otherCost"])
+	assertZeroAmount(t, customsValue["deductions"])
 
 	// remittanceValue is an AmountType (§4.3), not a bare number named amount.
 	assert.NotContains(t, remittance, "amount", "the pre-v1.6 spelling is gone")
@@ -232,6 +237,37 @@ func TestBuildPayload_HeaderValuationMapsTotalCustomsValuation(t *testing.T) {
 	assertZeroAmount(t, total["insurance"])
 	assertZeroAmount(t, total["otherCost"])
 	assertZeroAmount(t, total["deductions"])
+}
+
+// Item customsValue is the six-part Annex A block. The form only sends
+// grossWeight, netWeight, and invoiceAmount on the line — chargeAmount comes
+// from invoiceAmount; the other five costs are still sent as zeros.
+func TestBuildPayload_ItemCustomsValueMapsFromInvoiceAmount(t *testing.T) {
+	form := minimalForm()
+	item := form["items"].([]any)[0].(map[string]any)
+	item["valuation"] = map[string]any{
+		"grossWeight":   float64(1550),
+		"netWeight":     float64(1000),
+		"invoiceAmount": map[string]any{"amount": float64(2400), "currencyCode": "USD"},
+	}
+
+	sub, _, err := BuildPayload(form, "")
+	require.NoError(t, err)
+
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+
+	customsValue := wire["goodsShipments"].([]any)[0].(map[string]any)["customsValue"].(map[string]any)
+
+	assertAmount(t, customsValue["chargeAmount"], 2400, "USD")
+	assertZeroAmount(t, customsValue["externalFreight"])
+	assertZeroAmount(t, customsValue["internalFreight"])
+	assertZeroAmount(t, customsValue["insurance"])
+	assertZeroAmount(t, customsValue["otherCost"])
+	assertZeroAmount(t, customsValue["deductions"])
 }
 
 // Remittance currency comes from valuation.invoiceAmount.currencyCode. The
