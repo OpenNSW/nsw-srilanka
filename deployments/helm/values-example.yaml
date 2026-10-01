@@ -283,6 +283,8 @@ frontend:
     IDP_CHA_ROLE_NAME: "CHA"
     IDP_NSW_ADMIN_ROLE_NAME: "NSW Admin"
     SHOW_AUTOFILL_BUTTON: "false"
+    # "tnsw" (default) lists consignments; "agency" lists an agency's cases instead.
+    APP_MODE: "tnsw"
 
   # Overrides the image's baked-in public/configs/branding.json (see
   # values.yaml and the chart README). Replace these example.com links with

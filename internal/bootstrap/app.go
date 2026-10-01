@@ -214,7 +214,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to build consignment router: %w", err)
 	}
 
-	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, consignmentService)
+	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, agencyCompletion(db, consignmentService))
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -313,7 +313,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume.
-	taskAuthzGate, err := authzgate.NewMiddleware(ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+	taskAuthzGate, err := newTaskAuthzGate(db, globalCatalog.Roles, ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService})
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
@@ -353,6 +353,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 
 	mux := http.NewServeMux()
+	mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
 
 	// Health check is public and returns JSON in all cases.
 	// On failure, the component field identifies which subsystem is unhealthy

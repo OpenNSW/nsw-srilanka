@@ -1,0 +1,16 @@
+{
+  "roles": {
+    "trader": "Trader",
+    "cha": "CHA",
+    "officer": "Officer"
+  },
+  "clients": {
+    "fcau": "FCAU_TO_NSW",
+    "npqs": "NPQS_TO_NSW",
+    "cda": "CDA_TO_NSW",
+    "slpa": "SLPA_TO_NSW",
+    "sltb": "SLTB_TO_NSW",
+    "slce": "SLCE_TO_NSW",
+    "govpay": "GOVPAY_TO_NSW"
+  }
+}

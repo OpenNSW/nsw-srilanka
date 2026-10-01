@@ -39,6 +39,19 @@ const en = {
       },
     },
 
+    cases: {
+      list: {
+        loading: 'Loading Cases...',
+        title: 'Cases',
+        empty: 'No cases yet.',
+        table: {
+          id: 'Case',
+          state: 'State',
+          created: 'Created',
+        },
+      },
+    },
+
     consignments: {
       list: {
         loading: 'Loading Consignments...',

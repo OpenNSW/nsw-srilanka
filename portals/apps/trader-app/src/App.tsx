@@ -5,6 +5,7 @@ import { Footer } from '@/components/Layout'
 import { ConsignmentScreen } from './features/consignment/screens/ConsignmentScreen.tsx'
 import { ConsignmentDetailScreen } from './features/consignment/screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
+import { CaseDetailScreen, CaseListScreen, isAgencyMode } from '@/features/case'
 import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminConsignmentDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
@@ -81,8 +82,11 @@ function App() {
 
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Navigate to="/consignments" replace />} />
-          <Route path="/consignments" element={<ConsignmentScreen />} />
-          <Route path="/consignments/:consignmentId" element={<ConsignmentDetailScreen />} />
+          <Route path="/consignments" element={isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />} />
+          <Route
+            path="/consignments/:consignmentId"
+            element={isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />}
+          />
           <Route path="/consignments/:consignmentId/tasks/:taskId" element={<TaskDetailScreen />} />
           {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
           <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />

@@ -7,6 +7,7 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { NavMenu } from './NavMenu'
 import { appConfig, displayName } from '@/config'
 import { useProfile } from '@/services/useProfile'
+import { isAgencyMode } from '@/features/case'
 
 function BrandMark() {
   if (appConfig.branding.systemLogoUrl) {
@@ -64,7 +65,7 @@ export function TopBar() {
 
   return (
     <TopBarShell>
-      <RoleSwitcher />
+      {!isAgencyMode && <RoleSwitcher />}
       {/* Notifications */}
       {/* TODO: Show real notifications and link to a notifications page */}
       <button className="relative p-2 text-foreground-subtle hover:text-foreground-muted hover:bg-app-surface-muted rounded-lg transition-colors">
