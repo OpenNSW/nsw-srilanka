@@ -21,11 +21,6 @@
 #     --from-literal=m2m-asycuda-secret=... \
 #     --from-literal=argus-api-key=...
 #
-# The GovPay+ gateway also needs this GO's RSA private key, as a file. Create
-# it as its own Secret (see backend.volumes below):
-#   kubectl create secret generic govpay-go-private-key \
-#     --from-file=go_private.pem=./go_private.pem
-#
 # The https:// URLs and client IDs below are placeholders — replace them with
 # your environment's real IdP, Temporal, and Argus endpoints.
 
@@ -181,7 +176,6 @@ backend:
     - name: govpay-go-private-key
       mountPath: /certs/govpay
       readOnly: true
-
   # The server's config.yaml, authored here as values; the chart mounts it and
   # sets CONFIG_PATH (see values.yaml). Full schema and every option:
   # configs/config.example.yaml.
