@@ -2,13 +2,13 @@ name: Version Check
 # A PR that changes version.txt is a release PR: merging it tags and releases
 # that version (auto-tag.yml). This makes the release's own checks in review,
 # so a bad release PR fails here rather than after the merge. PRs that leave
-# version.txt alone pass at once, so this can be a required check.
+# version.txt alone pass at once, so this can be a required check. In the merge
+# queue it checks the PR again against what is merged ahead of it, and drops a
+# release PR whose version isn't higher than the version ahead of it.
 
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-  # The merge queue waits for required checks on its merge commit. These check
-  # the PR itself, so they skip there; a skipped required check counts as passed.
   merge_group:
 
 permissions:
@@ -17,7 +17,6 @@ permissions:
 jobs:
   version:
     name: Release version
-    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -25,12 +24,19 @@ jobs:
         with:
           fetch-depth: 0   # the base branch, and history for release-notes.sh
 
-      # HEAD is GitHub's preview of the merge, so HEAD^ is the base branch and
-      # release-notes.sh sees this PR as the commit that writes the section.
+      # On a PR, HEAD is GitHub's preview of the merge and BASE the base branch.
+      # In the merge queue, each PR is one squash commit on the queue's branch,
+      # so HEAD is this PR's commit and HEAD^ everything merged ahead of it. In
+      # both, HEAD^ is the base release-notes.sh compares against.
       - name: Check the release
         env:
-          BASE: origin/${{ github.base_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          if [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
+            BASE="HEAD^"
+          else
+            BASE="origin/${BASE_REF}"
+          fi
           if git diff --quiet "$BASE" HEAD -- version.txt; then
             echo "version.txt is unchanged, so this is not a release PR."
             exit 0

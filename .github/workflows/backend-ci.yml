@@ -1,22 +1,49 @@
 name: Backend CI
-# Three-stage Go quality and security pipeline.
+# Three-stage Go quality and security pipeline, run on PRs and in the merge
+# queue when Go code, the module files, the Dockerfile, migrations or the
+# Makefile change; otherwise its jobs are skipped.
 # Stage 1: quality-gate   — mod tidy + golangci-lint (fast; blocks further work)
 # Stage 2: test-and-security — go test -race + gosec SARIF (heavy; blocks security scans)
-# Stage 3: govulncheck + secret-scan (parallel; independent security checks)
+# Stage 3: govulncheck (PRs only; the vulnerability database changes independently of the code)
+# Secrets are scanned on every PR by secret-scan.yml.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile'
-      - 'migrations/**'
-      - 'Makefile'
-      - '.github/workflows/backend-ci.yml'
+  merge_group:
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Lists the files this PR or merge-queue entry changes, and reports whether
+  # any is one this workflow checks. The jobs below skip only when this job
+  # succeeds and finds none; if it fails, they run.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.match.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Match changed files
+        id: match
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          PATTERN: '\.go$|^go\.(mod|sum)$|^Dockerfile$|^migrations/|^Makefile$|^\.github/workflows/backend-ci\.yml$'
+        run: |
+          FILES=$(git diff --name-only "$BASE...$HEAD")
+          if grep -qE "$PATTERN" <<< "$FILES"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "None of the changed files is one this workflow checks, so its jobs are skipped."
+          fi
+
   # ---------------------------------------------------------------------------
   # STAGE 1: Quality Gate
   # Verifies go.mod tidiness and runs the linter. Fast — if this fails, there
@@ -25,6 +52,8 @@ jobs:
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,15 +117,16 @@ jobs:
           category: gosec
 
   # ---------------------------------------------------------------------------
-  # STAGE 3: Parallel Security Scans
-  # govulncheck: call-graph-precise vulnerability check against Go vuln DB.
-  # secret-scan: gitleaks scan for accidental credential commits.
-  # Both run independently once the test stage passes.
+  # STAGE 3: Vulnerability Check
+  # govulncheck: call-graph-precise vulnerability check against the Go vuln DB.
+  # Runs on PRs once the test stage passes. It is advisory and skips in the
+  # merge queue: a new advisory can turn it red without any change to the code.
   # ---------------------------------------------------------------------------
   govulncheck:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     needs: test-and-security
+    if: github.event_name != 'merge_group'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -114,23 +144,3 @@ jobs:
           go-package: ./...
         env:
           GOWORK: off
-
-  secret-scan:
-    name: Secret Scan
-    runs-on: ubuntu-latest
-    needs: test-and-security
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run gitleaks secret scan
-        run: |
-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
-            | tar -xz -C /usr/local/bin gitleaks
-          gitleaks detect \
-            --source . \
-            --config .gitleaks.toml \
-            --log-opts "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
-            --verbose

@@ -1,28 +1,52 @@
 name: Docker Validation CI
-# Validates that the deployable Docker images build successfully on PRs to main.
-# This workflow never pushes images — it is purely a build correctness check.
-# Image publishing is handled by build-dev.yaml (on push to main).
+# Validates that the deployable Docker images build successfully, on PRs to
+# main and in the merge queue, when any file in a Docker build context changes;
+# otherwise the builds are skipped. This workflow never pushes images — it is
+# purely a build correctness check. Image publishing is handled by
+# build-dev.yaml (on push to main).
 
 on:
   pull_request:
     branches: [main]
-    # Run when any file that affects a Docker build context changes,
-    # or when this workflow file itself changes.
-    paths:
-      - 'portals/**'
-      - 'Dockerfile'
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'migrations/**'
-      - 'configs/**'
-      - '.dockerignore'
-      - '.github/workflows/docker-validation.yml'
+  merge_group:
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Lists the files this PR or merge-queue entry changes, and reports whether
+  # any is one this workflow checks. The jobs below skip only when this job
+  # succeeds and finds none; if it fails, they run.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.match.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Match changed files
+        id: match
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          PATTERN: '^portals/|^Dockerfile$|\.go$|^go\.(mod|sum)$|^migrations/|^configs/|^\.dockerignore$|^\.github/workflows/docker-validation\.yml$'
+        run: |
+          FILES=$(git diff --name-only "$BASE...$HEAD")
+          if grep -qE "$PATTERN" <<< "$FILES"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "None of the changed files is one this workflow checks, so its jobs are skipped."
+          fi
+
   docker-validate:
     name: Validate ${{ matrix.name }} image
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -60,3 +84,23 @@ jobs:
           # Scope cache per image so matrix builds don't overwrite each other's layers.
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # The required check for this workflow. A skipped matrix job reports a single
+  # check whose name isn't expanded, so the per-image checks can't be required;
+  # this job passes when every image built, or when the builds were skipped
+  # because no build context changed.
+  docker-images:
+    name: Docker images
+    needs: [changes, docker-validate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the image builds
+        env:
+          BUILDS: ${{ needs.docker-validate.result }}
+        run: |
+          echo "Image builds: ${BUILDS}"
+          case "$BUILDS" in
+            success|skipped) ;;
+            *) echo "::error::An image build did not succeed (${BUILDS})."; exit 1 ;;
+          esac
