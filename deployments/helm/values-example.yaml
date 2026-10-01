@@ -30,10 +30,8 @@
 fullnameOverride: "tnsw"
 
 backend:
-  image:
-    # Required — pick the app version to deploy. There is no default; the
-    # chart fails to render if this is unset.
-    tag: "0.1.0"
+  # No image tag: the chart deploys the images of its own release (its
+  # appVersion). Set backend.image.tag only to run other images.
 
   # podSecurityContext / securityContext are intentionally left unset here so
   # the cluster decides the UID. The images run correctly under any UID, and on
@@ -48,7 +46,6 @@ backend:
 
   env:
     SERVER_PORT: "8080"
-    SERVER_DEBUG: "false"
     SERVER_LOG_LEVEL: "info"
     SERVICE_URL: "https://nsw-api.example.com"
 
@@ -111,7 +108,7 @@ backend:
     AUTH_JWKS_URL: "https://idp.example.com/oauth2/jwks"
     AUTH_ISSUER: "https://idp.example.com"
     AUTH_AUDIENCE: "https://api.nsw-srilanka.local"
-    AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW"
+    AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW"
     AUTH_JWKS_INSECURE_SKIP_VERIFY: "false"
 
     # Gates AUTH_JWKS_INSECURE_SKIP_VERIFY and services.json's per-service
@@ -165,6 +162,29 @@ backend:
           name: nsw-secrets
           key: argus-api-key
 
+  # The server's config.yaml, authored here as values; the chart mounts it and
+  # sets CONFIG_PATH (see values.yaml). Full schema and every option:
+  # configs/config.example.yaml.
+  config:
+    # Reference ID formats for the REFID_GENERATOR task plugin. Empty means
+    # generation is off, and any task using the plugin fails.
+    refid:
+      issuers: []
+      # issuers:
+      #   - issuer: TNSW
+      #     formats:
+      #       - idType: consignment_ref       # TNSW-CMB-20260930-000042
+      #         segments:
+      #           - {type: literal, value: "TNSW-"}
+      #           - {type: list, list: port, param: portCode}
+      #           - {type: literal, value: "-"}
+      #           - {type: date, layout: "20060102"}
+      #           - {type: literal, value: "-"}
+      #           - type: sequence
+      #             sequence: {scopeKey: "{issuer}:{idType}:{portCode}:{yyyyMMdd}", padding: 6}
+      # lists:
+      #   port: [CMB, HBT]
+
   # Run database migrations as a pre-upgrade hook before the server rolls out.
   # Uses the separate tnsw-migrate image (see values.yaml comments); note its
   # env uses DB_USER, not DB_USERNAME like the server above — that mismatch
@@ -212,10 +232,8 @@ backend:
     #      - nsw-api.example.com
 
 frontend:
-  image:
-    # Required — pick the app version to deploy. There is no default; the
-    # chart fails to render if this is unset.
-    tag: "0.1.0"
+  # No image tag: the chart deploys the images of its own release (its
+  # appVersion). Set frontend.image.tag only to run other images.
 
   # Left unset for the same reason as the backend above; the image writes only
   # to /tmp and to group-0 writable paths, so any assigned UID works.
@@ -226,23 +244,48 @@ frontend:
     type: ClusterIP
     port: 80
 
-  # Mirrors the TRADER_PORTAL_*/VITE_* vars in .env.example. These are all
-  # public SPA config injected into runtime-env.js at container start (see
-  # apps/trader-app/docker-entrypoint.sh) and read by the browser — none of
-  # these are secrets, and they must point at the host-exposed URLs the
-  # browser will actually use (not in-cluster Service names).
-  env:
-    VITE_API_BASE_URL: "https://nsw-api.example.com"
-    VITE_IDP_BASE_URL: "https://idp.example.com"
-    VITE_IDP_CLIENT_ID: "TRADER_PORTAL_APP"
+  # Same keys as apps/trader-app/public/config.example.js (the local dev
+  # equivalent of this config block). Rendered into a ConfigMap and mounted
+  # as config.js (see templates/frontend/configmap.yaml) for the browser to
+  # read — none of these are secrets, and they must point at the
+  # host-exposed URLs the browser will actually use (not in-cluster Service
+  # names). No VITE_ prefix: nothing here goes through Vite's build-time
+  # import.meta.env, so the prefix would be misleading. DEV_ENABLE_TEST_FLOW
+  # is deliberately omitted here — that's a dev-only "🧪 Test Flow" button,
+  # not something a real deployment wants.
+  config:
+    API_BASE_URL: "https://nsw-api.example.com"
+    IDP_BASE_URL: "https://idp.example.com"
+    IDP_CLIENT_ID: "TRADER_PORTAL_APP"
     # Extra /authorize parameters, query-string encoded (use "&" for more than one).
     # The `resource` value must equal AUTH_AUDIENCE / the NSW_API resource-server identifier.
-    VITE_IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
-    VITE_APP_URL: "https://trader.example.com"
-    VITE_IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read"
-    VITE_IDP_TRADER_GROUP_NAME: "Traders"
-    VITE_IDP_CHA_GROUP_NAME: "CHA"
-    VITE_SHOW_AUTOFILL_BUTTON: "false"
+    IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
+    APP_URL: "https://trader.example.com"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
+    # ID-token claim holding the roles (an array), and the role names in it. For an IdP that
+    # models roles as groups, set the claim to "groups" and use the group names.
+    IDP_ROLE_CLAIM_NAME: "roles"
+    IDP_TRADER_ROLE_NAME: "Trader"
+    IDP_CHA_ROLE_NAME: "CHA"
+    IDP_NSW_ADMIN_ROLE_NAME: "NSW Admin"
+    SHOW_AUTOFILL_BUTTON: "false"
+
+  # Overrides the image's baked-in public/configs/branding.json (see
+  # values.yaml and the chart README). Replace these example.com links with
+  # your environment's real policy/accessibility/support pages.
+  branding:
+    systemName: "NSW"
+    appName: "Trader Portal"
+    portalName: "Trader Portal"
+    description: "A unified digital platform enabling seamless and secure trade facilitation services."
+    footerLinks:
+      - key: policy
+        url: "https://gov.example.lk/policy"
+      - key: accessibility
+        url: "https://gov.example.lk/accessibility"
+      - key: support
+        url: "https://gov.example.lk/support"
+    copyrightNotice: "© 2026 Trader Portal. All rights reserved."
 
   # Expose the portal. Enable the one that matches your platform.
   #

@@ -18,10 +18,9 @@ backend:
   image:
     # Published image (see .github/workflows/release.yml).
     repository: ghcr.io/opennsw/tnsw-api
-    # REQUIRED — no default. Set the app version to deploy per environment or
-    # at install (--set backend.image.tag=1.4.0). Chart rendering fails if
-    # this is empty. appVersion is metadata only and is deliberately NOT used
-    # as the tag.
+    # Defaults to the chart's appVersion: chart 1.2.3 deploys the 1.2.3 images
+    # it was released with. Set it only to run other images, e.g. a dev build
+    # (--set backend.image.tag=dev-<run>-<sha>).
     tag: ""
     pullPolicy: IfNotPresent
 
@@ -62,6 +61,22 @@ backend:
   # Load server environment from existing ConfigMaps or Secrets
   envFrom: []
 
+  # The server's config file (config.yaml), authored as values: this section IS
+  # config.yaml, with the same schema as configs/config.example.yaml. The chart
+  # always renders it into a ConfigMap mounted read-only at
+  # configMountPath/config.yaml and points CONFIG_PATH at it, unless env above
+  # sets CONFIG_PATH itself. Empty is valid: the server needs the file, not any
+  # section in it.
+  #
+  # Non-secret only. A secret goes in as a placeholder the server resolves at
+  # startup, e.g. "{{env:SOME_SECRET}}" with SOME_SECRET set via env/valueFrom;
+  # Helm passes it through untouched.
+  config: {}
+
+  # Directory config.yaml is mounted into. Kept apart from /app/configs so the
+  # mount doesn't hide the image's baked templates or any files mounted there.
+  configMountPath: /app/config
+
   # Database migration Job, run as a Helm pre-install/pre-upgrade hook so the
   # schema is migrated before the new server rolls out. This runs a DIFFERENT
   # image from the server (see templates/backend/migration-job.yaml) — the
@@ -72,7 +87,7 @@ backend:
     enabled: false
     image:
       repository: ghcr.io/opennsw/tnsw-migrate
-      # Defaults to backend.image.tag above when left empty.
+      # Defaults to backend.image.tag above, then the chart's appVersion.
       tag: ""
       pullPolicy: IfNotPresent
     # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
@@ -127,9 +142,7 @@ frontend:
   image:
     # Published image (see .github/workflows/release.yml).
     repository: ghcr.io/opennsw/tnsw-web
-    # REQUIRED — no default. Set the app version to deploy per environment or
-    # at install (--set frontend.image.tag=1.4.0). Chart rendering fails if
-    # this is empty.
+    # Defaults to the chart's appVersion, like backend.image.tag.
     tag: ""
     pullPolicy: IfNotPresent
 
@@ -157,13 +170,27 @@ frontend:
     type: ClusterIP
     port: 80
 
-  # Runtime (VITE_*) environment variables, written into runtime-env.js for
-  # the browser to read. See ../values-example.yaml for the full set. No
-  # secrets here — see the chart README.
-  env: {}
+  # Runtime config values, rendered into a ConfigMap and mounted as
+  # /usr/share/nginx/html/config.js for the browser to read (see
+  # templates/frontend/configmap.yaml). Not container env vars — unlike
+  # backend.env above, nothing here reaches the container's process
+  # environment, so it's named `config`, not `env`. See ../values-example.yaml
+  # for the full set. No secrets here — see the chart README.
+  config: {}
 
   # Load environment from existing ConfigMaps or Secrets
   envFrom: []
+
+  # Branding/footer content for the portal — systemName, appName, logoUrl,
+  # footerLinks, copyrightNotice, etc. (see
+  # portals/apps/trader-app/src/configs/types.ts for the full schema). Empty
+  # by default: the image ships public/configs/branding.json baked in at
+  # build time with neutral placeholder content, which is fine to run with
+  # but not meant to reach real users. Set this per deployment to override
+  # that file — when non-empty, it's rendered into a ConfigMap and mounted
+  # over /usr/share/nginx/html/configs/branding.json, which initAppConfig()
+  # (src/config.ts) fetches at app start. See ../values-example.yaml.
+  branding: {}
 
   # Configuration for OpenShift Routes
   route:

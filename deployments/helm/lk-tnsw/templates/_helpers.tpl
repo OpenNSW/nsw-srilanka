@@ -75,3 +75,18 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
+
+{{/*
+Image tag: the tag given in values, else the chart's appVersion — so a released
+chart deploys the images it was released with. A chart packaged from source
+keeps the 0.0.0 placeholder, which no image has, so fail with the fix instead
+of an ImagePullBackOff.
+Usage: {{ include "lk-tnsw.imageTag" (dict "tag" .Values.backend.image.tag "root" .) }}
+*/}}
+{{- define "lk-tnsw.imageTag" -}}
+{{- $tag := .tag | default .root.Chart.AppVersion | toString -}}
+{{- if eq $tag "0.0.0" -}}
+{{- fail "no image tag: this chart was not packaged by a release, so its appVersion is the 0.0.0 placeholder. Install a released chart (helm install lk-tnsw oci://ghcr.io/opennsw/charts/lk-tnsw --version X.Y.Z), or set backend.image.tag and frontend.image.tag." -}}
+{{- end -}}
+{{- $tag -}}
+{{- end -}}

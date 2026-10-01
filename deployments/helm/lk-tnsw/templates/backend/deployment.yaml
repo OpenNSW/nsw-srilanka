@@ -11,6 +11,9 @@ spec:
       {{- include "lk-tnsw.backend.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        {{- /* Rolls the pods when config.yaml changes; nothing else in the pod spec references the ConfigMap's contents. */}}
+        checksum/config: {{ include (print $.Template.BasePath "/backend/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "lk-tnsw.backend.selectorLabels" . | nindent 8 }}
     spec:
@@ -28,13 +31,12 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ .Values.backend.image.repository }}:{{ required "backend.image.tag is required — set it per environment or at install (e.g. --set backend.image.tag=1.4.0)" .Values.backend.image.tag }}"
+          image: "{{ .Values.backend.image.repository }}:{{ include "lk-tnsw.imageTag" (dict "tag" .Values.backend.image.tag "root" .) }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.backend.containerPort }}
               protocol: TCP
-          {{- if .Values.backend.env }}
           env:
             {{- range $key, $value := .Values.backend.env }}
             - name: {{ $key }}
@@ -44,7 +46,11 @@ spec:
               value: {{ $value | quote }}
               {{- end }}
             {{- end }}
-          {{- end }}
+            {{- /* The chart-rendered config.yaml, unless env names another. */}}
+            {{- if not (hasKey (.Values.backend.env | default dict) "CONFIG_PATH") }}
+            - name: CONFIG_PATH
+              value: {{ printf "%s/config.yaml" .Values.backend.configMountPath | quote }}
+            {{- end }}
           {{- if .Values.backend.envFrom }}
           envFrom:
             {{- toYaml .Values.backend.envFrom | nindent 12 }}
@@ -61,11 +67,22 @@ spec:
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           {{- end }}
-          {{- if .Values.backend.volumeMounts }}
           volumeMounts:
-            {{- toYaml .Values.backend.volumeMounts | nindent 12 }}
-          {{- end }}
-      {{- if .Values.backend.volumes }}
+            - name: config
+              mountPath: {{ .Values.backend.configMountPath }}
+              readOnly: true
+            {{- with .Values.backend.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
-        {{- toYaml .Values.backend.volumes | nindent 8 }}
-      {{- end }}
+        {{- range .Values.backend.volumes }}
+        {{- if eq .name "config" }}
+        {{- fail "backend.volumes: the name \"config\" is reserved for the chart-rendered config.yaml; rename this volume" }}
+        {{- end }}
+        {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "lk-tnsw.backend.fullname" . }}-config
+        {{- with .Values.backend.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

@@ -1,10 +1,13 @@
 package cdn
 
 import (
+	"context"
 	"errors"
 	"strings"
 
 	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/edgetrace"
 )
 
 // SLC Edge submission statuses that count as accepted. RECEIVED is what the
@@ -37,6 +40,10 @@ var capturedFields = []string{
 type CDNInterpreter struct{}
 
 // NewCDNInterpreter returns the SLC Edge CDN submission interpreter.
+// cdnEndpoint names this exchange in the trace, so a dispatch note is
+// distinguishable from a declaration in one log.
+const cdnEndpoint = "cdn"
+
 func NewCDNInterpreter() *CDNInterpreter {
 	return &CDNInterpreter{}
 }
@@ -51,14 +58,20 @@ func NewCDNInterpreter() *CDNInterpreter {
 func (CDNInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 	payload, err := buildFromInputs(inputs)
 	if err != nil {
-		return remote.JSONBody{V: map[string]any{"error": err.Error()}}
+		body := map[string]any{"error": err.Error()}
+		edgetrace.Request(context.Background(), cdnEndpoint, body)
+		return remote.JSONBody{V: body}
 	}
+
+	edgetrace.Request(context.Background(), cdnEndpoint, payload)
 	return remote.JSONBody{V: payload}
 }
 
 // Interpret reports whether the submission was accepted and captures the SLC
 // response fields (and a trader-facing error message on rejection).
 func (CDNInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	edgetrace.Response(context.Background(), cdnEndpoint, resp, callErr)
+
 	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
 
 	out := map[string]any{}
@@ -97,7 +110,7 @@ type buildError struct{ msg string }
 
 func (e *buildError) Error() string { return e.msg }
 
-// hasErrors reports whether the response carries error detail. §4.4 defines
+// hasErrors reports whether the response carries error detail. §4.5 defines
 // errors as a segment-keyed object that is empty on success, but the submission
 // acknowledgement predates that shape and some responses still send an array,
 // so both are read as a rejection when non-empty.
@@ -126,7 +139,7 @@ func statusIsAccepted(resp map[string]any) bool {
 
 // describeFailure builds a trader-facing, markdown message for a rejected
 // submission. It prefers the SLC Edge error detail in the response body — an
-// {"error": "<reason>"} string, a §4.4 segment-keyed errors object, an errors
+// {"error": "<reason>"} string, a §4.5 segment-keyed errors object, an errors
 // array of {code,message,fieldRef}, or a problem+json "detail"/"title" — and
 // falls back to distinguishing a transport failure from an unexplained
 // rejection.

@@ -61,6 +61,14 @@ func (m *MockWM) GetStatus(ctx context.Context, workflowID string) (*workflow.Wo
 	return args.Get(0).(*workflow.WorkflowInstance), args.Error(1)
 }
 
+// ResolveAdminIntervention makes MockWM also satisfy workflow.AdminInterventionResolver —
+// needed only by the ResolveAdminIntervention tests, which type-assert s.wm against it the same
+// way the real Service.ResolveAdminIntervention does.
+func (m *MockWM) ResolveAdminIntervention(ctx context.Context, workflowID, runID string, resolution workflow.AdminResolutionSignal) error {
+	args := m.Called(ctx, workflowID, runID, resolution)
+	return args.Error(0)
+}
+
 // mockLoader is a simple loader for test artifacts.
 type mockLoader struct {
 	content map[string][]byte

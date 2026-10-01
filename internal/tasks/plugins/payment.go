@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -58,9 +59,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return fmt.Errorf("payment: failed to parse generic_payment config: %w", err)
 	}
 
-	if cfg.Amount.IsZero() {
-		return fmt.Errorf("payment: plugin_properties.amount is required and must be non-zero")
-	}
 	if cfg.Currency == "" {
 		return fmt.Errorf("payment: plugin_properties.currency is required")
 	}
@@ -75,16 +73,23 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		selectedMethod = "govpay"
 	}
 
-	// 2. Transition task state to PENDING_PAYMENT
-	ctx.Record.State = "PENDING_PAYMENT"
-
-	amount := cfg.Amount
+	// 2. Resolve the amount to charge. If a workflow input is available, it takes
+	// precedence over the artifact's static amount. This is the last
+	// checkpoint before it becomes an actual charge so the logical validation is done to
+	// make sure the payment amount is acceptable.
+	amount, err := resolvePaymentAmount(ctx.Inputs["amount"], cfg.Amount)
+	if err != nil {
+		return fmt.Errorf("payment: %w (task_code %q)", err, cfg.TaskCode)
+	}
 	currency := cfg.Currency
+
+	// 3. Transition task state to PENDING_PAYMENT
+	ctx.Record.State = "PENDING_PAYMENT"
 
 	slog.Info("task payment: initiating checkout session",
 		"taskId", ctx.Record.TaskID, "taskCode", cfg.TaskCode, "amount", amount, "method", selectedMethod)
 
-	// 3. Create the checkout session via core/payment. The selected gateway is
+	// 4. Create the checkout session via core/payment. The selected gateway is
 	// passed as GatewayID; the service generates the TNSW- reference and (for
 	// instruction-flow gateways) returns the instructions to display. An unknown
 	// gateway surfaces here as an error, as does a fee whose gateway_metadata
@@ -163,4 +168,44 @@ func buildPaymentMetadata(taskID string, cfg paymentConfig, selectedMethod strin
 	metadata["task_code"] = cfg.TaskCode
 	metadata["method_id"] = selectedMethod
 	return metadata
+}
+
+// Decides the amount to charge for a task. If the workflow input "amount" is
+// supplied, it takes precedence over the artifact's configured amount. If no
+// input is supplied, the configured amount will be taken. Both are validated to be
+// valid as a payment amount.
+func resolvePaymentAmount(input any, configured decimal.Decimal) (decimal.Decimal, error) {
+	if input == nil {
+		if !configured.IsPositive() {
+			return decimal.Decimal{}, errors.New(`plugin_properties.amount is required and must be positive when no "amount" input is supplied`)
+		}
+		return configured, nil
+	}
+
+	amount, err := decimalFromAny(input)
+	if err != nil {
+		return decimal.Decimal{}, fmt.Errorf(`input "amount" is invalid: %w`, err)
+	}
+	if !amount.IsPositive() {
+		return decimal.Decimal{}, fmt.Errorf(`input "amount" must be positive, got %s`, amount.String())
+	}
+	return amount, nil
+}
+
+// decimalFromAny converts a workflow input value into a decimal. Workflow
+// variables cross a JSON boundary at least once (from form submission -> stored
+// task data -> input_mapping copy), so a number arrives here as float64;
+// string and json.Number are accepted defensively for callers that pass
+// amounts as quoted values.
+func decimalFromAny(v any) (decimal.Decimal, error) {
+	switch x := v.(type) {
+	case float64:
+		return decimal.NewFromFloat(x), nil
+	case string:
+		return decimal.NewFromString(strings.TrimSpace(x))
+	case json.Number:
+		return decimal.NewFromString(x.String())
+	default:
+		return decimal.Decimal{}, fmt.Errorf("unsupported type %T", v)
+	}
 }

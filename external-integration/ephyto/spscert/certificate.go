@@ -30,15 +30,19 @@ type SPSCertificate struct {
 }
 
 type ExchangedDocument struct {
-	Name          string        `xml:"ram:Name"` // NON-PC, present for schema (empty)
-	ID            string        `xml:"ram:ID"`
-	TypeCode      string        `xml:"ram:TypeCode"`
-	StatusCode    string        `xml:"ram:StatusCode"`
-	IssueDateTime DateTime      `xml:"ram:IssueDateTime"`
-	Issuer        NameParty     `xml:"ram:IssuerSPSParty"`
-	Notes         []Note        `xml:"ram:IncludedSPSNote,omitempty"`
-	Signatory     Signatory     `xml:"ram:SignatorySPSAuthentication"`
-	Attachments   []RefDocument `xml:"ram:ReferenceSPSReferencedDocument,omitempty"`
+	Name          string    `xml:"ram:Name"` // NON-PC, present for schema (empty)
+	ID            string    `xml:"ram:ID"`
+	TypeCode      string    `xml:"ram:TypeCode"`
+	StatusCode    string    `xml:"ram:StatusCode"`
+	IssueDateTime DateTime  `xml:"ram:IssueDateTime"`
+	Issuer        NameParty `xml:"ram:IssuerSPSParty"`
+	Notes         []Note    `xml:"ram:IncludedSPSNote,omitempty"`
+	// ReferenceSPSReferencedDocument must precede SignatorySPSAuthentication:
+	// the schema closes the SPSExchangedDocument sequence with the (repeatable)
+	// signatory, so an attachment emitted after it fails validation with
+	// cvc-complex-type.2.4.a. Field order here IS the element order Go emits.
+	Attachments []RefDocument `xml:"ram:ReferenceSPSReferencedDocument,omitempty"`
+	Signatory   Signatory     `xml:"ram:SignatorySPSAuthentication"`
 }
 
 type NameParty struct {
@@ -92,6 +96,9 @@ type RefDocument struct {
 }
 
 type BinaryObject struct {
+	// MimeCode is required by the Hub's validator wherever a binary object is
+	// present: an empty attribute is rejected.
+	MimeCode string `xml:"mimeCode,attr,omitempty"`
 	Filename string `xml:"filename,attr,omitempty"`
 	Value    string `xml:",chardata"`
 }

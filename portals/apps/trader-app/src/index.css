@@ -1,4 +1,17 @@
+/* Registered before Tailwind below so it becomes the lowest-priority cascade
+ * layer: this vendored stylesheet is itself a separately-compiled Tailwind
+ * build (its own .hidden/.block/.border/etc.) for the file-upload dropzone
+ * in @opennsw/jsonforms-renderers. Importing it as a plain stylesheet
+ * previously merged those utility class names into our own "utilities"
+ * layer *after* ours (later import = later in the shared layer), which
+ * silently won every tie — e.g. its unconditional `.hidden` beat our
+ * `lg:block`, breaking every responsive show/hide in the app. Scoping it to
+ * its own named layer keeps its rules fully namespaced under that layer, so
+ * they can never outrank an app utility regardless of import order.
+ */
+@import '@opennsw/jsonforms-renderers/styles.css' layer(vendor-jsonforms);
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
 
 @theme {
   /* =========================================================================
@@ -9,11 +22,20 @@
    * Neutrals use contextual names (background / surface / foreground / border).
    * ========================================================================= */
 
-  /* Brand (primary - indigo). -dark is the deep-navy surface (e.g. sidebar);
-   * the bright base pops on it, and bright-at-opacity gives visible hovers. */
-  --color-primary-subtle: #eef2ff;
-  --color-primary: #4f46e5;
-  --color-primary-dark: #312e81;
+  /* Typography — Inter, self-hosted so first paint never blocks on a
+   * third-party font CDN (this app also has to run on restricted networks). */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Brand (primary). These are the "Modern" scheme's values and the default
+   * whenever no `data-theme` override applies — see the color-scheme block
+   * below for the other options and services/colorSchemeContextCore.ts for
+   * how <Theme accentColor> is kept in sync with whichever one is active.
+   * -dark is for deep surfaces (gradients, hero overlays); the bright base
+   * pops against it, and bright-at-opacity gives visible hovers. */
+  --color-primary-subtle: #f0f0ff;
+  --color-primary: #5b5bd6;
+  --color-primary-hover: #4a4ac7;
+  --color-primary-dark: #23214a;
 
   /* Status - success (green) */
   --color-success-subtle: #f0fdf4;
@@ -39,9 +61,16 @@
    * avoid a name collision with Radix Themes' own --color-background and
    * --color-surface variables (defined on .radix-themes), which were
    * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted. */
-  --color-app-bg: #f8fafc;
+  --color-app-bg: #f3f2fa;
   --color-app-surface: #ffffff;
   --color-app-surface-muted: #f1f5f9;
+
+  /* Form fields — a filled, borderless treatment (vs. a bordered white box)
+   * reads as current-generation rather than early-2010s forms. Used by the
+   * Radix TextField/Select/TextArea override below, which is what every
+   * JSONForms field renders through. */
+  --color-field-bg: #f2f1fa;
+  --color-field-bg-hover: #eae8f7;
 
   /* Neutrals / text */
   --color-foreground: #0f172a;
@@ -52,21 +81,25 @@
   --color-border: #e2e8f0;
   --color-border-strong: #cbd5e1;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  /* Shadows — slate-tinted rather than pure black, and softer/wider than the
+   * default Tailwind ramp. Colored, diffuse shadows read as more "designed"
+   * and less like a default framework drop-shadow. */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 8px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 12px 20px -6px rgb(15 23 42 / 0.1), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  --shadow-xl: 0 20px 32px -8px rgb(15 23 42 / 0.14), 0 8px 12px -6px rgb(15 23 42 / 0.08);
+  --shadow-2xl: 0 28px 56px -16px rgb(15 23 42 / 0.28);
 
-  /* Border Radius */
-  --radius-sm: 0.25rem;
-  --radius: 0.375rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
+  /* Border Radius — rounder across the board for a friendlier, more
+   * consumer-app feel (kept in step with the Theme radius="large" in
+   * main.tsx, which applies the same language to native Radix components). */
+  --radius-sm: 0.375rem;
+  --radius: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
 
   /* Animations */
   --animate-bounce-gentle: bounce-gentle 2s ease-in-out infinite;
@@ -77,6 +110,70 @@
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-fade-in-delayed: fade-in 0.8s ease-out 0.3s both;
   --animate-loading-bar: loading-bar 2s ease-in-out infinite;
+}
+
+/* =========================================================================
+ * COLOR SCHEMES — alternates to the "Modern" default above, switched at
+ * runtime via ColorSchemeProvider setting `data-theme` on <html>. Each
+ * block only needs to redefine the brand rungs (all the semantic/neutral
+ * tokens stay shared) plus the form-field fill, so every component built
+ * on bg-primary/text-primary/border-primary-subtle/etc. — cards, buttons,
+ * badges, gradients, and every JSONForms field — repaints automatically.
+ * Keep these in step with the `accentColor` each scheme maps to in
+ * services/colorSchemeContextCore.ts, so Radix's own components (which
+ * don't read these Tailwind tokens) land on a matching hue.
+ * ========================================================================= */
+
+/* Maritime Trade — navy & slate, a conventional customs/trade-portal look. */
+:root[data-theme='maritime'] {
+  --color-primary-subtle: #eaf0fb;
+  --color-primary: #1e3a8a;
+  --color-primary-hover: #16306f;
+  --color-primary-dark: #0f2547;
+  --color-field-bg: #eef2fa;
+  --color-field-bg-hover: #e3e9f5;
+}
+
+/* Ceylon Regal — maroon & gold, echoing the national flag's lion panel. */
+:root[data-theme='regal'] {
+  --color-primary-subtle: #fbedea;
+  --color-primary: #7a2430;
+  --color-primary-hover: #641d27;
+  --color-primary-dark: #3c1116;
+  --color-field-bg: #f7ecea;
+  --color-field-bg-hover: #f0dfdc;
+}
+
+/* Emerald Trade — deep teal-green. */
+:root[data-theme='emerald'] {
+  --color-primary-subtle: #e7f5f0;
+  --color-primary: #0f6a52;
+  --color-primary-hover: #0c5843;
+  --color-primary-dark: #0a3f30;
+  --color-field-bg: #eaf6f2;
+  --color-field-bg-hover: #dceee8;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Radix Themes sets its own font stack on .radix-themes (the Theme root),
+ * which would otherwise win over the body rule above for every Radix
+ * component — including every JSONForms field, since the renderer package
+ * is built on Radix Themes. Overriding the variable keeps Inter consistent
+ * everywhere instead of just in plain page text.
+ *
+ * `!important` is load-bearing here, not decorative: this rule and Radix's
+ * own tie in specificity (both a bare `.radix-themes` selector, neither
+ * layered), so without it the winner is whichever stylesheet the bundler
+ * happens to emit later — today that's Radix's, which is why plain buttons
+ * ("Back", pagination) were rendering in the system font while body text
+ * correctly showed Inter. */
+.radix-themes {
+  --default-font-family: var(--font-sans) !important;
 }
 
 /* Custom Scrollbar Utility */
@@ -168,7 +265,115 @@
   }
 }
 
-/* Custom Styles for JSON Forms */
-.json-form-container .MuiFormControl-root {
-  margin-bottom: 1.5rem !important;
+/* =========================================================================
+ * FORM FIELD ELEVATION
+ * Every text field, select and textarea in this app — including every
+ * JSONForms-rendered field, since @opennsw/jsonforms-renderers is built
+ * directly on @radix-ui/themes components — renders through Radix's own
+ * stable `.rt-*` classes. Overriding them here reskins every form in the
+ * product (consignment forms, filters, search) from one place, without
+ * touching vendored component code.
+ *
+ * `!important` is deliberate: these rules tie in specificity with Radix's
+ * own :where()-wrapped variant styles, and which stylesheet lands later in
+ * the bundle isn't something this file controls. It only guards the
+ * specific properties below, scoped to the exact classes Radix renders.
+ * ========================================================================= */
+.rt-TextFieldRoot.rt-variant-surface,
+.rt-SelectTrigger.rt-variant-surface,
+.rt-TextAreaRoot.rt-variant-surface {
+  background-color: var(--color-field-bg) !important;
+  box-shadow: inset 0 0 0 1px transparent !important;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.rt-TextFieldRoot.rt-variant-surface:hover,
+.rt-SelectTrigger.rt-variant-surface:hover,
+.rt-TextAreaRoot.rt-variant-surface:hover {
+  background-color: var(--color-field-bg-hover) !important;
+}
+
+.rt-TextFieldRoot.rt-variant-surface:focus-within,
+.rt-TextAreaRoot.rt-variant-surface:focus-within,
+.rt-SelectTrigger.rt-variant-surface:focus-visible,
+.rt-SelectTrigger.rt-variant-surface[data-state='open'] {
+  background-color: var(--color-app-surface) !important;
+  box-shadow:
+    0 0 0 4px var(--color-primary-subtle),
+    inset 0 0 0 1.5px var(--color-primary) !important;
+}
+
+/* Read-only / disabled fields recede instead of sharing the editable fill.
+ * JSONForms renders both in the same screen at once (e.g. a reviewer sees
+ * the applicant's already-submitted fields as read-only alongside the ones
+ * they can still act on), so the two need a visually obvious difference —
+ * otherwise nothing distinguishes "you can type here" from "you can't".
+ * Ordered after the hover/focus rules above so it wins that tie: a
+ * read-only (not disabled) field can still receive browser focus, and
+ * without this ordering it would light up with the editable focus ring. */
+.rt-TextFieldRoot.rt-variant-surface:has(.rt-TextFieldInput:disabled, .rt-TextFieldInput:read-only),
+.rt-TextAreaRoot.rt-variant-surface:has(.rt-TextAreaInput:disabled, .rt-TextAreaInput:read-only),
+.rt-SelectTrigger.rt-variant-surface:disabled {
+  background-color: var(--color-app-surface-muted) !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+.rt-TextFieldInput:disabled,
+.rt-TextFieldInput:read-only,
+.rt-TextAreaInput:disabled,
+.rt-TextAreaInput:read-only {
+  color: var(--color-foreground-subtle) !important;
+  cursor: not-allowed;
+}
+
+.rt-TextFieldRoot.rt-r-size-2 {
+  --text-field-height: 2.75rem !important;
+  --text-field-border-radius: var(--radius-lg) !important;
+}
+.rt-TextFieldRoot.rt-r-size-3 {
+  --text-field-height: 3rem !important;
+  --text-field-border-radius: var(--radius-lg) !important;
+}
+.rt-SelectTrigger.rt-r-size-2 {
+  --select-trigger-height: 2.75rem !important;
+  border-radius: var(--radius-lg) !important;
+}
+.rt-SelectTrigger.rt-r-size-3 {
+  --select-trigger-height: 3rem !important;
+  border-radius: var(--radius-lg) !important;
+}
+.rt-TextAreaRoot {
+  border-radius: var(--radius-lg) !important;
+  padding: 0.75rem !important;
+}
+
+/* Field labels: every JSONForms control label is a bare <label> styled via
+ * Radix Text (nothing else in this app pairs those two), so this selector
+ * is safe to scope broadly. Slightly softer weight/color than Radix's bold
+ * default reads as more considered and less "shouting". */
+label.rt-Text {
+  color: var(--color-foreground-muted) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Primary buttons get a subtle gradient + tinted shadow instead of a flat
+ * fill — scoped to whichever accent color the active color scheme uses as
+ * its default (see ColorSchemeContext), so semantic color overrides
+ * (danger/success buttons) are untouched regardless of which scheme is
+ * selected. */
+.rt-BaseButton.rt-variant-solid[data-accent-color='iris'],
+.rt-BaseButton.rt-variant-solid[data-accent-color='blue'],
+.rt-BaseButton.rt-variant-solid[data-accent-color='ruby'],
+.rt-BaseButton.rt-variant-solid[data-accent-color='jade'] {
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover)) !important;
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-primary) 55%, transparent) !important;
+}
+.rt-BaseButton.rt-variant-solid[data-accent-color='iris']:hover,
+.rt-BaseButton.rt-variant-solid[data-accent-color='blue']:hover,
+.rt-BaseButton.rt-variant-solid[data-accent-color='ruby']:hover,
+.rt-BaseButton.rt-variant-solid[data-accent-color='jade']:hover {
+  background-image: linear-gradient(135deg, var(--color-primary-hover), var(--color-primary)) !important;
 }

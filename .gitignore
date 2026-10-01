@@ -20,12 +20,14 @@ coverage.html
 .env*
 !*.example
 
-# Real config files — copy from *.example.json (gitignored; never commit)
+# Real config files — copy from *.example.json / *.example.yaml (gitignored; never commit)
+configs/config.yaml
 configs/notification.json
 configs/services.json
 configs/services.docker.json
 configs/payment_methods.json
 configs/catalog.json
+configs/companies.json
 
 # Local bucket files
 bucket/*

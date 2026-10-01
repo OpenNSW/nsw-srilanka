@@ -12,8 +12,14 @@ COMPOSE         := docker compose
 COMPOSE_PREVIEW := docker compose -f compose.yml
 # Source services built from this repo; `make deps` starts everything else.
 APP_SERVICES    := api trader-portal
-# A literal space, so APP_SERVICES can be turned into a grep alternation.
-SPACE           := $(subst ,, )
+# Newline for turning `docker compose config --services` output into a word list.
+define NL
+
+
+endef
+# Lazy (=) so `docker compose config` runs only when `make deps` is invoked.
+ALL_SERVICES  = $(subst $(NL), ,$(shell $(COMPOSE) config --services))
+DEPS_SERVICES = $(filter-out $(APP_SERVICES),$(ALL_SERVICES))
 # Migrator version for `make migration`, read straight out of the Dockerfile's
 # ARG so the two cannot drift apart. Lazy (=, not :=) so the sed runs only when
 # `make migration` expands it, not on every make invocation.
@@ -26,8 +32,9 @@ MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
 # ---------------------------------------------------------------------------
 
 .PHONY: dev
+dev: export APP_ENV = development
 dev: ## Start the full stack with hot reload (detached; use `make logs` to watch)
-	APP_ENV=development $(COMPOSE) up -d
+	$(COMPOSE) up -d
 
 .PHONY: logs
 logs: ## Tail logs from all running services
@@ -38,8 +45,9 @@ logs: ## Tail logs from all running services
 # ---------------------------------------------------------------------------
 
 .PHONY: preview
+preview: export APP_ENV = development
 preview: ## Build and run the real images locally (detached; use `make logs` to watch)
-	APP_ENV=development $(COMPOSE_PREVIEW) up --build -d
+	$(COMPOSE_PREVIEW) up --build -d
 
 .PHONY: build
 build: ## Build the images without starting anything
@@ -51,9 +59,12 @@ build: ## Build the images without starting anything
 
 .PHONY: deps
 deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
-	$(COMPOSE) up -d $$($(COMPOSE) config --services | grep -vxE '$(subst $(SPACE),|,$(APP_SERVICES))')
+	$(COMPOSE) up -d $(DEPS_SERVICES)
 
 .PHONY: test-e2e
+test-e2e: export APP_ENV = development
+test-e2e: export E2E = 1
+test-e2e: export GOWORK = off
 test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api container)
 	$(COMPOSE) stop api
 	@if [ -f .env ]; then \
@@ -61,17 +72,19 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 	else \
 		echo "⚠️  No .env found — using the current environment"; \
 	fi; \
-	E2E=1 GOWORK=off APP_ENV=development go test -v -count=1 -timeout 240s ./test/e2e/...
+	go test -v -count=1 -timeout 240s ./test/e2e/...
 
 # ---------------------------------------------------------------------------
 # Migrations (uses the OpenNSW/agency migrate tool; generate needs no database)
 # ---------------------------------------------------------------------------
 
 .PHONY: migration
+migration: export GOWORK = off
+migration: export MIGRATION_DIR = ./migrations
+migration: export DB_DRIVER = sqlite
 migration: ## Scaffold a new migration file: make migration name=<description>
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
-	@GOWORK=off MIGRATION_DIR=./migrations DB_DRIVER=sqlite \
-		go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
+	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
 
 # ---------------------------------------------------------------------------
 # Lifecycle
@@ -104,57 +117,99 @@ help: ## Show this help
 # Go code quality (mirrors the backend CI pipeline)
 # Prepend GOPATH/bin so tools installed by `make tools` are found without
 # requiring the developer to manually update their shell profile.
+# cmd.exe uses ';'. Git Bash / MSYS set MSYSTEM and keep ':'.
 # ---------------------------------------------------------------------------
 
-export PATH := $(shell go env GOPATH)/bin:$(PATH)
+# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
+# and keep Unix recipes. cmd's find is FIND.EXE, so it cannot walk files.
+ifeq ($(OS),Windows_NT)
+ifeq ($(MSYSTEM),)
+  USE_CMD := 1
+endif
+endif
+
+ifdef USE_CMD
+  export PATH := $(shell go env GOPATH)/bin;$(PATH)
+else ifneq ($(MSYSTEM),)
+  # go env GOPATH is C:\... here. cygpath makes /c/... so the drive colon is not a PATH separator.
+  export PATH := $(shell cygpath -u "$$(go env GOPATH)")/bin:$(PATH)
+else
+  export PATH := $(shell go env GOPATH)/bin:$(PATH)
+endif
 
 .PHONY: setup
 setup: tools ## First-time setup: install tools, configure git hooks, seed config files from examples
 	git config core.hooksPath .githooks
+ifdef USE_CMD
+	@echo Git hooks configured: .githooks/
+	@if exist .env.example if not exist .env copy /Y .env.example .env
+	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
+	@if exist portals\apps\trader-app\public\config.example.js if not exist portals\apps\trader-app\public\config.js copy /Y portals\apps\trader-app\public\config.example.js portals\apps\trader-app\public\config.js
+	@if exist configs\notification.example.json if not exist configs\notification.json copy /Y configs\notification.example.json configs\notification.json
+	@if exist configs\services.docker.example.json if not exist configs\services.docker.json copy /Y configs\services.docker.example.json configs\services.docker.json
+	@if exist configs\payment_methods.example.json if not exist configs\payment_methods.json copy /Y configs\payment_methods.example.json configs\payment_methods.json
+	@if exist configs\catalog.example.json if not exist configs\catalog.json copy /Y configs\catalog.example.json configs\catalog.json
+	@if exist configs\companies.example.json if not exist configs\companies.json copy /Y configs\companies.example.json configs\companies.json
+	@if exist configs\config.example.yaml if not exist configs\config.yaml copy /Y configs\config.example.yaml configs\config.yaml
+else
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
-	@for f in .env.example idp/.env.example; do \
+	@for f in .env.example idp/.env.example portals/apps/trader-app/public/config.example.js; do \
 		target=$$(echo $$f | sed 's/\.example//'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
-	@for f in configs/notification.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/catalog.example.json; do \
-		target=$$(echo $$f | sed 's/\.example\.json/.json/'); \
+	@for f in configs/notification.example.json configs/services.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/catalog.example.json configs/companies.example.json configs/config.example.yaml; do \
+		target=$$(echo $$f | sed 's/\.example\././'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
+endif
 
 .PHONY: tools
 tools: ## Install Go quality tools (gosec, govulncheck, gitleaks; golangci-lint must be v2 — see CONTRIBUTING.md)
-	@echo "Installing Go quality tools..."
-	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -qv "^golangci-lint has version v1" \
+	@echo Installing Go quality tools...
+ifdef USE_CMD
+	@where golangci-lint >nul 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	@golangci-lint --version | findstr /C:"version 1." /C:"version v1." >nul && (echo ERROR: golangci-lint v1 is not supported. Install v2. && exit 1) || ver >nul
+else
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint --version | grep -Eqv 'has version v?1\.' \
 		|| { echo "ERROR: golangci-lint v2 is required. Install via Homebrew: brew install golangci-lint"; exit 1; }
+endif
 	go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
 	go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 	go install github.com/zricethezav/gitleaks/v8@v8.30.1
-	@echo "Tools installed."
+	@echo Tools installed.
 
 .PHONY: fmt
 fmt: ## Format all Go source files with gofmt
+ifdef USE_CMD
+	powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter *.go | Where-Object { $$_.FullName -notlike '*\vendor\*' } | ForEach-Object { gofmt -w $$_.FullName; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE } }"
+else
 	gofmt -w $$(find . -name '*.go' -not -path '*/vendor/*')
+endif
 
 .PHONY: lint
+lint: export GOWORK = off
 lint: ## Run golangci-lint
-	GOWORK=off golangci-lint run --config .golangci.yml ./...
+	golangci-lint run --config .golangci.yml ./...
 
 .PHONY: tidy
+tidy: export GOWORK = off
 tidy: ## Run go mod tidy
-	GOWORK=off go mod tidy
+	go mod tidy
 
 .PHONY: test
+test: export GOWORK = off
 test: ## Run all tests with the race detector
-	GOWORK=off go test -race -count=1 ./...
+	go test -race -count=1 ./...
 
 .PHONY: vuln
+vuln: export GOWORK = off
 vuln: ## Run govulncheck against the Go vulnerability database
-	GOWORK=off govulncheck ./...
+	govulncheck ./...
 
 .PHONY: secrets
 secrets: ## Run gitleaks secret scan on the repository

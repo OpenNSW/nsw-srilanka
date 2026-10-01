@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
+
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/edgetrace"
 )
 
 const (
@@ -53,6 +55,8 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = r.Body.Close() }()
+
+	edgetrace.Webhook(r.Context(), r.URL.Path, body)
 
 	var env payloadEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {

@@ -39,10 +39,12 @@ func NewInterpreter() *Interpreter { return &Interpreter{} }
 // BuildRequest assembles the pass from the trader's form and the container this
 // branch is about.
 //
-// The container number comes from the consolidation step rather than the form:
-// the trader is issuing a pass for a container SLPA has already paired, and
-// letting it be typed again would allow a pass for a container that was never
-// consolidated — which the CMS refuses with a 422 the trader cannot act on.
+// The container number is so_container_no: the placeholder the service order was
+// priced on, which is a different box from the real container consolidated
+// against it. SLPA keys the pass on the placeholder and echoes that number back
+// on the issued pass, and refuses the real one — no service order was priced
+// against it. The form still shows the real container, so the trader knows which
+// box the pass is for; it is never what gets sent.
 func (i *Interpreter) BuildRequest(inputs map[string]any) remote.Body {
 	form, _ := inputs["payload"].(map[string]any)
 	if form == nil {
@@ -50,19 +52,12 @@ func (i *Interpreter) BuildRequest(inputs map[string]any) remote.Body {
 		form = map[string]any{}
 	}
 
-	req := Request{
-		ContainerNo: fields.String(inputs, "container_no"),
+	return remote.JSONBody{V: Request{
+		ContainerNo: fields.String(inputs, "so_container_no"),
 		TruckNo:     fields.String(form, "truck_no"),
 		DriverName:  fields.String(form, "driver_name"),
 		SealNo:      fields.String(form, "seal_no"),
-	}
-	if req.ContainerNo == "" {
-		// Fall back to the form only if the branch carries no container, so a
-		// misconfigured mapping is still visible in the CMS's own answer rather
-		// than as a silently blank field.
-		req.ContainerNo = fields.String(form, "container_no")
-	}
-	return remote.JSONBody{V: req}
+	}}
 }
 
 // BuildHeaders presents the client key the CMS identifies the company by. The
@@ -80,6 +75,9 @@ func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 	// what the terminal scans, so they are recorded even before anything
 	// downstream reads them. gate_pass_url is the printable pass itself, which
 	// is what the haulier actually carries to the gate.
+	//
+	// container_no in the answer is the service-order container the pass was
+	// issued against — the CMS echoes what it was sent, not the real box.
 	out := cms.Capture(body,
 		"gate_pass_id", "gate_pass_no", "container_no", "truck_no", "driver_name",
 		"seal_no", "barcode", "status", "issued_at", "gate_pass_url", "message",

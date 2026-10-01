@@ -47,8 +47,9 @@ export const SAMPLE_TASK: ZoneView = {
       to_state: 'DRAFT',
     },
   ],
-  view: {
-    instructions: {
+  view: [
+    {
+      id: 'instructions',
       type: 'MARKDOWN',
       payload: {
         content: [
@@ -68,7 +69,8 @@ export const SAMPLE_TASK: ZoneView = {
         ].join('\n'),
       },
     },
-    reference: {
+    {
+      id: 'reference',
       type: 'FORM',
       payload: {
         schema: {
@@ -99,7 +101,8 @@ export const SAMPLE_TASK: ZoneView = {
         readonly: true,
       },
     },
-    workspace: {
+    {
+      id: 'workspace',
       type: 'FORM',
       handles: [
         { command: 'SAVE_AS_DRAFT', label: 'Save as Draft', element: 'secondary_action' },
@@ -148,5 +151,5 @@ export const SAMPLE_TASK: ZoneView = {
         },
       },
     },
-  },
+  ],
 }

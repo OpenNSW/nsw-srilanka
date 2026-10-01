@@ -74,10 +74,15 @@ type Attachment struct {
 	RelationshipTypeCode string `json:"relationshipTypeCode"` // ZZZ (default) or AWR
 	ID                   string `json:"id"`
 	Filename             string `json:"filename,omitempty"`
-	Base64               string `json:"base64,omitempty"`
-	Information          string `json:"information,omitempty"`
-	IssueDate            string `json:"issueDate,omitempty"`
-	LanguageID           string `json:"languageID,omitempty"`
+	MimeCode             string `json:"mimeCode,omitempty"` // e.g. application/pdf
+	// Key is where the file lives in this deployment's storage. It is resolved
+	// into Base64 before the certificate is rendered and is never emitted; a
+	// caller that already holds the content sets Base64 instead.
+	Key         string `json:"key,omitempty"`
+	Base64      string `json:"base64,omitempty"`
+	Information string `json:"information,omitempty"`
+	IssueDate   string `json:"issueDate,omitempty"`
+	LanguageID  string `json:"languageID,omitempty"`
 }
 
 type ConsignmentInput struct {

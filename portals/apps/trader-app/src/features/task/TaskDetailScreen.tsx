@@ -1,25 +1,51 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Spinner, Text } from '@radix-ui/themes'
-import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { getZoneView, submitTaskStep } from './service'
+import { getConsignment } from '@/features/consignment/service.ts'
+import type { WorkflowNode } from '@/features/consignment/types'
+import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const SUBMIT_SUCCESS_DISMISS_MS = 5000
+const NEXT_TASK_MAX_ATTEMPTS = 5
+const NEXT_TASK_RETRY_MS = 1000
+const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
+
+function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
+  const actionable = nodes.filter((node) => {
+    if (node.id === currentTaskId) return false
+    if (!isTraderVisibleNodeType(node.workflowNodeTemplate.type)) return false
+    return ACTIONABLE_NODE_STATES.has(node.state)
+  })
+  const successor = actionable.find((node) => node.depends_on?.includes(currentTaskId))
+  return (successor ?? actionable[0])?.id
+}
 
 function hasRejection(zv: ZoneView): boolean {
   const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
   if (variant === 'error') return true
-  return Object.keys(zv.view).some((name) => name.toLowerCase().includes('reject'))
+  return zv.view.some((zone) => zone.id.toLowerCase().includes('reject'))
 }
 
 export function TaskDetailScreen() {
-  const { taskId } = useParams<{ taskId: string }>()
+  const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
   const navigate = useNavigate()
-  const goBack = () => void navigate(-1)
+  const goToTasks = () => {
+    if (consignmentId) {
+      void navigate(`/consignments/${consignmentId}`, { replace: true })
+      return
+    }
+    void navigate(-1)
+  }
+  const goToNextTask = (nextId: string) => {
+    if (!consignmentId) return
+    void navigate(`/consignments/${consignmentId}/tasks/${nextId}`)
+  }
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -28,11 +54,20 @@ export function TaskDetailScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const [showSubmitSuccess, setShowSubmitSuccess] = useState(false)
+  // Bumped once an action's refetch has landed, and mixed into the zone keys so
+  // the form remounts against what came back. A form seeds its data on mount
+  // and deliberately ignores later polls, which is what stops a background
+  // refresh clobbering someone mid-sentence -- but it also means a step that
+  // returns to the same form (verify, save) would otherwise keep displaying the
+  // values it mounted with, from before the submission was saved.
+  const [formEpoch, setFormEpoch] = useState(0)
+  const [nextTaskId, setNextTaskId] = useState<string | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
     setShowSubmitSuccess(false)
+    setNextTaskId(null)
   }
 
   const fetchTask = useCallback(async (): Promise<ZoneView | undefined> => {
@@ -73,6 +108,38 @@ export function TaskDetailScreen() {
     }
   }, [taskId, t])
 
+  useEffect(() => {
+    if (!consignmentId || !taskId || zoneView?.state !== 'COMPLETED') return
+
+    let cancelled = false
+    let attempt = 0
+    let timeout: ReturnType<typeof setTimeout> | undefined
+
+    const loadNextTask = async () => {
+      attempt += 1
+      try {
+        const consignment = await getConsignment(consignmentId)
+        if (cancelled || !consignment) return
+        const id = nextActionableTaskId(consignment.workflowNodes ?? [], taskId)
+        setNextTaskId(id ?? null)
+        if (!id && attempt < NEXT_TASK_MAX_ATTEMPTS) {
+          timeout = setTimeout(() => void loadNextTask(), NEXT_TASK_RETRY_MS)
+        }
+      } catch (err) {
+        console.error('TaskDetailScreen: failed to resolve next task:', err)
+        if (!cancelled && attempt < NEXT_TASK_MAX_ATTEMPTS) {
+          timeout = setTimeout(() => void loadNextTask(), NEXT_TASK_RETRY_MS)
+        }
+      }
+    }
+
+    void loadNextTask()
+    return () => {
+      cancelled = true
+      if (timeout) clearTimeout(timeout)
+    }
+  }, [consignmentId, taskId, zoneView])
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full p-6">
@@ -87,12 +154,12 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-lg shadow p-6 text-center">
+        <div className="bg-app-surface rounded-2xl shadow-md p-6 text-center">
           <Text size="4" color="red" weight="medium">
             {error}
           </Text>
           <div className="mt-4">
-            <Button variant="soft" onClick={goBack}>
+            <Button variant="soft" onClick={goToTasks}>
               <ArrowLeftIcon />
               {t('tasks.goBack')}
             </Button>
@@ -105,12 +172,12 @@ export function TaskDetailScreen() {
   if (!zoneView) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-lg shadow p-6 text-center">
+        <div className="bg-app-surface rounded-2xl shadow-md p-6 text-center">
           <Text size="4" color="gray" weight="medium">
             {t('tasks.error.notFound')}
           </Text>
           <div className="mt-4">
-            <Button variant="soft" onClick={goBack}>
+            <Button variant="soft" onClick={goToTasks}>
               <ArrowLeftIcon />
               {t('tasks.goBack')}
             </Button>
@@ -122,11 +189,19 @@ export function TaskDetailScreen() {
 
   return (
     <div className="min-h-full">
-      <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
-        <Button variant="ghost" color="gray" onClick={goBack}>
-          <ArrowLeftIcon />
-          {t('tasks.back')}
-        </Button>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <Button variant="ghost" color="gray" onClick={goToTasks} className="cursor-pointer">
+            <ArrowLeftIcon />
+            {t('tasks.back')}
+          </Button>
+          {zoneView.state === 'COMPLETED' && nextTaskId && (
+            <Button variant="ghost" color="gray" onClick={() => goToNextTask(nextTaskId)} className="cursor-pointer">
+              {t('tasks.nextTask')}
+              <ArrowRightIcon />
+            </Button>
+          )}
+        </div>
         <Button
           variant="soft"
           color="blue"
@@ -140,8 +215,8 @@ export function TaskDetailScreen() {
         </Button>
       </div>
       {showSubmitSuccess && (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="rounded-lg border border-success bg-success-subtle px-4 py-3">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="rounded-xl bg-success-subtle px-4 py-3 shadow-sm">
             <Text size="2" weight="medium" className="text-success-strong">
               {t('tasks.submitSuccess')}
             </Text>
@@ -149,9 +224,9 @@ export function TaskDetailScreen() {
         </div>
       )}
       {submitError && (
-        <div className="mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="rounded-lg border border-red-6 bg-red-2 px-4 py-3">
-            <Text size="2" color="red" weight="medium">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
+            <Text size="2" weight="medium" className="text-error-strong">
               {submitError}
             </Text>
           </div>
@@ -159,6 +234,7 @@ export function TaskDetailScreen() {
       )}
       <TraderZoneLayout
         task={zoneView}
+        formEpoch={formEpoch}
         onSubmitForm={
           hasSubmitted
             ? undefined
@@ -174,9 +250,13 @@ export function TaskDetailScreen() {
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
                   const zv = await fetchTask()
-                  // SAVE_AS_DRAFT persists a partial form and stays PENDING_USER;
-                  // the submit-success banner is only for a real application submit.
-                  if (command !== 'SAVE_AS_DRAFT' && zv && !hasRejection(zv)) {
+                  // Reseed from what the refetch returned, not from what the
+                  // form mounted with. Safe to discard the on-screen values
+                  // here: the submission that just succeeded carried them.
+                  setFormEpoch((n) => n + 1)
+                  // Show the success banner only when the task moved out of PENDING_USER.
+                  // A draft save leaves it there, a real submission advances it.
+                  if (zv && zv.state !== 'PENDING_USER' && !hasRejection(zv)) {
                     setShowSubmitSuccess(true)
                     setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
                   }

@@ -19,7 +19,7 @@ export function useAuthContext(): UseAuthContextResult {
     }
 
     try {
-      return mapClaimsToRoles(auth.user.profile as { groups?: unknown })
+      return mapClaimsToRoles(auth.user.profile)
     } catch {
       return []
     }

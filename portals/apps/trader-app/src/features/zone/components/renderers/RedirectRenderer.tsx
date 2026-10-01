@@ -47,7 +47,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
 
   if (hasRedirected) {
     return (
-      <div className="rounded-lg border border-primary-subtle bg-primary-subtle/40 p-6 text-sm text-foreground-muted shadow-sm transition-all duration-300">
+      <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted shadow-sm transition-all duration-300">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 bg-primary-subtle rounded-full text-primary">
             <svg
@@ -73,7 +73,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
           </div>
         </div>
 
-        <div className="text-foreground-muted mb-6 bg-app-surface/60 p-4 rounded-md border border-border">
+        <div className="text-foreground-muted mb-6 bg-app-surface/70 p-4 rounded-xl">
           <ReactMarkdown
             components={{
               a: ({ children, href }) => (
@@ -127,7 +127,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
   }
 
   return (
-    <div className="rounded border border-primary-subtle bg-primary-subtle/40 p-6 text-sm text-foreground-muted">
+    <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted">
       <p className="mb-3 font-medium text-primary">Redirecting to payment gateway…</p>
       <ReactMarkdown
         components={{

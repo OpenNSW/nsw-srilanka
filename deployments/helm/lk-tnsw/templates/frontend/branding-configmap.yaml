@@ -1,0 +1,11 @@
+{{- if .Values.frontend.branding }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lk-tnsw.frontend.fullname" . }}-branding
+  labels:
+    {{- include "lk-tnsw.frontend.labels" . | nindent 4 }}
+data:
+  branding.json: |
+    {{- dict "branding" .Values.frontend.branding | toJson | nindent 4 }}
+{{- end }}

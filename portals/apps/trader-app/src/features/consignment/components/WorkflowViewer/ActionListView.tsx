@@ -3,6 +3,7 @@ import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
+import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
 
@@ -28,18 +29,7 @@ export function ActionListView({
   const { t } = useTranslation()
 
   const filteredSteps = useMemo(
-    () =>
-      steps.filter((step) => {
-        const type = step.workflowNodeTemplate.type?.toUpperCase()
-        return (
-          type !== 'START' &&
-          type !== 'END' &&
-          type !== 'GATEWAY' &&
-          type !== 'END_NODE' &&
-          type !== 'SYSTEM' &&
-          type !== 'SPLIT_TASK'
-        )
-      }),
+    () => steps.filter((step) => isTraderVisibleNodeType(step.workflowNodeTemplate.type)),
     [steps],
   )
 
@@ -133,12 +123,7 @@ export function ActionListView({
             ) : null}
 
             {groups.active.length === 0 && groups.inReview.length === 0 && filteredSteps.length > 0 ? (
-              <Box
-                py="8"
-                px="6"
-                mb="6"
-                className="text-center bg-app-surface rounded-xl border border-border border-dashed shadow-sm relative"
-              >
+              <Box py="8" px="6" mb="6" className="text-center relative">
                 {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
                 <ClockIcon className="w-12 h-12 text-foreground-subtle mx-auto mb-3" />
                 <Heading size="3" color="gray" mb="1">

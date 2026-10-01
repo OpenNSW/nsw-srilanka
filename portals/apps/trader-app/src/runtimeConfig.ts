@@ -2,13 +2,18 @@ type RuntimeConfigValue = string | undefined
 
 type RuntimeConfigMap = Record<string, RuntimeConfigValue>
 
-export interface IdpRoleGroupConfig {
-  traderGroupName: string
-  chaGroupName: string
+export interface IdpRoleConfig {
+  roleClaimName: string
+  traderRoleName: string
+  chaRoleName: string
+  nswAdminRoleName: string
 }
 
-const DEFAULT_TRADER_GROUP_NAME = 'Traders'
-const DEFAULT_CHA_GROUP_NAME = 'CHA'
+// `roles` is the claim ThunderID releases for the `role` scope, and the one the backend reads.
+const DEFAULT_ROLE_CLAIM_NAME = 'roles'
+const DEFAULT_TRADER_ROLE_NAME = 'Trader'
+const DEFAULT_CHA_ROLE_NAME = 'CHA'
+const DEFAULT_NSW_ADMIN_ROLE_NAME = 'NSW Admin'
 
 declare global {
   interface Window {
@@ -30,11 +35,6 @@ export function getEnv(name: string, fallback?: string): string | undefined {
   const runtimeValue = resolveRuntimeConfig()[name]
   if (runtimeValue && runtimeValue.trim() !== '') {
     return runtimeValue
-  }
-
-  const buildValue = (import.meta.env as Record<string, string | undefined>)[name]
-  if (buildValue && buildValue.trim() !== '') {
-    return buildValue
   }
 
   return fallback
@@ -91,9 +91,11 @@ export function getBooleanEnv(name: string, fallback = false): boolean {
   return value.toLowerCase() === 'true'
 }
 
-export function getIdpRoleGroupConfig(): IdpRoleGroupConfig {
+export function getIdpRoleConfig(): IdpRoleConfig {
   return {
-    traderGroupName: getEnv('VITE_IDP_TRADER_GROUP_NAME', DEFAULT_TRADER_GROUP_NAME),
-    chaGroupName: getEnv('VITE_IDP_CHA_GROUP_NAME', DEFAULT_CHA_GROUP_NAME),
+    roleClaimName: getEnv('IDP_ROLE_CLAIM_NAME', DEFAULT_ROLE_CLAIM_NAME),
+    traderRoleName: getEnv('IDP_TRADER_ROLE_NAME', DEFAULT_TRADER_ROLE_NAME),
+    chaRoleName: getEnv('IDP_CHA_ROLE_NAME', DEFAULT_CHA_ROLE_NAME),
+    nswAdminRoleName: getEnv('IDP_NSW_ADMIN_ROLE_NAME', DEFAULT_NSW_ADMIN_ROLE_NAME),
   }
 }

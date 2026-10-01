@@ -13,16 +13,17 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders/github"
 	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/artifact/loaders/s3"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
+	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 // Config holds all configuration for the application.
@@ -39,13 +40,7 @@ type Config struct {
 
 	ArtifactLoader loaders.Config
 
-	// DevMode indicates whether the application is running in development mode (APP_ENV=development).
-	DevMode bool
-
-	// TestManifestPaths holds optional relative paths to test/sandbox manifest files
-	// (e.g. "test/single_node/manifest.json") loaded alongside the primary manifest
-	// when DevMode is true.
-	TestManifestPaths []string
+	RefID refid.Config
 }
 
 // ServerConfig holds server configuration.
@@ -55,7 +50,6 @@ type ServerConfig struct {
 	ServicesConfigPath       string
 	PaymentMethodsConfigPath string
 	CatalogConfigPath        string
-	Debug                    bool
 	LogLevel                 slog.Level
 	MaxRequestBytes          int64
 	ReadHeaderTimeout        time.Duration
@@ -94,6 +88,22 @@ func (s ServerConfig) Validate() error {
 func Load() (*Config, error) {
 	serverPort := getIntEnvOrDefault("SERVER_PORT", 8080)
 
+	// Unlike ServicesConfigPath/PaymentMethodsConfigPath/CatalogConfigPath below (stored as a
+	// path string and read later, downstream), notification.Config carries the provider blocks
+	// directly (core dropped its own Path-based loading — core#227) and Validate below requires
+	// Providers to be non-empty, so it has to be read here, synchronously, for Load itself to
+	// fail closed on a missing/malformed file rather than at first send.
+	notificationProviders, err := loadNotificationProviders(getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load notification config: %w", err)
+	}
+
+	// config.yaml is mandatory too, so a missing or malformed file fails Load.
+	fileCfg, err := loadConfigFile(getEnvOrDefault("CONFIG_PATH", "configs/config.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Database: database.Config{
 			Host:                   getEnvOrDefault("DB_HOST", "localhost"),
@@ -101,7 +111,7 @@ func Load() (*Config, error) {
 			Username:               getEnvOrDefault("DB_USERNAME", "postgres"),
 			Password:               os.Getenv("DB_PASSWORD"), // No default for security
 			Name:                   getEnvOrDefault("DB_NAME", "nsw_db"),
-			SSLMode:                getEnvOrDefault("DB_SSLMODE", "disable"),
+			SSLMode:                getEnvOrDefault("DB_SSLMODE", "require"),
 			MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
 			MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
 			MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),
@@ -112,7 +122,6 @@ func Load() (*Config, error) {
 			ServicesConfigPath:       getEnvOrDefault("SERVICES_CONFIG_PATH", "configs/services.json"),
 			PaymentMethodsConfigPath: getEnvOrDefault("PAYMENT_METHODS_CONFIG_PATH", "configs/payment_methods.json"),
 			CatalogConfigPath:        getEnvOrDefault("CATALOG_CONFIG_PATH", "configs/catalog.json"),
-			Debug:                    getBoolOrDefault("SERVER_DEBUG", true),
 			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
 			MaxRequestBytes:          int64(getIntEnvOrDefault("SERVER_MAX_REQUEST_BYTES", 33554432)), // 32 MiB
 			ReadHeaderTimeout:        getDurationOrDefault("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
@@ -149,7 +158,7 @@ func Load() (*Config, error) {
 			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
 		},
 		Notification: notification.Config{
-			Path: getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"),
+			Providers: notificationProviders,
 		},
 		Temporal: temporal.Config{
 			Host:      getEnvOrDefault("TEMPORAL_HOST", "localhost"),
@@ -189,8 +198,7 @@ func Load() (*Config, error) {
 				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
 			},
 		},
-		DevMode:           isDevEnvironment(),
-		TestManifestPaths: parseCommaSeparated(getEnvOrDefault("DEV_TEST_MANIFEST_PATHS", "")),
+		RefID: fileCfg.RefID,
 	}
 
 	// Validate required fields
@@ -280,6 +288,21 @@ func guardServicesConfigTLS(path string) error {
 		}
 	}
 	return nil
+}
+
+// loadNotificationProviders reads path — one settings block per channel, e.g.
+// {"email": {...}, "sms": {...}} — into notification.Config's Providers map. The file's own
+// shape is unchanged from before core#227; only how this app hands it to core did.
+func loadNotificationProviders(path string) (map[notification.ChannelType]map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var providers map[notification.ChannelType]map[string]any
+	if err := json.Unmarshal(data, &providers); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return providers, nil
 }
 
 // getEnvOrDefault returns the trimmed value of an environment variable or a default value.

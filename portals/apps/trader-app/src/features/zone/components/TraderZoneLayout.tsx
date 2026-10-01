@@ -1,42 +1,41 @@
-import type { Alert, AlertVariant, AuditEntry, ZoneComponent, ZoneView } from '@/features/zone/types'
+import type { Alert, AlertVariant, AuditEntry, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
+import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 
 type Props = {
   task: ZoneView
   onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
+  // Changes once an action's refetch has landed. Part of each zone's key, so a
+  // step returning to the same form remounts it against the refreshed data
+  // rather than leaving the values it mounted with on screen.
+  formEpoch?: number
 }
 
-const ZONE_ORDER = ['instructions', 'workspace', 'reference']
-
-export function TraderZoneLayout({ task, onSubmitForm }: Props) {
-  const zones = orderedZones(task.view)
-
+export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
   return (
-    <div className="mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
-      {zones.map(([name, component]) => (
-        <Zone key={`${name}:${task.task_id}:${task.state}`} name={name} component={component} onAction={onSubmitForm} />
+      {task.view.map((component) => (
+        <Zone
+          key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
+          component={component}
+          onAction={onSubmitForm}
+        />
       ))}
       {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
     </div>
   )
 }
 
-function orderedZones(view: Record<string, ZoneComponent>): Array<[string, ZoneComponent]> {
-  const known = ZONE_ORDER.filter((k) => k in view).map((k) => [k, view[k]] as [string, ZoneComponent])
-  const extras = Object.entries(view).filter(([k]) => !ZONE_ORDER.includes(k))
-  return [...known, ...extras]
-}
-
 function AlertBanner({ alert }: { alert: Alert }) {
   const { title, message, variant } = normaliseAlert(alert)
   const styles = alertStyles(variant)
   return (
-    <div className={`rounded-lg border p-4 flex items-start gap-3 ${styles.container}`}>
+    <div className={`rounded-2xl p-4 flex items-start gap-3 ${styles.container}`}>
       <span className={`mt-0.5 ${styles.icon}`}>{alertIcon(variant)}</span>
       <div className="flex-1 min-w-0">
         {title && <p className={`text-sm font-semibold ${styles.title}`}>{title}</p>}
@@ -55,21 +54,21 @@ function alertStyles(variant: AlertVariant) {
   switch (variant) {
     case 'success':
       return {
-        container: 'bg-success-subtle border-success-subtle',
+        container: 'bg-success-subtle',
         icon: 'text-success',
         title: 'text-success-strong',
         body: 'text-success-strong',
       }
     case 'warning':
       return {
-        container: 'bg-warning-subtle border-warning-subtle',
+        container: 'bg-warning-subtle',
         icon: 'text-warning',
         title: 'text-warning-strong',
         body: 'text-warning-strong',
       }
     case 'error':
       return {
-        container: 'bg-error-subtle border-error-subtle',
+        container: 'bg-error-subtle',
         icon: 'text-error',
         title: 'text-error-strong',
         body: 'text-error-strong',
@@ -77,7 +76,7 @@ function alertStyles(variant: AlertVariant) {
     case 'info':
     default:
       return {
-        container: 'bg-info-subtle border-info-subtle',
+        container: 'bg-info-subtle',
         icon: 'text-info',
         title: 'text-info-strong',
         body: 'text-info-strong',
@@ -112,7 +111,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
   const { t } = useTranslation()
   const sorted = [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
   return (
-    <details className="group rounded-lg border border-border bg-app-surface overflow-hidden">
+    <details className="group rounded-2xl bg-app-surface shadow-sm overflow-hidden">
       <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-app-bg">
         <span className="flex items-center gap-2">
           <svg
@@ -130,7 +129,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
           <span className="text-xs text-foreground-subtle">{t('audit.entries', { count: entries.length })}</span>
         </span>
       </summary>
-      <div className="relative border-t border-border px-4 py-4">
+      <div className="relative border-t border-border/60 px-4 py-4">
         <div className="absolute left-6.5 top-6 bottom-6 w-px bg-app-surface-muted" aria-hidden />
         <ol className="space-y-4">
           {sorted.map((entry) => (
@@ -148,7 +147,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
   return (
     <li className="relative flex items-start gap-3">
       <span
-        className={`relative z-10 mt-1 inline-block w-2.5 h-2.5 rounded-full ring-4 ring-white ${color}`}
+        className={`relative z-10 mt-1 inline-block w-2.5 h-2.5 rounded-full ring-4 ring-app-surface ${color}`}
         aria-hidden
       />
       <div className="flex-1 min-w-0">
@@ -198,15 +197,15 @@ function formatRelative(iso: string, t: TFunction): string {
 function Header({ task }: { task: ZoneView }) {
   const { t } = useTranslation()
   const statusKey = workflowStatusI18nKey(task.state)
-  const statusLabel = statusKey ? t(statusKey) : task.state
+  const statusLabel = statusKey ? t(statusKey) : humanizeStatus(task.state)
   return (
-    <div className="border-b border-border pb-4">
+    <div>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{task.task_type}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">{humanizeStatus(task.task_type)}</h1>
           <p className="text-xs text-foreground-muted mt-1 font-mono">{task.task_id}</p>
         </div>
-        <span className="inline-flex items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary border border-primary-subtle">
+        <span className="inline-flex items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary">
           {statusLabel}
         </span>
       </div>

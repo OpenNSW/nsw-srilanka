@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Rendering for the §4.4 errors object — the segment-keyed shape ASYCUDA uses
+// Rendering for the §4.5 errors object — the segment-keyed shape ASYCUDA uses
 // for validation failures, where "0" is the document as a whole and any other
 // key is an item number.
 //
@@ -16,7 +16,7 @@ import (
 // acknowledgement can carry error detail inline, and the §7.2 integration result
 // carries it in the errors object. It therefore lives with neither of them.
 
-// describeErrors renders the §4.4 segment-keyed errors object from an
+// describeErrors renders the §4.5 segment-keyed errors object from an
 // integration result as a trader-facing message.
 //
 // The raw JSON must not be passed through verbatim: `{"0":[{"code":331,...}]}`
@@ -44,13 +44,13 @@ func describeErrors(raw json.RawMessage) string {
 }
 
 // validationBullets renders the response's error detail as markdown bullets,
-// accepting both the §4.4 segment-keyed object and the flat array form.
+// accepting both the §4.5 segment-keyed object and the flat array form.
 func validationBullets(resp map[string]any) []string {
 	switch errs := resp["errors"].(type) {
 	case []any:
 		return entryBullets(errs, "")
 	case map[string]any:
-		// §4.4: "0" is the note as a whole, any other key is an item number.
+		// §4.5: "0" is the note as a whole, any other key is an item number.
 		var bullets []string
 		for _, key := range sortedSegmentKeys(errs) {
 			entries, ok := errs[key].([]any)
@@ -77,7 +77,7 @@ func entryBullets(entries []any, prefix string) []string {
 			bullets = append(bullets, "- "+prefix+fmt.Sprintf("%v", e))
 			continue
 		}
-		// §4.4 names the text "description"; the submission acknowledgement
+		// §4.5 names the text "description"; the submission acknowledgement
 		// uses "message". Either is the trader-facing reason.
 		msg := stringField(m, "description")
 		if msg == "" {
@@ -109,7 +109,7 @@ func stringField(m map[string]any, key string) string {
 	}
 }
 
-// sortedSegmentKeys orders the §4.4 errors object so the general segment ("0")
+// sortedSegmentKeys orders the §4.5 errors object so the general segment ("0")
 // leads and item segments follow numerically, rather than in Go's randomized
 // map order.
 func sortedSegmentKeys(errs map[string]any) []string {

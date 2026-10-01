@@ -14,28 +14,32 @@ It depends on the open-source core engine published at [github.com/OpenNSW/core]
 ```
 nsw-srilanka/
 ├── cmd/
-│   └── server/
-│       └── main.go                       # Entry point: loads config, builds the app, runs the HTTP server
-├── internal/
-│   └── bootstrap/
-│       └── app.go                        # Wires DB, Temporal, taskflow, auth, storage, notifications, routes
-├── external-integration/
-│   └── payment/                          # Sri Lanka–specific payment gateway implementations (GovPay+)
-├── test/
-│   └── e2e/
-│       └── replay/                       # End-to-end replay tests (config-driven harness, mock agency/gateway)
-├── migrations/                           # PostgreSQL migration files (up/down SQL)
-├── portals/                              # Trader Portal frontend (React/Vite monorepo)
-├── idp/                                  # Identity Provider configuration and seed resources
+│   ├── server/                            # Main API entry point: loads config, builds the app, runs the HTTP server
+│   └── otc/                               # CLI for applying one-trade-artifacts config against a running instance
+├── internal/                              # Application code — bootstrap wiring, consignment/profile domains,
+│                                           # task plugins & authz, replay engine, audit, catalog, static data
+├── external-integration/                  # Sri Lanka–specific integrations
+│   ├── payment/                           #   Payment gateways (GovPay+)
+│   ├── customs/                          #   Customs declaration integration (ASYCUDA)
+│   ├── ephyto/                           #   IPPC ePhyto Hub client
+│   └── slpa/                             #   Sri Lanka Ports Authority (CMS, gate pass, consolidation, invoicing…)
+├── test/e2e/replay/                       # End-to-end replay tests (config-driven harness, mock agency/gateway)
+├── migrations/                            # PostgreSQL migration files (up/down SQL)
+├── portals/                                # Trader Portal frontend (React/Vite monorepo)
+├── idp/                                    # Identity Provider (ThunderID) configuration and seed resources
+├── deployments/helm/                       # Helm chart for deploying the stack
+├── docs/                                   # WORKFLOW_GUIDE.md and other developer docs
 ├── configs/                                 # Runtime configs only (no workflow/form artifacts)
 │   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
 │   ├── services.example.json                # Template for services.json (local/native dev — localhost)
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── notification.example.json            # Template for notification.json
-│   └── catalog.example.json                 # Template for catalog.json
-├── .env.example                          # Template for environment variables
-├── .gitignore
+│   ├── catalog.example.json                 # Template for catalog.json
+│   └── companies.example.json               # Template for companies.json
+├── compose.yml / compose.override.yml     # Docker Compose stack (base + dev hot-reload override)
+├── .env.example                            # Template for environment variables
 ├── Dockerfile
+├── Makefile
 ├── go.mod
 └── go.sum
 ```
@@ -47,7 +51,7 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ---
 
 ## How to Run Locally
-
+>[!NOTE]
 > ⚠️ **This quickstart is for local development only.** The example configs enable
 > insecure TLS (`AUTH_JWKS_INSECURE_SKIP_VERIFY=true`, `insecure_skip_tls_verify`
 > in `services.json`) for the self-signed local IdP. The backend only honors these
@@ -56,23 +60,21 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 > start** on them. For non-local environments, trust the IdP/agency certificate
 > chain, keep those flags off, and never set `APP_ENV=development`.
 
-### 1. Prepare local config files
-
-Copy each example file to its live name (the real files are gitignored and must not be committed):
+### 1. First-time setup
 
 ```bash
-cp .env.example .env
-cp idp/.env.example idp/.env
-cp configs/services.docker.example.json configs/services.docker.json
-# cp configs/services.example.json configs/services.json
-# For local development with direct host DB access, use the non-docker
-# config with localhost references instead of container hostnames.
-cp configs/payment_methods.example.json configs/payment_methods.json
-cp configs/notification.example.json configs/notification.json
-cp configs/catalog.example.json configs/catalog.json
+make setup
 ```
 
-Edit each seeded file for your environment before starting the stack.
+This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, and `configs/{services,services.docker,payment_methods,notification,catalog,companies}.json`. Existing files are never overwritten, so it is safe to re-run.
+
+> [!NOTE]
+> `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.
+> See the [official install guide](https://golangci-lint.run) for all platforms, e.g.:
+> - macOS/Linux (Homebrew): `brew install golangci-lint`
+> - Any platform with Go: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`
+
+Edit the seeded files for your environment before starting the stack. See the [Configuration Reference](#configuration-reference) for what each one holds.
 
 ### 2. Start the Docker Stack
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
@@ -140,10 +142,7 @@ The dev container is hermetic: it builds from the pinned `go.mod` version, ignor
    ```bash
    go work init . ../core
    ```
-2. **Prepare env** — the template is already tuned for native runs (`DB_HOST=localhost`, `TEMPORAL_HOST=localhost`, `AUTH_JWKS_URL=https://localhost:8090`, `SERVICES_CONFIG_PATH=./configs/services.json`):
-   ```bash
-   cp .env.example .env
-   ```
+2. **Prepare config** — the `.env` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`. The host binary also needs the `localhost` variant of the service endpoints, `configs/services.json` (also seeded by `make setup`) — in `.env`, switch `SERVICES_CONFIG_PATH` to the commented-out `./configs/services.json` line.
 3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
    ```bash
    make deps
@@ -277,14 +276,16 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 ## Configuration Reference
 
-| File                                  | Purpose                                                                         | Source of truth                               |
-|---------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
-| `.env`                                | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)           | `.env.example`                                |
-| `idp/.env`                            | Identity Provider environment (client IDs, secrets, JWKS config)               | `idp/.env.example`                             |
-| `configs/services.docker.json`        | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json`       |
-| `configs/services.json`               | Outbound service endpoints — uses `localhost` (for native/host dev runs)        | `configs/services.example.json`               |
-| `configs/payment_methods.json`        | Payment gateway catalogue (id, type, gateway URL, instruction template)         | `configs/payment_methods.example.json`        |
-| `configs/notification.json`           | Notification provider settings (SMS, email channels)                            | `configs/notification.example.json`           |
-| `configs/catalog.json`                | Global catalog — logical names → IdP token roles and OAuth2 client ids          | `configs/catalog.example.json`                |
+| File                           | Purpose                                                                          | Source of truth                        |
+|--------------------------------|----------------------------------------------------------------------------------|----------------------------------------|
+| `.env`                         | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)            | `.env.example`                         |
+| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                 | `idp/.env.example`                     |
+| `configs/services.docker.json` | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json` |
+| `configs/services.json`        | Outbound service endpoints — uses `localhost` (for native/host dev runs)         | `configs/services.example.json`        |
+| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)          | `configs/payment_methods.example.json` |
+| `configs/notification.json`    | Notification provider settings (SMS, email channels)                             | `configs/notification.example.json`    |
+| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids           | `configs/catalog.example.json`         |
+| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)              | `configs/companies.example.json`       |
+| `configs/config.yaml`          | Server config file (mandatory; `CONFIG_PATH`) — reference ID formats (`refid`)   | `configs/config.example.yaml`          |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

@@ -13,7 +13,6 @@ import (
 
 	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/authn"
 	flowextensions "github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
@@ -22,6 +21,7 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	workflow "github.com/OpenNSW/core/workflow"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	authzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
@@ -138,6 +138,8 @@ func (noopWorkflowRunner) StartWorker() error { return nil }
 
 func (noopWorkflowRunner) StopWorker() {}
 
+func (noopWorkflowRunner) RegisterAdminParkHandler(workflow.AdminParkHandler) {}
+
 // testTaskArtifactID is the id of the subtask template the test task records
 // point at; the authz rules live in the template's extension properties.
 const testTaskArtifactID = "test-subtask"
@@ -237,15 +239,17 @@ func withGateInput(ctx context.Context, in *taskauthz.Input) context.Context {
 	return taskauthz.WithInput(ctx, *in)
 }
 
-// completeTask performs a POST /api/v1/tasks/{id}/commands/{command} against h
+// completeTask performs a POST /api/v1/tasks/{id} against h
 // as an authenticated user, with the gate's Input attached when present.
 func completeTask(t *testing.T, h *HTTPHandler, in *taskauthz.Input, command string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/commands/"+command, nil)
+	body := fmt.Sprintf(`{"command":%q}`, command)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID, strings.NewReader(body))
 	req.SetPathValue("id", testTaskID)
-	req.SetPathValue("command", command)
-	ctx := context.WithValue(req.Context(), authn.AuthContextKey, &authn.AuthContext{
-		User: &authn.UserContext{ID: "user-1", Roles: []string{"Trader"}},
+	ctx := authn.ContextWithPrincipal(req.Context(), &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "user-1",
+		Roles:  []string{"Trader"},
 	})
 	req = req.WithContext(withGateInput(ctx, in))
 	recorder := httptest.NewRecorder()
@@ -386,11 +390,20 @@ func decodeZoneView(t *testing.T, body string) zoneview.ZoneView {
 	return zv
 }
 
+// decodeSlots indexes the rendered view by each entry's id (its section key),
+// so assertions can ask which sections are present without depending on order.
 func decodeSlots(t *testing.T, zv zoneview.ZoneView) map[string]zoneview.EnrichedComponent {
 	t.Helper()
-	var view map[string]zoneview.EnrichedComponent
-	if err := json.Unmarshal(zv.View, &view); err != nil {
+	var entries []zoneview.EnrichedComponent
+	if err := json.Unmarshal(zv.View, &entries); err != nil {
 		t.Fatalf("decode view: %v", err)
+	}
+	view := make(map[string]zoneview.EnrichedComponent, len(entries))
+	for _, e := range entries {
+		if _, dup := view[e.ID]; dup {
+			t.Fatalf("duplicate view entry id %q", e.ID)
+		}
+		view[e.ID] = e
 	}
 	return view
 }
@@ -473,13 +486,11 @@ func TestHandleGetTask_DeniedAudited(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
 	req.SetPathValue("id", testTaskID)
 	ctx := taskauthz.WithInput(req.Context(), in)
-	authCtx := &authn.AuthContext{
-		User: &authn.UserContext{
-			ID:    "user-trader-1",
-			Email: "trader@example.com",
-		},
-	}
-	ctx = context.WithValue(ctx, authn.AuthContextKey, authCtx)
+	ctx = authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "user-trader-1",
+		Email:  "trader@example.com",
+	})
 	req = req.WithContext(ctx)
 
 	recorder := httptest.NewRecorder()
@@ -522,21 +533,6 @@ func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), errTaskNotFound) {
 		t.Errorf("body should be the not-found text, got %s", recorder.Body.String())
-	}
-}
-
-func TestParseCompleteTaskStepRequest_AllowsTrailingWhitespace(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/commands/approve", strings.NewReader(`{"key":"value"}`+"\n"))
-
-	command, payload, _, _, err := parseCompleteTaskStepRequest(req, "approve")
-	if err != nil {
-		t.Fatalf("unexpected error for trailing whitespace: %v", err)
-	}
-	if command != "approve" {
-		t.Fatalf("command = %q, want %q", command, "approve")
-	}
-	if payload["key"] != "value" {
-		t.Fatalf("payload[\"key\"] = %v, want %q", payload["key"], "value")
 	}
 }
 

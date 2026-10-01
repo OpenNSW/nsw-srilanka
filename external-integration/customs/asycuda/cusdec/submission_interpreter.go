@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/edgetrace"
 )
 
 // SLC Edge submission statuses that count as accepted. RECEIVED is what the
@@ -61,6 +63,12 @@ type CusdecInterpreter struct {
 // NewCusdecInterpreter returns the SLC Edge CusDec interpreter. files may be
 // nil, in which case a declaration carrying supporting documents is rejected
 // before it is sent rather than arriving without its attachments.
+// cusdecEndpoint names this exchange in the trace. The declaration goes as
+// multipart, so the payload is traced from BuildParts — the path that actually
+// assembles what is sent — rather than from BuildRequest, which exists only to
+// satisfy the interpreter contract.
+const cusdecEndpoint = "cusdec"
+
 func NewCusdecInterpreter(files FileFetcher) *CusdecInterpreter {
 	return &CusdecInterpreter{files: files}
 }
@@ -85,18 +93,32 @@ func (c CusdecInterpreter) BuildParts(ctx context.Context, inputs map[string]any
 		return nil, err
 	}
 
+	edgetrace.Request(ctx, cusdecEndpoint, payload)
+
 	payloadPart, err := remote.JSONPart("payload", payload)
 	if err != nil {
 		return nil, &buildError{err.Error()}
 	}
 
-	parts := make([]remote.Part, 0, len(docs)+2)
+	// Only a scanned document has a part; a metadata document (§8) references
+	// one held elsewhere and sends no bytes. Both still travel in the payload's
+	// supportingDocuments array, so the attached ones are collected separately
+	// here -- fileinfo counts parts, not entries, and fileN has to stay
+	// contiguous across the entries that have no file.
+	attached := make([]SupportDoc, 0, len(docs))
+	for _, doc := range docs {
+		if doc.HasFile() {
+			attached = append(attached, doc)
+		}
+	}
+
+	parts := make([]remote.Part, 0, len(attached)+2)
 	parts = append(parts, payloadPart,
 		// §6.1.1: the count must equal the number of file parts, and 0 is the
 		// correct value when there is nothing attached.
-		remote.Part{Name: "fileinfo", Content: []byte(strconv.Itoa(len(docs)))})
+		remote.Part{Name: "fileinfo", Content: []byte(strconv.Itoa(len(attached)))})
 
-	for i, doc := range docs {
+	for i, doc := range attached {
 		content, mime, err := c.fetch(ctx, doc)
 		if err != nil {
 			return nil, err
@@ -171,6 +193,8 @@ func buildFromInputs(inputs map[string]any) (Submission, []SupportDoc, error) {
 // Interpret reports whether the submission was accepted and captures the SLC
 // response fields (and a trader-facing error message on rejection).
 func (CusdecInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	edgetrace.Response(context.Background(), cusdecEndpoint, resp, callErr)
+
 	accepted := callErr == nil && !hasErrors(resp) && statusIsAccepted(resp)
 
 	out := map[string]any{}

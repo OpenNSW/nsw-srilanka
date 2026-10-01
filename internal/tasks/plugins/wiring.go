@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/consolidation"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/ecdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/invoice"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
 )
 
@@ -33,6 +34,11 @@ const (
 	// TaskTypeCustomsCusdecDispatch is the generic AUTH_API_CALL plugin wired
 	// with the Sri Lanka Customs (SLC Edge) CusDec response interpreter.
 	TaskTypeCustomsCusdecDispatch = "CUSTOMS_CUSDEC_DISPATCH"
+
+	// TaskTypeCustomsCusdecVerify is the same plugin wired with the verify
+	// interpreter: the declaration is priced and validated without being
+	// registered, so the trader can check it before committing.
+	TaskTypeCustomsCusdecVerify = "CUSTOMS_CUSDEC_VERIFY"
 
 	// TaskTypeCustomsCDNDispatch is the generic AUTH_API_CALL plugin wired with
 	// the Sri Lanka Customs (SLC Edge) Cargo Dispatch Note interpreter. One
@@ -53,6 +59,14 @@ const (
 	// asked only which service to order per container, and the CMS derives the
 	// cargo type from the CUSDEC record itself.
 	TaskTypeSLPAServiceOrder = "SLPA_SERVICE_ORDER"
+
+	// TaskTypeSLPAInvoiceGenerate asks the CMS to issue the official invoice for
+	// an approved service order. Asked for rather than waited on: the Single
+	// Window knows when the accountant approved the order, so a step that waited
+	// to be told the invoice existed left the trader in front of an empty panel
+	// for as long as the CMS took to call. The payment against it is still
+	// reported by webhook, since that money moves outside the Single Window.
+	TaskTypeSLPAInvoiceGenerate = "SLPA_INVOICE_GENERATE"
 
 	// TaskTypeSLPAConsolidationFetch looks up the containers available for
 	// consolidation under a CUSDEC serial and matches the two sides SLPA holds
@@ -109,7 +123,7 @@ type FileFetcher interface {
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string, devMode bool) error {
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -125,19 +139,21 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		plugin   flowplugins.TaskPlugin
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
-		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, devMode)},
+		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
+		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
+		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
 		{TaskTypeSLPAConsolidationDelete, NewAPICallPluginWithInterpreter(mgr, consolidation.NewDeleteInterpreter())},
 		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
-		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter())},
+		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter(files))},
 	}
 
 	for _, e := range entries {

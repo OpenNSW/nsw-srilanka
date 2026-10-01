@@ -1,5 +1,6 @@
 import type { ConsignmentState } from './types'
 import i18n from '@/i18n'
+import { humanizeStatus } from '@/utils/formatStatus'
 
 /**
  * Get the appropriate color for a consignment state badge.
@@ -29,7 +30,7 @@ export function getStateColor(state: ConsignmentState): 'gray' | 'orange' | 'gre
  * Example: IN_PROGRESS -> In Progress
  */
 export function formatState(state: ConsignmentState): string {
-  return state.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  return humanizeStatus(state)
 }
 
 /**

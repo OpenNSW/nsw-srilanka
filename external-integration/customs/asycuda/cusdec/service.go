@@ -176,9 +176,9 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 			"__command":      "submit",
 			"review_outcome": "approve",
 			"cusdec_number":  formattedRef,
-			// §6.2 returns the assessed taxes; their total is what the trader
-			// is asked to settle on the payment step that follows.
-			"amount_to_pay": totalTaxes(req.Payload.Taxes),
+			// What the trader is asked to settle on the payment step that
+			// follows -- ASYCUDA's own figure where it sent one.
+			"amount_to_pay": amountToPay(req.Payload),
 		}
 	} else {
 		payload = map[string]any{

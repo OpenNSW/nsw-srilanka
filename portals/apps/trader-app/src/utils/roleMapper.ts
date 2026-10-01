@@ -1,30 +1,31 @@
-import { getIdpRoleGroupConfig, type IdpRoleGroupConfig } from '@/runtimeConfig'
+import { getIdpRoleConfig, type IdpRoleConfig } from '@/runtimeConfig'
 import type { Role } from '@/services/RoleContext'
-
-interface ClaimsWithGroups {
-  groups?: unknown
-}
 
 const TRADER_ROLE: Role = 'trader'
 const CHA_ROLE: Role = 'cha'
+const NSW_ADMIN_ROLE: Role = 'nswAdmin'
 
-function toGroupSet(groupsClaim: unknown): Set<string> {
-  if (!Array.isArray(groupsClaim)) {
+function toRoleNameSet(roleClaim: unknown): Set<string> {
+  if (!Array.isArray(roleClaim)) {
     return new Set()
   }
 
-  return new Set(groupsClaim.filter((value): value is string => typeof value === 'string'))
+  return new Set(roleClaim.filter((value): value is string => typeof value === 'string'))
 }
 
-export function mapGroupsToRoles(groupsClaim: unknown, config: IdpRoleGroupConfig): Role[] {
-  const groups = toGroupSet(groupsClaim)
+export function mapRoleNamesToRoles(roleClaim: unknown, config: IdpRoleConfig): Role[] {
+  const roleNames = toRoleNameSet(roleClaim)
   const roles: Role[] = []
 
-  if (groups.has(config.traderGroupName)) {
+  if (roleNames.has(config.traderRoleName)) {
     roles.push(TRADER_ROLE)
   }
 
-  if (groups.has(config.chaGroupName)) {
+  if (roleNames.has(config.nswAdminRoleName)) {
+    roles.push(NSW_ADMIN_ROLE)
+  }
+
+  if (roleNames.has(config.chaRoleName)) {
     roles.push(CHA_ROLE)
   }
 
@@ -32,8 +33,8 @@ export function mapGroupsToRoles(groupsClaim: unknown, config: IdpRoleGroupConfi
 }
 
 export function mapClaimsToRoles(
-  claims: ClaimsWithGroups | null | undefined,
-  config: IdpRoleGroupConfig = getIdpRoleGroupConfig(),
+  claims: Record<string, unknown> | null | undefined,
+  config: IdpRoleConfig = getIdpRoleConfig(),
 ): Role[] {
-  return mapGroupsToRoles(claims?.groups, config)
+  return mapRoleNamesToRoles(claims?.[config.roleClaimName], config)
 }

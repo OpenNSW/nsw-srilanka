@@ -6,10 +6,16 @@
       "ouHandle": "adam-pvt-ltd",
       "hasCha": true,
       "data": {
+        "address": "No. 45, Galle Road, Colombo 03, Sri Lanka",
         "br_no": "PV-00123456",
         "vat_no": "VAT-409123456-7000",
         "tin_no": "134256789",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000002"
+          }
+        }
       }
     },
     {
@@ -18,10 +24,16 @@
       "ouHandle": "edward-pvt-ltd",
       "hasCha": true,
       "data": {
+        "address": "No. 78, Negombo Road, Wattala, Sri Lanka",
         "br_no": "PV-00876543",
         "vat_no": "VAT-409876543-7000",
         "tin_no": "987654321",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000003"
+          }
+        }
       }
     },
     {
@@ -30,10 +42,16 @@
       "ouHandle": "cda-company",
       "hasCha": true,
       "data": {
+        "address": "Coconut Cultivation Board Building, Colombo 05, Sri Lanka",
         "br_no": "PV-00123456",
         "vat_no": "VAT-409123456-7000",
         "tin_no": "134256789",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000001"
+          }
+        }
       }
     },
     {
@@ -42,10 +60,16 @@
       "ouHandle": "fcau-company",
       "hasCha": true,
       "data": {
+        "address": "Food Control Administration Unit, Colombo 05, Sri Lanka",
         "br_no": "PV-00876543",
         "vat_no": "VAT-409876543-7000",
         "tin_no": "987654321",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000004"
+          }
+        }
       }
     },
     {
@@ -54,10 +78,16 @@
       "ouHandle": "npqs-company",
       "hasCha": true,
       "data": {
+        "address": "National Plant Quarantine Service, Katunayake, Sri Lanka",
         "br_no": "PV-00000001",
         "vat_no": "VAT-409000000-7000",
         "tin_no": "000000001",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000005"
+          }
+        }
       }
     },
     {
@@ -66,10 +96,16 @@
       "ouHandle": "govtech-company",
       "hasCha": true,
       "data": {
+        "address": "Independence Avenue, Colombo 07, Sri Lanka",
         "br_no": "PV-00000002",
         "vat_no": "VAT-409000001-7000",
         "tin_no": "000000002",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000006"
+          }
+        }
       }
     },
     {
@@ -78,10 +114,16 @@
       "ouHandle": "piu-company",
       "hasCha": true,
       "data": {
+        "address": "Project Implementation Unit, Colombo 01, Sri Lanka",
         "br_no": "PV-00000004",
         "vat_no": "VAT-409000003-7000",
         "tin_no": "000000004",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000007"
+          }
+        }
       }
     },
     {
@@ -90,10 +132,16 @@
       "ouHandle": "sltb-company",
       "hasCha": true,
       "data": {
+        "address": "Sri Lanka Tea Board, Colombo 02, Sri Lanka",
         "br_no": "PV-00000005",
         "vat_no": "VAT-409000004-7000",
         "tin_no": "000000005",
-        "slpacmsuser_key": "agztNvLSUA"
+        "slpacmsuser_key": "agztNvLSUA",
+        "agencies": {
+          "cda": {
+            "registration_number": "CDA-EXP-000008"
+          }
+        }
       }
     }
   ]

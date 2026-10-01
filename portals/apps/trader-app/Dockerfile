@@ -26,8 +26,8 @@ RUN pnpm --filter trader-app build
 
 # Non-perl variant: nginx.conf declares no perl directives, so shipping
 # ngx_http_perl_module and a perl interpreter would only widen the CVE surface.
-# envsubst templating and /docker-entrypoint.d — which default.conf.template and
-# 40-runtime-env.sh below both rely on — live in the base layer, not this variant.
+# envsubst templating and /docker-entrypoint.d — which default.conf.template
+# relies on — live in the base layer, not this variant.
 FROM nginxinc/nginx-unprivileged:stable-alpine3.24
 
 LABEL org.opencontainers.image.source="https://github.com/OpenNSW/nsw-srilanka"
@@ -36,11 +36,13 @@ LABEL org.opencontainers.image.description="NSW Trader Portal Frontend"
 COPY apps/trader-app/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --chown=101:0 --from=builder /workspace/apps/trader-app/dist /usr/share/nginx/html
 
+# config.js is not generated here — it's supplied externally: bind-mounted by
+# docker-compose, or mounted from a ConfigMap by Helm (see
+# deployments/helm/lk-tnsw/templates/frontend/configmap.yaml).
+
 # OpenShift Compliance: Fix permissions for random UID (Group 0)
 USER root
-COPY --chown=101:0 apps/trader-app/docker-entrypoint.sh /docker-entrypoint.d/40-runtime-env.sh
-RUN chmod +x /docker-entrypoint.d/40-runtime-env.sh && \
-    chmod -R g+w /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
+RUN chmod -R g+w /var/cache/nginx /var/run /var/log/nginx /etc/nginx/conf.d /usr/share/nginx/html
 USER 101
 EXPOSE 8080
 

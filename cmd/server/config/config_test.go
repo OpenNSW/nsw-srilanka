@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/artifact/loaders/local"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
@@ -18,7 +18,43 @@ import (
 
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
+
+// TestMain writes a throwaway notification config and config.yaml to a temp dir and points
+// NOTIFICATIONS_CONFIG_PATH and CONFIG_PATH at them as this whole test binary's defaults, so
+// every test that calls Load() gets real, parseable files unless it overrides a var itself — as
+// the TestLoad_NotificationConfig* and TestLoad_ConfigFile* tests do, to point at a
+// missing/malformed one instead; t.Setenv correctly restores these defaults afterward. Load
+// reads both files eagerly (see loadNotificationProviders and loadConfigFile): Config.Validate
+// requires Providers non-empty, and config.yaml is mandatory, unlike the other *ConfigPath
+// fields in this package, which are just stored and read later, downstream.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "config-test-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create temp dir for config fixtures: %v\n", err)
+		os.Exit(1)
+	}
+	fixtures := []struct{ env, name, body string }{
+		{"NOTIFICATIONS_CONFIG_PATH", "notification.json", `{"email":{"baseURL":"https://email.example.com"}}`},
+		{"CONFIG_PATH", "config.yaml", "refid: {}\n"},
+	}
+	for _, f := range fixtures {
+		path := filepath.Join(dir, f.name)
+		if err := os.WriteFile(path, []byte(f.body), 0o600); err != nil {
+			os.RemoveAll(dir)
+			fmt.Fprintf(os.Stderr, "failed to write %s fixture: %v\n", f.name, err)
+			os.Exit(1)
+		}
+		os.Setenv(f.env, path)
+	}
+
+	// os.Exit skips deferred calls, so m.Run must be captured and cleanup done explicitly rather
+	// than via defer.
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 // validConfig returns a minimal Config that passes Validate().
 func validConfig() *Config {
@@ -57,7 +93,9 @@ func validConfig() *Config {
 			ClientIDs: []string{"client1"},
 		},
 		Notification: notification.Config{
-			Path: "configs/notification.json",
+			Providers: map[notification.ChannelType]map[string]any{
+				"email": {"baseURL": "https://email.example.com"},
+			},
 		},
 		Temporal: temporal.Config{
 			Host:      "localhost",
@@ -348,7 +386,7 @@ func TestLoad_Defaults(t *testing.T) {
 		"SERVER_PORT", "SERVICE_URL", "DB_HOST", "DB_PORT", "DB_USERNAME",
 		"DB_NAME", "DB_SSLMODE", "DB_MAX_IDLE_CONNS", "DB_MAX_OPEN_CONNS",
 		"DB_MAX_CONN_LIFETIME_SECONDS", "SERVICES_CONFIG_PATH",
-		"PAYMENT_METHODS_CONFIG_PATH", "SERVER_DEBUG", "SERVER_LOG_LEVEL",
+		"PAYMENT_METHODS_CONFIG_PATH", "SERVER_LOG_LEVEL",
 		"SERVER_MAX_REQUEST_BYTES", "SERVER_READ_HEADER_TIMEOUT",
 		"SERVER_READ_TIMEOUT", "SERVER_WRITE_TIMEOUT", "SERVER_IDLE_TIMEOUT",
 		"CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_METHODS", "CORS_ALLOWED_HEADERS",
@@ -358,9 +396,10 @@ func TestLoad_Defaults(t *testing.T) {
 		"STORAGE_S3_SECRET_KEY", "STORAGE_S3_USE_SSL", "STORAGE_S3_PUBLIC_URL",
 		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "AUTH_JWKS_URL",
 		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
-		"AUTH_JWKS_INSECURE_SKIP_VERIFY", "NOTIFICATIONS_CONFIG_PATH",
+		"AUTH_JWKS_INSECURE_SKIP_VERIFY",
+		// NOTIFICATIONS_CONFIG_PATH deliberately stays unlisted — see TestMain.
 		"CATALOG_CONFIG_PATH", "TEMPORAL_HOST", "TEMPORAL_PORT",
-		"TEMPORAL_NAMESPACE", "DEV_TEST_MANIFEST_PATHS",
+		"TEMPORAL_NAMESPACE",
 	}
 	for _, k := range envsToClear {
 		t.Setenv(k, "")
@@ -388,11 +427,12 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Server.WriteTimeout", cfg.Server.WriteTimeout, 30 * time.Second},
 		{"Server.IdleTimeout", cfg.Server.IdleTimeout, 60 * time.Second},
 		{"Server.CatalogConfigPath", cfg.Server.CatalogConfigPath, "configs/catalog.json"},
+		{"Server.LogLevel", cfg.Server.LogLevel, slog.LevelInfo},
 		{"Database.Host", cfg.Database.Host, "localhost"},
 		{"Database.Password", cfg.Database.Password, "testpassword"},
+		{"Database.SSLMode", cfg.Database.SSLMode, "require"},
 		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
 		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
-		{"DevMode", cfg.DevMode, false},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
@@ -563,6 +603,42 @@ func TestLoad_DatabaseValidationError(t *testing.T) {
 	}
 }
 
+func TestLoad_NotificationConfigMissingFile(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	t.Setenv("NOTIFICATIONS_CONFIG_PATH", filepath.Join(t.TempDir(), "does-not-exist.json"))
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for a missing notification config file, got nil")
+	}
+	if !containsString(err.Error(), "notification") {
+		t.Errorf("expected error mentioning 'notification', got: %v", err)
+	}
+}
+
+func TestLoad_NotificationConfigMalformedJSON(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	badFile := filepath.Join(t.TempDir(), "notification.json")
+	if err := os.WriteFile(badFile, []byte("not json"), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	t.Setenv("NOTIFICATIONS_CONFIG_PATH", badFile)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for a malformed notification config file, got nil")
+	}
+	if !containsString(err.Error(), "notification") {
+		t.Errorf("expected error mentioning 'notification', got: %v", err)
+	}
+}
+
 // --- Config.Validate ---
 
 func TestConfigValidate_Success(t *testing.T) {
@@ -666,12 +742,12 @@ func TestConfigValidate_CORSWildcardCredentialsError(t *testing.T) {
 
 func TestConfigValidate_NotificationError(t *testing.T) {
 	cfg := validConfig()
-	cfg.Notification = notification.Config{} // empty Path → error
+	cfg.Notification = notification.Config{} // no Providers → error
 	err := cfg.Validate()
 	if err == nil {
 		t.Fatal("expected notification config error")
 	}
-	if !errors.Is(err, notification.ErrConfigPathRequired) && !containsString(err.Error(), "invalid notification configuration") {
+	if !errors.Is(err, notification.ErrProvidersRequired) && !containsString(err.Error(), "invalid notification configuration") {
 		t.Errorf("expected notification config error, got: %v", err)
 	}
 }
@@ -741,26 +817,6 @@ func TestIsDevEnvironment(t *testing.T) {
 				t.Fatalf("isDevEnvironment() with APP_ENV=%q = %v, want %v", c.val, got, c.want)
 			}
 		})
-	}
-}
-
-func TestLoad_DevModeWithAppEnv(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("DEV_TEST_MANIFEST_PATHS", "test/manifest1.json, test/manifest2.json")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error: %v", err)
-	}
-	if !cfg.DevMode {
-		t.Fatalf("expected DevMode=true when APP_ENV=development, got false")
-	}
-	if len(cfg.TestManifestPaths) != 2 || cfg.TestManifestPaths[0] != "test/manifest1.json" || cfg.TestManifestPaths[1] != "test/manifest2.json" {
-		t.Fatalf("expected TestManifestPaths [test/manifest1.json test/manifest2.json], got %v", cfg.TestManifestPaths)
 	}
 }
 

@@ -8,6 +8,8 @@
     "portalName": "Trader Portal",
     "description": "A unified digital platform enabling seamless and secure trade facilitation services.",
     "heroImageUrl": "",
-    "partnerLogos": [{ "url": "", "alt": "" }]
+    "partnerLogos": [{ "url": "", "alt": "" }],
+    "footerLinks": [],
+    "copyrightNotice": "© 2026 Trader Portal. All rights reserved."
   }
 }

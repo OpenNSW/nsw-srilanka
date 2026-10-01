@@ -1,6 +1,6 @@
 import { createContext } from 'react'
 
-export type Role = 'trader' | 'cha'
+export type Role = 'trader' | 'cha' | 'nswAdmin'
 
 export interface RoleContextType {
   role: Role

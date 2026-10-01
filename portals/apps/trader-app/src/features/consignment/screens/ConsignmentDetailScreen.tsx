@@ -7,6 +7,7 @@ import { ActionListView } from '@/features/consignment/components/WorkflowViewer
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { CONTENT_TOP_PX } from '@/components/Layout'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 
@@ -20,7 +21,22 @@ const PROVISION_MAX_DELAY_MS = 5000
 
 type FetchMode = 'initial' | 'refresh' | 'poll'
 
-export function ConsignmentDetailScreen() {
+interface ConsignmentDetailScreenProps {
+  // Defaults to the trader/CHA-facing, ownership-checked getConsignment. Pass
+  // getConsignmentForAdmin (features/admin/service.ts) to reuse this screen for the
+  // ConsignmentAdminRead-gated admin view instead.
+  fetcher?: (consignmentId: string) => Promise<ConsignmentDetail | null>
+  // Where the back/back-to-list buttons navigate. Defaults to the trader/CHA consignments list.
+  backTo?: string
+  // Accessible label for the back button. Defaults to matching the trader/CHA backTo default.
+  backLabel?: string
+}
+
+export function ConsignmentDetailScreen({
+  fetcher = getConsignment,
+  backTo = '/consignments',
+  backLabel = 'Back to consignments list',
+}: ConsignmentDetailScreenProps = {}) {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -61,7 +77,7 @@ export function ConsignmentDetailScreen() {
       }
 
       try {
-        const result = await getConsignment(consignmentId)
+        const result = await fetcher(consignmentId)
         if (requestId !== requestCountRef.current) return
 
         if (!result) {
@@ -107,7 +123,7 @@ export function ConsignmentDetailScreen() {
         }
       }
     },
-    [consignmentId, clearProvisionTimer],
+    [consignmentId, fetcher, clearProvisionTimer],
   )
 
   const handleRefresh = () => {
@@ -123,7 +139,7 @@ export function ConsignmentDetailScreen() {
     if (!consignmentId) return
     clearProvisionTimer()
     let cancelled = false
-    void getConsignment(consignmentId)
+    void fetcher(consignmentId)
       .then((result) => {
         if (cancelled) return
         provisionAttemptsRef.current = 0
@@ -165,7 +181,7 @@ export function ConsignmentDetailScreen() {
       cancelled = true
       clearProvisionTimer()
     }
-  }, [consignmentId, fetchConsignment, clearProvisionTimer])
+  }, [consignmentId, fetcher, fetchConsignment, clearProvisionTimer])
 
   if (loading || provisioning) {
     const message = provisioning
@@ -198,12 +214,12 @@ export function ConsignmentDetailScreen() {
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Button variant="ghost" color="gray" onClick={() => void navigate('/consignments')}>
+          <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)}>
             <ArrowLeftIcon />
             {t('consignments.detail.back')}
           </Button>
         </div>
-        <div className="bg-app-surface rounded-lg shadow p-8 text-center">
+        <div className="bg-app-surface rounded-2xl shadow-md p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
             {errorTitle}
           </Text>
@@ -213,7 +229,7 @@ export function ConsignmentDetailScreen() {
               : t('consignments.detail.error.notFoundDescription')}
           </Text>
           <div className="flex gap-3 justify-center">
-            <Button variant="soft" onClick={() => void navigate('/consignments')}>
+            <Button variant="soft" onClick={() => void navigate(backTo)}>
               <ArrowLeftIcon />
               {t('consignments.detail.backToList')}
             </Button>
@@ -238,14 +254,12 @@ export function ConsignmentDetailScreen() {
   const workflowNodes = consignment.workflowNodes || []
 
   return (
-    <div className="p-4 md:p-6 h-[calc(100vh-64px)] flex flex-col">
+    <div
+      style={{ height: `calc(100vh - ${CONTENT_TOP_PX}px)` }}
+      className="p-4 md:p-6 max-w-5xl mx-auto w-full flex flex-col"
+    >
       <div className="mb-3 flex items-center justify-between">
-        <Button
-          variant="ghost"
-          color="gray"
-          onClick={() => void navigate('/consignments')}
-          aria-label="Back to consignments list"
-        >
+        <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)} aria-label={backLabel}>
           <ArrowLeftIcon />
           {t('consignments.detail.back')}
         </Button>
@@ -287,10 +301,10 @@ export function ConsignmentDetailScreen() {
         </div>
       </div>
 
-      <div className="bg-app-surface rounded-lg shadow flex flex-col flex-1 min-h-0 relative">
+      <div className="bg-app-surface rounded-2xl shadow-md flex flex-col flex-1 min-h-0 relative">
         {refreshing && (
           <div className="absolute inset-0 bg-app-surface/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
-            <div className="flex items-center gap-3 bg-app-surface px-6 py-4 rounded-lg shadow-lg">
+            <div className="flex items-center gap-3 bg-app-surface px-6 py-4 rounded-xl shadow-lg">
               <Spinner size="3" />
               <Text size="3" weight="medium" color="gray">
                 {t('consignments.detail.refreshing')}

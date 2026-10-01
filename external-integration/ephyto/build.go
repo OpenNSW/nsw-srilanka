@@ -3,6 +3,7 @@ package ephyto
 import (
 	"encoding/xml"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 	certID := asString(inputs["certificate_id"])
 
 	certType := "851" // Phytosanitary Certificate
-	if asString(uf["certificate_type"]) == "re-export" {
+	if isReExport(uf) {
 		certType = "657" // Phytosanitary Certificate for Re-Export
 	}
 	// The Hub destination is a connection code (e.g. "LK2"), chosen by the trader
@@ -61,7 +62,8 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			PlaceOfIssue:           officeName(asString(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
 			DocDeclarations:        buildDocDeclarations(uf),
-			Consignment:            buildConsignment(uf, importISO),
+			Attachments:            buildAttachments(uf, inputs),
+			Consignment:            buildConsignment(uf, importISO, inputs["certificate_items"]),
 		},
 	}
 }
@@ -277,7 +279,45 @@ func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
 	return dd
 }
 
-func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentInput {
+// excludedItemIDs returns the set of commodity IDs the officer explicitly
+// deselected on the certificate-issuance item picker (include_in_certificate
+// == false). certificate_items is required on the officer form and
+// validated before BuildInput is ever called for a submit (see
+// HubInterpreter.BuildEnvelope) — this function stays nil-safe regardless,
+// treating a missing list as excluding nothing.
+func excludedItemIDs(certificateItems any) map[string]bool {
+	excluded := make(map[string]bool)
+	for _, raw := range asSlice(certificateItems) {
+		item := asMap(raw)
+		id := asString(item["id"])
+		if id == "" {
+			continue
+		}
+		if included, ok := item["include_in_certificate"].(bool); ok && !included {
+			excluded[id] = true
+		}
+	}
+	return excluded
+}
+
+// anyItemIncluded reports whether at least one entry in certificateItems will
+// actually end up on the certificate, using the same inclusion rule as
+// excludedItemIDs (missing/non-bool/true all count as included; only an
+// explicit include_in_certificate: false excludes). A certificate_items list
+// that's non-empty but has every item deselected must be rejected the same
+// way an entirely absent list is — otherwise buildConsignment silently
+// produces a certificate with zero consignment items.
+func anyItemIncluded(certificateItems any) bool {
+	for _, raw := range asSlice(certificateItems) {
+		item := asMap(raw)
+		if included, ok := item["include_in_certificate"].(bool); !ok || included {
+			return true
+		}
+	}
+	return false
+}
+
+func buildConsignment(uf map[string]any, importISO string, certificateItems any) spscert.ConsignmentInput {
 	c := spscert.ConsignmentInput{
 		ExportCountry: exportNPPOCode,
 		ImportCountry: importISO,
@@ -311,15 +351,23 @@ func buildConsignment(uf map[string]any, importISO string) spscert.ConsignmentIn
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])
-	for i, raw := range asSlice(uf["commodities"]) {
+	reExport := buildReExport(uf)
+	excluded := excludedItemIDs(certificateItems)
+	seq := 0
+	for _, raw := range asSlice(uf["commodities"]) {
+		com := asMap(raw)
+		if excluded[asString(com["id"])] {
+			continue
+		}
+		seq++
 		c.Items = append(c.Items, spscert.ItemInput{
-			TradeLines: []spscert.TradeLineInput{buildTradeLine(asMap(raw), i+1, treatment)},
+			TradeLines: []spscert.TradeLineInput{buildTradeLine(com, seq, treatment, reExport)},
 		})
 	}
 	return c
 }
 
-func buildTradeLine(com map[string]any, seq int, treatment string) spscert.TradeLineInput {
+func buildTradeLine(com map[string]any, seq int, treatment string, reExport *spscert.ReExport) spscert.TradeLineInput {
 	description := asString(com["commodity_description"])
 	if description == "" {
 		description = asString(com["commodity_common_name"])
@@ -365,7 +413,111 @@ func buildTradeLine(com map[string]any, seq int, treatment string) spscert.Trade
 	if treatment != "" {
 		tl.Treatments = []spscert.Treatment{{FullTreatment: treatment, LanguageID: "en"}}
 	}
+
+	// The re-export declaration is answered once for the consignment but is
+	// carried per trade line (the RPC* notes live inside the item), so each
+	// line repeats it against its own country of origin.
+	if reExport != nil {
+		perLine := *reExport
+		perLine.CountriesOfOrigin = tl.OriginCountries
+		tl.ReExport = &perLine
+	}
 	return tl
+}
+
+// --- re-export ---------------------------------------------------------------
+
+// ReExportInput is the form section describing a re-export, filled in only when
+// the trader chose a re-export certificate. It is asked once for the
+// consignment even though the certificate carries it per commodity.
+const ReExportInput = "re_export"
+
+// certificateTypeReExport is the value the apply form's certificate_type takes
+// when the trader is re-exporting rather than exporting.
+const certificateTypeReExport = "re-export"
+
+// isReExport reports whether the trader asked for a re-export certificate
+// (657/PC-R) rather than an ordinary phytosanitary certificate (851).
+func isReExport(uf map[string]any) bool {
+	return asString(uf["certificate_type"]) == certificateTypeReExport
+}
+
+// buildReExport maps the trader's re-export answers onto the declaration the
+// certificate carries, or returns nil for an ordinary export — which leaves
+// every RPC* note off the certificate entirely.
+//
+// The three either/or answers each drive a pair of statements the IPPC model
+// keeps separate (original vs certified true copy, packed vs repacked,
+// original vs new containers). Asking them as one choice each is what stops a
+// consignment from being declared both packed and repacked.
+//
+// CountriesOfOrigin is left empty here: it is the one part of the declaration
+// that genuinely differs per commodity, so buildTradeLine fills it from the
+// country of origin that commodity already carries.
+func buildReExport(uf map[string]any) *spscert.ReExport {
+	if !isReExport(uf) {
+		return nil
+	}
+
+	// A declaration is made only once all three either/or questions have been
+	// answered. A consignment can be marked as a re-export well before that --
+	// an application that predates the section, or one the trader is part way
+	// through -- and an unanswered question reads as false on both of its
+	// sides. Sent, that says the consignment is neither packed nor repacked,
+	// in containers that are neither the original ones nor new: a declaration
+	// no consignment can satisfy.
+	//
+	// Counting the keys is not enough to tell the two apart, because a trader
+	// who has typed only the certificate number leaves a section that is
+	// non-empty and still unanswered.
+	//
+	// Saying nothing until the answers are there is the honest reading, and
+	// the certificate is a PC-R either way: the type code comes from
+	// certificate_type rather than from here.
+	re := asMap(uf[ReExportInput])
+	form, formAnswered := reExportChoice(re, "original_certificate_form", "original", "certified_true_copy")
+	packing, packingAnswered := reExportChoice(re, "packing", "packed", "repacked")
+	containers, containersAnswered := reExportChoice(re, "containers", "original", "new")
+	if !formAnswered || !packingAnswered || !containersAnswered {
+		return nil
+	}
+
+	return &spscert.ReExport{
+		StatementCode:        asString(re["statement_code"]),
+		OriginalCertRefs:     splitRefs(asString(re["original_certificate_number"])),
+		IsOriginal:           form == "original",
+		CertifiedTrueCopy:    form == "certified_true_copy",
+		Packed:               packing == "packed",
+		Repacked:             packing == "repacked",
+		OriginalContainers:   containers == "original",
+		NewContainers:        containers == "new",
+		OriginalPCAttached:   saidYes(re["original_certificate_attached"]),
+		AdditionalInspection: saidYes(re["additional_inspection"]),
+	}
+}
+
+// reExportChoice reads one of the declaration's either/or answers, reporting
+// whether it was answered at all. Anything other than the two values the form
+// offers -- blank, absent, or a value from an older version of the form --
+// counts as unanswered rather than as the side it is not.
+func reExportChoice(re map[string]any, field, one, other string) (string, bool) {
+	answer := asString(re[field])
+	return answer, answer == one || answer == other
+}
+
+// splitRefs reads the certificate numbers a re-export is covered by out of the
+// single field the form asks for them in. A consolidated consignment can be
+// covered by more than one, and the certificate lists them separately, so the
+// field is documented as comma-separated rather than adding a repeating
+// control the trader has to discover.
+func splitRefs(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if ref := strings.TrimSpace(part); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -517,4 +669,173 @@ func isAlpha(s string) bool {
 		}
 	}
 	return true
+}
+
+// --- trader-submitted documents ----------------------------------------------
+
+// DocumentsInput is the task input every trader-uploadable document arrives
+// under: one entry per document, each with the trader's answer to whether it
+// travels with the certificate and the storage reference(s) of the upload.
+//
+//	"documents": {
+//	  "commercial_invoice":   {"url": "…", "send": false},
+//	  "treatment_certificate": {"url": ["…", "…"], "send": true}
+//	}
+//
+// url is either a single string or an array of strings: a document is usually
+// one file, but one whose upload step can run more than once for the same
+// certificate — the treatment certificate, uploaded once per group of
+// commodities sent through external treatment together — needs more than one.
+// Both shapes attach the same way, deduplicated by URL.
+//
+// Described by the workflow rather than listed here, so a document the NPQS
+// flow gains later is two lines of input mapping and no change to this
+// package:
+//
+//	"invoice_file_url?":         "documents.commercial_invoice.url"
+//	"traderinput.send_invoice?": "documents.commercial_invoice.send"
+//
+// The entry's name is what the receiving NPPO reads as the document's ID, in
+// title case — "commercial_invoice" becomes "Commercial Invoice" — so the
+// artifact names the document and nothing here has to know what documents
+// exist.
+const DocumentsInput = "documents"
+
+// sendApplicationDocuments is the ePhyto form field covering the files attached
+// to the application itself. They are one answer rather than one per file: the
+// trader attached them together, describing the same consignment.
+const sendApplicationDocuments = "send_application_documents"
+
+// buildAttachments lists, as referenced documents on the certificate, the
+// documents the trader chose to send at the ePhyto step.
+//
+// The receiving NPPO inspects a consignment against what the certificate says
+// accompanies it, so a document the trader was asked to upload belongs on the
+// certificate rather than only in this deployment's storage — but only the ones
+// they said yes to.
+//
+// Each is referenced by name, type and description; the file's bytes are not
+// embedded. The SPS model does carry them (ram:AttachmentBinaryObject, see
+// spscert.Attachment.Base64), but reading a file needs a context to cancel on
+// and the SOAP interpreter contract passes none — so embedding is a separate
+// change, not a silent omission here.
+func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attachment {
+	var out []spscert.Attachment
+
+	// The application's attachments carry their own type and description.
+	if saidYes(inputs[sendApplicationDocuments]) {
+		for _, raw := range asSlice(uf["attachments"]) {
+			row := asMap(raw)
+			url := asString(row["attachment_file_url"])
+			if url == "" {
+				continue
+			}
+			id := asString(row["file_type"])
+			if id == "" {
+				id = "Supporting Document"
+			}
+			out = append(out, spscert.Attachment{
+				RelationshipTypeCode: attachmentRelationship,
+				ID:                   id,
+				Filename:             documentFilename(url),
+				Key:                  url,
+				Information:          asString(row["attachment_description"]),
+			})
+		}
+	}
+
+	documents := asMap(inputs[DocumentsInput])
+
+	// One entry per document the flow can produce, in name order: a
+	// certificate built twice from the same answers lists its documents the
+	// same way, which map iteration alone would not give.
+	names := make([]string, 0, len(documents))
+	for name := range documents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		doc := asMap(documents[name])
+		if !saidYes(doc["send"]) {
+			continue
+		}
+		for _, url := range documentURLs(doc["url"]) {
+			out = append(out, spscert.Attachment{
+				RelationshipTypeCode: attachmentRelationship,
+				ID:                   documentLabel(name),
+				Filename:             documentFilename(url),
+				Key:                  url,
+			})
+		}
+	}
+
+	return out
+}
+
+// documentURLs normalises a document's url — either a single string or an
+// array of them — into the distinct, non-empty URLs it names, in order.
+func documentURLs(v any) []string {
+	raw := asSlice(v)
+	if raw == nil {
+		raw = []any{v}
+	}
+
+	var out []string
+	seen := make(map[string]bool)
+	for _, r := range raw {
+		url := asString(r)
+		if url == "" || seen[url] {
+			continue
+		}
+		seen[url] = true
+		out = append(out, url)
+	}
+	return out
+}
+
+// documentLabel turns the name the workflow gave a document into the ID the
+// receiving NPPO reads: "treatment_certificate" becomes "Treatment
+// Certificate". Naming the entry for the document rather than for the field it
+// arrived in is what lets the label be derived rather than configured.
+func documentLabel(name string) string {
+	words := strings.Split(name, "_")
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
+}
+
+// saidYes reports whether the trader ticked a checkbox. It arrives as a bool
+// from JSON; a form that stringifies its values has been seen to send "true".
+func saidYes(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	default:
+		return false
+	}
+}
+
+// attachmentRelationship is the code for a document that accompanies this
+// certificate. "AWR" is reserved for a copy of the original certificate on a
+// re-export, which none of these are.
+const attachmentRelationship = "ZZZ"
+
+// documentFilename reduces an upload's storage key or URL to the file name a
+// reader would recognise, without the path or the query a signed URL carries.
+func documentFilename(ref string) string {
+	if i := strings.IndexAny(ref, "?#"); i != -1 {
+		ref = ref[:i]
+	}
+	ref = strings.TrimSuffix(ref, "/")
+	if i := strings.LastIndex(ref, "/"); i != -1 {
+		ref = ref[i+1:]
+	}
+	return ref
 }

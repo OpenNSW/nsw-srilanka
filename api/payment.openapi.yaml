@@ -1,0 +1,531 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / GovPay+ Payment Gateway Callbacks
+  description: |
+    OpenAPI 3.0 specification for the two GovPay+ callback endpoints,
+    mounted generically by `github.com/OpenNSW/core/payment` at
+    `/api/v1/payments/{gatewayId}/validate` and `.../webhook` for whichever
+    gateways a deployment registers. This deployment registers exactly one
+    gateway, `govpay` (`external-integration/payment/govpay`), so this
+    document fixes `gatewayId` to that value and describes GovPay+'s own
+    presentment/update wire contract.
+
+    GovPay+ posts the same request envelope (`transactionID`, `subinstId`,
+    `serviceid`, `serviceName`, `data[]`) to both endpoints. Field-name
+    casing varies across GovPay+ environments — `transactionId`, `suinstId`,
+    `serviceId`/`serviced` are also accepted — the schemas below show the
+    primary spelling.
+
+    Both routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
+    carrying the scope named on each operation, **and** the token's OAuth2
+    client must match this deployment's configured GovPay+ webhook client —
+    scopes are held per client, not per gateway, so this pins the caller to
+    the one entitled to act as GovPay+ for this deployment.
+  version: 1.0.0
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/payments/{gatewayId}/validate:
+    post:
+      summary: GovPay+ presentment — validate a payment reference
+      description: |
+        Called by GovPay+ when a payer enters a reference number in their
+        banking app, to check whether it is valid and payable and to fetch
+        the fields to display. `data[]` must contain exactly one item named
+        `refNo` (alphanumeric, ≤20 characters).
+
+        Requires scope `nsw:payment-webhooks:validate`.
+      operationId: govpayValidateReference
+      parameters:
+        - $ref: '#/components/parameters/GatewayID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentmentRequest'
+            example:
+              transactionID: "GP-TXN-000123"
+              subinstId: "SLC01"
+              serviceid: "IMPORT_PERMIT"
+              serviceName: "Import Permit Fee"
+              data:
+                - seq: "1"
+                  paramName: "refNo"
+                  value: "NSW20260001"
+      responses:
+        '200':
+          description: The reference is valid and payable; returns the fields GovPay+ should render.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresentmentResponse'
+        '400':
+          description: Malformed request envelope (missing `transactionID`, `subinstId`, `serviceid`, or an invalid `data[]`).
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "gateway ID is required in URL"
+        '401':
+          description: |
+            Missing/invalid bearer token, or the caller's authenticated
+            OAuth2 client does not match the configured GovPay+ webhook
+            client.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "unauthorized"
+        '404':
+          description: Unknown reference number, or one registered under a different `subinstId`/`serviceid`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovPayErrorEnvelope'
+        '409':
+          description: The reference exists but is not payable (already settled or expired).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovPayErrorEnvelope'
+        '500':
+          description: |
+            Internal error, including a fee that never declared its
+            GovPay+ identity (`govpay_subinst_id` / `govpay_service_id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovPayErrorEnvelope'
+
+  /api/v1/payments/{gatewayId}/webhook:
+    post:
+      summary: GovPay+ update — notify a completed payment
+      description: |
+        Called by GovPay+ once a payer has completed payment against a
+        reference. `data[]` carries named items this integration reads:
+        `refno`/`refNo` (required), `status`/`paymentstatus` (required —
+        normalized to SUCCESS/FAILED/PENDING), `amount`, `currency`,
+        `paymentmethod`, `gatewaytransactionid`, `timestamp`.
+
+        Requires scope `nsw:payment-webhooks:process`.
+      operationId: govpayWebhook
+      parameters:
+        - $ref: '#/components/parameters/GatewayID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequest'
+            example:
+              transactionID: "GP-TXN-000123"
+              subinstId: "SLC01"
+              serviceid: "IMPORT_PERMIT"
+              serviceName: "Import Permit Fee"
+              data:
+                - seq: "1"
+                  paramName: "refNo"
+                  value: "NSW20260001"
+                - seq: "2"
+                  paramName: "status"
+                  value: "SUCCESS"
+                - seq: "3"
+                  paramName: "amount"
+                  value: 15000.00
+                - seq: "4"
+                  paramName: "currency"
+                  value: "LKR"
+      responses:
+        '200':
+          description: The payment was recorded; returns the acknowledgement receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+        '400':
+          description: |
+            Malformed request envelope, or a `status` value that does not
+            map to a known outcome.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "unsupported payment status"
+        '401':
+          description: |
+            Missing/invalid bearer token, or the caller's authenticated
+            OAuth2 client does not match the configured GovPay+ webhook
+            client.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "unauthorized"
+        '404':
+          description: No transaction matches the reference number. Permanent — GovPay+ should not retry.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "unknown payment reference"
+        '422':
+          description: The notified amount/currency does not match the transaction on file; never marked paid.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "payment amount mismatch"
+        '500':
+          description: Internal error processing the notification.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "internal server error"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    GatewayID:
+      name: gatewayId
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [govpay]
+
+  schemas:
+    GovPayParam:
+      type: object
+      required:
+        - paramName
+        - value
+      properties:
+        seq:
+          type: string
+        paramName:
+          type: string
+        value:
+          description: String or number, depending on the field.
+          oneOf:
+            - type: string
+            - type: number
+
+    PresentmentDataItem:
+      type: object
+      description: The single `data[]` item required for presentment — named `refNo`, alphanumeric, ≤20 characters.
+      required:
+        - paramName
+        - value
+      properties:
+        seq:
+          type: string
+        paramName:
+          type: string
+          enum: [refNo]
+        value:
+          type: string
+          pattern: '^[A-Za-z0-9]{1,20}$'
+
+    PresentmentRequest:
+      type: object
+      description: The common GovPay+ request envelope, posted for presentment (validate).
+      required:
+        - data
+      allOf:
+        - anyOf:
+            - required: [transactionID]
+            - required: [transactionId]
+        - anyOf:
+            - required: [subinstId]
+            - required: [suinstId]
+        - anyOf:
+            - required: [serviceid]
+            - required: [serviceId]
+            - required: [serviced]
+      properties:
+        transactionID:
+          type: string
+        transactionId:
+          type: string
+          description: Alias for `transactionID` accepted by some GovPay+ environments.
+        subinstId:
+          type: string
+          pattern: '\S'
+          description: Sub-institution ID this reference must be registered under.
+        suinstId:
+          type: string
+          pattern: '\S'
+          description: Alias for `subinstId` accepted by some GovPay+ environments.
+        serviceid:
+          type: string
+          pattern: '\S'
+          description: Service ID this reference must be registered under.
+        serviceId:
+          type: string
+          pattern: '\S'
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviced:
+          type: string
+          pattern: '\S'
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviceName:
+          type: string
+        data:
+          type: array
+          description: Exactly one item, named `refNo`.
+          minItems: 1
+          maxItems: 1
+          items:
+            $ref: '#/components/schemas/PresentmentDataItem'
+
+    UpdateRequest:
+      type: object
+      description: The common GovPay+ request envelope, posted for update (webhook).
+      required:
+        - data
+      allOf:
+        - anyOf:
+            - required: [transactionID]
+            - required: [transactionId]
+        - anyOf:
+            - required: [subinstId]
+            - required: [suinstId]
+        - anyOf:
+            - required: [serviceid]
+            - required: [serviceId]
+            - required: [serviced]
+        - properties:
+            data:
+              not:
+                items:
+                  not:
+                    properties:
+                      paramName:
+                        enum: [refno, refNo]
+                    required: [paramName]
+        - properties:
+            data:
+              not:
+                items:
+                  not:
+                    properties:
+                      paramName:
+                        enum: [status, paymentstatus]
+                    required: [paramName]
+      properties:
+        transactionID:
+          type: string
+        transactionId:
+          type: string
+          description: Alias for `transactionID` accepted by some GovPay+ environments.
+        subinstId:
+          type: string
+          pattern: '\S'
+        suinstId:
+          type: string
+          pattern: '\S'
+          description: Alias for `subinstId` accepted by some GovPay+ environments.
+        serviceid:
+          type: string
+          pattern: '\S'
+        serviceId:
+          type: string
+          pattern: '\S'
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviced:
+          type: string
+          pattern: '\S'
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviceName:
+          type: string
+        data:
+          type: array
+          minItems: 2
+          description: Must include one item named `refno`/`refNo` and one named `status`/`paymentstatus`.
+          items:
+            $ref: '#/components/schemas/GovPayParam'
+
+    GovPayErrorEnvelope:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: "not_payable"
+        message:
+          type: string
+          example: "payment already completed, expired, or otherwise not payable for this reference number"
+
+    PresentmentObject:
+      type: object
+      description: One renderable field in a presentment response.
+      required:
+        - objType
+        - seq
+        - id
+        - placeholder
+        - datatype
+      properties:
+        objType:
+          type: string
+          example: "label"
+        seq:
+          type: string
+        id:
+          type: string
+        placeholder:
+          type: string
+        initialValue:
+          description: String or number.
+          oneOf:
+            - type: string
+            - type: number
+        datatype:
+          type: string
+          example: "decimal"
+        maxLength:
+          type: integer
+        selectionType:
+          type: string
+          example: "SINGLE"
+        mask:
+          type: string
+        notNull:
+          type: string
+          example: "true"
+        enabled:
+          type: string
+          example: "true"
+        returned:
+          type: string
+          example: "true"
+        rows:
+          type: integer
+        cols:
+          type: integer
+        returnedParam:
+          type: string
+        isPaymentReference:
+          type: boolean
+        isPaymentAmount:
+          type: boolean
+        returnValue:
+          type: string
+        objData:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              data:
+                type: string
+
+    PresentmentResponse:
+      type: object
+      required:
+        - transactionID
+        - subinstId
+        - serviceid
+        - message
+        - presentmentData
+      properties:
+        transactionID:
+          type: string
+        subinstId:
+          type: string
+        serviceid:
+          type: string
+        serviceName:
+          type: string
+        message:
+          type: string
+          example: "Success"
+        presentmentData:
+          type: array
+          items:
+            $ref: '#/components/schemas/PresentmentObject'
+
+    PaymentItem:
+      type: object
+      description: One field in an update-response receipt — echoes a submitted data[] item, or the appended receipt number/status.
+      required:
+        - objType
+        - seq
+        - id
+        - placeholder
+        - datatype
+      properties:
+        objType:
+          type: string
+          example: "label"
+        seq:
+          type: string
+        id:
+          type: string
+        placeholder:
+          type: string
+        initialValue:
+          description: String or number.
+          oneOf:
+            - type: string
+            - type: number
+        datatype:
+          type: string
+        maxLength:
+          type: integer
+        selectionType:
+          type: string
+        mask:
+          type: string
+        notNull:
+          type: string
+        enabled:
+          type: string
+        returned:
+          type: string
+        rows:
+          type: integer
+        cols:
+          type: integer
+        returnedParam:
+          type: string
+        returnValue:
+          type: string
+
+    UpdateResponse:
+      type: object
+      required:
+        - transactionID
+        - subinstId
+        - serviceid
+        - message
+        - paymentData
+      properties:
+        transactionID:
+          type: string
+        subinstId:
+          type: string
+        serviceid:
+          type: string
+        serviceName:
+          type: string
+        message:
+          type: string
+          example: "Success"
+        paymentData:
+          type: array
+          description: Echoes the submitted data[], with "Receipt Number" and "Status" appended.
+          items:
+            $ref: '#/components/schemas/PaymentItem'

@@ -22,16 +22,7 @@ export function PaginationControl({
   const { t } = useTranslation()
 
   return (
-    <Flex
-      justify="between"
-      align="center"
-      mt="4"
-      pt="4"
-      pb="4"
-      pl="4"
-      pr="4"
-      style={{ borderTop: '1px solid var(--gray-5)' }}
-    >
+    <Flex justify="between" align="center" mt="4" pt="4" pb="4" pl="4" pr="4">
       <Flex align="center" gap="4">
         {totalCount !== undefined && (
           <Text size="2" color="gray">

@@ -118,19 +118,67 @@ The child subworkflow defines the execution path of a single transaction stage.
 - `type`: A user-facing category for the view. `APPLICATION` (trader/applicant submission view) and `REVIEW` (officer review split pane) are the common ones; the shipped configs also use `PAYMENT`, `SYSTEM`, `LAB_TEST`, `SAMPLE_COLLECTION`, `VISUAL_ASSESSMENT`, and `CERTIFICATE_ISSUANCE`.
 - `title`: Human-readable name for the whole task view (e.g. `[Trade] Select HS Codes`).
 - `read`: **Who may read this task at all** — see [Read authorization](#read-authorization) below.
-- `sections`: Map of slots (e.g. `workspace`, `reference`, `instructions`).
+- `sections`: Map of slots (e.g. `user_form`, `status_messsage`). The slot key is the section's identifier: it is sent to the frontend as the `id` of the section's view entry, and `layouts` refer to sections by it. Sections have no `id` field of their own.
   - `templateId`: Identifies the schema file to display (maps to `id` in the respective `*_jsonform.json`).
   - `projector`: `FORM` (interactive JSONForm), `MARKDOWN` (static instructions), or `PAYMENT` (checkout page).
   - `dataKey`: Variable name matching the task's output namespace (e.g. `traderinput`, `reviewerform`). Omit it to hand the projector the whole variable map.
-  - `title`: Heading rendered above the section.
+  - `title`: Heading rendered above the section. Optional; a section without one renders with no heading.
   - `visibleWhen`: Declarative rules deciding whether the section renders at all. All rules present must hold (they AND together); omitting the block renders the section always. There is no `OR` — express alternatives as separate slots.
     - `states`: List of task states the section shows in, matched case-insensitively (e.g. `["PENDING_USER"]`).
     - `requireDataKey`: Section only renders if this **top-level** key exists and is non-null in the task's data. Not a dotted path.
     - `requireClaim`: Section only renders if the caller holds this claim — see [Read authorization](#read-authorization).
   - `handles`: **CRITICAL FOR EDITABILITY**. Defines what actions/buttons can be clicked on the form zone. **If `handles` is missing or empty, the frontend renders the form fields as read-only (non-interactive).** A handle only reaches the frontend if its section rendered *and* its `command` is legal in the current state, so hiding a section also removes its buttons.
+- `layouts`: Named orderings of the sections (e.g. `"layout_1": ["feedback", "user_form"]`). Each layout lists **all** section keys and expresses relative order only, never visibility. visibility stays with each section's `visibleWhen`. States that agree on the relative order of the sections they show can share one layout.
 - `states`: Defines the operational lifecycle.
   - `PENDING_USER`: Active state where user can perform actions.
     - `actions`: List of allowed commands (e.g. `{ "command": "submit" }`).
+    - `order`: Which layout to render this state in, as `{ "$ref": "#/layouts/<name>" }`.
+
+### Section order
+
+The task view reaches the frontend as an **ordered list**, and the frontend renders it as-is. The order is:
+
+1. The current state's layout, filtered down to the sections visible right now.
+2. Then any visible section the layout doesn't list, sorted by key.
+3. Any malformed/additional keys in the layout are ignored, and any section key not present in the `sections` block is ignored.
+
+A state with no `order` therefore renders its visible sections sorted alphabetically by key. Declare a layout whenever that isn't the order you want (e.g. `status_awaiting` sorts after `review_history`).
+
+```json
+{
+  "id": "cda-apply-coconut-cert-flow:render",
+  "sections": {
+    "feedback": {
+      "templateId": "cda-apply-coconut-cert--feedback",
+      "title": "Officer Feedback & Deficiencies",
+      "projector": "MARKDOWN",
+      "dataKey": "rejection_reason",
+      "visibleWhen": { "states": ["PENDING_USER"], "requireDataKey": "rejection_reason" }
+    },
+    "user_form": {
+      "templateId": "cda-apply-coconut-cert--user-form",
+      "title": "CDA Export Coconut Certificate Application",
+      "projector": "FORM",
+      "dataKey": "userform",
+      "handles": [
+        { "command": "submit", "label": "Submit Application", "element": "primary_action" }
+      ]
+    }
+  },
+  "layouts": {
+    "layout_1": ["feedback", "user_form"]
+  },
+  "states": {
+    "PENDING_USER": {
+      "order": { "$ref": "#/layouts/layout_1" },
+      "actions": [{ "command": "submit" }]
+    },
+    "COMPLETED": { "order": { "$ref": "#/layouts/layout_1" } }
+  }
+}
+```
+
+In `PENDING_USER` the feedback (when present) renders above the form; in `COMPLETED` the same layout applies and the feedback is simply not visible.
 
 ### Read authorization
 
@@ -186,7 +234,6 @@ In the same `PENDING_USER` state the CHA gets the form and its submit button, wh
   "type": "APPLICATION",
   "sections": {
     "workspace": {
-      "id": "workspace",
       "templateId": "fcau-warehouse-scheduling--form",
       "title": "Warehouse Inspection Scheduling",
       "projector": "FORM",
@@ -230,6 +277,21 @@ Declares if the task is completed by the applicant (`USER_INPUT`) or another age
   }
 }
 ```
+
+### Reference IDs (`REFID_GENERATOR`)
+Generates a reference ID from a format in the `refid` section of `configs/config.yaml` (see `configs/config.example.yaml`). The step is synchronous, and `plugin_properties` names the format by issuer and id type:
+```json
+{
+  "id": "trade-consignment-ref--generate",
+  "task_type": "REFID_GENERATOR",
+  "output_namespace": "refid",
+  "plugin_properties": { "issuer": "TNSW", "id_type": "consignment_ref" }
+}
+```
+- **Params:** every string input to the node is passed to the format. Name the `input_mapping` targets after the params the format uses: a list segment's `param`, or a `{name}` in a scope key.
+- **Output:** the ID is written to the task's own state at `<output_namespace>.reference_id`. It reaches the parent workflow only through the usual two mappings: the task workflow node's `"output_mapping": {"refid.reference_id": "reference_id"}`, then the parent TASK node's `"output_mapping": {"reference_id": "trade.reference_id"}`.
+- **Re-runs:** a task that already holds an ID keeps it. A re-run of the step (for example a Temporal retry) doesn't take another number.
+- **Not configured:** if the deployment has no `refid.issuers`, the step fails.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and `uiSchema` block:

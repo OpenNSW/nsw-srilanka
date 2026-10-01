@@ -52,3 +52,22 @@ func TestErrorResponseCorrelationIDMatchesTraceID(t *testing.T) {
 		t.Fatalf("expected server log to contain traceId=%s, got: %s", traceID, logOutput.String())
 	}
 }
+
+func TestConfigureLoggingAddSourceTiedToDebugLevel(t *testing.T) {
+	prevDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prevDefault) })
+
+	var debugOutput bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelDebug}}, &debugOutput)
+	slog.Info("test message")
+	if !strings.Contains(debugOutput.String(), "source=") {
+		t.Errorf("expected source location in log output at debug level, got: %s", debugOutput.String())
+	}
+
+	var infoOutput bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &infoOutput)
+	slog.Info("test message")
+	if strings.Contains(infoOutput.String(), "source=") {
+		t.Errorf("expected no source location in log output at info level, got: %s", infoOutput.String())
+	}
+}

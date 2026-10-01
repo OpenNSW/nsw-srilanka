@@ -64,6 +64,15 @@ func TestBuildPayload_MapsAnnexBFields(t *testing.T) {
 	// §4.1: the display reference is split back into the four canonical parts.
 	require.Len(t, sub.CusDecRefs, 1)
 	assert.Equal(t, DocumentReference{Office: "CBEX1", Year: "2026", Serial: "E", Number: 1047}, sub.CusDecRefs[0])
+
+	// The assertions above are on Go fields, which a struct tag can no longer
+	// contradict. Both names were misspelled on the wire once — voaygeNumber and
+	// regYear — while these same assertions passed, so the tags are checked on
+	// the encoded form as well.
+	encoded, err := json.Marshal(sub)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"voyageNumber":"V092"`)
+	assert.Contains(t, string(encoded), `"cusDecRefs":[{"year":"2026","office":"CBEX1","serial":"E","number":1047}]`)
 }
 
 // The unused optional cost/volume lines must not appear on the wire as bare
@@ -160,4 +169,17 @@ func TestBuildPayload_AcceptsStringNumbers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 16500.5, sub.GrossWeight)
 	assert.Equal(t, 80, sub.PackageNumber)
+}
+
+// DocumentReference serves both legs: the cusDecRefs sent out and the cdnRef
+// their callbacks send back. §4.1 names the year "year" on both, so one shape
+// covers both — which was not true while the outbound leg carried a
+// workaround.
+func TestDocumentReference_ReadsTheCanonicalYear(t *testing.T) {
+	var ref DocumentReference
+	require.NoError(t, json.Unmarshal(
+		[]byte(`{"office":"CBEX1","year":"2026","serial":"C","number":28237}`), &ref))
+
+	assert.Equal(t, "2026", ref.Year)
+	assert.True(t, ref.IsValid())
 }
