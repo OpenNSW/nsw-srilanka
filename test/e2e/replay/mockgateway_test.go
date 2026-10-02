@@ -3,6 +3,13 @@ package replay_e2e
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +29,9 @@ const gatewayPollInterval = 300 * time.Millisecond
 // confirms payment via a webhook protected by an M2M bearer token (see
 // PaymentConfig.Identity / signedAuth.tokens). This mock simulates that
 // webhook, driven entirely by configs/payments/<id>.json — it carries no
-// knowledge of any specific gateway. It implements replay.PaymentGateway.
+// knowledge of any specific gateway. A gateway that declares privateKeyField
+// has its webhook encrypted to the key pair the harness minted for it. It
+// implements replay.PaymentGateway.
 //
 // The reference is only rendered into the task's markdown view, so the mock
 // reads it from the payment store (GetByTaskID) rather than over HTTP.
@@ -31,11 +40,12 @@ type mockGateway struct {
 	client  *http.Client
 	base    string // the in-process NSW app base URL; set by the harness after start
 	configs map[string]PaymentConfig
-	bearers map[string]string // paymentID -> SERVICE bearer token (empty = unauthenticated)
+	bearers map[string]string          // paymentID -> SERVICE bearer token (empty = unauthenticated)
+	keys    map[string]*rsa.PrivateKey // paymentID -> key pair the webhook is encrypted to (absent = plaintext)
 	logf    func(string, ...any)
 }
 
-func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig) *mockGateway {
+func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map[string]*rsa.PrivateKey) *mockGateway {
 	t.Helper()
 	cfgMap := make(map[string]PaymentConfig, len(configs))
 	for _, c := range configs {
@@ -46,6 +56,7 @@ func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig) *mockGat
 		client:  &http.Client{Timeout: 10 * time.Second},
 		configs: cfgMap,
 		bearers: make(map[string]string),
+		keys:    keys,
 		logf:    t.Logf,
 	}
 }
@@ -75,15 +86,22 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, ti
 	// updateBody) — the only wire format this harness's mock speaks today.
 	// cfg.IdentityFields overlays whatever extra fields this gateway's webhook
 	// needs to prove which of its own services the payment belongs to.
+	data := []map[string]string{
+		{"seq": "1", "paramName": "refNo", "value": tx.ReferenceNumber},
+		{"seq": "2", "paramName": "status", "value": status},
+		{"seq": "3", "paramName": "amount", "value": tx.Amount.String()},
+		{"seq": "4", "paramName": "currency", "value": tx.Currency},
+	}
+	var transactionKeyHeader string
+	if key, ok := g.keys[cfg.ID]; ok {
+		if transactionKeyHeader, err = encryptAsGovPay(&key.PublicKey, data); err != nil {
+			return fmt.Errorf("mock-gateway[%s]: encrypt webhook: %w", cfg.ID, err)
+		}
+	}
 	fields := map[string]any{
 		"transactionID": "e2e-gw-tx",
 		"serviceName":   "Application Fee",
-		"data": []map[string]any{
-			{"seq": "1", "paramName": "refNo", "value": tx.ReferenceNumber},
-			{"seq": "2", "paramName": "status", "value": status},
-			{"seq": "3", "paramName": "amount", "value": tx.Amount.String()},
-			{"seq": "4", "paramName": "currency", "value": tx.Currency},
-		},
+		"data":          data,
 	}
 	for wireField, value := range identityFields {
 		fields[wireField] = value
@@ -100,6 +118,9 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, ti
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if transactionKeyHeader != "" {
+		req.Header.Set("TransactionKey", transactionKeyHeader)
+	}
 	if bearer := g.bearers[cfg.ID]; bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
@@ -164,4 +185,38 @@ func resolveIdentityFields(cfg PaymentConfig, tx *payment.PaymentTransaction) (m
 		fields[wireField] = value
 	}
 	return fields, nil
+}
+
+// encryptAsGovPay encrypts every field of each data[] item in place the way
+// GovPay+ does (spec §3): a fresh 32-character transaction key, AES-256-CBC
+// with PKCS7 padding under key SHA-256(transaction key) and IV its first 16
+// bytes. It returns the transaction key RSA-OAEP(SHA-256) encrypted to pub and
+// base64-encoded, the value of the TransactionKey header.
+func encryptAsGovPay(pub *rsa.PublicKey, data []map[string]string) (string, error) {
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	transactionKey := []byte(hex.EncodeToString(raw))
+
+	derived := sha256.Sum256(transactionKey)
+	block, err := aes.NewCipher(derived[:])
+	if err != nil {
+		return "", err
+	}
+	for _, item := range data {
+		for field, plaintext := range item {
+			pad := block.BlockSize() - len(plaintext)%block.BlockSize()
+			padded := append([]byte(plaintext), bytes.Repeat([]byte{byte(pad)}, pad)...)
+			ciphertext := make([]byte, len(padded))
+			cipher.NewCBCEncrypter(block, derived[:block.BlockSize()]).CryptBlocks(ciphertext, padded)
+			item[field] = base64.StdEncoding.EncodeToString(ciphertext)
+		}
+	}
+
+	encryptedKey, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, transactionKey, nil)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(encryptedKey), nil
 }

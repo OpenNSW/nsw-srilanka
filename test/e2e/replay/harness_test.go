@@ -21,7 +21,11 @@ package replay_e2e
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -93,9 +97,14 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
+	// Gateways that encrypt their calls get a key pair minted for this run: the
+	// app reads the private half, the mock gateway encrypts to the public half.
+	paymentKeys := mintPaymentKeys(t, payments)
+
 	// Defaults point at gitignored real config files; redirect to the committed
-	// example (absolute, so it resolves irrespective of cwd).
-	cfg.Server.PaymentMethodsConfigPath = filepath.Join(root, "configs", "payment_methods.example.json")
+	// examples (absolute, so they resolve irrespective of cwd). The payment
+	// methods example is rewritten to carry the minted private keys.
+	cfg.Server.PaymentMethodsConfigPath = writePaymentMethodsConfig(t, root, payments, paymentKeys)
 	cfg.Server.CatalogConfigPath = filepath.Join(root, "configs", "catalog.example.json")
 	cfg.Storage.LocalBaseDir = t.TempDir() // keep blob storage out of the repo tree
 
@@ -114,7 +123,7 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("gateway: connect db: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close(gwDB) })
-	gateway := newMockGateway(t, gwDB, payments)
+	gateway := newMockGateway(t, gwDB, payments, paymentKeys)
 
 	// Seed one user record per member actor so each gets their own company identity.
 	memberUserIDs := make(map[string]string, len(members))
@@ -202,4 +211,86 @@ func writeServicesConfig(t *testing.T, agencyURL string, agencies []AgencyConfig
 		t.Fatalf("write services config: %v", err)
 	}
 	return path
+}
+
+// mintPaymentKeys generates a 2048-bit RSA key pair for each payment gateway
+// that declares a privateKeyField, keyed by payment config id.
+func mintPaymentKeys(t *testing.T, payments []PaymentConfig) map[string]*rsa.PrivateKey {
+	t.Helper()
+	keys := make(map[string]*rsa.PrivateKey)
+	for _, p := range payments {
+		if p.PrivateKeyField == "" {
+			continue
+		}
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("payment %q: generate rsa key: %v", p.ID, err)
+		}
+		keys[p.ID] = key
+	}
+	return keys
+}
+
+// writePaymentMethodsConfig copies configs/payment_methods.example.json to a
+// temp file, pointing each keyed gateway's privateKeyField at a temp PEM file
+// holding its minted private key, and returns the copy's path.
+func writePaymentMethodsConfig(t *testing.T, root string, payments []PaymentConfig, keys map[string]*rsa.PrivateKey) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, "configs", "payment_methods.example.json"))
+	if err != nil {
+		t.Fatalf("read payment methods config: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse payment methods config: %v", err)
+	}
+	methods, _ := doc["methods"].([]any)
+
+	dir := t.TempDir()
+	for _, p := range payments {
+		key, ok := keys[p.ID]
+		if !ok {
+			continue
+		}
+		der, err := x509.MarshalPKCS8PrivateKey(key)
+		if err != nil {
+			t.Fatalf("payment %q: marshal private key: %v", p.ID, err)
+		}
+		keyPath := filepath.Join(dir, p.ID+"_private.pem")
+		if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+			t.Fatalf("payment %q: write private key: %v", p.ID, err)
+		}
+
+		method := findPaymentMethod(methods, p.ID)
+		if method == nil {
+			t.Fatalf("payment %q declares privateKeyField but payment_methods.example.json has no method with that id", p.ID)
+		}
+		methodCfg, _ := method["config"].(map[string]any)
+		if methodCfg == nil {
+			methodCfg = make(map[string]any)
+			method["config"] = methodCfg
+		}
+		methodCfg[p.PrivateKeyField] = "file:" + keyPath
+	}
+
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal payment methods config: %v", err)
+	}
+	path := filepath.Join(dir, "payment_methods.json")
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatalf("write payment methods config: %v", err)
+	}
+	return path
+}
+
+// findPaymentMethod returns the payment_methods.json method object with the
+// given id, or nil.
+func findPaymentMethod(methods []any, id string) map[string]any {
+	for _, m := range methods {
+		if method, ok := m.(map[string]any); ok && method["id"] == id {
+			return method
+		}
+	}
+	return nil
 }
