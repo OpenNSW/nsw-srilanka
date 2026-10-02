@@ -315,6 +315,16 @@ func TestRefIDGenerator_Rejected(t *testing.T) {
 		{name: "duplicate target", props: `{"ids": [
 			{"path": "/ref", "issuer": "ACME", "id_type": "x"},
 			{"path": "/ref", "issuer": "ACME", "id_type": "y"}]}`},
+		{name: "root path inside another", props: `{"ids": [
+			{"path": "/ref", "issuer": "ACME", "id_type": "x"},
+			{"path": "/ref/child", "issuer": "ACME", "id_type": "y"}]}`},
+		{name: "root path around another", props: `{"ids": [
+			{"path": "/ref/child", "issuer": "ACME", "id_type": "x"},
+			{"path": "/ref", "issuer": "ACME", "id_type": "y"}]}`},
+		{name: "element path inside another", props: `{"ids": [
+			{"each": "/order/lines", "path": "0/no", "issuer": "ACME", "id_type": "x"},
+			{"each": "/order/lines", "path": "0/no/child", "issuer": "ACME", "id_type": "y"}]}`,
+			inputs: order(line(1))},
 		{name: "each is not an array", props: orderProps,
 			inputs: map[string]any{"order": map[string]any{"lines": map[string]any{}}}},
 		{name: "element is not an object", props: orderProps,
@@ -341,6 +351,24 @@ func TestRefIDGenerator_Rejected(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Overlap is checked per scope: sibling fields, the same relative path on two
+// different arrays, and a root field named like an element field all pass.
+func TestRefIDGenerator_NonOverlappingPathsAllowed(t *testing.T) {
+	reg := &fakeRefIDs{}
+	inputs := order(line(1))
+	inputs["other"] = []any{map[string]any{}}
+	ctx := refIDCtx(inputs)
+
+	require.NoError(t, execRefIDs(t, reg, ctx, `{"ids": [
+		{"path": "/order/a/ref", "issuer": "ACME", "id_type": "x"},
+		{"path": "/order/b/ref", "issuer": "ACME", "id_type": "x"},
+		{"path": "/no", "issuer": "ACME", "id_type": "x"},
+		{"each": "/order/lines", "path": "0/no", "issuer": "ACME", "id_type": "y"},
+		{"each": "/other", "path": "0/no", "issuer": "ACME", "id_type": "y"}]}`))
+
+	assert.Len(t, reg.calls, 5)
 }
 
 // A shape error in a later element must stop the step before any ID is issued.
