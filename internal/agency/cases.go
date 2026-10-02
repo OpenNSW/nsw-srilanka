@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig"
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig/taskconfigart"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 const (
@@ -154,14 +154,15 @@ func (h *CaseHandler) meta(r *http.Request, taskCode string) taskconfig.TaskMeta
 }
 
 // requireOfficer writes the error response and returns false unless the caller is a
-// user holding the officer token role.
+// user holding the officer token role. A machine client is authenticated but never an
+// officer, so it gets 403 rather than 401.
 func (h *CaseHandler) requireOfficer(w http.ResponseWriter, r *http.Request) bool {
-	ac := authn.GetAuthContext(r.Context())
-	if ac == nil || ac.User == nil {
+	p, ok := authn.FromContext(r.Context())
+	if !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return false
 	}
-	if !slices.Contains(ac.User.Roles, h.officerRole) {
+	if p.Kind != authn.KindUser || !slices.Contains(p.Roles, h.officerRole) {
 		slog.WarnContext(r.Context(), "agency: case access denied, officer role missing")
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenOfficer)
 		return false

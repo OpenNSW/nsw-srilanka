@@ -10,8 +10,9 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/testutil"
-	"github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/taskflow/store"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
 type fakeCaseRepo struct {
@@ -46,13 +47,20 @@ func (f fakeTasks) GetAllTasks(_ context.Context, rootWorkflowID string) []store
 }
 
 func requestAs(roles []string, target string, id string) *http.Request {
+	if roles == nil {
+		return requestBy(nil, target, id)
+	}
+	return requestBy(&authn.Principal{Kind: authn.KindUser, Roles: roles}, target, id)
+}
+
+// requestBy builds a request authenticated as p, or unauthenticated when p is nil.
+func requestBy(p *authn.Principal, target string, id string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, target, nil)
 	if id != "" {
 		r.SetPathValue("id", id)
 	}
-	if roles != nil {
-		ac := &authn.AuthContext{User: &authn.UserContext{Roles: roles}}
-		r = r.WithContext(context.WithValue(r.Context(), authn.AuthContextKey, ac))
+	if p != nil {
+		r = r.WithContext(authn.ContextWithPrincipal(r.Context(), p))
 	}
 	return r
 }
@@ -78,14 +86,16 @@ func TestCaseHandler(t *testing.T) {
 
 	t.Run("requires the officer role", func(t *testing.T) {
 		for name, tc := range map[string]struct {
-			roles []string
-			want  int
+			p    *authn.Principal
+			want int
 		}{
 			"unauthenticated": {nil, http.StatusUnauthorized},
-			"trader":          {[]string{"Trader"}, http.StatusForbidden},
+			"trader":          {&authn.Principal{Kind: authn.KindUser, Roles: []string{"Trader"}}, http.StatusForbidden},
+			// Only a user can be an officer, whatever roles a client token carries.
+			"client": {&authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA", Roles: []string{"Officer"}}, http.StatusForbidden},
 		} {
 			rec := httptest.NewRecorder()
-			h.HandleListCases(rec, requestAs(tc.roles, "/api/v1/cases", ""))
+			h.HandleListCases(rec, requestBy(tc.p, "/api/v1/cases", ""))
 			if rec.Code != tc.want {
 				t.Errorf("%s: status = %d, want %d", name, rec.Code, tc.want)
 			}
