@@ -37,6 +37,10 @@ const (
 // request's taskCode.
 var ErrUnknownTaskCode = errors.New("unknown task code")
 
+// ErrConflict is returned by Inject when taskId is already recorded with a different
+// consignmentId or taskCode.
+var ErrConflict = errors.New("taskId already injected with different details")
+
 // InjectRequest is the request body for POST /api/v1/inject.
 type InjectRequest struct {
 	TaskID        string          `json:"taskId"`
@@ -85,6 +89,14 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 	w, err := s.repo.Get(ctx, req.TaskID)
 	if err != nil {
 		return nil, fmt.Errorf("agency: failed to read workflow: %w", err)
+	}
+	// A taskId names one workflow for good, so a repeat is a retry only if it agrees
+	// with the recorded row. Checked against the row that won the insert, not before
+	// Record, so concurrent requests cannot race past it. It also means cfg below is
+	// the row's own config: a retry cannot start a different taskCode's workflow.
+	if w.CaseID != req.ConsignmentID || w.TaskCode != req.TaskCode {
+		return nil, fmt.Errorf("%w: %q is recorded for consignment %q, task code %q",
+			ErrConflict, w.TaskID, w.CaseID, w.TaskCode)
 	}
 	// Once started (or completed), a repeat inject must not reach the engine: after the
 	// workflow completes, the engine would accept the same ID as a brand-new run.
@@ -152,8 +164,12 @@ func (s *Service) HandleInject(w http.ResponseWriter, r *http.Request) {
 
 	wf, err := s.Inject(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, ErrUnknownTaskCode) {
+		switch {
+		case errors.Is(err, ErrUnknownTaskCode):
 			httputil.Error(w, r, http.StatusBadRequest, err.Error())
+			return
+		case errors.Is(err, ErrConflict):
+			httputil.Error(w, r, http.StatusConflict, err.Error())
 			return
 		}
 		httputil.InternalServerError(w, r, errFailedToInjectTask, err, "taskId", req.TaskID)
