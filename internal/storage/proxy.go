@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -90,6 +91,37 @@ func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, 
 	}
 	meta := resp.FileMetadata
 	return &meta, nil
+}
+
+// Save stores content on the owning service: it allocates the key there, as
+// Upload does, then puts the content to the presigned URL itself. The owning
+// service decides which MIME types it accepts.
+func (s *ProxyService) Save(ctx context.Context, filename, mime string, content []byte) (*corestorage.FileMetadata, error) {
+	meta, err := s.Upload(ctx, filename, int64(len(content)), mime)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, meta.UploadURL, bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("storage proxy: build upload request: %w", err)
+	}
+	// A presigned upload is signed over its content type, so it must be sent
+	// as the type it was allocated for.
+	req.Header.Set("Content-Type", meta.MimeType)
+	resp, err := s.fetchClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("storage proxy: upload %s: %w", meta.Key, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxProxyErrorBody))
+		return nil, fmt.Errorf("storage proxy: upload %s: owning service returned %d: %s", meta.Key, resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+
+	// The URL was for this upload only; the key is what to persist.
+	meta.UploadURL = ""
+	return meta, nil
 }
 
 // GetDownloadURL returns the owning service's time-limited download URL.

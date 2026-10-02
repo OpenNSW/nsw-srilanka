@@ -238,8 +238,8 @@ func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, ok := stack.Service.(*corestorage.Service); !ok {
-		t.Errorf("Service = %T, want *corestorage.Service", stack.Service)
+	if _, ok := stack.Service.(*BackendService); !ok {
+		t.Errorf("Service = %T, want *BackendService", stack.Service)
 	}
 	if stack.LocalContent == nil {
 		t.Error("LocalContent = nil, want the local content handlers for a local backend")
@@ -280,5 +280,60 @@ func TestProxyConfigValidate(t *testing.T) {
 func TestKeyPath_KeyAnywhereInPath(t *testing.T) {
 	if got := keyPath("/api/v1/{key}/content", "abc.pdf"); got != "/api/v1/abc.pdf/content" {
 		t.Errorf("keyPath = %q, want /api/v1/abc.pdf/content", got)
+	}
+}
+
+// TestProxy_Save stores content under a key the owning service allocates and
+// reads it back.
+func TestProxy_Save(t *testing.T) {
+	svc := newProxyStack(t, ownerToken).Service
+	ctx := context.Background()
+
+	content := []byte("%PDF-1.4 generated on the server")
+	meta, err := svc.Save(ctx, "permit.pdf", "application/pdf", content)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !strings.HasSuffix(meta.Key, ".pdf") || meta.Size != int64(len(content)) || meta.UploadURL != "" {
+		t.Fatalf("Save metadata = %+v, want a .pdf key, the content's size and no upload URL", meta)
+	}
+
+	body, mime, err := svc.Download(ctx, meta.Key)
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+	got, _ := io.ReadAll(body)
+	if !bytes.Equal(got, content) || mime != "application/pdf" {
+		t.Errorf("Download = (%q, %q), want (%q, application/pdf)", got, mime, content)
+	}
+}
+
+
+
+func TestBackendService_Save(t *testing.T) {
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+
+	content := []byte("<!DOCTYPE html><p>Permit</p>")
+	meta, err := stack.Service.Save(ctx, "permit.html", "text/html; charset=utf-8", content)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !strings.HasSuffix(meta.Key, ".html") || meta.Name != "permit.html" || meta.Size != int64(len(content)) {
+		t.Fatalf("Save metadata = %+v, want a .html key named permit.html with the content's size", meta)
+	}
+
+	body, mime, err := stack.Service.Download(ctx, meta.Key)
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+	got, _ := io.ReadAll(body)
+	if !bytes.Equal(got, content) || mime != "text/html; charset=utf-8" {
+		t.Errorf("Download = (%q, %q), want the saved content and type", got, mime)
 	}
 }
