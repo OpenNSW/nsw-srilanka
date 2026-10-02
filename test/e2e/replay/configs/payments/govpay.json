@@ -9,5 +9,6 @@
   "identityFields": {
     "subinstId": "govpay_subinst_id",
     "serviceid": "govpay_service_id"
-  }
+  },
+  "privateKeyField": "private_key"
 }

@@ -68,6 +68,14 @@ type PaymentConfig struct {
 	// built-in knowledge of any gateway's identity scheme, so a new gateway
 	// needs only its own configs/payments/<id>.json entry, no Go changes.
 	IdentityFields map[string]string `json:"identityFields,omitempty"`
+
+	// PrivateKeyField is for a gateway that encrypts its calls to this GO's
+	// RSA public key. It names the gateway's payment_methods.json config field
+	// that takes the private key as a "file:" reference. The harness mints a
+	// fresh key pair per run, points that field at the private half, and the
+	// mock encrypts its webhook to the public half using the GovPay+ scheme
+	// (spec §3), the only one it speaks, like its envelope.
+	PrivateKeyField string `json:"privateKeyField,omitempty"`
 }
 
 // loadMemberConfigs reads every *.json file under test/e2e/replay/configs/members/
