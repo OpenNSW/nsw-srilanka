@@ -10,6 +10,9 @@
 COMPOSE         := docker compose
 # Pass only the base file to exclude the override == the real built images.
 COMPOSE_PREVIEW := docker compose -f compose.yml
+# The API gateway in front of the backend: a separate Compose project in
+# gateway/, started and stopped alongside the stack. It reads gateway/.env.
+GATEWAY_COMPOSE := docker compose -f gateway/docker-compose.yaml
 # Source services built from this repo; `make deps` starts everything else.
 APP_SERVICES    := api trader-portal
 # Newline for turning `docker compose config --services` output into a word list.
@@ -35,6 +38,7 @@ MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
 dev: export APP_ENV = development
 dev: ## Start the full stack with hot reload (detached; use `make logs` to watch)
 	$(COMPOSE) up -d
+	$(GATEWAY_COMPOSE) up -d
 
 .PHONY: logs
 logs: ## Tail logs from all running services
@@ -48,6 +52,7 @@ logs: ## Tail logs from all running services
 preview: export APP_ENV = development
 preview: ## Build and run the real images locally (detached; use `make logs` to watch)
 	$(COMPOSE_PREVIEW) up --build -d
+	$(GATEWAY_COMPOSE) up -d
 
 .PHONY: build
 build: ## Build the images without starting anything
@@ -60,6 +65,7 @@ build: ## Build the images without starting anything
 .PHONY: deps
 deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
 	$(COMPOSE) up -d $(DEPS_SERVICES)
+	$(GATEWAY_COMPOSE) up -d
 
 .PHONY: test-e2e
 test-e2e: export APP_ENV = development
@@ -93,10 +99,12 @@ migration: ## Scaffold a new migration file: make migration name=<description>
 .PHONY: down
 down: ## Stop and remove containers (keeps volumes/data)
 	$(COMPOSE) down
+	$(GATEWAY_COMPOSE) down
 
 .PHONY: clean
 clean: ## Stop and remove containers AND named volumes (wipes db/bucket data)
 	$(COMPOSE) down -v
+	$(GATEWAY_COMPOSE) down -v
 
 .PHONY: ps
 ps: ## Show the status of the stack's containers
@@ -144,6 +152,7 @@ ifdef USE_CMD
 	@echo Git hooks configured: .githooks/
 	@if exist .env.example if not exist .env copy /Y .env.example .env
 	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
+	@if exist gateway\.env.example if not exist gateway\.env copy /Y gateway\.env.example gateway\.env
 	@if exist portals\apps\trader-app\public\config.example.js if not exist portals\apps\trader-app\public\config.js copy /Y portals\apps\trader-app\public\config.example.js portals\apps\trader-app\public\config.js
 	@if exist configs\notification.example.json if not exist configs\notification.json copy /Y configs\notification.example.json configs\notification.json
 	@if exist configs\services.docker.example.json if not exist configs\services.docker.json copy /Y configs\services.docker.example.json configs\services.docker.json
@@ -154,7 +163,7 @@ ifdef USE_CMD
 else
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
-	@for f in .env.example idp/.env.example portals/apps/trader-app/public/config.example.js; do \
+	@for f in .env.example idp/.env.example gateway/.env.example portals/apps/trader-app/public/config.example.js; do \
 		target=$$(echo $$f | sed 's/\.example//'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \

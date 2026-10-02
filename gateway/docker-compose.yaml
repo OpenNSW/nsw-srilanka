@@ -1,0 +1,100 @@
+# WSO2 API Platform Gateway 1.1.0 in front of the NSW backend — the two
+# services the gateway needs and nothing else (no tracing, logging or metrics).
+# `make dev`, `make preview` and `make deps` start it with the NSW stack.
+#
+#   cp .env.example .env        # once (`make setup` does it), then set the login
+#   docker compose up -d        # from this folder
+#   docker compose down         # stop, keep deployed APIs
+#   docker compose down -v      # stop and forget deployed APIs
+#
+# Host ports default to values that stay clear of the NSW stack (tnsw-api owns
+# 8080) and a local Prometheus (9090). Override any of them in .env or per run,
+# e.g. GATEWAY_HTTP_PORT=8380 docker compose up -d
+
+name: nsw-gateway
+
+services:
+  # One-shot: fills the ${...} placeholders in configs/config.toml from .env
+  # and writes the result to the gateway-config volume, which the two gateway
+  # services read. The gateway cannot take its login list from environment
+  # variables, so the credentials are written into its config here, at
+  # startup, rather than kept in the repository.
+  #
+  # nginx:alpine is used only because it ships envsubst; nothing serves HTTP.
+  gateway-config:
+    image: nginx:1.29-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        : "$${GATEWAY_ADMIN_USERNAME:?is not set: copy .env.example to .env and set it}"
+        : "$${GATEWAY_ADMIN_PASSWORD:?is not set: copy .env.example to .env and set it}"
+        case "$$GATEWAY_ADMIN_USERNAME$$GATEWAY_ADMIN_PASSWORD" in
+          *\'*) echo "GATEWAY_ADMIN_USERNAME/PASSWORD must not contain a single quote" >&2; exit 1 ;;
+        esac
+        envsubst '$$GATEWAY_ADMIN_USERNAME $$GATEWAY_ADMIN_PASSWORD' \
+          < /template/config.toml > /rendered/config.toml
+        echo "gateway config rendered"
+    environment:
+      GATEWAY_ADMIN_USERNAME: ${GATEWAY_ADMIN_USERNAME:-}
+      GATEWAY_ADMIN_PASSWORD: ${GATEWAY_ADMIN_PASSWORD:-}
+    volumes:
+      - ./configs/config.toml:/template/config.toml:ro
+      - gateway-config:/rendered
+    restart: "no"
+
+  # The control side: stores API definitions and pushes routes to the runtime.
+  # Only you talk to it.
+  gateway-controller:
+    image: ghcr.io/wso2/api-platform/gateway-controller:1.1.0
+    mem_limit: 60m
+    mem_reservation: 60m
+    cpus: 0.025
+    command: ["-config", "/etc/gateway-controller/config.toml"]
+    ports:
+      - "${GATEWAY_MANAGEMENT_PORT:-9190}:9090" # management API: deploy/list APIs (basic auth)
+      - "${GATEWAY_ADMIN_PORT:-9094}:9092"      # admin API: /api/admin/v0.9/health
+    environment:
+      - APIP_GW_DEVELOPMENT_MODE=true
+    volumes:
+      - controller-data:/app/data                    # deployed APIs survive restarts
+      - gateway-config:/etc/gateway-controller:ro     # rendered config.toml
+    depends_on:
+      gateway-config:
+        condition: service_completed_successfully
+    networks:
+      - gateway-network
+
+  # The traffic side: Envoy plus the policy engine. Clients call this; it
+  # forwards to the NSW backend.
+  gateway-runtime:
+    image: ghcr.io/wso2/api-platform/gateway-runtime:1.1.0
+    mem_limit: 180m
+    mem_reservation: 180m
+    cpus: 0.175
+    command: ["--pol.config", "/etc/policy-engine/config.toml"]
+    ports:
+      - "${GATEWAY_HTTP_PORT:-8280}:8080" # HTTP ingress: where clients send API calls
+    environment:
+      - GATEWAY_CONTROLLER_HOST=gateway-controller
+    volumes:
+      - gateway-config:/etc/policy-engine:ro          # rendered config.toml
+    depends_on:
+      gateway-config:
+        condition: service_completed_successfully
+    # The runtime is what calls the upstream, so it is the one that has to
+    # resolve host.docker.internal (the NSW API on the host's :8080). Docker
+    # Desktop provides the name already; this makes it work on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - gateway-network
+
+volumes:
+  controller-data:
+  # The rendered config. Rewritten on every `up`, so a change to .env or
+  # configs/config.toml takes effect on the next start.
+  gateway-config:
+
+networks:
+  gateway-network:
