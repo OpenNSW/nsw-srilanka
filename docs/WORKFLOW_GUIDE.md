@@ -370,7 +370,7 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 - **Output:** the stored file's `{key, name, mime_type, size}` is written to the task's own state at `<output_namespace>`. Map `permit_doc.key` up through the parent TASK node's `output_mapping` as with any plugin output; a client fetches the document through `GET /api/v1/storage/{key}`, and it is served inline as `text/html`, ready to print.
 - **Validation:** the template is checked with `htmlgen.Validate` each time it is loaded, so a syntax error or an unescapable construct fails the step rather than producing a broken document. A value html/template refuses (a `javascript:` URL in an `href`) also fails the step.
 - **Filename:** names the stored document, not the template: it defaults to `<template_id>.html`, and `.html` is added when missing. Templates use `.gohtml`, as NSW-Agency's certificate templates do, so editors highlight the template actions.
-- **Re-runs:** a task that already holds a document keeps it, so a retried step doesn't store a second copy.
+- **Re-runs:** the step renders and stores a new document every time it runs, so a loop that brings it back after the inputs changed records the document for the new data. A Temporal retry can leave an extra copy in storage that nothing refers to; superseded files are not deleted.
 
 
 ### JSONForm Schemas (`*_jsonform.json`)

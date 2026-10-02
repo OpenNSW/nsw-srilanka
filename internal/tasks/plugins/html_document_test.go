@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/OpenNSW/core/artifact"
@@ -43,7 +44,10 @@ func (f *fakeSaver) Save(_ context.Context, filename, mime string, content []byt
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &corestorage.FileMetadata{Key: "0f8e7c1a-0000-4000-8000-000000000001.html", Name: filename, MimeType: mime, Size: int64(len(content))}, nil
+	// A new key per call, as storage allocates one, so a test can tell a
+	// reused document from a newly stored one.
+	key := fmt.Sprintf("0f8e7c1a-0000-4000-8000-%012d.html", f.calls)
+	return &corestorage.FileMetadata{Key: key, Name: filename, MimeType: mime, Size: int64(len(content))}, nil
 }
 
 const permitTemplate = `<p>Permit No: {{ .refid.reference_id }}</p>` +
@@ -80,17 +84,43 @@ func TestHTMLDocumentGenerator_RendersStoresAndRecordsKey(t *testing.T) {
 	}, ctx.Record.Data["permit_doc"])
 }
 
-func TestHTMLDocumentGenerator_ReusesExistingDocument(t *testing.T) {
+const permitProps = `{"template_id": "permit"}`
+
+func permitInputs(applicant string) map[string]any {
+	return map[string]any{
+		"refid":       map[string]any{"reference_id": "PRM-2026-00555"},
+		"application": map[string]any{"applicant_name": applicant, "fee_amount": json.Number("1400")},
+	}
+}
+
+func TestHTMLDocumentGenerator_ChangedInputsStoreNewDocument(t *testing.T) {
 	files := &fakeSaver{}
 	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files)
-	ctx := htmlDocCtx(nil)
-	existing := map[string]any{"key": "already-stored.html"}
-	ctx.Record.Data["permit_doc"] = existing
+	ctx := htmlDocCtx(permitInputs("Smith & Co"))
 
-	require.NoError(t, p.Execute(ctx, json.RawMessage(`{"template_id": "permit"}`)))
+	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
+	first := ctx.Record.Data["permit_doc"].(map[string]any)
 
-	assert.Zero(t, files.calls, "a retried activity must not store the document again")
-	assert.Equal(t, existing, ctx.Record.Data["permit_doc"])
+	// A workflow loop comes back to the step after the trader corrected the form.
+	ctx.Inputs = permitInputs("Smith & Sons")
+	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
+	second := ctx.Record.Data["permit_doc"].(map[string]any)
+
+	assert.Equal(t, 2, files.calls)
+	assert.Contains(t, string(files.content), "Smith &amp; Sons")
+	assert.NotEqual(t, first["key"], second["key"], "the task must point at the document for the new inputs")
+}
+
+func TestHTMLDocumentGenerator_EveryRunStores(t *testing.T) {
+	files := &fakeSaver{}
+	p := NewHTMLDocumentGeneratorPlugin(fakeTemplates{"permit": permitTemplate}, files)
+	ctx := htmlDocCtx(permitInputs("Smith & Co"))
+
+	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
+	require.NoError(t, p.Execute(ctx, json.RawMessage(permitProps)))
+
+	assert.Equal(t, 2, files.calls, "a document already recorded for the task is not reused")
+	assert.Equal(t, "0f8e7c1a-0000-4000-8000-000000000002.html", ctx.Record.Data["permit_doc"].(map[string]any)["key"])
 }
 
 func TestHTMLDocumentGenerator_Filename(t *testing.T) {
