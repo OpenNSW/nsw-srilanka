@@ -109,6 +109,24 @@ kubectl create secret generic nsw-secrets \
   --from-literal=argus-api-key=...
 ```
 
+The GovPay+ gateway also needs this GO's RSA private key. GovPay+ encrypts
+every call to the matching public key, so it must be given that public key.
+The private key is a file rather than an env var, so it goes in a Secret of
+its own:
+
+```bash
+kubectl create secret generic govpay-go-private-key \
+  --from-file=go_private.pem=./go_private.pem
+```
+
+[`values-example.yaml`](../values-example.yaml) mounts it at `/certs/govpay`
+through `backend.volumes` / `backend.volumeMounts`, which is where the govpay
+entry in `payment_methods.json` points (`"private_key":
+"file:/certs/govpay/go_private.pem"`). The key must be a `file:` (or `env:`)
+reference; an inline PEM is refused. Without it the backend starts but answers
+every GovPay+ call with 500; a key that is set but unreadable stops the backend
+at startup.
+
 See [`.env.example`](../../../.env.example) for what each of these secrets
 backs and the full set of non-secret config the backend reads. The frontend
 needs no secrets — its `config` is all public SPA config (see below).

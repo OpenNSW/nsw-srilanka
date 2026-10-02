@@ -19,7 +19,7 @@ import (
 // acknowledgement echoes the request's protocol fields and submitted data[] and
 // is independent of the settlement outcome.
 func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers map[string][]string) (*corepayment.WebhookPayload, *corepayment.WebhookResponse, error) {
-	req, err := parseGovPayRequest(body)
+	req, aesKey, err := g.decryptRequest(ctx, body)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -65,13 +65,18 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 	// Build the GovPay+ UpdateResponse acknowledgement (paymentData receipt) from
 	// the request itself — it echoes the submitted data[] and is the same
 	// regardless of how the service settles the transaction.
+	paymentData := buildPaymentData(req.Data, req.TransactionID)
+	if err := encryptResponseObjects(paymentData, aesKey); err != nil {
+		return nil, nil, fmt.Errorf("encrypt update response: %w", err)
+	}
+
 	ack := UpdateResponse{
 		TransactionID: req.TransactionID,
 		SubInstID:     req.SubInstID,
 		ServiceID:     req.ServiceID,
 		ServiceName:   req.ServiceName,
 		Message:       "Success",
-		PaymentData:   buildPaymentData(req.Data, req.TransactionID),
+		PaymentData:   paymentData,
 	}
 	ackBody, err := json.Marshal(ack)
 	if err != nil {
@@ -115,7 +120,7 @@ func buildPaymentData(params []govPayParam, transactionID string) []PaymentItem 
 			paramName = fmt.Sprintf("param_%d", i+1)
 		}
 
-		items = append(items, newPaymentItem(i+1, seq, paramName, param.Value, valueDataType(param.Value)))
+		items = append(items, newPaymentItem(i+1, seq, paramName, paramValueString(param.Value), valueDataType(param.Value)))
 	}
 
 	items = append(items, newPaymentItem(len(items)+1, strconv.Itoa(len(items)+1), "Receipt Number", fmt.Sprintf("REC-%s", transactionID), "text"))
@@ -124,7 +129,7 @@ func buildPaymentData(params []govPayParam, transactionID string) []PaymentItem 
 	return items
 }
 
-func newPaymentItem(idx int, seq, placeholder string, initialValue interface{}, dataType string) PaymentItem {
+func newPaymentItem(idx int, seq, placeholder, initialValue, dataType string) PaymentItem {
 	return PaymentItem{
 		ObjType:       "label",
 		Seq:           seq,
@@ -132,14 +137,14 @@ func newPaymentItem(idx int, seq, placeholder string, initialValue interface{}, 
 		Placeholder:   placeholder,
 		InitialValue:  initialValue,
 		DataType:      dataType,
-		MaxLength:     50,
+		MaxLength:     "50",
 		SelectionType: "SINGLE",
 		Mask:          "",
 		NotNull:       "true",
 		Enabled:       "false",
 		Returned:      "false",
-		Rows:          1,
-		Cols:          1,
+		Rows:          "1",
+		Cols:          "1",
 		ReturnParam:   "",
 		ReturnValue:   "",
 	}

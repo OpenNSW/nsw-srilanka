@@ -15,6 +15,7 @@ require (
 	github.com/OpenNSW/core/payment v0.2.0
 	github.com/OpenNSW/core/refid v0.2.0
 	github.com/OpenNSW/core/remote v0.8.0
+	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/storage v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
@@ -29,7 +30,6 @@ require (
 )
 
 require (
-	github.com/OpenNSW/core/secret v0.2.0 // indirect
 	github.com/OpenNSW/core/shared v0.3.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.47.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
