@@ -144,8 +144,11 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 		return fmt.Errorf("html_document_generator: load template %q: %w", cfg.TemplateID, err)
 	}
 
-	// Inputs go to htmlgen as JSON so it decodes them with UseNumber: a number
-	// that reached the inputs as json.Number keeps its exact text.
+	// Inputs go to htmlgen as JSON, which it decodes with UseNumber, so a
+	// number prints as plain digits rather than in exponent form. That keeps
+	// only the text the number still has here: inputs arrive through Temporal
+	// as float64, so 1.50 is already 1.5. A template formats money and
+	// quantities with decimal.
 	data, err := json.Marshal(ctx.Inputs)
 	if err != nil {
 		return fmt.Errorf("html_document_generator: encode inputs: %w", err)
