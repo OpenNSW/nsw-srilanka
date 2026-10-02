@@ -24,7 +24,8 @@ Each task folder is recognized by the `config_loader.go` registry scanner and mu
     ├── render.json                   # UI Zone rendering configuration (Required)
     ├── <role>input.json              # Task definition type & properties (E.g. traderinput.json, officerinput.json)
     ├── <role>input_jsonform.json     # JSONForms schema/uiSchema for interactive forms
-    └── [instructions_jsonform.json]  # Optional Markdown template for static instruction boxes
+    ├── [instructions_jsonform.json]  # Optional Markdown template for static instruction boxes
+    └── [<name>.gohtml]               # Optional htmlgen template for a generated document (see HTML_DOCUMENT_GENERATOR)
 ```
 
 ---
@@ -323,6 +324,55 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Not configured:** if the deployment has no `refid.issuers`, the step fails.
 - **Showing the IDs:** the step doesn't write the namespace a user's own form reads, e.g. the one its `USER_INPUT` step fills. So a form section reading that namespace shows the IDs only once a later step maps them back in. To show them straight away, add a `MARKDOWN` section with `"dataKey": "refid"`.
 
+### Print-ready HTML documents (`HTML_DOCUMENT_GENERATOR`)
+Renders a permit, licence, certificate or receipt as print-ready HTML with [`htmlgen`](https://github.com/OpenNSW/core/tree/main/htmlgen), stores it, and records its storage key. The step is synchronous. Adding one takes four pieces:
+
+1. **The template** (`<task-folder>/permit.gohtml`): the document's HTML with `html/template` actions in it. It addresses the node's inputs by name and formats them with htmlgen's helpers (`decimal`, `date`, `lookup`, …); every value is escaped for where it is printed.
+   ```html
+   <!DOCTYPE html>
+   <html><head><meta charset="utf-8"><style>@page { size: A4; margin: 12mm; }</style></head>
+   <body>
+     <h1>Permit</h1>
+     <p>Permit No: {{ .permit_number }}</p>
+     <p>Applicant: {{ .application.applicant_name }}</p>
+     <p>Issued on {{ date .issued_at "2006-01-02" "02/01/2006" }}</p>
+   </body></html>
+   ```
+2. **The subtask template** (`<task-folder>/permit_document.json`): names the template and the stored file.
+   ```json
+   {
+     "id": "npqs-permit--generate-document",
+     "task_type": "HTML_DOCUMENT_GENERATOR",
+     "output_namespace": "permit_doc",
+     "plugin_properties": { "template_id": "npqs-permit--html", "filename": "permit.html" }
+   }
+   ```
+3. **The workflow node** (`<task-folder>/workflow.json`): its `input_mapping` assembles everything the document prints, and its `output_mapping` takes the key out. Put the issue date in the inputs too; templates have no clock.
+   ```json
+   {
+     "id": "generate_permit_document",
+     "type": "TASK",
+     "task_template_id": "npqs-permit--generate-document",
+     "input_mapping": {
+       "application": "application",
+       "reference_number": "permit_number",
+       "issued_at": "issued_at"
+     },
+     "output_mapping": { "permit_doc.key": "permit_document_key" }
+   }
+   ```
+4. **Two manifest rows**: the template's kind is `html_template` — the HTML file itself, not JSON.
+   ```json
+   { "id": "npqs-permit--generate-document", "kind": "subtask_template", "version": "", "path": "npqs/<task-folder>/permit_document.json" },
+   { "id": "npqs-permit--html", "kind": "html_template", "version": "", "path": "npqs/<task-folder>/permit.gohtml" }
+   ```
+
+- **Output:** the stored file's `{key, name, mime_type, size}` is written to the task's own state at `<output_namespace>`. Map `permit_doc.key` up through the parent TASK node's `output_mapping` as with any plugin output; a client fetches the document through `GET /api/v1/storage/{key}`, and it is served inline as `text/html`, ready to print.
+- **Validation:** the template is checked with `htmlgen.Validate` each time it is loaded, so a syntax error or an unescapable construct fails the step rather than producing a broken document. A value html/template refuses (a `javascript:` URL in an `href`) also fails the step.
+- **Filename:** names the stored document, not the template: it defaults to `<template_id>.html`, and `.html` is added when missing. Templates use `.gohtml`, as NSW-Agency's certificate templates do, so editors highlight the template actions.
+- **Re-runs:** a task that already holds a document keeps it, so a retried step doesn't store a second copy.
+
+
 ### JSONForm Schemas (`*_jsonform.json`)
 Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and `uiSchema` block:
 ```json
@@ -350,7 +400,7 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 1. **Parent Workflow Hot-Reload**:
    - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
 2. **Form schemas and markdown templates**:
-   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `artifactLoader.type: local`).
+   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `ARTIFACT_LOADER_TYPE=local`). `html_template` documents are likewise fetched each time a document is generated.
 3. **Render configs**:
    - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
 4. **The manifest**:
