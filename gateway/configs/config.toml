@@ -1,0 +1,43 @@
+# Gateway settings, read by both the controller and the runtime. Only what
+# differs from the defaults, or is worth seeing, is set here; every other
+# option and its default is in the distribution's configs/config-template.toml.
+#
+# This is a template. ${NAME} placeholders are filled from gateway/.env by the
+# gateway-config service in docker-compose.yaml before the gateway starts, so
+# no credential lives in this file. Only the variables that service names are
+# substituted; any other "$" here is left alone.
+
+[controller.server]
+# Identifies this gateway in its own storage.
+gateway_id = "nsw-local-gateway"
+
+# Login for the management API (deploying APIs). Single-quoted TOML literal
+# strings, so a password may contain anything except a single quote.
+[controller.auth.basic]
+enabled = true
+
+[[controller.auth.basic.users]]
+username = '${GATEWAY_ADMIN_USERNAME}'
+password = '${GATEWAY_ADMIN_PASSWORD}'
+roles = ["admin"]
+
+[router]
+gateway_host = "*"
+# HTTP only. HTTPS needs a listener certificate and private key, which do not
+# belong in the repository; TLS is terminated in front of the gateway when it
+# is deployed. Turning this on needs [router.downstream_tls] cert_path/key_path.
+https_enabled = false
+
+[router.access_logs]
+enabled = true
+
+[router.upstream.timeouts]
+# The default, stated because the NSW webhooks depend on it: SLPA's
+# invoice.paid can take ~20s while the receipt is fetched and stored.
+route_timeout_ms = 60000
+
+[controller.logging]
+level = "info"
+
+[policy_engine.logging]
+level = "info"
