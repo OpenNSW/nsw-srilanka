@@ -162,6 +162,20 @@ backend:
           name: nsw-secrets
           key: argus-api-key
 
+  # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
+  # gateway needs the private key. payment_methods.json points at it with
+  # "private_key": "file:/certs/govpay/go_private.pem"; this mounts it there
+  # from the govpay-go-private-key Secret created above. Without the key the
+  # backend starts but answers every GovPay+ call with 500; a key that is set
+  # but unreadable stops the backend at startup.
+  volumes:
+    - name: govpay-go-private-key
+      secret:
+        secretName: govpay-go-private-key
+  volumeMounts:
+    - name: govpay-go-private-key
+      mountPath: /certs/govpay
+      readOnly: true
   # The server's config.yaml, authored here as values; the chart mounts it and
   # sets CONFIG_PATH (see values.yaml). Full schema and every option:
   # configs/config.example.yaml.

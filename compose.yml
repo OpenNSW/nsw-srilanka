@@ -272,6 +272,10 @@ services:
       # the "ippc-hub" service's tls block in services.docker.json. Create
       # ./certs/ippc/{nppo.crt,nppo.key} from your Hub Admin Console connection.
       - ./certs/ippc:/certs/ippc:ro
+      # This GO's GovPay+ RSA private key (git-ignored), referenced by the govpay
+      # gateway's "private_key": "file:/certs/govpay/go_private.pem" in
+      # payment_methods.json.
+      - ./certs/govpay:/certs/govpay:ro
       # Host-side artifacts dir for ARTIFACT_LOADER_TYPE=local — the tnsw/ dir of
       # a OpenNSW/one-trade-artifacts clone. Same .env variable a native run uses,
       # so one line covers both; the container reads it at the target path below.

@@ -35,6 +35,9 @@ bucket/*
 # IPPC ePhyto Hub mTLS material (operator-supplied; never commit)
 certs/ippc/
 
+# GovPay+ RSA private key (generated per environment; never commit)
+certs/govpay/
+
 # Intellij Configs
 **/.idea/**
 
