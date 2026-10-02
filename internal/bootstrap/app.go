@@ -16,7 +16,6 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
-	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/notification/providers"
 	"github.com/OpenNSW/core/payment"
@@ -41,6 +40,7 @@ import (
 	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
+	"github.com/OpenNSW/nsw-srilanka/internal/database"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -101,13 +101,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 1: Relational Database & Connection Health Check
 	// -------------------------------------------------------------------
-	db, err := database.New(cfg.Database)
+	db, err := database.Open(ctx, cfg.Database)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-	db.TranslateError = true
 
-	if err := database.HealthCheck(db); err != nil {
+	if err := database.HealthCheck(ctx, db); err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("database health check failed: %w", err)
 	}
@@ -361,7 +360,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		var unhealthy []string
 
-		if err := database.HealthCheck(db); err != nil {
+		if err := database.HealthCheck(r.Context(), db); err != nil {
 			unhealthy = append(unhealthy, "database")
 		}
 		if err := authnManager.Health(); err != nil {

@@ -17,7 +17,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/OpenNSW/core/database"
+	"github.com/OpenNSW/nsw-srilanka/internal/database"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
 
@@ -126,11 +126,10 @@ func initDB() *gorm.DB {
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
-	db, err := database.New(cfg.Database)
+	db, err := database.Open(context.Background(), cfg.Database)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	db.TranslateError = true
 	return db
 }
 

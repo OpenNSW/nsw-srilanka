@@ -31,7 +31,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/OpenNSW/core/database"
+	"github.com/OpenNSW/nsw-srilanka/internal/database"
 
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 	"github.com/OpenNSW/nsw-srilanka/internal/bootstrap"
@@ -109,7 +109,7 @@ func newHarness(t *testing.T) *harness {
 	// A controllable mock payment gateway confirms payments by posting the GovPay
 	// webhook; it reads the generated reference from the payment store, so it
 	// needs DB access.
-	gwDB, err := database.New(cfg.Database)
+	gwDB, err := database.Open(context.Background(), cfg.Database)
 	if err != nil {
 		t.Fatalf("gateway: connect db: %v", err)
 	}
@@ -165,7 +165,7 @@ func newHarness(t *testing.T) *harness {
 // token's sub equals this id so the authn middleware resolves to this user.
 func seedUser(t *testing.T, cfg *config.Config, userID, ouHandle string) {
 	t.Helper()
-	db, err := database.New(cfg.Database)
+	db, err := database.Open(context.Background(), cfg.Database)
 	if err != nil {
 		t.Fatalf("seed: connect db (is `make deps` up and .env sourced?): %v", err)
 	}

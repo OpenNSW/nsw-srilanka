@@ -107,15 +107,20 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Database: database.Config{
-			Host:                   getEnvOrDefault("DB_HOST", "localhost"),
-			Port:                   getIntEnvOrDefault("DB_PORT", 5432),
-			Username:               getEnvOrDefault("DB_USERNAME", "postgres"),
-			Password:               os.Getenv("DB_PASSWORD"), // No default for security
-			Name:                   getEnvOrDefault("DB_NAME", "nsw_db"),
-			SSLMode:                getEnvOrDefault("DB_SSLMODE", "require"),
-			MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
-			MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
-			MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),
+			Driver: database.Postgres,
+			Postgres: &database.PostgresConfig{
+				Host:     getEnvOrDefault("DB_HOST", "localhost"),
+				Port:     getIntEnvOrDefault("DB_PORT", 5432),
+				User:     getEnvOrDefault("DB_USERNAME", "postgres"),
+				Password: os.Getenv("DB_PASSWORD"), // No default for security
+				Name:     getEnvOrDefault("DB_NAME", "nsw_db"),
+				SSLMode:  getEnvOrDefault("DB_SSLMODE", "require"),
+				Pool: database.PoolConfig{
+					MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
+					MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
+					MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),
+				},
+			},
 		},
 		Server: ServerConfig{
 			Port:                     serverPort,

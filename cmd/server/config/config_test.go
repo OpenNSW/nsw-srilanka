@@ -61,10 +61,13 @@ func TestMain(m *testing.M) {
 func validConfig() *Config {
 	return &Config{
 		Database: database.Config{
-			Host:     "localhost",
-			Username: "postgres",
-			Password: "secret",
-			Name:     "testdb",
+			Driver: database.Postgres,
+			Postgres: &database.PostgresConfig{
+				Host:     "localhost",
+				User:     "postgres",
+				Password: "secret",
+				Name:     "testdb",
+			},
 		},
 		Server: ServerConfig{
 			ServiceURL:        "http://localhost:8080",
@@ -431,9 +434,9 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Server.IdleTimeout", cfg.Server.IdleTimeout, 60 * time.Second},
 		{"Server.CatalogConfigPath", cfg.Server.CatalogConfigPath, "configs/catalog.json"},
 		{"Server.LogLevel", cfg.Server.LogLevel, slog.LevelInfo},
-		{"Database.Host", cfg.Database.Host, "localhost"},
-		{"Database.Password", cfg.Database.Password, "testpassword"},
-		{"Database.SSLMode", cfg.Database.SSLMode, "require"},
+		{"Database.Host", cfg.Database.Postgres.Host, "localhost"},
+		{"Database.Password", cfg.Database.Postgres.Password, "testpassword"},
+		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "require"},
 		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
 		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
 	} {
@@ -679,7 +682,7 @@ func TestConfigValidate_ServiceURLWrongScheme(t *testing.T) {
 
 func TestConfigValidate_DatabaseError(t *testing.T) {
 	cfg := validConfig()
-	cfg.Database = database.Config{} // all fields empty → DB_HOST required
+	cfg.Database = database.Config{} // no driver → driver required
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid database configuration") {
 		t.Errorf("expected database config error, got: %v", err)
