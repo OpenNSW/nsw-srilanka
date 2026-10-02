@@ -83,6 +83,23 @@ tnsw-api, tnsw-migrate) without pushing; **Docker images** reports the result.
 Runs when `deployments/helm/**` changes. **Lint, Render & Package Helm Chart**
 packages the chart the way a release does, then lints and renders it.
 
+### Migration Check (`migrations.yml`)
+Runs when `migrations/**`, the migrator pin in `Dockerfile` or the check's scripts
+change. **Migrations** checks that files are named and numbered in order and
+that migrations already on `main` are unchanged, then applies them to
+PostgreSQL 16 with the pinned migrator: a fresh install, and an upgrade from
+`main` in which each new migration is applied, rolled back and compared with the
+schema from before it, then applied again. A new migration therefore needs a
+`@DOWN` that undoes every schema change its `@UP` makes. To run it locally against a PostgreSQL, with the
+migrator installed (see Database migrations in the README):
+
+```bash
+BASE=$(git merge-base origin/main HEAD)
+.github/scripts/check-migrations.sh "$BASE"
+DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=... DB_SSLMODE=disable \
+  .github/scripts/test-migrations.sh "$BASE"
+```
+
 ### Secret Scan (`secret-scan.yml`)
 Runs on every PR. **Secret Scan** checks the PR's commits for credentials with
 gitleaks.
@@ -105,7 +122,7 @@ once.
 `main` merges through a merge queue, and these checks must pass:
 **Conventional Commit Title**, **Release notes label**, **Release version**,
 **Secret Scan**, **Quality Gate**, **Test & Security**, **Quality Check & Build**,
-**Docker images** and **Lint, Render & Package Helm Chart**.
+**Docker images**, **Lint, Render & Package Helm Chart** and **Migrations**.
 
 The queue tests each PR on top of `main` and the PRs queued ahead of it. The
 code checks and **Release version** run again there, when the combined change
