@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -128,17 +127,6 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 		return errors.New("html_document_generator: task record is nil")
 	}
 
-	// StartSubTask runs as a Temporal activity, so it can run again after the
-	// record holding this document was saved. Storing it again would leave the
-	// first copy orphaned under a key nothing refers to.
-	if existing, ok := ctx.Record.Data[ctx.OutputNamespace].(map[string]any); ok {
-		if key, ok := existing["key"].(string); ok && key != "" {
-			slog.Info("html_document_generator: document already generated for this task; reusing it",
-				"taskId", ctx.Record.TaskID, "templateId", cfg.TemplateID, "key", key)
-			return nil
-		}
-	}
-
 	tmpl, err := p.templates.HTMLTemplate(ctx.Context, cfg.TemplateID)
 	if err != nil {
 		return fmt.Errorf("html_document_generator: load template %q: %w", cfg.TemplateID, err)
@@ -158,6 +146,11 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 		return fmt.Errorf("html_document_generator: render template %q: %w", cfg.TemplateID, err)
 	}
 
+	// Every run stores what it rendered, including a Temporal retry and a
+	// workflow loop that brings the step back. A loop may arrive with changed
+	// inputs, and reusing an earlier document would leave the task pointing at
+	// one rendered from the old data. A retry leaves at worst an extra copy in
+	// storage that nothing refers to.
 	meta, err := p.files.Save(ctx.Context, documentFilename(cfg), htmlDocumentMIME, doc)
 	if err != nil {
 		return fmt.Errorf("html_document_generator: store document: %w", err)
