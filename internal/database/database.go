@@ -15,6 +15,14 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// Bounds on the connectivity checks, so an unresponsive server cannot block
+// startup or a health probe. A shorter deadline already on the caller's
+// context still applies.
+const (
+	openTimeout        = 10 * time.Second
+	healthCheckTimeout = 5 * time.Second
+)
+
 // Open connects to the database described by cfg and wraps the connection
 // pool in a GORM handle. Only the Postgres driver is supported.
 func Open(ctx context.Context, cfg database.Config) (*gorm.DB, error) {
@@ -22,13 +30,18 @@ func Open(ctx context.Context, cfg database.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("unsupported database driver %q: only %q is supported", cfg.Driver, database.Postgres)
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, openTimeout)
+	defer cancel()
+
 	sqlDB, err := database.New(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Error),
+		// database.New has already pinged with ctx; GORM's own ping ignores it.
+		DisableAutomaticPing: true,
+		Logger:               logger.Default.LogMode(logger.Error),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -71,6 +84,9 @@ func HealthCheck(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return fmt.Errorf("failed to get underlying database: %w", err)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
+	defer cancel()
 
 	return database.HealthCheck(ctx, sqlDB)
 }
