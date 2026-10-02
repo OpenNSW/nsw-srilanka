@@ -309,8 +309,6 @@ func TestProxy_Save(t *testing.T) {
 	}
 }
 
-
-
 func TestBackendService_Save(t *testing.T) {
 	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
 	if err != nil {
@@ -335,5 +333,36 @@ func TestBackendService_Save(t *testing.T) {
 	got, _ := io.ReadAll(body)
 	if !bytes.Equal(got, content) || mime != "text/html; charset=utf-8" {
 		t.Errorf("Download = (%q, %q), want the saved content and type", got, mime)
+	}
+}
+
+// TestProxy_SaveFallsBackToRequestedType sends the content as the type it
+// asked for when the owning service's reply leaves the type out; sending no
+// type would not match a URL signed over it.
+func TestProxy_SaveFallsBackToRequestedType(t *testing.T) {
+	var putType string
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"key":"0f8e7c1a-0000-4000-8000-000000000001.html","upload_url":%q}`, srv.URL+"/content")
+		case http.MethodPut:
+			putType = r.Header.Get("Content-Type")
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	svc, err := NewProxyService(newRegistry(t, srv.URL, ownerToken), defaultProxyConfig())
+	if err != nil {
+		t.Fatalf("NewProxyService: %v", err)
+	}
+	meta, err := svc.Save(context.Background(), "doc.html", "text/html; charset=utf-8", []byte("<p>x</p>"))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if putType != "text/html; charset=utf-8" || meta.MimeType != "text/html; charset=utf-8" {
+		t.Errorf("PUT Content-Type = %q, metadata type = %q; want the requested type for both", putType, meta.MimeType)
 	}
 }

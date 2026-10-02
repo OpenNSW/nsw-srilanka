@@ -101,6 +101,11 @@ func (s *ProxyService) Save(ctx context.Context, filename, mime string, content 
 	if err != nil {
 		return nil, err
 	}
+	// An owning service that omits the type from its reply signed the URL
+	// for the one requested.
+	if meta.MimeType == "" {
+		meta.MimeType = mime
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, meta.UploadURL, bytes.NewReader(content))
 	if err != nil {
