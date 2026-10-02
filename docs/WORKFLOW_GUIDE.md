@@ -279,19 +279,49 @@ Declares if the task is completed by the applicant (`USER_INPUT`) or another age
 ```
 
 ### Reference IDs (`REFID_GENERATOR`)
-Generates a reference ID from a format in the `refid` section of `configs/config.yaml` (see `configs/config.example.yaml`). The step is synchronous, and `plugin_properties` names the format by issuer and id type:
+Fills fields of a copy of the step's inputs with reference IDs, and writes the filled copy to `<output_namespace>`. The formats are defined in the `refid` section of `configs/config.yaml` (see `configs/config.example.yaml`). The step is synchronous. It reads only its inputs, which come through `input_mapping`, and writes only its own namespace.
+
+Each entry in `plugin_properties.ids` names a field to fill and the format to generate it from. Entries may use the same format or different ones. In the example below, an order gets one reference, and every line in it a number of its own, counted per warehouse:
 ```json
 {
-  "id": "trade-consignment-ref--generate",
+  "id": "acme-order--refid",
   "task_type": "REFID_GENERATOR",
   "output_namespace": "refid",
-  "plugin_properties": { "issuer": "TNSW", "id_type": "consignment_ref" }
+  "plugin_properties": {
+    "ids": [
+      { "path": "/order/order_ref", "issuer": "ACME", "id_type": "order" },
+      { "each": "/order/lines", "path": "0/line_no", "issuer": "ACME", "id_type": "order_line",
+        "params": { "warehouse": "0/warehouse_code", "region": "/order/region" } }
+    ]
+  }
 }
 ```
-- **Params:** every string input to the node is passed to the format. Name the `input_mapping` targets after the params the format uses: a list segment's `param`, or a `{name}` in a scope key.
-- **Output:** the ID is written to the task's own state at `<output_namespace>.reference_id`. It reaches the parent workflow only through the usual two mappings: the task workflow node's `"output_mapping": {"refid.reference_id": "reference_id"}`, then the parent TASK node's `"output_mapping": {"reference_id": "trade.reference_id"}`.
-- **Re-runs:** a task that already holds an ID keeps it. A re-run of the step (for example a Temporal retry) doesn't take another number.
+The task workflow node passes the order in and takes it back out: `"input_mapping": {"order": "order"}`, `"output_mapping": {"refid.order": "order"}`. Any later node that maps `order` sees the IDs.
+
+**Pointers:**
+- **Absolute:** a pointer starting with `/` is a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901) from the root of the inputs.
+- **Relative:** a pointer starting with `0/` is a [Relative JSON Pointer](https://datatracker.ietf.org/doc/html/draft-bhutton-relative-json-pointer) from the current element. It's only allowed in an entry with `each`. Only `0/` is supported.
+
+| Field | Meaning |
+|---|---|
+| `path` | The field to fill. Without `each` it is absolute. With `each` it must be relative, so each element gets its own ID. |
+| `each` | Optional. An absolute pointer to an array of objects; the entry applies to every element. A missing or `null` array has nothing to fill. |
+| `params` | Optional. Maps each param the format expects (a list segment's `param`, or a `{name}` in a scope key) to a pointer to its value. A pointer with no value leaves that param out. Params are read before any ID of the step is generated. |
+| `overwrite` | Optional, default `false`. When `true`, the field is generated on every run, even if it already holds a value. |
+
+**Behaviour:**
+- **Single ID:** use one entry, e.g. `{"path": "/reference_id", ...}`. The node maps it on with `"output_mapping": {"refid.reference_id": "reference_id"}`. It reaches the parent workflow only through the parent TASK node's own `output_mapping`.
+- **Order:** entries are filled in the order listed, and elements in index order.
+- **Existing values are kept:** a field that already holds an ID keeps it. A resubmission that loops back through the step numbers only the fields that have none yet, such as a newly added line.
+- **`overwrite`:** use it for an ID that must always come from the system. Every run then takes new numbers, and with `each` every element is renumbered, so don't use it for an ID another system has already seen. `readOnly` is only enforced by the form, so without `overwrite` a value sent straight to the API is kept.
+- **Shape errors fail first:** the step fails before any number is used if:
+  - a field to fill holds a non-string value (`null` counts as empty);
+  - `each` isn't an array, or an element isn't an object;
+  - a path runs through a non-object;
+  - a param's value isn't a string.
+- **Retries:** a Temporal retry of the step sees the same inputs and issues new numbers, so a sequence can have gaps. Nothing downstream has used the earlier ones.
 - **Not configured:** if the deployment has no `refid.issuers`, the step fails.
+- **Showing the IDs:** the step doesn't write the namespace a user's own form reads, e.g. the one its `USER_INPUT` step fills. So a form section reading that namespace shows the IDs only once a later step maps them back in. To show them straight away, add a `MARKDOWN` section with `"dataKey": "refid"`.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and `uiSchema` block:

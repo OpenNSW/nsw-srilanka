@@ -12,15 +12,18 @@
 
 # Reference ID formats for the REFID_GENERATOR task plugin, in the schema of
 # github.com/OpenNSW/core/refid (see its example_config.yaml for every segment
-# option). A subtask template names one format by issuer and id type:
+# option). A subtask template names each field to fill, by JSON Pointer into
+# the step's inputs, and the format to generate it from; the inputs, with the
+# IDs filled in, land at its output_namespace:
 #
 #   {"task_type": "REFID_GENERATOR", "output_namespace": "refid",
-#    "plugin_properties": {"issuer": "TNSW", "id_type": "consignment_ref"}}
+#    "plugin_properties": {"ids": [
+#      {"path": "/reference_id", "issuer": "TNSW", "id_type": "consignment_ref"}]}}
 #
-# and the ID lands at refid.reference_id for the node's output_mapping. The
-# node's string inputs are the format's params (a list segment's `param`, or a
-# `{name}` in a scope key). With no issuers, the plugin fails every task that
-# uses it.
+# "each" fills a field in every element of an array, and "params" names where
+# each param a format expects (a list segment's `param`, or a `{name}` in a
+# scope key) is read from; see docs/WORKFLOW_GUIDE.md. With no issuers, the
+# plugin fails every task that uses it.
 refid:
   issuers: []
   # issuers:

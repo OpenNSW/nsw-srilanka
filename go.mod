@@ -11,11 +11,13 @@ require (
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
 	github.com/OpenNSW/core/database v0.3.0
 	github.com/OpenNSW/core/httputil v0.1.0
+	github.com/OpenNSW/core/json v0.0.0-20260917101529-36df0ddf30e0
 	github.com/OpenNSW/core/pagination v0.1.0
 	github.com/OpenNSW/core/payment v0.2.0
 	github.com/OpenNSW/core/refid v0.2.0
 	github.com/OpenNSW/core/remote v0.8.0
 	github.com/OpenNSW/core/secret v0.2.0
+	github.com/OpenNSW/core/shared v0.3.0
 	github.com/OpenNSW/core/storage v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
@@ -30,7 +32,6 @@ require (
 )
 
 require (
-	github.com/OpenNSW/core/shared v0.3.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.47.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.33.6 // indirect
