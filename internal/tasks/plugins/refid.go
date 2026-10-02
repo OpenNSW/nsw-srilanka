@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -175,11 +174,11 @@ func parseRefIDEntry(s refIDSpec) (refIDEntry, error) {
 		return refIDEntry{}, fmt.Errorf(".path: %w", err)
 	}
 
-	for _, name := range slices.Sorted(maps.Keys(s.Params)) {
+	for name, raw := range s.Params {
 		if strings.TrimSpace(name) == "" {
 			return refIDEntry{}, errors.New(".params has an empty name")
 		}
-		p, err := parseRefIDPointer(s.Params[name], hasEach)
+		p, err := parseRefIDPointer(raw, hasEach)
 		if err != nil {
 			return refIDEntry{}, fmt.Errorf(".params.%s: %w", name, err)
 		}
@@ -313,8 +312,7 @@ func newRefIDTarget(root, elem map[string]any, e *refIDEntry, label string) (ref
 	}
 
 	params := make(map[string]string, len(e.params))
-	for _, name := range slices.Sorted(maps.Keys(e.params)) {
-		p := e.params[name]
+	for name, p := range e.params {
 		v, ok := jsonpointer.Get(p.in(root, elem), p.ptr)
 		if !ok || v == nil {
 			continue
