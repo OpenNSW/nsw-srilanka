@@ -71,10 +71,11 @@ type refIDSpec struct {
 
 // refIDEntry is a refIDSpec with its pointers parsed.
 type refIDEntry struct {
-	spec   refIDSpec
-	each   string // absolute JSON Pointer, "" without "each"
-	path   refIDPointer
-	params map[string]refIDPointer
+	spec     refIDSpec
+	each     string // absolute JSON Pointer, "" without "each"
+	path     refIDPointer
+	pathSegs []string // path's decoded segments
+	params   map[string]refIDPointer
 }
 
 // refIDPointer is a pointer from plugin_properties: an absolute JSON Pointer
@@ -124,53 +125,74 @@ func (c refIDGeneratorConfig) entries() ([]refIDEntry, error) {
 		return nil, errors.New("plugin_properties.ids must list at least one ID")
 	}
 	entries := make([]refIDEntry, 0, len(c.IDs))
-	seen := make(map[[2]string]bool, len(c.IDs))
 	for i, s := range c.IDs {
-		if strings.TrimSpace(s.Issuer) == "" {
-			return nil, fmt.Errorf("ids[%d].issuer is required", i)
-		}
-		if strings.TrimSpace(s.IDType) == "" {
-			return nil, fmt.Errorf("ids[%d].id_type is required", i)
-		}
-
-		e := refIDEntry{spec: s, params: make(map[string]refIDPointer, len(s.Params))}
-		hasEach := s.Each != ""
-		if hasEach {
-			each, err := parseRefIDPointer(s.Each, false)
-			if err != nil {
-				return nil, fmt.Errorf("ids[%d].each: %w", i, err)
-			}
-			e.each = each.ptr
-		}
-
-		path, err := parseRefIDPointer(s.Path, hasEach)
+		e, err := parseRefIDEntry(s)
 		if err != nil {
-			return nil, fmt.Errorf("ids[%d].path: %w", i, err)
+			return nil, fmt.Errorf("ids[%d]%w", i, err)
 		}
-		if hasEach && !path.relative {
-			return nil, fmt.Errorf(`ids[%d].path %q must be relative ("0/…") with "each", so each element gets its own ID`, i, s.Path)
-		}
-		e.path = path
-
-		for _, name := range slices.Sorted(maps.Keys(s.Params)) {
-			if strings.TrimSpace(name) == "" {
-				return nil, fmt.Errorf("ids[%d].params has an empty name", i)
+		// Two paths in the same scope must not overlap: one field inside the
+		// other would be written as an ID and then written through.
+		for j := range entries {
+			if entries[j].each == e.each && overlapping(entries[j].pathSegs, e.pathSegs) {
+				return nil, fmt.Errorf("ids[%d].path %q overlaps ids[%d].path %q", i, s.Path, j, entries[j].spec.Path)
 			}
-			p, err := parseRefIDPointer(s.Params[name], hasEach)
-			if err != nil {
-				return nil, fmt.Errorf("ids[%d].params.%s: %w", i, name, err)
-			}
-			e.params[name] = p
 		}
-
-		key := [2]string{s.Each, s.Path}
-		if seen[key] {
-			return nil, fmt.Errorf("ids[%d] repeats each %q, path %q", i, s.Each, s.Path)
-		}
-		seen[key] = true
 		entries = append(entries, e)
 	}
 	return entries, nil
+}
+
+// parseRefIDEntry validates one entry and parses its pointers. Its errors
+// start with the field they concern (".path: …"), for entries to prefix with
+// the entry's index.
+func parseRefIDEntry(s refIDSpec) (refIDEntry, error) {
+	if strings.TrimSpace(s.Issuer) == "" {
+		return refIDEntry{}, errors.New(".issuer is required")
+	}
+	if strings.TrimSpace(s.IDType) == "" {
+		return refIDEntry{}, errors.New(".id_type is required")
+	}
+
+	e := refIDEntry{spec: s, params: make(map[string]refIDPointer, len(s.Params))}
+	hasEach := s.Each != ""
+	if hasEach {
+		each, err := parseRefIDPointer(s.Each, false)
+		if err != nil {
+			return refIDEntry{}, fmt.Errorf(".each: %w", err)
+		}
+		e.each = each.ptr
+	}
+
+	path, err := parseRefIDPointer(s.Path, hasEach)
+	if err != nil {
+		return refIDEntry{}, fmt.Errorf(".path: %w", err)
+	}
+	if hasEach && !path.relative {
+		return refIDEntry{}, fmt.Errorf(`.path %q must be relative ("0/…") with "each", so each element gets its own ID`, s.Path)
+	}
+	e.path = path
+	if e.pathSegs, err = jsonpointer.Segments(path.ptr); err != nil {
+		return refIDEntry{}, fmt.Errorf(".path: %w", err)
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(s.Params)) {
+		if strings.TrimSpace(name) == "" {
+			return refIDEntry{}, errors.New(".params has an empty name")
+		}
+		p, err := parseRefIDPointer(s.Params[name], hasEach)
+		if err != nil {
+			return refIDEntry{}, fmt.Errorf(".params.%s: %w", name, err)
+		}
+		e.params[name] = p
+	}
+	return e, nil
+}
+
+// overlapping reports whether one decoded pointer is a prefix of the other,
+// so the field one names sits inside, or is, the field the other names.
+func overlapping(a, b []string) bool {
+	n := min(len(a), len(b))
+	return slices.Equal(a[:n], b[:n])
 }
 
 // refIDTarget is one field to fill.
