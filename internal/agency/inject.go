@@ -20,9 +20,10 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig/taskconfigart"
 )
 
-// ScopeApplicationInject gates POST /api/v1/inject. Named to match the sibling
-// nsw-agency portal's agency:application:inject.
-const ScopeApplicationInject = "nsw:application:inject"
+// ScopeWorkflowInject gates POST /api/v1/inject. An inject starts one workflow (and
+// creates or joins its case as a side effect), so the scope names the workflow. It is
+// an M2M permission, kept apart from the officer's nsw:task:* scopes.
+const ScopeWorkflowInject = "nsw:workflow:inject"
 
 const (
 	errInvalidBody        = "invalid request body"

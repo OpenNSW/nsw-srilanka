@@ -40,7 +40,7 @@ func mountAgency(
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
 	svc := agency.NewService(agency.NewRepository(db), artifactRegistry, wm)
-	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeApplicationInject)(http.HandlerFunc(svc.HandleInject))))
+	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeWorkflowInject)(http.HandlerFunc(svc.HandleInject))))
 
 	officerRole, ok := roles[agency.RoleOfficer]
 	if !ok {

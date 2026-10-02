@@ -45,7 +45,7 @@ export ARTIFACT_LOCAL_ROOT=configs/agency/artifacts
 export AUTH_CLIENT_IDS=TRADER_PORTAL_APP,...,NSW_TO_CDA   # accept the injecting client
 ```
 
-The injecting client's token needs the `nsw:application:inject` scope.
+The injecting client's token needs the `nsw:workflow:inject` scope.
 
 Officers need the `officer` token role (mapped in the agency catalog) and the
 `nsw:consignment:read` and task scopes the portal token already carries.
