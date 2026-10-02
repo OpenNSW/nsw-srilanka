@@ -11,6 +11,8 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 type invoiceCompleter struct {
@@ -37,7 +39,7 @@ func newInvoiceEvents(t *testing.T) (*InvoiceEvents, sqlmock.Sqlmock, *invoiceCo
 	require.NoError(t, err)
 
 	tasks := &invoiceCompleter{}
-	return NewInvoiceEvents(db, tasks), mock, tasks
+	return NewInvoiceEvents(db, tasks, nil), mock, tasks
 }
 
 func expectParkedInvoice(mock sqlmock.Sqlmock, taskID string) {
@@ -222,4 +224,30 @@ func TestInvoiceEvents_RedeliveryAndUnknownOrder(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 		assert.False(t, tasks.called)
 	})
+}
+
+type fakeArchiver struct {
+	serviceID string
+	fields    []documents.Field
+}
+
+func (a *fakeArchiver) ArchiveFields(_ context.Context, serviceID string, out map[string]any, fields []documents.Field) {
+	a.serviceID, a.fields = serviceID, fields
+	out["receipt_url"] = "3f2b6c1e-8a4d-4e1f-9b7c-2d5e8f1a3b6c.pdf"
+}
+
+// The trader keeps the receipt, so they are handed our copy of it: SLPA's link
+// is a signed URL that expires on their schedule.
+func TestInvoiceEvents_PaidHandsOnTheStoredReceipt(t *testing.T) {
+	service, mock, tasks := newInvoiceEvents(t)
+	archiver := &fakeArchiver{}
+	service.documents = archiver
+	expectParkedInvoice(mock, "slpa_4_0_invoice:abc")
+
+	require.NoError(t, service.Handle(context.Background(), invoiceEvent(t, paid)))
+
+	assert.Equal(t, "slpa", archiver.serviceID, "fetched through the CMS's own service, so only its host can be reached")
+	assert.Equal(t, []documents.Field{{Key: "receipt_url", Name: "slpa-payment-receipt"}}, archiver.fields)
+	assert.Equal(t, "3f2b6c1e-8a4d-4e1f-9b7c-2d5e8f1a3b6c.pdf", tasks.payload["receipt_url"])
+	assert.Equal(t, "100415624", tasks.payload["receipt_no"])
 }

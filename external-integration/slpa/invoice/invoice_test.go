@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 // SLPA's own answer to the generate-invoice call, kept as they send it: the
@@ -250,4 +252,9 @@ func TestGenerate_OmitsWhatTheCMSHasNotIssuedYet(t *testing.T) {
 	// What the answer did carry is still recorded.
 	assert.Equal(t, "26211843262217", out["invoice_no"])
 	assert.Equal(t, false, out["paid"])
+}
+
+// The slip is the one document the trader acts on, so it is the one kept.
+func TestGenerateInterpreter_KeepsThePaymentSlip(t *testing.T) {
+	assert.Equal(t, []documents.Field{{Key: "payment_slip_url", Name: "slpa-payment-slip"}}, NewGenerateInterpreter().Documents())
 }

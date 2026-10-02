@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/cms"
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 func sent(t *testing.T, inputs map[string]any) Request {
@@ -135,4 +136,13 @@ func TestBuildHeaders_PresentsTheClientKey(t *testing.T) {
 	assert.Equal(t, map[string]string{cms.ClientKeyHeader: "agztNvLSUA"},
 		i.BuildHeaders(map[string]any{cms.ClientKeyInput: "agztNvLSUA"}))
 	assert.Nil(t, i.BuildHeaders(map[string]any{}))
+}
+
+// The pass and its barcode are what the haulier presents at the gate, so both
+// are kept rather than linked to SLPA's host.
+func TestInterpreter_KeepsThePassAndItsBarcode(t *testing.T) {
+	assert.Equal(t, []documents.Field{
+		{Key: "gate_pass_url", Name: "slpa-gate-pass"},
+		{Key: "barcode", Name: "slpa-gate-pass-barcode"},
+	}, NewInterpreter().Documents())
 }

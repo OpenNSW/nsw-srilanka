@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 // EventInvoicePaid is the one invoice event this side acts on. What SLPA bills
@@ -84,16 +86,29 @@ func (e InvoiceEvent) correlator() string {
 // that subtask and no other.
 const PaymentWaitTemplateID = "slpa-invoice--wait"
 
-// InvoiceEvents applies an invoice event to the consignment waiting on it.
-type InvoiceEvents struct {
-	lookup taskLookup
-	tasks  TaskCompleter
+// ServiceID is the services-registry entry for SLPA's CMS — the one the SLPA
+// artifacts name as their service_id. The receipt is fetched through it, so
+// the link can only ever reach the CMS's own host.
+const ServiceID = "slpa"
+
+// DocumentArchiver keeps the documents an event links to in storage, replacing
+// each link with the storage key. *documents.Archiver satisfies it.
+type DocumentArchiver interface {
+	ArchiveFields(ctx context.Context, serviceID string, out map[string]any, fields []documents.Field)
 }
 
-// NewInvoiceEvents binds the service to the task store it reads and the task
-// manager it writes through.
-func NewInvoiceEvents(db *gorm.DB, tasks TaskCompleter) *InvoiceEvents {
-	return &InvoiceEvents{lookup: taskLookup{db: db}, tasks: tasks}
+// InvoiceEvents applies an invoice event to the consignment waiting on it.
+type InvoiceEvents struct {
+	lookup    taskLookup
+	tasks     TaskCompleter
+	documents DocumentArchiver
+}
+
+// NewInvoiceEvents binds the service to the task store it reads, the task
+// manager it writes through, and the archiver that keeps the receipt. A nil
+// archiver passes SLPA's receipt link on as it arrived.
+func NewInvoiceEvents(db *gorm.DB, tasks TaskCompleter, docs DocumentArchiver) *InvoiceEvents {
+	return &InvoiceEvents{lookup: taskLookup{db: db}, tasks: tasks, documents: docs}
 }
 
 // Handle closes the waiting step once the invoice has been paid.
@@ -122,6 +137,7 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 	}
 
 	receipt := event.Receipt
+	receiptURL := s.keepReceipt(ctx, receipt.ReceiptURL)
 	payload := map[string]any{
 		"__command":        "submit",
 		"paid":             true,
@@ -137,7 +153,7 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 		// behind a "receipt" link -- the CMS does send one, on the receipt
 		// block, and that is the only thing read now.
 		"receipt_no":  receipt.ReceiptNo,
-		"receipt_url": receipt.ReceiptURL,
+		"receipt_url": receiptURL,
 
 		// Who paid, and against what. Stated on the settled panel so the
 		// payment can be reconciled without opening the PDF.
@@ -154,4 +170,21 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 	slog.InfoContext(ctx, "slpa webhook: invoice paid",
 		"task_id", taskID, "invoice_no", event.InvoiceNo, "correlator", correlator)
 	return nil
+}
+
+// keepReceipt stores the receipt SLPA links to and returns the storage key the
+// trader is handed instead of SLPA's signed URL.
+//
+// It runs before the step is completed, so the settled panel never shows a link
+// that is later swapped. A receipt that cannot be fetched keeps SLPA's link:
+// the payment has landed whatever happens to the document, and refusing the
+// event over it would leave the trader waiting on a payment already made.
+func (s *InvoiceEvents) keepReceipt(ctx context.Context, link string) string {
+	if s.documents == nil || link == "" {
+		return link
+	}
+	out := map[string]any{"receipt_url": link}
+	s.documents.ArchiveFields(ctx, ServiceID, out, []documents.Field{{Key: "receipt_url", Name: "slpa-payment-receipt"}})
+	kept, _ := out["receipt_url"].(string)
+	return kept
 }

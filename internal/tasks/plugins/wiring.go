@@ -19,6 +19,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/invoice"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -123,7 +124,11 @@ type FileFetcher interface {
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string) error {
+//
+// archiver keeps the documents an interpreter's answer links to (the SLPA
+// payment slip, gate pass and barcode) in storage; nil leaves the links as the
+// service sent them.
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, archiver *documents.Archiver, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -148,11 +153,11 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
-		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
+		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter()).WithDocuments(archiver)},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
 		{TaskTypeSLPAConsolidationDelete, NewAPICallPluginWithInterpreter(mgr, consolidation.NewDeleteInterpreter())},
-		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter())},
+		{TaskTypeSLPAGatePass, NewAPICallPluginWithInterpreter(mgr, gatepass.NewInterpreter()).WithDocuments(archiver)},
 		{TaskTypeNPQSEphytoHub, flowplugins.NewSOAPCallPlugin(mgr, ephyto.NewHubInterpreter(files))},
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/remote"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/cms"
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 // GenerateInterpreter drives the call that issues the invoice: POST the service
@@ -103,6 +104,15 @@ func (i *GenerateInterpreter) Interpret(callErr error, resp map[string]any) (boo
 		out["exchange_rate"] = v
 	}
 	return true, out
+}
+
+// Documents names the payment slip as a document to keep. Its link is SLPA's
+// signed URL, which expires on their schedule and works only while their host
+// is up; the trader pays against this slip, so the copy they are handed is
+// ours. The invoice document itself is not carried to the panel (see
+// Interpret), so there is no link of it to replace.
+func (i *GenerateInterpreter) Documents() []documents.Field {
+	return []documents.Field{{Key: "payment_slip_url", Name: "slpa-payment-slip"}}
 }
 
 // lineItems is the invoice broken down the way it was priced: one entry per

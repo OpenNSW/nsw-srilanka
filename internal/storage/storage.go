@@ -43,6 +43,9 @@ type Handler interface {
 type Stack struct {
 	Service Service
 	Handler Handler
+	// Writer stores files the backend holds the bytes of — documents another
+	// service issued, kept here rather than linked to there.
+	Writer Writer
 	// LocalContent serves the upload/download content routes that stand in
 	// for S3 when this deployment stores files on local disk. Nil otherwise:
 	// with S3 the client talks to the bucket, and behind a proxy it talks to
@@ -59,7 +62,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		if err != nil {
 			return nil, err
 		}
-		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
+		return &Stack{Service: svc, Handler: NewProxyHandler(svc), Writer: svc}, nil
 	}
 
 	driver, err := corestorage.NewStorageFromConfig(ctx, cfg.Config)
@@ -69,7 +72,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 	svc := corestorage.NewService(driver)
 	handler := corestorage.NewHTTPHandler(svc)
 
-	stack := &Stack{Service: svc, Handler: handler}
+	stack := &Stack{Service: svc, Handler: handler, Writer: backendWriter{driver: driver}}
 	if _, ok := driver.(*drivers.LocalFSDriver); ok {
 		stack.LocalContent = handler
 	}

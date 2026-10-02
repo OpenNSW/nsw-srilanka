@@ -1,7 +1,41 @@
-import type { MouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useUpload } from '@opennsw/jsonforms-renderers'
 import type { ZoneRendererProps } from '@/features/zone/types'
+
+// A key minted by our storage (uuid + extension), as opposed to an outside URL.
+const isStorageKey = (value?: string) =>
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\.[a-zA-Z0-9]+)?$/.test(value ?? '')
+
+// An image kept in our storage — a gate-pass barcode, say — referenced by its
+// key. The key is resolved to a time-limited download URL before it can be
+// shown, so nothing renders until then; a key that cannot be resolved shows
+// its alt text instead of a broken image.
+function StoredImage({ storageKey, alt }: { storageKey: string; alt?: string }) {
+  const getDownloadUrl = useUpload()?.getDownloadUrl
+  const [src, setSrc] = useState<string>()
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!getDownloadUrl) return
+    let cancelled = false
+    getDownloadUrl(storageKey)
+      .then(({ url }) => {
+        if (!cancelled) setSrc(url)
+      })
+      .catch((err) => {
+        console.error('Failed to resolve secure download url from context', err)
+        if (!cancelled) setFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [storageKey, getDownloadUrl])
+
+  if (failed || !getDownloadUrl) return alt ? <span className="italic">{alt}</span> : null
+  if (!src) return null
+  return <img src={src} alt={alt ?? ''} className="max-w-full h-auto" />
+}
 
 export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
   const uploadCtx = useUpload()
@@ -15,12 +49,7 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
           h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-3 mb-1">{children}</h3>,
           p: ({ children }) => <p className="text-foreground-muted">{children}</p>,
           a: ({ children, href }) => {
-            const isStorageKey =
-              /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\.[a-zA-Z0-9]+)?$/.test(
-                href ?? '',
-              )
-
-            if (isStorageKey && href) {
+            if (isStorageKey(href) && href) {
               const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
                 e.preventDefault()
                 if (uploadCtx?.getDownloadUrl) {
@@ -63,6 +92,12 @@ export function MarkdownRenderer({ payload }: ZoneRendererProps<'MARKDOWN'>) {
                 {children}
               </a>
             )
+          },
+          img: ({ src, alt }) => {
+            if (typeof src === 'string' && isStorageKey(src)) {
+              return <StoredImage storageKey={src} alt={alt} />
+            }
+            return <img src={src} alt={alt ?? ''} className="max-w-full h-auto" />
           },
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
           em: ({ children }) => <em className="italic text-foreground">{children}</em>,

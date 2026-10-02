@@ -15,6 +15,7 @@ import (
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/cms"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 // Request is the gate-pass body the CMS reads.
@@ -89,6 +90,18 @@ func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 		return false, out
 	}
 	return true, out
+}
+
+// Documents names the printable pass and its barcode as documents to keep.
+// The pass link is SLPA's signed URL; the barcode arrives inline as a data:
+// URI. Both are what the haulier presents at the gate, so the copies the
+// trader is handed must outlive SLPA's signature and survive their host being
+// down.
+func (i *Interpreter) Documents() []documents.Field {
+	return []documents.Field{
+		{Key: "gate_pass_url", Name: "slpa-gate-pass"},
+		{Key: "barcode", Name: "slpa-gate-pass-barcode"},
+	}
 }
 
 // describeFailure builds the trader-facing message for a pass the CMS did not

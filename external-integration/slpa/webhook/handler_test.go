@@ -43,7 +43,7 @@ func handlerOver(t *testing.T, parked bool) (*Handler, *orderCompleter) {
 	}
 
 	tasks := &orderCompleter{}
-	h, err := NewHandler(NewOrderEvents(db, tasks), NewInvoiceEvents(db, tasks), Config{Secret: secret})
+	h, err := NewHandler(NewOrderEvents(db, tasks), NewInvoiceEvents(db, tasks, nil), Config{Secret: secret})
 	require.NoError(t, err)
 	return h, tasks
 }

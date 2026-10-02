@@ -41,6 +41,7 @@ import (
 	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -184,7 +185,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.TaskDone(context.Background(), parentWorkflowID, parentRunID, parentNodeID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	// Documents other services issue — the SLPA payment slip, receipt and gate
+	// pass — are fetched when they are issued and kept in this storage, so the
+	// trader is handed our link rather than the provider's signed one.
+	documentArchiver := documents.NewArchiver(storageStack.Writer, remoteManager)
+
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, companyService, storageStack.Service, documentArchiver, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -292,7 +298,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// secret is a deployment fault worth stopping for either way.
 	slpaHandler, err := slpawebhook.NewHandler(
 		slpawebhook.NewOrderEvents(db, tm),
-		slpawebhook.NewInvoiceEvents(db, tm),
+		slpawebhook.NewInvoiceEvents(db, tm, documentArchiver),
 		cfg.Integrations.SLPAWebhook(),
 	)
 	if err != nil {
@@ -702,6 +708,7 @@ func initTask(
 	paymentService payment.PaymentService,
 	companyService company.Service,
 	storageService nswstorage.Service,
+	documentArchiver *documents.Archiver,
 	artifactRegistry *artifact.Registry,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -709,7 +716,7 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, documentArchiver, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	refIDs, err := initRefIDs(cfg.RefID, db)

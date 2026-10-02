@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/documents"
 )
 
 // Interpreter adapts a domain to the generic API-call plugin: it builds the
@@ -91,6 +93,20 @@ func queryFor(interp Interpreter, inputs map[string]any) url.Values {
 	return qi.BuildQuery(inputs)
 }
 
+// DocumentInterpreter is implemented by interpreters whose answer links to a
+// document the service hosts — a payment slip, a gate pass — that the trader
+// should be handed from our storage rather than from the service's host.
+//
+// Documents names the captured fields holding those links. Once the call is
+// accepted, the plugin fetches each one through the same service, stores it,
+// and records the storage key in the field's place. A document it cannot store
+// keeps the service's link; see documents.Archiver.ArchiveFields.
+type DocumentInterpreter interface {
+	Interpreter
+
+	Documents() []documents.Field
+}
+
 // expandPath fills {name} placeholders in a configured path from the task's
 // inputs, so a resource-scoped endpoint — /orders/{slug}/gate-pass — can be
 // declared in an artifact and addressed per case.
@@ -161,6 +177,9 @@ func (passthroughInterpreter) Interpret(callErr error, resp map[string]any) (boo
 type APICallPlugin struct {
 	manager     *remote.Manager
 	interpreter Interpreter
+	// archiver keeps the documents a DocumentInterpreter names. Nil leaves
+	// their links as the service sent them.
+	archiver *documents.Archiver
 }
 
 func NewAPICallPlugin(manager *remote.Manager) *APICallPlugin {
@@ -172,6 +191,13 @@ func NewAPICallPluginWithInterpreter(manager *remote.Manager, interp Interpreter
 	if interp != nil {
 		p.interpreter = interp
 	}
+	return p
+}
+
+// WithDocuments keeps the documents the interpreter names in storage, through
+// archiver. It has no effect on an interpreter that names none.
+func (p *APICallPlugin) WithDocuments(archiver *documents.Archiver) *APICallPlugin {
+	p.archiver = archiver
 	return p
 }
 
@@ -254,6 +280,9 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	accepted, out := p.interpreter.Interpret(callErr, resp)
 	if out == nil {
 		out = map[string]any{}
+	}
+	if di, ok := p.interpreter.(DocumentInterpreter); ok && accepted && p.archiver != nil {
+		p.archiver.ArchiveFields(ctx.Context, cfg.ServiceID, out, di.Documents())
 	}
 	if cfg.ResultField != "" {
 		out[cfg.ResultField] = accepted
