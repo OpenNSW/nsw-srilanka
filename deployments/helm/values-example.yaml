@@ -180,6 +180,8 @@ backend:
   # sets CONFIG_PATH (see values.yaml). Full schema and every option:
   # configs/config.example.yaml.
   config:
+    # "tnsw" (default) or "agency" — see docs/agency.md.
+    mode: tnsw
     # Reference ID formats for the REFID_GENERATOR task plugin. Empty means
     # generation is off, and any task using the plugin fails.
     refid:
@@ -283,6 +285,8 @@ frontend:
     IDP_CHA_ROLE_NAME: "CHA"
     IDP_NSW_ADMIN_ROLE_NAME: "NSW Admin"
     SHOW_AUTOFILL_BUTTON: "false"
+    # "tnsw" (default) lists consignments; "agency" lists an agency's cases instead.
+    APP_MODE: "tnsw"
 
   # Overrides the image's baked-in public/configs/branding.json (see
   # values.yaml and the chart README). Replace these example.com links with

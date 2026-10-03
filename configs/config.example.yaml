@@ -10,6 +10,12 @@
 # mounted file. The placeholder must be the whole value, and an unset one fails
 # the boot.
 
+# What this deployment runs as: "tnsw" (the default when omitted) or "agency".
+# The modes are exclusive. An agency serves inject and the officer case views in
+# place of TNSW's consignment, payment and webhook routes, and its catalog maps
+# the officer role instead of trader/CHA. See docs/agency.md.
+mode: tnsw
+
 # Reference ID formats for the REFID_GENERATOR task plugin, in the schema of
 # github.com/OpenNSW/core/refid (see its example_config.yaml for every segment
 # option). A subtask template names one format by issuer and id type:

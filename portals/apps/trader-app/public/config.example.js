@@ -20,4 +20,6 @@ window.__APP_CONFIG__ = {
   IDP_CHA_ROLE_NAME: 'CHA',
   IDP_NSW_ADMIN_ROLE_NAME: 'NSW Admin',
   SHOW_AUTOFILL_BUTTON: 'true',
+  // 'tnsw' (default) lists consignments; 'agency' lists an agency's cases instead.
+  APP_MODE: 'tnsw',
 }

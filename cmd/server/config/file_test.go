@@ -169,3 +169,38 @@ func TestLoadConfigFile_ExampleLoads(t *testing.T) {
 		t.Fatalf("configs/config.example.yaml does not load: %v", err)
 	}
 }
+
+func TestLoad_ConfigFileMode(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+
+	for name, tc := range map[string]struct {
+		body    string
+		want    Mode
+		wantErr bool
+	}{
+		"omitted defaults to tnsw": {"", ModeTNSW, false},
+		"tnsw":                     {"mode: tnsw\n", ModeTNSW, false},
+		"agency":                   {"mode: agency\n", ModeAgency, false},
+		"unknown is rejected":      {"mode: both\n", "", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("CONFIG_PATH", writeConfigFile(t, tc.body))
+			cfg, err := Load()
+			if tc.wantErr {
+				if err == nil || !containsString(err.Error(), "invalid mode") {
+					t.Fatalf("expected an invalid mode error, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() unexpected error: %v", err)
+			}
+			if cfg.Mode != tc.want {
+				t.Errorf("Mode = %q, want %q", cfg.Mode, tc.want)
+			}
+		})
+	}
+}
