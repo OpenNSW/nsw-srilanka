@@ -441,45 +441,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
 	} else {
-		mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
-		mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
-		mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
-		mux.Handle("GET /api/v1/consignments/{id}/agency", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentAgency))))
-		mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
-		mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
-
-		// Ops/admin views of consignment data — gated behind the dedicated admin scope, not the
-		// trader/CHA-facing consignment read scope, and with no per-consignment ownership check.
-		// Kept together (and as their own handlers, not scope branches on the routes above) so this
-		// distinct trust boundary — a small admin group that can read any consignment — stays easy
-		// to audit as a group rather than spread through the general consignment API.
-		mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
-		mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleAdminGetConsignmentByID))))
-		// A TASK node's independent per-task ("micro") workflow — separate ID space and
-		// workflow.Manager from the consignment/child-workflow route above (see
-		// EngineNodeDTO.TaskWorkflowID).
-		mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetTaskWorkflowEngineStatus))))
-		// Resolving a parked node can mutate workflow data (GlobalVariablesPatch) or force it down a path the
-		// interpreter never chose (Complete/Abort), so this sits behind ConsignmentAdminWrite, a
-		// stricter scope than the read-only admin views above.
-		mux.Handle("POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveAdminIntervention))))
-		// Same, for a node inside a task workflow, which lives in its own ID space on the task workflow
-		// manager (mirrors the two engine-status routes above).
-		mux.Handle("POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveTaskWorkflowAdminIntervention))))
-
-		// Payment webhook endpoints. Requires valid JWT issued from nsw-srilanka's IDP with the appropriate scope. The gatewayId path param is used to resolve the correct payment gateway configuration for the webhook.
-		// Authenticating the caller as the gateway itself is the gateway's own job:
-		// core/payment calls PaymentGateway.VerifyWebhook before any reference lookup
-		// or settlement, so each gateway checks the scheme it actually uses.
-		mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", withAuth(withScope(scopes.PaymentWebhooksProcess)(http.HandlerFunc(paymentHandler.HandleWebhook))))
-		mux.Handle("POST /api/v1/payments/{gatewayId}/validate", withAuth(withScope(scopes.PaymentWebhooksValidate)(http.HandlerFunc(paymentHandler.HandleValidateReference))))
-
-		// SLCE Webhook Endpoint (single central route handling all ASYCUDA/SLCE events).
-		mux.Handle("POST /webhooks/slce", withAuth(withScope(scopes.SLCEWebhooksWrite)(http.HandlerFunc(slceHandler.HandleWebhook))))
-
-		// SLPA Webhook Endpoint. Authenticated by the HMAC signature on the request
-		// itself — see slpa.VerifySignature — so no token middleware here.
-		mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
+		mountTNSW(mux, tnswHandlers{
+			consignment: consignmentRouter,
+			cha:         chaHandler,
+			company:     companyHandler,
+			payment:     paymentHandler,
+			slce:        slceHandler,
+			slpa:        slpaHandler,
+		}, withAuth, withScope)
 	}
 
 	// When using local storage, these endpoints serve as mocks for S3.

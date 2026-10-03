@@ -25,9 +25,10 @@ without conflicts. Main-branch files touched:
   `config.go`).
 - `internal/bootstrap/app.go`: `Build` branches on the mode. TNSW builds the
   consignment service and router, the trader/CHA task gate and its integration
-  handlers, and mounts their routes. An agency builds none of those, and instead gets
-  `agencyCompletion`, `newAgencyTaskGate` and `mountAgency` from
-  `internal/bootstrap/agency.go`. Most of the diff is indentation (`git diff -w`).
+  handlers, and mounts their routes with `mountTNSW` (`internal/bootstrap/tnsw.go`).
+  An agency builds none of those, and instead gets `agencyCompletion`,
+  `newAgencyTaskGate` and `mountAgency` from `internal/bootstrap/agency.go`. Most of
+  the diff is indentation (`git diff -w`). Routes both modes serve stay in `Build`.
 - `portals/apps/trader-app/src/App.tsx`, one import plus the `/consignments` and
   `/consignments/:consignmentId` routes choosing the agency screen when `isAgencyMode`.
   Everything else is in `src/features/case/`.
