@@ -5,34 +5,29 @@ import (
 	"fmt"
 )
 
-// CompletionHandler is the parent workflow runner's completion callback;
-// *consignment.Service satisfies it.
-type CompletionHandler interface {
-	CompletionHandler(workflowID string, finalContext map[string]any) error
-}
-
-// CompletionRouter sends completions of injected workflows to the agency and every
-// other completion to next. Both kinds of workflow run on the same parent runner, and
-// next (the consignment service) fails on a workflow id it has no consignment for.
-type CompletionRouter struct {
+// CompletionHandler is the parent workflow runner's completion callback in agency
+// mode. Every parent workflow an agency runs was injected, so a completion marks its
+// workflow COMPLETED and, once every workflow of its case is, the case FINISHED.
+type CompletionHandler struct {
 	repo Repository
-	next CompletionHandler
 }
 
-// NewCompletionRouter creates a CompletionRouter.
-func NewCompletionRouter(repo Repository, next CompletionHandler) *CompletionRouter {
-	return &CompletionRouter{repo: repo, next: next}
+// NewCompletionHandler creates a CompletionHandler.
+func NewCompletionHandler(repo Repository) *CompletionHandler {
+	return &CompletionHandler{repo: repo}
 }
 
-func (c *CompletionRouter) CompletionHandler(workflowID string, finalContext map[string]any) error {
-	// The runner's callback carries no context; it runs inside a Temporal activity
-	// that retries on error.
+// CompletionHandler records the completion of workflowID. The runner's callback
+// carries no context; it runs inside a Temporal activity that retries on error.
+func (c *CompletionHandler) CompletionHandler(workflowID string, _ map[string]any) error {
 	found, err := c.repo.MarkCompleted(context.Background(), workflowID)
 	if err != nil {
 		return fmt.Errorf("agency: failed to record completion of %q: %w", workflowID, err)
 	}
-	if found {
-		return nil
+	if !found {
+		// Nothing else runs parent workflows in agency mode, so this is a bug or a
+		// workflow from another deployment sharing the Temporal namespace.
+		return fmt.Errorf("agency: completed workflow %q is not an injected workflow", workflowID)
 	}
-	return c.next.CompletionHandler(workflowID, finalContext)
+	return nil
 }

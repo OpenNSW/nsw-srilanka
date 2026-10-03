@@ -29,6 +29,9 @@ import (
 
 // Config holds all configuration for the application.
 type Config struct {
+	// Mode is what this deployment runs as: TNSW (the default) or an agency.
+	Mode Mode
+
 	Database     database.Config
 	Server       ServerConfig
 	CORS         cors.Config
@@ -104,8 +107,13 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	mode, err := parseMode(fileCfg.Mode)
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := &Config{
+		Mode: mode,
 		Database: database.Config{
 			Driver: database.Postgres,
 			Postgres: &database.PostgresConfig{

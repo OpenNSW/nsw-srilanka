@@ -1,25 +1,33 @@
 # Agency mode
 
-The same backend runs as TNSW or as a government agency (e.g. CDA). Both share the
-task engine, Temporal, renderers, plugins and `/api/v1/tasks/{id}`. They differ only at
-the edges:
+The same backend runs as TNSW or as a government agency (e.g. CDA), chosen by `mode`
+in `config.yaml`. The modes are exclusive: a deployment is one or the other, never
+both. Both share the task engine, Temporal, renderers, plugins, storage and
+`/api/v1/tasks/{id}`. They differ at the edges:
 
-|                      | TNSW                                    | Agency                                   |
-|----------------------|-----------------------------------------|------------------------------------------|
-| Workflow starts from | `POST /api/v1/consignments` (trader)    | `POST /api/v1/inject` (external system)  |
-| Task ownership       | trader/CHA company owns the consignment | `officer` role, on any injected workflow |
-| Catalog              | `configs/catalog.json`                  | `configs/agency/catalog.json`            |
-| Artifacts            | TNSW artifact root                      | `configs/agency/artifacts`               |
+|                      | TNSW (`mode: tnsw`, the default)                    | Agency (`mode: agency`)                   |
+|----------------------|-----------------------------------------------------|-------------------------------------------|
+| Workflow starts from | `POST /api/v1/consignments` (trader)                | `POST /api/v1/inject` (external system)   |
+| Task ownership       | trader/CHA company owns the consignment             | `officer` role, on any injected workflow  |
+| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`       |
+| Catalog must map     | `trader`, `cha`                                     | `officer`                                 |
+| Catalog              | `configs/catalog.json`                              | `configs/agency/catalog.json`             |
+| Artifacts            | TNSW artifact root                                  | the agency's artifacts                    |
+
+An unknown `mode` stops the server at startup.
 
 ## Keeping the branch mergeable
 
 Agency code lives outside the files main owns, so `main` can be merged in often
 without conflicts. Main-branch files touched:
 
-- `internal/bootstrap/app.go`, three lines: one calls `newTaskAuthzGate` in place of
-  `authzgate.NewMiddleware`, one wraps the consignment service passed to
-  `wireParentRunner` in `agencyCompletion`, and one calls `mountAgency` after the mux
-  is created. All three live in `internal/bootstrap/agency.go`.
+- `cmd/server/config`: the `mode` key (`mode.go`, one field each in `file.go` and
+  `config.go`).
+- `internal/bootstrap/app.go`: `Build` branches on the mode. TNSW builds the
+  consignment service and router, the trader/CHA task gate and its integration
+  handlers, and mounts their routes. An agency builds none of those, and instead gets
+  `agencyCompletion`, `newAgencyTaskGate` and `mountAgency` from
+  `internal/bootstrap/agency.go`. Most of the diff is indentation (`git diff -w`).
 - `portals/apps/trader-app/src/App.tsx`, one import plus the `/consignments` and
   `/consignments/:consignmentId` routes choosing the agency screen when `isAgencyMode`.
   Everything else is in `src/features/case/`.
@@ -36,6 +44,8 @@ Watch the migration number. `migrations/000018_create_agency_workflow.sql` takes
 next free slot; if main adds its own `000018`, renumber this one after the merge.
 
 ## Running as an agency
+
+Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then:
 
 ```sh
 cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the officer token role
@@ -85,13 +95,13 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
    The payload is seeded as the `notification` variable.
 4. Retries are safe. A row still `STARTING` (a failed start) is started again, and a
    `STARTED` row is returned without touching the engine. That matters: once a
-   workflow completes, Temporal would accept the same ID as a new run.
-5. Tasks spawned under the workflow have `RootWorkflowID == taskId`. The wrapped task
-   authz gate (`agency.WrapTaskGate`) reports `officer` ownership for any root that is
+   workflow completes, Temporal would accept the same ID as a new run. A repeat
+   `taskId` with a different `consignmentId` or `taskCode` is not a retry: it is a 409
+   and starts nothing.
+5. Tasks spawned under the workflow have `RootWorkflowID == taskId`. The agency's task
+   authz gate (`agency.OfficerGate`) reports `officer` ownership for any root that is
    an `agency_workflow` row, so `readauthz` and the write extension treat officers
    like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
-
-A deployment whose catalog has no `officer` role gets the gate unchanged.
 
 ## Task configs
 
@@ -132,11 +142,12 @@ case id.
 the case has completed. A new workflow injected into a finished case reopens it
 (`IN_PROGRESS`). `name` is empty until a caller or UI supplies one.
 
-Completions reach the agency through `agency.CompletionRouter`, wrapped around the
-consignment service's completion handler in `app.go`: an injected workflow is marked
-`COMPLETED` (and its case finished if it was the last), anything else goes to the
-consignment service as before. The case row is locked while deciding, so two
-workflows completing at once cannot both leave it `IN_PROGRESS`.
+Completions reach the agency through `agency.CompletionHandler`, the parent runner's
+completion callback in agency mode: the workflow is marked `COMPLETED`, and its case
+finished if it was the last. A completion for anything that is not an injected
+workflow is an error, since nothing else runs parent workflows in an agency. The case
+row is locked while deciding, so two workflows completing at once cannot both leave it
+`IN_PROGRESS`.
 The intended next step, as a separate PR to main, is to move the trader/CHA columns
 off `consignments` into such a table and retire `consignments` in favour of `cases`.
 Until then TNSW writes only `consignments` and the agency only `cases`; nothing mirrors

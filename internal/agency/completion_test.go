@@ -24,44 +24,28 @@ func (r *completionRepo) MarkCompleted(_ context.Context, taskID string) (bool, 
 	return true, nil
 }
 
-type nextHandler struct{ called []string }
-
-func (n *nextHandler) CompletionHandler(workflowID string, _ map[string]any) error {
-	n.called = append(n.called, workflowID)
-	return nil
-}
-
-func TestCompletionRouter(t *testing.T) {
-	t.Run("injected workflow completes in the agency, not the next handler", func(t *testing.T) {
+func TestCompletionHandler(t *testing.T) {
+	t.Run("injected workflow is marked completed", func(t *testing.T) {
 		repo := &completionRepo{injected: map[string]bool{"task-1": true}}
-		next := &nextHandler{}
-		if err := NewCompletionRouter(repo, next).CompletionHandler("task-1", nil); err != nil {
+		if err := NewCompletionHandler(repo).CompletionHandler("task-1", nil); err != nil {
 			t.Fatal(err)
 		}
-		if len(repo.completed) != 1 || len(next.called) != 0 {
-			t.Fatalf("completed = %v, next called = %v", repo.completed, next.called)
+		if len(repo.completed) != 1 || repo.completed[0] != "task-1" {
+			t.Fatalf("completed = %v", repo.completed)
 		}
 	})
 
-	t.Run("other workflows go to the next handler", func(t *testing.T) {
+	t.Run("unknown workflow is an error", func(t *testing.T) {
 		repo := &completionRepo{}
-		next := &nextHandler{}
-		if err := NewCompletionRouter(repo, next).CompletionHandler("consignment-1", nil); err != nil {
-			t.Fatal(err)
-		}
-		if len(next.called) != 1 || next.called[0] != "consignment-1" {
-			t.Fatalf("next called = %v", next.called)
-		}
-	})
-
-	t.Run("a lookup failure is returned, not passed on", func(t *testing.T) {
-		repo := &completionRepo{err: errors.New("db down")}
-		next := &nextHandler{}
-		if err := NewCompletionRouter(repo, next).CompletionHandler("task-1", nil); err == nil {
+		if err := NewCompletionHandler(repo).CompletionHandler("consignment-1", nil); err == nil {
 			t.Fatal("want error")
 		}
-		if len(next.called) != 0 {
-			t.Fatalf("next called = %v, want none", next.called)
+	})
+
+	t.Run("a lookup failure is returned", func(t *testing.T) {
+		repo := &completionRepo{err: errors.New("db down")}
+		if err := NewCompletionHandler(repo).CompletionHandler("task-1", nil); err == nil {
+			t.Fatal("want error")
 		}
 	})
 }

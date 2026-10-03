@@ -199,22 +199,36 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	audit.InitializeGlobalAudit(auditClient)
 	recorder := nswaudit.NewRecorder(auditClient)
 
-	consignmentService, err := consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles)
-	if err != nil {
-		_ = stopTask()
-		temporalClient.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to build consignment service: %w", err)
-	}
-	consignmentRouter, err := consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
-	if err != nil {
-		_ = stopTask()
-		temporalClient.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to build consignment router: %w", err)
+	// The mode decides what starts parent workflows: consignments in TNSW, injects in
+	// an agency (see agency.go). An agency builds none of the consignment stack, whose
+	// constructors require the trader and CHA roles an agency catalog does not map.
+	agencyMode := cfg.Mode == config.ModeAgency
+	var (
+		consignmentService *consignment.Service
+		consignmentRouter  *consignment.Router
+		upstream           parentUpstreamService
+	)
+	if agencyMode {
+		upstream = agencyCompletion(db)
+	} else {
+		consignmentService, err = consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles)
+		if err != nil {
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to build consignment service: %w", err)
+		}
+		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
+		if err != nil {
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to build consignment router: %w", err)
+		}
+		upstream = consignmentService
 	}
 
-	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, agencyCompletion(db, consignmentService))
+	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, upstream)
 	if err != nil {
 		_ = stopTask()
 		temporalClient.Close()
@@ -230,19 +244,21 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	})
 	parentRunner = pr
 
-	if err := consignmentService.RegisterWorkflowManager(parentRunner); err != nil {
-		_ = stopParentRunner()
-		_ = stopTask()
-		temporalClient.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to register workflow manager with consignment service: %w", err)
-	}
-	if err := consignmentService.RegisterTaskWorkflowManager(task.Runner); err != nil {
-		_ = stopParentRunner()
-		_ = stopTask()
-		temporalClient.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
+	if !agencyMode {
+		if err := consignmentService.RegisterWorkflowManager(parentRunner); err != nil {
+			_ = stopParentRunner()
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register workflow manager with consignment service: %w", err)
+		}
+		if err := consignmentService.RegisterTaskWorkflowManager(task.Runner); err != nil {
+			_ = stopParentRunner()
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
+		}
 	}
 
 	// -------------------------------------------------------------------
@@ -270,39 +286,53 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Stage 7: HTTP Route & Middleware Registration
 	// -------------------------------------------------------------------
 
-	// ASYCUDA webhook stack.
-	cdnRepo := cdn.NewDispatchNoteRepository(db)
-	cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, tm)
-
-	cusdecRepo := cusdec.NewDeclarationRepository(db)
-	cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
-
-	slceHandler := asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
-
-	// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
-	// presenting an IdP token, so this handler owns its own authentication and
-	// the route below carries no bearer middleware.
-	// Refused at boot rather than started without the route. SLPA reports every
-	// decision on this endpoint, so a deployment that cannot mount it accepts
-	// service orders it can never hear the answer to: the callback 404s, their
-	// retries stop, and the consignment waits on an approval that has already
-	// happened. The outbound half of this integration fails the same way when
-	// its own secret is missing (see the services registry), and a missing
-	// secret is a deployment fault worth stopping for either way.
-	slpaHandler, err := slpawebhook.NewHandler(
-		slpawebhook.NewOrderEvents(db, tm),
-		slpawebhook.NewInvoiceEvents(db, tm),
-		cfg.Integrations.SLPAWebhook(),
+	// TNSW's trade integrations: customs, port and payment callbacks, and the
+	// trader portal's CHA/company lookups. An agency serves none of them, so it builds
+	// none of them either — the SLPA handler, for one, refuses to start without its
+	// secret.
+	var (
+		slceHandler    *asycuda.Handler
+		slpaHandler    *slpawebhook.Handler
+		paymentHandler *payment.HTTPHandler
+		chaHandler     *cha.Handler
+		companyHandler *company.Handler
 	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build the SLPA webhook handler: %w", err)
+	if !agencyMode {
+		// ASYCUDA webhook stack.
+		cdnRepo := cdn.NewDispatchNoteRepository(db)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, tm)
+
+		cusdecRepo := cusdec.NewDeclarationRepository(db)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
+
+		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
+
+		// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
+		// presenting an IdP token, so this handler owns its own authentication and
+		// the route below carries no bearer middleware.
+		// Refused at boot rather than started without the route. SLPA reports every
+		// decision on this endpoint, so a deployment that cannot mount it accepts
+		// service orders it can never hear the answer to: the callback 404s, their
+		// retries stop, and the consignment waits on an approval that has already
+		// happened. The outbound half of this integration fails the same way when
+		// its own secret is missing (see the services registry), and a missing
+		// secret is a deployment fault worth stopping for either way.
+		slpaHandler, err = slpawebhook.NewHandler(
+			slpawebhook.NewOrderEvents(db, tm),
+			slpawebhook.NewInvoiceEvents(db, tm),
+			cfg.Integrations.SLPAWebhook(),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build the SLPA webhook handler: %w", err)
+		}
+
+		chaHandler = cha.NewHandler(chaService)
+		companyHandler = company.NewHandler(companyService)
+		paymentHandler = payment.NewHTTPHandler(paymentService)
 	}
 
 	staticDataHandler := staticdata.NewHandler(artifactRegistry)
-	chaHandler := cha.NewHandler(chaService)
-	companyHandler := company.NewHandler(companyService)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
-	paymentHandler := payment.NewHTTPHandler(paymentService)
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
@@ -312,8 +342,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
-	// extension and the read evaluator to consume.
-	taskAuthzGate, err := newTaskAuthzGate(db, globalCatalog.Roles, ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService})
+	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
+	// task through its consignment; in an agency an officer owns every injected
+	// workflow's tasks (see agency.go).
+	var taskAuthzGate taskGate
+	if agencyMode {
+		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
+	} else {
+		taskAuthzGate, err = authzgate.NewMiddleware(ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+	}
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
@@ -353,7 +390,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 
 	mux := http.NewServeMux()
-	mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
 
 	// Health check is public and returns JSON in all cases.
 	// On failure, the component field identifies which subsystem is unhealthy
@@ -393,51 +429,58 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))
 
-	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
-	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
 	mux.Handle("GET /api/v1/users/me", withAuth(withScope(scopes.ProfileRead)(http.HandlerFunc(profileHandler.HandleGetProfile))))
-	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
-	mux.Handle("GET /api/v1/consignments/{id}/agency", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentAgency))))
-	mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
-	mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
-
-	// Ops/admin views of consignment data — gated behind the dedicated admin scope, not the
-	// trader/CHA-facing consignment read scope, and with no per-consignment ownership check.
-	// Kept together (and as their own handlers, not scope branches on the routes above) so this
-	// distinct trust boundary — a small admin group that can read any consignment — stays easy
-	// to audit as a group rather than spread through the general consignment API.
-	mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
-	mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleAdminGetConsignmentByID))))
-	// A TASK node's independent per-task ("micro") workflow — separate ID space and
-	// workflow.Manager from the consignment/child-workflow route above (see
-	// EngineNodeDTO.TaskWorkflowID).
-	mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetTaskWorkflowEngineStatus))))
-	// Resolving a parked node can mutate workflow data (GlobalVariablesPatch) or force it down a path the
-	// interpreter never chose (Complete/Abort), so this sits behind ConsignmentAdminWrite, a
-	// stricter scope than the read-only admin views above.
-	mux.Handle("POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveAdminIntervention))))
-	// Same, for a node inside a task workflow, which lives in its own ID space on the task workflow
-	// manager (mirrors the two engine-status routes above).
-	mux.Handle("POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveTaskWorkflowAdminIntervention))))
 
 	// Storage
 	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
 	mux.Handle("GET /api/v1/storage/{key}", withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
 	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
 
-	// Payment webhook endpoints. Requires valid JWT issued from nsw-srilanka's IDP with the appropriate scope. The gatewayId path param is used to resolve the correct payment gateway configuration for the webhook.
-	// Authenticating the caller as the gateway itself is the gateway's own job:
-	// core/payment calls PaymentGateway.VerifyWebhook before any reference lookup
-	// or settlement, so each gateway checks the scheme it actually uses.
-	mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", withAuth(withScope(scopes.PaymentWebhooksProcess)(http.HandlerFunc(paymentHandler.HandleWebhook))))
-	mux.Handle("POST /api/v1/payments/{gatewayId}/validate", withAuth(withScope(scopes.PaymentWebhooksValidate)(http.HandlerFunc(paymentHandler.HandleValidateReference))))
+	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
+	// routes, or the agency's inject and case routes. The shared routes above serve both.
+	if agencyMode {
+		mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
+	} else {
+		mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(chaHandler.HandleGetCHAs))))
+		mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(companyHandler.HandleGetCompanies))))
+		mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(consignmentRouter.HandleCreateConsignment))))
+		mux.Handle("GET /api/v1/consignments/{id}/agency", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentAgency))))
+		mux.Handle("GET /api/v1/consignments/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentByID))))
+		mux.Handle("GET /api/v1/consignments", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignments))))
 
-	// SLCE Webhook Endpoint (single central route handling all ASYCUDA/SLCE events).
-	mux.Handle("POST /webhooks/slce", withAuth(withScope(scopes.SLCEWebhooksWrite)(http.HandlerFunc(slceHandler.HandleWebhook))))
+		// Ops/admin views of consignment data — gated behind the dedicated admin scope, not the
+		// trader/CHA-facing consignment read scope, and with no per-consignment ownership check.
+		// Kept together (and as their own handlers, not scope branches on the routes above) so this
+		// distinct trust boundary — a small admin group that can read any consignment — stays easy
+		// to audit as a group rather than spread through the general consignment API.
+		mux.Handle("GET /api/v1/admin/consignments/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetConsignmentEngineStatus))))
+		mux.Handle("GET /api/v1/admin/consignments/{id}", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleAdminGetConsignmentByID))))
+		// A TASK node's independent per-task ("micro") workflow — separate ID space and
+		// workflow.Manager from the consignment/child-workflow route above (see
+		// EngineNodeDTO.TaskWorkflowID).
+		mux.Handle("GET /api/v1/admin/task/{id}/engine-status", withAuth(withScope(scopes.ConsignmentAdminRead)(http.HandlerFunc(consignmentRouter.HandleGetTaskWorkflowEngineStatus))))
+		// Resolving a parked node can mutate workflow data (GlobalVariablesPatch) or force it down a path the
+		// interpreter never chose (Complete/Abort), so this sits behind ConsignmentAdminWrite, a
+		// stricter scope than the read-only admin views above.
+		mux.Handle("POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveAdminIntervention))))
+		// Same, for a node inside a task workflow, which lives in its own ID space on the task workflow
+		// manager (mirrors the two engine-status routes above).
+		mux.Handle("POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve", withAuth(withScope(scopes.ConsignmentAdminWrite)(http.HandlerFunc(consignmentRouter.HandleResolveTaskWorkflowAdminIntervention))))
 
-	// SLPA Webhook Endpoint. Authenticated by the HMAC signature on the request
-	// itself — see slpa.VerifySignature — so no token middleware here.
-	mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
+		// Payment webhook endpoints. Requires valid JWT issued from nsw-srilanka's IDP with the appropriate scope. The gatewayId path param is used to resolve the correct payment gateway configuration for the webhook.
+		// Authenticating the caller as the gateway itself is the gateway's own job:
+		// core/payment calls PaymentGateway.VerifyWebhook before any reference lookup
+		// or settlement, so each gateway checks the scheme it actually uses.
+		mux.Handle("POST /api/v1/payments/{gatewayId}/webhook", withAuth(withScope(scopes.PaymentWebhooksProcess)(http.HandlerFunc(paymentHandler.HandleWebhook))))
+		mux.Handle("POST /api/v1/payments/{gatewayId}/validate", withAuth(withScope(scopes.PaymentWebhooksValidate)(http.HandlerFunc(paymentHandler.HandleValidateReference))))
+
+		// SLCE Webhook Endpoint (single central route handling all ASYCUDA/SLCE events).
+		mux.Handle("POST /webhooks/slce", withAuth(withScope(scopes.SLCEWebhooksWrite)(http.HandlerFunc(slceHandler.HandleWebhook))))
+
+		// SLPA Webhook Endpoint. Authenticated by the HMAC signature on the request
+		// itself — see slpa.VerifySignature — so no token middleware here.
+		mux.Handle("POST /webhooks/slpa", http.HandlerFunc(slpaHandler.HandleWebhook))
+	}
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if localContent := storageStack.LocalContent; localContent != nil {
@@ -511,6 +554,12 @@ type parentTaskActivator interface {
 // parentUpstreamService is the narrow surface wireParentRunner needs to notify
 // a downstream domain (consignment) when a parent workflow completes.
 // *consignment.Service satisfies this directly via its CompletionHandler method.
+// taskGate is Layer 1 of task authorization on the task routes: authzgate's
+// trader/CHA middleware in TNSW, agency.OfficerGate in an agency.
+type taskGate interface {
+	Handler(next http.Handler) http.Handler
+}
+
 type parentUpstreamService interface {
 	CompletionHandler(workflowID string, finalContext map[string]any) error
 }

@@ -1,10 +1,10 @@
 package bootstrap
 
-// Agency hooks. Everything the agency deployment adds to Build is reached from the three
-// calls in app.go into this file, so the branch touches app.go by three lines and merges
-// from main stay conflict-free. See internal/agency and docs/agency.md.
+// Agency mode wiring. Build calls into this file when config.yaml sets mode: agency,
+// in place of TNSW's consignment stack. See internal/agency and docs/agency.md.
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/OpenNSW/core/artifact"
@@ -12,23 +12,22 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
-	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 )
 
-// newTaskAuthzGate builds the task authz gate and, when the catalog defines the
-// officer role, extends it with officer ownership of injected workflows.
-func newTaskAuthzGate(db *gorm.DB, roles map[string]string, ownership authzgate.OwnershipResolver, company authzgate.CompanyResolver) (agency.TaskGate, error) {
-	gate, err := authzgate.NewMiddleware(ownership, company, roles)
-	if err != nil {
-		return nil, err
+// newAgencyTaskGate builds the officer-only task authz gate. The catalog must map the
+// officer role: it is the only role anyone can act in on an agency's tasks.
+func newAgencyTaskGate(db *gorm.DB, roles map[string]string) (*agency.OfficerGate, error) {
+	if err := catalog.RequireRoles(roles, agency.RoleOfficer); err != nil {
+		return nil, fmt.Errorf("agency mode: %w", err)
 	}
-	return agency.WrapTaskGate(gate, agency.NewRepository(db), roles), nil
+	return agency.NewOfficerGate(agency.NewRepository(db)), nil
 }
 
-// mountAgency registers the agency routes. Inject is gated by a scope only an agency
-// deployment's IDP issues. The officer case views are mounted only when the catalog
-// defines the officer role, so a TNSW deployment serves none of them.
+// mountAgency registers the agency's own routes: inject, gated by a scope only the
+// injecting client holds, and the officer case views. newAgencyTaskGate has already
+// required the catalog to map the officer role.
 func mountAgency(
 	mux *http.ServeMux,
 	db *gorm.DB,
@@ -42,20 +41,15 @@ func mountAgency(
 	svc := agency.NewService(agency.NewRepository(db), artifactRegistry, wm)
 	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeWorkflowInject)(http.HandlerFunc(svc.HandleInject))))
 
-	officerRole, ok := roles[agency.RoleOfficer]
-	if !ok {
-		return
-	}
 	// ConsignmentRead is the read scope the portal's token already carries; the
 	// handler additionally requires the officer token role.
-	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifactRegistry, officerRole)
+	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifactRegistry, roles[agency.RoleOfficer])
 	mux.Handle("GET /api/v1/cases", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleListCases))))
 	mux.Handle("GET /api/v1/cases/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleGetCase))))
 }
 
-// agencyCompletion routes the parent runner's completions: injected workflows complete
-// in the agency (workflow COMPLETED, case FINISHED once all its workflows are), every
-// other workflow goes to upstream as before.
-func agencyCompletion(db *gorm.DB, upstream agency.CompletionHandler) agency.CompletionHandler {
-	return agency.NewCompletionRouter(agency.NewRepository(db), upstream)
+// agencyCompletion is the parent runner's completion handler in agency mode: every
+// parent workflow is an injected one, completed in the agency.
+func agencyCompletion(db *gorm.DB) parentUpstreamService {
+	return agency.NewCompletionHandler(agency.NewRepository(db))
 }

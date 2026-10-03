@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
@@ -18,63 +19,55 @@ func (f fakeRepo) Exists(_ context.Context, taskID string) (bool, error) {
 	return f.injected[taskID], nil
 }
 
-// stubGate stands in for authzgate: it attaches in, as Layer 1 would.
-type stubGate struct{ in taskauthz.Input }
-
-func (g *stubGate) Handler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(taskauthz.WithInput(r.Context(), g.in)))
-	})
-}
-
-// ownedThrough runs gate and returns what the Input it attached resolves for rootID.
-func ownedThrough(t *testing.T, gate TaskGate, rootID string) map[string]bool {
+// inputThrough runs gate for a request authenticated as p (unauthenticated when nil)
+// and returns the Input it attached.
+func inputThrough(t *testing.T, gate *OfficerGate, p *authn.Principal) (taskauthz.Input, bool) {
 	t.Helper()
-	var owned map[string]bool
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	if p != nil {
+		r = r.WithContext(authn.ContextWithPrincipal(r.Context(), p))
+	}
+	var in taskauthz.Input
+	var ok bool
 	gate.Handler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		in, ok := taskauthz.InputFromContext(r.Context())
-		if !ok {
-			t.Fatal("no input attached")
-		}
-		var err error
-		if owned, err = in.OwnedRoles(r.Context(), rootID); err != nil {
-			t.Fatalf("OwnedRoles: %v", err)
-		}
-	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-	return owned
+		in, ok = taskauthz.InputFromContext(r.Context())
+	})).ServeHTTP(httptest.NewRecorder(), r)
+	return in, ok
 }
 
-func TestWrapTaskGate(t *testing.T) {
-	base := func(context.Context, string) (map[string]bool, error) {
-		return map[string]bool{"trader": true, "cha": false}, nil
-	}
-	gate := &stubGate{in: taskauthz.Input{Kind: taskauthz.KindUser, OwnedRoles: base}}
-	repo := fakeRepo{injected: map[string]bool{"task-1": true}}
-	roles := map[string]string{"trader": "Trader", "cha": "CHA", RoleOfficer: "Officer"}
+func TestOfficerGate(t *testing.T) {
+	gate := NewOfficerGate(fakeRepo{injected: map[string]bool{"task-1": true}})
 
-	t.Run("catalog without officer leaves the gate unchanged", func(t *testing.T) {
-		if got := WrapTaskGate(gate, repo, map[string]string{"trader": "Trader"}); got != TaskGate(gate) {
-			t.Fatalf("expected the original gate, got %T", got)
+	t.Run("officer owns injected workflows only", func(t *testing.T) {
+		in, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindUser, Roles: []string{"Officer"}})
+		if !ok || in.Kind != taskauthz.KindUser || in.OwnedRoles == nil {
+			t.Fatalf("input = %+v, ok = %v", in, ok)
+		}
+		for root, want := range map[string]bool{"task-1": true, "consignment-1": false} {
+			owned, err := in.OwnedRoles(context.Background(), root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if owned[RoleOfficer] != want {
+				t.Errorf("%s: officer owned = %v, want %v", root, owned[RoleOfficer], want)
+			}
+			// No trader/CHA ownership exists in agency mode.
+			if owned["trader"] || owned["cha"] {
+				t.Errorf("%s: owned = %v, want officer only", root, owned)
+			}
 		}
 	})
 
-	t.Run("injected workflow grants officer and keeps base ownership", func(t *testing.T) {
-		owned := ownedThrough(t, WrapTaskGate(gate, repo, roles), "task-1")
-		if !owned[RoleOfficer] || !owned["trader"] {
-			t.Fatalf("owned = %v, want officer and trader", owned)
+	t.Run("client carries its id and no ownership", func(t *testing.T) {
+		in, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"})
+		if !ok || in.Kind != taskauthz.KindClient || in.ClientID != "NSW_TO_CDA" || in.OwnedRoles != nil {
+			t.Fatalf("input = %+v, ok = %v", in, ok)
 		}
 	})
 
-	t.Run("other workflows do not grant officer", func(t *testing.T) {
-		if owned := ownedThrough(t, WrapTaskGate(gate, repo, roles), "consignment-1"); owned[RoleOfficer] {
-			t.Fatalf("owned = %v, want no officer", owned)
-		}
-	})
-
-	t.Run("user without a base resolver still gets officer", func(t *testing.T) {
-		g := &stubGate{in: taskauthz.Input{Kind: taskauthz.KindUser}}
-		if owned := ownedThrough(t, WrapTaskGate(g, repo, roles), "task-1"); !owned[RoleOfficer] {
-			t.Fatalf("owned = %v, want officer", owned)
+	t.Run("unauthenticated gets no input", func(t *testing.T) {
+		if _, ok := inputThrough(t, gate, nil); ok {
+			t.Fatal("expected no input")
 		}
 	})
 }

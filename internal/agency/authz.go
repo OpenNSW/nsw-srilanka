@@ -5,70 +5,65 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
-// RoleOfficer is the logical catalog role an agency officer acts in. A deployment
-// whose catalog does not define it runs with the task authz gate unchanged.
+// RoleOfficer is the logical catalog role an agency officer acts in. An agency
+// deployment's catalog must define it.
 const RoleOfficer = "officer"
 
-// TaskGate is the shape of the task authz gate bootstrap wires onto the task routes;
-// *authzgate.Middleware satisfies it.
-type TaskGate interface {
-	Handler(next http.Handler) http.Handler
-}
-
-// WrapTaskGate extends gate so that, besides the trader/CHA consignment ownership
-// it already resolves, a caller owns the officer role on every task rooted in an
-// injected workflow. The read and write evaluators then treat officers exactly like
-// any other owner, so agency tasks go through the normal /api/v1/tasks/{id} routes
-// with no second, unauthenticated surface.
-//
-// This re-attaches the Input the gate built, which the taskauthz.WithInput doc
-// reserves for Layer 1. The wrapper is part of Layer 1 — it only runs behind the
-// gate, and adds ownership rather than asserting a new identity.
-func WrapTaskGate(gate TaskGate, repo Repository, roles map[string]string) TaskGate {
-	if _, ok := roles[RoleOfficer]; !ok {
-		return gate
-	}
-	return officerGate{gate: gate, repo: repo}
-}
-
-type officerGate struct {
-	gate TaskGate
+// OfficerGate is Layer 1 of task authorization in agency mode, in place of TNSW's
+// authzgate. It attaches the same taskauthz.Input, but the only ownership it resolves
+// is officer ownership of injected workflows: an agency has no consignments, so there
+// is no trader or CHA company to look up. The read and write evaluators then treat
+// officers like any other owner, and agency tasks go through the normal
+// /api/v1/tasks/{id} routes.
+type OfficerGate struct {
 	repo Repository
 }
 
-func (g officerGate) Handler(next http.Handler) http.Handler {
-	return g.gate.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if in, ok := taskauthz.InputFromContext(r.Context()); ok && in.Kind == taskauthz.KindUser {
-			in.OwnedRoles = g.withOfficer(in.OwnedRoles)
+// NewOfficerGate creates an OfficerGate.
+func NewOfficerGate(repo Repository) *OfficerGate {
+	return &OfficerGate{repo: repo}
+}
+
+// Handler wraps next, attaching the caller's taskauthz.Input. An unauthenticated
+// request gets none, which the evaluators deny.
+func (g *OfficerGate) Handler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if in, ok := g.resolve(r.Context()); ok {
 			r = r.WithContext(taskauthz.WithInput(r.Context(), in))
 		}
 		next.ServeHTTP(w, r)
-	}))
+	})
 }
 
-// withOfficer decorates base so the returned map also carries officer ownership.
-// Token-role checks stay in taskauthz.Eligible: this only answers "is this task an
-// agency task", and only once the caller is known to hold a relevant role.
-func (g officerGate) withOfficer(base taskauthz.OwnedRolesFunc) taskauthz.OwnedRolesFunc {
-	return func(ctx context.Context, rootWorkflowID string) (map[string]bool, error) {
-		owned := map[string]bool{}
-		if base != nil {
-			var err error
-			if owned, err = base(ctx, rootWorkflowID); err != nil {
-				return nil, err
-			}
-		}
-		if rootWorkflowID == "" {
-			return owned, nil
-		}
-		injected, err := g.repo.Exists(ctx, rootWorkflowID)
-		if err != nil {
-			return nil, fmt.Errorf("agency: resolve officer ownership: %w", err)
-		}
-		owned[RoleOfficer] = injected
-		return owned, nil
+func (g *OfficerGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
+	p, ok := authn.FromContext(ctx)
+	if !ok {
+		return taskauthz.Input{}, false
 	}
+	switch p.Kind {
+	case authn.KindClient:
+		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
+	case authn.KindUser:
+		return taskauthz.Input{Kind: taskauthz.KindUser, Roles: p.Roles, OwnedRoles: g.ownedRoles}, true
+	default:
+		return taskauthz.Input{}, false
+	}
+}
+
+// ownedRoles reports officer ownership of the task's root workflow: true when it is an
+// injected workflow. Token-role checks stay in taskauthz.Eligible, which calls this
+// only once the caller is known to hold a relevant role.
+func (g *OfficerGate) ownedRoles(ctx context.Context, rootWorkflowID string) (map[string]bool, error) {
+	if rootWorkflowID == "" {
+		return map[string]bool{}, nil
+	}
+	injected, err := g.repo.Exists(ctx, rootWorkflowID)
+	if err != nil {
+		return nil, fmt.Errorf("agency: resolve officer ownership: %w", err)
+	}
+	return map[string]bool{RoleOfficer: injected}, nil
 }
