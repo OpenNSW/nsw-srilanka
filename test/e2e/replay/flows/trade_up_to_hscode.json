@@ -21,6 +21,25 @@
       }
     },
     {
+      "name": "trader reads the pending CHA-selection task and gets the form",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectPresent": ["view.workspace.type", "view.workspace.handles"],
+        "expectAbsent": ["view.summary"]
+      }
+    },
+    {
+      "name": "cha cannot read the CHA-selection task before being appointed",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectStatus": 404
+      }
+    },
+    {
       "name": "trader initializes consignment (name + CHA)",
       "request": {
         "actor": "trader",
@@ -40,6 +59,66 @@
       }
     },
     {
+      "name": "trader sees the completed CHA-selection summary",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectPresent": ["view.summary.type"],
+        "expectAbsent": ["view.workspace"]
+      }
+    },
+    {
+      "name": "cha now sees the same completed CHA-selection summary",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectPresent": ["view.summary.type"],
+        "expectAbsent": ["view.workspace"]
+      }
+    },
+    {
+      "name": "trader waits on the HS-code task and gets a notice, not the form",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectPresent": ["view.status_message.type"],
+        "expectAbsent": ["view.workspace", "view.instructions"]
+      }
+    },
+    {
+      "name": "cha gets the HS-code form with its submit affordance",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectPresent": ["view.workspace.type", "view.workspace.handles"],
+        "expectAbsent": ["view.status_message", "view.instructions"]
+      }
+    },
+    {
+      "name": "a user holding both roles gets one view, not both",
+      "request": {
+        "actor": "self_clearing",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectPresent": ["view.workspace.type"],
+        "expectAbsent": ["view.status_message", "view.instructions"]
+      }
+    },
+    {
+      "name": "the same dual-role user acts as trader where trader has precedence",
+      "request": {
+        "actor": "self_clearing",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "expectPresent": ["view.summary.type"],
+        "expectAbsent": ["view.workspace"]
+      }
+    },
+    {
       "name": "cha selects HS codes (FCAU flow)",
       "request": {
         "actor": "cha",
@@ -55,6 +134,26 @@
         "node": "[FCAU] Apply for Health Certificate",
         "state": "IN_PROGRESS",
         "timeout": "60s"
+      }
+    },
+    {
+      "name": "trader sees the completed HS-code summary",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectPresent": ["view.instructions.type"],
+        "expectAbsent": ["view.workspace", "view.status_message"]
+      }
+    },
+    {
+      "name": "cha sees the same completed HS-code summary",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "expectPresent": ["view.instructions.type"],
+        "expectAbsent": ["view.workspace", "view.status_message"]
       }
     }
   ]

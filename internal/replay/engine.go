@@ -72,6 +72,14 @@ type Request struct {
 	Body         any               `json:"body,omitempty"`
 	ExpectStatus int               `json:"expectStatus,omitempty"` // default 200
 	Extract      map[string]string `json:"extract,omitempty"`      // var -> response field path (dot-notation, e.g. "consignment.id")
+	// ExpectPresent asserts each dot-notation path exists in the response.
+	// Extract already fails on a missing path; this is for the paths a step
+	// asserts on without needing their value.
+	ExpectPresent []string `json:"expectPresent,omitempty"`
+	// ExpectAbsent asserts each dot-notation path does NOT exist in the response.
+	// Needed to prove a caller is denied something — that an authorization rule
+	// withheld a field, rather than merely that the visible ones are right.
+	ExpectAbsent []string `json:"expectAbsent,omitempty"`
 }
 
 // Wait polls the consignment detail until a workflow node matches.
@@ -221,17 +229,36 @@ func (r *Runner) doRequest(ctx context.Context, req *Request) error {
 		return fmt.Errorf("%s %s: got status %d, want %d: %s", req.Method, path, resp.StatusCode, want, truncate(respBody))
 	}
 
-	if len(req.Extract) > 0 {
-		var obj map[string]any
-		if err := json.Unmarshal(respBody, &obj); err != nil {
-			return fmt.Errorf("extract: response must be a JSON object: %w (body=%s)", err, truncate(respBody))
+	return r.inspectBody(req, respBody)
+}
+
+// inspectBody runs the response-body half of a request step: the extractions
+// into the variable store and the presence/absence assertions. The body is only
+// parsed when a step actually asks something of it.
+func (r *Runner) inspectBody(req *Request, respBody []byte) error {
+	if len(req.Extract) == 0 && len(req.ExpectPresent) == 0 && len(req.ExpectAbsent) == 0 {
+		return nil
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal(respBody, &obj); err != nil {
+		return fmt.Errorf("response must be a JSON object: %w (body=%s)", err, truncate(respBody))
+	}
+	for varName, path := range req.Extract {
+		v, ok := lookupPath(obj, path)
+		if !ok {
+			return fmt.Errorf("extract: path %q not present in response", path)
 		}
-		for varName, path := range req.Extract {
-			v, ok := lookupPath(obj, path)
-			if !ok {
-				return fmt.Errorf("extract: path %q not present in response", path)
-			}
-			r.Vars[varName] = v
+		r.Vars[varName] = v
+	}
+	for _, path := range req.ExpectPresent {
+		if _, ok := lookupPath(obj, path); !ok {
+			return fmt.Errorf("expectPresent: path %q not present in response: %s", path, truncate(respBody))
+		}
+	}
+	for _, path := range req.ExpectAbsent {
+		if _, ok := lookupPath(obj, path); ok {
+			return fmt.Errorf("expectAbsent: path %q is present in response but must not be: %s", path, truncate(respBody))
 		}
 	}
 	return nil
