@@ -293,3 +293,85 @@ func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	assert.Contains(t, payload["error"], "Missing office Code")
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
+
+// The edgeId threads one round-trip; cdnRef is the note itself. Two edgeIds
+// resolving to one reference means ASYCUDA answered twice for the same
+// registered note, so it is acknowledged rather than recorded a second time.
+func TestProcessIntegrationResult_ReferenceAlreadyHeldIsAcknowledged(t *testing.T) {
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567}
+	repo := &mockRepository{
+		byEdgeID: map[string]*DispatchNote{
+			"edge-second": {ID: "2", EdgeID: "edge-second", Status: DispatchNoteStatusSubmitted},
+		},
+		byCDNRef: map[string]*DispatchNote{
+			"2026-COL-C": {
+				ID: "1", EdgeID: "edge-first", Status: DispatchNoteStatusIntegrated,
+				CDNYear: ref.Year, CDNOffice: ref.Office, CDNSerial: ref.Serial, CDNNumber: ref.Number,
+			},
+		},
+	}
+	svc := NewCDNWebhookService(repo, nil, nil)
+
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event: "INTEGRATION_RESULT",
+		Payload: integrationResultPayload{
+			EdgeID: "edge-second", Integrated: true, CDNRef: ref,
+		},
+	})
+
+	require.ErrorIs(t, err, ErrDuplicateRegisteredReference)
+	assert.Nil(t, repo.created, "a second row for one note is what this prevents")
+	assert.Nil(t, repo.updated)
+}
+
+// The note that already holds the reference is the one being answered again:
+// that is the ordinary redelivery, and it keeps its existing handling.
+func TestProcessIntegrationResult_SameNoteAnsweredAgainIsNotAReferenceClash(t *testing.T) {
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567}
+	held := &DispatchNote{
+		ID: "1", EdgeID: "edge-123", Status: DispatchNoteStatusSubmitted,
+		CDNYear: ref.Year, CDNOffice: ref.Office, CDNSerial: ref.Serial, CDNNumber: ref.Number,
+	}
+	repo := &mockRepository{
+		byEdgeID: map[string]*DispatchNote{"edge-123": held},
+		byCDNRef: map[string]*DispatchNote{"2026-COL-C": held},
+	}
+	svc := NewCDNWebhookService(repo, nil, nil)
+
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event: "INTEGRATION_RESULT",
+		Payload: integrationResultPayload{
+			EdgeID: "edge-123", Integrated: true, CDNRef: ref,
+		},
+	})
+
+	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference)
+}
+
+// A reference held by a note that failed belongs to a note Customs rejected.
+// The trader corrects it and resubmits, and that new round-trip has a new
+// edgeId against the same reference — it must be recorded, not refused.
+func TestProcessIntegrationResult_ReferenceHeldByAFailedNoteIsNotADuplicate(t *testing.T) {
+	ref := DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 4567}
+	repo := &mockRepository{
+		byEdgeID: map[string]*DispatchNote{
+			"edge-second": {ID: "2", EdgeID: "edge-second", Status: DispatchNoteStatusSubmitted},
+		},
+		byCDNRef: map[string]*DispatchNote{
+			"2026-COL-C": {
+				ID: "1", EdgeID: "edge-first", Status: DispatchNoteStatusFailed,
+				CDNYear: ref.Year, CDNOffice: ref.Office, CDNSerial: ref.Serial, CDNNumber: ref.Number,
+			},
+		},
+	}
+	svc := NewCDNWebhookService(repo, nil, nil)
+
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event:   "INTEGRATION_RESULT",
+		Payload: integrationResultPayload{EdgeID: "edge-second", Integrated: true, CDNRef: ref},
+	})
+
+	assert.NotErrorIs(t, err, ErrDuplicateRegisteredReference,
+		"the corrected resubmission is a new round-trip and belongs on the record")
+	assert.Equal(t, DispatchNoteStatusIntegrated, repo.updated.Status)
+}
