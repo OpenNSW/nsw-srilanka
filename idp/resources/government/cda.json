@@ -1,0 +1,76 @@
+{
+  "organizationUnits": [
+    {
+      "key": "government-organization/cda",
+      "handle": "cda",
+      "name": "CDA",
+      "description": "Coconut Development Authority",
+      "parent": "government-organization",
+      "treePath": "government-organization/cda"
+    }
+  ],
+  "groups": [
+    { "key": "CDA Officers", "name": "CDA Officers", "description": "CDA officers group", "ou": "government-organization/cda" }
+  ],
+  "roles": [
+    { "key": "CDA Officer", "name": "CDA Officer", "description": "Role for CDA officers working tasks in the CDA deployment",
+      "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaOfficer" },
+    { "key": "NswToCdaM2M", "name": "NswToCdaM2M", "description": "Role for NSW injecting workflows into the CDA deployment",
+      "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaInject" }
+  ],
+  "roleAssignments": [
+    { "role": "CDA Officer", "group": "CDA Officers" }
+  ],
+  "users": [
+    {
+      "key": "cda_officer",
+      "type": "Government_User",
+      "ou": "government-organization/cda",
+      "username": "cda_officer",
+      "email": "cda_officer@government.dev",
+      "givenName": "CDA",
+      "familyName": "Officer",
+      "phoneNumber": "+94771234563",
+      "passwordEnv": { "override": "SAMPLE_CDA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["CDA Officers"]
+    }
+  ],
+  "applications": [
+    {
+      "key": "OGA_PORTAL_APP_CDA",
+      "kind": "spa",
+      "name": "CDAPortalApp",
+      "description": "Application for the CDA officer portal (trader-app in agency mode)",
+      "clientId": "OGA_PORTAL_APP_CDA",
+      "port": 5176,
+      "allowedUserType": "Government_User",
+      "ou": "government-organization/cda",
+      "scopeSet": "cdaOfficer",
+      "redirectUrisEnv": "CDA_REDIRECT_URIS"
+    },
+    {
+      "key": "CDA_TO_NSW",
+      "kind": "m2m",
+      "name": "CDA_TO_NSW_M2M",
+      "description": "Machine-to-machine integration for CDA to NSW",
+      "clientId": "CDA_TO_NSW",
+      "secretEnv": { "override": "M2M_CDA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "m2mNsw"
+    },
+    {
+      "key": "NSW_TO_CDA",
+      "kind": "m2m",
+      "name": "NSW_TO_CDA_M2M",
+      "description": "Machine-to-machine integration for NSW to CDA",
+      "clientId": "NSW_TO_CDA",
+      "secretEnv": { "override": "M2M_NSW_TO_CDA_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "government-organization",
+      "scopeSet": "cdaInject"
+    }
+  ],
+  "appRoleAssignments": [
+    { "role": "AgencyM2M", "app": "CDA_TO_NSW" },
+    { "role": "NswToCdaM2M", "app": "NSW_TO_CDA" }
+  ]
+}

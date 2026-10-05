@@ -10,8 +10,9 @@
 COMPOSE         := docker compose
 # Pass only the base file to exclude the override == the real built images.
 COMPOSE_PREVIEW := docker compose -f compose.yml
-# Source services built from this repo; `make deps` starts everything else.
-APP_SERVICES    := api trader-portal
+# Source services built from this repo (TNSW and the CDA agency); `make deps` starts
+# everything else.
+APP_SERVICES    := api trader-portal cda-api cda-portal
 # Newline for turning `docker compose config --services` output into a word list.
 define NL
 
@@ -58,7 +59,7 @@ build: ## Build the images without starting anything
 # ---------------------------------------------------------------------------
 
 .PHONY: deps
-deps: ## Start everything EXCEPT api & trader-portal (run those natively yourself)
+deps: ## Start everything EXCEPT the apps (api, trader-portal, cda-api, cda-portal)
 	$(COMPOSE) up -d $(DEPS_SERVICES)
 
 .PHONY: test-e2e

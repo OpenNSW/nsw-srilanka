@@ -204,3 +204,21 @@ func TestLoad_ConfigFileMode(t *testing.T) {
 		})
 	}
 }
+
+// An agency builds none of TNSW's integrations, so it starts without their secrets.
+func TestLoad_AgencyModeNeedsNoSLPASecret(t *testing.T) {
+	t.Setenv("DB_PASSWORD", "testpassword")
+	t.Setenv("SLPA_WEBHOOK_SECRET", "")
+	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+
+	t.Setenv("CONFIG_PATH", writeConfigFile(t, "mode: agency\n"))
+	if _, err := Load(); err != nil {
+		t.Fatalf("agency: Load() unexpected error: %v", err)
+	}
+
+	t.Setenv("CONFIG_PATH", writeConfigFile(t, "mode: tnsw\n"))
+	if _, err := Load(); err == nil || !containsString(err.Error(), "SLPA_WEBHOOK_SECRET") {
+		t.Fatalf("tnsw: expected the SLPA secret to be required, got: %v", err)
+	}
+}

@@ -40,6 +40,18 @@
     "paymentWebhook": [
       "nsw:payment-webhooks:validate",
       "nsw:payment-webhooks:process"
+    ],
+    "cdaOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write",
+      "nsw:storage:delete"
+    ],
+    "cdaInject": [
+      "nsw:workflow:inject"
     ]
   }
 }

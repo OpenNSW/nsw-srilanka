@@ -1,0 +1,12 @@
+{
+  "email": {
+    "baseURL": "https://email.svc.local",
+    "token": "replace-with-actual-token"
+  },
+  "sms": {
+    "baseURL": "https://smsservice.lk",
+    "userName": "replace-with-actual-username",
+    "password": "replace-with-actual-password",
+    "sidCode": "sidCode"
+  }
+}

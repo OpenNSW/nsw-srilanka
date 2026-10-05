@@ -31,21 +31,6 @@
       }
     },
     {
-      "handle": "cda",
-      "name": "CDA",
-      "description": "Coconut Development Authority",
-      "officer": {
-        "username": "cda_officer", "email": "cda_officer@government.dev",
-        "givenName": "CDA", "familyName": "Officer", "phoneNumber": "+94771234563",
-        "passwordEnv": { "override": "SAMPLE_CDA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
-      },
-      "portal": { "name": "CDAPortalApp", "clientId": "OGA_PORTAL_APP_CDA", "port": 5176, "redirectUrisEnv": "CDA_REDIRECT_URIS" },
-      "m2m": {
-        "toNsw": { "clientId": "CDA_TO_NSW", "secretEnv": { "override": "M2M_CDA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
-        "nswTo": { "clientId": "NSW_TO_CDA", "secretEnv": { "override": "M2M_NSW_TO_CDA_SECRET", "default": "M2M_CLIENT_SECRET" } }
-      }
-    },
-    {
       "handle": "slpa",
       "name": "SLPA",
       "description": "Sri Lanka Ports Authority",
