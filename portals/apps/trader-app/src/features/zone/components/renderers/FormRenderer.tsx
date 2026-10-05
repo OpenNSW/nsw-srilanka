@@ -42,11 +42,11 @@ function seedWithDefaults(
 // this constant (so an empty error list is always the same reference), and
 // `stableAdditionalErrors`'s content-based memoization for when it's
 // non-empty (see its own comment, further down).
-const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
+const EMPTY_ADDITIONAL_ERRORS: AdditionalFormError[] = []
 
-// AJV-shaped error so JsonForms maps it onto the missing control. `message`
-// must stay "is a required property" — the radix renderers rewrite that
-// exact string to "<label> is required".
+// AJV-shaped errors so JsonForms maps them onto the violating control.
+// For `required`, `message` must stay "is a required property" — the radix
+// renderers rewrite that exact string to "<label> is required".
 type RequiredFieldError = {
   instancePath: string
   schemaPath: string
@@ -54,6 +54,18 @@ type RequiredFieldError = {
   params: { missingProperty: string }
   message: 'is a required property'
 }
+
+// Schema-driven cross-field date order: a property may declare
+// `x-notLaterThan: "<siblingField>"`. Compared as ISO date strings.
+type NotLaterThanError = {
+  instancePath: string
+  schemaPath: string
+  keyword: 'x-notLaterThan'
+  params: { limitField: string }
+  message: string
+}
+
+type AdditionalFormError = RequiredFieldError | NotLaterThanError
 
 type Props = ZoneRendererProps<'FORM'> & {
   // handles, when non-empty, render as physical controls in the form's own
@@ -104,31 +116,39 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [showErrors, setShowErrors] = useState(false)
 
   const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
+  const notLaterThanErrors = useMemo(
+    () => collectNotLaterThanErrors(payload.schema, data),
+    [payload.schema, data],
+  )
   // JsonForms merges additionalErrors with native AJV errors. Absent keys
   // already produce a required error; synthesizing another would render
   // "X is required" twice. Only present empty values ("" / []) need a
   // synthetic error — JSON Schema `required` checks presence, not emptiness.
+  // x-notLaterThan errors are always synthetic (AJV does not know that keyword).
   const additionalRequiredErrors = useMemo(
     () => requiredErrors.filter((error) => isPresentEmpty(data, error)),
     [requiredErrors, data],
   )
-  // additionalRequiredErrors is a fresh array reference on every edit even
-  // when its CONTENT is unchanged (the memo above is keyed on `data`, which
-  // changes on every keystroke). additionalErrors is a dependency of
-  // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above), so an
-  // unstable reference here would force that resync far more often than the
-  // missing-fields set actually changes — reusing the previous array
-  // whenever the set is unchanged keeps the reference, and therefore the
-  // resync, tied to genuine content changes only. State, not a ref: this
-  // project's lint rules (React Compiler-compatible) disallow touching a
-  // ref's `.current` during render, so "remember what render-N computed" has
-  // to go through the same sanctioned "adjust state during render" pattern
-  // used below for lastFed, not a ref-based memo.
-  const [prevStableErrors, setPrevStableErrors] = useState<RequiredFieldError[]>(EMPTY_ADDITIONAL_ERRORS)
-  const candidateErrors =
-    showErrors && additionalRequiredErrors.length > 0 ? additionalRequiredErrors : EMPTY_ADDITIONAL_ERRORS
+  const syntheticErrors = useMemo(
+    () => [...additionalRequiredErrors, ...notLaterThanErrors],
+    [additionalRequiredErrors, notLaterThanErrors],
+  )
+  // syntheticErrors is a fresh array reference on every edit even when its
+  // CONTENT is unchanged (the memo above is keyed on `data`, which changes
+  // on every keystroke). additionalErrors is a dependency of JsonForms's own
+  // resync effect (see EMPTY_ADDITIONAL_ERRORS above), so an unstable
+  // reference here would force that resync far more often than the error set
+  // actually changes — reusing the previous array whenever the set is
+  // unchanged keeps the reference, and therefore the resync, tied to genuine
+  // content changes only. State, not a ref: this project's lint rules (React
+  // Compiler-compatible) disallow touching a ref's `.current` during render,
+  // so "remember what render-N computed" has to go through the same
+  // sanctioned "adjust state during render" pattern used below for lastFed,
+  // not a ref-based memo.
+  const [prevStableErrors, setPrevStableErrors] = useState<AdditionalFormError[]>(EMPTY_ADDITIONAL_ERRORS)
+  const candidateErrors = showErrors && syntheticErrors.length > 0 ? syntheticErrors : EMPTY_ADDITIONAL_ERRORS
   const stableAdditionalErrors =
-    missingFieldsSignature(candidateErrors) === missingFieldsSignature(prevStableErrors)
+    additionalErrorsSignature(candidateErrors) === additionalErrorsSignature(prevStableErrors)
       ? prevStableErrors
       : candidateErrors
   if (stableAdditionalErrors !== prevStableErrors) {
@@ -161,7 +181,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // (impossible for an actual person, who needs time to see the file dialog
   // close and move to the button) hit this floor, and rarely even then.
   const [lastFed, setLastFed] = useState<{
-    additionalErrors: RequiredFieldError[]
+    additionalErrors: AdditionalFormError[]
     validationMode: 'ValidateAndShow' | 'ValidateAndHide'
   }>({ additionalErrors: EMPTY_ADDITIONAL_ERRORS, validationMode: 'ValidateAndHide' })
   if (lastFed.additionalErrors !== stableAdditionalErrors || lastFed.validationMode !== validationMode) {
@@ -173,7 +193,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // dispatch callback; otherwise it renders read-only with no footer. This
   // collapses interactivity, readonly, and button visibility into a single
   // derived fact — the same rule the backend uses to derive Role.
-  const isValid = errors.length === 0 && requiredErrors.length === 0
+  const isValid = errors.length === 0 && requiredErrors.length === 0 && notLaterThanErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('SHOW_AUTOFILL_BUTTON', false)
 
@@ -332,14 +352,68 @@ function collectRequiredErrors(schema: JsonSchema | undefined, data: unknown, in
   return out
 }
 
-// A cheap content key for a required-errors list: `instancePath` and
-// `missingProperty` are the only fields that ever vary between calls
-// (schemaPath/keyword/message are the same literals every time), so this is
-// enough to tell "the missing-fields set is unchanged" from "it changed" —
-// see stableAdditionalErrors, which uses it to reuse the previous array
-// reference whenever the set hasn't moved.
-function missingFieldsSignature(errors: RequiredFieldError[]): string {
-  return errors.map((error) => `${error.instancePath}:${error.params.missingProperty}`).join(',')
+// A cheap content key for the synthetic-errors list — enough to tell "the
+// set is unchanged" from "it changed" so stableAdditionalErrors can reuse
+// the previous array reference whenever the set hasn't moved.
+function additionalErrorsSignature(errors: AdditionalFormError[]): string {
+  return errors
+    .map((error) =>
+      error.keyword === 'required'
+        ? `${error.instancePath}:required:${error.params.missingProperty}`
+        : `${error.instancePath}:x-notLaterThan:${error.params.limitField}:${error.message}`,
+    )
+    .join('|')
+}
+
+// Emits AJV-shaped errors for `x-notLaterThan: "<sibling>"` — the local
+// field's ISO date string must be <= the sibling's. Message uses field
+// titles so forms can set the exact inline text via schema titles alone.
+function collectNotLaterThanErrors(
+  schema: JsonSchema | undefined,
+  data: unknown,
+  instancePath = '',
+): NotLaterThanError[] {
+  if (!schema || typeof schema !== 'object') return []
+  const properties = (schema as { properties?: Record<string, JsonSchema> }).properties
+  const items = (schema as { items?: JsonSchema | JsonSchema[] }).items
+  const out: NotLaterThanError[] = []
+
+  if (properties && data && typeof data === 'object' && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>
+    for (const [key, propSchema] of Object.entries(properties)) {
+      if (!propSchema || typeof propSchema !== 'object') continue
+      const limitField = (propSchema as { 'x-notLaterThan'?: unknown })['x-notLaterThan']
+      if (typeof limitField === 'string') {
+        const left = obj[key]
+        const right = obj[limitField]
+        if (typeof left === 'string' && typeof right === 'string' && left > right) {
+          const leftTitle = typeof propSchema.title === 'string' ? propSchema.title : key
+          const rightSchema = properties[limitField]
+          const rightTitle =
+            rightSchema && typeof rightSchema === 'object' && typeof rightSchema.title === 'string'
+              ? rightSchema.title
+              : limitField
+          out.push({
+            instancePath: `${instancePath}/${key}`,
+            schemaPath: `#/properties/${key}/x-notLaterThan`,
+            keyword: 'x-notLaterThan',
+            params: { limitField },
+            message: `${leftTitle} cannot be later than ${rightTitle}`,
+          })
+        }
+      }
+      if (obj[key] === undefined) continue
+      out.push(...collectNotLaterThanErrors(propSchema, obj[key], `${instancePath}/${key}`))
+    }
+  }
+
+  if (items && !Array.isArray(items) && Array.isArray(data)) {
+    data.forEach((item, index) => {
+      out.push(...collectNotLaterThanErrors(items, item, `${instancePath}/${index}`))
+    })
+  }
+
+  return out
 }
 
 // True when the required property exists on the instance but is empty, so
