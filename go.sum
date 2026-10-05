@@ -28,8 +28,8 @@ github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrx
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
 github.com/OpenNSW/core/shared v0.3.0 h1:HcWcXyMdwzMfsVvo1HG2OTBYaQTRipTpLI0AFx/5Wgs=
 github.com/OpenNSW/core/shared v0.3.0/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
-github.com/OpenNSW/core/storage v0.1.0 h1:vrBW5Fx7Uourtgn2ael3ifl/TinIxK43AKwJPViS6Gw=
-github.com/OpenNSW/core/storage v0.1.0/go.mod h1:MTFoGuUiSixi0IJ+9EUpI+GzQt3y8+5RWz2xr/O10Hw=
+github.com/OpenNSW/core/storage v0.2.0 h1:yoy165qMx8/sKXSw9feiMi2ZaODUqN6iskTNU6sAFrM=
+github.com/OpenNSW/core/storage v0.2.0/go.mod h1:991NQzJBaa6ACmxsLNLuoISeyBWP0rRkSO6eSNz0XDg=
 github.com/OpenNSW/core/trace v0.2.0 h1:C0ngf3m03oySzYvdpQNG+D+dsGs9+n5zWugoyMmWnlg=
 github.com/OpenNSW/core/trace v0.2.0/go.mod h1:b3qhByzXWqepa+5NOYpqIZILwv4OuhACLHCh/eRdWRo=
 github.com/OpenNSW/core/uiprojector v0.3.0 h1:TRp0+TCcq+9eGMU0KPf0a2idHVE/xjVoFgy5Nf/pqZM=

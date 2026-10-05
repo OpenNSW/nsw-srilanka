@@ -32,7 +32,7 @@ with no rule is rejected):
 ## Catalog
 
 The logical names resolve through the global catalog (`configs/catalog.json`,
-`CATALOG_CONFIG_PATH`): `roles` maps a name to an IdP token role, `clients` maps a
+`server.catalogConfigPath`): `roles` maps a name to an IdP token role, `clients` maps a
 name to an OAuth2 client id.
 
 ```json

@@ -3,17 +3,17 @@ package authn
 import coreauthn "github.com/OpenNSW/core/authn"
 
 // Config is the authentication configuration this application supplies, loaded
-// from the environment by cmd/server/config.
+// from config.yaml's authn section by cmd/server/config.
 //
 // It deliberately omits core/authn's claim-declaration fields: which claims to
 // extract is this package's own business, not a per-deployment setting, so
 // coreConfig declares them from the claim constants in principal.go.
 type Config struct {
-	JWKSURL               string
-	Issuer                string
-	Audience              string
-	ClientIDs             []string
-	InsecureSkipTLSVerify bool
+	JWKSURL               string   `yaml:"jwksURL"`
+	Issuer                string   `yaml:"issuer"`
+	Audience              string   `yaml:"audience"`
+	ClientIDs             []string `yaml:"clientIDs"`
+	InsecureSkipTLSVerify bool     `yaml:"insecureSkipTLSVerify"`
 }
 
 // coreConfig maps Config onto core/authn's Config and declares the extra claims

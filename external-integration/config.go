@@ -22,14 +22,15 @@ import (
 // Config is the configuration of every external integration, as one value.
 //
 // The fields are the plain values a deployment supplies, so the server can fill
-// them from the environment without importing an integration or knowing what
-// shape it wants them in. The accessors below hand each integration its own
-// configuration, and the integration says what makes it usable.
+// them from its config file (the integrations section of config.yaml) without
+// importing an integration or knowing what shape it wants them in. The
+// accessors below hand each integration its own configuration, and the
+// integration says what makes it usable.
 type Config struct {
 	// SLPAWebhookSecret is shared with SLPA out of band and authenticates the
 	// callbacks their Cargo Management System makes to report a service order's
 	// progress.
-	SLPAWebhookSecret string
+	SLPAWebhookSecret string `yaml:"slpaWebhookSecret"`
 }
 
 // SLPAWebhook is the configuration of the SLPA service order webhook.

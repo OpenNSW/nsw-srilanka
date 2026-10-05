@@ -7,7 +7,7 @@ This document serves as an exhaustive reference for creating, modifying, and deb
 ## 1. Directory Structure: Folder-as-Task Convention
 
 > [!IMPORTANT]
-> These workflow/form artifacts are **not** committed to this application repo. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path (`tnsw/manifest.json` + `tnsw/<agency_code>/…`) and are fetched at startup by the artifact loader (see `ARTIFACT_*` env in [`.env.example`](../.env.example)). Every path below is relative to that base path, so `<agency_code>/…` here means `tnsw/<agency_code>/…` in the artifacts repo. To edit them locally, clone that repo and point the local loader at its `tnsw` dir (`ARTIFACT_LOADER_TYPE=local`, `ARTIFACT_LOCAL_ROOT=<path>/tnsw`).
+> These workflow/form artifacts are **not** committed to this application repo. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path (`tnsw/manifest.json` + `tnsw/<agency_code>/…`) and are fetched at startup by the artifact loader (see `artifactLoader` in [`configs/config.example.yaml`](../configs/config.example.yaml)). Every path below is relative to that base path, so `<agency_code>/…` here means `tnsw/<agency_code>/…` in the artifacts repo. To edit them locally, clone that repo and point the local loader at its `tnsw` dir (`ARTIFACT_LOADER_TYPE=local`, `ARTIFACT_LOCAL_ROOT=<path>/tnsw`).
 
 Task definitions are grouped into self-contained folders representing micro-workflows under an agency-specific folder (e.g. `<agency_code>/`). 
 
@@ -350,7 +350,7 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 1. **Parent Workflow Hot-Reload**:
    - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
 2. **Form schemas and markdown templates**:
-   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `ARTIFACT_LOADER_TYPE=local`).
+   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `artifactLoader.type: local`).
 3. **Render configs**:
    - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
 4. **The manifest**:

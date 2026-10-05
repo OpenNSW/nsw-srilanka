@@ -21,6 +21,22 @@ volumes:
   cda_bucket_data:
     driver: local
 
+# The environment every service that reads the server's config file needs —
+# api, migrate and seed-companies all run on configs/config.docker.yaml (seeded
+# by `make setup` from configs/config.docker.example.yaml). Each reads only its
+# own sections of it, but every {{env:...}} placeholder in the file is resolved
+# regardless, so all of them get every secret the file references.
+x-config-env: &config-env
+  CONFIG_PATH: configs/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  ARGUS_API_KEY: ${ARGUS_API_KEY:-nsw-super-secret-audit-token}
+  SLPA_WEBHOOK_SECRET: ${SLPA_WEBHOOK_SECRET:-local-dev-slpa-webhook-secret}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+  # For a private artifacts repo: reference it as {{env:ARTIFACT_GITHUB_TOKEN}}
+  # under artifactLoader.github.token.
+  ARTIFACT_GITHUB_TOKEN: ${ARTIFACT_GITHUB_TOKEN:-}
+
 services:
   # -------------------------------------------------------------------
   # 1. Shared Infrastructure Database (PostgreSQL)
@@ -203,14 +219,10 @@ services:
     container_name: tnsw-migrate
     networks:
       - nsw-network
-    environment:
-      - DB_DRIVER=postgres
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-nsw_db}
-      - DB_USER=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
+    volumes:
+      # The api's config file, for its db section; the SQL itself is baked in.
+      - ./configs:/app/configs:ro
+    environment: *config-env
     # No `command:` — the migrate image's default CMD is ["migrate", "up"].
     depends_on:
       db:
@@ -237,13 +249,8 @@ services:
     volumes:
       # Mount live, not baked-in, so editing the file needs no rebuild.
       - ./configs:/app/configs:ro
-    environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-nsw_db}
-      - DB_USERNAME=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
+    # The api's own config file: otc reads only its db section.
+    environment: *config-env
     command: ["otc", "company", "apply", "-f", "configs/companies.json"]
     depends_on:
       migrate:
@@ -278,77 +285,33 @@ services:
       # gateway's "private_key": "file:/certs/govpay/go_private.pem" in
       # payment_methods.json.
       - ./certs/govpay:/certs/govpay:ro
-      # Host-side artifacts dir for ARTIFACT_LOADER_TYPE=local — the tnsw/ dir of
-      # a OpenNSW/one-trade-artifacts clone. Same .env variable a native run uses,
-      # so one line covers both; the container reads it at the target path below.
+      # Host-side artifacts dir for artifactLoader.type: local — the tnsw/ dir of
+      # a OpenNSW/one-trade-artifacts clone, set in .env; config.docker.yaml
+      # then reads it at the target path below (artifactLoader.local.root).
       # Unused by the default GitHub loader (Docker just creates the dir if the
       # clone is absent).
       - ${ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/tnsw}:/app/artifacts:ro
       # Persist runtime blob storage written by the storage driver.
       - bucket_data:/app/bucket
     environment:
-      # Target relational store parameter mapping
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-nsw_db}
-      - DB_USERNAME=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
-      # Engine configuration variables
-      - TEMPORAL_HOST=temporal
-      - TEMPORAL_PORT=7233
-      - TEMPORAL_NAMESPACE=${TEMPORAL_NAMESPACE:-default}
-      # Context variables translated directly from old start-dev parameters
-      - SERVER_PORT=8080
-      - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-info}
-      - SERVICE_URL=${SERVICE_URL:-http://localhost:${BACKEND_PORT:-8080}}
-      # Request-body size cap and server timeouts (Slowloris/DoS hardening).
-      - SERVER_MAX_REQUEST_BYTES=${SERVER_MAX_REQUEST_BYTES:-33554432}
-      - SERVER_READ_HEADER_TIMEOUT=${SERVER_READ_HEADER_TIMEOUT:-5s}
-      - SERVER_READ_TIMEOUT=${SERVER_READ_TIMEOUT:-15s}
-      - SERVER_WRITE_TIMEOUT=${SERVER_WRITE_TIMEOUT:-30s}
-      - SERVER_IDLE_TIMEOUT=${SERVER_IDLE_TIMEOUT:-60s}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178,http://localhost:5179}
-      - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
-      - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks
-      - AUTH_CLIENT_IDS=${AUTH_CLIENT_IDS:-TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW}
-      - AUTH_AUDIENCE=${AUTH_AUDIENCE:-https://api.nsw-srilanka.local}
-      - AUTH_JWKS_INSECURE_SKIP_VERIFY=${AUTH_JWKS_INSECURE_SKIP_VERIFY:-true}
-      # APP_ENV gates the insecure-TLS flags above/in services.json: they are only
+      # Every server setting lives in config.docker.yaml (see x-config-env) —
+      # edit it there, not here; what follows is only what the file cannot hold.
+      <<: *config-env
+      # APP_ENV gates the insecure-TLS flags (authn.insecureSkipTLSVerify in
+      # config.yaml, insecure_skip_tls_verify in services.json): they are only
       # honored when APP_ENV=development, otherwise the backend refuses to start.
       # Injected as "development" by `make dev`/`make preview` (dev only); left empty
       # for a raw `docker compose up` or any deployment, which then fails closed.
-      - APP_ENV=${APP_ENV:-}
+      APP_ENV: ${APP_ENV:-}
       # NSW -> Agency m2m client secrets, referenced as env:... in services.*.json
-      - M2M_NSW_TO_NPQS_SECRET=${M2M_NSW_TO_NPQS_SECRET:-1234}
-      - M2M_NSW_TO_FCAU_SECRET=${M2M_NSW_TO_FCAU_SECRET:-1234}
-      - M2M_NSW_TO_CDA_SECRET=${M2M_NSW_TO_CDA_SECRET:-1234}
-      - M2M_NSW_TO_SLPA_SECRET=${M2M_NSW_TO_SLPA_SECRET:-1234}
-      - SLPA_CLIENT_SECRET=${SLPA_CLIENT_SECRET:-1234}
-      - SLPA_WEBHOOK_SECRET=${SLPA_WEBHOOK_SECRET:-local-dev-slpa-webhook-secret}
-      - M2M_NSW_TO_CUSTOMS_SECRET=${M2M_NSW_TO_CUSTOMS_SECRET:-1234}
-      - M2M_NSW_TO_SLTB_SECRET=${M2M_NSW_TO_SLTB_SECRET:-1234}
-      - M2M_NSW_TO_ASYCUDA_SECRET=${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
-      - SERVICES_CONFIG_PATH=${SERVICES_CONFIG_PATH:-configs/services.docker.json}
-      - PAYMENT_METHODS_CONFIG_PATH=${PAYMENT_METHODS_CONFIG_PATH:-configs/payment_methods.json}
-      - NOTIFICATIONS_CONFIG_PATH=${NOTIFICATIONS_CONFIG_PATH:-configs/notification.json}
-      - CATALOG_CONFIG_PATH=${CATALOG_CONFIG_PATH:-configs/catalog.json}
-      - CONFIG_PATH=${CONFIG_PATH:-configs/config.yaml}
-      # Workflow/form artifacts are no longer baked into the repo/image; they are
-      # fetched at startup from the public OpenNSW/one-trade-artifacts repo under
-      # the tnsw/ base path. `make dev` works with no local clone. Override any of
-      # these in .env (e.g. ARTIFACT_LOADER_TYPE=local with a local clone).
-      - ARTIFACT_LOADER_TYPE=${ARTIFACT_LOADER_TYPE:-github}
-      - ARTIFACT_GITHUB_OWNER=${ARTIFACT_GITHUB_OWNER:-OpenNSW}
-      - ARTIFACT_GITHUB_REPO=${ARTIFACT_GITHUB_REPO:-one-trade-artifacts}
-      - ARTIFACT_GITHUB_REF=${ARTIFACT_GITHUB_REF:-main}
-      - ARTIFACT_GITHUB_BASE_PATH=${ARTIFACT_GITHUB_BASE_PATH:-tnsw}
-      - ARTIFACT_GITHUB_TOKEN=${ARTIFACT_GITHUB_TOKEN:-}
-      # Pinned to the bind-mount target above, not interpolated: the host path in
-      # .env does not resolve inside the container.
-      - ARTIFACT_LOCAL_ROOT=/app/artifacts
-      - ARGUS_SERVICE_URL=http://argus:3001
-      - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
+      M2M_NSW_TO_NPQS_SECRET: ${M2M_NSW_TO_NPQS_SECRET:-1234}
+      M2M_NSW_TO_FCAU_SECRET: ${M2M_NSW_TO_FCAU_SECRET:-1234}
+      M2M_NSW_TO_CDA_SECRET: ${M2M_NSW_TO_CDA_SECRET:-1234}
+      M2M_NSW_TO_SLPA_SECRET: ${M2M_NSW_TO_SLPA_SECRET:-1234}
+      SLPA_CLIENT_SECRET: ${SLPA_CLIENT_SECRET:-1234}
+      M2M_NSW_TO_CUSTOMS_SECRET: ${M2M_NSW_TO_CUSTOMS_SECRET:-1234}
+      M2M_NSW_TO_SLTB_SECRET: ${M2M_NSW_TO_SLTB_SECRET:-1234}
+      M2M_NSW_TO_ASYCUDA_SECRET: ${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
     depends_on:
       migrate:
         condition: service_completed_successfully

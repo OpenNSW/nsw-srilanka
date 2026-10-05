@@ -46,7 +46,7 @@ backend:
   #     drop: ["ALL"]
   securityContext: {}
 
-  # Port the server listens on (must match SERVER_PORT in env below and the
+  # Port the server listens on (must match server.port in config below and the
   # Dockerfile's EXPOSE).
   containerPort: 8080
 
@@ -55,7 +55,8 @@ backend:
     port: 80
 
   # Server environment variables (key-value map). Supports raw values and
-  # valueFrom maps. See .env.example for the full set this backend reads.
+  # valueFrom maps. The server reads only APP_ENV and CONFIG_PATH itself; the
+  # rest are the secrets config below (and services.json) reference by name.
   env: {}
 
   # Load server environment from existing ConfigMaps or Secrets
@@ -65,8 +66,10 @@ backend:
   # config.yaml, with the same schema as configs/config.example.yaml. The chart
   # always renders it into a ConfigMap mounted read-only at
   # configMountPath/config.yaml and points CONFIG_PATH at it, unless env above
-  # sets CONFIG_PATH itself. Empty is valid: the server needs the file, not any
-  # section in it.
+  # sets CONFIG_PATH itself. A setting left out keeps its built-in default; the
+  # ones with none (db.postgres.password, cors.allowedOrigins,
+  # notification.providers, integrations.slpaWebhookSecret) must be set, or the
+  # server refuses to start — see ../values-example.yaml.
   #
   # Non-secret only. A secret goes in as a placeholder the server resolves at
   # startup, e.g. "{{env:SOME_SECRET}}" with SOME_SECRET set via env/valueFrom;
@@ -93,9 +96,11 @@ backend:
     # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
     command: []
     backoffLimit: 1
-    # Migrate-specific env — kept separate from backend.env above because the
-    # external migrator uses different variable names than this backend
-    # (DB_USER, not DB_USERNAME; see ../values-example.yaml).
+    # The migrator reads the db section of the same config.yaml (config
+    # above), mounted into the Job as a hook-scoped copy, and requires
+    # config.db.driver: postgres (it would default to sqlite). It also inherits
+    # backend.env/envFrom, since it resolves every placeholder in the file; the
+    # two below only add to or override those.
     env: {}
     envFrom: []
 

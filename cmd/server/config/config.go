@@ -5,19 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/OpenNSW/core/artifact/loaders"
-	"github.com/OpenNSW/core/artifact/loaders/github"
-	"github.com/OpenNSW/core/artifact/loaders/local"
-	"github.com/OpenNSW/core/artifact/loaders/s3"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/refid"
-	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/temporal"
 
 	"github.com/LSFLK/argus/pkg/audit"
@@ -27,207 +22,105 @@ import (
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
-// Config holds all configuration for the application.
+// Config holds all configuration for the application, in the shape of
+// config.yaml: each field is one top-level section of the file.
 type Config struct {
 	// Mode is what this deployment runs as: TNSW (the default) or an agency.
-	Mode Mode
+	Mode Mode `yaml:"mode"`
 
-	Database     database.Config
-	Server       ServerConfig
-	CORS         cors.Config
-	Storage      nswstorage.Config
-	Authn        authn.Config
-	Notification notification.Config
-	Temporal     temporal.Config
-	Audit        audit.Config
-	Integrations integrations.Config
+	Database     database.Config     `yaml:"db"`
+	Server       ServerConfig        `yaml:"server"`
+	CORS         cors.Config         `yaml:"cors"`
+	Storage      nswstorage.Config   `yaml:"storage"`
+	Authn        authn.Config        `yaml:"authn"`
+	Notification notification.Config `yaml:"notification"`
+	Temporal     temporal.Config     `yaml:"temporal"`
+	Audit        AuditConfig         `yaml:"audit"`
+	Integrations integrations.Config `yaml:"integrations"`
 
-	ArtifactLoader loaders.Config
+	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
 
-	RefID refid.Config
+	// RefID holds the reference ID formats the REFID_GENERATOR task plugin
+	// generates from. Optional: with no issuers, generation is disabled and a
+	// template using the plugin fails at run time (see bootstrap.initRefIDs).
+	RefID refid.Config `yaml:"refid"`
 }
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Port                     int
-	ServiceURL               string
-	ServicesConfigPath       string
-	PaymentMethodsConfigPath string
-	CatalogConfigPath        string
-	LogLevel                 slog.Level
-	MaxRequestBytes          int64
-	ReadHeaderTimeout        time.Duration
-	ReadTimeout              time.Duration
-	WriteTimeout             time.Duration
-	IdleTimeout              time.Duration
+	Port                     int           `yaml:"port"`
+	ServiceURL               string        `yaml:"serviceURL"`
+	ServicesConfigPath       string        `yaml:"servicesConfigPath"`
+	PaymentMethodsConfigPath string        `yaml:"paymentMethodsConfigPath"`
+	CatalogConfigPath        string        `yaml:"catalogConfigPath"`
+	LogLevel                 slog.Level    `yaml:"logLevel"`
+	MaxRequestBytes          int64         `yaml:"maxRequestBytes"`
+	ReadHeaderTimeout        time.Duration `yaml:"readHeaderTimeout"`
+	ReadTimeout              time.Duration `yaml:"readTimeout"`
+	WriteTimeout             time.Duration `yaml:"writeTimeout"`
+	IdleTimeout              time.Duration `yaml:"idleTimeout"`
+}
+
+// AuditConfig is what a deployment sets for the Argus audit client. The
+// client's own audit.Config is an SDK constructor input — it carries a signer
+// func and tuning knobs, and no yaml tags — so it is built from this rather
+// than decoded into.
+type AuditConfig struct {
+	BaseURL string `yaml:"baseURL"`
+	APIKey  string `yaml:"apiKey"`
+}
+
+// ClientConfig is the audit client configuration a deployment's settings
+// make; everything else keeps the client's defaults.
+func (a AuditConfig) ClientConfig() audit.Config {
+	return audit.Config{BaseURL: a.BaseURL, APIKey: a.APIKey}
 }
 
 // Validate checks that the server configuration is valid.
 func (s ServerConfig) Validate() error {
 	if s.ServiceURL == "" {
-		return fmt.Errorf("SERVICE_URL is required")
+		return fmt.Errorf("server.serviceURL is required")
 	}
-	if err := HTTPURL("SERVICE_URL", s.ServiceURL); err != nil {
+	if err := HTTPURL("server.serviceURL", s.ServiceURL); err != nil {
 		return err
 	}
 	if s.MaxRequestBytes <= 0 {
-		return fmt.Errorf("SERVER_MAX_REQUEST_BYTES must be greater than zero")
+		return fmt.Errorf("server.maxRequestBytes must be greater than zero")
 	}
 	if s.ReadHeaderTimeout <= 0 {
-		return fmt.Errorf("SERVER_READ_HEADER_TIMEOUT must be greater than zero")
+		return fmt.Errorf("server.readHeaderTimeout must be greater than zero")
 	}
 	if s.ReadTimeout <= 0 {
-		return fmt.Errorf("SERVER_READ_TIMEOUT must be greater than zero")
+		return fmt.Errorf("server.readTimeout must be greater than zero")
 	}
 	if s.WriteTimeout <= 0 {
-		return fmt.Errorf("SERVER_WRITE_TIMEOUT must be greater than zero")
+		return fmt.Errorf("server.writeTimeout must be greater than zero")
 	}
 	if s.IdleTimeout <= 0 {
-		return fmt.Errorf("SERVER_IDLE_TIMEOUT must be greater than zero")
+		return fmt.Errorf("server.idleTimeout must be greater than zero")
 	}
 	return nil
 }
 
-// Load reads configuration from environment variables.
+// Load reads the configuration from the config.yaml at CONFIG_PATH (default
+// configs/config.yaml) and validates it. The file is mandatory; any setting it
+// leaves out keeps its default (see defaults).
+//
+// CONFIG_PATH and APP_ENV are the only settings read from the environment
+// directly. Secrets reach the file through "{{env:NAME}}" / "{{file:/path}}"
+// placeholders instead, which configyaml resolves at load.
 func Load() (*Config, error) {
-	serverPort := getIntEnvOrDefault("SERVER_PORT", 8080)
-
-	// Unlike ServicesConfigPath/PaymentMethodsConfigPath/CatalogConfigPath below (stored as a
-	// path string and read later, downstream), notification.Config carries the provider blocks
-	// directly (core dropped its own Path-based loading — core#227) and Validate below requires
-	// Providers to be non-empty, so it has to be read here, synchronously, for Load itself to
-	// fail closed on a missing/malformed file rather than at first send.
-	notificationProviders, err := loadNotificationProviders(getEnvOrDefault("NOTIFICATIONS_CONFIG_PATH", "configs/notification.json"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load notification config: %w", err)
+	path := strings.TrimSpace(os.Getenv("CONFIG_PATH"))
+	if path == "" {
+		path = defaultConfigPath
 	}
-
-	// config.yaml is mandatory too, so a missing or malformed file fails Load.
-	fileCfg, err := loadConfigFile(getEnvOrDefault("CONFIG_PATH", "configs/config.yaml"))
+	cfg, err := loadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	mode, err := parseMode(fileCfg.Mode)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg := &Config{
-		Mode: mode,
-		Database: database.Config{
-			Driver: database.Postgres,
-			Postgres: &database.PostgresConfig{
-				Host:     getEnvOrDefault("DB_HOST", "localhost"),
-				Port:     getIntEnvOrDefault("DB_PORT", 5432),
-				User:     getEnvOrDefault("DB_USERNAME", "postgres"),
-				Password: os.Getenv("DB_PASSWORD"), // No default for security
-				Name:     getEnvOrDefault("DB_NAME", "nsw_db"),
-				SSLMode:  getEnvOrDefault("DB_SSLMODE", "require"),
-				Pool: database.PoolConfig{
-					MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
-					MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
-					MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),
-				},
-			},
-		},
-		Server: ServerConfig{
-			Port:                     serverPort,
-			ServiceURL:               getEnvOrDefault("SERVICE_URL", fmt.Sprintf("http://localhost:%d", serverPort)),
-			ServicesConfigPath:       getEnvOrDefault("SERVICES_CONFIG_PATH", "configs/services.json"),
-			PaymentMethodsConfigPath: getEnvOrDefault("PAYMENT_METHODS_CONFIG_PATH", "configs/payment_methods.json"),
-			CatalogConfigPath:        getEnvOrDefault("CATALOG_CONFIG_PATH", "configs/catalog.json"),
-			LogLevel:                 parseLogLevel(getEnvOrDefault("SERVER_LOG_LEVEL", "info")),
-			MaxRequestBytes:          int64(getIntEnvOrDefault("SERVER_MAX_REQUEST_BYTES", 33554432)), // 32 MiB
-			ReadHeaderTimeout:        getDurationOrDefault("SERVER_READ_HEADER_TIMEOUT", 5*time.Second),
-			ReadTimeout:              getDurationOrDefault("SERVER_READ_TIMEOUT", 15*time.Second),
-			WriteTimeout:             getDurationOrDefault("SERVER_WRITE_TIMEOUT", 30*time.Second),
-			IdleTimeout:              getDurationOrDefault("SERVER_IDLE_TIMEOUT", 60*time.Second),
-		},
-		CORS: cors.Config{
-			AllowedOrigins:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_ORIGINS", "")),
-			AllowedMethods:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS")),
-			AllowedHeaders:   parseCommaSeparated(getEnvOrDefault("CORS_ALLOWED_HEADERS", "Content-Type,Authorization")),
-			AllowCredentials: getBoolOrDefault("CORS_ALLOW_CREDENTIALS", true),
-			MaxAge:           getIntEnvOrDefault("CORS_MAX_AGE", 3600),
-		},
-		Storage: nswstorage.Config{
-			Config: storage.Config{
-				Type:           getEnvOrDefault("STORAGE_TYPE", "local"),
-				LocalBaseDir:   getEnvOrDefault("STORAGE_LOCAL_BASE_DIR", "./bucket"),
-				LocalPublicURL: getEnvOrDefault("STORAGE_LOCAL_PUBLIC_URL", getEnvOrDefault("SERVICE_URL", fmt.Sprintf("http://localhost:%d", serverPort))),
-				S3Endpoint:     getEnvOrDefault("STORAGE_S3_ENDPOINT", ""),
-				S3Bucket:       getEnvOrDefault("STORAGE_S3_BUCKET", "nsw-uploads"),
-				S3Region:       getEnvOrDefault("STORAGE_S3_REGION", "us-east-1"),
-				S3AccessKey:    getEnvOrDefault("STORAGE_S3_ACCESS_KEY", ""),
-				S3SecretKey:    getEnvOrDefault("STORAGE_S3_SECRET_KEY", ""),
-				S3UseSSL:       getBoolOrDefault("STORAGE_S3_USE_SSL", true),
-				S3PublicURL:    getEnvOrDefault("STORAGE_S3_PUBLIC_URL", ""),
-				LocalPutSecret: getEnvOrDefault("STORAGE_LOCAL_PUT_SECRET", "local-dev-secret"),
-				PresignTTL:     getDurationOrDefault("STORAGE_PRESIGN_TTL", 15*time.Minute),
-			},
-			Proxy: nswstorage.ProxyConfig{
-				Service:      getEnvOrDefault("STORAGE_PROXY_SERVICE", ""),
-				UploadPath:   getEnvOrDefault("STORAGE_PROXY_UPLOAD_PATH", nswstorage.DefaultProxyUploadPath),
-				DownloadPath: getEnvOrDefault("STORAGE_PROXY_DOWNLOAD_PATH", nswstorage.DefaultProxyDownloadPath),
-				DeletePath:   getEnvOrDefault("STORAGE_PROXY_DELETE_PATH", nswstorage.DefaultProxyDeletePath),
-			},
-		},
-		Authn: authn.Config{
-			JWKSURL:               getEnvOrDefault("AUTH_JWKS_URL", "https://localhost:8090/oauth2/jwks"),
-			Issuer:                getEnvOrDefault("AUTH_ISSUER", "https://localhost:8090"),
-			Audience:              getEnvOrDefault("AUTH_AUDIENCE", "https://api.nsw-srilanka.local"),
-			ClientIDs:             parseCommaSeparated(getEnvOrDefault("AUTH_CLIENT_IDS", "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW")),
-			InsecureSkipTLSVerify: getBoolOrDefault("AUTH_JWKS_INSECURE_SKIP_VERIFY", false),
-		},
-		Notification: notification.Config{
-			Providers: notificationProviders,
-		},
-		Temporal: temporal.Config{
-			Host:      getEnvOrDefault("TEMPORAL_HOST", "localhost"),
-			Port:      getIntEnvOrDefault("TEMPORAL_PORT", 7233),
-			Namespace: getEnvOrDefault("TEMPORAL_NAMESPACE", "default"),
-		},
-		Audit: audit.Config{
-			BaseURL: getEnvOrDefault("ARGUS_SERVICE_URL", ""),
-			APIKey:  os.Getenv("ARGUS_API_KEY"),
-		},
-		// The values themselves; what each integration requires of them is the
-		// integration's own to say (see external-integration).
-		Integrations: integrations.Config{
-			SLPAWebhookSecret: os.Getenv("SLPA_WEBHOOK_SECRET"),
-		},
-		ArtifactLoader: loaders.Config{
-			Type: getEnvOrDefault("ARTIFACT_LOADER_TYPE", loaders.TypeLocal),
-			Local: local.Config{
-				Root: getEnvOrDefault("ARTIFACT_LOCAL_ROOT", "configs"),
-			},
-			GitHub: github.Config{
-				Owner:      getEnvOrDefault("ARTIFACT_GITHUB_OWNER", ""),
-				Repo:       getEnvOrDefault("ARTIFACT_GITHUB_REPO", ""),
-				Ref:        getEnvOrDefault("ARTIFACT_GITHUB_REF", ""),
-				BasePath:   getEnvOrDefault("ARTIFACT_GITHUB_BASE_PATH", ""),
-				Token:      os.Getenv("ARTIFACT_GITHUB_TOKEN"),
-				BaseURL:    getEnvOrDefault("ARTIFACT_GITHUB_BASE_URL", ""),
-				UseRawHost: getBoolOrDefault("ARTIFACT_GITHUB_USE_RAW_HOST", false),
-				RawBaseURL: getEnvOrDefault("ARTIFACT_GITHUB_RAW_BASE_URL", ""),
-			},
-			S3: s3.Config{
-				Bucket:    getEnvOrDefault("ARTIFACT_S3_BUCKET", ""),
-				Region:    getEnvOrDefault("ARTIFACT_S3_REGION", ""),
-				Endpoint:  getEnvOrDefault("ARTIFACT_S3_ENDPOINT", ""),
-				AccessKey: getEnvOrDefault("ARTIFACT_S3_ACCESS_KEY", ""),
-				SecretKey: getEnvOrDefault("ARTIFACT_S3_SECRET_KEY", ""),
-				Prefix:    getEnvOrDefault("ARTIFACT_S3_PREFIX", ""),
-			},
-		},
-		RefID: fileCfg.RefID,
-	}
-
-	// Validate required fields
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-
 	return cfg, nil
 }
 
@@ -254,7 +147,7 @@ func (c *Config) Validate() error {
 	// Refuse to skip JWKS TLS verification outside development: a forged
 	// signing-key response here means full JWT forgery / auth bypass.
 	if c.Authn.InsecureSkipTLSVerify && !isDevEnvironment() {
-		return fmt.Errorf("AUTH_JWKS_INSECURE_SKIP_VERIFY: insecure TLS verification requested but APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start — provide a trusted certificate chain, or set APP_ENV=development for a non-production run")
+		return fmt.Errorf("authn.insecureSkipTLSVerify: insecure TLS verification requested but APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start — provide a trusted certificate chain, or set APP_ENV=development for a non-production run")
 	}
 	// Outbound M2M (services.json) may also disable TLS verification per service;
 	// hold it to the same rule so an insecure token endpoint can't ship to prod.
@@ -296,7 +189,7 @@ func guardServicesConfigTLS(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G703: path is server.servicesConfigPath from the operator's own config.yaml, not user input.
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // absent config: surfaced later by LoadServices
@@ -315,62 +208,6 @@ func guardServicesConfigTLS(path string) error {
 	return nil
 }
 
-// loadNotificationProviders reads path — one settings block per channel, e.g.
-// {"email": {...}, "sms": {...}} — into notification.Config's Providers map. The file's own
-// shape is unchanged from before core#227; only how this app hands it to core did.
-func loadNotificationProviders(path string) (map[notification.ChannelType]map[string]any, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	var providers map[notification.ChannelType]map[string]any
-	if err := json.Unmarshal(data, &providers); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return providers, nil
-}
-
-// getEnvOrDefault returns the trimmed value of an environment variable or a default value.
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-// getIntEnvOrDefault returns the integer value of an environment variable or a default value.
-// Invalid values are silently ignored and the default is returned.
-func getIntEnvOrDefault(key string, defaultValue int) int {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
-}
-
-// getBoolOrDefault returns the boolean value of an environment variable or a default value.
-// Invalid values are silently ignored and the default is returned.
-func getBoolOrDefault(key string, defaultValue bool) bool {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
-		}
-	}
-	return defaultValue
-}
-
-// getDurationOrDefault returns the time.Duration value of an environment variable or a default value.
-// Invalid values are silently ignored and the default is returned.
-func getDurationOrDefault(key string, defaultValue time.Duration) time.Duration {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return defaultValue
-}
-
 // isDevEnvironment reports whether APP_ENV explicitly designates a development
 // run (case-insensitive "development"). Unset or any other value is treated as
 // production. This is the only place APP_ENV is read; it exists solely to gate
@@ -378,35 +215,4 @@ func getDurationOrDefault(key string, defaultValue time.Duration) time.Duration 
 // explicit development run.
 func isDevEnvironment() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "development")
-}
-
-// parseCommaSeparated splits a comma-separated string into a slice of trimmed strings.
-func parseCommaSeparated(value string) []string {
-	if value == "" {
-		return []string{}
-	}
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
-
-func parseLogLevel(level string) slog.Level {
-	switch strings.ToLower(level) {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
 }

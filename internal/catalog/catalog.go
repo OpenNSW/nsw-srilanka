@@ -3,7 +3,7 @@
 // deployment's concrete identifiers — IdP token roles and OAuth2 client ids
 // today, further sections later.
 //
-// It is loaded once at bootstrap (configs/catalog.json, CATALOG_CONFIG_PATH) and
+// It is loaded once at bootstrap (configs/catalog.json, server.catalogConfigPath) and
 // handed to consumers as data; no consumer reads the file itself. Unknown
 // top-level keys are ignored, so the file may grow new sections ahead of the code
 // that reads them.

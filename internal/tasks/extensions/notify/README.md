@@ -6,20 +6,27 @@ a customs house agent → confirmation email is sent".
 Two things to configure: **where to send** (gateway credentials) and **when to
 send** (an `extensions` block on a step).
 
-## 1. Gateway credentials — `notification.json`
+## 1. Gateway credentials — `notification.providers` in `config.yaml`
 
-Copy `notification.example.json` to `notification.json` (gitignored) and fill in
-real values. Restart the server after changing it.
+Set them under `notification.providers` in the server's `config.yaml` (see
+`configs/config.example.yaml`). Restart the server after changing it.
 
-```json
-{
-  "email": { "baseURL": "https://email.svc.local", "token": "your-token" },
-  "sms":   { "baseURL": "https://smsservice.lk", "userName": "...", "password": "...", "sidCode": "..." }
-}
+```yaml
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: "..."
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: "..."
 ```
 
-The email `token` may be a literal, or a secret reference: `"env:EMAIL_TOKEN"`
-(environment variable) or `"file:/run/secrets/email_token"` (file contents).
+Keep secrets out of the file: any value may be a `"{{env:NAME}}"` (environment
+variable) or `"{{file:/run/secrets/name}}"` (file contents) placeholder,
+resolved at startup.
 
 ## 2. Sending on a step — the `extensions` block
 

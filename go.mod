@@ -18,7 +18,7 @@ require (
 	github.com/OpenNSW/core/remote v0.8.0
 	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/shared v0.3.0
-	github.com/OpenNSW/core/storage v0.1.0
+	github.com/OpenNSW/core/storage v0.2.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -27,6 +27,7 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.12.1
 	go.temporal.io/sdk v1.49.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )
@@ -76,5 +77,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

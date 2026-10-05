@@ -33,18 +33,19 @@ nsw-srilanka/
 │   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
 │   ├── services.example.json                # Template for services.json (local/native dev — localhost)
 │   ├── payment_methods.example.json         # Template for payment_methods.json
-│   ├── notification.example.json            # Template for notification.json
+│   ├── config.example.yaml                  # Template for config.yaml (server config — local/native dev)
+│   ├── config.docker.example.yaml           # Template for config.docker.yaml (server config — Docker Compose)
 │   ├── catalog.example.json                 # Template for catalog.json
 │   └── companies.example.json               # Template for companies.json
 ├── compose.yml / compose.override.yml     # Docker Compose stack (base + dev hot-reload override)
-├── .env.example                            # Template for environment variables
+├── .env.example                            # Template for .env (secrets and Docker Compose host settings)
 ├── Dockerfile
 ├── Makefile
 ├── go.mod
 └── go.sum
 ```
 
-The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured via `ARTIFACT_*` env — see [`.env.example`](.env.example)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which files to load at startup.
+The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which files to load at startup.
 
 For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
 
@@ -53,7 +54,7 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ## How to Run Locally
 >[!NOTE]
 > ⚠️ **This quickstart is for local development only.** The example configs enable
-> insecure TLS (`AUTH_JWKS_INSECURE_SKIP_VERIFY=true`, `insecure_skip_tls_verify`
+> insecure TLS (`authn.insecureSkipTLSVerify: true`, `insecure_skip_tls_verify`
 > in `services.json`) for the self-signed local IdP. The backend only honors these
 > when `APP_ENV=development` — which `make dev`/`make preview` inject and nothing
 > else does — so a raw `docker compose up` or any real deployment **refuses to
@@ -66,7 +67,7 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 make setup
 ```
 
-This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, and `configs/{services,services.docker,payment_methods,notification,catalog,companies}.json`. Existing files are never overwritten, so it is safe to re-run.
+This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/{services,services.docker,payment_methods,catalog,companies}.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
 
 > [!NOTE]
 > `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.
@@ -142,7 +143,7 @@ The dev container is hermetic: it builds from the pinned `go.mod` version, ignor
    ```bash
    go work init . ../core
    ```
-2. **Prepare config** — the `.env` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`. The host binary also needs the `localhost` variant of the service endpoints, `configs/services.json` (also seeded by `make setup`) — in `.env`, switch `SERVICES_CONFIG_PATH` to the commented-out `./configs/services.json` line.
+2. **Prepare config** — the `configs/config.yaml` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`, and `.env` supplies the secrets it references. The host binary also needs the `localhost` variant of the service endpoints, `configs/services.json` (also seeded by `make setup`) — in `configs/config.yaml`, switch `server.servicesConfigPath` to the commented-out `./configs/services.json` line.
 3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
    ```bash
    make deps
@@ -152,7 +153,7 @@ The dev container is hermetic: it builds from the pinned `go.mod` version, ignor
    go run ./cmd/server
    ```
 
-Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a native debugger. Because `docker compose` reads the same `.env`, the published service ports and the ports your host binary connects to stay in sync automatically (e.g. `DB_PORT`).
+Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a native debugger. The ports `docker compose` publishes come from `.env` (e.g. `DB_PORT`), while the host binary connects to the ones in `configs/config.yaml` (`db.postgres.port`) — keep the two in step.
 
 > Don't mix the two: if `make dev` is already running, its `api` container holds port `8080` — run `make down` (or just `docker compose stop api`) before starting the native server.
 
@@ -235,23 +236,24 @@ docker compose run --rm migrate status   # show applied / pending
 docker compose run --rm migrate down     # roll back the latest migration
 ```
 
-**Locally (native, without Docker):** install the tool once, then point it at
-your database. Note the env var names differ slightly from the app's
-(`DB_USER`, not `DB_USERNAME`):
+**Locally (native, without Docker):** install the tool once, then run it on the
+same `configs/config.yaml` the server uses — it reads the `db` section (its
+`driver` and `postgres` keys) and nothing else. Every `{{env:…}}` placeholder in
+the file must resolve, so source `.env` first:
 
 ```bash
 # Read the pin out of the Dockerfile rather than repeating it — MIGRATE_VERSION
 # there is the single source of truth, and compose and the Makefile both defer to it.
 go install github.com/OpenNSW/agency/backend/cmd/migrate@"$(sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)"
 
-DB_DRIVER=postgres MIGRATION_DIR=./migrations \
-  DB_HOST=localhost DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" \
-  DB_USER="$DB_USERNAME" DB_PASSWORD="$DB_PASSWORD" \
+set -a; . ./.env; set +a
+CONFIG_PATH=./configs/config.yaml \
   migrate up        # or: status | down | generate <name>
 ```
 
 `migrate generate <name>` scaffolds the next `NNN_<name>.sql` with empty
-`@UP`/`@DOWN` stubs.
+`@UP`/`@DOWN` stubs; it needs no database, so `make migration name=<name>` runs
+it with no config file at all.
 
 ## Upstream Dependency
 
@@ -278,14 +280,14 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 | File                           | Purpose                                                                          | Source of truth                        |
 |--------------------------------|----------------------------------------------------------------------------------|----------------------------------------|
-| `.env`                         | Runtime environment (DB, Temporal, CORS, auth, storage, config paths)            | `.env.example`                         |
+| `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)     | `.env.example`                         |
 | `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                 | `idp/.env.example`                     |
 | `configs/services.docker.json` | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json` |
 | `configs/services.json`        | Outbound service endpoints — uses `localhost` (for native/host dev runs)         | `configs/services.example.json`        |
 | `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)          | `configs/payment_methods.example.json` |
-| `configs/notification.json`    | Notification provider settings (SMS, email channels)                             | `configs/notification.example.json`    |
 | `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids           | `configs/catalog.example.json`         |
 | `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)              | `configs/companies.example.json`       |
-| `configs/config.yaml`          | Server config file (mandatory; `CONFIG_PATH`) — reference ID formats (`refid`)   | `configs/config.example.yaml`          |
+| `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml` |
+| `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname  | `configs/config.docker.example.yaml`   |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.
