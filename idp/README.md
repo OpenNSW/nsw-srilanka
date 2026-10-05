@@ -364,10 +364,18 @@ becomes the access-token **audience** (`aud`):
 > is also how `idp/resources/**` names a resource server in `resourceServer:` references,
 > so changing one means changing those too.
 >
-> `AUTH_AUDIENCE` in the backend must equal the `NSW_API` identifier — it is set in
-> `.env.example`, `compose.yml`, `cmd/server/config/config.go` and
-> `deployments/helm/values-example.yaml`. Changing the identifier means changing all
-> four (and any existing local `.env`).
+> `AUTH_AUDIENCE` in each backend must equal its own resource server's identifier:
+>
+> - **TNSW** (`api`): the `NSW_API` identifier, `https://api.nsw-srilanka.local`. It is
+>   set in `.env.example`, `compose.yml`, `cmd/server/config/config.go` and
+>   `deployments/helm/values-example.yaml`. Changing the identifier means changing all
+>   four (and any existing local `.env`).
+> - **CDA** (`cda-api`): the `CDA API` identifier, `https://api.cda.nsw-agency.local`. It
+>   is set in `configs/agency/cda/cda.env` and the `cda-api` service in `compose.yml`. Its
+>   callers request it as `resource=`: the CDA portal in
+>   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
+>   `configs/services*.example.json`. Changing the identifier means changing all of these
+>   (and any existing local `configs/services*.json`).
 
 Scopes are namespaced (`nsw:*` / `agency:*`). The CDA API reuses `nsw:*` names, since it
 is the same backend; that is safe because every caller names its target with `resource`
