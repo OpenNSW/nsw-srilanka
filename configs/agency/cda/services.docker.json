@@ -3,7 +3,7 @@
   "services": [
     {
       "id": "tnsw",
-      "url": "http://host.docker.internal:8080",
+      "url": "http://api:8080",
       "timeout": "30s",
       "auth": {
         "type": "oauth2",
