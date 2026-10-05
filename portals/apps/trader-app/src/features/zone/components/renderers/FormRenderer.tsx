@@ -116,10 +116,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [showErrors, setShowErrors] = useState(false)
 
   const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
-  const notLaterThanErrors = useMemo(
-    () => collectNotLaterThanErrors(payload.schema, data),
-    [payload.schema, data],
-  )
+  const notLaterThanErrors = useMemo(() => collectNotLaterThanErrors(payload.schema, data), [payload.schema, data])
   // JsonForms merges additionalErrors with native AJV errors. Absent keys
   // already produce a required error; synthesizing another would render
   // "X is required" twice. Only present empty values ("" / []) need a
