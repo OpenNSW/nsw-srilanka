@@ -18,12 +18,12 @@ require (
 	github.com/OpenNSW/core/remote v0.8.0
 	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/shared v0.3.0
-	github.com/OpenNSW/core/storage v0.1.0
+	github.com/OpenNSW/core/storage v0.2.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.12.1
 	go.temporal.io/sdk v1.49.0
