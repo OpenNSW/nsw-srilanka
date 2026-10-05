@@ -3,23 +3,34 @@
 #   helm install lk-tnsw ./lk-tnsw -f ./values-example.yaml
 #
 # This chart deploys the app only. Infra dependencies (Postgres, Temporal,
-# Thunder ID, Argus) are separate deployments — the env below just points at
-# their in-cluster Service names / external URLs.
+# Thunder ID, Argus) are separate deployments — backend.config below just
+# points at their in-cluster Service names / external URLs.
 #
-# Mirrors .env.example. NON-secret config lives here in plain text; SECRETS
-# (DB_PASSWORD, M2M_*_SECRET, ARGUS_API_KEY, etc.) are referenced from a
-# Kubernetes Secret and must NEVER be written here. Create the Secret
-# out-of-band, e.g.:
+# NON-secret config lives here in plain text: backend.config is the server's
+# config.yaml (same schema as configs/config.example.yaml). SECRETS are
+# referenced from a Kubernetes Secret and must NEVER be written here:
+# backend.env exposes each one as an env var, and backend.config reads it by
+# "{{env:NAME}}" placeholder. Create the Secrets out-of-band, e.g.:
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
+#     --from-literal=argus-api-key=... \
+#     --from-literal=slpa-webhook-secret=... \
+#     --from-literal=notification-email-token=... \
+#     --from-literal=notification-sms-password=... \
 #     --from-literal=m2m-npqs-secret=... \
 #     --from-literal=m2m-fcau-secret=... \
 #     --from-literal=m2m-cda-secret=... \
 #     --from-literal=m2m-slpa-secret=... \
 #     --from-literal=m2m-customs-secret=... \
 #     --from-literal=m2m-sltb-secret=... \
-#     --from-literal=m2m-asycuda-secret=... \
-#     --from-literal=argus-api-key=...
+#     --from-literal=m2m-asycuda-secret=...
+#   kubectl create secret generic govpay-go-private-key \
+#     --from-file=go_private.pem=...
+#
+# Adding a secret takes three steps: a key in the Secret, an entry in
+# backend.env, and a "{{env:NAME}}" placeholder in backend.config. A
+# placeholder whose env var is unset stops the server (and the migration Job)
+# at startup.
 #
 # The https:// URLs and client IDs below are placeholders — replace them with
 # your environment's real IdP, Temporal, and Argus endpoints.
@@ -104,7 +115,7 @@ backend:
   # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
   # gateway needs the private key. payment_methods.json points at it with
   # "private_key": "file:/certs/govpay/go_private.pem"; this mounts it there
-  # from the govpay-go-private-key Secret created above. Without the key the
+  # from the govpay-go-private-key Secret (see the top of this file). Without the key the
   # backend starts but answers every GovPay+ call with 500; a key that is set
   # but unreadable stops the backend at startup.
   volumes:
@@ -172,6 +183,9 @@ backend:
         repo: one-trade-artifacts
         ref: main              # prefer an immutable tag/SHA in production
         basePath: tnsw
+        # Required for a private repo (lifts the rate limit on a public one).
+        # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
+        # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
 
     # Trader/agency portals calling this API.
     cors:
@@ -181,7 +195,7 @@ backend:
       allowCredentials: true
       maxAge: 3600
 
-    # Uploaded document blobs.
+    # Uploaded document blobs: local | s3 | proxy (see configs/config.example.yaml).
     storage:
       type: s3
       presignTTLSeconds: 900
@@ -189,6 +203,12 @@ backend:
         bucket: nsw-uploads
         region: auto
         endpoint: "https://<accountid>.r2.cloudflarestorage.com"
+        # Static credentials, set together; leave both out to use the default
+        # AWS credential chain (e.g. IRSA). R2 needs them. Add
+        # STORAGE_S3_ACCESS_KEY / STORAGE_S3_SECRET_KEY to backend.env from a
+        # Secret first.
+        # accessKey: "{{env:STORAGE_S3_ACCESS_KEY}}"
+        # secretKey: "{{env:STORAGE_S3_SECRET_KEY}}"
 
     # Inbound auth: tokens this backend accepts.
     authn:
@@ -313,7 +333,7 @@ frontend:
     IDP_BASE_URL: "https://idp.example.com"
     IDP_CLIENT_ID: "TRADER_PORTAL_APP"
     # Extra /authorize parameters, query-string encoded (use "&" for more than one).
-    # The `resource` value must equal AUTH_AUDIENCE / the NSW_API resource-server identifier.
+    # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
     IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
