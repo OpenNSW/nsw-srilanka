@@ -456,10 +456,9 @@ services:
       context: .
       additional_contexts:
         migrate: service:migrate
-        temporal: docker-image://temporalio/auto-setup:1.28.3
       dockerfile_inline: |
         FROM postgres:16-alpine
-        COPY --from=temporal /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
         COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
         COPY --from=migrate /app/migrations /app/migrations
         ENV MIGRATION_DIR=/app/migrations DB_DRIVER=postgres
