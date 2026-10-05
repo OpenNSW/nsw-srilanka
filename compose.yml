@@ -500,7 +500,8 @@ services:
     networks:
       - nsw-network
     ports:
-      - "${CDA_BACKEND_PORT:-8083}:8080"
+      # Fixed: the CDA portal's config and TNSW's "cda" service entry both call 8083.
+      - "8083:8080"
     volumes:
       - ./configs:/app/configs:ro
       # ARTIFACT_LOADER_TYPE=local reads a one-trade-artifacts clone's cda-v2/ dir.
@@ -518,7 +519,7 @@ services:
       - TEMPORAL_NAMESPACE=cda
       - SERVER_PORT=8080
       - SERVER_LOG_LEVEL=${SERVER_LOG_LEVEL:-debug}
-      - SERVICE_URL=http://localhost:${CDA_BACKEND_PORT:-8083}
+      - SERVICE_URL=http://localhost:8083
       - CORS_ALLOWED_ORIGINS=http://localhost:${CDA_PORTAL_PORT:-5176}
       - AUTH_ISSUER=https://localhost:${IDP_PORT:-8090}
       - AUTH_JWKS_URL=https://thunderid:${IDP_PORT:-8090}/oauth2/jwks

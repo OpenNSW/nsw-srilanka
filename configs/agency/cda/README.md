@@ -30,7 +30,7 @@ Values marked ASSUMED in `cda.env` are placeholders to replace.
 rebuild them after a change with `docker compose up -d --build cda-api cda-portal`.
 
 TNSW in compose reaches it at `host.docker.internal:8083`, through the `cda` entry its
-`services.docker.json` already has. Overrides: `CDA_BACKEND_PORT`, `CDA_PORTAL_PORT`,
+`services.docker.json` already has. Overrides: `CDA_PORTAL_PORT`,
 `CDA_AUTH_AUDIENCE`, `CDA_ARTIFACT_GITHUB_REF`, and `CDA_ARTIFACT_LOADER_TYPE=local` with
 `CDA_ARTIFACT_LOCAL_ROOT` for a local `one-trade-artifacts/cda-v2` checkout.
 
