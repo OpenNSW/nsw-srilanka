@@ -44,8 +44,8 @@
           "client_id": "NSW_TO_CDA",
           "client_secret": "env:M2M_NSW_TO_CDA_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"],
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "scopes": ["nsw:workflow:inject"],
+          "endpoint_params": { "resource": "https://api.cda.nsw-agency.local" }
         }
       }
     },

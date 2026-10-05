@@ -43,9 +43,9 @@
           "token_url": "https://localhost:8090/oauth2/token",
           "client_id": "NSW_TO_CDA",
           "client_secret": "env:M2M_NSW_TO_CDA_SECRET",
-          "scopes": ["agency:application:inject"],
+          "scopes": ["nsw:workflow:inject"],
           "insecure_skip_tls_verify": true,
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "endpoint_params": { "resource": "https://api.cda.nsw-agency.local" }
         }
       }
     },

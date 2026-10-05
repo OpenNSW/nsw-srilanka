@@ -1,0 +1,9 @@
+# CDA (Coconut Development Authority) agency deployment. See configs/agency/cda/README.md.
+#
+# Never write a secret into this file: use "{{env:NAME}}" or "{{file:/path}}".
+
+mode: agency
+
+# The cda-v2 artifacts use no REFID_GENERATOR tasks.
+refid:
+  issuers: []

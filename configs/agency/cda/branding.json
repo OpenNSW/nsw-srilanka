@@ -1,0 +1,15 @@
+{
+  "branding": {
+    "systemName": "CDA",
+    "appName": "CDA Officer Portal",
+    "logoUrl": "",
+    "systemLogoUrl": "",
+    "favicon": "",
+    "portalName": "CDA Officer Portal",
+    "description": "Coconut Development Authority review of export applications received through the National Single Window.",
+    "heroImageUrl": "",
+    "partnerLogos": [{ "url": "", "alt": "" }],
+    "footerLinks": [],
+    "copyrightNotice": "© 2026 Coconut Development Authority. All rights reserved."
+  }
+}

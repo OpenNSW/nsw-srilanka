@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "services": [
+    {
+      "id": "tnsw",
+      "url": "http://api:8080",
+      "timeout": "30s",
+      "auth": {
+        "type": "oauth2",
+        "options": {
+          "token_url": "https://thunderid:8090/oauth2/token",
+          "client_id": "CDA_TO_NSW",
+          "client_secret": "env:M2M_CDA_TO_NSW_SECRET",
+          "scopes": ["nsw:task:write"],
+          "insecure_skip_tls_verify": true,
+          "endpoint_params": { "resource": "https://api.nsw-srilanka.local" }
+        }
+      }
+    }
+  ]
+}

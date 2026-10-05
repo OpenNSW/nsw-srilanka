@@ -245,8 +245,11 @@ func (c *Config) Validate() error {
 	if err := c.Authn.Validate(); err != nil {
 		return fmt.Errorf("invalid authn configuration: %w", err)
 	}
-	if err := c.Integrations.Validate(); err != nil {
-		return fmt.Errorf("invalid external integration configuration: %w", err)
+	// TNSW's trade integrations; an agency builds none of them.
+	if c.Mode != ModeAgency {
+		if err := c.Integrations.Validate(); err != nil {
+			return fmt.Errorf("invalid external integration configuration: %w", err)
+		}
 	}
 	// Refuse to skip JWKS TLS verification outside development: a forged
 	// signing-key response here means full JWT forgery / auth bypass.
