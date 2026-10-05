@@ -148,11 +148,10 @@ is [`configs/config.example.yaml`](../../../configs/config.example.yaml)). The
 chart renders it into a ConfigMap and mounts it read-only at
 `backend.configMountPath` (`/app/config`), then points `CONFIG_PATH` there.
 Every server setting lives here — the backend reads no other env vars besides
-`APP_ENV` and the secrets the file references. A setting left out keeps its
-built-in default; the ones with none (`db.postgres.password`,
-`cors.allowedOrigins`, `notification.providers`,
-`integrations.slpaWebhookSecret`) must be set, or the server refuses to start.
-`backend.config` is empty by default, so an override file always sets them.
+`APP_ENV` and the secrets the file references. There are no built-in
+defaults: every setting the server needs must be set, or it refuses to start
+(see [`values-example.yaml`](../values-example.yaml) for a complete one).
+`backend.config` is empty by default, so an override file always sets it.
 
 - To use a file of your own instead, set `backend.env.CONFIG_PATH`. The chart
   then leaves `CONFIG_PATH` alone.

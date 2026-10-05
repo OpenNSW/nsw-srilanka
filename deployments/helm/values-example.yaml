@@ -117,10 +117,11 @@ backend:
       readOnly: true
 
   # The server's config.yaml, authored here as values; the chart mounts it and
-  # sets CONFIG_PATH (see values.yaml). A setting left out keeps its built-in
-  # default. Full schema and every option: configs/config.example.yaml.
+  # sets CONFIG_PATH (see values.yaml). There are no built-in defaults: every
+  # setting the server needs is set below, and one left out stops it at
+  # startup. Full schema and every option: configs/config.example.yaml.
   config:
-    # "tnsw" (default) or "agency" — see docs/agency.md.
+    # "tnsw" or "agency" — see docs/agency.md. Required.
     mode: tnsw
 
     server:
@@ -183,6 +184,7 @@ backend:
     # Uploaded document blobs.
     storage:
       type: s3
+      presignTTLSeconds: 900
       s3:
         bucket: nsw-uploads
         region: auto

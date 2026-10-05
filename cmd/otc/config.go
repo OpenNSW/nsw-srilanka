@@ -27,8 +27,8 @@ type Config struct {
 	Database database.Config `yaml:"db"`
 }
 
-// Load reads the config file at CONFIG_PATH (default configs/config.yaml) over
-// the defaults below and validates the database settings.
+// Load reads the config file at CONFIG_PATH (default configs/config.yaml) and
+// validates the database settings.
 //
 // Every "{{env:NAME}}" / "{{file:/path}}" placeholder in the file is resolved,
 // not only the db section's, so on the server's config.yaml the secrets
@@ -41,15 +41,14 @@ func Load() (*Config, error) {
 	return loadFile(path)
 }
 
-// loadFile decodes the config file at path over the defaults and validates it.
+// loadFile decodes the config file at path and validates its db section,
+// which has no built-in defaults: every setting otc connects with is set in it.
 func loadFile(path string) (*Config, error) {
-	// The same defaults the server starts from; the password has none, so the
-	// file sets it, as a placeholder.
-	cfg := &Config{Database: nswdatabase.Defaults()}
+	cfg := &Config{}
 	if err := configyaml.LoadAndExpand(path, cfg); err != nil {
 		return nil, err
 	}
-	if err := cfg.Database.Validate(); err != nil {
+	if err := nswdatabase.Validate(cfg.Database); err != nil {
 		return nil, fmt.Errorf("invalid database configuration: %w", err)
 	}
 

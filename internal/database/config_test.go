@@ -1,54 +1,51 @@
 package database
 
 import (
+	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"github.com/OpenNSW/core/database"
 )
 
-func TestDefaults_FileOverridesKeys(t *testing.T) {
-	cfg := Defaults()
-	if err := yaml.Unmarshal([]byte(`
-driver: postgres
-postgres:
-  host: nsw-db
-  port: 6543
-  user: nsw
-  password: secret
-  pool:
-    maxOpenConns: 50
-`), &cfg); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	pg := cfg.Postgres
-	for _, tc := range []struct {
-		name string
-		got  any
-		want any
-	}{
-		{"Host", pg.Host, "nsw-db"},
-		{"Port", pg.Port, 6543},
-		{"User", pg.User, "nsw"},
-		{"Password", pg.Password, "secret"},
-		{"Pool.MaxOpenConns", pg.Pool.MaxOpenConns, 50},
-		// Left out of the file, so the defaults.
-		{"Name", pg.Name, "nsw_db"},
-		{"SSLMode", pg.SSLMode, "require"},
-		{"Pool.MaxIdleConns", pg.Pool.MaxIdleConns, 10},
-		{"Pool.MaxConnLifetimeSeconds", pg.Pool.MaxConnLifetimeSeconds, 3600},
-	} {
-		if tc.got != tc.want {
-			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
-		}
+func validPostgres() database.Config {
+	return database.Config{
+		Driver: database.Postgres,
+		Postgres: &database.PostgresConfig{
+			Host:     "localhost",
+			Port:     5432,
+			User:     "postgres",
+			Password: "secret",
+			Name:     "nsw_db",
+			SSLMode:  "require",
+		},
 	}
 }
 
-// Defaults hands out a fresh postgres block each call, so decoding a file over
-// one result cannot leak into the next.
-func TestDefaults_Independent(t *testing.T) {
-	a, b := Defaults(), Defaults()
-	a.Postgres.Host = "changed"
-	if b.Postgres.Host != "localhost" {
-		t.Fatalf("Defaults() results share a postgres block")
+func TestValidate(t *testing.T) {
+	for name, tc := range map[string]struct {
+		mutate  func(*database.Config)
+		wantErr string
+	}{
+		"complete":          {func(*database.Config) {}, ""},
+		"no driver":         {func(c *database.Config) { c.Driver = "" }, "driver is required"},
+		"no password":       {func(c *database.Config) { c.Postgres.Password = "" }, "password is required"},
+		"no port":           {func(c *database.Config) { c.Postgres.Port = 0 }, "db.postgres.port"},
+		"port out of range": {func(c *database.Config) { c.Postgres.Port = 70000 }, "db.postgres.port"},
+		"no sslMode":        {func(c *database.Config) { c.Postgres.SSLMode = "" }, "db.postgres.sslMode is required"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := validPostgres()
+			tc.mutate(&cfg)
+			err := Validate(cfg)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("Validate() = %v, want an error containing %q", err, tc.wantErr)
+			}
+		})
 	}
 }

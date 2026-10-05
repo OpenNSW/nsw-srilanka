@@ -25,31 +25,12 @@ func loadYAML(t *testing.T, body string) (*Config, error) {
 
 // --- Load ---
 
-func TestLoad_Defaults(t *testing.T) {
-	// db.postgres.password has no default and is required — set it explicitly.
-	cfg, err := loadYAML(t, "db:\n  postgres:\n    password: testpassword\n")
-	if err != nil {
-		t.Fatalf("Load() error: %v", err)
-	}
-
-	for _, tc := range []struct {
-		name string
-		got  any
-		want any
-	}{
-		{"Database.Host", cfg.Database.Postgres.Host, "localhost"},
-		{"Database.Port", cfg.Database.Postgres.Port, 5432},
-		{"Database.Username", cfg.Database.Postgres.User, "postgres"},
-		{"Database.Password", cfg.Database.Postgres.Password, "testpassword"},
-		{"Database.Name", cfg.Database.Postgres.Name, "nsw_db"},
-		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "require"},
-		{"Database.MaxIdleConns", cfg.Database.Postgres.Pool.MaxIdleConns, 10},
-		{"Database.MaxOpenConns", cfg.Database.Postgres.Pool.MaxOpenConns, 100},
-		{"Database.MaxConnLifetimeSeconds", cfg.Database.Postgres.Pool.MaxConnLifetimeSeconds, 3600},
-	} {
-		if tc.got != tc.want {
-			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
-		}
+// There are no built-in defaults: a db section that sets only the password
+// is refused rather than completed with a host, user or sslMode of otc's own.
+func TestLoad_NoDefaults(t *testing.T) {
+	_, err := loadYAML(t, "db:\n  driver: postgres\n  postgres:\n    password: testpassword\n")
+	if err == nil || !strings.Contains(err.Error(), "invalid database configuration") {
+		t.Fatalf("expected an incomplete db section to be refused, got: %v", err)
 	}
 }
 
@@ -106,9 +87,14 @@ cors:
 storage:
   type: not-a-backend
 db:
+  driver: postgres
   postgres:
     host: db
+    port: 5432
+    user: postgres
     password: testpassword
+    name: nsw_db
+    sslMode: disable
 `)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -136,7 +122,7 @@ audit:
 // The server's committed templates load as otc's config too, with the env vars
 // .env.example sets for their placeholders.
 func TestLoad_ServerTemplates(t *testing.T) {
-	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD"} {
+	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
 		t.Setenv(k, "example-"+k)
 	}
 	for name, host := range map[string]string{
@@ -157,8 +143,8 @@ func TestLoad_ServerTemplates(t *testing.T) {
 }
 
 func TestLoad_DatabaseValidationError(t *testing.T) {
-	// db.postgres.password not set (no default) → database.Validate returns error
-	_, err := loadYAML(t, "db:\n  postgres:\n    host: localhost\n")
+	// No db.postgres.password → database.Validate returns error
+	_, err := loadYAML(t, "db:\n  driver: postgres\n  postgres:\n    host: localhost\n")
 	if err == nil {
 		t.Fatal("expected error for missing db.postgres.password, got nil")
 	}

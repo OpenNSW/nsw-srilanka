@@ -1,21 +1,20 @@
-# CDA (Coconut Development Authority) agency deployment, for a native run
-# (`go run ./cmd/server` with cda.env loaded). See configs/agency/cda/README.md.
-# The Docker Compose cda-api reads config.docker.yaml instead; the two differ
-# only in reaching the shared services by container hostname there rather than
-# localhost. Every key is documented in configs/config.example.yaml.
+# CDA (Coconut Development Authority) agency deployment, for the Docker Compose
+# cda-init and cda-api services (compose.yml points their CONFIG_PATH here). See
+# configs/agency/cda/README.md. A native run reads config.yaml instead; the two
+# differ only in reaching the shared services by container hostname here rather
+# than localhost. Every key is documented in configs/config.docker.example.yaml.
 #
 # Never write a secret into this file: use "{{env:NAME}}" or "{{file:/path}}".
-# The ones below are set by cda.env.
+# The ones below are passed to the containers by compose.yml.
 
 mode: agency
 
-# Its own database on the shared Postgres. ASSUMED name; create it before
-# running migrations (`docker compose run --rm cda-init` does).
+# Its own database on the shared Postgres, created by cda-init.
 db:
   driver: postgres
   postgres:
-    host: localhost
-    port: 55432
+    host: db
+    port: 5432
     user: postgres
     password: "{{env:DB_PASSWORD}}"
     name: cda_db
@@ -26,19 +25,21 @@ db:
       maxConnLifetimeSeconds: 3600
 
 server:
-  # 8083 is where TNSW's services.json already points its "cda" service.
-  port: 8083
+  port: 8080
   logLevel: debug
+  # The browser-facing URL: the host port compose publishes. TNSW's
+  # services.docker.json "cda" entry also calls 8083.
   serviceURL: http://localhost:8083
   maxRequestBytes: 33554432
   readHeaderTimeout: 5s
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  # services.json: "tnsw", where notify_decision posts the decision back.
-  servicesConfigPath: ./configs/agency/cda/services.json
-  paymentMethodsConfigPath: ./configs/agency/cda/payment_methods.json
-  catalogConfigPath: ./configs/agency/cda/catalog.json
+  # services.docker.json: "tnsw" at api:8080, where notify_decision posts the
+  # decision back.
+  servicesConfigPath: configs/agency/cda/services.docker.json
+  paymentMethodsConfigPath: configs/agency/cda/payment_methods.json
+  catalogConfigPath: configs/agency/cda/catalog.json
 
 # The CDA portal (the trader-app in agency mode).
 cors:
@@ -49,20 +50,21 @@ cors:
   allowCredentials: true
   maxAge: 3600
 
-# Its own bucket directory.
+# The cda_bucket_data volume is mounted at /app/bucket.
 storage:
   type: local
   presignTTLSeconds: 900
   local:
-    baseDir: ./bucket-cda
+    baseDir: ./bucket
     publicURL: http://localhost:8083
     putSecret: "{{env:STORAGE_LOCAL_PUT_SECRET}}"
 
 # Officers sign in through the CDA portal client, and NSW injects as NSW_TO_CDA.
 # The audience is the CDA API resource server in
-# idp/resources/shared/resource-servers.json.
+# idp/resources/shared/resource-servers.json. The keys are fetched in-network;
+# the issuer is the browser-facing host the tokens are minted for.
 authn:
-  jwksURL: https://localhost:8090/oauth2/jwks
+  jwksURL: https://thunderid:8090/oauth2/jwks
   issuer: https://localhost:8090
   audience: https://api.cda.nsw-agency.local
   clientIDs:
@@ -83,10 +85,10 @@ notification:
       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
       sidCode: sidCode
 
-# Its own namespace, so TNSW and CDA workers never pick up each other's
-# workflows. ASSUMED name; register it first (cda-init does).
+# Its own namespace, created by cda-init, so TNSW and CDA workers never pick up
+# each other's workflows.
 temporal:
-  host: localhost
+  host: temporal
   port: 7233
   namespace: cda
 
@@ -99,9 +101,10 @@ artifactLoader:
     repo: one-trade-artifacts
     ref: feat/add-cda-agency-config-to-workflows
     basePath: cda-v2
-  # Or from a local checkout, with type: local.
+  # Offline alternative, with type: local: set CDA_ARTIFACT_LOCAL_ROOT in .env
+  # to a clone's cda-v2 dir; compose bind-mounts that at /app/artifacts.
   # local:
-  #   root: ../one-trade-artifacts/cda-v2
+  #   root: /app/artifacts
 
 # The cda-v2 artifacts use no REFID_GENERATOR tasks.
 refid:

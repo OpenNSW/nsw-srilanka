@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/artifact/loaders"
+	"github.com/OpenNSW/core/configyaml"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
@@ -19,13 +20,18 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
+
+// defaultConfigPath is where Load looks for config.yaml when CONFIG_PATH is
+// unset.
+const defaultConfigPath = "configs/config.yaml"
 
 // Config holds all configuration for the application, in the shape of
 // config.yaml: each field is one top-level section of the file.
 type Config struct {
-	// Mode is what this deployment runs as: TNSW (the default) or an agency.
+	// Mode is what this deployment runs as: TNSW or an agency. Required.
 	Mode Mode `yaml:"mode"`
 
 	Database     database.Config     `yaml:"db"`
@@ -78,6 +84,9 @@ func (a AuditConfig) ClientConfig() audit.Config {
 
 // Validate checks that the server configuration is valid.
 func (s ServerConfig) Validate() error {
+	if s.Port < 1 || s.Port > 65535 {
+		return fmt.Errorf("server.port must be between 1 and 65535, got %d", s.Port)
+	}
 	if s.ServiceURL == "" {
 		return fmt.Errorf("server.serviceURL is required")
 	}
@@ -99,12 +108,22 @@ func (s ServerConfig) Validate() error {
 	if s.IdleTimeout <= 0 {
 		return fmt.Errorf("server.idleTimeout must be greater than zero")
 	}
+	for _, p := range []struct{ key, path string }{
+		{"server.servicesConfigPath", s.ServicesConfigPath},
+		{"server.paymentMethodsConfigPath", s.PaymentMethodsConfigPath},
+		{"server.catalogConfigPath", s.CatalogConfigPath},
+	} {
+		if strings.TrimSpace(p.path) == "" {
+			return fmt.Errorf("%s is required", p.key)
+		}
+	}
 	return nil
 }
 
 // Load reads the configuration from the config.yaml at CONFIG_PATH (default
-// configs/config.yaml) and validates it. The file is mandatory; any setting it
-// leaves out keeps its default (see defaults).
+// configs/config.yaml) and validates it. The file is mandatory and has no
+// built-in defaults: every setting the server needs is set in it, and one left
+// out fails Validate here, at startup, rather than when it is first used.
 //
 // CONFIG_PATH and APP_ENV are the only settings read from the environment
 // directly. Secrets reach the file through "{{env:NAME}}" / "{{file:/path}}"
@@ -124,12 +143,25 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// loadFile decodes config.yaml at path, resolving its placeholders. It does
+// not validate.
+func loadFile(path string) (*Config, error) {
+	var cfg Config
+	if err := configyaml.LoadAndExpand(path, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
 // Validate checks that all required configuration is present.
 func (c *Config) Validate() error {
+	if err := c.Mode.Validate(); err != nil {
+		return err
+	}
 	if err := c.Server.Validate(); err != nil {
 		return fmt.Errorf("invalid server configuration: %w", err)
 	}
-	if err := c.Database.Validate(); err != nil {
+	if err := nswdatabase.Validate(c.Database); err != nil {
 		return fmt.Errorf("invalid database configuration: %w", err)
 	}
 	if err := c.Storage.Validate(); err != nil {
@@ -157,7 +189,7 @@ func (c *Config) Validate() error {
 	if err := c.Temporal.Validate(); err != nil {
 		return fmt.Errorf("invalid temporal configuration: %w", err)
 	}
-	if err := c.CORS.Validate(); err != nil {
+	if err := validateCORS(c.CORS); err != nil {
 		return fmt.Errorf("invalid CORS configuration: %w", err)
 	}
 	if err := c.Notification.Validate(); err != nil {
@@ -165,6 +197,22 @@ func (c *Config) Validate() error {
 	}
 	if err := c.ArtifactLoader.Validate(); err != nil {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
+	}
+	return nil
+}
+
+// validateCORS runs core/cors's checks, then requires the allowed methods and
+// headers too: core/cors accepts them empty, which answers every preflight with
+// none allowed, so browsers refuse all but simple requests.
+func validateCORS(c cors.Config) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	if len(c.AllowedMethods) == 0 {
+		return fmt.Errorf("cors.allowedMethods is required")
+	}
+	if len(c.AllowedHeaders) == 0 {
+		return fmt.Errorf("cors.allowedHeaders is required")
 	}
 	return nil
 }

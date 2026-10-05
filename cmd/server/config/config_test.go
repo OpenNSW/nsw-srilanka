@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,23 +21,57 @@ import (
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
+	"gopkg.in/yaml.v3"
 )
 
-// The smallest config.yaml Load accepts, in pieces so a test can swap one
-// section for its own (yaml rejects a key defined twice): the settings with no
-// default — the database password, CORS origins, notification providers and
-// the SLPA webhook secret — plus an artifact root that exists.
-const (
-	databaseYAML = `
+// baseYAML is the smallest config.yaml Load accepts: every setting the server
+// requires, there being no built-in defaults. Tests change or drop single keys
+// of it with configYAML rather than repeat it.
+const baseYAML = `
+mode: tnsw
 db:
+  driver: postgres
   postgres:
+    host: localhost
+    port: 5432
+    user: postgres
     password: testpassword
-`
-	corsYAML = `
+    name: nsw_db
+    sslMode: disable
+server:
+  port: 8080
+  serviceURL: http://localhost:8080
+  logLevel: info
+  servicesConfigPath: configs/services.json
+  paymentMethodsConfigPath: configs/payment_methods.json
+  catalogConfigPath: configs/catalog.json
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
 cors:
   allowedOrigins: ["http://localhost:3000"]
-`
-	restYAML = `
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+storage:
+  type: local
+  local:
+    baseDir: ./bucket
+    publicURL: http://localhost:8080
+    putSecret: test-put-secret
+  presignTTLSeconds: 900
+authn:
+  jwksURL: https://localhost:8090/oauth2/jwks
+  issuer: https://localhost:8090
+  audience: https://api.nsw-srilanka.local
+  clientIDs: [TRADER_PORTAL_APP]
+temporal:
+  host: localhost
+  port: 7233
+  namespace: default
 notification:
   providers:
     email:
@@ -44,11 +79,54 @@ notification:
 integrations:
   slpaWebhookSecret: a-secret-shared-with-slpa
 artifactLoader:
+  type: local
   local:
     root: "."
 `
-	baseYAML = databaseYAML + corsYAML + restYAML
-)
+
+// configYAML returns baseYAML with override deep-merged over it and the
+// dotted keys in drop removed, so a test states only the settings it is about.
+func configYAML(t *testing.T, override string, drop ...string) string {
+	t.Helper()
+	var base, over map[string]any
+	if err := yaml.Unmarshal([]byte(baseYAML), &base); err != nil {
+		t.Fatalf("baseYAML: %v", err)
+	}
+	if err := yaml.Unmarshal([]byte(override), &over); err != nil {
+		t.Fatalf("override: %v", err)
+	}
+	mergeYAML(base, over)
+	for _, key := range drop {
+		dropYAML(base, strings.Split(key, "."))
+	}
+	out, err := yaml.Marshal(base)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(out)
+}
+
+func mergeYAML(dst, src map[string]any) {
+	for k, v := range src {
+		if sv, ok := v.(map[string]any); ok {
+			if dv, ok := dst[k].(map[string]any); ok {
+				mergeYAML(dv, sv)
+				continue
+			}
+		}
+		dst[k] = v
+	}
+}
+
+func dropYAML(m map[string]any, path []string) {
+	if len(path) == 1 {
+		delete(m, path[0])
+		return
+	}
+	if sub, ok := m[path[0]].(map[string]any); ok {
+		dropYAML(sub, path[1:])
+	}
+}
 
 // loadYAML writes body as config.yaml, points CONFIG_PATH at it and runs Load.
 func loadYAML(t *testing.T, body string) (*Config, error) {
@@ -60,25 +138,34 @@ func loadYAML(t *testing.T, body string) (*Config, error) {
 // validConfig returns a minimal Config that passes Validate().
 func validConfig() *Config {
 	return &Config{
+		Mode: ModeTNSW,
 		Database: database.Config{
 			Driver: database.Postgres,
 			Postgres: &database.PostgresConfig{
 				Host:     "localhost",
+				Port:     5432,
 				User:     "postgres",
 				Password: "secret",
 				Name:     "testdb",
+				SSLMode:  "disable",
 			},
 		},
 		Server: ServerConfig{
-			ServiceURL:        "http://localhost:8080",
-			MaxRequestBytes:   33554432,
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       15 * time.Second,
-			WriteTimeout:      30 * time.Second,
-			IdleTimeout:       60 * time.Second,
+			Port:                     8080,
+			ServicesConfigPath:       "configs/services.json",
+			PaymentMethodsConfigPath: "configs/payment_methods.json",
+			CatalogConfigPath:        "configs/catalog.json",
+			ServiceURL:               "http://localhost:8080",
+			MaxRequestBytes:          33554432,
+			ReadHeaderTimeout:        5 * time.Second,
+			ReadTimeout:              15 * time.Second,
+			WriteTimeout:             30 * time.Second,
+			IdleTimeout:              60 * time.Second,
 		},
 		CORS: cors.Config{
 			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedMethods: []string{"GET", "POST"},
+			AllowedHeaders: []string{"Content-Type", "Authorization"},
 		},
 		Storage: nswstorage.Config{Config: storage.Config{
 			Type: storage.TypeLocal,
@@ -186,70 +273,87 @@ func TestServerConfigValidate_NonPositiveLimits(t *testing.T) {
 
 // --- Load ---
 
-func TestLoad_Defaults(t *testing.T) {
+func TestLoad_Base(t *testing.T) {
 	cfg, err := loadYAML(t, baseYAML)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-
 	for _, tc := range []struct {
 		name string
 		got  any
 		want any
 	}{
+		{"Mode", cfg.Mode, ModeTNSW},
 		{"Server.Port", cfg.Server.Port, 8080},
-		{"Server.ServiceURL", cfg.Server.ServiceURL, "http://localhost:8080"},
-		{"Server.MaxRequestBytes", cfg.Server.MaxRequestBytes, int64(33554432)},
-		{"Server.ReadHeaderTimeout", cfg.Server.ReadHeaderTimeout, 5 * time.Second},
 		{"Server.ReadTimeout", cfg.Server.ReadTimeout, 15 * time.Second},
-		{"Server.WriteTimeout", cfg.Server.WriteTimeout, 30 * time.Second},
-		{"Server.IdleTimeout", cfg.Server.IdleTimeout, 60 * time.Second},
-		{"Server.ServicesConfigPath", cfg.Server.ServicesConfigPath, "configs/services.json"},
-		{"Server.CatalogConfigPath", cfg.Server.CatalogConfigPath, "configs/catalog.json"},
 		{"Server.LogLevel", cfg.Server.LogLevel, slog.LevelInfo},
-		{"Database.Host", cfg.Database.Postgres.Host, "localhost"},
 		{"Database.Port", cfg.Database.Postgres.Port, 5432},
-		{"Database.Password", cfg.Database.Postgres.Password, "testpassword"},
-		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "require"},
-		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
-		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
-		{"CORS.MaxAge", cfg.CORS.MaxAge, 3600},
-		{"Storage.Type", cfg.Storage.Type, "local"},
-		{"Storage.Local.BaseDir", cfg.Storage.Local.BaseDir, "./bucket"},
+		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "disable"},
 		{"Storage.Local.PublicURL", cfg.Storage.Local.PublicURL, "http://localhost:8080"},
-		{"Storage.PresignTTLSeconds", cfg.Storage.PresignTTLSeconds, 900},
-		{"Authn.Issuer", cfg.Authn.Issuer, "https://localhost:8090"},
 		{"ArtifactLoader.Type", cfg.ArtifactLoader.Type, loaders.TypeLocal},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
 		}
 	}
-
-	if len(cfg.CORS.AllowedOrigins) != 1 || cfg.CORS.AllowedOrigins[0] != "http://localhost:3000" {
-		t.Errorf("CORS.AllowedOrigins = %v, want [http://localhost:3000]", cfg.CORS.AllowedOrigins)
-	}
-	if len(cfg.CORS.AllowedMethods) != 5 {
-		t.Errorf("CORS.AllowedMethods = %v, want the 5 default methods", cfg.CORS.AllowedMethods)
-	}
 }
 
-func TestLoad_DefaultFailClosed(t *testing.T) {
-	_, err := loadYAML(t, databaseYAML+restYAML)
-	if err == nil {
-		t.Fatal("expected error when cors.allowedOrigins is not set, got nil")
-	}
-	if !containsString(err.Error(), "invalid CORS configuration") {
-		t.Errorf("expected a CORS configuration error, got: %v", err)
+// There are no built-in defaults: leaving out any setting the server needs
+// fails Load at startup rather than running on a value of the code's choosing.
+func TestLoad_MissingRequiredSettingFails(t *testing.T) {
+	for _, key := range []string{
+		"mode",
+		"db.driver",
+		"db.postgres.host",
+		"db.postgres.port",
+		"db.postgres.user",
+		"db.postgres.password",
+		"db.postgres.name",
+		"db.postgres.sslMode",
+		"server.port",
+		"server.serviceURL",
+		"server.servicesConfigPath",
+		"server.paymentMethodsConfigPath",
+		"server.catalogConfigPath",
+		"server.maxRequestBytes",
+		"server.readHeaderTimeout",
+		"server.readTimeout",
+		"server.writeTimeout",
+		"server.idleTimeout",
+		"cors.allowedOrigins",
+		"cors.allowedMethods",
+		"cors.allowedHeaders",
+		"storage.type",
+		"storage.local.baseDir",
+		"storage.local.publicURL",
+		"storage.local.putSecret",
+		"storage.presignTTLSeconds",
+		"authn.jwksURL",
+		"authn.issuer",
+		"authn.audience",
+		"authn.clientIDs",
+		"temporal.host",
+		"temporal.port",
+		"temporal.namespace",
+		"notification.providers",
+		"integrations.slpaWebhookSecret",
+		"artifactLoader.type",
+		"artifactLoader.local.root",
+	} {
+		t.Run(key, func(t *testing.T) {
+			if _, err := loadYAML(t, configYAML(t, "", key)); err == nil {
+				t.Fatalf("expected Load to fail without %s, got nil", key)
+			}
+		})
 	}
 }
 
 func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
-	_, err := loadYAML(t, databaseYAML+restYAML+`
+	_, err := loadYAML(t, configYAML(t, `
 cors:
   allowedOrigins: ["*"]
   allowCredentials: true
-`)
+`))
 	if err == nil {
 		t.Fatal("expected error for wildcard origin with credentials=true, got nil")
 	}
@@ -259,45 +363,36 @@ cors:
 }
 
 func TestLoad_CustomPort(t *testing.T) {
-	cfg, err := loadYAML(t, baseYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 server:
   port: 9090
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 	if cfg.Server.Port != 9090 {
 		t.Errorf("Server.Port = %d, want 9090", cfg.Server.Port)
 	}
-	if cfg.Server.ServiceURL != "http://localhost:9090" {
-		t.Errorf("Server.ServiceURL = %q, want http://localhost:9090", cfg.Server.ServiceURL)
-	}
-	if cfg.Storage.Local.PublicURL != "http://localhost:9090" {
-		t.Errorf("Storage.Local.PublicURL = %q, want http://localhost:9090", cfg.Storage.Local.PublicURL)
-	}
 }
 
 func TestLoad_CustomServiceURL(t *testing.T) {
-	cfg, err := loadYAML(t, baseYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 server:
   serviceURL: https://api.example.com
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 	if cfg.Server.ServiceURL != "https://api.example.com" {
 		t.Errorf("Server.ServiceURL = %q, want https://api.example.com", cfg.Server.ServiceURL)
 	}
-	if cfg.Storage.Local.PublicURL != "https://api.example.com" {
-		t.Errorf("Storage.Local.PublicURL = %q, want it to follow server.serviceURL", cfg.Storage.Local.PublicURL)
-	}
 }
 
 func TestLoad_CustomLogLevel(t *testing.T) {
-	cfg, err := loadYAML(t, baseYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 server:
   logLevel: debug
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -307,14 +402,14 @@ server:
 }
 
 func TestLoad_CustomServerLimits(t *testing.T) {
-	cfg, err := loadYAML(t, baseYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 server:
   maxRequestBytes: 262144
   readHeaderTimeout: 2s
   readTimeout: 7s
   writeTimeout: 9s
   idleTimeout: 11s
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -344,7 +439,7 @@ func TestLoad_UnparseableValueRejected(t *testing.T) {
 		"int":       "port: eighty",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := loadYAML(t, baseYAML+"\nserver:\n  "+server+"\n"); err == nil {
+			if _, err := loadYAML(t, configYAML(t, "server:\n  "+server+"\n")); err == nil {
 				t.Fatalf("expected %q to be rejected, got nil", server)
 			}
 		})
@@ -352,28 +447,27 @@ func TestLoad_UnparseableValueRejected(t *testing.T) {
 }
 
 func TestLoad_InvalidServiceURL(t *testing.T) {
-	_, err := loadYAML(t, baseYAML+`
+	_, err := loadYAML(t, configYAML(t, `
 server:
   serviceURL: not-a-url
-`)
+`))
 	if err == nil {
 		t.Fatal("expected error for invalid server.serviceURL, got nil")
 	}
 }
 
 func TestLoad_ZeroReadTimeoutRejected(t *testing.T) {
-	_, err := loadYAML(t, baseYAML+`
+	_, err := loadYAML(t, configYAML(t, `
 server:
   readTimeout: 0s
-`)
+`))
 	if err == nil || !containsString(err.Error(), "server.readTimeout must be greater than zero") {
 		t.Fatalf("expected server.readTimeout validation error, got: %v", err)
 	}
 }
 
 func TestLoad_DatabaseValidationError(t *testing.T) {
-	// db.postgres.password has no default → database.Validate returns error
-	_, err := loadYAML(t, corsYAML+restYAML)
+	_, err := loadYAML(t, configYAML(t, "", "db.postgres.password"))
 	if err == nil {
 		t.Fatal("expected error for missing db.postgres.password, got nil")
 	}
@@ -388,14 +482,14 @@ func TestLoad_SecretPlaceholders(t *testing.T) {
 	if err := os.WriteFile(secret, []byte("from-file"), 0o600); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
-	cfg, err := loadYAML(t, corsYAML+restYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 db:
   postgres:
     password: "{{env:TEST_DB_PASSWORD}}"
 audit:
   baseURL: http://argus:3001
   apiKey: "{{file:`+secret+`}}"
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -408,32 +502,26 @@ audit:
 }
 
 func TestLoad_UnsetSecretPlaceholderFails(t *testing.T) {
-	_, err := loadYAML(t, corsYAML+restYAML+`
+	_, err := loadYAML(t, configYAML(t, `
 db:
   postgres:
     password: "{{env:TEST_DB_PASSWORD_UNSET}}"
-`)
+`))
 	if err == nil || !containsString(err.Error(), "db.postgres.password") {
 		t.Fatalf("expected an unset placeholder to fail naming db.postgres.password, got: %v", err)
 	}
 }
 
 func TestLoad_NotificationProviders(t *testing.T) {
-	cfg, err := loadYAML(t, databaseYAML+corsYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 notification:
   providers:
     email:
-      baseURL: https://email.example.com
       token: email-token
     sms:
       baseURL: https://sms.example.com
       sidCode: sid
-integrations:
-  slpaWebhookSecret: a-secret-shared-with-slpa
-artifactLoader:
-  local:
-    root: "."
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -446,20 +534,14 @@ artifactLoader:
 }
 
 func TestLoad_NotificationProvidersMissing(t *testing.T) {
-	_, err := loadYAML(t, databaseYAML+corsYAML+`
-integrations:
-  slpaWebhookSecret: a-secret-shared-with-slpa
-artifactLoader:
-  local:
-    root: "."
-`)
+	_, err := loadYAML(t, configYAML(t, "", "notification"))
 	if err == nil || !containsString(err.Error(), "notification") {
 		t.Fatalf("expected a notification configuration error, got: %v", err)
 	}
 }
 
 func TestLoad_StorageS3(t *testing.T) {
-	cfg, err := loadYAML(t, baseYAML+`
+	cfg, err := loadYAML(t, configYAML(t, `
 storage:
   type: s3
   s3:
@@ -467,7 +549,7 @@ storage:
     region: ap-south-1
     endpoint: http://minio:9000
   presignTTLSeconds: 60
-`)
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -556,24 +638,43 @@ func TestConfigValidate_StorageProxy(t *testing.T) {
 	}
 }
 
-func TestLoad_StorageProxyDefaults(t *testing.T) {
-	cfg, err := loadYAML(t, baseYAML+`
+// Proxy mode has no default endpoint paths either: the owning service's are
+// stated in the file.
+func TestLoad_StorageProxyRequiresPaths(t *testing.T) {
+	_, err := loadYAML(t, configYAML(t, `
 storage:
   type: proxy
   proxy:
     service: files-api
-`)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+`))
+	if err == nil || !containsString(err.Error(), "is required when storage.type is proxy") {
+		t.Fatalf("expected a missing storage.proxy path error, got: %v", err)
 	}
-	want := nswstorage.ProxyConfig{
-		Service:      "files-api",
-		UploadPath:   "/api/v1/storage",
-		DownloadPath: "/api/v1/storage/{key}",
-		DeletePath:   "/api/v1/storage/{key}",
-	}
-	if cfg.Storage.Proxy != want {
-		t.Errorf("Storage.Proxy = %+v, want %+v", cfg.Storage.Proxy, want)
+}
+
+func TestConfigValidate_RequiredSettings(t *testing.T) {
+	for name, tc := range map[string]struct {
+		mutate func(*Config)
+		errMsg string
+	}{
+		"no mode":          {func(c *Config) { c.Mode = "" }, "mode is required"},
+		"unknown mode":     {func(c *Config) { c.Mode = "both" }, "invalid mode"},
+		"no server port":   {func(c *Config) { c.Server.Port = 0 }, "server.port must be between 1 and 65535"},
+		"no services path": {func(c *Config) { c.Server.ServicesConfigPath = "" }, "server.servicesConfigPath is required"},
+		"no payments path": {func(c *Config) { c.Server.PaymentMethodsConfigPath = "" }, "server.paymentMethodsConfigPath is required"},
+		"no catalog path":  {func(c *Config) { c.Server.CatalogConfigPath = "" }, "server.catalogConfigPath is required"},
+		"no CORS methods":  {func(c *Config) { c.CORS.AllowedMethods = nil }, "cors.allowedMethods is required"},
+		"no CORS headers":  {func(c *Config) { c.CORS.AllowedHeaders = nil }, "cors.allowedHeaders is required"},
+		"no db port":       {func(c *Config) { c.Database.Postgres.Port = 0 }, "db.postgres.port"},
+		"no db sslMode":    {func(c *Config) { c.Database.Postgres.SSLMode = "" }, "db.postgres.sslMode is required"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := validConfig()
+			tc.mutate(cfg)
+			if err := cfg.Validate(); err == nil || !containsString(err.Error(), tc.errMsg) {
+				t.Errorf("expected error containing %q, got %v", tc.errMsg, err)
+			}
+		})
 	}
 }
 

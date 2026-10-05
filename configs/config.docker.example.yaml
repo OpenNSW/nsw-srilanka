@@ -5,8 +5,11 @@
 # instead; the two differ only in reaching the other services by container
 # hostname here rather than localhost.
 #
-# The file is mandatory, but a setting it leaves out keeps its built-in default
-# (cmd/server/config/file.go), so only what differs from that needs writing.
+# The file is mandatory. There are no built-in
+# defaults: every setting the server needs is written here, and one left out
+# (or empty) stops the server at startup rather than running on a value the
+# code chose. Only the optional sections (audit, refid, the inactive storage
+# and artifactLoader backends) may be left out.
 #
 # The otc CLI and the schema migrator read the same file (same CONFIG_PATH),
 # decoding only its db section — or point them at a separate file holding just
@@ -50,13 +53,13 @@ server:
   logLevel: info
   # The browser-facing URL: the host port compose publishes (BACKEND_PORT).
   serviceURL: http://localhost:8080
-  # Maximum request body size (default 32 MiB).
-  # maxRequestBytes: 33554432
+  # Maximum request body size, in bytes (32 MiB).
+  maxRequestBytes: 33554432
   # Durations are Go duration strings (5s, 1m30s).
-  # readHeaderTimeout: 5s
-  # readTimeout: 15s
-  # writeTimeout: 30s
-  # idleTimeout: 60s
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
   # Config file paths, relative to the container's working directory (/app),
   # whose configs/ is the repo's, bind-mounted read-only.
   # The outbound services registry, reaching the agencies by container hostname.
@@ -83,14 +86,15 @@ cors:
 storage:
   # local | s3 | proxy
   type: local
-  # How long a presigned upload/download URL stays valid (default 15 minutes).
-  # presignTTLSeconds: 900
+  # How long a presigned upload/download URL stays valid, in seconds.
+  presignTTLSeconds: 900
+  # Only read when type is local.
   local:
     baseDir: ./bucket
-    # Defaults to server.serviceURL.
-    # publicURL: http://localhost:8080
-    # Signs presigned upload URLs (default local-dev-secret).
-    # putSecret: "{{env:STORAGE_LOCAL_PUT_SECRET}}"
+    # The base URL presigned local URLs are built on: server.serviceURL.
+    publicURL: http://localhost:8080
+    # Signs presigned upload URLs.
+    putSecret: "{{env:STORAGE_LOCAL_PUT_SECRET}}"
   # Only read when type is s3.
   # s3:
   #   endpoint: ""
@@ -102,9 +106,9 @@ storage:
   #   publicURL: ""
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
-  # (server.servicesConfigPath), which supplies its URL and authentication. The
-  # paths default to that service's storage routes, and {key} may appear
-  # anywhere in the download/delete paths.
+  # (server.servicesConfigPath), which supplies its URL and authentication. All
+  # four are required in proxy mode; below are that service's usual storage
+  # routes, and {key} may appear anywhere in the download/delete paths.
   # proxy:
   #   service: ""
   #   uploadPath: /api/v1/storage
@@ -203,17 +207,26 @@ artifactLoader:
   #   # Optional in-bucket key prefix every path resolves against.
   #   prefix: ""
 
+# What this deployment runs as: "tnsw" or "agency". Required.
+# The modes are exclusive. An agency serves inject and the officer case views in
+# place of TNSW's consignment, payment and webhook routes, and its catalog maps
+# the officer role instead of trader/CHA. See docs/agency.md.
+mode: tnsw
+
 # Reference ID formats for the REFID_GENERATOR task plugin, in the schema of
 # github.com/OpenNSW/core/refid (see its example_config.yaml for every segment
-# option). A subtask template names one format by issuer and id type:
+# option). A subtask template names each field to fill, by JSON Pointer into
+# the step's inputs, and the format to generate it from; the inputs, with the
+# IDs filled in, land at its output_namespace:
 #
 #   {"task_type": "REFID_GENERATOR", "output_namespace": "refid",
-#    "plugin_properties": {"issuer": "TNSW", "id_type": "consignment_ref"}}
+#    "plugin_properties": {"ids": [
+#      {"path": "/reference_id", "issuer": "TNSW", "id_type": "consignment_ref"}]}}
 #
-# and the ID lands at refid.reference_id for the node's output_mapping. The
-# node's string inputs are the format's params (a list segment's `param`, or a
-# `{name}` in a scope key). With no issuers, the plugin fails every task that
-# uses it.
+# "each" fills a field in every element of an array, and "params" names where
+# each param a format expects (a list segment's `param`, or a `{name}` in a
+# scope key) is read from; see docs/WORKFLOW_GUIDE.md. With no issuers, the
+# plugin fails every task that uses it.
 refid:
   issuers: []
   # issuers:

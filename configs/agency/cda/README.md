@@ -2,16 +2,16 @@
 
 Configuration to run this backend as the Coconut Development Authority, next to
 TNSW on the same machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
-Values marked ASSUMED in `cda.env` are placeholders to replace.
+Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 | File                   | Purpose                                                                                                                             |
 |------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `cda.env`              | Environment: port 8083, own database, Temporal namespace, artifacts, authn                                                          |
-| `config.yaml`          | `mode: agency`                                                                                                                      |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn                       |
+| `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                     |
+| `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                  |
 | `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP                                                                     |
 | `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/tasks/{taskId}`) as `CDA_TO_NSW` |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                               |
-| `notification.json`    | Placeholder providers, as in `configs/notification.example.json`                                                                    |
 | `services.docker.json` | `services.json` for the `cda-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                        |
 | `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                         |
 | `branding.json`        | CDA branding for the `cda-portal` container                                                                                         |
@@ -30,9 +30,9 @@ Values marked ASSUMED in `cda.env` are placeholders to replace.
 rebuild them after a change with `docker compose up -d --build cda-api cda-portal`.
 
 TNSW in compose reaches it at `host.docker.internal:8083`, through the `cda` entry its
-`services.docker.json` already has. Overrides:
-`CDA_AUTH_AUDIENCE`, `CDA_ARTIFACT_GITHUB_REF`, and `CDA_ARTIFACT_LOADER_TYPE=local` with
-`CDA_ARTIFACT_LOCAL_ROOT` for a local `one-trade-artifacts/cda-v2` checkout.
+`services.docker.json` already has. To change a setting, edit `config.docker.yaml` and
+restart `cda-api`. For a local `one-trade-artifacts/cda-v2` checkout, set
+`artifactLoader.type: local` there and `CDA_ARTIFACT_LOCAL_ROOT` in `.env`.
 
 ## Run natively
 
@@ -55,7 +55,7 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 [`idp/resources/government/cda.json`](../../../idp/resources/government/cda.json) seeds
 CDA for this deployment, on the `CDA API` resource server
-(`https://api.cda.nsw-agency.local`, the `AUTH_AUDIENCE` here):
+(`https://api.cda.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
 | Caller | Client | Grant |
 |---|---|---|

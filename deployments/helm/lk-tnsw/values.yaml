@@ -66,10 +66,9 @@ backend:
   # config.yaml, with the same schema as configs/config.example.yaml. The chart
   # always renders it into a ConfigMap mounted read-only at
   # configMountPath/config.yaml and points CONFIG_PATH at it, unless env above
-  # sets CONFIG_PATH itself. A setting left out keeps its built-in default; the
-  # ones with none (db.postgres.password, cors.allowedOrigins,
-  # notification.providers, integrations.slpaWebhookSecret) must be set, or the
-  # server refuses to start — see ../values-example.yaml.
+  # sets CONFIG_PATH itself. There are no built-in defaults: every setting the
+  # server needs must be set here, or it refuses to start — see
+  # ../values-example.yaml for a complete one.
   #
   # Non-secret only. A secret goes in as a placeholder the server resolves at
   # startup, e.g. "{{env:SOME_SECRET}}" with SOME_SECRET set via env/valueFrom;

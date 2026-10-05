@@ -325,7 +325,7 @@ SPA, the `<H>_TO_NSW` + `NSW_TO_<H>` M2M clients, and their role assignments:
 
 (Remember to add the new port to `CORS_ORIGINS_*` in `idp/.env` — see
 [`resources/shared/cors.json`](resources/shared/cors.json) — and, for the agency to call
-the NSW backend, to the backend's `AUTH_CLIENT_IDS` in `compose.yml`.)
+the NSW backend, to the backend's `authn.clientIDs` in `configs/config*.yaml`.)
 
 ## Applications created
 

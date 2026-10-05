@@ -1,7 +1,10 @@
 # Server configuration file, read once at startup from CONFIG_PATH
 # (default: configs/config.yaml). The file is mandatory — the server refuses to
-# start without it — but a setting it leaves out keeps its built-in default
-# (cmd/server/config/file.go), so only what differs from that needs writing.
+# start without it. There are no built-in
+# defaults: every setting the server needs is written here, and one left out
+# (or empty) stops the server at startup rather than running on a value the
+# code chose. Only the optional sections (audit, refid, the inactive storage
+# and artifactLoader backends) may be left out.
 #
 # This is the committed template for a native run (`go run ./cmd/server`,
 # `make test-e2e`), pointed at the `make deps` services on localhost;
@@ -51,15 +54,15 @@ server:
   port: 8080
   # debug | info | warn | error
   logLevel: debug
-  # Defaults to http://localhost:<port>.
+  # This API's own base URL, as its callers reach it.
   serviceURL: http://localhost:8080
-  # Maximum request body size (default 32 MiB).
-  # maxRequestBytes: 33554432
+  # Maximum request body size, in bytes (32 MiB).
+  maxRequestBytes: 33554432
   # Durations are Go duration strings (5s, 1m30s).
-  # readHeaderTimeout: 5s
-  # readTimeout: 15s
-  # writeTimeout: 30s
-  # idleTimeout: 60s
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
   # Config file paths, relative to the working directory at start-up.
   # The outbound services registry. The docker one reaches the agencies by
   # container hostname; services.json uses localhost references instead.
@@ -87,14 +90,15 @@ cors:
 storage:
   # local | s3 | proxy
   type: local
-  # How long a presigned upload/download URL stays valid (default 15 minutes).
-  # presignTTLSeconds: 900
+  # How long a presigned upload/download URL stays valid, in seconds.
+  presignTTLSeconds: 900
+  # Only read when type is local.
   local:
     baseDir: ./bucket
-    # Defaults to server.serviceURL.
-    # publicURL: http://localhost:8080
-    # Signs presigned upload URLs (default local-dev-secret).
-    # putSecret: "{{env:STORAGE_LOCAL_PUT_SECRET}}"
+    # The base URL presigned local URLs are built on: server.serviceURL.
+    publicURL: http://localhost:8080
+    # Signs presigned upload URLs.
+    putSecret: "{{env:STORAGE_LOCAL_PUT_SECRET}}"
   # Only read when type is s3.
   # s3:
   #   endpoint: ""
@@ -106,9 +110,9 @@ storage:
   #   publicURL: ""
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
-  # (server.servicesConfigPath), which supplies its URL and authentication. The
-  # paths default to that service's storage routes, and {key} may appear
-  # anywhere in the download/delete paths.
+  # (server.servicesConfigPath), which supplies its URL and authentication. All
+  # four are required in proxy mode; below are that service's usual storage
+  # routes, and {key} may appear anywhere in the download/delete paths.
   # proxy:
   #   service: ""
   #   uploadPath: /api/v1/storage
@@ -204,7 +208,7 @@ artifactLoader:
   #   # Optional in-bucket key prefix every path resolves against.
   #   prefix: ""
 
-# What this deployment runs as: "tnsw" (the default when omitted) or "agency".
+# What this deployment runs as: "tnsw" or "agency". Required.
 # The modes are exclusive. An agency serves inject and the officer case views in
 # place of TNSW's consignment, payment and webhook routes, and its catalog maps
 # the officer role instead of trader/CHA. See docs/agency.md.
