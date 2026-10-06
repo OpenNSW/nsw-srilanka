@@ -35,8 +35,9 @@ rebuild them after a change with `docker compose up -d --build cda-api cda-porta
 
 TNSW in compose reaches it at `host.docker.internal:8083`, through the `cda` entry its
 `services.docker.json` already has. To change a setting, edit `config.docker.yaml` and
-restart `cda-api`. For a local `one-trade-artifacts/cda-v2` checkout, set
-`artifactLoader.type: local` there and `CDA_ARTIFACT_LOCAL_ROOT` in `.env`.
+restart `cda-api`. `cda-api` loads its artifacts from a `one-trade-artifacts` clone
+next to this repo (`../one-trade-artifacts/cda-v2`); set `CDA_ARTIFACT_LOCAL_ROOT` in
+`.env` to use another clone's `cda-v2` dir.
 
 ## Run natively
 
