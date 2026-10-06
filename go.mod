@@ -12,6 +12,7 @@ require (
 	github.com/OpenNSW/core/database v0.3.0
 	github.com/OpenNSW/core/httputil v0.1.0
 	github.com/OpenNSW/core/json v0.0.0-20260917101529-36df0ddf30e0
+	github.com/OpenNSW/core/notifications v0.0.0-20261006123626-59c34652f2a9
 	github.com/OpenNSW/core/pagination v0.1.0
 	github.com/OpenNSW/core/payment v0.2.0
 	github.com/OpenNSW/core/refid v0.2.0
