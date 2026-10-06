@@ -17,19 +17,13 @@ const TypeProxy = "proxy"
 // DownloadPath and DeletePath.
 const KeyPlaceholder = "{key}"
 
-// RoutePrefix is where this application mounts its storage API: upload at
-// RoutePrefix, download and delete at RoutePrefix/{key}, and, with the local
-// backend, the content routes its upload and download URLs point at, at
-// RoutePrefix/{key}/content. It is set here rather than left to core/storage's
-// default, so all of them stay together.
-const RoutePrefix = "/api/v1/storage"
-
 // Default ProxyConfig endpoint paths: the storage routes this application
-// itself mounts, so a proxy onto another deployment of it needs none set.
+// itself mounts (see routes.go), so a proxy onto another deployment of it
+// needs none set.
 const (
-	DefaultProxyUploadPath   = RoutePrefix
-	DefaultProxyDownloadPath = RoutePrefix + "/" + KeyPlaceholder
-	DefaultProxyDeletePath   = RoutePrefix + "/" + KeyPlaceholder
+	DefaultProxyUploadPath   = "/api/v1/storage"
+	DefaultProxyDownloadPath = "/api/v1/storage/{key}"
+	DefaultProxyDeletePath   = "/api/v1/storage/{key}"
 )
 
 // Config is the storage configuration. Type (storage.type) selects either
