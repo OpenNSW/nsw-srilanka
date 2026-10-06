@@ -67,6 +67,8 @@ storage:
     publicURL: http://localhost:8080
     putSecret: test-put-secret
   presignTTLSeconds: 900
+  allowedUploadTypes: [application/pdf, image/png]
+  maxUploadBytes: 1048576
 authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090
@@ -176,15 +178,19 @@ func validConfig() *Config {
 			AllowedMethods: []string{"GET", "POST"},
 			AllowedHeaders: []string{"Content-Type", "Authorization"},
 		},
-		Storage: nswstorage.Config{Config: storage.Config{
-			Type: storage.TypeLocal,
-			Local: drivers.LocalConfig{
-				BaseDir:   "./bucket",
-				PublicURL: "http://localhost:8080",
-				PutSecret: "secret",
+		Storage: nswstorage.Config{
+			Config: storage.Config{
+				Type: storage.TypeLocal,
+				Local: drivers.LocalConfig{
+					BaseDir:   "./bucket",
+					PublicURL: "http://localhost:8080",
+					PutSecret: "secret",
+				},
+				PresignTTLSeconds: 900,
 			},
-			PresignTTLSeconds: 900,
-		}},
+			AllowedUploadTypes: []string{"application/pdf"},
+			MaxUploadBytes:     1 << 20,
+		},
 		Integrations: integrations.Config{
 			SLPAWebhookSecret: "a-secret-shared-with-slpa",
 		},
@@ -340,6 +346,8 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"storage.local.publicURL",
 		"storage.local.putSecret",
 		"storage.presignTTLSeconds",
+		"storage.allowedUploadTypes",
+		"storage.maxUploadBytes",
 		"authn.jwksURL",
 		"authn.issuer",
 		"authn.audience",
@@ -570,6 +578,12 @@ storage:
 	}
 	if cfg.Storage.PresignTTLSeconds != 60 {
 		t.Errorf("Storage.PresignTTLSeconds = %d, want 60", cfg.Storage.PresignTTLSeconds)
+	}
+	if got := cfg.Storage.AllowedUploadTypes; len(got) != 2 || got[0] != "application/pdf" || got[1] != "image/png" {
+		t.Errorf("Storage.AllowedUploadTypes = %v, want the file's list", got)
+	}
+	if cfg.Storage.MaxUploadBytes != 1048576 {
+		t.Errorf("Storage.MaxUploadBytes = %d, want 1048576", cfg.Storage.MaxUploadBytes)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -60,7 +59,7 @@ func newOwningService(t *testing.T) *httptest.Server {
 	}
 	// The owner applies the same upload policy this deployment does, so a
 	// rejection it relays is a real one.
-	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(UploadTypes...)))
+	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...)))
 	mux.HandleFunc("POST /api/v1/storage", h.Upload)
 	mux.HandleFunc("GET /api/v1/storage/{key}", h.Download)
 	mux.HandleFunc("DELETE /api/v1/storage/{key}", h.Delete)
@@ -233,15 +232,7 @@ func TestNewProxyService_UnknownServiceFailsAtStartup(t *testing.T) {
 }
 
 func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
-	stack, err := New(context.Background(), Config{Config: corestorage.Config{
-		Type: corestorage.TypeLocal,
-		Local: drivers.LocalConfig{
-			BaseDir:   t.TempDir(),
-			PublicURL: "http://localhost:8080",
-			PutSecret: "secret",
-		},
-		PresignTTLSeconds: 900,
-	}}, nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -250,34 +241,6 @@ func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
 	}
 	if stack.LocalContent == nil {
 		t.Error("LocalContent = nil, want the local content handlers for a local backend")
-	}
-}
-
-// core/storage accepts any upload type unless told otherwise; this
-// deployment's own backend keeps the list core enforced itself up to v0.2.0.
-func TestNew_BackendModeRestrictsUploadTypes(t *testing.T) {
-	stack, err := New(context.Background(), Config{Config: corestorage.Config{
-		Type: corestorage.TypeLocal,
-		Local: drivers.LocalConfig{
-			BaseDir:   t.TempDir(),
-			PublicURL: "http://localhost:8080",
-			PutSecret: "secret",
-		},
-		PresignTTLSeconds: 900,
-	}}, nil)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
-	for _, mime := range UploadTypes {
-		if _, err := stack.Service.Upload(context.Background(), "file", 10, mime); err != nil {
-			t.Errorf("Upload(%s) = %v, want it accepted", mime, err)
-		}
-	}
-	for _, mime := range []string{"application/x-msdownload", "application/vnd.ms-excel", "text/html"} {
-		if _, err := stack.Service.Upload(context.Background(), "file", 10, mime); !errors.Is(err, corestorage.ErrContentTypeNotAllowed) {
-			t.Errorf("Upload(%s) = %v, want ErrContentTypeNotAllowed", mime, err)
-		}
 	}
 }
 

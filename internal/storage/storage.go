@@ -39,22 +39,6 @@ type Handler interface {
 	Delete(w http.ResponseWriter, r *http.Request)
 }
 
-// UploadTypes are the MIME types this deployment's own storage accepts
-// uploads of; any other type is rejected with 415. core/storage accepts any
-// type unless told otherwise, so the list is this application's policy. It is
-// the list core/storage enforced itself up to v0.2.0.
-var UploadTypes = []string{
-	"application/pdf",
-	"image/jpeg",
-	"image/png",
-	"image/gif",
-	"image/webp",
-	// .xlsx only: the OOXML spreadsheet format cannot carry VBA macros
-	// (macro-enabled workbooks use .xlsm), unlike legacy .xls which is a
-	// known malware vector and stays prohibited.
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-}
-
 // Stack is the storage service and HTTP handlers storage.type selected.
 type Stack struct {
 	Service Service
@@ -78,6 +62,9 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
 	}
 
+	if err := cfg.validateUploadLimits(); err != nil {
+		return nil, err
+	}
 	// The local content routes sit beside the rest of the storage API, not
 	// wherever core/storage's default puts them.
 	cfg.Local.RoutePrefix = RoutePrefix
@@ -85,7 +72,10 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 	if err != nil {
 		return nil, fmt.Errorf("storage backend: %w", err)
 	}
-	svc := corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(UploadTypes...))
+	svc := corestorage.NewService(driver,
+		corestorage.WithAllowedUploadTypes(cfg.AllowedUploadTypes...),
+		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
+	)
 
 	stack := &Stack{Service: svc, Handler: corestorage.NewHTTPHandler(svc)}
 	if local, ok := driver.(*drivers.LocalFSDriver); ok {
