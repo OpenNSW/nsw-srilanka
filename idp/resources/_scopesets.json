@@ -20,7 +20,8 @@
       "nsw:task:write",
       "nsw:consignment:read",
       "nsw:storage:read",
-      "nsw:storage:write"
+      "nsw:storage:write",
+      "nsw:storage:delete"
     ],
     "agencyReviewer": [
       "agency:application:read",

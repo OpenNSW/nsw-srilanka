@@ -11,7 +11,7 @@
           "token_url": "https://localhost:8090/oauth2/token",
           "client_id": "CDA_TO_NSW",
           "client_secret": "env:M2M_CDA_TO_NSW_SECRET",
-          "scopes": ["nsw:task:write"],
+          "scopes": ["nsw:task:write", "nsw:storage:read", "nsw:storage:write", "nsw:storage:delete"],
           "insecure_skip_tls_verify": true,
           "endpoint_params": { "resource": "https://api.nsw-srilanka.local" }
         }

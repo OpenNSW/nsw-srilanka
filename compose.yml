@@ -18,8 +18,6 @@ volumes:
     driver: local
   bucket_data:
     driver: local
-  cda_bucket_data:
-    driver: local
 
 # The environment every service that reads the server's config file needs —
 # api, migrate and seed-companies all run on configs/config.docker.yaml (seeded
@@ -44,7 +42,6 @@ x-cda-config-env: &cda-config-env
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
-  STORAGE_LOCAL_PUT_SECRET: ${STORAGE_LOCAL_PUT_SECRET:-local-dev-put-secret}
 
 services:
   # -------------------------------------------------------------------
@@ -476,7 +473,6 @@ services:
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
       # clone's cda-v2/ dir.
       - ${CDA_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/cda-v2}:/app/artifacts:ro
-      - cda_bucket_data:/app/bucket
     environment:
       # Every server setting lives in configs/agency/cda/config.docker.yaml (see
       # x-cda-config-env); what follows is only what the file cannot hold.
