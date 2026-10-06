@@ -99,9 +99,9 @@ WORKDIR /app
 COPY --from=migrate-builder /out/migrate /usr/local/bin/migrate
 COPY migrations/ /app/migrations/
 
-# The migrator reads its connection from the db section of the server's own
-# config.yaml, mounted at runtime and named by CONFIG_PATH (see compose.yml and
-# the Helm chart's migration Job). Its migrationDir defaults to ./migrations,
+# The migrator reads its connection from the db section of a config.yaml
+# mounted at runtime and named by CONFIG_PATH: the server's own in compose.yml,
+# one of its own (migration.config) in the Helm chart's migration Job. Its migrationDir defaults to ./migrations,
 # i.e. the SQL baked in above, relative to this WORKDIR.
 
 # Numeric so the kubelet can verify it against runAsNonRoot: true — it cannot

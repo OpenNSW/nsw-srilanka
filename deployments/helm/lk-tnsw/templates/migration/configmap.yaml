@@ -1,0 +1,23 @@
+{{- if .Values.migration.enabled }}
+{{- /*
+The migrator's config.yaml, rendered from migration.config — its own file, not
+the backend's, so it can connect as an account of its own and the Job needs
+only the secrets this file references. The Job is a pre-install hook, so on a
+first install it runs before the release's regular resources exist; this
+ConfigMap is a hook too, created just ahead of it.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lk-tnsw.migration.fullname" . }}-config
+  labels:
+    {{- include "lk-tnsw.migration.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    # Lower than the Job's -5, so it exists before the Job starts.
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  config.yaml: |
+    {{- toYaml (.Values.migration.config | default dict) | nindent 4 }}
+{{- end }}

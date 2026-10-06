@@ -53,6 +53,37 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{/*
+Migration component: fullname, selector labels, labels. The name stays
+<backend>-migrate, the schema it migrates being the backend's.
+*/}}
+{{- define "lk-tnsw.migration.fullname" -}}
+{{- printf "%s-migrate" (include "lk-tnsw.backend.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{- define "lk-tnsw.migration.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "lk-tnsw.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: migrate
+{{- end }}
+
+{{- define "lk-tnsw.migration.labels" -}}
+helm.sh/chart: {{ include "lk-tnsw.chart" . }}
+{{ include "lk-tnsw.migration.selectorLabels" . }}
+{{- with (include "lk-tnsw.migration.imageTag" .) }}
+app.kubernetes.io/version: {{ . | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+The migration image's tag before the appVersion fallback: its own, else the
+backend's, since release.yml publishes both images from the same git tag.
+*/}}
+{{- define "lk-tnsw.migration.imageTag" -}}
+{{- .Values.migration.image.tag | default .Values.backend.image.tag | default .Chart.AppVersion -}}
+{{- end }}
+
+{{/*
 Frontend component: fullname, selector labels, labels.
 */}}
 {{- define "lk-tnsw.frontend.fullname" -}}
@@ -92,9 +123,8 @@ Usage: {{ include "lk-tnsw.imageTag" (dict "tag" .Values.backend.image.tag "root
 {{- end -}}
 
 {{/*
-The server's config.yaml, rendered from backend.config. One definition for the
-backend ConfigMap and the migration Job's hook copy of it, so the two can never
-hold different files.
+The server's config.yaml, rendered from backend.config for the backend
+ConfigMap.
 */}}
 {{- define "lk-tnsw.backend.configYAML" -}}
 {{ toYaml (.Values.backend.config | default dict) }}
