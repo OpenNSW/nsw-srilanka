@@ -9,7 +9,7 @@ Creates a GitHub PR using this repo's official template, never a freehand summar
 
 ## Hard rules
 
-- **Reproduce every checkbox from the template, verbatim, unchecked by default.** Mark `[x]` only for items concretely true. Never drop, collapse, or hide an unchecked box to make the PR look tidier — visibility of what's *not* done is the point.
+- **Reproduce every checkbox from the template, verbatim, unchecked by default.** Mark `[x]` only for items concretely true. Never drop, collapse, or hide an unchecked box to make the PR look tidier — visibility of what's _not_ done is the point.
 - **Be concise.** Each section is a few words to a couple of sentences. This is a filled-in template, not a report.
 - **Describe only the end state of the change** — what it does and why. Never narrate how the session got there: no mention of earlier drafts, corrections, back-and-forth, or things that were tried and reverted. The reader wants the diff's rationale, not its history.
 

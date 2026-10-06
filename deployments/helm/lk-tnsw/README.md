@@ -74,11 +74,11 @@ is a third — all three are published as separate GHCR images by the same
 [`release.yml`](../../../.github/workflows/release.yml) run (same git tag →
 same version for all three):
 
-| Image                          | Built from                                    | Deployed by                  |
-|--------------------------------|-----------------------------------------------|------------------------------|
-| `ghcr.io/opennsw/tnsw-api`     | root `Dockerfile`, `runtime` (default) target | `backend/deployment.yaml`    |
-| `ghcr.io/opennsw/tnsw-migrate` | root `Dockerfile`, `migrate` target           | `migration/job.yaml`         |
-| `ghcr.io/opennsw/tnsw-web`     | `portals/apps/trader-app/Dockerfile`          | `frontend/deployment.yaml`   |
+| Image                          | Built from                                    | Deployed by                |
+| ------------------------------ | --------------------------------------------- | -------------------------- |
+| `ghcr.io/opennsw/tnsw-api`     | root `Dockerfile`, `runtime` (default) target | `backend/deployment.yaml`  |
+| `ghcr.io/opennsw/tnsw-migrate` | root `Dockerfile`, `migrate` target           | `migration/job.yaml`       |
+| `ghcr.io/opennsw/tnsw-web`     | `portals/apps/trader-app/Dockerfile`          | `frontend/deployment.yaml` |
 
 All three are published as multi-arch manifest lists covering `linux/amd64` and
 `linux/arm64`, so one tag scheduled onto a mixed-arch cluster resolves to the
@@ -96,7 +96,7 @@ and shares no configuration with the backend:
 - `migration.config` is the migrator's `config.yaml`. It reads only `db` (the
   same schema as `backend.config.db`) and, optionally, `migrationDir`, which
   defaults to the SQL baked into the image. `db.driver` must be `postgres` —
-  the migrator defaults it to sqlite, so the chart refuses to render without
+  the migrator defaults it to SQLite, so the chart refuses to render without
   it.
 - `migration.env` / `migration.envFrom` carry only the secrets that file
   references, so the Job is never handed the backend's other secrets. Nothing
@@ -226,6 +226,7 @@ for the full schema.
 
 Both components default their `livenessProbe`/`readinessProbe` to `GET
 /health`:
+
 - Backend: see `internal/bootstrap/app.go` — returns 503 while the database
   or authn dependency is unreachable.
 - Frontend: answered directly by
