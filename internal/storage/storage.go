@@ -47,7 +47,7 @@ type Stack struct {
 	// for S3 when this deployment stores files on local disk. Nil otherwise:
 	// with S3 the client talks to the bucket, and behind a proxy it talks to
 	// the owning service.
-	LocalContent *corestorage.HTTPHandler
+	LocalContent *corestorage.LocalContentHandler
 }
 
 // New builds the storage stack for cfg.Type: a proxy onto another service
@@ -62,16 +62,25 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
 	}
 
+	if err := cfg.validateBackend(); err != nil {
+		return nil, err
+	}
+	// The local content routes sit beside the rest of the storage API, not
+	// wherever core/storage's default puts them. validateBackend allows only
+	// an unset or matching value here, so nothing configured is overridden.
+	cfg.Local.RoutePrefix = RoutePrefix
 	driver, err := corestorage.NewStorageFromConfig(ctx, cfg.Config)
 	if err != nil {
 		return nil, fmt.Errorf("storage backend: %w", err)
 	}
-	svc := corestorage.NewService(driver)
-	handler := corestorage.NewHTTPHandler(svc)
+	svc := corestorage.NewService(driver,
+		corestorage.WithAllowedUploadTypes(cfg.AllowedUploadTypes...),
+		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
+	)
 
-	stack := &Stack{Service: svc, Handler: handler}
-	if _, ok := driver.(*drivers.LocalFSDriver); ok {
-		stack.LocalContent = handler
+	stack := &Stack{Service: svc, Handler: corestorage.NewHTTPHandler(svc)}
+	if local, ok := driver.(*drivers.LocalFSDriver); ok {
+		stack.LocalContent = corestorage.NewLocalContentHandler(local)
 	}
 	return stack, nil
 }

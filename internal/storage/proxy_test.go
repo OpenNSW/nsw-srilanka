@@ -57,12 +57,13 @@ func newOwningService(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("NewLocalFSDriver: %v", err)
 	}
-	h := corestorage.NewHTTPHandler(corestorage.NewService(driver))
-	mux.HandleFunc("POST /api/v1/storage", h.Upload)
-	mux.HandleFunc("GET /api/v1/storage/{key}", h.Download)
-	mux.HandleFunc("DELETE /api/v1/storage/{key}", h.Delete)
-	mux.HandleFunc("PUT /api/v1/storage/{key}/content", h.UploadContentLocal)
-	mux.HandleFunc("GET /api/v1/storage/{key}/content", h.DownloadContent)
+	// The owner applies the same upload policy this deployment does, so a
+	// rejection it relays is a real one.
+	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...)))
+	mux.HandleFunc(UploadRoute, h.Upload)
+	mux.HandleFunc(DownloadRoute, h.Download)
+	mux.HandleFunc(DeleteRoute, h.Delete)
+	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
 	return srv
 }
 
@@ -231,15 +232,7 @@ func TestNewProxyService_UnknownServiceFailsAtStartup(t *testing.T) {
 }
 
 func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
-	stack, err := New(context.Background(), Config{Config: corestorage.Config{
-		Type: corestorage.TypeLocal,
-		Local: drivers.LocalConfig{
-			BaseDir:   t.TempDir(),
-			PublicURL: "http://localhost:8080",
-			PutSecret: "secret",
-		},
-		PresignTTLSeconds: 900,
-	}}, nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

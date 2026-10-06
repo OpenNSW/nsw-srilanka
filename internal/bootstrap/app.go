@@ -432,9 +432,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/users/me", withAuth(withScope(scopes.ProfileRead)(http.HandlerFunc(profileHandler.HandleGetProfile))))
 
 	// Storage
-	mux.Handle("POST /api/v1/storage", withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
-	mux.Handle("GET /api/v1/storage/{key}", withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
-	mux.Handle("DELETE /api/v1/storage/{key}", withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
+	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
+	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
+	mux.Handle(nswstorage.DeleteRoute, withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
 
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
@@ -451,10 +451,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		}, withAuth, withScope)
 	}
 
-	// When using local storage, these endpoints serve as mocks for S3.
+	// When using local storage, these endpoints serve as mocks for S3, at
+	// nswstorage.RoutePrefix/{key}/content.
 	if localContent := storageStack.LocalContent; localContent != nil {
-		mux.HandleFunc("PUT /api/v1/storage/{key}/content", localContent.UploadContentLocal)
-		mux.HandleFunc("GET /api/v1/storage/{key}/content", localContent.DownloadContent)
+		localContent.RegisterRoutes(mux)
 	}
 
 	// -------------------------------------------------------------------

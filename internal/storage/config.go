@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"mime"
 	"strings"
 
 	corestorage "github.com/OpenNSW/core/storage"
@@ -30,6 +31,13 @@ const (
 // beside proxy under the same storage section.
 type Config struct {
 	corestorage.Config `yaml:",inline"`
+	// AllowedUploadTypes are the MIME types clients may upload; any other
+	// type is refused with 415. Required for the local and s3 backends; not
+	// read in proxy mode, where the owning service applies its own.
+	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
+	// MaxUploadBytes is the largest file, in bytes, clients may upload.
+	// Required for the local and s3 backends; not read in proxy mode.
+	MaxUploadBytes int64 `yaml:"maxUploadBytes"`
 	// Proxy is used when Type is TypeProxy: files are served from another
 	// service that owns them.
 	Proxy ProxyConfig `yaml:"proxy"`
@@ -42,12 +50,42 @@ func (c Config) IsProxy() bool {
 
 // Validate checks the configuration Type selects: the proxy settings in proxy
 // mode, otherwise the core/storage backend's — which would reject "proxy" as
-// an unknown backend type.
+// an unknown backend type. The local content routes always sit under
+// RoutePrefix, so a storage.local.routePrefix that says otherwise is an error
+// rather than silently ignored.
 func (c Config) Validate() error {
 	if c.IsProxy() {
 		return c.Proxy.Validate()
 	}
+	if err := c.validateBackend(); err != nil {
+		return err
+	}
 	return c.Config.Validate()
+}
+
+// validateBackend checks what this application adds to a core/storage
+// backend's settings. New runs it as well, so a configuration that never went
+// through Validate is refused the same way: a conflicting route prefix is not
+// silently replaced, and a non-positive size cannot reach core's panic.
+func (c Config) validateBackend() error {
+	if p := c.Local.RoutePrefix; p != "" && p != RoutePrefix {
+		return fmt.Errorf("storage.local.routePrefix must be %q, where this application mounts its storage routes, or left unset; got %q", RoutePrefix, p)
+	}
+	if len(c.AllowedUploadTypes) == 0 {
+		return fmt.Errorf("storage.allowedUploadTypes must list at least one MIME type")
+	}
+	for _, t := range c.AllowedUploadTypes {
+		// core/storage compares an upload's type to these exactly, so each
+		// must be a bare, lower-case type/subtype: no parameters, no wildcard.
+		mediaType, params, err := mime.ParseMediaType(t)
+		if err != nil || len(params) > 0 || mediaType != t || !strings.Contains(t, "/") || strings.Contains(t, "*") {
+			return fmt.Errorf("storage.allowedUploadTypes: %q is not a bare MIME type such as \"application/pdf\"", t)
+		}
+	}
+	if c.MaxUploadBytes <= 0 {
+		return fmt.Errorf("storage.maxUploadBytes must be greater than zero, got %d", c.MaxUploadBytes)
+	}
+	return nil
 }
 
 // ProxyConfig configures proxy mode (storage.type: proxy): which service owns

@@ -92,6 +92,19 @@ storage:
   type: local
   # How long a presigned upload/download URL stays valid, in seconds.
   presignTTLSeconds: 900
+  # What clients may upload. Not read when type is proxy: the owning service
+  # applies its own. MIME types, compared exactly with the upload's.
+  allowedUploadTypes:
+    - application/pdf
+    - image/jpeg
+    - image/png
+    - image/gif
+    - image/webp
+    # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
+    # a known malware vector.
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  # Largest upload, in bytes (32 MiB). Not read when type is proxy.
+  maxUploadBytes: 33554432
   # Only read when type is local.
   local:
     baseDir: ./bucket
