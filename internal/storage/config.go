@@ -16,12 +16,19 @@ const TypeProxy = "proxy"
 // DownloadPath and DeletePath.
 const KeyPlaceholder = "{key}"
 
+// RoutePrefix is where this application mounts its storage API: upload at
+// RoutePrefix, download and delete at RoutePrefix/{key}, and, with the local
+// backend, the content routes its upload and download URLs point at, at
+// RoutePrefix/{key}/content. It is set here rather than left to core/storage's
+// default, so all of them stay together.
+const RoutePrefix = "/api/v1/storage"
+
 // Default ProxyConfig endpoint paths: the storage routes this application
 // itself mounts, so a proxy onto another deployment of it needs none set.
 const (
-	DefaultProxyUploadPath   = "/api/v1/storage"
-	DefaultProxyDownloadPath = "/api/v1/storage/" + KeyPlaceholder
-	DefaultProxyDeletePath   = "/api/v1/storage/" + KeyPlaceholder
+	DefaultProxyUploadPath   = RoutePrefix
+	DefaultProxyDownloadPath = RoutePrefix + "/" + KeyPlaceholder
+	DefaultProxyDeletePath   = RoutePrefix + "/" + KeyPlaceholder
 )
 
 // Config is the storage configuration. Type (storage.type) selects either
@@ -42,10 +49,15 @@ func (c Config) IsProxy() bool {
 
 // Validate checks the configuration Type selects: the proxy settings in proxy
 // mode, otherwise the core/storage backend's — which would reject "proxy" as
-// an unknown backend type.
+// an unknown backend type. The local content routes always sit under
+// RoutePrefix, so a storage.local.routePrefix that says otherwise is an error
+// rather than silently ignored.
 func (c Config) Validate() error {
 	if c.IsProxy() {
 		return c.Proxy.Validate()
+	}
+	if p := c.Local.RoutePrefix; p != "" && p != RoutePrefix {
+		return fmt.Errorf("storage.local.routePrefix must be %q, where this application mounts its storage routes, or left unset; got %q", RoutePrefix, p)
 	}
 	return c.Config.Validate()
 }

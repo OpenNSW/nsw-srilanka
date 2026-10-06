@@ -78,6 +78,9 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
 	}
 
+	// The local content routes sit beside the rest of the storage API, not
+	// wherever core/storage's default puts them.
+	cfg.Local.RoutePrefix = RoutePrefix
 	driver, err := corestorage.NewStorageFromConfig(ctx, cfg.Config)
 	if err != nil {
 		return nil, fmt.Errorf("storage backend: %w", err)
