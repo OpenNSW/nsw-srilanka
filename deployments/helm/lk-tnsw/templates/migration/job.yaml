@@ -1,0 +1,89 @@
+{{- if .Values.migration.enabled }}
+{{- /* The migrator defaults db.driver to sqlite: left unset, the Job would
+migrate a throwaway sqlite file and report success against a database the
+server never uses. */}}
+{{- $driver := dig "db" "driver" "" (.Values.migration.config | default dict) }}
+{{- if ne $driver "postgres" }}
+{{- fail (printf "migration.config.db.driver must be set to \"postgres\" when migration.enabled (got %q): the migrator defaults it to sqlite" $driver) }}
+{{- end }}
+{{- $env := .Values.migration.env | default dict }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "lk-tnsw.migration.fullname" . }}
+  labels:
+    {{- include "lk-tnsw.migration.labels" . | nindent 4 }}
+  annotations:
+    # Run as a Helm hook BEFORE the Deployment rolls out, on every install and
+    # upgrade. The release only proceeds if this Job succeeds; a failed
+    # migration aborts the upgrade and leaves the running server untouched.
+    "helm.sh/hook": pre-install,pre-upgrade
+    # Negative weight => runs earlier than other hooks.
+    "helm.sh/hook-weight": "-5"
+    # Delete the previous migration Job just before creating a new one, so the
+    # last attempt's logs stick around for debugging.
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  # Number of retries before the Job is marked failed (and the upgrade aborts).
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "lk-tnsw.migration.selectorLabels" . | nindent 8 }}
+    spec:
+      # A Job pod must not be restarted forever; run once and stop.
+      restartPolicy: Never
+      {{- with .Values.migration.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.migration.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          {{- with .Values.migration.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # A separate image from the server (see the Dockerfile's `migrate`
+          # stage, published as tnsw-migrate) — it runs the standalone
+          # nsw-agency migrate binary, not this backend's code.
+          image: "{{ .Values.migration.image.repository }}:{{ include "lk-tnsw.imageTag" (dict "tag" (.Values.migration.image.tag | default .Values.backend.image.tag) "root" .) }}"
+          imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
+          {{- if .Values.migration.command }}
+          command: {{ .Values.migration.command | toJson }}
+          {{- end }}
+          env:
+            {{- range $key, $value := $env }}
+            - name: {{ $key }}
+              {{- if kindIs "map" $value }}
+              {{- toYaml $value | nindent 14 }}
+              {{- else }}
+              value: {{ $value | quote }}
+              {{- end }}
+            {{- end }}
+            {{- /* The ConfigMap's config.yaml, unless env names another. */}}
+            {{- if not (hasKey $env "CONFIG_PATH") }}
+            - name: CONFIG_PATH
+              value: {{ printf "%s/config.yaml" .Values.migration.configMountPath | quote }}
+            {{- end }}
+          {{- with .Values.migration.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.migration.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            # Beside the image's baked /app/migrations, not over it.
+            - name: config
+              mountPath: {{ .Values.migration.configMountPath }}
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "lk-tnsw.migration.fullname" . }}-config
+{{- end }}

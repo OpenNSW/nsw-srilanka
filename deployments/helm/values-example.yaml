@@ -28,9 +28,9 @@
 #     --from-file=go_private.pem=...
 #
 # Adding a secret takes three steps: a key in the Secret, an entry in
-# backend.env, and a "{{env:NAME}}" placeholder in backend.config. A
-# placeholder whose env var is unset stops the server (and the migration Job)
-# at startup.
+# backend.env, and a "{{env:NAME}}" placeholder in backend.config (migration.env
+# and migration.config for the migration Job). A placeholder whose env var is
+# unset stops the server, or the migration Job, at startup.
 #
 # The https:// URLs and client IDs below are placeholders — replace them with
 # your environment's real IdP, Temporal, and Argus endpoints.
@@ -153,10 +153,9 @@ backend:
       paymentMethodsConfigPath: configs/payment_methods.json
       catalogConfigPath: configs/catalog.json
 
-    # One section for the server, the otc CLI and the schema migrator
-    # (OpenNSW/agency cmd/migrate): core/database's Config
-    # (github.com/OpenNSW/core/database), whose keys the migrator shares. Always
-    # set driver: the migrator defaults it to sqlite.
+    # The server's (and the otc CLI's) database connection: core/database's
+    # Config (github.com/OpenNSW/core/database). The schema migrator has its own,
+    # under migration.config below.
     db:
       # postgres is the only driver supported today.
       driver: postgres
@@ -271,14 +270,6 @@ backend:
       # lists:
       #   port: [CMB, HBT]
 
-  # Run database migrations as a pre-upgrade hook before the server rolls out.
-  # Uses the separate tnsw-migrate image (see values.yaml comments). It reads
-  # the db section of backend.config above — the same one the server uses — and
-  # inherits backend.env for the secrets that file references, so it needs no
-  # settings of its own.
-  migration:
-    enabled: true
-
   # Expose the backend API. Enable the one that matches your platform.
   #
   # OpenShift Route (default):
@@ -305,6 +296,41 @@ backend:
     #  - secretName: tnsw-api-tls
     #    hosts:
     #      - nsw-api.example.com
+
+# Run database migrations as a pre-install/pre-upgrade hook before the server
+# rolls out, with the separate tnsw-migrate image (see values.yaml). It shares
+# nothing with backend above: its config and env are its own, so it gets only
+# the database secret.
+migration:
+  enabled: true
+
+  # podSecurityContext / securityContext are left unset for the same reason as
+  # the backend's above.
+
+  # DATABASE ACCOUNT: this example uses ONE account for the server and the
+  # migrator — the same user here as in backend.config.db, and the same
+  # db-password Secret key — so it works with no extra database setup. For
+  # production, prefer a SEPARATE migrator account that owns the schema, so the
+  # server's account can only read and write rows: set its user below, point
+  # DB_PASSWORD at its own Secret key, and apply the grants under "Database
+  # accounts" in the chart README.
+  env:
+    DB_PASSWORD:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: db-password }
+
+  # The migrator's config.yaml: db only, same schema as backend.config.db.
+  config:
+    db:
+      # Required: the migrator defaults it to sqlite.
+      driver: postgres
+      postgres:
+        host: nsw-db
+        port: 5432
+        user: postgres
+        password: "{{env:DB_PASSWORD}}"
+        name: nsw_db
+        sslMode: require
 
 frontend:
   # No image tag: the chart deploys the images of its own release (its

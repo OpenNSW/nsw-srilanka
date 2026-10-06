@@ -26,8 +26,8 @@ backend:
 
   imagePullSecrets: []
 
-  # Pod-level security context (applies to the server and migration pods).
-  # Empty by default, which suits both cases. The images own their files by
+  # Pod-level security context. Empty by default, which suits both cases
+  # below. The images own their files by
   # group 0 and make every writable path group-0 writable, so they run correctly
   # under whatever UID the cluster gives them — no override is required. Where
   # the platform allocates the UID itself, leave this unset: an explicit
@@ -38,8 +38,7 @@ backend:
   #   fsGroup: 1001
   podSecurityContext: {}
 
-  # Container-level security context (applies to the server and migration
-  # containers), e.g.
+  # Container-level security context, e.g.
   #   allowPrivilegeEscalation: false
   #   readOnlyRootFilesystem: true
   #   capabilities:
@@ -79,31 +78,6 @@ backend:
   # mount doesn't hide the image's baked templates or any files mounted there.
   configMountPath: /app/config
 
-  # Database migration Job, run as a Helm pre-install/pre-upgrade hook so the
-  # schema is migrated before the new server rolls out. This runs a DIFFERENT
-  # image from the server (see templates/backend/migration-job.yaml) — the
-  # external nsw-agency migrate binary, published from this repo's Dockerfile
-  # `migrate` stage as tnsw-migrate. Off by default; enabled via the example
-  # override file.
-  migration:
-    enabled: false
-    image:
-      repository: ghcr.io/opennsw/tnsw-migrate
-      # Defaults to backend.image.tag above, then the chart's appVersion.
-      tag: ""
-      pullPolicy: IfNotPresent
-    # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
-    command: []
-    backoffLimit: 1
-    # The migrator reads the db section of config above (with migrationDir,
-    # if set), mounted into the Job as a hook-scoped config.yaml of its own
-    # that holds nothing else, and requires config.db.driver: postgres (it
-    # would default to sqlite). It also inherits backend.env/envFrom for the
-    # database secrets that section references; the two below only add to or
-    # override those.
-    env: {}
-    envFrom: []
-
   # Configuration for OpenShift Routes
   route:
     enabled: false
@@ -140,6 +114,60 @@ backend:
 
   volumes: []
   volumeMounts: []
+
+# Database migration Job, run as a Helm pre-install/pre-upgrade hook so the
+# schema is migrated before the new server rolls out. A component of its own:
+# it runs a DIFFERENT image from the server (see templates/migration/job.yaml)
+# — the external nsw-agency migrate binary, published from this repo's
+# Dockerfile `migrate` stage as tnsw-migrate — and shares no configuration with
+# the backend, so it can connect as a database account of its own. Off by
+# default; enabled via the example override file.
+migration:
+  enabled: false
+
+  image:
+    repository: ghcr.io/opennsw/tnsw-migrate
+    # Defaults to backend.image.tag, then the chart's appVersion: release.yml
+    # publishes both images from the same git tag.
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  imagePullSecrets: []
+
+  # Same reasoning as backend.podSecurityContext / securityContext: the image
+  # runs under any cluster-assigned UID, so leave these unset unless you
+  # control the UID yourself.
+  podSecurityContext: {}
+  securityContext: {}
+
+  # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
+  command: []
+  backoffLimit: 1
+
+  # Migrator environment variables (key-value map), raw values or valueFrom
+  # maps: the secrets config below references by name, and nothing else.
+  env: {}
+  envFrom: []
+
+  # The migrator's config file (config.yaml), authored as values. It reads only
+  # db (core/database's Config, the same schema as backend.config.db) and,
+  # optionally, migrationDir (defaulting to the image's ./migrations). Rendered
+  # into a ConfigMap mounted at configMountPath/config.yaml, with CONFIG_PATH
+  # pointed at it unless env sets CONFIG_PATH itself. db.driver must be
+  # postgres — the migrator defaults it to sqlite, so the chart refuses to
+  # render without it. Secrets go in as "{{env:NAME}}" placeholders, as for
+  # backend.config.
+  #
+  # Database account: the migrator may connect as the same account as the
+  # server (same user as backend.config.db, env pointing at the same Secret
+  # key), or — recommended for production — as a separate account that owns
+  # the schema, leaving the server's account to read and write rows. See
+  # "Database accounts" in the chart README for the grants that needs.
+  config: {}
+
+  configMountPath: /app/config
+
+  resources: {}
 
 frontend:
   replicaCount: 1
