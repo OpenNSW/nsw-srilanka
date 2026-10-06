@@ -62,11 +62,12 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
 	}
 
-	if err := cfg.validateUploadLimits(); err != nil {
+	if err := cfg.validateBackend(); err != nil {
 		return nil, err
 	}
 	// The local content routes sit beside the rest of the storage API, not
-	// wherever core/storage's default puts them.
+	// wherever core/storage's default puts them. validateBackend allows only
+	// an unset or matching value here, so nothing configured is overridden.
 	cfg.Local.RoutePrefix = RoutePrefix
 	driver, err := corestorage.NewStorageFromConfig(ctx, cfg.Config)
 	if err != nil {

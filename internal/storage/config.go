@@ -18,12 +18,11 @@ const TypeProxy = "proxy"
 const KeyPlaceholder = "{key}"
 
 // Default ProxyConfig endpoint paths: the storage routes this application
-// itself mounts (see routes.go), so a proxy onto another deployment of it
-// needs none set.
+// itself mounts, so a proxy onto another deployment of it needs none set.
 const (
 	DefaultProxyUploadPath   = "/api/v1/storage"
-	DefaultProxyDownloadPath = "/api/v1/storage/{key}"
-	DefaultProxyDeletePath   = "/api/v1/storage/{key}"
+	DefaultProxyDownloadPath = "/api/v1/storage/" + KeyPlaceholder
+	DefaultProxyDeletePath   = "/api/v1/storage/" + KeyPlaceholder
 )
 
 // Config is the storage configuration. Type (storage.type) selects either
@@ -58,19 +57,20 @@ func (c Config) Validate() error {
 	if c.IsProxy() {
 		return c.Proxy.Validate()
 	}
-	if p := c.Local.RoutePrefix; p != "" && p != RoutePrefix {
-		return fmt.Errorf("storage.local.routePrefix must be %q, where this application mounts its storage routes, or left unset; got %q", RoutePrefix, p)
-	}
-	if err := c.validateUploadLimits(); err != nil {
+	if err := c.validateBackend(); err != nil {
 		return err
 	}
 	return c.Config.Validate()
 }
 
-// validateUploadLimits checks the upload limits a core/storage backend
-// enforces. New runs it as well, so a configuration that never went through
-// Validate cannot reach core's panic on a non-positive size.
-func (c Config) validateUploadLimits() error {
+// validateBackend checks what this application adds to a core/storage
+// backend's settings. New runs it as well, so a configuration that never went
+// through Validate is refused the same way: a conflicting route prefix is not
+// silently replaced, and a non-positive size cannot reach core's panic.
+func (c Config) validateBackend() error {
+	if p := c.Local.RoutePrefix; p != "" && p != RoutePrefix {
+		return fmt.Errorf("storage.local.routePrefix must be %q, where this application mounts its storage routes, or left unset; got %q", RoutePrefix, p)
+	}
 	if len(c.AllowedUploadTypes) == 0 {
 		return fmt.Errorf("storage.allowedUploadTypes must list at least one MIME type")
 	}

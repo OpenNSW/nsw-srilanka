@@ -10,20 +10,19 @@ import (
 
 // TestRoutes checks the storage routes are valid ServeMux patterns under
 // RoutePrefix, that they and the local content routes can all be mounted on
-// one mux (ServeMux panics on an invalid or conflicting pattern), that each
-// routes the request it should, and that the proxy defaults name the same
-// paths.
+// one mux (ServeMux panics on an invalid or conflicting pattern), and that
+// each routes the request it should.
 func TestRoutes(t *testing.T) {
 	if !strings.HasPrefix(RoutePrefix, "/") || path.Clean(RoutePrefix) != RoutePrefix {
 		t.Fatalf("RoutePrefix %q is not a clean absolute path", RoutePrefix)
 	}
 
 	routes := map[string]struct {
-		method, path, proxyDefault string
+		method, path string
 	}{
-		UploadRoute:   {http.MethodPost, "/api/v1/storage", DefaultProxyUploadPath},
-		DownloadRoute: {http.MethodGet, "/api/v1/storage/{key}", DefaultProxyDownloadPath},
-		DeleteRoute:   {http.MethodDelete, "/api/v1/storage/{key}", DefaultProxyDeletePath},
+		UploadRoute:   {http.MethodPost, "/api/v1/storage"},
+		DownloadRoute: {http.MethodGet, "/api/v1/storage/{key}"},
+		DeleteRoute:   {http.MethodDelete, "/api/v1/storage/{key}"},
 	}
 
 	mux := http.NewServeMux()
@@ -37,9 +36,6 @@ func TestRoutes(t *testing.T) {
 		}
 		if !underPrefix(p, RoutePrefix) {
 			t.Errorf("route %q is not under RoutePrefix %q", pattern, RoutePrefix)
-		}
-		if p != want.proxyDefault {
-			t.Errorf("route %q: proxy default path is %q, want %q", pattern, want.proxyDefault, p)
 		}
 		mount(t, mux, pattern)
 	}

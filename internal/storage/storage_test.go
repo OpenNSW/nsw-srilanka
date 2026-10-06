@@ -90,6 +90,10 @@ func TestConfigValidate_LocalRoutePrefix(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "storage.local.routePrefix") {
 		t.Errorf("routePrefix /files: Validate() = %v, want an error naming storage.local.routePrefix", err)
 	}
+	// New refuses it too, rather than replacing it with RoutePrefix.
+	if _, err := New(context.Background(), cfg, nil); err == nil || !strings.Contains(err.Error(), "storage.local.routePrefix") {
+		t.Errorf("routePrefix /files: New() = %v, want an error naming storage.local.routePrefix", err)
+	}
 }
 
 // The backend enforces the upload limits from the configuration, not core's
