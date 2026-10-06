@@ -38,6 +38,10 @@ db:
     password: testpassword
     name: nsw_db
     sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
 server:
   port: 8080
   serviceURL: http://localhost:8080
@@ -148,6 +152,11 @@ func validConfig() *Config {
 				Password: "secret",
 				Name:     "testdb",
 				SSLMode:  "disable",
+				Pool: database.PoolConfig{
+					MaxIdleConns:           10,
+					MaxOpenConns:           100,
+					MaxConnLifetimeSeconds: 3600,
+				},
 			},
 		},
 		Server: ServerConfig{
@@ -310,6 +319,9 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"db.postgres.password",
 		"db.postgres.name",
 		"db.postgres.sslMode",
+		"db.postgres.pool.maxIdleConns",
+		"db.postgres.pool.maxOpenConns",
+		"db.postgres.pool.maxConnLifetimeSeconds",
 		"server.port",
 		"server.serviceURL",
 		"server.servicesConfigPath",

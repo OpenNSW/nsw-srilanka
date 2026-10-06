@@ -121,9 +121,11 @@ func (s ServerConfig) Validate() error {
 }
 
 // Load reads the configuration from the config.yaml at CONFIG_PATH (default
-// configs/config.yaml) and validates it. The file is mandatory and has no
-// built-in defaults: every setting the server needs is set in it, and one left
-// out fails Validate here, at startup, rather than when it is first used.
+// configs/config.yaml) and validates it. The file is mandatory. Settings the
+// server can't run without are checked by Validate, so one left out fails
+// here, at startup, rather than when it is first used. Optional settings left
+// out take Go's zero value (false, 0, empty), and unrecognised keys are
+// ignored.
 //
 // The server reads only two env vars itself: CONFIG_PATH and APP_ENV. Every
 // other setting is in the config file. A secret may still come from the

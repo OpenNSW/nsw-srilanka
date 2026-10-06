@@ -95,6 +95,10 @@ db:
     password: testpassword
     name: nsw_db
     sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
 `)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
