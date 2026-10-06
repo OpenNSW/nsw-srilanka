@@ -175,8 +175,8 @@ func TestLoadFile_ExamplesLoad(t *testing.T) {
 			if cfg.Database.Postgres.Password != "example-DB_PASSWORD" {
 				t.Errorf("db.postgres.password = %q, want it resolved from DB_PASSWORD", cfg.Database.Postgres.Password)
 			}
-			if len(cfg.Notification.Providers) == 0 {
-				t.Error("expected notification providers in the template")
+			if got := cfg.Notification.Providers.SMS.Password; got != "example-NOTIFICATION_SMS_PASSWORD" {
+				t.Errorf("notification.providers.sms.password = %q, want it resolved from NOTIFICATION_SMS_PASSWORD", got)
 			}
 			if err := cfg.Validate(); err != nil {
 				t.Errorf("configs/%s does not validate: %v", name, err)

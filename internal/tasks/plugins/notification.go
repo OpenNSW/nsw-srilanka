@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/OpenNSW/core/notification"
+	notification "github.com/OpenNSW/core/notifications"
 )
 
 // sender dispatches a notification request. It is satisfied by
