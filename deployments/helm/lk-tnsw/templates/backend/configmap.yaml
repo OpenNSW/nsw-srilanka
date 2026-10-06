@@ -10,4 +10,4 @@ metadata:
     {{- include "lk-tnsw.backend.labels" . | nindent 4 }}
 data:
   config.yaml: |
-    {{- toYaml (.Values.backend.config | default dict) | nindent 4 }}
+    {{- include "lk-tnsw.backend.configYAML" . | nindent 4 }}

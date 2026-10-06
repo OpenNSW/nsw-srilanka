@@ -232,11 +232,13 @@ func TestNewProxyService_UnknownServiceFailsAtStartup(t *testing.T) {
 
 func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
 	stack, err := New(context.Background(), Config{Config: corestorage.Config{
-		Type:           "local",
-		LocalBaseDir:   t.TempDir(),
-		LocalPublicURL: "http://localhost:8080",
-		LocalPutSecret: "secret",
-		PresignTTL:     15 * time.Minute,
+		Type: corestorage.TypeLocal,
+		Local: drivers.LocalConfig{
+			BaseDir:   t.TempDir(),
+			PublicURL: "http://localhost:8080",
+			PutSecret: "secret",
+		},
+		PresignTTLSeconds: 900,
 	}}, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)

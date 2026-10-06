@@ -81,8 +81,9 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 
 .PHONY: migration
 migration: export GOWORK = off
-migration: export MIGRATION_DIR = ./migrations
-migration: export DB_DRIVER = sqlite
+# generate touches no database: an empty config leaves the migrator on its
+# defaults (sqlite, unused; migrationDir ./migrations).
+migration: export CONFIG_PATH = /dev/null
 migration: ## Scaffold a new migration file: make migration name=<description>
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
 	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
@@ -146,12 +147,12 @@ ifdef USE_CMD
 	@if exist .env.example if not exist .env copy /Y .env.example .env
 	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
 	@if exist portals\apps\trader-app\public\config.example.js if not exist portals\apps\trader-app\public\config.js copy /Y portals\apps\trader-app\public\config.example.js portals\apps\trader-app\public\config.js
-	@if exist configs\notification.example.json if not exist configs\notification.json copy /Y configs\notification.example.json configs\notification.json
 	@if exist configs\services.docker.example.json if not exist configs\services.docker.json copy /Y configs\services.docker.example.json configs\services.docker.json
 	@if exist configs\payment_methods.example.json if not exist configs\payment_methods.json copy /Y configs\payment_methods.example.json configs\payment_methods.json
 	@if exist configs\catalog.example.json if not exist configs\catalog.json copy /Y configs\catalog.example.json configs\catalog.json
 	@if exist configs\companies.example.json if not exist configs\companies.json copy /Y configs\companies.example.json configs\companies.json
 	@if exist configs\config.example.yaml if not exist configs\config.yaml copy /Y configs\config.example.yaml configs\config.yaml
+	@if exist configs\config.docker.example.yaml if not exist configs\config.docker.yaml copy /Y configs\config.docker.example.yaml configs\config.docker.yaml
 else
 	chmod +x .githooks/pre-commit .githooks/pre-push
 	@echo "  Git hooks configured: .githooks/"
@@ -161,7 +162,7 @@ else
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
-	@for f in configs/notification.example.json configs/services.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/catalog.example.json configs/companies.example.json configs/config.example.yaml; do \
+	@for f in configs/services.example.json configs/services.docker.example.json configs/payment_methods.example.json configs/catalog.example.json configs/companies.example.json configs/config.example.yaml configs/config.docker.example.yaml; do \
 		target=$$(echo $$f | sed 's/\.example\././'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \

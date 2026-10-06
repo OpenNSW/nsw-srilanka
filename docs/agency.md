@@ -5,23 +5,23 @@ in `config.yaml`. The modes are exclusive: a deployment is one or the other, nev
 both. Both share the task engine, Temporal, renderers, plugins, storage and
 `/api/v1/tasks/{id}`. They differ at the edges:
 
-|                      | TNSW (`mode: tnsw`, the default)                    | Agency (`mode: agency`)                   |
-|----------------------|-----------------------------------------------------|-------------------------------------------|
-| Workflow starts from | `POST /api/v1/consignments` (trader)                | `POST /api/v1/inject` (external system)   |
-| Task ownership       | trader/CHA company owns the consignment             | `officer` role, on any injected workflow  |
-| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`       |
-| Catalog must map     | `trader`, `cha`                                     | `officer`                                 |
-| Catalog              | `configs/catalog.json`                              | `configs/agency/catalog.json`             |
-| Artifacts            | TNSW artifact root                                  | the agency's artifacts                    |
+|                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                  |
+|----------------------|---------------------------------------------------------|------------------------------------------|
+| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)  |
+| Task ownership       | trader/CHA company owns the consignment                 | `officer` role, on any injected workflow |
+| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`          |
+| Catalog must map     | `trader`, `cha`                                         | `officer`                                |
+| Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`            |
+| Artifacts            | TNSW artifact root                                      | the agency's artifacts                   |
 
-An unknown `mode` stops the server at startup.
+A missing or unknown `mode` stops the server at startup.
 
 ## Keeping the branch mergeable
 
 Agency code lives outside the files main owns, so `main` can be merged in often
 without conflicts. Main-branch files touched:
 
-- `cmd/server/config`: the `mode` key (`mode.go`, one field each in `file.go` and
+- `cmd/server/config`: the `mode` key (`mode.go`, and the `Mode` field in
   `config.go`).
 - `internal/bootstrap/app.go`: `Build` branches on the mode. TNSW builds the
   consignment service and router, the trader/CHA task gate and its integration
@@ -46,15 +46,25 @@ next free slot; if main adds its own `000018`, renumber this one after the merge
 
 ## Running as an agency
 
-Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then:
+Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then
+point it at the agency's own catalog and artifacts, and accept the injecting client:
 
 ```sh
 cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the officer token role
-export CATALOG_CONFIG_PATH=configs/agency/catalog.json
-export ARTIFACT_LOADER_TYPE=local
-export ARTIFACT_LOCAL_ROOT=configs/agency/artifacts
-export AUTH_CLIENT_IDS=TRADER_PORTAL_APP,...,NSW_TO_CDA   # accept the injecting client
 ```
+
+```yaml
+server:
+  catalogConfigPath: configs/agency/catalog.json
+artifactLoader:
+  type: local
+  local:
+    root: configs/agency/artifacts
+authn:
+  clientIDs: [TRADER_PORTAL_APP, ..., NSW_TO_CDA]
+```
+
+`configs/agency/cda/` is a complete example.
 
 The injecting client's token needs the `nsw:workflow:inject` scope.
 

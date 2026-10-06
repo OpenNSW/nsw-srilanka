@@ -9,22 +9,22 @@ type Mode string
 
 const (
 	// ModeTNSW is the trade single window: traders create consignments, and trader/CHA
-	// companies own their tasks. It is the default.
+	// companies own their tasks.
 	ModeTNSW Mode = "tnsw"
 	// ModeAgency runs the backend as a government agency: external systems inject
 	// workflows, which officers work grouped into cases.
 	ModeAgency Mode = "agency"
 )
 
-// parseMode returns the Mode named by s, defaulting to ModeTNSW when s is empty so a
-// config.yaml without a mode key keeps running as TNSW.
-func parseMode(s string) (Mode, error) {
-	switch Mode(s) {
-	case "", ModeTNSW:
-		return ModeTNSW, nil
-	case ModeAgency:
-		return ModeAgency, nil
+// Validate reports whether m names a Mode. There is no default: a config.yaml
+// must say which system it runs, so an agency cannot start as TNSW by omission.
+func (m Mode) Validate() error {
+	switch m {
+	case ModeTNSW, ModeAgency:
+		return nil
+	case "":
+		return fmt.Errorf("invalid mode: mode is required (%q or %q)", ModeTNSW, ModeAgency)
 	default:
-		return "", fmt.Errorf("invalid mode %q: must be %q or %q", s, ModeTNSW, ModeAgency)
+		return fmt.Errorf("invalid mode %q: must be %q or %q", string(m), ModeTNSW, ModeAgency)
 	}
 }

@@ -3,23 +3,34 @@
 #   helm install lk-tnsw ./lk-tnsw -f ./values-example.yaml
 #
 # This chart deploys the app only. Infra dependencies (Postgres, Temporal,
-# Thunder ID, Argus) are separate deployments — the env below just points at
-# their in-cluster Service names / external URLs.
+# Thunder ID, Argus) are separate deployments — backend.config below just
+# points at their in-cluster Service names / external URLs.
 #
-# Mirrors .env.example. NON-secret config lives here in plain text; SECRETS
-# (DB_PASSWORD, M2M_*_SECRET, ARGUS_API_KEY, etc.) are referenced from a
-# Kubernetes Secret and must NEVER be written here. Create the Secret
-# out-of-band, e.g.:
+# NON-secret config lives here in plain text: backend.config is the server's
+# config.yaml (same schema as configs/config.example.yaml). SECRETS are
+# referenced from a Kubernetes Secret and must NEVER be written here:
+# backend.env exposes each one as an env var, and backend.config reads it by
+# "{{env:NAME}}" placeholder. Create the Secrets out-of-band, e.g.:
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
+#     --from-literal=argus-api-key=... \
+#     --from-literal=slpa-webhook-secret=... \
+#     --from-literal=notification-email-token=... \
+#     --from-literal=notification-sms-password=... \
 #     --from-literal=m2m-npqs-secret=... \
 #     --from-literal=m2m-fcau-secret=... \
 #     --from-literal=m2m-cda-secret=... \
 #     --from-literal=m2m-slpa-secret=... \
 #     --from-literal=m2m-customs-secret=... \
 #     --from-literal=m2m-sltb-secret=... \
-#     --from-literal=m2m-asycuda-secret=... \
-#     --from-literal=argus-api-key=...
+#     --from-literal=m2m-asycuda-secret=...
+#   kubectl create secret generic govpay-go-private-key \
+#     --from-file=go_private.pem=...
+#
+# Adding a secret takes three steps: a key in the Secret, an entry in
+# backend.env, and a "{{env:NAME}}" placeholder in backend.config. A
+# placeholder whose env var is unset stops the server (and the migration Job)
+# at startup.
 #
 # The https:// URLs and client IDs below are placeholders — replace them with
 # your environment's real IdP, Temporal, and Argus endpoints.
@@ -44,82 +55,37 @@ backend:
     type: ClusterIP
     port: 80
 
+  # Only what config.yaml cannot hold: APP_ENV, and the secrets it (and
+  # services.json) references as {{env:NAME}} / env:NAME — each pulled from a
+  # Kubernetes Secret, never inlined.
   env:
-    SERVER_PORT: "8080"
-    SERVER_LOG_LEVEL: "info"
-    SERVICE_URL: "https://nsw-api.example.com"
+    # Gates authn.insecureSkipTLSVerify and services.json's per-service
+    # insecure_skip_tls_verify. Leave unset in any real deployment — the
+    # backend then fails closed rather than trusting an unverified cert.
+    APP_ENV: ""
 
-    # Request-body size cap and server timeouts (Slowloris/DoS hardening).
-    SERVER_MAX_REQUEST_BYTES: "33554432"   # 32 MiB
-    SERVER_READ_HEADER_TIMEOUT: "5s"
-    SERVER_READ_TIMEOUT: "15s"
-    SERVER_WRITE_TIMEOUT: "30s"
-    SERVER_IDLE_TIMEOUT: "60s"
-
-    # --- Database (PostgreSQL) ---
-    DB_HOST: "nsw-db"            # Postgres Service name in the cluster
-    DB_PORT: "5432"
-    DB_USERNAME: "postgres"
-    DB_NAME: "nsw_db"
-    DB_SSLMODE: "require"        # "disable" only for local/dev
-    DB_MAX_IDLE_CONNS: "10"
-    DB_MAX_OPEN_CONNS: "100"
-    DB_MAX_CONN_LIFETIME_SECONDS: "3600"
-    # SECRET — pulled from a Kubernetes Secret, never inlined.
     DB_PASSWORD:
       valueFrom:
         secretKeyRef:
           name: nsw-secrets
           key: db-password
-
-    # --- Config file paths, relative to the image's /app working directory ---
-    # (Only the *.example.json templates ship in the image — see the root
-    # Dockerfile. The live files below are gitignored, so supply them via a
-    # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
-    SERVICES_CONFIG_PATH: "configs/services.json"
-    PAYMENT_METHODS_CONFIG_PATH: "configs/payment_methods.json"
-    NOTIFICATIONS_CONFIG_PATH: "configs/notification.json"
-    CATALOG_CONFIG_PATH: "configs/catalog.json"
-
-    # --- Artifact loader: workflow/form definitions and manifest.json, fetched
-    # at startup from OpenNSW/one-trade-artifacts (tnsw/ base path) rather than
-    # baked into the image. ---
-    ARTIFACT_LOADER_TYPE: "github"
-    ARTIFACT_GITHUB_OWNER: "OpenNSW"
-    ARTIFACT_GITHUB_REPO: "one-trade-artifacts"
-    ARTIFACT_GITHUB_REF: "main"         # prefer an immutable tag/SHA in production
-    ARTIFACT_GITHUB_BASE_PATH: "tnsw"
-
-    # --- CORS (trader/agency portals calling this API) ---
-    CORS_ALLOWED_ORIGINS: "https://trader.example.com"
-    CORS_ALLOWED_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
-    CORS_ALLOWED_HEADERS: "Content-Type,Authorization"
-    CORS_ALLOW_CREDENTIALS: "true"
-    CORS_MAX_AGE: "3600"
-
-    # --- Storage (uploaded document blobs) ---
-    STORAGE_TYPE: "s3"
-    STORAGE_S3_BUCKET: "nsw-uploads"
-    STORAGE_S3_REGION: "auto"
-    STORAGE_S3_ENDPOINT: "https://<accountid>.r2.cloudflarestorage.com"
-    STORAGE_S3_USE_SSL: "true"
-
-    # --- Inbound auth: tokens this backend accepts ---
-    AUTH_JWKS_URL: "https://idp.example.com/oauth2/jwks"
-    AUTH_ISSUER: "https://idp.example.com"
-    AUTH_AUDIENCE: "https://api.nsw-srilanka.local"
-    AUTH_CLIENT_IDS: "TRADER_PORTAL_APP,FCAU_TO_NSW,NPQS_TO_NSW,CDA_TO_NSW,SLPA_TO_NSW,CUSTOMS_TO_NSW,SLTB_TO_NSW,SLCE_TO_NSW,GOVPAY_TO_NSW"
-    AUTH_JWKS_INSECURE_SKIP_VERIFY: "false"
-
-    # Gates AUTH_JWKS_INSECURE_SKIP_VERIFY and services.json's per-service
-    # insecure_skip_tls_verify. Leave unset in any real deployment — the
-    # backend then fails closed rather than trusting an unverified cert.
-    APP_ENV: ""
-
-    # --- Temporal workflow engine ---
-    TEMPORAL_HOST: "temporal"
-    TEMPORAL_PORT: "7233"
-    TEMPORAL_NAMESPACE: "default"
+    ARGUS_API_KEY:
+      valueFrom:
+        secretKeyRef:
+          name: nsw-secrets
+          key: argus-api-key
+    # Inbound: SLPA signs each service order webhook with this shared secret and
+    # it is the whole of that route's authentication, so the service refuses to
+    # start without it. Required on any deployment SLPA calls back.
+    SLPA_WEBHOOK_SECRET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
+    NOTIFICATION_EMAIL_TOKEN:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: notification-email-token }
+    NOTIFICATION_SMS_PASSWORD:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: notification-sms-password }
 
     # --- Outbound M2M (NSW -> Agency): client secrets referenced as
     # env:M2M_NSW_TO_<AGENCY>_SECRET in configs/services*.json. ---
@@ -146,26 +112,10 @@ backend:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-asycuda-secret }
 
-    # --- SLPA Cargo Management System ---
-    # Inbound: SLPA signs each service order webhook with this shared secret and
-    # it is the whole of that route's authentication, so the service refuses to
-    # start without it. Required on any deployment SLPA calls back.
-    SLPA_WEBHOOK_SECRET:
-      valueFrom:
-        secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
-
-    # --- Audit service (Argus) ---
-    ARGUS_SERVICE_URL: "http://argus:3001"
-    ARGUS_API_KEY:
-      valueFrom:
-        secretKeyRef:
-          name: nsw-secrets
-          key: argus-api-key
-
   # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
   # gateway needs the private key. payment_methods.json points at it with
   # "private_key": "file:/certs/govpay/go_private.pem"; this mounts it there
-  # from the govpay-go-private-key Secret created above. Without the key the
+  # from the govpay-go-private-key Secret (see the top of this file). Without the key the
   # backend starts but answers every GovPay+ call with 500; a key that is set
   # but unreadable stops the backend at startup.
   volumes:
@@ -176,12 +126,132 @@ backend:
     - name: govpay-go-private-key
       mountPath: /certs/govpay
       readOnly: true
+
   # The server's config.yaml, authored here as values; the chart mounts it and
-  # sets CONFIG_PATH (see values.yaml). Full schema and every option:
-  # configs/config.example.yaml.
+  # sets CONFIG_PATH (see values.yaml). There are no built-in defaults: every
+  # setting the server needs is set below, and one left out stops it at
+  # startup. Full schema and every option: configs/config.example.yaml.
   config:
-    # "tnsw" (default) or "agency" — see docs/agency.md.
+    # "tnsw" or "agency" — see docs/agency.md. Required.
     mode: tnsw
+
+    server:
+      port: 8080               # keep in step with containerPort above
+      logLevel: info
+      serviceURL: "https://nsw-api.example.com"
+      # Request-body size cap and server timeouts (Slowloris/DoS hardening).
+      maxRequestBytes: 33554432   # 32 MiB
+      readHeaderTimeout: 5s
+      readTimeout: 15s
+      writeTimeout: 30s
+      idleTimeout: 60s
+      # Config file paths, relative to the image's /app working directory.
+      # (Only the *.example.json templates ship in the image — see the root
+      # Dockerfile. The live files below are gitignored, so supply them via a
+      # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
+      servicesConfigPath: configs/services.json
+      paymentMethodsConfigPath: configs/payment_methods.json
+      catalogConfigPath: configs/catalog.json
+
+    # One section for the server, the otc CLI and the schema migrator
+    # (OpenNSW/agency cmd/migrate): core/database's Config
+    # (github.com/OpenNSW/core/database), whose keys the migrator shares. Always
+    # set driver: the migrator defaults it to sqlite.
+    db:
+      # postgres is the only driver supported today.
+      driver: postgres
+      postgres:
+        host: nsw-db             # Postgres Service name in the cluster
+        port: 5432
+        user: postgres
+        password: "{{env:DB_PASSWORD}}"
+        name: nsw_db
+        # "disable" only for local/dev
+        sslMode: require
+        pool:
+          maxIdleConns: 10
+          maxOpenConns: 100
+          maxConnLifetimeSeconds: 3600
+
+    # Workflow/form definitions and manifest.json, fetched at startup from
+    # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
+    # image.
+    artifactLoader:
+      type: github
+      github:
+        owner: OpenNSW
+        repo: one-trade-artifacts
+        ref: main              # prefer an immutable tag/SHA in production
+        basePath: tnsw
+        # Required for a private repo (lifts the rate limit on a public one).
+        # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
+        # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
+
+    # Trader/agency portals calling this API.
+    cors:
+      allowedOrigins: ["https://trader.example.com"]
+      allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+      allowedHeaders: [Content-Type, Authorization]
+      allowCredentials: true
+      maxAge: 3600
+
+    # Uploaded document blobs: local | s3 | proxy (see configs/config.example.yaml).
+    storage:
+      type: s3
+      presignTTLSeconds: 900
+      s3:
+        bucket: nsw-uploads
+        region: auto
+        endpoint: "https://<accountid>.r2.cloudflarestorage.com"
+        # Static credentials, set together; leave both out to use the default
+        # AWS credential chain (e.g. IRSA). R2 needs them. Add
+        # STORAGE_S3_ACCESS_KEY / STORAGE_S3_SECRET_KEY to backend.env from a
+        # Secret first.
+        # accessKey: "{{env:STORAGE_S3_ACCESS_KEY}}"
+        # secretKey: "{{env:STORAGE_S3_SECRET_KEY}}"
+
+    # Inbound auth: tokens this backend accepts.
+    authn:
+      jwksURL: "https://idp.example.com/oauth2/jwks"
+      issuer: "https://idp.example.com"
+      audience: "https://api.nsw-srilanka.local"
+      clientIDs:
+        - TRADER_PORTAL_APP
+        - FCAU_TO_NSW
+        - NPQS_TO_NSW
+        - CDA_TO_NSW
+        - SLPA_TO_NSW
+        - CUSTOMS_TO_NSW
+        - SLTB_TO_NSW
+        - SLCE_TO_NSW
+        - GOVPAY_TO_NSW
+      insecureSkipTLSVerify: false
+
+    temporal:
+      host: temporal
+      port: 7233
+      namespace: default
+
+    # Email/SMS gateways, one settings block per channel.
+    notification:
+      providers:
+        email:
+          baseURL: "https://email.example.com"
+          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+        sms:
+          baseURL: "https://sms.example.com"
+          userName: "nsw"
+          password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+          sidCode: "NSW"
+
+    # Audit service (Argus).
+    audit:
+      baseURL: "http://argus:3001"
+      apiKey: "{{env:ARGUS_API_KEY}}"
+
+    integrations:
+      slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
+
     # Reference ID formats for the REFID_GENERATOR task plugin. Empty means
     # generation is off, and any task using the plugin fails.
     refid:
@@ -202,23 +272,12 @@ backend:
       #   port: [CMB, HBT]
 
   # Run database migrations as a pre-upgrade hook before the server rolls out.
-  # Uses the separate tnsw-migrate image (see values.yaml comments); note its
-  # env uses DB_USER, not DB_USERNAME like the server above — that mismatch
-  # comes from the external nsw-agency migrate tool's own variable naming.
+  # Uses the separate tnsw-migrate image (see values.yaml comments). It reads
+  # the db section of backend.config above — the same one the server uses — and
+  # inherits backend.env for the secrets that file references, so it needs no
+  # settings of its own.
   migration:
     enabled: true
-    env:
-      DB_DRIVER: "postgres"
-      DB_HOST: "nsw-db"
-      DB_PORT: "5432"
-      DB_NAME: "nsw_db"
-      DB_USER: "postgres"
-      DB_SSLMODE: "require"
-      DB_PASSWORD:
-        valueFrom:
-          secretKeyRef:
-            name: nsw-secrets
-            key: db-password
 
   # Expose the backend API. Enable the one that matches your platform.
   #
@@ -274,7 +333,7 @@ frontend:
     IDP_BASE_URL: "https://idp.example.com"
     IDP_CLIENT_ID: "TRADER_PORTAL_APP"
     # Extra /authorize parameters, query-string encoded (use "&" for more than one).
-    # The `resource` value must equal AUTH_AUDIENCE / the NSW_API resource-server identifier.
+    # The `resource` value must equal backend.config.authn.audience / the NSW_API resource-server identifier.
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
     IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"

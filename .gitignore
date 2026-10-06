@@ -22,6 +22,7 @@ coverage.html
 
 # Real config files — copy from *.example.json / *.example.yaml (gitignored; never commit)
 configs/config.yaml
+configs/config.docker.yaml
 configs/notification.json
 configs/services.json
 configs/services.docker.json

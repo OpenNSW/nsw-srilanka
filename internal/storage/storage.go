@@ -4,7 +4,7 @@
 //
 // Everything outside this package depends on the Service and Handler
 // interfaces rather than on core/storage directly, so the choice is made once,
-// here, from STORAGE_TYPE.
+// here, from storage.type.
 package storage
 
 import (
@@ -39,7 +39,7 @@ type Handler interface {
 	Delete(w http.ResponseWriter, r *http.Request)
 }
 
-// Stack is the storage service and HTTP handlers STORAGE_TYPE selected.
+// Stack is the storage service and HTTP handlers storage.type selected.
 type Stack struct {
 	Service Service
 	Handler Handler

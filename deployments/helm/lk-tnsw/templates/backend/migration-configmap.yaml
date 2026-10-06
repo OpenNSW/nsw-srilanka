@@ -1,0 +1,26 @@
+{{- if .Values.backend.migration.enabled }}
+{{- /*
+The migration Job's own config.yaml. The Job is a pre-install hook, so on a
+first install it runs before the release's regular resources — the backend
+ConfigMap among them — exist; this file is a hook too, created just ahead of it.
+It holds only the keys the migrator reads (db, migrationDir) out of
+backend.config: the migrator resolves every placeholder in the file it is
+given, so a full copy would make the Job need every backend secret, not just
+the database's.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-migrate-config" (include "lk-tnsw.backend.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "lk-tnsw.backend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    # Lower than the Job's -5, so it exists before the Job starts.
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  config.yaml: |
+    {{- pick (.Values.backend.config | default dict) "db" "migrationDir" | toYaml | nindent 4 }}
+{{- end }}

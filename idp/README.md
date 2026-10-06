@@ -325,7 +325,7 @@ SPA, the `<H>_TO_NSW` + `NSW_TO_<H>` M2M clients, and their role assignments:
 
 (Remember to add the new port to `CORS_ORIGINS_*` in `idp/.env` — see
 [`resources/shared/cors.json`](resources/shared/cors.json) — and, for the agency to call
-the NSW backend, to the backend's `AUTH_CLIENT_IDS` in `compose.yml`.)
+the NSW backend, to the backend's `authn.clientIDs` in `configs/config*.yaml`.)
 
 ## Applications created
 
@@ -364,14 +364,14 @@ becomes the access-token **audience** (`aud`):
 > is also how `idp/resources/**` names a resource server in `resourceServer:` references,
 > so changing one means changing those too.
 >
-> `AUTH_AUDIENCE` in each backend must equal its own resource server's identifier:
+> `authn.audience` in each backend's `config.yaml` must equal its own resource server's identifier:
 >
 > - **TNSW** (`api`): the `NSW_API` identifier, `https://api.nsw-srilanka.local`. It is
->   set in `.env.example`, `compose.yml`, `cmd/server/config/config.go` and
+>   set in `configs/config.example.yaml`, `configs/config.docker.example.yaml` and
 >   `deployments/helm/values-example.yaml`. Changing the identifier means changing all
->   four (and any existing local `.env`).
+>   three (and any existing local `configs/config*.yaml`).
 > - **CDA** (`cda-api`): the `CDA API` identifier, `https://api.cda.nsw-agency.local`. It
->   is set in `configs/agency/cda/cda.env` and the `cda-api` service in `compose.yml`. Its
+>   is set in `configs/agency/cda/config.yaml` and `configs/agency/cda/config.docker.yaml`. Its
 >   callers request it as `resource=`: the CDA portal in
 >   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
 >   `configs/services*.example.json`. Changing the identifier means changing all of these

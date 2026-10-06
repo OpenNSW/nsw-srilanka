@@ -1,16 +1,15 @@
-# Server configuration file, read once at startup from CONFIG_PATH
-# (default: configs/config.yaml). The file is mandatory — the server refuses to
-# start without it. There are no built-in
+# Server configuration file for the Docker Compose stack (`make dev`,
+# `make preview`): compose.yml points the api container's CONFIG_PATH at
+# configs/config.docker.yaml, which `make setup` seeds from this committed
+# template. A native run reads configs/config.yaml (config.example.yaml)
+# instead; the two differ only in reaching the other services by container
+# hostname here rather than localhost.
+#
+# The file is mandatory. There are no built-in
 # defaults: every setting the server needs is written here, and one left out
 # (or empty) stops the server at startup rather than running on a value the
 # code chose. Only the optional sections (audit, refid, the inactive storage
 # and artifactLoader backends) may be left out.
-#
-# This is the committed template for a native run (`go run ./cmd/server`,
-# `make test-e2e`), pointed at the `make deps` services on localhost;
-# `make setup` copies it to the gitignored configs/config.yaml. The Docker
-# Compose stack reads configs/config.docker.yaml instead, seeded from
-# config.docker.example.yaml.
 #
 # The otc CLI and the schema migrator read the same file (same CONFIG_PATH),
 # decoding only its db section — or point them at a separate file holding just
@@ -26,7 +25,7 @@
 # Never write a secret into this file. Any value may instead be a placeholder
 # resolved at startup: "{{env:NAME}}" reads an env var, "{{file:/path}}" reads a
 # mounted file. The placeholder must be the whole value, and an unset one fails
-# the boot. The ones below are set by .env.example.
+# the boot. The ones below are passed to the api container by compose.yml.
 
 # One section for the server, the otc CLI and the schema migrator
 # (OpenNSW/agency cmd/migrate): core/database's Config
@@ -36,10 +35,8 @@ db:
   # postgres is the only driver supported today.
   driver: postgres
   postgres:
-    host: localhost
-    # Mostly 5432 for local Postgres; a different port avoids clashing with one
-    # already running on the host.
-    port: 55432
+    host: db
+    port: 5432
     user: postgres
     password: "{{env:DB_PASSWORD}}"
     name: nsw_db
@@ -53,8 +50,8 @@ db:
 server:
   port: 8080
   # debug | info | warn | error
-  logLevel: debug
-  # This API's own base URL, as its callers reach it.
+  logLevel: info
+  # The browser-facing URL: the host port compose publishes (BACKEND_PORT).
   serviceURL: http://localhost:8080
   # Maximum request body size, in bytes (32 MiB).
   maxRequestBytes: 33554432
@@ -63,14 +60,13 @@ server:
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  # Config file paths, relative to the working directory at start-up.
-  # The outbound services registry. The docker one reaches the agencies by
-  # container hostname; services.json uses localhost references instead.
-  servicesConfigPath: ./configs/services.docker.json
-  # servicesConfigPath: ./configs/services.json
-  paymentMethodsConfigPath: ./configs/payment_methods.json
+  # Config file paths, relative to the container's working directory (/app),
+  # whose configs/ is the repo's, bind-mounted read-only.
+  # The outbound services registry, reaching the agencies by container hostname.
+  servicesConfigPath: configs/services.docker.json
+  paymentMethodsConfigPath: configs/payment_methods.json
   # The global catalog: logical names -> IdP token roles and OAuth2 client ids.
-  catalogConfigPath: ./configs/catalog.json
+  catalogConfigPath: configs/catalog.json
 
 # Agency portals are listed too: they call the storage service directly.
 cors:
@@ -120,7 +116,9 @@ storage:
   #   deletePath: /api/v1/storage/{key}
 
 authn:
-  jwksURL: https://localhost:8090/oauth2/jwks
+  # The keys are fetched in-network; the issuer is the browser-facing host the
+  # tokens are minted for.
+  jwksURL: https://thunderid:8090/oauth2/jwks
   issuer: https://localhost:8090
   audience: https://api.nsw-srilanka.local
   clientIDs:
@@ -151,13 +149,13 @@ notification:
       sidCode: sidCode
 
 temporal:
-  host: localhost
+  host: temporal
   port: 7233
   namespace: default
 
 # Audit service (Argus).
 audit:
-  baseURL: http://localhost:3001
+  baseURL: http://argus:3001
   apiKey: "{{env:ARGUS_API_KEY}}"
 
 integrations:
@@ -193,10 +191,11 @@ artifactLoader:
     # ref).
     # useRawHost: false
     # rawBaseURL: https://raw.githubusercontent.com
-  # Offline alternative: clone the artifacts repo and point root at its tnsw dir
+  # Offline alternative: clone the artifacts repo and set ARTIFACT_LOCAL_ROOT in
+  # .env to its tnsw dir; compose bind-mounts that at /app/artifacts.
   #   git clone https://github.com/OpenNSW/one-trade-artifacts.git <path>
   # local:
-  #   root: ../one-trade-artifacts/tnsw
+  #   root: /app/artifacts
   # s3:
   #   bucket: nsw-configs
   #   region: us-east-1

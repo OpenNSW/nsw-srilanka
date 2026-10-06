@@ -6,8 +6,8 @@ Helm chart for Sri Lanka's Trade National Single Window platform: the
 ([`portals/apps/trader-app`](../../../portals/apps/trader-app)), deployed
 together as one release with `backend`/`frontend` sections in values. Infra
 this stack depends on (Postgres, Temporal, Thunder ID, Argus) is deployed
-separately — component env just points at their in-cluster Service names or
-external URLs.
+separately — the backend's config just points at their in-cluster Service
+names or external URLs.
 
 **Start from [`../values-example.yaml`](../values-example.yaml)** — a
 complete, ready-to-edit override file covering every config value each
@@ -86,10 +86,16 @@ right image per node — no `nodeSelector` on `kubernetes.io/arch` is needed.
 
 The migration Job (`backend.migration.enabled: true`) uses a **different
 image** from the backend Deployment — see `backend.migration.image` in
-`values.yaml`. It also uses **different DB env var names** than the backend
-(`DB_USER`, not `DB_USERNAME`) because it runs the external nsw-agency
-migrator's own binary, not this backend's code. `backend.migration.image.tag`
-defaults to `backend.image.tag`, then to the chart's `appVersion`.
+`values.yaml` — it runs the external OpenNSW/agency migrator's own binary, not
+this backend's code. Its configuration is not separate, though: it reads the
+`db` section (and `migrationDir`, if set) of the same `backend.config`, rendered
+into a hook-scoped config.yaml of its own that holds nothing else — on a first
+install the Job runs before the backend ConfigMap exists, and the migrator
+resolves every placeholder in its file, so only the database secrets need to
+resolve. It inherits `backend.env`/`backend.envFrom` for those secrets. `backend.config.db.driver` must be `postgres` — the migrator
+defaults it to sqlite, so the chart refuses to render without it.
+`backend.migration.image.tag` defaults to `backend.image.tag`, then to the
+chart's `appVersion`.
 
 ### Prerequisite: secrets
 
@@ -106,7 +112,9 @@ kubectl create secret generic nsw-secrets \
   --from-literal=m2m-customs-secret=... \
   --from-literal=m2m-sltb-secret=... \
   --from-literal=m2m-asycuda-secret=... \
-  --from-literal=argus-api-key=...
+  --from-literal=argus-api-key=... \
+  --from-literal=notification-email-token=... \
+  --from-literal=notification-sms-password=...
 ```
 
 The GovPay+ gateway also needs this GO's RSA private key. GovPay+ encrypts
@@ -127,8 +135,10 @@ reference; an inline PEM is refused. Without it the backend starts but answers
 every GovPay+ call with 500; a key that is set but unreadable stops the backend
 at startup.
 
-See [`.env.example`](../../../.env.example) for what each of these secrets
-backs and the full set of non-secret config the backend reads. The frontend
+`backend.env` exposes each `nsw-secrets` key to the server as an env var, and
+`backend.config` references it by placeholder (see below). See
+[`configs/config.example.yaml`](../../../configs/config.example.yaml) for
+every setting the backend reads. The frontend
 needs no secrets — its `config` is all public SPA config (see below).
 
 ### Backend config file
@@ -138,7 +148,11 @@ provides one. `backend.config` holds the file's content as values (the schema
 is [`configs/config.example.yaml`](../../../configs/config.example.yaml)). The
 chart renders it into a ConfigMap and mounts it read-only at
 `backend.configMountPath` (`/app/config`), then points `CONFIG_PATH` there.
-`backend.config` is empty by default, which is valid.
+Every server setting lives here — the backend reads no other env vars besides
+`APP_ENV` and the secrets the file references. There are no built-in
+defaults: every setting the server needs must be set, or it refuses to start
+(see [`values-example.yaml`](../values-example.yaml) for a complete one).
+`backend.config` is empty by default, so an override file always sets it.
 
 - To use a file of your own instead, set `backend.env.CONFIG_PATH`. The chart
   then leaves `CONFIG_PATH` alone.

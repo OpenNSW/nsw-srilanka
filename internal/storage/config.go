@@ -7,9 +7,9 @@ import (
 	corestorage "github.com/OpenNSW/core/storage"
 )
 
-// TypeProxy is the STORAGE_TYPE that serves storage from another service
-// instead of a backend of this deployment's own. Every other STORAGE_TYPE is
-// a core/storage backend type.
+// TypeProxy is the storage type (storage.type) that serves storage from
+// another service instead of a backend of this deployment's own. Every other
+// type is a core/storage backend type.
 const TypeProxy = "proxy"
 
 // KeyPlaceholder marks where the storage key goes in ProxyConfig's
@@ -24,14 +24,15 @@ const (
 	DefaultProxyDeletePath   = "/api/v1/storage/" + KeyPlaceholder
 )
 
-// Config is the storage configuration. Type (STORAGE_TYPE) selects either
+// Config is the storage configuration. Type (storage.type) selects either
 // TypeProxy, which uses Proxy, or a core/storage backend, which uses the
-// embedded core/storage settings.
+// embedded core/storage settings. Those are inlined, so in config.yaml they sit
+// beside proxy under the same storage section.
 type Config struct {
-	corestorage.Config
+	corestorage.Config `yaml:",inline"`
 	// Proxy is used when Type is TypeProxy: files are served from another
 	// service that owns them.
-	Proxy ProxyConfig
+	Proxy ProxyConfig `yaml:"proxy"`
 }
 
 // IsProxy reports whether Type selects proxy mode.
@@ -49,41 +50,41 @@ func (c Config) Validate() error {
 	return c.Config.Validate()
 }
 
-// ProxyConfig configures proxy mode (STORAGE_TYPE=proxy): which service owns
+// ProxyConfig configures proxy mode (storage.type: proxy): which service owns
 // the files and where it serves its storage API.
 type ProxyConfig struct {
 	// Service is the owning service's ID in the outbound services registry
 	// (services.json), which supplies its URL, authentication and timeout.
-	Service string
+	Service string `yaml:"service"`
 	// UploadPath is the owning service's upload endpoint (POST), which
 	// allocates a key and returns the file metadata with an upload URL.
-	UploadPath string
+	UploadPath string `yaml:"uploadPath"`
 	// DownloadPath is its download endpoint (GET), which returns a
 	// download URL. Must contain {key}.
-	DownloadPath string
+	DownloadPath string `yaml:"downloadPath"`
 	// DeletePath is its delete endpoint (DELETE). Must contain {key}.
-	DeletePath string
+	DeletePath string `yaml:"deletePath"`
 }
 
 // Validate reports whether the proxy configuration is usable.
 func (c ProxyConfig) Validate() error {
 	if strings.TrimSpace(c.Service) == "" {
-		return fmt.Errorf("STORAGE_PROXY_SERVICE is required when STORAGE_TYPE=%s", TypeProxy)
+		return fmt.Errorf("storage.proxy.service is required when storage.type is %s", TypeProxy)
 	}
 	for name, path := range map[string]string{
-		"STORAGE_PROXY_UPLOAD_PATH":   c.UploadPath,
-		"STORAGE_PROXY_DOWNLOAD_PATH": c.DownloadPath,
-		"STORAGE_PROXY_DELETE_PATH":   c.DeletePath,
+		"storage.proxy.uploadPath":   c.UploadPath,
+		"storage.proxy.downloadPath": c.DownloadPath,
+		"storage.proxy.deletePath":   c.DeletePath,
 	} {
 		if strings.TrimSpace(path) == "" {
-			return fmt.Errorf("%s is required when STORAGE_TYPE=%s", name, TypeProxy)
+			return fmt.Errorf("%s is required when storage.type is %s", name, TypeProxy)
 		}
 	}
 	if !strings.Contains(c.DownloadPath, KeyPlaceholder) {
-		return fmt.Errorf("STORAGE_PROXY_DOWNLOAD_PATH must contain %s", KeyPlaceholder)
+		return fmt.Errorf("storage.proxy.downloadPath must contain %s", KeyPlaceholder)
 	}
 	if !strings.Contains(c.DeletePath, KeyPlaceholder) {
-		return fmt.Errorf("STORAGE_PROXY_DELETE_PATH must contain %s", KeyPlaceholder)
+		return fmt.Errorf("storage.proxy.deletePath must contain %s", KeyPlaceholder)
 	}
 	return nil
 }

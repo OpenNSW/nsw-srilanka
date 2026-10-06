@@ -58,7 +58,7 @@ RUN GOWORK=off go mod init migrate-build
 # module and fails with "does not contain package .../backend/cmd/migrate",
 # because backend/ is carved out of the root module by its own go.mod.
 # Publishing `backend/vX.Y.Z` upstream would make the plain tag usable here.
-ARG MIGRATE_VERSION=v0.0.0-20260828042937-10e26e2d7008
+ARG MIGRATE_VERSION=v0.0.0-20260928195741-0530d08e5fdd
 
 # Fetch kept in its own layer, above the TARGETOS/TARGETARCH ARGs: an ARG makes
 # every RUN beneath it platform-specific, so this way one download serves both
@@ -99,10 +99,10 @@ WORKDIR /app
 COPY --from=migrate-builder /out/migrate /usr/local/bin/migrate
 COPY migrations/ /app/migrations/
 
-# Tell the migrator where the baked-in SQL lives; the postgres connection
-# is supplied via DB_* env vars at runtime (see compose.yml).
-ENV MIGRATION_DIR=/app/migrations \
-    DB_DRIVER=postgres
+# The migrator reads its connection from the db section of the server's own
+# config.yaml, mounted at runtime and named by CONFIG_PATH (see compose.yml and
+# the Helm chart's migration Job). Its migrationDir defaults to ./migrations,
+# i.e. the SQL baked in above, relative to this WORKDIR.
 
 # Numeric so the kubelet can verify it against runAsNonRoot: true — it cannot
 # resolve names. A cluster that assigns its own UID overrides this either way.
@@ -140,7 +140,7 @@ COPY --chown=1001:0 --from=builder /out/server /app/server
 COPY --chown=1001:0 --from=builder /out/otc /usr/local/bin/otc
 
 # Bake the configs directory. Only the committed *.example.json templates
-# (services, payment_methods, notification, catalog), config.example.yaml and
+# (services, payment_methods, catalog), the config*.example.yaml templates and
 # argus/ land here — the live files they seed are excluded by .dockerignore
 # because they carry literal credentials, so no build bakes them regardless of
 # the working tree.
@@ -148,21 +148,21 @@ COPY --chown=1001:0 --from=builder /out/otc /usr/local/bin/otc
 # Workflow/form artifacts and the manifest are NOT baked either — they are
 # resolved at startup by the pluggable artifact loader, so the image does not
 # couple the code to one deployment's workflow content. The code default is the
-# local loader reading /app/configs (ARTIFACT_LOADER_TYPE=local), i.e. a bare
-# container expects the artifacts to be bind-mounted; compose.yml and .env.example
-# override this to the GitHub loader pointed at OpenNSW/one-trade-artifacts (see
-# the ARTIFACT_* env there). A host bind mount over /app/configs (docker-compose)
+# local loader reading /app/configs (artifactLoader.type: local), i.e. a bare
+# container expects the artifacts to be bind-mounted; the config*.example.yaml
+# templates switch this to the GitHub loader pointed at
+# OpenNSW/one-trade-artifacts (see their artifactLoader section). A host bind mount over /app/configs (docker-compose)
 # takes precedence over anything baked here.
 COPY --chown=1001:0 --from=builder /src/configs /app/configs
 
 # The blob storage mount point, and the only path the server writes to
-# (STORAGE_TYPE=local, STORAGE_LOCAL_BASE_DIR=./bucket). It is group-0 writable
+# (storage.type: local, storage.local.baseDir: ./bucket). It is group-0 writable
 # the running UID may be assigned by the cluster and is unknown at build time;
 # a mode-0755 dir owned by 1001 would reject the first file upload.
-# Keep STORAGE_LOCAL_BASE_DIR at this baked path, or mount a volume over it: /app
+# Keep storage.local.baseDir at this baked path, or mount a volume over it: /app
 # itself is deliberately not group-writable, so pointing the driver at a sibling
 # directory it has to create would fail under an arbitrary UID. Hardened
-# deployments should prefer STORAGE_TYPE=s3 or an emptyDir/PVC mounted here —
+# deployments should prefer storage.type: s3 or an emptyDir/PVC mounted here —
 # the latter is required if readOnlyRootFilesystem is enabled.
 RUN mkdir -p /app/bucket \
     && chown 1001:0 /app/bucket \
@@ -172,14 +172,15 @@ RUN mkdir -p /app/bucket \
 # resolve names. A cluster that assigns its own UID overrides this either way.
 USER 1001
 
-# Expose application port (configurable via SERVER_PORT env var)
+# Expose application port (server.port in config.yaml)
 EXPOSE 8080
 
 # 127.0.0.1 rather than localhost: busybox wget resolves localhost to ::1 first
 # and tries only that address, while the server's :8080 bind degrades to
-# IPv4-only wherever the container has no IPv6.
+# IPv4-only wherever the container has no IPv6. The port is server.port's
+# default; a deployment that changes it overrides this check too.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:${SERVER_PORT:-8080}/health || exit 1
+    CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
 # Default command
 CMD ["/app/server"]

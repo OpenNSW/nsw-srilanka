@@ -79,7 +79,8 @@ type harness struct {
 	gateway *mockGateway
 }
 
-// newHarness loads config from the environment (source .env first), seeds a
+// newHarness loads config from the committed config.example.yaml, whose
+// secret placeholders resolve from the environment (source .env first), seeds a
 // MEMBER user, builds the app with the real authn manager pointed at a local
 // JWKS server, and serves it via an httptest.Server. Torn down via t.Cleanup.
 func newHarness(t *testing.T) *harness {
@@ -106,7 +107,7 @@ func newHarness(t *testing.T) *harness {
 	// methods example is rewritten to carry the minted private keys.
 	cfg.Server.PaymentMethodsConfigPath = writePaymentMethodsConfig(t, root, payments, paymentKeys)
 	cfg.Server.CatalogConfigPath = filepath.Join(root, "configs", "catalog.example.json")
-	cfg.Storage.LocalBaseDir = t.TempDir() // keep blob storage out of the repo tree
+	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
 
 	// A controllable mock agency stands in for all external OGA services; all
 	// known agency service ids are pointed at it so EXTERNAL_REVIEW injects land

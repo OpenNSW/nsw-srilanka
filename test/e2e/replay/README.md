@@ -52,7 +52,7 @@ make test-e2e   # stops the api container, then runs E2E=1 GOWORK=off go test ./
 
 `make test-e2e` sources `.env` automatically — ensure `GOWORK` is not set (or set to `off`) in `.env` so the go workspace does not interfere with module resolution.
 
-The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `ARTIFACT_*` from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. `.env.example` defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). To run offline, clone that repo and set `ARTIFACT_LOADER_TYPE=local` / `ARTIFACT_LOCAL_ROOT=<path>/tnsw` in `.env`.
+The harness builds the full app via `bootstrap.Build`, which loads the workflow/form artifacts through the artifact loader (`config.Load()` reads `artifactLoader` from the committed `configs/config.example.yaml`, resolving its secret placeholders from the sourced `.env`). These artifacts are **not** in this repo — they live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under `tnsw/`. That template defaults to the GitHub loader, so `make test-e2e` works with no local clone (network access to GitHub required). To run offline, clone that repo and set `artifactLoader.type: local` / `artifactLoader.local.root: <path>/tnsw` in it (locally, without committing).
 
 Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task queues.
 
@@ -284,4 +284,4 @@ The mock agency waits until the app sends the inject for that task id, then post
 
 **`pay` times out** — the payment record hasn't been created. Increase `timeout` or check the payment method submit step succeeded.
 
-**401/403 on agency callback** — the mock posts with a real agency bearer. Ensure the agency `clientID` (from `configs/agencies/<id>.json`) is in `AUTH_CLIENT_IDS` in `.env`.
+**401/403 on agency callback** — the mock posts with a real agency bearer. Ensure the agency `clientID` (from `configs/agencies/<id>.json`) is in `authn.clientIDs` in `configs/config.example.yaml`.

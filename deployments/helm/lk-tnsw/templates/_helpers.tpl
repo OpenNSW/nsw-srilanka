@@ -90,3 +90,12 @@ Usage: {{ include "lk-tnsw.imageTag" (dict "tag" .Values.backend.image.tag "root
 {{- end -}}
 {{- $tag -}}
 {{- end -}}
+
+{{/*
+The server's config.yaml, rendered from backend.config. One definition for the
+backend ConfigMap and the migration Job's hook copy of it, so the two can never
+hold different files.
+*/}}
+{{- define "lk-tnsw.backend.configYAML" -}}
+{{ toYaml (.Values.backend.config | default dict) }}
+{{- end }}

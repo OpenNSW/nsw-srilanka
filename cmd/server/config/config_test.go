@@ -2,10 +2,10 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,77 +15,175 @@ import (
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/storage"
+	"github.com/OpenNSW/core/storage/drivers"
 
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
+	"gopkg.in/yaml.v3"
 )
 
-// TestMain writes a throwaway notification config and config.yaml to a temp dir and points
-// NOTIFICATIONS_CONFIG_PATH and CONFIG_PATH at them as this whole test binary's defaults, so
-// every test that calls Load() gets real, parseable files unless it overrides a var itself — as
-// the TestLoad_NotificationConfig* and TestLoad_ConfigFile* tests do, to point at a
-// missing/malformed one instead; t.Setenv correctly restores these defaults afterward. Load
-// reads both files eagerly (see loadNotificationProviders and loadConfigFile): Config.Validate
-// requires Providers non-empty, and config.yaml is mandatory, unlike the other *ConfigPath
-// fields in this package, which are just stored and read later, downstream.
-func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "config-test-*")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create temp dir for config fixtures: %v\n", err)
-		os.Exit(1)
-	}
-	fixtures := []struct{ env, name, body string }{
-		{"NOTIFICATIONS_CONFIG_PATH", "notification.json", `{"email":{"baseURL":"https://email.example.com"}}`},
-		{"CONFIG_PATH", "config.yaml", "refid: {}\n"},
-	}
-	for _, f := range fixtures {
-		path := filepath.Join(dir, f.name)
-		if err := os.WriteFile(path, []byte(f.body), 0o600); err != nil {
-			os.RemoveAll(dir)
-			fmt.Fprintf(os.Stderr, "failed to write %s fixture: %v\n", f.name, err)
-			os.Exit(1)
-		}
-		os.Setenv(f.env, path)
-	}
+// baseYAML is the smallest config.yaml Load accepts: every setting the server
+// requires, there being no built-in defaults. Tests change or drop single keys
+// of it with configYAML rather than repeat it.
+const baseYAML = `
+mode: tnsw
+db:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 5432
+    user: postgres
+    password: testpassword
+    name: nsw_db
+    sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
+server:
+  port: 8080
+  serviceURL: http://localhost:8080
+  logLevel: info
+  servicesConfigPath: configs/services.json
+  paymentMethodsConfigPath: configs/payment_methods.json
+  catalogConfigPath: configs/catalog.json
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+cors:
+  allowedOrigins: ["http://localhost:3000"]
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+storage:
+  type: local
+  local:
+    baseDir: ./bucket
+    publicURL: http://localhost:8080
+    putSecret: test-put-secret
+  presignTTLSeconds: 900
+authn:
+  jwksURL: https://localhost:8090/oauth2/jwks
+  issuer: https://localhost:8090
+  audience: https://api.nsw-srilanka.local
+  clientIDs: [TRADER_PORTAL_APP]
+temporal:
+  host: localhost
+  port: 7233
+  namespace: default
+notification:
+  providers:
+    email:
+      baseURL: https://email.example.com
+integrations:
+  slpaWebhookSecret: a-secret-shared-with-slpa
+artifactLoader:
+  type: local
+  local:
+    root: "."
+`
 
-	// os.Exit skips deferred calls, so m.Run must be captured and cleanup done explicitly rather
-	// than via defer.
-	code := m.Run()
-	os.RemoveAll(dir)
-	os.Exit(code)
+// configYAML returns baseYAML with override deep-merged over it and the
+// dotted keys in drop removed, so a test states only the settings it is about.
+func configYAML(t *testing.T, override string, drop ...string) string {
+	t.Helper()
+	var base, over map[string]any
+	if err := yaml.Unmarshal([]byte(baseYAML), &base); err != nil {
+		t.Fatalf("baseYAML: %v", err)
+	}
+	if err := yaml.Unmarshal([]byte(override), &over); err != nil {
+		t.Fatalf("override: %v", err)
+	}
+	mergeYAML(base, over)
+	for _, key := range drop {
+		dropYAML(base, strings.Split(key, "."))
+	}
+	out, err := yaml.Marshal(base)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(out)
+}
+
+func mergeYAML(dst, src map[string]any) {
+	for k, v := range src {
+		if sv, ok := v.(map[string]any); ok {
+			if dv, ok := dst[k].(map[string]any); ok {
+				mergeYAML(dv, sv)
+				continue
+			}
+		}
+		dst[k] = v
+	}
+}
+
+func dropYAML(m map[string]any, path []string) {
+	if len(path) == 1 {
+		delete(m, path[0])
+		return
+	}
+	if sub, ok := m[path[0]].(map[string]any); ok {
+		dropYAML(sub, path[1:])
+	}
+}
+
+// loadYAML writes body as config.yaml, points CONFIG_PATH at it and runs Load.
+func loadYAML(t *testing.T, body string) (*Config, error) {
+	t.Helper()
+	t.Setenv("CONFIG_PATH", writeConfigFile(t, body))
+	return Load()
 }
 
 // validConfig returns a minimal Config that passes Validate().
 func validConfig() *Config {
 	return &Config{
+		Mode: ModeTNSW,
 		Database: database.Config{
 			Driver: database.Postgres,
 			Postgres: &database.PostgresConfig{
 				Host:     "localhost",
+				Port:     5432,
 				User:     "postgres",
 				Password: "secret",
 				Name:     "testdb",
+				SSLMode:  "disable",
+				Pool: database.PoolConfig{
+					MaxIdleConns:           10,
+					MaxOpenConns:           100,
+					MaxConnLifetimeSeconds: 3600,
+				},
 			},
 		},
 		Server: ServerConfig{
-			ServiceURL:        "http://localhost:8080",
-			MaxRequestBytes:   33554432,
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       15 * time.Second,
-			WriteTimeout:      30 * time.Second,
-			IdleTimeout:       60 * time.Second,
+			Port:                     8080,
+			ServicesConfigPath:       "configs/services.json",
+			PaymentMethodsConfigPath: "configs/payment_methods.json",
+			CatalogConfigPath:        "configs/catalog.json",
+			ServiceURL:               "http://localhost:8080",
+			MaxRequestBytes:          33554432,
+			ReadHeaderTimeout:        5 * time.Second,
+			ReadTimeout:              15 * time.Second,
+			WriteTimeout:             30 * time.Second,
+			IdleTimeout:              60 * time.Second,
 		},
 		CORS: cors.Config{
 			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedMethods: []string{"GET", "POST"},
+			AllowedHeaders: []string{"Content-Type", "Authorization"},
 		},
 		Storage: nswstorage.Config{Config: storage.Config{
-			Type:           "local",
-			LocalBaseDir:   "./bucket",
-			LocalPublicURL: "http://localhost:8080",
-			LocalPutSecret: "secret",
-			PresignTTL:     15 * time.Minute,
+			Type: storage.TypeLocal,
+			Local: drivers.LocalConfig{
+				BaseDir:   "./bucket",
+				PublicURL: "http://localhost:8080",
+				PutSecret: "secret",
+			},
+			PresignTTLSeconds: 900,
 		}},
 		Integrations: integrations.Config{
 			SLPAWebhookSecret: "a-secret-shared-with-slpa",
@@ -159,16 +257,16 @@ func TestServerConfigValidate_NonPositiveLimits(t *testing.T) {
 		mutate func(*ServerConfig)
 		errMsg string
 	}{
-		{"zero MaxRequestBytes", func(s *ServerConfig) { s.MaxRequestBytes = 0 }, "SERVER_MAX_REQUEST_BYTES must be greater than zero"},
-		{"negative MaxRequestBytes", func(s *ServerConfig) { s.MaxRequestBytes = -1 }, "SERVER_MAX_REQUEST_BYTES must be greater than zero"},
-		{"zero ReadHeaderTimeout", func(s *ServerConfig) { s.ReadHeaderTimeout = 0 }, "SERVER_READ_HEADER_TIMEOUT must be greater than zero"},
-		{"negative ReadHeaderTimeout", func(s *ServerConfig) { s.ReadHeaderTimeout = -1 * time.Second }, "SERVER_READ_HEADER_TIMEOUT must be greater than zero"},
-		{"zero ReadTimeout", func(s *ServerConfig) { s.ReadTimeout = 0 }, "SERVER_READ_TIMEOUT must be greater than zero"},
-		{"negative ReadTimeout", func(s *ServerConfig) { s.ReadTimeout = -1 * time.Second }, "SERVER_READ_TIMEOUT must be greater than zero"},
-		{"zero WriteTimeout", func(s *ServerConfig) { s.WriteTimeout = 0 }, "SERVER_WRITE_TIMEOUT must be greater than zero"},
-		{"negative WriteTimeout", func(s *ServerConfig) { s.WriteTimeout = -1 * time.Second }, "SERVER_WRITE_TIMEOUT must be greater than zero"},
-		{"zero IdleTimeout", func(s *ServerConfig) { s.IdleTimeout = 0 }, "SERVER_IDLE_TIMEOUT must be greater than zero"},
-		{"negative IdleTimeout", func(s *ServerConfig) { s.IdleTimeout = -1 * time.Second }, "SERVER_IDLE_TIMEOUT must be greater than zero"},
+		{"zero MaxRequestBytes", func(s *ServerConfig) { s.MaxRequestBytes = 0 }, "server.maxRequestBytes must be greater than zero"},
+		{"negative MaxRequestBytes", func(s *ServerConfig) { s.MaxRequestBytes = -1 }, "server.maxRequestBytes must be greater than zero"},
+		{"zero ReadHeaderTimeout", func(s *ServerConfig) { s.ReadHeaderTimeout = 0 }, "server.readHeaderTimeout must be greater than zero"},
+		{"negative ReadHeaderTimeout", func(s *ServerConfig) { s.ReadHeaderTimeout = -1 * time.Second }, "server.readHeaderTimeout must be greater than zero"},
+		{"zero ReadTimeout", func(s *ServerConfig) { s.ReadTimeout = 0 }, "server.readTimeout must be greater than zero"},
+		{"negative ReadTimeout", func(s *ServerConfig) { s.ReadTimeout = -1 * time.Second }, "server.readTimeout must be greater than zero"},
+		{"zero WriteTimeout", func(s *ServerConfig) { s.WriteTimeout = 0 }, "server.writeTimeout must be greater than zero"},
+		{"negative WriteTimeout", func(s *ServerConfig) { s.WriteTimeout = -1 * time.Second }, "server.writeTimeout must be greater than zero"},
+		{"zero IdleTimeout", func(s *ServerConfig) { s.IdleTimeout = 0 }, "server.idleTimeout must be greater than zero"},
+		{"negative IdleTimeout", func(s *ServerConfig) { s.IdleTimeout = -1 * time.Second }, "server.idleTimeout must be greater than zero"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -182,298 +280,92 @@ func TestServerConfigValidate_NonPositiveLimits(t *testing.T) {
 	}
 }
 
-// --- getEnvOrDefault ---
-
-func TestGetEnvOrDefault(t *testing.T) {
-	t.Run("unset key returns default", func(t *testing.T) {
-		got := getEnvOrDefault("__UNSET_KEY_XYZ__", "fallback")
-		if got != "fallback" {
-			t.Errorf("got %q, want %q", got, "fallback")
-		}
-	})
-	t.Run("set key returns trimmed value", func(t *testing.T) {
-		t.Setenv("__TEST_ENV__", "  hello  ")
-		got := getEnvOrDefault("__TEST_ENV__", "fallback")
-		if got != "hello" {
-			t.Errorf("got %q, want %q", got, "hello")
-		}
-	})
-	t.Run("whitespace-only value returns default", func(t *testing.T) {
-		t.Setenv("__TEST_ENV_WS__", "   ")
-		got := getEnvOrDefault("__TEST_ENV_WS__", "fallback")
-		if got != "fallback" {
-			t.Errorf("got %q, want %q", got, "fallback")
-		}
-	})
-}
-
-// --- getIntEnvOrDefault ---
-
-func TestGetIntEnvOrDefault(t *testing.T) {
-	t.Run("unset key returns default", func(t *testing.T) {
-		got := getIntEnvOrDefault("__UNSET_INT__", 42)
-		if got != 42 {
-			t.Errorf("got %d, want 42", got)
-		}
-	})
-	t.Run("valid int value", func(t *testing.T) {
-		t.Setenv("__TEST_INT__", "9090")
-		got := getIntEnvOrDefault("__TEST_INT__", 42)
-		if got != 9090 {
-			t.Errorf("got %d, want 9090", got)
-		}
-	})
-	t.Run("invalid string returns default", func(t *testing.T) {
-		t.Setenv("__TEST_INT_BAD__", "not-a-number")
-		got := getIntEnvOrDefault("__TEST_INT_BAD__", 42)
-		if got != 42 {
-			t.Errorf("got %d, want 42", got)
-		}
-	})
-	t.Run("whitespace-only returns default", func(t *testing.T) {
-		t.Setenv("__TEST_INT_WS__", "   ")
-		got := getIntEnvOrDefault("__TEST_INT_WS__", 42)
-		if got != 42 {
-			t.Errorf("got %d, want 42", got)
-		}
-	})
-}
-
-// --- getBoolOrDefault ---
-
-func TestGetBoolOrDefault(t *testing.T) {
-	t.Run("unset key returns default false", func(t *testing.T) {
-		got := getBoolOrDefault("__UNSET_BOOL__", false)
-		if got != false {
-			t.Errorf("got %v, want false", got)
-		}
-	})
-	t.Run("unset key returns default true", func(t *testing.T) {
-		got := getBoolOrDefault("__UNSET_BOOL2__", true)
-		if got != true {
-			t.Errorf("got %v, want true", got)
-		}
-	})
-	t.Run("'true' string", func(t *testing.T) {
-		t.Setenv("__TEST_BOOL__", "true")
-		if !getBoolOrDefault("__TEST_BOOL__", false) {
-			t.Error("expected true")
-		}
-	})
-	t.Run("'false' string", func(t *testing.T) {
-		t.Setenv("__TEST_BOOL__", "false")
-		if getBoolOrDefault("__TEST_BOOL__", true) {
-			t.Error("expected false")
-		}
-	})
-	t.Run("'1' string", func(t *testing.T) {
-		t.Setenv("__TEST_BOOL__", "1")
-		if !getBoolOrDefault("__TEST_BOOL__", false) {
-			t.Error("expected true")
-		}
-	})
-	t.Run("'0' string", func(t *testing.T) {
-		t.Setenv("__TEST_BOOL__", "0")
-		if getBoolOrDefault("__TEST_BOOL__", true) {
-			t.Error("expected false")
-		}
-	})
-	t.Run("invalid string returns default", func(t *testing.T) {
-		t.Setenv("__TEST_BOOL_BAD__", "yes-please")
-		got := getBoolOrDefault("__TEST_BOOL_BAD__", true)
-		if !got {
-			t.Error("expected default true")
-		}
-	})
-	t.Run("whitespace-only returns default", func(t *testing.T) {
-		t.Setenv("__TEST_BOOL_WS__", "  ")
-		got := getBoolOrDefault("__TEST_BOOL_WS__", true)
-		if !got {
-			t.Error("expected default true")
-		}
-	})
-}
-
-// --- getDurationOrDefault ---
-
-func TestGetDurationOrDefault(t *testing.T) {
-	t.Run("unset key returns default", func(t *testing.T) {
-		got := getDurationOrDefault("__UNSET_DUR__", 5*time.Minute)
-		if got != 5*time.Minute {
-			t.Errorf("got %v, want 5m", got)
-		}
-	})
-	t.Run("valid duration", func(t *testing.T) {
-		t.Setenv("__TEST_DUR__", "30m")
-		got := getDurationOrDefault("__TEST_DUR__", 5*time.Minute)
-		if got != 30*time.Minute {
-			t.Errorf("got %v, want 30m", got)
-		}
-	})
-	t.Run("invalid string returns default", func(t *testing.T) {
-		t.Setenv("__TEST_DUR_BAD__", "not-a-duration")
-		got := getDurationOrDefault("__TEST_DUR_BAD__", 5*time.Minute)
-		if got != 5*time.Minute {
-			t.Errorf("got %v, want 5m", got)
-		}
-	})
-	t.Run("whitespace-only returns default", func(t *testing.T) {
-		t.Setenv("__TEST_DUR_WS__", "   ")
-		got := getDurationOrDefault("__TEST_DUR_WS__", 5*time.Minute)
-		if got != 5*time.Minute {
-			t.Errorf("got %v, want 5m", got)
-		}
-	})
-}
-
-// --- parseCommaSeparated ---
-
-func TestParseCommaSeparated(t *testing.T) {
-	tests := []struct {
-		input string
-		want  []string
-	}{
-		{"", []string{}},
-		{"a", []string{"a"}},
-		{"a,b,c", []string{"a", "b", "c"}},
-		{" a , b , c ", []string{"a", "b", "c"}},
-		{"a,,b", []string{"a", "b"}},
-		{"  ,  ,  ", []string{}},
-	}
-	for _, tc := range tests {
-		got := parseCommaSeparated(tc.input)
-		if len(got) != len(tc.want) {
-			t.Errorf("input %q: got %v, want %v", tc.input, got, tc.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tc.want[i] {
-				t.Errorf("input %q index %d: got %q, want %q", tc.input, i, got[i], tc.want[i])
-			}
-		}
-	}
-}
-
-// --- parseLogLevel ---
-
-func TestParseLogLevel(t *testing.T) {
-	tests := []struct {
-		input string
-		want  slog.Level
-	}{
-		{"debug", slog.LevelDebug},
-		{"DEBUG", slog.LevelDebug},
-		{"info", slog.LevelInfo},
-		{"INFO", slog.LevelInfo},
-		{"warn", slog.LevelWarn},
-		{"WARN", slog.LevelWarn},
-		{"error", slog.LevelError},
-		{"ERROR", slog.LevelError},
-		{"", slog.LevelInfo},
-		{"unknown", slog.LevelInfo},
-		{"verbose", slog.LevelInfo},
-	}
-	for _, tc := range tests {
-		got := parseLogLevel(tc.input)
-		if got != tc.want {
-			t.Errorf("parseLogLevel(%q) = %v, want %v", tc.input, got, tc.want)
-		}
-	}
-}
-
 // --- Load ---
 
-func TestLoad_Defaults(t *testing.T) {
-	// DB_PASSWORD has no default and is required — set it explicitly.
-	// All other env vars are cleared so defaults apply.
-	envsToClear := []string{
-		"SERVER_PORT", "SERVICE_URL", "DB_HOST", "DB_PORT", "DB_USERNAME",
-		"DB_NAME", "DB_SSLMODE", "DB_MAX_IDLE_CONNS", "DB_MAX_OPEN_CONNS",
-		"DB_MAX_CONN_LIFETIME_SECONDS", "SERVICES_CONFIG_PATH",
-		"PAYMENT_METHODS_CONFIG_PATH", "SERVER_LOG_LEVEL",
-		"SERVER_MAX_REQUEST_BYTES", "SERVER_READ_HEADER_TIMEOUT",
-		"SERVER_READ_TIMEOUT", "SERVER_WRITE_TIMEOUT", "SERVER_IDLE_TIMEOUT",
-		"CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_METHODS", "CORS_ALLOWED_HEADERS",
-		"CORS_ALLOW_CREDENTIALS", "CORS_MAX_AGE", "STORAGE_TYPE",
-		"STORAGE_LOCAL_BASE_DIR", "STORAGE_LOCAL_PUBLIC_URL", "STORAGE_S3_ENDPOINT",
-		"STORAGE_S3_BUCKET", "STORAGE_S3_REGION", "STORAGE_S3_ACCESS_KEY",
-		"STORAGE_S3_SECRET_KEY", "STORAGE_S3_USE_SSL", "STORAGE_S3_PUBLIC_URL",
-		"STORAGE_LOCAL_PUT_SECRET", "STORAGE_PRESIGN_TTL", "STORAGE_PROXY_SERVICE",
-		"STORAGE_PROXY_UPLOAD_PATH", "STORAGE_PROXY_DOWNLOAD_PATH",
-		"STORAGE_PROXY_DELETE_PATH", "AUTH_JWKS_URL",
-		"AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_CLIENT_IDS",
-		"AUTH_JWKS_INSECURE_SKIP_VERIFY",
-		// NOTIFICATIONS_CONFIG_PATH deliberately stays unlisted — see TestMain.
-		"CATALOG_CONFIG_PATH", "TEMPORAL_HOST", "TEMPORAL_PORT",
-		"TEMPORAL_NAMESPACE",
-	}
-	for _, k := range envsToClear {
-		t.Setenv(k, "")
-	}
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-
-	cfg, err := Load()
+func TestLoad_Base(t *testing.T) {
+	cfg, err := loadYAML(t, baseYAML)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-
 	for _, tc := range []struct {
 		name string
 		got  any
 		want any
 	}{
+		{"Mode", cfg.Mode, ModeTNSW},
 		{"Server.Port", cfg.Server.Port, 8080},
-		{"Server.ServiceURL", cfg.Server.ServiceURL, "http://localhost:8080"},
-		{"Server.MaxRequestBytes", cfg.Server.MaxRequestBytes, int64(33554432)},
-		{"Server.ReadHeaderTimeout", cfg.Server.ReadHeaderTimeout, 5 * time.Second},
 		{"Server.ReadTimeout", cfg.Server.ReadTimeout, 15 * time.Second},
-		{"Server.WriteTimeout", cfg.Server.WriteTimeout, 30 * time.Second},
-		{"Server.IdleTimeout", cfg.Server.IdleTimeout, 60 * time.Second},
-		{"Server.CatalogConfigPath", cfg.Server.CatalogConfigPath, "configs/catalog.json"},
 		{"Server.LogLevel", cfg.Server.LogLevel, slog.LevelInfo},
-		{"Database.Host", cfg.Database.Postgres.Host, "localhost"},
-		{"Database.Password", cfg.Database.Postgres.Password, "testpassword"},
-		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "require"},
-		{"Temporal.Namespace", cfg.Temporal.Namespace, "default"},
-		{"CORS.AllowCredentials", cfg.CORS.AllowCredentials, true},
+		{"Database.Port", cfg.Database.Postgres.Port, 5432},
+		{"Database.SSLMode", cfg.Database.Postgres.SSLMode, "disable"},
+		{"Storage.Local.PublicURL", cfg.Storage.Local.PublicURL, "http://localhost:8080"},
+		{"ArtifactLoader.Type", cfg.ArtifactLoader.Type, loaders.TypeLocal},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
 		}
 	}
-
-	if len(cfg.CORS.AllowedOrigins) != 1 || cfg.CORS.AllowedOrigins[0] != "http://localhost:3000" {
-		t.Errorf("CORS.AllowedOrigins = %v, want [http://localhost:3000]", cfg.CORS.AllowedOrigins)
-	}
 }
 
-func TestLoad_DefaultFailClosed(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "")
-	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error when CORS_ALLOWED_ORIGINS is not set, got nil")
-	}
-	if !containsString(err.Error(), "CORS_ALLOWED_ORIGINS is required") {
-		t.Errorf("expected error mentioning 'CORS_ALLOWED_ORIGINS is required', got: %v", err)
+// There are no built-in defaults: leaving out any setting the server needs
+// fails Load at startup rather than running on a value of the code's choosing.
+func TestLoad_MissingRequiredSettingFails(t *testing.T) {
+	for _, key := range []string{
+		"mode",
+		"db.driver",
+		"db.postgres.host",
+		"db.postgres.port",
+		"db.postgres.user",
+		"db.postgres.password",
+		"db.postgres.name",
+		"db.postgres.sslMode",
+		"db.postgres.pool.maxIdleConns",
+		"db.postgres.pool.maxOpenConns",
+		"db.postgres.pool.maxConnLifetimeSeconds",
+		"server.port",
+		"server.serviceURL",
+		"server.servicesConfigPath",
+		"server.paymentMethodsConfigPath",
+		"server.catalogConfigPath",
+		"server.maxRequestBytes",
+		"server.readHeaderTimeout",
+		"server.readTimeout",
+		"server.writeTimeout",
+		"server.idleTimeout",
+		"cors.allowedOrigins",
+		"cors.allowedMethods",
+		"cors.allowedHeaders",
+		"storage.type",
+		"storage.local.baseDir",
+		"storage.local.publicURL",
+		"storage.local.putSecret",
+		"storage.presignTTLSeconds",
+		"authn.jwksURL",
+		"authn.issuer",
+		"authn.audience",
+		"authn.clientIDs",
+		"temporal.host",
+		"temporal.port",
+		"temporal.namespace",
+		"notification.providers",
+		"integrations.slpaWebhookSecret",
+		"artifactLoader.type",
+		"artifactLoader.local.root",
+	} {
+		t.Run(key, func(t *testing.T) {
+			if _, err := loadYAML(t, configYAML(t, "", key)); err == nil {
+				t.Fatalf("expected Load to fail without %s, got nil", key)
+			}
+		})
 	}
 }
 
 func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "*")
-	t.Setenv("CORS_ALLOW_CREDENTIALS", "true")
-
-	_, err := Load()
+	_, err := loadYAML(t, configYAML(t, `
+cors:
+  allowedOrigins: ["*"]
+  allowCredentials: true
+`))
 	if err == nil {
 		t.Fatal("expected error for wildcard origin with credentials=true, got nil")
 	}
@@ -483,37 +375,23 @@ func TestLoad_InvalidCORSWildcardWithCredentials(t *testing.T) {
 }
 
 func TestLoad_CustomPort(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("SERVER_PORT", "9090")
-	t.Setenv("SERVICE_URL", "")
-	t.Setenv("STORAGE_LOCAL_PUBLIC_URL", "")
-
-	cfg, err := Load()
+	cfg, err := loadYAML(t, configYAML(t, `
+server:
+  port: 9090
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
 	if cfg.Server.Port != 9090 {
 		t.Errorf("Server.Port = %d, want 9090", cfg.Server.Port)
 	}
-	if cfg.Server.ServiceURL != "http://localhost:9090" {
-		t.Errorf("Server.ServiceURL = %q, want http://localhost:9090", cfg.Server.ServiceURL)
-	}
-	if cfg.Storage.LocalPublicURL != "http://localhost:9090" {
-		t.Errorf("Storage.LocalPublicURL = %q, want http://localhost:9090", cfg.Storage.LocalPublicURL)
-	}
 }
 
 func TestLoad_CustomServiceURL(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("SERVICE_URL", "https://api.example.com")
-
-	cfg, err := Load()
+	cfg, err := loadYAML(t, configYAML(t, `
+server:
+  serviceURL: https://api.example.com
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -523,13 +401,10 @@ func TestLoad_CustomServiceURL(t *testing.T) {
 }
 
 func TestLoad_CustomLogLevel(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("SERVER_LOG_LEVEL", "debug")
-
-	cfg, err := Load()
+	cfg, err := loadYAML(t, configYAML(t, `
+server:
+  logLevel: debug
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -539,17 +414,14 @@ func TestLoad_CustomLogLevel(t *testing.T) {
 }
 
 func TestLoad_CustomServerLimits(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("SERVER_MAX_REQUEST_BYTES", "262144")
-	t.Setenv("SERVER_READ_HEADER_TIMEOUT", "2s")
-	t.Setenv("SERVER_READ_TIMEOUT", "7s")
-	t.Setenv("SERVER_WRITE_TIMEOUT", "9s")
-	t.Setenv("SERVER_IDLE_TIMEOUT", "11s")
-
-	cfg, err := Load()
+	cfg, err := loadYAML(t, configYAML(t, `
+server:
+  maxRequestBytes: 262144
+  readHeaderTimeout: 2s
+  readTimeout: 7s
+  writeTimeout: 9s
+  idleTimeout: 11s
+`))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -570,78 +442,134 @@ func TestLoad_CustomServerLimits(t *testing.T) {
 	}
 }
 
-func TestLoad_InvalidServiceURL(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("SERVICE_URL", "not-a-url")
+// Unlike the env vars this file replaced, a value that does not parse fails
+// the load rather than silently falling back to the default.
+func TestLoad_UnparseableValueRejected(t *testing.T) {
+	for name, server := range map[string]string{
+		"duration":  "readTimeout: soon",
+		"log level": "logLevel: loud",
+		"int":       "port: eighty",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := loadYAML(t, configYAML(t, "server:\n  "+server+"\n")); err == nil {
+				t.Fatalf("expected %q to be rejected, got nil", server)
+			}
+		})
+	}
+}
 
-	_, err := Load()
+func TestLoad_InvalidServiceURL(t *testing.T) {
+	_, err := loadYAML(t, configYAML(t, `
+server:
+  serviceURL: not-a-url
+`))
 	if err == nil {
-		t.Fatal("expected error for invalid SERVICE_URL, got nil")
+		t.Fatal("expected error for invalid server.serviceURL, got nil")
 	}
 }
 
 func TestLoad_ZeroReadTimeoutRejected(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("SERVER_READ_TIMEOUT", "0")
-
-	_, err := Load()
-	if err == nil || !containsString(err.Error(), "SERVER_READ_TIMEOUT must be greater than zero") {
-		t.Fatalf("expected SERVER_READ_TIMEOUT validation error, got: %v", err)
+	_, err := loadYAML(t, configYAML(t, `
+server:
+  readTimeout: 0s
+`))
+	if err == nil || !containsString(err.Error(), "server.readTimeout must be greater than zero") {
+		t.Fatalf("expected server.readTimeout validation error, got: %v", err)
 	}
 }
 
 func TestLoad_DatabaseValidationError(t *testing.T) {
-	// DB_PASSWORD not set (no default) → database.Validate returns error
-	t.Setenv("DB_PASSWORD", "")
-
-	_, err := Load()
+	_, err := loadYAML(t, configYAML(t, "", "db.postgres.password"))
 	if err == nil {
-		t.Fatal("expected error for missing DB_PASSWORD, got nil")
+		t.Fatal("expected error for missing db.postgres.password, got nil")
 	}
 	if !containsString(err.Error(), "database") {
 		t.Errorf("expected error mentioning 'database', got: %v", err)
 	}
 }
 
-func TestLoad_NotificationConfigMissingFile(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("NOTIFICATIONS_CONFIG_PATH", filepath.Join(t.TempDir(), "does-not-exist.json"))
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for a missing notification config file, got nil")
+func TestLoad_SecretPlaceholders(t *testing.T) {
+	t.Setenv("TEST_DB_PASSWORD", "from-env")
+	secret := filepath.Join(t.TempDir(), "argus-key")
+	if err := os.WriteFile(secret, []byte("from-file"), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
 	}
-	if !containsString(err.Error(), "notification") {
-		t.Errorf("expected error mentioning 'notification', got: %v", err)
+	cfg, err := loadYAML(t, configYAML(t, `
+db:
+  postgres:
+    password: "{{env:TEST_DB_PASSWORD}}"
+audit:
+  baseURL: http://argus:3001
+  apiKey: "{{file:`+secret+`}}"
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Database.Postgres.Password != "from-env" {
+		t.Errorf("Database.Password = %q, want it resolved from the env var", cfg.Database.Postgres.Password)
+	}
+	if got := cfg.Audit.ClientConfig(); got.BaseURL != "http://argus:3001" || got.APIKey != "from-file" {
+		t.Errorf("Audit.ClientConfig() = {BaseURL: %q, APIKey: %q}, want the file's values", got.BaseURL, got.APIKey)
 	}
 }
 
-func TestLoad_NotificationConfigMalformedJSON(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	badFile := filepath.Join(t.TempDir(), "notification.json")
-	if err := os.WriteFile(badFile, []byte("not json"), 0o600); err != nil {
-		t.Fatalf("failed to write fixture: %v", err)
+func TestLoad_UnsetSecretPlaceholderFails(t *testing.T) {
+	_, err := loadYAML(t, configYAML(t, `
+db:
+  postgres:
+    password: "{{env:TEST_DB_PASSWORD_UNSET}}"
+`))
+	if err == nil || !containsString(err.Error(), "db.postgres.password") {
+		t.Fatalf("expected an unset placeholder to fail naming db.postgres.password, got: %v", err)
 	}
-	t.Setenv("NOTIFICATIONS_CONFIG_PATH", badFile)
+}
 
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for a malformed notification config file, got nil")
+func TestLoad_NotificationProviders(t *testing.T) {
+	cfg, err := loadYAML(t, configYAML(t, `
+notification:
+  providers:
+    email:
+      token: email-token
+    sms:
+      baseURL: https://sms.example.com
+      sidCode: sid
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
 	}
-	if !containsString(err.Error(), "notification") {
-		t.Errorf("expected error mentioning 'notification', got: %v", err)
+	if got := cfg.Notification.Providers["email"]["token"]; got != "email-token" {
+		t.Errorf("email token = %v, want email-token", got)
+	}
+	if got := cfg.Notification.Providers["sms"]["sidCode"]; got != "sid" {
+		t.Errorf("sms sidCode = %v, want sid", got)
+	}
+}
+
+func TestLoad_NotificationProvidersMissing(t *testing.T) {
+	_, err := loadYAML(t, configYAML(t, "", "notification"))
+	if err == nil || !containsString(err.Error(), "notification") {
+		t.Fatalf("expected a notification configuration error, got: %v", err)
+	}
+}
+
+func TestLoad_StorageS3(t *testing.T) {
+	cfg, err := loadYAML(t, configYAML(t, `
+storage:
+  type: s3
+  s3:
+    bucket: uploads
+    region: ap-south-1
+    endpoint: http://minio:9000
+  presignTTLSeconds: 60
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Storage.S3.Bucket != "uploads" || cfg.Storage.S3.Region != "ap-south-1" || cfg.Storage.S3.Endpoint != "http://minio:9000" {
+		t.Errorf("Storage.S3 = %+v, want the file's values", cfg.Storage.S3)
+	}
+	if cfg.Storage.PresignTTLSeconds != 60 {
+		t.Errorf("Storage.PresignTTLSeconds = %d, want 60", cfg.Storage.PresignTTLSeconds)
 	}
 }
 
@@ -657,8 +585,8 @@ func TestConfigValidate_EmptyServiceURL(t *testing.T) {
 	cfg := validConfig()
 	cfg.Server.ServiceURL = ""
 	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "SERVICE_URL is required") {
-		t.Errorf("expected SERVICE_URL required error, got: %v", err)
+	if err == nil || !containsString(err.Error(), "server.serviceURL is required") {
+		t.Errorf("expected server.serviceURL required error, got: %v", err)
 	}
 }
 
@@ -667,7 +595,7 @@ func TestConfigValidate_InvalidServiceURL(t *testing.T) {
 	cfg.Server.ServiceURL = "not-a-url"
 	err := cfg.Validate()
 	if err == nil {
-		t.Fatal("expected error for invalid SERVICE_URL")
+		t.Fatal("expected error for invalid server.serviceURL")
 	}
 }
 
@@ -691,7 +619,7 @@ func TestConfigValidate_DatabaseError(t *testing.T) {
 
 func TestConfigValidate_StorageError(t *testing.T) {
 	cfg := validConfig()
-	cfg.Storage = nswstorage.Config{Config: storage.Config{Type: "local"}} // missing LocalBaseDir
+	cfg.Storage = nswstorage.Config{Config: storage.Config{Type: storage.TypeLocal}} // missing local.baseDir
 	err := cfg.Validate()
 	if err == nil || !containsString(err.Error(), "invalid storage configuration") {
 		t.Errorf("expected storage config error, got: %v", err)
@@ -717,34 +645,48 @@ func TestConfigValidate_StorageProxy(t *testing.T) {
 
 	cfg.Storage.Proxy.Service = ""
 	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "STORAGE_PROXY_SERVICE") {
-		t.Errorf("expected STORAGE_PROXY_SERVICE error, got: %v", err)
+	if err == nil || !containsString(err.Error(), "storage.proxy.service") {
+		t.Errorf("expected storage.proxy.service error, got: %v", err)
 	}
 }
 
-func TestLoad_StorageProxyDefaults(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	for _, k := range []string{"STORAGE_PROXY_UPLOAD_PATH", "STORAGE_PROXY_DOWNLOAD_PATH", "STORAGE_PROXY_DELETE_PATH"} {
-		t.Setenv(k, "")
+// Proxy mode has no default endpoint paths either: the owning service's are
+// stated in the file.
+func TestLoad_StorageProxyRequiresPaths(t *testing.T) {
+	_, err := loadYAML(t, configYAML(t, `
+storage:
+  type: proxy
+  proxy:
+    service: files-api
+`))
+	if err == nil || !containsString(err.Error(), "is required when storage.type is proxy") {
+		t.Fatalf("expected a missing storage.proxy path error, got: %v", err)
 	}
-	t.Setenv("STORAGE_TYPE", "proxy")
-	t.Setenv("STORAGE_PROXY_SERVICE", "files-api")
+}
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	want := nswstorage.ProxyConfig{
-		Service:      "files-api",
-		UploadPath:   "/api/v1/storage",
-		DownloadPath: "/api/v1/storage/{key}",
-		DeletePath:   "/api/v1/storage/{key}",
-	}
-	if cfg.Storage.Proxy != want {
-		t.Errorf("Storage.Proxy = %+v, want %+v", cfg.Storage.Proxy, want)
+func TestConfigValidate_RequiredSettings(t *testing.T) {
+	for name, tc := range map[string]struct {
+		mutate func(*Config)
+		errMsg string
+	}{
+		"no mode":          {func(c *Config) { c.Mode = "" }, "mode is required"},
+		"unknown mode":     {func(c *Config) { c.Mode = "both" }, "invalid mode"},
+		"no server port":   {func(c *Config) { c.Server.Port = 0 }, "server.port must be between 1 and 65535"},
+		"no services path": {func(c *Config) { c.Server.ServicesConfigPath = "" }, "server.servicesConfigPath is required"},
+		"no payments path": {func(c *Config) { c.Server.PaymentMethodsConfigPath = "" }, "server.paymentMethodsConfigPath is required"},
+		"no catalog path":  {func(c *Config) { c.Server.CatalogConfigPath = "" }, "server.catalogConfigPath is required"},
+		"no CORS methods":  {func(c *Config) { c.CORS.AllowedMethods = nil }, "cors.allowedMethods is required"},
+		"no CORS headers":  {func(c *Config) { c.CORS.AllowedHeaders = nil }, "cors.allowedHeaders is required"},
+		"no db port":       {func(c *Config) { c.Database.Postgres.Port = 0 }, "db.postgres.port"},
+		"no db sslMode":    {func(c *Config) { c.Database.Postgres.SSLMode = "" }, "db.postgres.sslMode is required"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := validConfig()
+			tc.mutate(cfg)
+			if err := cfg.Validate(); err == nil || !containsString(err.Error(), tc.errMsg) {
+				t.Errorf("expected error containing %q, got %v", tc.errMsg, err)
+			}
+		})
 	}
 }
 

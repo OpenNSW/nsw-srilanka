@@ -154,7 +154,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Storage is built here rather than alongside its HTTP handler further
 	// down: task plugins that attach uploaded files to an outbound call read
 	// through this service, so it has to exist before the task stack (Stage 4).
-	// STORAGE_TYPE picks a backend of this deployment's own or a proxy onto
+	// storage.type picks a backend of this deployment's own or a proxy onto
 	// the service that owns the files.
 	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager)
 	if err != nil {
@@ -195,7 +195,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	auditClient := audit.NewClient(cfg.Audit)
+	auditClient := audit.NewClient(cfg.Audit.ClientConfig())
 	audit.InitializeGlobalAudit(auditClient)
 	recorder := nswaudit.NewRecorder(auditClient)
 

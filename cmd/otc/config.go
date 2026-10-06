@@ -3,64 +3,54 @@ package main
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
+	"github.com/OpenNSW/core/configyaml"
 	"github.com/OpenNSW/core/database"
+
+	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 )
 
-// Config holds the configuration for the otc CLI.
+// defaultConfigPath is where Load looks for the config file when CONFIG_PATH
+// is unset — the server's own default, so a checkout runs both on one file.
+const defaultConfigPath = "configs/config.yaml"
+
+// Config holds the configuration for the otc CLI: database access only.
+//
+// It has the server's config.yaml shape, so otc can run on the very file the
+// server does — the other sections are simply not decoded — or on a separate
+// file that holds just a db section. It intentionally does not share
+// cmd/server/config, which also requires and validates unrelated server
+// settings (auth, CORS, temporal, artifact loading, etc.) that this CLI never
+// uses.
 type Config struct {
-	Database database.Config
+	Database database.Config `yaml:"db"`
 }
 
-// Load reads the minimal configuration needed by the otc CLI from
-// environment variables: database access only. It intentionally does not
-// share cmd/server/config, which also requires and validates unrelated
-// server settings (auth, CORS, temporal, artifact loading, etc.) that this
-// CLI never uses.
+// Load reads the config file at CONFIG_PATH (default configs/config.yaml) and
+// validates the database settings.
+//
+// Every "{{env:NAME}}" / "{{file:/path}}" placeholder in the file is resolved,
+// not only the db section's, so on the server's config.yaml the secrets
+// its other sections reference must be set too.
 func Load() (*Config, error) {
-	cfg := &Config{
-		Database: database.Config{
-			Driver: database.Postgres,
-			Postgres: &database.PostgresConfig{
-				Host:     getEnvOrDefault("DB_HOST", "localhost"),
-				Port:     getIntEnvOrDefault("DB_PORT", 5432),
-				User:     getEnvOrDefault("DB_USERNAME", "postgres"),
-				Password: os.Getenv("DB_PASSWORD"), // No default for security
-				Name:     getEnvOrDefault("DB_NAME", "nsw_db"),
-				SSLMode:  getEnvOrDefault("DB_SSLMODE", "require"),
-				Pool: database.PoolConfig{
-					MaxIdleConns:           getIntEnvOrDefault("DB_MAX_IDLE_CONNS", 10),
-					MaxOpenConns:           getIntEnvOrDefault("DB_MAX_OPEN_CONNS", 100),
-					MaxConnLifetimeSeconds: getIntEnvOrDefault("DB_MAX_CONN_LIFETIME_SECONDS", 3600),
-				},
-			},
-		},
+	path := strings.TrimSpace(os.Getenv("CONFIG_PATH"))
+	if path == "" {
+		path = defaultConfigPath
 	}
+	return loadFile(path)
+}
 
-	if err := cfg.Database.Validate(); err != nil {
+// loadFile decodes the config file at path and validates its db section,
+// which has no built-in defaults: every setting otc connects with is set in it.
+func loadFile(path string) (*Config, error) {
+	cfg := &Config{}
+	if err := configyaml.LoadAndExpand(path, cfg); err != nil {
+		return nil, err
+	}
+	if err := nswdatabase.Validate(cfg.Database); err != nil {
 		return nil, fmt.Errorf("invalid database configuration: %w", err)
 	}
 
 	return cfg, nil
-}
-
-// getEnvOrDefault returns the trimmed value of an environment variable or a default value.
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-// getIntEnvOrDefault returns the integer value of an environment variable or a default value.
-// Invalid values are silently ignored and the default is returned.
-func getIntEnvOrDefault(key string, defaultValue int) int {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
 }

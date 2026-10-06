@@ -10,7 +10,8 @@
 // So it is a switch rather than a default. Turn it on for as long as the
 // question takes to answer:
 //
-//	SERVER_LOG_LEVEL=debug
+//	server:
+//	  logLevel: debug   # in config.yaml
 //
 // Each function checks the level before doing any work, so nothing is
 // marshalled while the switch is off.

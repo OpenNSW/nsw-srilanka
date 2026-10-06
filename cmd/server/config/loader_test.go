@@ -15,8 +15,8 @@ func writeConfigFile(t *testing.T, body string) string {
 	return path
 }
 
-func TestLoadConfigFile_Empty(t *testing.T) {
-	fc, err := loadConfigFile(writeConfigFile(t, ""))
+func TestLoadFile_Empty(t *testing.T) {
+	fc, err := loadFile(writeConfigFile(t, ""))
 	if err != nil {
 		t.Fatalf("expected an empty file to be valid, got: %v", err)
 	}
@@ -25,8 +25,8 @@ func TestLoadConfigFile_Empty(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFile_RefIDOmitted(t *testing.T) {
-	fc, err := loadConfigFile(writeConfigFile(t, "refid:\n  issuers: []\n"))
+func TestLoadFile_RefIDOmitted(t *testing.T) {
+	fc, err := loadFile(writeConfigFile(t, "refid:\n  issuers: []\n"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,8 +35,8 @@ func TestLoadConfigFile_RefIDOmitted(t *testing.T) {
 	}
 }
 
-func TestLoadConfigFile_RefIDDecoded(t *testing.T) {
-	fc, err := loadConfigFile(writeConfigFile(t, `
+func TestLoadFile_RefIDDecoded(t *testing.T) {
+	fc, err := loadFile(writeConfigFile(t, `
 refid:
   issuers:
     - issuer: TNSW
@@ -86,9 +86,9 @@ refid:
 	}
 }
 
-func TestLoadConfigFile_ResolvesPlaceholders(t *testing.T) {
+func TestLoadFile_ResolvesPlaceholders(t *testing.T) {
 	t.Setenv("REFID_TEST_ISSUER", "TNSW")
-	fc, err := loadConfigFile(writeConfigFile(t, `
+	fc, err := loadFile(writeConfigFile(t, `
 refid:
   issuers:
     - issuer: "{{env:REFID_TEST_ISSUER}}"
@@ -101,8 +101,8 @@ refid:
 	}
 }
 
-func TestLoadConfigFile_UnsetPlaceholderFails(t *testing.T) {
-	_, err := loadConfigFile(writeConfigFile(t, `
+func TestLoadFile_UnsetPlaceholderFails(t *testing.T) {
+	_, err := loadFile(writeConfigFile(t, `
 refid:
   issuers:
     - issuer: "{{env:REFID_TEST_UNSET_VAR}}"
@@ -115,17 +115,13 @@ refid:
 	}
 }
 
-func TestLoadConfigFile_Malformed(t *testing.T) {
-	if _, err := loadConfigFile(writeConfigFile(t, "refid: [unclosed\n")); err == nil {
+func TestLoadFile_Malformed(t *testing.T) {
+	if _, err := loadFile(writeConfigFile(t, "refid: [unclosed\n")); err == nil {
 		t.Fatal("expected malformed YAML to be rejected, got nil")
 	}
 }
 
 func TestLoad_ConfigFileMissing(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("CONFIG_PATH", filepath.Join(t.TempDir(), "does-not-exist.yaml"))
 
 	_, err := Load()
@@ -138,11 +134,7 @@ func TestLoad_ConfigFileMissing(t *testing.T) {
 }
 
 func TestLoad_ConfigFileRefID(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-	t.Setenv("CONFIG_PATH", writeConfigFile(t, `
+	t.Setenv("CONFIG_PATH", writeConfigFile(t, baseYAML+`
 refid:
   issuers:
     - issuer: TNSW
@@ -162,36 +154,53 @@ refid:
 	}
 }
 
-// The committed template must always load: `make setup` seeds the live file
-// from it, and the e2e harness points CONFIG_PATH straight at it.
-func TestLoadConfigFile_ExampleLoads(t *testing.T) {
-	if _, err := loadConfigFile(filepath.Join("..", "..", "..", "configs", "config.example.yaml")); err != nil {
-		t.Fatalf("configs/config.example.yaml does not load: %v", err)
+// The committed templates must always load and validate: `make setup` seeds
+// the live files from them, compose mounts the docker one, and the e2e harness
+// points CONFIG_PATH straight at config.example.yaml. With no built-in
+// defaults, each has to set every required setting itself. Their placeholders
+// resolve from the env vars .env.example sets.
+func TestLoadFile_ExamplesLoad(t *testing.T) {
+	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
+		t.Setenv(k, "example-"+k)
+	}
+	// Both are dev templates, run under APP_ENV=development (make dev, make
+	// test-e2e), which lets their insecure-TLS settings through.
+	t.Setenv("APP_ENV", "development")
+	for _, name := range []string{"config.example.yaml", "config.docker.example.yaml"} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := loadFile(filepath.Join("..", "..", "..", "configs", name))
+			if err != nil {
+				t.Fatalf("configs/%s does not load: %v", name, err)
+			}
+			if cfg.Database.Postgres.Password != "example-DB_PASSWORD" {
+				t.Errorf("db.postgres.password = %q, want it resolved from DB_PASSWORD", cfg.Database.Postgres.Password)
+			}
+			if len(cfg.Notification.Providers) == 0 {
+				t.Error("expected notification providers in the template")
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("configs/%s does not validate: %v", name, err)
+			}
+		})
 	}
 }
 
 func TestLoad_ConfigFileMode(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "a-secret-shared-with-slpa")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
-
 	for name, tc := range map[string]struct {
 		body    string
 		want    Mode
-		wantErr bool
+		wantErr string
 	}{
-		"omitted defaults to tnsw": {"", ModeTNSW, false},
-		"tnsw":                     {"mode: tnsw\n", ModeTNSW, false},
-		"agency":                   {"mode: agency\n", ModeAgency, false},
-		"unknown is rejected":      {"mode: both\n", "", true},
+		"omitted is rejected": {configYAML(t, "", "mode"), "", "mode is required"},
+		"tnsw":                {configYAML(t, "mode: tnsw\n"), ModeTNSW, ""},
+		"agency":              {configYAML(t, "mode: agency\n"), ModeAgency, ""},
+		"unknown is rejected": {configYAML(t, "mode: both\n"), "", "invalid mode"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("CONFIG_PATH", writeConfigFile(t, tc.body))
-			cfg, err := Load()
-			if tc.wantErr {
-				if err == nil || !containsString(err.Error(), "invalid mode") {
-					t.Fatalf("expected an invalid mode error, got: %v", err)
+			cfg, err := loadYAML(t, tc.body)
+			if tc.wantErr != "" {
+				if err == nil || !containsString(err.Error(), tc.wantErr) {
+					t.Fatalf("expected an error containing %q, got: %v", tc.wantErr, err)
 				}
 				return
 			}
@@ -207,18 +216,13 @@ func TestLoad_ConfigFileMode(t *testing.T) {
 
 // An agency builds none of TNSW's integrations, so it starts without their secrets.
 func TestLoad_AgencyModeNeedsNoSLPASecret(t *testing.T) {
-	t.Setenv("DB_PASSWORD", "testpassword")
-	t.Setenv("SLPA_WEBHOOK_SECRET", "")
-	t.Setenv("ARTIFACT_LOCAL_ROOT", ".")
-	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
+	const secret = "integrations.slpaWebhookSecret"
 
-	t.Setenv("CONFIG_PATH", writeConfigFile(t, "mode: agency\n"))
-	if _, err := Load(); err != nil {
+	if _, err := loadYAML(t, configYAML(t, "mode: agency\n", secret)); err != nil {
 		t.Fatalf("agency: Load() unexpected error: %v", err)
 	}
 
-	t.Setenv("CONFIG_PATH", writeConfigFile(t, "mode: tnsw\n"))
-	if _, err := Load(); err == nil || !containsString(err.Error(), "SLPA_WEBHOOK_SECRET") {
+	if _, err := loadYAML(t, configYAML(t, "mode: tnsw\n", secret)); err == nil || !containsString(err.Error(), "slpa webhook") {
 		t.Fatalf("tnsw: expected the SLPA secret to be required, got: %v", err)
 	}
 }
