@@ -29,10 +29,21 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
+A component's name, <fullname>-<suffix>, called with (list . "<suffix>"). The
+fullname is cut to 50 before the suffix is added, so the suffix is never cut
+and components never share a name; 50 leaves room for suffixes up to 12
+characters (api-migrate is the longest) within the 63-character limit.
+*/}}
+{{- define "lk-tnsw.componentFullname" -}}
+{{- $root := index . 0 -}}
+{{- printf "%s-%s" (include "lk-tnsw.fullname" $root | trunc 50 | trimSuffix "-") (index . 1) -}}
+{{- end }}
+
+{{/*
 Backend component: fullname, selector labels, labels.
 */}}
 {{- define "lk-tnsw.backend.fullname" -}}
-{{- printf "%s-api" (include "lk-tnsw.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- include "lk-tnsw.componentFullname" (list . "api") -}}
 {{- end }}
 
 {{- define "lk-tnsw.backend.selectorLabels" -}}
@@ -57,7 +68,7 @@ Migration component: fullname, selector labels, labels. The name stays
 <backend>-migrate, the schema it migrates being the backend's.
 */}}
 {{- define "lk-tnsw.migration.fullname" -}}
-{{- printf "%s-migrate" (include "lk-tnsw.backend.fullname" . | trunc 55 | trimSuffix "-") -}}
+{{- include "lk-tnsw.componentFullname" (list . "api-migrate") -}}
 {{- end }}
 
 {{- define "lk-tnsw.migration.selectorLabels" -}}
@@ -87,7 +98,7 @@ backend's, since release.yml publishes both images from the same git tag.
 Frontend component: fullname, selector labels, labels.
 */}}
 {{- define "lk-tnsw.frontend.fullname" -}}
-{{- printf "%s-web" (include "lk-tnsw.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- include "lk-tnsw.componentFullname" (list . "web") -}}
 {{- end }}
 
 {{- define "lk-tnsw.frontend.selectorLabels" -}}
