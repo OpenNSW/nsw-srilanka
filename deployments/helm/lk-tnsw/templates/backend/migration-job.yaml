@@ -6,8 +6,8 @@ success against a database the server never uses. */}}
 {{- if ne $driver "postgres" }}
 {{- fail (printf "backend.config.db.driver must be set to \"postgres\" when backend.migration.enabled (got %q): the migrator defaults it to sqlite" $driver) }}
 {{- end }}
-{{- /* backend.env carries the secrets config.yaml references, and the migrator
-resolves every placeholder in the file; migration.env adds to or overrides it. */}}
+{{- /* backend.env carries the secrets config.yaml references, the database's
+among them; migration.env adds to or overrides it. */}}
 {{- $env := merge (deepCopy (.Values.backend.migration.env | default dict)) (deepCopy (.Values.backend.env | default dict)) }}
 {{- $envFrom := concat (.Values.backend.envFrom | default list) (.Values.backend.migration.envFrom | default list) }}
 apiVersion: batch/v1

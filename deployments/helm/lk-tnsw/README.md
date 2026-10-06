@@ -88,10 +88,11 @@ The migration Job (`backend.migration.enabled: true`) uses a **different
 image** from the backend Deployment — see `backend.migration.image` in
 `values.yaml` — it runs the external OpenNSW/agency migrator's own binary, not
 this backend's code. Its configuration is not separate, though: it reads the
-`db` section of the same `backend.config` (mounted into the Job as a hook-scoped
-copy, since on a first install the Job runs before the backend ConfigMap
-exists) and inherits `backend.env`/`backend.envFrom` for the secrets that file
-references. `backend.config.db.driver` must be `postgres` — the migrator
+`db` section (and `migrationDir`, if set) of the same `backend.config`, rendered
+into a hook-scoped config.yaml of its own that holds nothing else — on a first
+install the Job runs before the backend ConfigMap exists, and the migrator
+resolves every placeholder in its file, so only the database secrets need to
+resolve. It inherits `backend.env`/`backend.envFrom` for those secrets. `backend.config.db.driver` must be `postgres` — the migrator
 defaults it to sqlite, so the chart refuses to render without it.
 `backend.migration.image.tag` defaults to `backend.image.tag`, then to the
 chart's `appVersion`.

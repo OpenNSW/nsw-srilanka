@@ -95,11 +95,12 @@ backend:
     # Overrides the image's default CMD (["migrate", "up"]), e.g. ["migrate", "status"].
     command: []
     backoffLimit: 1
-    # The migrator reads the db section of the same config.yaml (config
-    # above), mounted into the Job as a hook-scoped copy, and requires
-    # config.db.driver: postgres (it would default to sqlite). It also inherits
-    # backend.env/envFrom, since it resolves every placeholder in the file; the
-    # two below only add to or override those.
+    # The migrator reads the db section of config above (with migrationDir,
+    # if set), mounted into the Job as a hook-scoped config.yaml of its own
+    # that holds nothing else, and requires config.db.driver: postgres (it
+    # would default to sqlite). It also inherits backend.env/envFrom for the
+    # database secrets that section references; the two below only add to or
+    # override those.
     env: {}
     envFrom: []
 
