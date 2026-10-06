@@ -1,0 +1,194 @@
+{
+  "name": "sltb_application_rework",
+  "steps": [
+    {
+      "name": "trader creates consignment",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments",
+        "expectStatus": 201,
+        "extract": { "consignmentId": "id" }
+      }
+    },
+    {
+      "name": "wait for Initialize Consignment task",
+      "wait": { "node": "Initialize Consignment", "state": "IN_PROGRESS", "into": "initTask", "timeout": "45s" }
+    },
+    {
+      "name": "trader initializes consignment (name + CHA)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "body": { "command": "submit", "payload": { "consignment_name": "E2E SLTB Rework Consignment", "cha_company_id": "adam-pvt-ltd" } },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for HS-code selection task",
+      "wait": { "node": "Select HS Codes", "state": "IN_PROGRESS", "into": "hsTask", "timeout": "45s" }
+    },
+    {
+      "name": "cha selects the SLTB blendsheet HS code",
+      "request": {
+        "actor": "cha",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "body": { "command": "submit", "payload": { "hs_codes": ["sltb-blendsheet-approval"] } },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for SLTB application task (agency split fired)",
+      "wait": { "node": "[SLTB] Submit & Review Blend Sheet", "state": "IN_PROGRESS", "into": "sltbApp", "timeout": "60s" }
+    },
+    {
+      "name": "trader submits the SLTB blend sheet",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{sltbApp}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "blendsheet_data": [
+              {
+                "form": "100_local",
+                "blendsheet_no": "2026/E2E-REWORK",
+                "exporter_registration_no": "R/473",
+                "exporter_tin": "900000000004",
+                "private_treaty_to_be_exported": "Jordan",
+                "cusdec_number": "CBEX1 2026 E 48428",
+                "blend_no": "26/1386",
+                "quality_to_be_exported": 16128,
+                "avg_rate_per_kg": 1054.56,
+                "grade_or_standard": "BOPF",
+                "fob_avg": 2359,
+                "date_of_blend": "2026-07-23",
+                "lion_logo_requested": "no",
+                "sales": {
+                  "sheet": [
+                    {
+                      "Sale_date": "2026-07-01",
+                      "Sale_code": "AUCTION",
+                      "BR_code": "BR01",
+                      "LOT_number": "L-100",
+                      "Invoice_number": "INV-1",
+                      "Garden_mark": "E2E ESTATE",
+                      "Sale_grade": "BOPF",
+                      "Sale_rate": 1054.56,
+                      "Sale_quantity": 16128,
+                      "Sale_value": 17007942.72
+                    }
+                  ],
+                  "derivations": {
+                    "total_sales_quantity": { "value": 16128 },
+                    "total_sales_value": { "value": 17007942.72 },
+                    "average_value_per_kg": { "value": 1054.56 }
+                  }
+                },
+                "total_blend_balances_and_gain": 0,
+                "total": 16128,
+                "blend_balance": 0,
+                "warehouse_address": "E2E Tea Warehouse, Colombo"
+              }
+            ]
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "SLTB agency sends the blend sheet back for more information",
+      "callback": {
+        "taskVar": "sltbApp",
+        "command": "needs_more_info",
+        "content": {
+          "review_outcome": "needs_more_info",
+          "feedback": "Blendsheet figures don't reconcile with CUSDEC quantities. Please re-upload with corrected totals.",
+          "rejection_reason": "Blendsheet figures don't reconcile with CUSDEC quantities. Please re-upload with corrected totals."
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for SLTB application to return to the trader",
+      "wait": { "node": "[SLTB] Submit & Review Blend Sheet", "state": "IN_PROGRESS", "into": "sltbApp", "timeout": "60s" }
+    },
+    {
+      "name": "trader resubmits the SLTB blend sheet",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{sltbApp}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "blendsheet_data": [
+              {
+                "form": "100_local",
+                "blendsheet_no": "2026/E2E-REWORK",
+                "exporter_registration_no": "R/473",
+                "exporter_tin": "900000000004",
+                "private_treaty_to_be_exported": "Jordan",
+                "cusdec_number": "CBEX1 2026 E 48428",
+                "blend_no": "26/1386",
+                "quality_to_be_exported": 16128,
+                "avg_rate_per_kg": 1054.56,
+                "grade_or_standard": "BOPF",
+                "fob_avg": 2359,
+                "date_of_blend": "2026-07-23",
+                "lion_logo_requested": "no",
+                "sales": {
+                  "sheet": [
+                    {
+                      "Sale_date": "2026-07-01",
+                      "Sale_code": "AUCTION",
+                      "BR_code": "BR01",
+                      "LOT_number": "L-100",
+                      "Invoice_number": "INV-1",
+                      "Garden_mark": "E2E ESTATE",
+                      "Sale_grade": "BOPF",
+                      "Sale_rate": 1054.56,
+                      "Sale_quantity": 16128,
+                      "Sale_value": 17007942.72
+                    }
+                  ],
+                  "derivations": {
+                    "total_sales_quantity": { "value": 16128 },
+                    "total_sales_value": { "value": 17007942.72 },
+                    "average_value_per_kg": { "value": 1054.56 }
+                  }
+                },
+                "total_blend_balances_and_gain": 0,
+                "total": 16128,
+                "blend_balance": 0,
+                "warehouse_address": "E2E Tea Warehouse, Colombo"
+              }
+            ]
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "SLTB agency approves the resubmitted blend sheet",
+      "callback": {
+        "taskVar": "sltbApp",
+        "command": "approve",
+        "content": {
+          "review_outcome": "approve",
+          "reference_number": "REF-SLTB-E2E-REWORK",
+          "levy_amount": 12500,
+          "collection_method": "none"
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for SLTB pay-levy task (rework loop advanced)",
+      "wait": { "node": "[SLTB] Pay SLTB Levy", "state": "IN_PROGRESS", "timeout": "60s" }
+    }
+  ]
+}
