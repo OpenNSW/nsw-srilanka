@@ -125,9 +125,11 @@ func (s ServerConfig) Validate() error {
 // built-in defaults: every setting the server needs is set in it, and one left
 // out fails Validate here, at startup, rather than when it is first used.
 //
-// CONFIG_PATH and APP_ENV are the only settings read from the environment
-// directly. Secrets reach the file through "{{env:NAME}}" / "{{file:/path}}"
-// placeholders instead, which configyaml resolves at load.
+// The server reads only two env vars itself: CONFIG_PATH and APP_ENV. Every
+// other setting is in the config file. A secret may still come from the
+// environment (or a mounted file), but only where the config file asks for it
+// with a "{{env:NAME}}" / "{{file:/path}}" placeholder, which configyaml
+// resolves at load.
 func Load() (*Config, error) {
 	path := strings.TrimSpace(os.Getenv("CONFIG_PATH"))
 	if path == "" {
