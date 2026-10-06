@@ -39,6 +39,22 @@ type Handler interface {
 	Delete(w http.ResponseWriter, r *http.Request)
 }
 
+// UploadTypes are the MIME types this deployment's own storage accepts
+// uploads of; any other type is rejected with 415. core/storage accepts any
+// type unless told otherwise, so the list is this application's policy. It is
+// the list core/storage enforced itself up to v0.2.0.
+var UploadTypes = []string{
+	"application/pdf",
+	"image/jpeg",
+	"image/png",
+	"image/gif",
+	"image/webp",
+	// .xlsx only: the OOXML spreadsheet format cannot carry VBA macros
+	// (macro-enabled workbooks use .xlsm), unlike legacy .xls which is a
+	// known malware vector and stays prohibited.
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
 // Stack is the storage service and HTTP handlers storage.type selected.
 type Stack struct {
 	Service Service
@@ -47,7 +63,7 @@ type Stack struct {
 	// for S3 when this deployment stores files on local disk. Nil otherwise:
 	// with S3 the client talks to the bucket, and behind a proxy it talks to
 	// the owning service.
-	LocalContent *corestorage.HTTPHandler
+	LocalContent *corestorage.LocalContentHandler
 }
 
 // New builds the storage stack for cfg.Type: a proxy onto another service
@@ -66,12 +82,11 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 	if err != nil {
 		return nil, fmt.Errorf("storage backend: %w", err)
 	}
-	svc := corestorage.NewService(driver)
-	handler := corestorage.NewHTTPHandler(svc)
+	svc := corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(UploadTypes...))
 
-	stack := &Stack{Service: svc, Handler: handler}
-	if _, ok := driver.(*drivers.LocalFSDriver); ok {
-		stack.LocalContent = handler
+	stack := &Stack{Service: svc, Handler: corestorage.NewHTTPHandler(svc)}
+	if local, ok := driver.(*drivers.LocalFSDriver); ok {
+		stack.LocalContent = corestorage.NewLocalContentHandler(local)
 	}
 	return stack, nil
 }

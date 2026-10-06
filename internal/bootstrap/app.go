@@ -453,8 +453,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	// When using local storage, these endpoints serve as mocks for S3.
 	if localContent := storageStack.LocalContent; localContent != nil {
-		mux.HandleFunc("PUT /api/v1/storage/{key}/content", localContent.UploadContentLocal)
-		mux.HandleFunc("GET /api/v1/storage/{key}/content", localContent.DownloadContent)
+		localContent.RegisterRoutes(mux)
 	}
 
 	// -------------------------------------------------------------------
