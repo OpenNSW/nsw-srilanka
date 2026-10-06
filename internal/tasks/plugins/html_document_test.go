@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/OpenNSW/core/artifact"
@@ -36,18 +37,24 @@ type fakeSaver struct {
 	filename string
 	mime     string
 	content  []byte
+	size     int64
 }
 
-func (f *fakeSaver) Save(_ context.Context, filename, mime string, content []byte) (*corestorage.FileMetadata, error) {
+func (f *fakeSaver) Save(_ context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error) {
 	f.calls++
-	f.filename, f.mime, f.content = filename, mime, content
+	content, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
+	f.filename, f.mime, f.content, f.size = filename, mime, content, size
 	if f.err != nil {
 		return nil, f.err
 	}
 	// A new key per call, as storage allocates one, so a test can tell a
-	// reused document from a newly stored one.
+	// reused document from a newly stored one. The size is recorded as
+	// given, as core/storage's Save records it.
 	key := fmt.Sprintf("0f8e7c1a-0000-4000-8000-%012d.html", f.calls)
-	return &corestorage.FileMetadata{Key: key, Name: filename, MimeType: mime, Size: int64(len(content))}, nil
+	return &corestorage.FileMetadata{Key: key, Name: filename, MimeType: mime, Size: size}, nil
 }
 
 const permitTemplate = `<p>Permit No: {{ .refid.reference_id }}</p>` +
@@ -76,6 +83,7 @@ func TestHTMLDocumentGenerator_RendersStoresAndRecordsKey(t *testing.T) {
 	assert.Equal(t, `<p>Permit No: PRM-2026-00555</p><p>Applicant: Smith &amp; Co</p><p>Fee: 1400.00</p>`, string(files.content))
 	assert.Equal(t, "permit.html", files.filename)
 	assert.Equal(t, "text/html; charset=utf-8", files.mime)
+	assert.Equal(t, int64(len(files.content)), files.size, "the size given is the document's length")
 	assert.Equal(t, map[string]any{
 		"key":       "0f8e7c1a-0000-4000-8000-000000000001.html",
 		"name":      "permit.html",

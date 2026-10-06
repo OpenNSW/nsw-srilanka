@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -96,8 +95,8 @@ func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, 
 // Save stores content on the owning service: it allocates the key there, as
 // Upload does, then puts the content to the presigned URL itself. The owning
 // service decides which MIME types it accepts.
-func (s *ProxyService) Save(ctx context.Context, filename, mime string, content []byte) (*corestorage.FileMetadata, error) {
-	meta, err := s.Upload(ctx, filename, int64(len(content)), mime)
+func (s *ProxyService) Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error) {
+	meta, err := s.Upload(ctx, filename, size, mime)
 	if err != nil {
 		return nil, err
 	}
@@ -107,10 +106,13 @@ func (s *ProxyService) Save(ctx context.Context, filename, mime string, content 
 		meta.MimeType = mime
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, meta.UploadURL, bytes.NewReader(content))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, meta.UploadURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("storage proxy: build upload request: %w", err)
 	}
+	// The URL was signed for this size, and a presigned S3 upload refuses a
+	// chunked body; net/http sends one for a reader it can't measure.
+	req.ContentLength = size
 	// A presigned upload is signed over its content type, so it must be sent
 	// as the type it was allocated for.
 	req.Header.Set("Content-Type", meta.MimeType)

@@ -8,16 +8,13 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
-	"github.com/google/uuid"
 )
 
 // Service is the file storage the rest of the application uses. It is
@@ -34,8 +31,9 @@ type Service interface {
 	Delete(ctx context.Context, key string) error
 	// Save stores content this service produced itself — a generated
 	// document, say — under a new key and returns its metadata. Unlike
-	// Upload, nothing is left for a client to do.
-	Save(ctx context.Context, filename, mime string, content []byte) (*corestorage.FileMetadata, error)
+	// Upload, nothing is left for a client to do, and the upload limits don't
+	// apply. size is the length of body; it is recorded as given.
+	Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error)
 }
 
 // Handler serves the storage API routes. It is satisfied by core/storage's
@@ -85,35 +83,9 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
 	)
 
-	stack := &Stack{Service: &BackendService{Service: svc}, Handler: corestorage.NewHTTPHandler(svc)}
+	stack := &Stack{Service: svc, Handler: corestorage.NewHTTPHandler(svc)}
 	if local, ok := driver.(*drivers.LocalFSDriver); ok {
 		stack.LocalContent = corestorage.NewLocalContentHandler(local)
 	}
 	return stack, nil
-}
-
-// BackendService is a Service over a storage backend of this deployment's
-// own. It adds Save to core/storage's *Service, writing through the driver.
-type BackendService struct {
-	*corestorage.Service
-}
-
-// Save writes content to the backend under a fresh key, allocated the way
-// Upload allocates one.
-func (s *BackendService) Save(ctx context.Context, filename, mime string, content []byte) (*corestorage.FileMetadata, error) {
-	if mime == "" {
-		mime = drivers.DefaultMime
-	}
-	id := uuid.NewString()
-	key := id + filepath.Ext(filename)
-	if err := s.Driver.Save(ctx, key, bytes.NewReader(content), mime); err != nil {
-		return nil, fmt.Errorf("save %s: %w", filename, err)
-	}
-	return &corestorage.FileMetadata{
-		ID:       id,
-		Name:     filename,
-		Key:      key,
-		Size:     int64(len(content)),
-		MimeType: mime,
-	}, nil
 }

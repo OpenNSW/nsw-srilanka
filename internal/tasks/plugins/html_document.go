@@ -1,10 +1,12 @@
 package plugins
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -67,7 +69,7 @@ func (r RegistryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]b
 // DocumentSaver stores a document this service produced. The storage service
 // satisfies it.
 type DocumentSaver interface {
-	Save(ctx context.Context, filename, mime string, content []byte) (*corestorage.FileMetadata, error)
+	Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error)
 }
 
 // HTMLDocumentGeneratorPlugin is a synchronous plugin that renders the
@@ -151,7 +153,7 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 	// inputs, and reusing an earlier document would leave the task pointing at
 	// one rendered from the old data. A retry leaves at worst an extra copy in
 	// storage that nothing refers to.
-	meta, err := p.files.Save(ctx.Context, documentFilename(cfg), htmlDocumentMIME, doc)
+	meta, err := p.files.Save(ctx.Context, documentFilename(cfg), htmlDocumentMIME, bytes.NewReader(doc), int64(len(doc)))
 	if err != nil {
 		return fmt.Errorf("html_document_generator: store document: %w", err)
 	}
