@@ -12,6 +12,8 @@ github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea h1:xHt0uDs
 github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea/go.mod h1:gU+anuIRxUrq7pSgDQHPjTQJMO2bvwOZso3ayKDC+JU=
 github.com/OpenNSW/core/database v0.3.0 h1:45d5pwSrZknt+RGRNKZpdVTqQ+3wUF+1SQyQgzACdRI=
 github.com/OpenNSW/core/database v0.3.0/go.mod h1:v5l8ecRlOGIP7+tCheYcMFlnxCvaRwZniTEMJl0qnw4=
+github.com/OpenNSW/core/htmlgen v0.0.0-20261006063237-d8b90361237e h1:d6IukKp2eVd5ZkPVccuTpH0F818k0gK9K+41ilDa530=
+github.com/OpenNSW/core/htmlgen v0.0.0-20261006063237-d8b90361237e/go.mod h1:W/ZfmOykzC4vW5WvUEW2qpSYiW6FdJgWNnRS+y0q2qw=
 github.com/OpenNSW/core/httputil v0.1.0 h1:IEkr9sHOh065+pubjlPShqmW3X2GPB9+wlHoeNDsGiU=
 github.com/OpenNSW/core/httputil v0.1.0/go.mod h1:kZyjhx9ckd54vYxH/R65KW++X2Lrvt1N13ZvhMupk7M=
 github.com/OpenNSW/core/json v0.0.0-20260917101529-36df0ddf30e0 h1:XP4TYN7gX9MthDLRTgHC1zTOpelSK6B12nmDPu0gdPc=
