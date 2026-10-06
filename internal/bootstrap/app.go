@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
 	notification "github.com/OpenNSW/core/notifications"
+	"github.com/OpenNSW/core/notifications/providers"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
@@ -772,11 +773,15 @@ func initTask(
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
 
-	notifProviders, err := cfg.Notification.NewProviders()
+	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
 	if err != nil {
-		return nil, nil, fmt.Errorf("notification providers: %w", err)
+		return nil, nil, fmt.Errorf("email provider: %w", err)
 	}
-	notifManager, err := notification.NewManager(notifProviders...)
+	smsProvider, err := providers.NewSMSProvider(cfg.Notification.Providers.SMS)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sms provider: %w", err)
+	}
+	notifManager, err := notification.NewManager(emailProvider, smsProvider)
 	if err != nil {
 		return nil, nil, fmt.Errorf("notification manager: %w", err)
 	}

@@ -1,9 +1,6 @@
 package config
 
-import (
-	notification "github.com/OpenNSW/core/notifications"
-	"github.com/OpenNSW/core/notifications/providers"
-)
+import "github.com/OpenNSW/core/notifications/providers"
 
 // NotificationConfig holds the notification section of config.yaml: one block
 // per provider, each in that provider's own typed config. The fields are typed,
@@ -21,22 +18,13 @@ type NotificationProviders struct {
 }
 
 // Validate reports a provider whose config is missing or invalid, by building
-// each provider without starting it.
+// each provider and discarding it: the constructors hold the providers' rules.
 func (c NotificationConfig) Validate() error {
-	_, err := c.NewProviders()
-	return err
-}
-
-// NewProviders builds the email and SMS providers from their config, ready to
-// hand to notification.NewManager.
-func (c NotificationConfig) NewProviders() ([]notification.Provider, error) {
-	email, err := providers.NewEmailProvider(c.Providers.Email)
-	if err != nil {
-		return nil, err
+	if _, err := providers.NewEmailProvider(c.Providers.Email); err != nil {
+		return err
 	}
-	sms, err := providers.NewSMSProvider(c.Providers.SMS)
-	if err != nil {
-		return nil, err
+	if _, err := providers.NewSMSProvider(c.Providers.SMS); err != nil {
+		return err
 	}
-	return []notification.Provider{email, sms}, nil
+	return nil
 }

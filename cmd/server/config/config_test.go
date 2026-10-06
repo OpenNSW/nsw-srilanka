@@ -604,8 +604,8 @@ notification:
 			t.Errorf("%s = %q, want %q", name, got[0], got[1])
 		}
 	}
-	if _, err := cfg.Notification.NewProviders(); err != nil {
-		t.Errorf("NewProviders() error: %v", err)
+	if err := cfg.Notification.Validate(); err != nil {
+		t.Errorf("Validate() error: %v", err)
 	}
 }
 
