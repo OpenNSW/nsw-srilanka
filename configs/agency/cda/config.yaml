@@ -92,18 +92,20 @@ temporal:
   port: 7233
   namespace: cda
 
-# The cda-v2 folder of one-trade-artifacts (branch
-# feat/add-cda-agency-config-to-workflows until it merges).
+# The cda-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# to where the server runs (the repo root). Point root at another clone's
+# cda-v2 dir to use that one.
 artifactLoader:
-  type: github
-  github:
-    owner: OpenNSW
-    repo: one-trade-artifacts
-    ref: feat/add-cda-agency-config-to-workflows
-    basePath: cda-v2
-  # Or from a local checkout, with type: local.
-  # local:
-  #   root: ../one-trade-artifacts/cda-v2
+  type: local
+  local:
+    root: ../one-trade-artifacts/cda-v2
+  # Or straight from GitHub (branch feat/add-cda-agency-config-to-workflows
+  # until it merges), with type: github:
+  # github:
+  #   owner: OpenNSW
+  #   repo: one-trade-artifacts
+  #   ref: feat/add-cda-agency-config-to-workflows
+  #   basePath: cda-v2
 
 # The cda-v2 artifacts use no REFID_GENERATOR tasks.
 refid:

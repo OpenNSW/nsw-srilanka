@@ -54,6 +54,10 @@ go run ./cmd/server
 TNSW reaches it through its own `configs/services.json` entry `cda`
 (`http://localhost:8083`).
 
+It loads its artifacts from a `one-trade-artifacts` clone next to this repo
+(`../one-trade-artifacts/cda-v2`); change `artifactLoader.local.root` in `config.yaml`
+to use another clone.
+
 For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 ## IdP
