@@ -500,7 +500,7 @@ db:
     password: "{{env:TEST_DB_PASSWORD}}"
 audit:
   baseURL: http://argus:3001
-  apiKey: "{{file:`+secret+`}}"
+  apiKey: '{{file:`+secret+`}}'
 `))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
