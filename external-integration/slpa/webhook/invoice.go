@@ -110,7 +110,7 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 	}
 
 	correlator := event.correlator()
-	taskID, err := s.lookup.parked(ctx, PaymentWaitTemplateID,
+	taskID, stepID, err := s.lookup.parked(ctx, PaymentWaitTemplateID,
 		"data->'so'->>'slug' = ? OR data->'so'->>'service_order_no' = ?", correlator, correlator)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (s *InvoiceEvents) Handle(ctx context.Context, event InvoiceEvent) error {
 		"consignee":    receipt.Consignee,
 	}
 
-	if err := s.tasks.CompleteTaskStep(ctx, taskID, payload); err != nil {
+	if err := s.tasks.CompleteTaskStep(ctx, taskID, stepID, payload); err != nil {
 		return fmt.Errorf("slpa webhook: failed to complete task %s: %w", taskID, err)
 	}
 

@@ -28,14 +28,15 @@ func newDispatchHelper(manager *remote.Manager, backendBaseURL string) *dispatch
 	}
 }
 
-// callbackTasksURL is the URL the receiving OGA portal should call back into
-// to advance the workflow once the officer has acted.
-func (h *dispatchHelper) callbackTasksURL() string {
-	joined, err := url.JoinPath(h.backendBaseURL, "/api/v1/tasks")
+// callbacksURL is the base URL the receiving OGA portal calls back into, at
+// {callbacksURL}/{callbackToken}, to advance the workflow once the officer has
+// acted.
+func (h *dispatchHelper) callbacksURL() string {
+	joined, err := url.JoinPath(h.backendBaseURL, "/api/v1/callbacks")
 	if err != nil {
 		slog.Error("taskv2 plugin: failed to build callback URL",
 			"backendBaseURL", h.backendBaseURL, "error", err)
-		return h.backendBaseURL + "/api/v1/tasks"
+		return h.backendBaseURL + "/api/v1/callbacks"
 	}
 	return joined
 }

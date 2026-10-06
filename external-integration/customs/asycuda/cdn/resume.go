@@ -100,12 +100,13 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 
 	var task struct {
 		TaskID string `gorm:"column:task_id"`
+		StepID string `gorm:"column:active_step_id"`
 	}
 	err = s.db.WithContext(ctx).
 		Table("task_records_v2").
 		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
 			record.ParentWorkflowID, look.templateID, stateQueuedExternally).
-		Select("task_id").
+		Select("task_id", "active_step_id").
 		First(&task).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -116,7 +117,7 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 		return fmt.Errorf("failed to locate parked CDN task for workflow %s: %w", record.ParentWorkflowID, err)
 	}
 
-	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, look.payload); err != nil {
+	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, look.payload); err != nil {
 		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
 	}
 

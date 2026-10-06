@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
@@ -21,12 +22,15 @@ import (
 )
 
 const (
-	errTaskIDRequired      = "task id is required"
-	errTaskNotFound        = "task not found"
-	errAuthenticationReq   = "authentication required"
-	errForbiddenTaskAction = "you may not perform this action on this task"
-	errInvalidRequestBody  = "invalid request body"
-	errRequestBodyTooLarge = "request body too large"
+	errTaskIDRequired       = "task id is required"
+	errStepIDRequired       = "step id is required"
+	errInvalidCallbackToken = "invalid callback token"
+	errTaskNotFound         = "task not found"
+	errAuthenticationReq    = "authentication required"
+	errForbiddenTaskAction  = "you may not perform this action on this task"
+	errInvalidRequestBody   = "invalid request body"
+	errStaleStep            = "this step is no longer active; refetch the task"
+	errRequestBodyTooLarge  = "request body too large"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -125,9 +129,14 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, zv)
 }
 
-// HandleCompleteTaskStep advances a task by submitting a step payload.
+// HandleCompleteTaskStep advances a task by completing one of its steps. It is the
+// portal's route.
 //
-//	POST /api/v1/tasks/{id}
+//	POST /api/v1/tasks/{id}/steps/{stepId}
+//
+// {stepId} is the step being completed: the step_id the task view reported. Core
+// completes only that step, so a submission for a step the task has since left is
+// rejected (409) instead of applied to a later one.
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
 	// TODO: retrieve the authenticated context and validate it against the
 	// task's ownership bounds before completing the step.
@@ -137,11 +146,62 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
+	stepID := r.PathValue("stepId")
+	if stepID == "" {
+		slog.ErrorContext(r.Context(), "tasks: missing step id in request", "taskId", taskID)
+		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
+		return
+	}
 
+	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
+	if !ok {
+		return
+	}
+	// Read before the call: core may strip system keys from the payload.
+	command := payload["__command"]
+	err := h.Manager.CompleteTaskStep(r.Context(), taskID, stepID, payload)
+	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "command", command)
+}
+
+// HandleCompleteTaskStepByToken advances a task by completing the step an external
+// system was dispatched for. It is the route external reviewers call back on.
+//
+//	POST /api/v1/callbacks/{token}
+//
+// {token} is the opaque callbackToken the dispatch carried (core's
+// plugins.CallbackToken). It names one step of one task, so a callback that arrives
+// after the task has moved on is rejected (409) instead of completing a later step.
+// The body is the same {command, payload} envelope HandleCompleteTaskStep takes.
+func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	// Decoded here only to reject a malformed token early and to log the task and
+	// step it names; core decodes it again to complete the step.
+	taskID, stepID, err := callbacktoken.Decode(token)
+	if err != nil {
+		slog.WarnContext(r.Context(), "tasks: invalid callback token", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidCallbackToken)
+		return
+	}
+
+	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
+	if !ok {
+		return
+	}
+	// Read before the call: core may strip system keys from the payload.
+	command := payload["__command"]
+	err = h.Manager.CompleteTaskStepByToken(r.Context(), token, payload)
+	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "command", command)
+}
+
+// decodeSubmission reads the {command, payload} envelope both completion routes take
+// and returns the payload with the command set under the reserved "__command" key.
+// On a bad request it writes the error response and returns false. logAttrs name
+// the step in the log lines.
+func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, logAttrs ...any) (map[string]any, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
 	fail := func(status int, message string, err error) {
-		slog.ErrorContext(r.Context(), "tasks: failed to parse request", "taskId", taskID, "error", err)
+		slog.ErrorContext(r.Context(), "tasks: failed to parse request", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, status, message)
 	}
 
@@ -154,14 +214,14 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return
+			return nil, false
 		}
 
 		// An empty body is tolerated here and caught by the command-required check below;
 		// only fail on genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
 			fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON"))
-			return
+			return nil, false
 		}
 
 		// If unexpected data follows the first JSON value, reject the request.
@@ -169,15 +229,15 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return
+			return nil, false
 		}
 		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value"))
-		return
+		return nil, false
 	}
 
 	if req.Command == "" {
 		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: must contain 'command' (string)"))
-		return
+		return nil, false
 	}
 
 	payload := req.Payload
@@ -186,7 +246,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	if payload != nil {
 		if _, exists := payload["__command"]; exists {
 			fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request payload: '__command' is a reserved system key"))
-			return
+			return nil, false
 		}
 	}
 
@@ -194,28 +254,32 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 		payload = make(map[string]any)
 	}
 
-	command := req.Command
-	payload["__command"] = command
+	payload["__command"] = req.Command
 
-	slog.InfoContext(r.Context(), "tasks: processing complete step command", "taskId", taskID, "command", command)
-
-	if err := h.Manager.CompleteTaskStep(r.Context(), taskID, payload); err != nil {
-		switch {
-		case errors.Is(err, taskauthzext.ErrUnauthenticated):
-			httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
-		case errors.Is(err, taskauthzext.ErrForbidden):
-			slog.WarnContext(r.Context(), "tasks: authorization denied", "taskId", taskID, "command", command, "error", err)
-			httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
-		default:
-			httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, "taskId", taskID)
-		}
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	slog.InfoContext(r.Context(), "tasks: processing complete step command", append(logAttrs, "command", req.Command)...)
+	return payload, true
 }
 
-// completeTaskStepRequest is the JSON envelope HandleCompleteTaskStep accepts:
+// writeCompletion answers a completion attempt: 204 when the workflow accepted the
+// step, otherwise the error mapped to its status. logAttrs name the step.
+func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, err error, logAttrs ...any) {
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, orchestrator.ErrStaleStep):
+		slog.InfoContext(r.Context(), "tasks: stale step", append(logAttrs, "error", err)...)
+		httputil.Error(w, r, http.StatusConflict, errStaleStep)
+	case errors.Is(err, taskauthzext.ErrUnauthenticated):
+		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+	case errors.Is(err, taskauthzext.ErrForbidden):
+		slog.WarnContext(r.Context(), "tasks: authorization denied", append(logAttrs, "error", err)...)
+		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
+	default:
+		httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, logAttrs...)
+	}
+}
+
+// completeTaskStepRequest is the JSON envelope both completion routes accept:
 // {"command": "...", "payload": {...}}. Payload stays map[string]any because its
 // contents are genuinely dynamic per task type; only the envelope around it has
 // a fixed shape.

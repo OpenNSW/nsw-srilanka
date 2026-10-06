@@ -3,8 +3,8 @@ import { API_BASE_URL } from '@/constants'
 import type { AdminResolutionRequest, AdminWorkflowKind, EngineStatus } from './types'
 import type { ConsignmentDetail } from '@/features/consignment/types'
 
-// Ids are interpolated into URL paths through encodeURIComponent throughout this file. Workflow and
-// node ids are "<name>:<uuid>" composites, and the name comes from a workflow definition, so it is
+// Ids are interpolated into URL paths through encodeURIComponent throughout this file. Workflow ids
+// are often "<name>:<uuid>" composites and node ids are workflow-definition ids, so both come from
 // data, not something this app controls: a "/", "?" or "#" in it would otherwise change the path,
 // query or fragment before the server saw the id. The server decodes them (r.PathValue), so an
 // encoded ":" (%3A) reaches the handler as the same id as before.
@@ -33,7 +33,9 @@ export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<Eng
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${encodeURIComponent(taskWorkflowId)}/engine-status`)
 }
 
-// Resolves a node AWAITING_ADMIN. workflowId is the workflow instance containing the node, and
+// Resolves a node AWAITING_ADMIN, addressed by its parking: stepId is the node's step_id from the
+// engine status, so a resolve made after the node re-parked is rejected (409). workflowId is the
+// workflow instance containing the node, and
 // workflowKind says which route family it belongs to: 'consignment' for the root or a child branch
 // (child_workflow_ids), 'task' for a task workflow (task_workflow_id), which is a separate ID space
 // with its own route, like the two engine-status functions above. Required rather than defaulted, so
@@ -41,13 +43,13 @@ export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<Eng
 // nsw:consignment:adminwrite.
 export async function resolveAdminIntervention(
   workflowId: string,
-  nodeId: string,
+  stepId: string,
   request: AdminResolutionRequest,
   workflowKind: AdminWorkflowKind,
 ): Promise<void> {
   const route = workflowKind === 'task' ? 'task' : 'consignments'
   await http.request({
-    url: `${API_BASE_URL}/api/v1/admin/${route}/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/resolve`,
+    url: `${API_BASE_URL}/api/v1/admin/${route}/${encodeURIComponent(workflowId)}/steps/${encodeURIComponent(stepId)}/resolve`,
     method: 'POST',
     data: request,
     attachToken: true,

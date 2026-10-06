@@ -179,8 +179,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// closure is only invoked when a task workflow finishes, by which point
 	// the assignment has already happened.
 	var parentRunner workflow.TemporalManager
-	onTaskCompleted := func(parentWorkflowID, parentRunID, parentNodeID string, finalVariables map[string]any) error {
-		return parentRunner.TaskDone(context.Background(), parentWorkflowID, parentRunID, parentNodeID, finalVariables)
+	// CompleteActivation's error is returned as it is: the orchestrator treats
+	// workflow.ErrActivationNotPending as "an earlier attempt already woke the parent".
+	onTaskCompleted := func(parentWorkflowID, parentStepID string, finalVariables map[string]any) error {
+		return parentRunner.CompleteActivation(context.Background(), parentWorkflowID, "", parentStepID, finalVariables)
 	}
 
 	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
@@ -190,7 +192,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, err
 	}
 	tm := task.Manager
-	paymentService.SetTaskCompleter(tm)
+	paymentService.SetTaskCompleter(activeStepCompleter{manager: tm, store: task.Store})
 
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
@@ -425,7 +427,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// scope gate. Order matters: withAuth injects the AuthContext; withScope
 	// reads it. Public routes (local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleGetTask)))))
-	mux.Handle("POST /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
+	mux.Handle("POST /api/v1/tasks/{id}/steps/{stepId}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
+	mux.Handle("POST /api/v1/callbacks/{token}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStepByToken)))))
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))
 
@@ -579,10 +582,10 @@ func wireParentRunner(c client.Client, namespace string, activator parentTaskAct
 		return activator.StartTask(context.Background(), payload)
 	}
 
-	onCompletion := func(workflowID string, finalVariables map[string]any) error {
-		log.Printf("\n[Parent Workflow] Completed. Final state: %v\n", finalVariables)
+	onCompletion := func(completion workflow.WorkflowCompletion) error {
+		log.Printf("\n[Parent Workflow] Completed. Final state: %v\n", completion.FinalVariables)
 		if upstream != nil {
-			if err := upstream.CompletionHandler(workflowID, finalVariables); err != nil {
+			if err := upstream.CompletionHandler(completion.WorkflowID, completion.FinalVariables); err != nil {
 				return fmt.Errorf("upstream completion handler: %w", err)
 			}
 		}
@@ -613,6 +616,23 @@ type taskStack struct {
 	Runner    workflow.TemporalManager
 	Store     *gormstore.TaskStore
 	Assembler *zoneview.ZoneViewAssembler
+}
+
+// activeStepCompleter adapts the task manager to core payment's TaskCompleter,
+// which names only the task: it completes whichever step the task is on now.
+// TODO: drop this once core payment carries the step (or the callback token)
+// from dispatch to its webhook, so a late webhook can't complete a later step.
+type activeStepCompleter struct {
+	manager *orchestrator.TaskManager
+	store   *gormstore.TaskStore
+}
+
+func (c activeStepCompleter) CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error {
+	record, ok := c.store.GetTask(ctx, taskID)
+	if !ok {
+		return fmt.Errorf("task %s not found", taskID)
+	}
+	return c.manager.CompleteTaskStep(ctx, taskID, record.ActiveStepID, payload)
 }
 
 // ownershipResolver adapts the consignment service to
@@ -753,21 +773,21 @@ func initTask(
 
 	// Handlers for events on the per-task (micro) sub-workflows running on
 	// MICRO_WORKFLOW_QUEUE. Nodes inside a task workflow activate subtasks
-	// via tm.StartSubTask, which dispatches to the matching plugin.
+	// via tm.StartTaskStep, which dispatches to the matching plugin.
 	microActivationHandler := func(payload workflow.TaskPayload) (map[string]any, error) {
-		log.Printf("\n[Micro Workflow] SubTask activated: node=%s template=%s\n", payload.NodeID, payload.TaskTemplateID)
+		log.Printf("\n[Micro Workflow] Step activated: node=%s template=%s\n", payload.NodeID, payload.TaskTemplateID)
 		if tm == nil {
 			return nil, fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		return tm.StartSubTask(context.Background(), payload)
+		return tm.StartTaskStep(context.Background(), payload)
 	}
 
-	microCompletionHandler := func(workflowID string, finalVariables map[string]any) error {
-		log.Printf("\n[Micro Workflow] Completed. Final state: %v\n", finalVariables)
+	microCompletionHandler := func(completion workflow.WorkflowCompletion) error {
+		log.Printf("\n[Micro Workflow] Completed. Final state: %v\n", completion.FinalVariables)
 		if tm == nil {
 			return fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		return tm.HandleTaskCompletion(context.Background(), workflowID, finalVariables)
+		return tm.HandleTaskCompletion(context.Background(), completion)
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)

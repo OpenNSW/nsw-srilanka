@@ -18,8 +18,11 @@ type CDNWebhookService interface {
 
 // TaskCompleter defines the task completion interface needed from the workflow
 // manager to advance tasks parked while ASYCUDA holds the next move.
+//
+// stepID is the parked task's active_step_id, read with the task itself, so a
+// callback only ever completes the step it was matched to.
 type TaskCompleter interface {
-	CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error
+	CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error
 }
 
 type cdnWebhookService struct {

@@ -70,17 +70,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/tasks/{id}/steps/{stepId}:
     post:
-      summary: Advance a task by submitting a step
+      summary: Advance a task by completing a step (portal)
       description: |
         Submits a command (and optional payload) to advance the task's
         underlying workflow. The request body must contain exactly one JSON
         value; trailing data after it is rejected.
 
+        `{stepId}` is the step being completed: the `step_id` the task's zone
+        view reported. Only that step is completed; a submission for a step
+        the task has since left is rejected with 409 and changes nothing.
+        External reviewers call back on `POST /api/v1/callbacks/{token}`
+        instead.
+
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
       parameters:
         - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/StepID'
       requestBody:
         required: true
         content:
@@ -89,10 +97,89 @@ paths:
               $ref: '#/components/schemas/CompleteTaskStepRequest'
       responses:
         '204':
-          description: No Content. The step was applied.
+          description: |
+            No Content. The workflow accepted the step; the task shows
+            ADVANCING (or its next step) from then on, so refetch it rather
+            than assume its state.
         '400':
           description: |
-            Missing task ID, malformed JSON, unexpected trailing data, a
+            Missing task or step ID, malformed JSON, unexpected trailing data,
+            a missing/empty `command`, or a `payload` that sets the reserved
+            `__command` key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The caller may not perform this action on this task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            `{stepId}` is not the task's active step: the task has moved on (or
+            completed) since the caller read it. Refetch the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured maximum size.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error completing the step.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/callbacks/{token}:
+    post:
+      summary: Complete the step an external reviewer was dispatched for
+      description: |
+        The route an external reviewer (an OGA portal or agency) calls back
+        on. `{token}` is the opaque `callbackToken` from the dispatch envelope
+        (the reviewer posts to `{serviceUrl}/{callbackToken}`). It names one
+        step of one task, so a callback that arrives after the task has moved
+        on is rejected with 409 instead of completing a later step. Treat it
+        as an opaque string; it is also the reviewer's idempotency key (the
+        same on every retry of one dispatch, different for every step).
+
+        The body is the same envelope as the portal's
+        `POST /api/v1/tasks/{id}/steps/{stepId}`, and must contain exactly one
+        JSON value.
+
+        Requires scope `nsw:task:write`.
+      operationId: completeTaskStepByCallbackToken
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: The `callbackToken` from the dispatch envelope.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteTaskStepRequest'
+      responses:
+        '204':
+          description: No Content. The workflow accepted the step.
+        '400':
+          description: |
+            A malformed token, malformed JSON, unexpected trailing data, a
             missing/empty `command`, or a `payload` that sets the reserved
             `__command` key.
           content:
@@ -107,6 +194,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: The caller may not perform this action on this task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            The token's step is no longer the task's active step: this callback
+            was already applied, or the task has moved on.
           content:
             application/json:
               schema:
@@ -136,6 +231,13 @@ components:
       name: id
       in: path
       required: true
+      schema:
+        type: string
+    StepID:
+      name: stepId
+      in: path
+      required: true
+      description: The step being completed (the task's `step_id`).
       schema:
         type: string
 
@@ -233,6 +335,16 @@ components:
         state:
           type: string
           description: e.g. PENDING_USER, QUEUED_EXTERNALLY, COMPLETED.
+        step_id:
+          type: string
+          description: |
+            The step the task is on. A submission is posted to
+            `/api/v1/tasks/{id}/steps/{step_id}`. Omitted before the task's
+            first step starts.
+        version:
+          type: integer
+          format: int64
+          description: Increases every time the task moves on. Read-only.
         view:
           type: array
           description: Sections in render order.

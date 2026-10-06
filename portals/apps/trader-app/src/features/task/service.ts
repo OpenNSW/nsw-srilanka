@@ -11,9 +11,14 @@ export async function getZoneView(taskId: string): Promise<ZoneView> {
   return data
 }
 
-export async function submitTaskStep(taskId: string, command: string, payload: Record<string, unknown>): Promise<void> {
+export async function submitTaskStep(
+  taskId: string,
+  stepId: string,
+  command: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
   await http.request({
-    url: `${API_BASE_URL}/api/v1/tasks/${taskId}`,
+    url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}`,
     method: 'POST',
     data: { command, payload },
     attachToken: true,

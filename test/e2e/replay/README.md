@@ -83,10 +83,11 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   },
   "inbound": {
     "endpoint": "POST /api/v1/inject",
-    "taskIDField": "taskId"
+    "taskIDField": "taskId",
+    "callbackTokenField": "callbackToken"
   },
   "outbound": {
-    "callbackPath": "/api/v1/tasks/{taskId}",
+    "callbackPath": "/api/v1/callbacks/{callbackToken}",
     "commandField": "command",
     "payloadField": "payload"
   }
@@ -97,7 +98,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
 |---|---|
 | `identity` | IdP credentials — used to mint/validate the M2M token |
 | `inbound` | The HTTP endpoint the mock agency exposes to receive injects from the NSW app |
-| `outbound` | How the mock posts the callback back to the NSW app |
+| `outbound` | How the mock posts the callback back to the NSW app. `{callbackToken}` in `callbackPath` is the token the inject carried (`inbound.callbackTokenField`): it names the one step the inject was for, and the app completes only that. |
 
 ### `configs/payments/<id>.json`
 
@@ -154,13 +155,24 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 
 #### Completing a USER_INPUT task
 
+A submission is posted to the step it completes, so read the task's `step_id` first, as the same actor, the way the portal does:
+
 ```json
+{
+  "name": "trader reads the step initTask is on",
+  "request": {
+    "actor": "trader",
+    "method": "GET",
+    "path": "/api/v1/tasks/{{initTask}}",
+    "extract": { "initTaskStep": "step_id" }
+  }
+},
 {
   "name": "trader initializes consignment",
   "request": {
     "actor": "trader",
     "method": "POST",
-    "path": "/api/v1/tasks/{{initTask}}",
+    "path": "/api/v1/tasks/{{initTask}}/steps/{{initTaskStep}}",
     "body": {
       "command": "submit",
       "payload": { "consignment_name": "My Consignment", "cha_company_id": "adam-pvt-ltd" }

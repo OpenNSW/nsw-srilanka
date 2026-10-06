@@ -180,7 +180,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve:
+  /api/v1/admin/consignments/{id}/steps/{stepId}/resolve:
     post:
       summary: "[Admin] Resolve a node parked for admin intervention"
       description: |
@@ -194,10 +194,11 @@ paths:
         are the same). It is the root workflow or a child-branch workflow
         (`EngineNodeDTO.child_workflow_ids`). A node inside a task workflow
         is resolved through
-        `POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve` instead, which
-        takes the task workflow's own ID. `{nodeId}` is the node's composite
-        ID, `EngineNodeDTO.id`, from that workflow's own engine-status
-        response.
+        `POST /api/v1/admin/task/{id}/steps/{stepId}/resolve` instead, which
+        takes the task workflow's own ID. `{stepId}` is the parked node's
+        `EngineNodeDTO.step_id` from that workflow's own engine-status
+        response: it names that one parking, so a resolve sent after the node
+        was resolved and parked again is rejected (`409`).
 
         The node is re-checked to be parked before the resolution is sent.
         `204` means the resolution was handed to the workflow, not that it has
@@ -217,10 +218,10 @@ paths:
             node (see above), not a consignment record ID.
           schema:
             type: string
-        - name: nodeId
+        - name: stepId
           in: path
           required: true
-          description: The node's composite ID (`EngineNodeDTO.id`), of the form `<template ID>:<uuid>`.
+          description: The parked node's current step (`EngineNodeDTO.step_id`).
           schema:
             type: string
       requestBody:
@@ -234,7 +235,7 @@ paths:
           description: The resolution was handed to the workflow.
         '400':
           description: >-
-            Missing path ID; an invalid request body (malformed JSON, an
+            Missing workflow or step ID; an invalid request body (malformed JSON, an
             unknown field, or anything after the JSON value); an `action`
             other than `RETRY`, `COMPLETE` or `ABORT`; a missing or blank
             `reason`; or `COMPLETE` on a GATEWAY node.
@@ -262,10 +263,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >-
-            The node is not currently awaiting admin intervention: it was
-            already resolved, has not parked yet, or `{nodeId}` matches no node
-            in this workflow (including an ID from before a retry re-ran the
-            node, which gets a new one).
+            No node in this workflow is parked under `{stepId}`: it was already
+            resolved, or the node has parked again since under a new step (each
+            run gets a new step ID), or the step never existed here.
           content:
             application/json:
               schema:
@@ -277,7 +277,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/admin/task/{id}/nodes/{nodeId}/resolve:
+  /api/v1/admin/task/{id}/steps/{stepId}/resolve:
     post:
       summary: "[Admin] Resolve a node parked inside a task workflow"
       description: |
@@ -290,9 +290,9 @@ paths:
         `EngineNodeDTO.task_workflow_id` on the TASK node that spawned it: a
         separate ID space and workflow manager from the consignment and
         child-workflow IDs of
-        `POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve`, the
-        same split as the two engine-status endpoints. `{nodeId}` is the
-        node's composite ID, `EngineNodeDTO.id`, from that task workflow's
+        `POST /api/v1/admin/consignments/{id}/steps/{stepId}/resolve`, the
+        same split as the two engine-status endpoints. `{stepId}` is the
+        parked node's `EngineNodeDTO.step_id` from that task workflow's
         response to `GET /api/v1/admin/task/{id}/engine-status`.
 
         The node is re-checked to be parked before the resolution is sent.
@@ -313,10 +313,10 @@ paths:
             `EngineNodeDTO.task_workflow_id`).
           schema:
             type: string
-        - name: nodeId
+        - name: stepId
           in: path
           required: true
-          description: The node's composite ID (`EngineNodeDTO.id`), of the form `<template ID>:<uuid>`.
+          description: The parked node's current step (`EngineNodeDTO.step_id`).
           schema:
             type: string
       requestBody:
@@ -330,7 +330,7 @@ paths:
           description: The resolution was handed to the workflow.
         '400':
           description: >-
-            Missing path ID; an invalid request body (malformed JSON, an
+            Missing workflow or step ID; an invalid request body (malformed JSON, an
             unknown field, or anything after the JSON value); an `action`
             other than `RETRY`, `COMPLETE` or `ABORT`; a missing or blank
             `reason`; or `COMPLETE` on a GATEWAY node.
@@ -358,10 +358,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >-
-            The node is not currently awaiting admin intervention: it was
-            already resolved, has not parked yet, or `{nodeId}` matches no node
-            in this workflow (including an ID from before a retry re-ran the
-            node, which gets a new one).
+            No node in this workflow is parked under `{stepId}`: it was already
+            resolved, or the node has parked again since under a new step (each
+            run gets a new step ID), or the step never existed here.
           content:
             application/json:
               schema:
@@ -434,6 +433,11 @@ components:
       properties:
         id:
           type: string
+          description: |
+            The task's ID, for `GET /api/v1/tasks/{id}`. Unlike
+            `EngineNodeDTO.id` it names one run of a TASK node, not the node
+            in the workflow definition: a loop revisit of the same node is a
+            new task with a new ID.
         createdAt:
           type: string
           format: date-time
@@ -497,6 +501,16 @@ components:
       properties:
         id:
           type: string
+          description: |
+            The node's ID in the workflow definition. It names the node, not a
+            run of it: it stays the same across retries and loop revisits. Use
+            `step_id` to address the current run (e.g. to resolve it).
+        step_id:
+          type: string
+          description: |
+            The node's latest run. A retry or loop revisit gives it a new one.
+            A parked node is resolved by it
+            (`POST …/steps/{step_id}/resolve`).
         type:
           type: string
         gateway_type:
@@ -631,12 +645,13 @@ components:
       properties:
         id:
           type: string
+          description: The edge's ID in the workflow definition.
         source_id:
           type: string
-          description: The composite ID of the source node (`EngineNodeDTO.id`).
+          description: The source node's ID in the workflow definition (`EngineNodeDTO.id`).
         target_id:
           type: string
-          description: The composite ID of the target node (`EngineNodeDTO.id`).
+          description: The target node's ID in the workflow definition (`EngineNodeDTO.id`).
         condition:
           type: string
           description: >-

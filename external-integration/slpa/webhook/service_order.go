@@ -125,7 +125,7 @@ func (s *OrderEvents) Handle(ctx context.Context, event OrderEvent) error {
 		return err
 	}
 
-	taskID, err := s.lookup.parked(ctx, ApprovalWaitTemplateID, "data->'so'->>'slug' = ?", event.Slug)
+	taskID, stepID, err := s.lookup.parked(ctx, ApprovalWaitTemplateID, "data->'so'->>'slug' = ?", event.Slug)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (s *OrderEvents) Handle(ctx context.Context, event OrderEvent) error {
 		payload["total_amount"] = event.TotalAmount
 	}
 
-	if err := s.tasks.CompleteTaskStep(ctx, taskID, payload); err != nil {
+	if err := s.tasks.CompleteTaskStep(ctx, taskID, stepID, payload); err != nil {
 		return fmt.Errorf("slpa webhook: failed to complete task %s: %w", taskID, err)
 	}
 

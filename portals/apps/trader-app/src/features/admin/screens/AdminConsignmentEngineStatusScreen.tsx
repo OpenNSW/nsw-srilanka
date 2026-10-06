@@ -48,8 +48,8 @@ const NODE_STATUS_COLOR: Record<EngineNodeStatus, 'gray' | 'orange' | 'green' | 
 // Shared grid so NodeRow's columns line up under the header regardless of nesting depth.
 const NODE_ROW_GRID = 'grid grid-cols-[1fr_150px_130px_150px_1fr] gap-2 items-center'
 
-// Workflow/node ids are "<name>:<uuid>" composites — the name is what an admin actually
-// recognizes at a glance; the uuid matters for exact lookups but is unreadable noise inline, so
+// Workflow ids are often "<name>:<uuid>" composites (node ids are plain definition ids, left whole
+// here) — the name is what an admin actually recognizes at a glance; the uuid matters for exact lookups but is unreadable noise inline, so
 // it's split off here to be shown smaller/muted with the full id in a title tooltip instead.
 function splitIDName(id: string): { name: string; uuid: string | null } {
   const separatorIndex = id.lastIndexOf(':')
@@ -140,6 +140,8 @@ interface AdminResolutionTarget {
   // different endpoint for a task workflow than for the root or a child branch.
   workflowKind: AdminWorkflowKind
   nodeId: string
+  // The parking being resolved (EngineNode.step_id).
+  stepId: string
   isGateway: boolean
   lastError?: string
   parkCategory?: ParkCategory
@@ -705,7 +707,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
     try {
       await resolveAdminIntervention(
         target.workflowId,
-        target.nodeId,
+        target.stepId,
         { action, global_variables_patch: globalVariablesPatch, reason },
         target.workflowKind,
       )
@@ -1170,6 +1172,7 @@ function NodeRow({
                   workflowId,
                   workflowKind,
                   nodeId: node.id,
+                  stepId: node.step_id ?? '',
                   isGateway: node.type === 'GATEWAY',
                   lastError: node.last_error,
                   parkCategory: node.park_category,

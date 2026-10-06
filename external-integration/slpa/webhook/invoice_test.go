@@ -15,12 +15,13 @@ import (
 
 type invoiceCompleter struct {
 	taskID  string
+	stepID  string
 	payload map[string]any
 	called  bool
 }
 
-func (c *invoiceCompleter) CompleteTaskStep(_ context.Context, taskID string, payload map[string]any) error {
-	c.taskID, c.payload, c.called = taskID, payload, true
+func (c *invoiceCompleter) CompleteTaskStep(_ context.Context, taskID, stepID string, payload map[string]any) error {
+	c.taskID, c.stepID, c.payload, c.called = taskID, stepID, payload, true
 	return nil
 }
 
@@ -42,7 +43,7 @@ func newInvoiceEvents(t *testing.T) (*InvoiceEvents, sqlmock.Sqlmock, *invoiceCo
 
 func expectParkedInvoice(mock sqlmock.Sqlmock, taskID string) {
 	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow(taskID))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow(taskID, "step-"+taskID))
 }
 
 // event decodes a CMS payload, so the fixtures read as what they send.
@@ -115,6 +116,7 @@ func TestInvoiceEvents_PaidReleasesTheStep(t *testing.T) {
 
 	require.True(t, tasks.called)
 	assert.Equal(t, "slpa_4_0_invoice:abc", tasks.taskID)
+	assert.Equal(t, "step-slpa_4_0_invoice:abc", tasks.stepID)
 	assert.Equal(t, "submit", tasks.payload["__command"])
 	assert.Equal(t, true, tasks.payload["paid"])
 	assert.Equal(t, "26211843261345", tasks.payload["invoice_no"])
