@@ -179,6 +179,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// closure is only invoked when a task workflow finishes, by which point
 	// the assignment has already happened.
 	var parentRunner workflow.TemporalManager
+	// The run ID is "" (Temporal: the workflow's current run) because a parent
+	// workflow only ever has one run; the step ID alone names the Activity in it.
 	// CompleteActivation's error is returned as it is: the orchestrator treats
 	// workflow.ErrActivationNotPending as "an earlier attempt already woke the parent".
 	onTaskCompleted := func(parentWorkflowID, parentStepID string, finalVariables map[string]any) error {

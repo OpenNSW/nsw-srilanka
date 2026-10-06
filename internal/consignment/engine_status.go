@@ -232,7 +232,11 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 // in AWAITING_ADMIN on workflowID, a consignment's root workflow or one of its child-branch
 // workflows, through the same manager GetEngineStatus queries. A task workflow is a separate ID
 // space on its own manager: see ResolveTaskWorkflowAdminIntervention. sig.ActivationID names the
-// parked step; it returns the ID of the node it resolved.
+// parked step.
+//
+// nodeID is the resolved node's ID in the workflow definition (e.g. "officer_review"), not a run
+// of it. It is returned only so the caller can audit which node was resolved in readable terms;
+// the step ID is what addresses the run.
 func (s *Service) ResolveAdminIntervention(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) (nodeID string, err error) {
 	if s.wm == nil {
 		return "", fmt.Errorf("no workflow manager registered for ConsignmentService")
@@ -253,7 +257,7 @@ func (s *Service) ResolveTaskWorkflowAdminIntervention(ctx context.Context, task
 // resolveAdminIntervention is the body both resolve methods share, run against whichever manager
 // owns workflowID. It finds the node parked under sig.ActivationID (the requested step), confirms a
 // GATEWAY isn't asked to COMPLETE, fills in sig.NodeID and sends the signal. It returns the node's
-// ID so the caller can record which node it resolved.
+// ID in the workflow definition, only for the caller's audit record (see ResolveAdminIntervention).
 //
 // Core routes the signal by sig.ActivationID (EngineNodeDTO.StepID), which must name a node's
 // current run: a resolve made against an earlier parking of a node is rejected here, and if it
