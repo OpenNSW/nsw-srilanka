@@ -13,13 +13,14 @@ The harness starts the full app in-process with `bootstrap.Build` (no test-only 
 
 Per-step identity is chosen by the flow's `actor`, which must match an actor `id` in one of the config files:
 - `"trader"` → MEMBER user (authorization_code token), defined in `configs/members/trader.json`.
-- `"<agencyId>"` (e.g. `"fcau"`) → SERVICE/M2M client (client_credentials token), defined in `configs/agencies/fcau.json`.
+- `"cha"` → MEMBER user with the CHA role, defined in `configs/members/cha.json`.
+- `"<agencyId>"` (e.g. `"fcau"`, `"cda"`) → SERVICE/M2M client (client_credentials token), defined in `configs/agencies/<id>.json`.
 
 **External agency flows** are handled by a generic mock agency (`mockagency_test.go`) that receives injects from the app and, when a `callback` step fires, posts the configured callback payload back to complete the parked EXTERNAL_REVIEW task.
 
 **Payment flows** are handled by a generic mock gateway (`mockgateway_test.go`) that resolves the payment reference and posts a gateway webhook to confirm the payment.
 
-FCAU is the sample flow exercising both. Other agency or payment flows need only a new JSON flow file.
+FCAU and CDA are the sample flows exercising both. Other agency or payment flows need only a new JSON flow file (and an agency config if the actor is new).
 
 ## Directory layout
 
@@ -27,14 +28,18 @@ FCAU is the sample flow exercising both. Other agency or payment flows need only
 test/e2e/replay/
 ├── configs/
 │   ├── members/        # MEMBER actor configs (Trader, CHA, …) — identity for token minting
-│   │   └── trader.json
+│   │   ├── trader.json
+│   │   └── cha.json
 │   ├── agencies/       # SERVICE/M2M agency configs — identity + inbound/outbound wire protocol
-│   │   └── fcau.json
+│   │   ├── fcau.json
+│   │   └── cda.json
 │   └── payments/       # Payment gateway configs — webhook path + optional identity
 │       └── govpay.json
 ├── flows/              # Flow JSON files (one per business scenario)
+│   ├── trade_up_to_hscode.json
 │   ├── fcau_application_approve.json
-│   └── trade_up_to_hscode.json
+│   ├── cda_application_approve.json
+│   └── cda_application_rework.json
 ├── config_test.go           # All config types (MemberConfig, AgencyConfig, PaymentConfig) and JSON loaders
 ├── harness_test.go          # Full in-process app setup
 ├── signedauth_test.go       # RS256 token minting + local JWKS server
