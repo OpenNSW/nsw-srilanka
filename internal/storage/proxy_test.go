@@ -236,8 +236,8 @@ func TestNew_BackendModeKeepsCoreStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, ok := stack.Service.(*BackendService); !ok {
-		t.Errorf("Service = %T, want *BackendService", stack.Service)
+	if _, ok := stack.Service.(*corestorage.Service); !ok {
+		t.Errorf("Service = %T, want *corestorage.Service", stack.Service)
 	}
 	if stack.LocalContent == nil {
 		t.Error("LocalContent = nil, want the local content handlers for a local backend")
@@ -288,7 +288,7 @@ func TestProxy_Save(t *testing.T) {
 	ctx := context.Background()
 
 	content := []byte("%PDF-1.4 generated on the server")
-	meta, err := svc.Save(ctx, "permit.pdf", "application/pdf", content)
+	meta, err := svc.Save(ctx, "permit.pdf", "application/pdf", bytes.NewReader(content), int64(len(content)))
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -307,7 +307,9 @@ func TestProxy_Save(t *testing.T) {
 	}
 }
 
-func TestBackendService_Save(t *testing.T) {
+// TestNew_BackendSave stores content through a local backend's Service, which
+// is core/storage's own, and reads it back.
+func TestNew_BackendSave(t *testing.T) {
 	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -315,7 +317,7 @@ func TestBackendService_Save(t *testing.T) {
 	ctx := context.Background()
 
 	content := []byte("<!DOCTYPE html><p>Permit</p>")
-	meta, err := stack.Service.Save(ctx, "permit.html", "text/html; charset=utf-8", content)
+	meta, err := stack.Service.Save(ctx, "permit.html", "text/html; charset=utf-8", bytes.NewReader(content), int64(len(content)))
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -336,9 +338,13 @@ func TestBackendService_Save(t *testing.T) {
 
 // TestProxy_SaveFallsBackToRequestedType sends the content as the type it
 // asked for when the owning service's reply leaves the type out; sending no
-// type would not match a URL signed over it.
+// type would not match a URL signed over it. The content goes with the length
+// it was given, not chunked, even from a reader that can't report its own.
 func TestProxy_SaveFallsBackToRequestedType(t *testing.T) {
 	var putType string
+	var putLength int64
+	var putChunked bool
+	var putBody []byte
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -347,6 +353,9 @@ func TestProxy_SaveFallsBackToRequestedType(t *testing.T) {
 			_, _ = fmt.Fprintf(w, `{"key":"0f8e7c1a-0000-4000-8000-000000000001.html","upload_url":%q}`, srv.URL+"/content")
 		case http.MethodPut:
 			putType = r.Header.Get("Content-Type")
+			putLength = r.ContentLength
+			putChunked = len(r.TransferEncoding) > 0
+			putBody, _ = io.ReadAll(r.Body)
 			w.WriteHeader(http.StatusOK)
 		}
 	}))
@@ -356,11 +365,18 @@ func TestProxy_SaveFallsBackToRequestedType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProxyService: %v", err)
 	}
-	meta, err := svc.Save(context.Background(), "doc.html", "text/html; charset=utf-8", []byte("<p>x</p>"))
+	content := "<p>x</p>"
+	// MultiReader hides the length that net/http would read off a
+	// *strings.Reader or *bytes.Reader by itself.
+	body := io.MultiReader(strings.NewReader(content))
+	meta, err := svc.Save(context.Background(), "doc.html", "text/html; charset=utf-8", body, int64(len(content)))
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	if putType != "text/html; charset=utf-8" || meta.MimeType != "text/html; charset=utf-8" {
 		t.Errorf("PUT Content-Type = %q, metadata type = %q; want the requested type for both", putType, meta.MimeType)
+	}
+	if putChunked || putLength != int64(len(content)) || string(putBody) != content {
+		t.Errorf("PUT chunked = %v, Content-Length = %d, body = %q; want %d bytes of %q, not chunked", putChunked, putLength, putBody, len(content), content)
 	}
 }
