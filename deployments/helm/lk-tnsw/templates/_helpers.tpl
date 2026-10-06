@@ -57,7 +57,7 @@ Migration component: fullname, selector labels, labels. The name stays
 <backend>-migrate, the schema it migrates being the backend's.
 */}}
 {{- define "lk-tnsw.migration.fullname" -}}
-{{- printf "%s-migrate" (include "lk-tnsw.backend.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-migrate" (include "lk-tnsw.backend.fullname" . | trunc 55 | trimSuffix "-") -}}
 {{- end }}
 
 {{- define "lk-tnsw.migration.selectorLabels" -}}

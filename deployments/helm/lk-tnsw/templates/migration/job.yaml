@@ -25,7 +25,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   # Number of retries before the Job is marked failed (and the upgrade aborts).
-  backoffLimit: {{ .Values.migration.backoffLimit | default 1 }}
+  backoffLimit: {{ .Values.migration.backoffLimit }}
   template:
     metadata:
       labels:
