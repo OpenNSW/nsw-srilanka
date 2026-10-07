@@ -1,16 +1,18 @@
 name: Makefile CI
 # Runs the Makefile the way each developer shell runs it, on PRs to main and in
 # the merge queue, when the Makefile, the git hooks or an example config file
-# change; otherwise the checks are skipped. Most developers use macOS/Linux, so
-# a recipe that only breaks under Windows (cmd.exe from PowerShell, Git Bash)
-# would otherwise be found by the first Windows developer after merge.
+# change; otherwise the checks are skipped. A recipe that only breaks under
+# Windows (cmd.exe from PowerShell, Git Bash) or under the Unix recipes (BSD
+# grep/awk/sed and Apple's Make) would otherwise be found by the first developer
+# on that machine after merge.
 #
 # One leg per shell the Makefile supports:
 #   Windows (cmd.exe) — GNU Make from PowerShell, with no sh on PATH. The Makefile
 #                       selects its USE_CMD recipes here (OS=Windows_NT, no MSYSTEM).
 #   Windows (Git Bash) — MSYSTEM set, sh on PATH: the Unix recipes plus the
 #                       cygpath PATH handling.
-#   Linux             — the Unix recipes.
+#   UNIX              — the Unix recipes, on the macOS runner: Apple's GNU Make
+#                       and the BSD userland (grep, awk, sed, find).
 
 on:
   pull_request:
@@ -73,8 +75,8 @@ jobs:
           - name: Windows (Git Bash)
             os: windows-latest
             shell_kind: gitbash
-          - name: Linux
-            os: ubuntu-latest
+          - name: UNIX
+            os: macos-latest
             shell_kind: unix
     # Every step is driven from PowerShell 7 (on all three runners); what differs
     # per leg is the environment `make` itself sees, set up below.
@@ -130,6 +132,9 @@ jobs:
         run: |
           make --version
           "OS=$env:OS MSYSTEM=$env:MSYSTEM"
+          if ($env:RUNNER_OS -eq 'macOS' -and ($env:OS -eq 'Windows_NT' -or $env:MSYSTEM)) {
+            throw "UNIX leg would not run the Unix recipes (OS=$env:OS MSYSTEM=$env:MSYSTEM)"
+          }
 
       # `make -n` parses the whole Makefile and expands every recipe without
       # running it. Catches syntax errors, bad ifdef/endif nesting and bad
