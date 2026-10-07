@@ -112,7 +112,7 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 		t.Helper()
 		mockCompany := svc.companyService.(*MockCompanyService)
 		mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co-trader", OUHandle: "trader-ou"}, nil).Maybe()
-		r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+		r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.New())
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/consignments/"+consignmentID+"/flows", strings.NewReader(body))
 		req.SetPathValue("id", consignmentID)
 		req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))

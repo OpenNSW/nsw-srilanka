@@ -1,12 +1,15 @@
 package audit
 
+// EventType, Action, TargetType and ActorType are the string vocabulary written
+// into audit log records (category=audit).
 type EventType string
 type Action string
 type TargetType string
 type ActorType string
 
-// These constants must match the enum definitions in configs/argus/config.yaml.
-// A unit test (enums_test.go) asserts they are defined in that configuration.
+// Status is the outcome of an audited action.
+type Status string
+
 const (
 	EventConsignment EventType = "CONSIGNMENT_EVENT"
 	EventTask        EventType = "TASK_EVENT"
@@ -14,10 +17,11 @@ const (
 	EventPayment     EventType = "PAYMENT_EVENT"
 	EventUserMgmt    EventType = "USER_MANAGEMENT"
 
-	ActionCreate Action = "CREATE"
-	ActionRead   Action = "READ"
-	ActionUpdate Action = "UPDATE"
-	ActionDelete Action = "DELETE"
+	ActionCreate        Action = "CREATE"
+	ActionRead          Action = "READ"
+	ActionUpdate        Action = "UPDATE"
+	ActionDelete        Action = "DELETE"
+	ActionPresignUpload Action = "PRESIGN_UPLOAD"
 
 	TargetConsignment TargetType = "CONSIGNMENT"
 	TargetTask        TargetType = "TASK"
@@ -28,4 +32,7 @@ const (
 	ActorMember  ActorType = "MEMBER"
 	ActorService ActorType = "SERVICE"
 	ActorSystem  ActorType = "SYSTEM"
+
+	StatusSuccess Status = "SUCCESS"
+	StatusFailure Status = "FAILURE"
 )
