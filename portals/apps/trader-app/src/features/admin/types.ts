@@ -18,6 +18,9 @@ export type ParkCategory =
 
 export interface EngineNode {
   id: string
+  // The node's latest run. A retry or loop revisit gives it a new one; a parked node is resolved
+  // by it, so a resolve made against an earlier parking is rejected (409).
+  step_id?: string
   type: string
   // Only present when type is 'GATEWAY' — which kind (EXCLUSIVE_SPLIT, PARALLEL_SPLIT,
   // EXCLUSIVE_JOIN, PARALLEL_JOIN, BATCH_SPLIT, BATCH_JOIN).
@@ -55,7 +58,7 @@ export interface EngineNode {
 export type EngineWorkflowStatus = 'RUNNING' | 'COMPLETED' | 'FAILED'
 
 // This workflow instance's own graph connections (workflow.Edge on the backend) — source_id/
-// target_id already resolved to the composite node IDs in EngineStatus.nodes[i].id. condition is
+// target_id are the node IDs in EngineStatus.nodes[i].id. condition is
 // the raw expr-lang expression evaluated against global_variables, verbatim.
 export interface EngineEdge {
   id: string

@@ -72,6 +72,11 @@ type Request struct {
 	Body         any               `json:"body,omitempty"`
 	ExpectStatus int               `json:"expectStatus,omitempty"` // default 200
 	Extract      map[string]string `json:"extract,omitempty"`      // var -> response field path (dot-notation, e.g. "consignment.id")
+	// Retry, for a GET only, re-issues the request until it gets the expected
+	// status and every Extract path is present, or this long elapses (e.g. "30s").
+	// For state that lands a moment after a wait matched: a task's step_id is
+	// set when its step is claimed, just after the node shows IN_PROGRESS.
+	Retry string `json:"retry,omitempty"`
 }
 
 // Wait polls the consignment detail until a workflow node matches.
@@ -183,6 +188,34 @@ func (r *Runner) Run(ctx context.Context, flow *Flow) error {
 }
 
 func (r *Runner) doRequest(ctx context.Context, req *Request) error {
+	if req.Retry == "" {
+		return r.doRequestOnce(ctx, req)
+	}
+	if req.Method != http.MethodGet {
+		return fmt.Errorf("retry is only allowed on GET, not %s: retrying could repeat a side effect", req.Method)
+	}
+	timeout, err := parseTimeout(req.Retry, defaultWaitTimeout)
+	if err != nil {
+		return err
+	}
+	// Each attempt is bounded by the same deadline, so a request that stalls is
+	// cancelled when the retry window ends rather than holding the replay open.
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	for {
+		err := r.doRequestOnce(ctx, req)
+		if err == nil || ctx.Err() != nil {
+			return err
+		}
+		// The window can close during the pause too; the last attempt's error says
+		// more about why the step never succeeded than the deadline does.
+		if sleep(ctx, waitPollInterval) != nil {
+			return err
+		}
+	}
+}
+
+func (r *Runner) doRequestOnce(ctx context.Context, req *Request) error {
 	path := r.interpolate(req.Path)
 
 	var rdr io.Reader

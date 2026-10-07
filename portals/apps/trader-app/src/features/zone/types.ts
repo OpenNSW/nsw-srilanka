@@ -61,6 +61,9 @@ export type ZoneView = {
   task_id: string
   task_type: string
   state: string
+  // step_id is the step the task is on. A submission is posted to it, so one made
+  // against a step the task has since left is rejected (409) instead of applied.
+  step_id?: string
   alert?: Alert
   audit?: AuditEntry[]
   view: ZoneComponent[]

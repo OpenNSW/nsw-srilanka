@@ -328,8 +328,9 @@ func TestConsignmentRouter_HandleCreateConsignment_Unauthorized(t *testing.T) {
 
 const (
 	resolveTestWorkflowID = "wf-1"
-	// A composite "<template ID>:<uuid>" node ID, as an admin gets it from the engine status.
-	resolveTestCompositeNodeID = "officer_review:6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	resolveTestNodeID     = "officer_review"
+	// resolveTestStepID is the parked node's current step ID, which every request addresses.
+	resolveTestStepID = "step-1"
 )
 
 // managerSlot registers a mock as one of the service's two workflow managers: the root one, for a
@@ -356,12 +357,12 @@ var resolveRoutes = []resolveRoute{
 }
 
 // newResolveRequest builds a POST to a resolve endpoint as an authenticated admin, addressing
-// resolveTestCompositeNodeID on resolveTestWorkflowID. The handlers read their path values, not the
+// resolveTestStepID on resolveTestWorkflowID. The handlers read their path values, not the
 // URL, so the same request serves both routes.
 func newResolveRequest(body string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/"+resolveTestWorkflowID+"/nodes/"+resolveTestCompositeNodeID+"/resolve", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/"+resolveTestWorkflowID+"/steps/"+resolveTestStepID+"/resolve", strings.NewReader(body))
 	req.SetPathValue("id", resolveTestWorkflowID)
-	req.SetPathValue("nodeId", resolveTestCompositeNodeID)
+	req.SetPathValue("stepId", resolveTestStepID)
 	return req.WithContext(withAuthContext(req.Context(), "admin-1"))
 }
 
@@ -374,21 +375,21 @@ func newResolveRouter(t *testing.T, route resolveRoute, mockWM *MockWM) *Router 
 	return mustNewRouter(t, svc, nil, nil, nswaudit.NewRecorder(nil))
 }
 
-// parkedInstance is a workflow with one node of nodeType parked in AWAITING_ADMIN, keyed by its
-// plain template ID and carrying resolveTestCompositeNodeID, like a real engine status.
+// parkedInstance is a workflow with one node of nodeType parked in AWAITING_ADMIN under
+// resolveTestStepID, like a real engine status.
 func parkedInstance(nodeType workflow.NodeType) *workflow.WorkflowInstance {
 	return &workflow.WorkflowInstance{
 		ID:     resolveTestWorkflowID,
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
-			"officer_review": {ID: resolveTestCompositeNodeID, Type: nodeType, Status: workflow.NodeStatusAwaitingAdmin},
+			resolveTestNodeID: {ID: resolveTestNodeID, ActivationID: resolveTestStepID, Type: nodeType, Status: workflow.NodeStatusAwaitingAdmin},
 		},
 	}
 }
 
 // The request's fields must reach core's signal under core's names: the wire field
-// global_variables_patch becomes WorkflowVariablesPatch, and the composite node ID is translated
-// to the template ID. A slip in this mapping would drop the admin's variables while still
+// global_variables_patch becomes WorkflowVariablesPatch, the path's step becomes ActivationID
+// (core's routing key), and NodeID is the node found parked under it. A slip in this mapping would drop the admin's variables while still
 // returning 204, so assert the whole signal rather than just that one was sent.
 func TestConsignmentRouter_HandleResolveAdminIntervention_ForwardsRequestToSignal(t *testing.T) {
 	for _, route := range resolveRoutes {
@@ -407,7 +408,8 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_ForwardsRequestToSigna
 
 			assert.Equal(t, http.StatusNoContent, w.Code)
 			assert.Equal(t, workflow.AdminResolutionSignal{
-				NodeID:                 "officer_review",
+				NodeID:                 resolveTestNodeID,
+				ActivationID:           resolveTestStepID,
 				Action:                 workflow.AdminActionComplete,
 				WorkflowVariablesPatch: map[string]any{"review.outcome": "APPROVED"},
 				Reason:                 "result was recorded under the wrong key",
@@ -491,11 +493,12 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_MapsServiceErrors(t *t
 			wantStatus: http.StatusConflict,
 		},
 		{
-			name: "stale node ID is 409",
+			name: "stale step ID is 409",
 			body: `{"action":"RETRY","reason":"retry"}`,
 			setup: func(m *MockWM) {
+				// Resolved and parked again since the admin loaded the engine status.
 				inst := parkedInstance(workflow.NodeTypeTask)
-				inst.NodeInfo["officer_review"].ID = "officer_review:the-uuid-of-a-later-run"
+				inst.NodeInfo[resolveTestNodeID].ActivationID = "step-2"
 				m.On("GetStatus", mock.Anything, resolveTestWorkflowID).Return(inst, nil)
 			},
 			wantStatus: http.StatusConflict,
@@ -566,6 +569,23 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_RejectsInvalidRequest(
 				assert.Contains(t, w.Body.String(), tt.wantErr)
 			})
 		}
+	}
+}
+
+// A request without a step never reaches the workflow manager, so none is registered.
+func TestConsignmentRouter_HandleResolveAdminIntervention_RequiresStepID(t *testing.T) {
+	for _, route := range resolveRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+			req := newResolveRequest(`{"action":"RETRY","reason":"retry"}`)
+			req.SetPathValue("stepId", "")
+
+			w := httptest.NewRecorder()
+			route.handler(r)(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), errStepIDRequired)
+		})
 	}
 }
 

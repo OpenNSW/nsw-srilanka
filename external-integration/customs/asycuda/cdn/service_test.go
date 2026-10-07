@@ -166,13 +166,18 @@ func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 }
 
 // resumeRecorder captures the task steps a callback completes.
-type resumeRecorder struct{ completed map[string]map[string]any }
+type resumeRecorder struct {
+	completed map[string]map[string]any
+	steps     map[string]string
+}
 
-func (r *resumeRecorder) CompleteTaskStep(_ context.Context, taskID string, payload map[string]any) error {
+func (r *resumeRecorder) CompleteTaskStep(_ context.Context, taskID, stepID string, payload map[string]any) error {
 	if r.completed == nil {
 		r.completed = map[string]map[string]any{}
+		r.steps = map[string]string{}
 	}
 	r.completed[taskID] = payload
+	r.steps[taskID] = stepID
 	return nil
 }
 
@@ -241,7 +246,7 @@ func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) 
 	sqlMock.ExpectQuery(`task_records_v2`).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
 	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("create_cdn:abc"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("create_cdn:abc", "step-abc"))
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -255,6 +260,7 @@ func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) 
 
 	payload, ok := recorder.completed["create_cdn:abc"]
 	require.True(t, ok, "the parked task was not completed; the trader would wait forever")
+	assert.Equal(t, "step-abc", recorder.steps["create_cdn:abc"], "the step it was parked on must be the one completed")
 	assert.Equal(t, "submit", payload["__command"])
 	assert.Equal(t, true, payload["integrated"])
 	// The workflow is handed the registered reference, which is what the trader
@@ -274,7 +280,7 @@ func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	sqlMock.ExpectQuery(`task_records_v2`).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
 	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("create_cdn:abc"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("create_cdn:abc", "step-abc"))
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",

@@ -34,9 +34,12 @@ const gatewayPollInterval = 300 * time.Millisecond
 // implements replay.PaymentGateway.
 //
 // The reference is only rendered into the task's markdown view, so the mock
-// reads it from the payment store (GetByTaskID) rather than over HTTP.
+// reads it from the payment table rather than over HTTP. The payment service
+// does not record which task a payment is for; the payment plugin puts it in
+// the checkout metadata (gateway_metadata.task_id), which is what the mock
+// matches on.
 type mockGateway struct {
-	repo    payment.PaymentRepository
+	db      *gorm.DB
 	client  *http.Client
 	base    string // the in-process NSW app base URL; set by the harness after start
 	configs map[string]PaymentConfig
@@ -52,7 +55,7 @@ func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map
 		cfgMap[c.ID] = c
 	}
 	return &mockGateway{
-		repo:    payment.NewPaymentRepository(db),
+		db:      db,
 		client:  &http.Client{Timeout: 10 * time.Second},
 		configs: cfgMap,
 		bearers: make(map[string]string),
@@ -146,7 +149,7 @@ func (g *mockGateway) awaitReference(ctx context.Context, taskID string, timeout
 	defer ticker.Stop()
 
 	for {
-		tx, err := g.repo.GetByTaskID(ctx, taskID)
+		tx, err := g.latestPaymentFor(ctx, taskID)
 		if err != nil {
 			return nil, fmt.Errorf("mock-gateway: lookup payment for task %s: %w", taskID, err)
 		}
@@ -162,6 +165,25 @@ func (g *mockGateway) awaitReference(ctx context.Context, taskID string, timeout
 		case <-ticker.C:
 		}
 	}
+}
+
+// latestPaymentFor returns taskID's newest payment transaction, or nil if there
+// is none yet. A looped payment step can leave more than one, and the newest is
+// the one the trader is paying now.
+func (g *mockGateway) latestPaymentFor(ctx context.Context, taskID string) (*payment.PaymentTransaction, error) {
+	var tx payment.PaymentTransaction
+	err := g.db.WithContext(ctx).
+		Where("gateway_metadata->>'task_id' = ?", taskID).
+		Order("created_at DESC").
+		Limit(1).
+		Find(&tx).Error
+	if err != nil {
+		return nil, err
+	}
+	if tx.ID == "" {
+		return nil, nil
+	}
+	return &tx, nil
 }
 
 // resolveIdentityFields looks up, for each wire field cfg.IdentityFields

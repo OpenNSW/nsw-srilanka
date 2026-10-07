@@ -375,6 +375,10 @@ components:
       properties:
         id:
           type: string
+          description: |
+            The task's ID, for `GET /api/v1/tasks/{id}`. It names one run of a
+            TASK node, not the node in the workflow definition: a loop revisit
+            of the same node is a new task with a new ID.
         createdAt:
           type: string
           format: date-time

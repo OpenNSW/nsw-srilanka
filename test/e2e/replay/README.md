@@ -84,21 +84,22 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   },
   "inbound": {
     "endpoint": "POST /api/v1/inject",
-    "taskIDField": "taskId"
+    "taskIDField": "taskId",
+    "callbackTokenField": "callbackToken"
   },
   "outbound": {
-    "callbackPath": "/api/v1/tasks/{taskId}",
+    "callbackPath": "/api/v1/callbacks/{callbackToken}",
     "commandField": "command",
     "payloadField": "payload"
   }
 }
 ```
 
-| Section    | Purpose                                                                       |
-| ---------- | ----------------------------------------------------------------------------- |
-| `identity` | IdP credentials — used to mint/validate the M2M token                         |
-| `inbound`  | The HTTP endpoint the mock agency exposes to receive injects from the NSW app |
-| `outbound` | How the mock posts the callback back to the NSW app                           |
+| Section    | Purpose                                                                                                                                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identity` | IdP credentials — used to mint/validate the M2M token                                                                                                                                                                               |
+| `inbound`  | The HTTP endpoint the mock agency exposes to receive injects from the NSW app                                                                                                                                                       |
+| `outbound` | How the mock posts the callback back to the NSW app. `{callbackToken}` in `callbackPath` is the token the inject carried (`inbound.callbackTokenField`): it names the one step the inject was for, and the app completes only that. |
 
 ### `configs/payments/<id>.json`
 
@@ -144,24 +145,37 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 }
 ```
 
-| Field          | Notes                                                                           |
-| -------------- | ------------------------------------------------------------------------------- |
-| `actor`        | Must match an `id` in `configs/members/` or `configs/agencies/`.                |
-| `method`       | HTTP method.                                                                    |
-| `path`         | URL path; `{{var}}` tokens interpolated.                                        |
-| `body`         | JSON body; `{{var}}` in string values interpolated.                             |
-| `expectStatus` | Expected status code (default 200).                                             |
-| `extract`      | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`). |
+| Field          | Notes                                                                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `actor`        | Must match an `id` in `configs/members/` or `configs/agencies/`.                                                     |
+| `method`       | HTTP method.                                                                                                         |
+| `path`         | URL path; `{{var}}` tokens interpolated.                                                                             |
+| `body`         | JSON body; `{{var}}` in string values interpolated.                                                                  |
+| `expectStatus` | Expected status code (default 200).                                                                                  |
+| `extract`      | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`).                                      |
+| `retry`        | GET only: re-issue until the status matches and every `extract` path is present, for up to this long (e.g. `"30s"`). |
 
 #### Completing a USER_INPUT task
 
+A submission is posted to the step it completes, so read the task's `step_id` first, as the same actor, the way the portal does. The node shows `IN_PROGRESS` a moment before its step is claimed, so the read retries until `step_id` is there:
+
 ```json
+{
+  "name": "trader reads the step initTask is on",
+  "request": {
+    "actor": "trader",
+    "method": "GET",
+    "path": "/api/v1/tasks/{{initTask}}",
+    "extract": { "initTaskStep": "step_id" },
+    "retry": "30s"
+  }
+},
 {
   "name": "trader initializes consignment",
   "request": {
     "actor": "trader",
     "method": "POST",
-    "path": "/api/v1/tasks/{{initTask}}",
+    "path": "/api/v1/tasks/{{initTask}}/steps/{{initTaskStep}}",
     "body": {
       "command": "submit",
       "payload": { "consignment_name": "My Consignment", "cha_company_id": "adam-pvt-ltd" }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -131,7 +132,13 @@ func (a *mockAgency) Respond(ctx context.Context, taskID, command string, conten
 	if !ok {
 		return fmt.Errorf("mock-agency: no config found for agency ID %q", inj.agencyID)
 	}
-	callbackURL := a.callbackBase + strings.Replace(cfg.Outbound.CallbackPath, "{taskId}", taskID, 1)
+	// Call back with the token the inject carried, as a real reviewer must: it
+	// names the one step the inject was for, and the app completes only that.
+	token, _ := inj.body[cfg.Inbound.CallbackTokenField].(string)
+	if token == "" {
+		return fmt.Errorf("mock-agency: inject for taskId %q carried no %s", taskID, cfg.Inbound.CallbackTokenField)
+	}
+	callbackURL := a.callbackBase + strings.NewReplacer("{taskId}", taskID, "{callbackToken}", url.PathEscape(token)).Replace(cfg.Outbound.CallbackPath)
 	body, err := json.Marshal(map[string]any{
 		cfg.Outbound.CommandField: command,
 		cfg.Outbound.PayloadField: content,

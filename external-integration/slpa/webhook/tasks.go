@@ -26,11 +26,15 @@ var ErrNotWaitingYet = errors.New("slpa webhook: the order is not waiting on thi
 // which persists it as part of resuming the step and lets the workflow decide
 // what happens next.
 //
+// stepID is the parked step's active_step_id, read in the same lookup that found
+// the task, so the completion is for the step that was parked when the event
+// was matched; if the task has moved on since, core rejects it as stale.
+//
 // That is why an event which does not end a lifecycle still completes the step:
 // the workflow's own gateway sends it back to the same wait, so what the trader
 // sees is updated and the step is open again. See the SLPA task workflows.
 type TaskCompleter interface {
-	CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error
+	CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error
 }
 
 // stateQueuedExternally is the state a wait parks in while SLPA owns the next
@@ -47,7 +51,8 @@ type taskLookup struct {
 	db *gorm.DB
 }
 
-// parked returns the task waiting on this order under the given wait template.
+// parked returns the task waiting on this order under the given wait template,
+// and the ID of the step it is parked on.
 //
 // The three outcomes are deliberately different, because they tell the CMS
 // different things: a task to resume, a lifecycle already finished (its retries
@@ -57,21 +62,22 @@ type taskLookup struct {
 // identifiers on more than one task — the approval and the invoice both hold
 // the slug — so a redelivered approval must not be judged by whether the
 // invoice task that followed it happens to be open.
-func (l taskLookup) parked(ctx context.Context, templateID string, match string, args ...any) (string, error) {
+func (l taskLookup) parked(ctx context.Context, templateID string, match string, args ...any) (taskID, stepID string, err error) {
 	var task struct {
 		TaskID string `gorm:"column:task_id"`
+		StepID string `gorm:"column:active_step_id"`
 	}
-	err := l.db.WithContext(ctx).
+	err = l.db.WithContext(ctx).
 		Table("task_records_v2").
 		Where("("+match+") AND active_task_template_id = ? AND state = ?",
 			append(append([]any{}, args...), templateID, stateQueuedExternally)...).
-		Select("task_id").
+		Select("task_id", "active_step_id").
 		First(&task).Error
 	if err == nil {
-		return task.TaskID, nil
+		return task.TaskID, task.StepID, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
+		return "", "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
 	}
 
 	// Nothing parked under that wait. Which of the three cases this is decides
@@ -84,7 +90,7 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 		Table("task_records_v2").
 		Where("("+match+") AND active_task_template_id = ?", append(append([]any{}, args...), templateID)...).
 		Pluck("state", &states).Error; err != nil {
-		return "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
+		return "", "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
 	}
 
 	for _, state := range states {
@@ -92,7 +98,7 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 			// The wait ran to the end of its flow, so this event has been
 			// applied already and the CMS is answered rather than told to
 			// retry — which is what stops the retries.
-			return "", nil
+			return "", "", nil
 		}
 	}
 	if len(states) > 0 {
@@ -100,7 +106,7 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 		// being applied and the one after it has not reopened yet. Answering
 		// "already applied" here would drop an event that was never acted on,
 		// so the CMS is asked to retry, and its retry lands.
-		return "", ErrNotWaitingYet
+		return "", "", ErrNotWaitingYet
 	}
 
 	// This wait has never opened. Whether that is worth retrying depends on
@@ -110,13 +116,13 @@ func (l taskLookup) parked(ctx context.Context, templateID string, match string,
 		Table("task_records_v2").
 		Where(match, args...).
 		Count(&held).Error; err != nil {
-		return "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
+		return "", "", fmt.Errorf("slpa webhook: failed to look up the order: %w", err)
 	}
 	if held == 0 {
-		return "", ErrOrderNotFound
+		return "", "", ErrOrderNotFound
 	}
 	// The consignment holds the order but has not reached this step yet — a
 	// decision arriving before the task that waits for it, which their retry
 	// resolves.
-	return "", ErrNotWaitingYet
+	return "", "", ErrNotWaitingYet
 }

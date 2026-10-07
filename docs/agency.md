@@ -96,14 +96,19 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
 
 ## Flow
 
-1. `POST /api/v1/inject` with `{taskId, taskCode, consignmentId, data}`.
+1. `POST /api/v1/inject` with `{taskId, taskCode, consignmentId, callbackToken, data}`.
 2. The `taskCode` is resolved to its `task_config` (see below). An unknown code is a 400
    `unknown task code "<code>"` and records nothing.
 3. `agency.Service.Inject` upserts the `cases` row keyed by `consignmentId` and records
    one `agency_workflow` row per `taskId` (status `STARTING`) in the same transaction.
    It then starts the config's `workflow` with `taskId` as the instance ID and marks
    it `STARTED`.
-   The payload is seeded as the `notification` variable.
+   The payload is seeded as the `notification` variable, and the `callbackToken`, when
+   the caller sent one, as the `callbackToken` variable. Both are recorded on the row,
+   so a retried start runs with the values from the first inject. A workflow sends its
+   decision back with it on the caller's `POST /api/v1/callbacks/{callbackToken}`: the
+   token names the caller's step, so a late or repeated decision cannot complete a
+   later one.
 4. Retries are safe. A row still `STARTING` (a failed start) is started again, and a
    `STARTED` row is returned without touching the engine. That matters: once a
    workflow completes, Temporal would accept the same ID as a new run. A repeat

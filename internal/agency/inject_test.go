@@ -7,6 +7,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/testutil"
+	workflow "github.com/OpenNSW/core/workflow"
 )
 
 // recordingRepo fails the test if Inject gets as far as recording anything.
@@ -77,4 +78,84 @@ func TestInjectRepeatTaskID(t *testing.T) {
 			t.Errorf("%s: got %+v, want the stored row", name, got)
 		}
 	}
+}
+
+// startingRepo records the first Workflow it is given and returns it from Get as the
+// recorded row, still STARTING, so Inject goes on to start it.
+type startingRepo struct {
+	Repository
+	recorded *Workflow
+}
+
+func (r *startingRepo) Record(_ context.Context, w Workflow) error {
+	if r.recorded == nil {
+		w.Status = StatusStarting
+		r.recorded = &w
+	}
+	return nil
+}
+
+func (r *startingRepo) Get(context.Context, string) (*Workflow, error) {
+	w := *r.recorded
+	return &w, nil
+}
+
+func (r *startingRepo) MarkStarted(context.Context, string) error { return nil }
+
+// startCapture records the variables each workflow was started with.
+type startCapture struct {
+	workflow.Manager
+	vars []map[string]any
+}
+
+func (m *startCapture) StartWorkflow(_ context.Context, _ string, _ workflow.WorkflowDefinition, vars map[string]any) error {
+	m.vars = append(m.vars, vars)
+	return nil
+}
+
+func TestInjectSeedsCallbackToken(t *testing.T) {
+	reg := artifact.NewRegistry(testutil.MemLoader{
+		"verify.json":    []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
+		"verify_wf.json": []byte(`{"id":"verify_wf","nodes":[],"edges":[]}`),
+	})
+	reg.RegisterArtifact("verify", "task_config", "", "verify.json")
+	reg.RegisterArtifact("verify_wf", "workflow", "", "verify_wf.json")
+	req := InjectRequest{TaskID: "T1", TaskCode: "verify", ConsignmentID: "C1"}
+
+	t.Run("token is seeded from the recorded row", func(t *testing.T) {
+		repo, wm := &startingRepo{}, &startCapture{}
+		svc := NewService(repo, reg, wm)
+
+		first, retry := req, req
+		first.CallbackToken = "tok-1"
+		// A retried start runs with the first inject's token, like its payload.
+		retry.CallbackToken = "tok-2"
+		for _, r := range []InjectRequest{first, retry} {
+			if _, err := svc.Inject(context.Background(), r); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if repo.recorded.CallbackToken != "tok-1" {
+			t.Errorf("recorded token = %q, want tok-1", repo.recorded.CallbackToken)
+		}
+		// The row is never marked started, so the retry starts it again.
+		if len(wm.vars) != 2 {
+			t.Fatalf("started %d times, want 2", len(wm.vars))
+		}
+		for i, vars := range wm.vars {
+			if vars["callbackToken"] != "tok-1" {
+				t.Errorf("start %d: callbackToken = %v, want tok-1", i, vars["callbackToken"])
+			}
+		}
+	})
+
+	t.Run("no token leaves the variable unset", func(t *testing.T) {
+		wm := &startCapture{}
+		if _, err := NewService(&startingRepo{}, reg, wm).Inject(context.Background(), req); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := wm.vars[0]["callbackToken"]; ok {
+			t.Errorf("callbackToken = %v, want unset", wm.vars[0]["callbackToken"])
+		}
+	})
 }

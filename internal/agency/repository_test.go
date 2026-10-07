@@ -25,13 +25,15 @@ func newMockRepo(t *testing.T) (Repository, sqlmock.Sqlmock) {
 }
 
 func TestRecord(t *testing.T) {
-	w := Workflow{TaskID: "task-1", TaskCode: "code", CaseID: "C1"}
+	w := Workflow{TaskID: "task-1", TaskCode: "code", CaseID: "C1", CallbackToken: "tok-1"}
 
 	t.Run("new workflow reopens its case", func(t *testing.T) {
 		repo, mock := newMockRepo(t)
 		mock.ExpectBegin()
 		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
-		mock.ExpectExec(`INSERT INTO agency_workflow`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`INSERT INTO agency_workflow`).
+			WithArgs("task-1", "code", "C1", StatusStarting, "tok-1").
+			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectCommit()
 

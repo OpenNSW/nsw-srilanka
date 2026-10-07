@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/payment"
+	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/shopspring/decimal"
@@ -119,11 +120,18 @@ func (f *fakePaymentService) CreateCheckoutSession(_ context.Context, req paymen
 	return f.resp, nil
 }
 
+// The task and step IDs are UUIDs, as core mints them: the plugin builds the
+// checkout's callback token from them.
+const (
+	paymentTestTaskID = "6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	paymentTestStepID = "ca7ed707-1dba-43ca-94bf-10eddf00df3c"
+)
+
 func paymentPluginCtx(inputs map[string]any) plugins.PluginContext {
 	return plugins.PluginContext{
 		Context: context.Background(),
 		Inputs:  inputs,
-		Record:  &store.TaskRecord{TaskID: "task-1", Data: map[string]any{}},
+		Record:  &store.TaskRecord{TaskID: paymentTestTaskID, ActiveStepID: paymentTestStepID, Data: map[string]any{}},
 	}
 }
 
@@ -151,6 +159,20 @@ func TestPaymentPlugin_Execute_FallsBackToConfiguredAmountWhenNoInput(t *testing
 	require.True(t, svc.called, "expected the payment service to be called")
 	assert.True(t, svc.lastReq.Amount.Equal(decimal.NewFromInt(12500)),
 		"expected the configured amount to reach the gateway, got %s", svc.lastReq.Amount)
+}
+
+// The checkout carries the token for the step that dispatched it, so the
+// settlement completes exactly that step.
+func TestPaymentPlugin_Execute_SendsTheStepsCallbackToken(t *testing.T) {
+	svc := &fakePaymentService{resp: &payment.CreateCheckoutResponse{SessionID: "session-1", ReferenceNumber: "TNSW-1", Type: payment.FlowTypeRedirect}}
+	p := NewPaymentPlugin(svc)
+
+	err := p.Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	want, err := callbacktoken.Encode(paymentTestTaskID, paymentTestStepID)
+	require.NoError(t, err)
+	assert.Equal(t, want, svc.lastReq.CallbackToken)
 }
 
 func TestPaymentPlugin_Execute_RejectsInvalidAmountWithoutCallingGateway(t *testing.T) {
