@@ -154,8 +154,9 @@ That script creates:
   - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
     and **`NswM2M`** roles (machine clients) — see *API authorization* below
   - **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
-  - **`NSW_API`**, **`AGENCY_API`** and **`CDA API`** OAuth2 resource servers (scopes + token audiences)
+  - **`NSW_API`**, **`AGENCY_API`**, **`CDA API`** and **`Customs API`** OAuth2 resource servers (scopes + token audiences)
   - **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
+  - **`Customs Officers`** group + **`Customs Officer`** role, and the **`NswToCustomsM2M`** role (see `customs.json`)
   - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
     `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
     `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
@@ -274,6 +275,7 @@ idp/resources/
     ous.json  user-types.json  groups-roles.json
     agencies.json              the OGA agencies (shorthand, see below)
     cda.json                   CDA, run by this backend in agency mode (explicit, see below)
+    customs.json               Customs, run by this backend in agency mode (explicit, see below)
 ```
 
 CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
@@ -283,6 +285,11 @@ CDA is not in the `agencies` shorthand. It runs as this same backend in agency m
 (`NswToCdaM2M` on `NSW_TO_CDA`), the portal client requesting those scopes, and
 `CDA_TO_NSW` as for any agency. A CDA-only group keeps other agencies' officers, who
 are all in `OGA Reviewers`, out of CDA.
+
+Customs is declared the same way in `customs.json` (`configs/agency/customs/`): the
+`Customs API` resource server's `Customs Officer` role (via `Customs Officers`, holding
+only `customs_officer`) and `NswToCustomsM2M` role (on `NSW_TO_CUSTOMS`), the
+`OGA_PORTAL_APP_CUSTOMS` portal client, and `CUSTOMS_TO_NSW`.
 
 Each file's top-level keys are entity-type buckets (`scopeSets`, `resourceServers`,
 `organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
@@ -344,8 +351,9 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 - **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
   `CDA_TO_NSW`, `SLPA_TO_NSW`, `CUSTOMS_TO_NSW`, `SLTB_TO_NSW`.
 - **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_NPQS`, `NSW_TO_FCAU`,
-  `NSW_TO_SLPA`, `NSW_TO_CUSTOMS`, `NSW_TO_SLTB`.
+  `NSW_TO_SLPA`, `NSW_TO_SLTB`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
+- **NSW → Customs** (`aud=https://api.customs.nsw-agency.local`, `NswToCustomsM2M` role): `NSW_TO_CUSTOMS`.
 
 ## API authorization (OAuth2)
 
@@ -357,6 +365,7 @@ becomes the access-token **audience** (`aud`):
 | `https://api.nsw-srilanka.local` | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/` | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
 | `https://api.nsw-agency.local` | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}` |
 | `https://api.cda.nsw-agency.local` | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}` |
+| `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}` |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -376,9 +385,12 @@ becomes the access-token **audience** (`aud`):
 >   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
 >   `configs/services*.example.json`. Changing the identifier means changing all of these
 >   (and any existing local `configs/services*.json`).
+> - **Customs** (`customs-api`): the `Customs API` identifier,
+>   `https://api.customs.nsw-agency.local`, in the same places under
+>   `configs/agency/customs/` and TNSW's `customs` entry in `configs/services*.example.json`.
 
-Scopes are namespaced (`nsw:*` / `agency:*`). The CDA API reuses `nsw:*` names, since it
-is the same backend; that is safe because every caller names its target with `resource`
+Scopes are namespaced (`nsw:*` / `agency:*`). The CDA and Customs APIs reuse `nsw:*` names, since they
+are the same backend; that is safe because every caller names its target with `resource`
 (below), and a token is narrowed to the scopes of that one resource server.
 
 **How a token gets its scopes.** Scopes come from a **role grant on the principal**,
@@ -394,6 +406,8 @@ scopes via a role:
 | `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject` |
 | CDA portal users | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes |
 | `NSW_TO_CDA` | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject` on the CDA API |
+| Customs portal users | `Customs Officer` role (via `Customs Officers` group) → Customs API scopes |
+| `NSW_TO_CUSTOMS` | **`NswToCustomsM2M` role assigned to the application** → `nsw:workflow:inject` on the Customs API |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to
