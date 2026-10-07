@@ -1,7 +1,5 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/LSFLK/argus/pkg/audit v0.1.0 h1:UjPm6Bsa0r/4mi9XtN2Q8lHsBrQmboyxuOLoYanTnao=
-github.com/LSFLK/argus/pkg/audit v0.1.0/go.mod h1:4VVVpK0P7nFEQLP+QU44rezK+Ds9PzE42ZyKw07abl0=
 github.com/OpenNSW/core v0.0.0-20261022093513-70e269455051 h1:8Yhw1UfaO0qg1CJN/hKOhdbbhZqn71G3mpjCYNc2EXQ=
 github.com/OpenNSW/core v0.0.0-20261022093513-70e269455051/go.mod h1:TjjsW9kcC3Od4Qi0VZa6VlbVYQGluAtzrzKMaPkSpx4=
 github.com/OpenNSW/core/authn v0.4.0 h1:kZNUGp49aAZ1ui19soMKF2qGVOc2os1PyS6UuRpT7UY=
@@ -32,8 +30,8 @@ github.com/OpenNSW/core/remote v0.8.0 h1:Ot44DtkEtzqKffy77EI0S6BCH1xDspQ2y2lSFKc
 github.com/OpenNSW/core/remote v0.8.0/go.mod h1:BzfC7ppzEAd5fUQmIsgeR2lZ6LzygNU4prNjvDpDH+4=
 github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrxBChQ=
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
-github.com/OpenNSW/core/shared v0.3.0 h1:HcWcXyMdwzMfsVvo1HG2OTBYaQTRipTpLI0AFx/5Wgs=
-github.com/OpenNSW/core/shared v0.3.0/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
+github.com/OpenNSW/core/shared v0.3.1-0.20261011235839-d0866ff9985b h1:5RPKIDzfzdRCmXGIKLMSkqFORfyhSBnIF1OaMtsFaH4=
+github.com/OpenNSW/core/shared v0.3.1-0.20261011235839-d0866ff9985b/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
 github.com/OpenNSW/core/storage v0.3.0 h1:TrPNxgu5dkJtafWtXkXxcVN4z7idygedFDu2Bh9iBEA=
 github.com/OpenNSW/core/storage v0.3.0/go.mod h1:PUkwnwzFP+GzXzbzIvmULmtsEgz74jlvq6qmTb59I2Y=
 github.com/OpenNSW/core/temporal v0.1.0 h1:/wFL05TyuZpnz0rOsg30eY3viXixMrfh+zDXA+DtvXA=

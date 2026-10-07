@@ -23,6 +23,7 @@ import (
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
+	sharedaudit "github.com/OpenNSW/core/shared/audit"
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
@@ -69,8 +70,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
-
-	"github.com/LSFLK/argus/pkg/audit"
 
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
@@ -244,9 +243,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	auditClient := audit.NewClient(cfg.Audit.ClientConfig())
-	audit.InitializeGlobalAudit(auditClient)
-	recorder := nswaudit.NewRecorder(auditClient)
+	// Audit client. Events go to structured slog with category=audit (same
+	// process stream, filterable as the audit log). cfg.Audit is unused.
+	auditor := nswaudit.New()
+	auditor.RegisterSink(nswaudit.NewLogSink(nil))
 
 	// The mode decides what starts parent workflows: consignments in TNSW, injects in
 	// an agency (see agency.go). An agency builds none of the consignment stack, whose
@@ -268,7 +268,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to build consignment service: %w", err)
 		}
-		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
+		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, auditor, globalCatalog.Roles)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -406,15 +406,28 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	staticDataHandler := staticdata.NewHandler(artifactRegistry)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
+	coreAuditor := nswaudit.NewCoreAdapter(auditor)
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
+	// Released payment and storage have no WithAuditor yet. The assertion is
+	// a no-op until a release accepts one.
+	if svc, ok := any(paymentService).(interface {
+		WithAuditor(a sharedaudit.Auditor)
+	}); ok {
+		svc.WithAuditor(coreAuditor)
+	}
+	if svc, ok := storageStack.Service.(interface {
+		WithAuditor(a sharedaudit.Auditor)
+	}); ok {
+		svc.WithAuditor(coreAuditor)
+	}
 	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
 	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, recorder, cfg.Server.MaxRequestBytes)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, auditor, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -558,14 +571,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	closeFn := func() error {
 		var closeErrs []error
-
-		if auditClient != nil && auditClient.IsEnabled() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := auditClient.Close(shutdownCtx); err != nil {
-				closeErrs = append(closeErrs, fmt.Errorf("failed to close audit client: %w", err))
-			}
-			cancel()
-		}
 
 		if err := stopParentRunner(); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop parent runner: %w", err))

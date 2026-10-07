@@ -4,7 +4,6 @@ go 1.27
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/LSFLK/argus/pkg/audit v0.1.0
 	github.com/OpenNSW/core v0.0.0-20261022093513-70e269455051
 	github.com/OpenNSW/core/authn v0.4.0
 	github.com/OpenNSW/core/authz v0.1.0
@@ -20,7 +19,7 @@ require (
 	github.com/OpenNSW/core/refid v0.3.0
 	github.com/OpenNSW/core/remote v0.8.0
 	github.com/OpenNSW/core/secret v0.2.0
-	github.com/OpenNSW/core/shared v0.3.0
+	github.com/OpenNSW/core/shared v0.3.1-0.20261011235839-d0866ff9985b
 	github.com/OpenNSW/core/storage v0.3.0
 	github.com/OpenNSW/core/temporal v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0

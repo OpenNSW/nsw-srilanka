@@ -57,7 +57,7 @@ type HTTPHandler struct {
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
 	AuthzCatalog    taskauthz.Catalog
-	Audit           *nswaudit.Recorder
+	Audit           nswaudit.Auditor
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
 	// references for a reader, references in as stored values on a submission.
@@ -74,7 +74,7 @@ func NewHTTPHandler(
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
 	canAct CanAct,
-	audit *nswaudit.Recorder,
+	audit nswaudit.Auditor,
 	maxRequestBytes int64,
 ) *HTTPHandler {
 	return &HTTPHandler{
@@ -130,7 +130,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		// indistinguishable from a task that does not exist and cannot be used to
 		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
 		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
-		h.Audit.Record(ctx, nswaudit.Event{
+		h.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventTask,
 			Action:     nswaudit.ActionRead,
 			TargetType: nswaudit.TargetTask,
@@ -320,15 +320,28 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
+	ctx := r.Context()
+	var req completeTaskStepRequest
 	fail := func(status int, message string, err error) {
-		slog.ErrorContext(r.Context(), "tasks: failed to parse request", append(logAttrs, "error", err)...)
+		slog.ErrorContext(ctx, "tasks: failed to parse request", append(logAttrs, "error", err)...)
+		h.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   attrString(logAttrs, "taskId"),
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  status,
+				"command": req.Command,
+				"error":   message,
+			},
+		})
 		httputil.Error(w, r, status, message)
 	}
 
 	// The body must contain at most one JSON value: json.Decoder.Decode only parses the
 	// first value and silently ignores anything after it, so a second Decode call is
 	// required to confirm nothing trails it.
-	var req completeTaskStepRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
@@ -410,16 +423,67 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 // writeCompletion answers a completion attempt or a draft save: 204 when the workflow accepted the
 // step, otherwise the error mapped to its status. logAttrs name the step.
 func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, err error, logAttrs ...any) {
+	ctx := r.Context()
+	taskID := attrString(logAttrs, "taskId")
+	command := attrString(logAttrs, "command")
+
 	switch {
 	case err == nil:
+		h.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    false,
+			Metadata: map[string]any{
+				"command": command,
+				"status":  http.StatusNoContent,
+			},
+		})
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, orchestrator.ErrStaleStep):
-		slog.InfoContext(r.Context(), "tasks: stale step", append(logAttrs, "error", err)...)
+		slog.InfoContext(ctx, "tasks: stale step", append(logAttrs, "error", err)...)
+		h.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  http.StatusConflict,
+				"command": command,
+				"error":   "stale_step",
+			},
+		})
 		httputil.Error(w, r, http.StatusConflict, errStaleStep)
 	case errors.Is(err, taskauthzext.ErrUnauthenticated):
+		h.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  http.StatusUnauthorized,
+				"command": command,
+				"error":   "unauthenticated",
+			},
+		})
 		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
 	case errors.Is(err, taskauthzext.ErrForbidden):
-		slog.WarnContext(r.Context(), "tasks: authorization denied", append(logAttrs, "error", err)...)
+		slog.WarnContext(ctx, "tasks: authorization denied", append(logAttrs, "error", err)...)
+		h.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  http.StatusForbidden,
+				"command": command,
+				"error":   "forbidden",
+			},
+		})
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 	case errors.Is(err, orchestrator.ErrStepNotGuarded):
 		// The step's template names no one who may act, so no one may. That is a
@@ -436,8 +500,45 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 		slog.WarnContext(r.Context(), "tasks: draft for a step that takes none", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, http.StatusBadRequest, errDraftNotEnabled)
 	default:
+		h.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventTask,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetTask,
+			TargetID:   taskID,
+			Failure:    true,
+			Metadata: map[string]any{
+				"status":  http.StatusInternalServerError,
+				"command": command,
+				"error":   "complete_failed",
+			},
+		})
 		httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, logAttrs...)
 	}
+}
+
+func (h *HTTPHandler) auditEvent(ctx context.Context, e nswaudit.Event) {
+	if h.Audit != nil {
+		h.Audit.Audit(ctx, e)
+	}
+}
+
+// attrString returns the string value for key in a slog-style attr list.
+func attrString(attrs []any, key string) string {
+	for i := 0; i+1 < len(attrs); i += 2 {
+		k, ok := attrs[i].(string)
+		if !ok || k != key {
+			continue
+		}
+		switch v := attrs[i+1].(type) {
+		case string:
+			return v
+		case fmt.Stringer:
+			return v.String()
+		default:
+			return fmt.Sprint(v)
+		}
+	}
+	return ""
 }
 
 // completeTaskStepRequest is the JSON envelope the completion routes accept:
