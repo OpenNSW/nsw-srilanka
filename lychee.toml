@@ -15,6 +15,10 @@ exclude = [
   '^https?://[^/]*\.local([:/]|$)',
   # Placeholder hosts in examples.
   '^https?://([^/]*\.)?example\.(com|org)',
+  # This repo's release tags. A release PR's CHANGELOG section links to the tag
+  # it is about to create, which exists only once the PR merges.
+  '^https://github\.com/OpenNSW/nsw-srilanka/(blob|tree)/v\d+\.\d+\.\d+/',
+  '^https://github\.com/OpenNSW/nsw-srilanka/compare/v\d+\.\d+\.\d+\.\.\.',
 ]
 
 exclude_path = ['(^|/)tmp/', '(^|/)node_modules/', '(^|/)\.claude/worktrees/']
