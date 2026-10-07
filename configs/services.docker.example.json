@@ -73,8 +73,8 @@
           "client_id": "NSW_TO_CUSTOMS",
           "client_secret": "env:M2M_NSW_TO_CUSTOMS_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"],
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "scopes": ["nsw:workflow:inject"],
+          "endpoint_params": { "resource": "https://api.customs.nsw-agency.local" }
         }
       }
     },

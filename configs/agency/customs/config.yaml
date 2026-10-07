@@ -1,0 +1,112 @@
+# Sri Lanka Customs agency deployment, for a native run
+# (`go run ./cmd/server` with customs.env loaded). See configs/agency/customs/README.md.
+# The Docker Compose customs-api reads config.docker.yaml instead; the two differ
+# only in reaching the shared services by container hostname there rather than
+# localhost. Every key is documented in configs/config.example.yaml.
+#
+# Never write a secret into this file: use "{{env:NAME}}" or "{{file:/path}}".
+# The ones below are set by customs.env.
+
+mode: agency
+
+# Its own database on the shared Postgres. ASSUMED name; create it before
+# running migrations (`docker compose run --rm customs-init` does).
+db:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 55432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: customs_db
+    sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
+
+server:
+  # 8085 is where TNSW's services.json already points its "customs" service.
+  port: 8085
+  logLevel: debug
+  serviceURL: http://localhost:8085
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+  # services.json: "tnsw", where notify_decision posts the decision back.
+  servicesConfigPath: ./configs/agency/customs/services.json
+  paymentMethodsConfigPath: ./configs/agency/customs/payment_methods.json
+  catalogConfigPath: ./configs/agency/customs/catalog.json
+
+# The Customs portal (the trader-app in agency mode).
+cors:
+  allowedOrigins:
+    - http://localhost:5178
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+
+# Customs keeps no files of its own: it serves TNSW's storage, calling TNSW as
+# CUSTOMS_TO_NSW (services.json, service tnsw), so officers open the documents
+# traders uploaded there. TNSW applies its own upload limits.
+storage:
+  type: proxy
+  proxy:
+    service: "tnsw"
+    uploadPath: /api/v1/storage
+    downloadPath: /api/v1/storage/{key}
+    deletePath: /api/v1/storage/{key}
+
+# Officers sign in through the Customs portal client, and NSW injects as NSW_TO_CUSTOMS.
+# The audience is the Customs API resource server in
+# idp/resources/shared/resource-servers.json.
+authn:
+  jwksURL: https://localhost:8090/oauth2/jwks
+  issuer: https://localhost:8090
+  audience: https://api.customs.nsw-agency.local
+  clientIDs:
+    - OGA_PORTAL_APP_CUSTOMS
+    - NSW_TO_CUSTOMS
+  # Only honored when APP_ENV=development.
+  insecureSkipTLSVerify: true
+
+# Placeholder providers.
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: replace-with-actual-username
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: sidCode
+
+# Its own namespace, so TNSW and Customs workers never pick up each other's
+# workflows. ASSUMED name; register it first (customs-init does).
+temporal:
+  host: localhost
+  port: 7233
+  namespace: customs
+
+# The customs-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# to where the server runs (the repo root). Point root at another clone's
+# customs-v2 dir to use that one.
+artifactLoader:
+  type: local
+  local:
+    root: ../one-trade-artifacts/customs-v2
+  # Or straight from GitHub (branch feat/customs-v2-agency
+  # until it merges), with type: github:
+  # github:
+  #   owner: OpenNSW
+  #   repo: one-trade-artifacts
+  #   ref: feat/customs-v2-agency
+  #   basePath: customs-v2
+
+# The customs-v2 artifacts use no REFID_GENERATOR tasks.
+refid:
+  issuers: []
