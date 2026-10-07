@@ -98,6 +98,8 @@ backend:
     M2M_NSW_TO_CDA_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-cda-secret }
+    # SLPA's is issued by SLPA's own OAuth2 server for the CMS client, not by
+    # the IdP; the "slpa" service reads it like any other agency's.
     M2M_NSW_TO_SLPA_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-slpa-secret }
