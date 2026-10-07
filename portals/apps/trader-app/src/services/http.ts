@@ -1,3 +1,4 @@
+import { authHeader } from '@opennsw/auth'
 import { userManager } from '@/oidcUserManager'
 
 interface RequestConfig {
@@ -55,13 +56,9 @@ export const http = {
     }
 
     const promise = (async (): Promise<{ data: T }> => {
-      const headers: Record<string, string> = { ...config.headers }
-
-      if (config.attachToken) {
-        const user = await userManager.getUser()
-        if (user?.access_token) {
-          headers['Authorization'] = `Bearer ${user.access_token}`
-        }
+      const headers: Record<string, string> = {
+        ...config.headers,
+        ...(config.attachToken ? await authHeader(userManager) : {}),
       }
 
       const serializableBody = isPlainObject(config.data)
