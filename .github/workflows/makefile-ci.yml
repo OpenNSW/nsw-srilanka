@@ -210,8 +210,8 @@ jobs:
           make tidy
           git diff --exit-code go.mod go.sum
 
-      # Needs sed, test and /dev/null, which cmd.exe does not have: the recipe
-      # has no cmd.exe branch yet, so this check runs where it can work.
+      # The recipe is a Unix shell script (`test`). cmd.exe has no branch for
+      # it yet, so this check runs on Git Bash and UNIX only.
       - name: make migration scaffolds a file
         if: matrix.shell_kind != 'cmd'
         run: |
@@ -219,9 +219,13 @@ jobs:
           $new = git ls-files --others --exclude-standard -- migrations | Where-Object { $_ -match 'ci_check' }
           if (-not $new) { throw 'make migration created no file in migrations/' }
 
+      # `make` exits 1 on purpose. GitHub's pwsh turns a native non-zero exit
+      # into a failed step, so keep going and check the usage text.
       - name: make migration without a name fails
         if: matrix.shell_kind != 'cmd'
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $ErrorActionPreference = 'Continue'
           $out = make migration 2>&1 | Out-String
           if ($LASTEXITCODE -eq 0) { throw 'make migration without name= succeeded' }
           if ($out -notmatch 'Usage: make migration') { Write-Host $out; throw 'no usage message' }

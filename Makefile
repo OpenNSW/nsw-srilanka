@@ -82,8 +82,13 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 .PHONY: migration
 migration: export GOWORK = off
 # generate touches no database: an empty config leaves the migrator on its
-# defaults (sqlite, unused; migrationDir ./migrations).
+# defaults (sqlite, unused; migrationDir ./migrations). Git Bash runs Windows
+# go.exe, which cannot open /dev/null; NUL is that null device.
+ifeq ($(OS),Windows_NT)
+migration: export CONFIG_PATH = NUL
+else
 migration: export CONFIG_PATH = /dev/null
+endif
 migration: ## Scaffold a new migration file: make migration name=<description>
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
 	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
