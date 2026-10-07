@@ -573,7 +573,7 @@ func TestConsignmentRouter_HandleResolveAdminIntervention_RejectsInvalidRequest(
 func TestConsignmentRouter_HandleResolveAdminIntervention_RequiresStepID(t *testing.T) {
 	for _, route := range resolveRoutes {
 		t.Run(route.name, func(t *testing.T) {
-			r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nswaudit.NewRecorder(nil))
+			r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nil)
 			req := newResolveRequest(`{"action":"RETRY","reason":"retry"}`)
 			req.SetPathValue("stepId", "")
 
