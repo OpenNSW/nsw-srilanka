@@ -12,7 +12,6 @@ import (
 	"github.com/OpenNSW/core/configyaml"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
-	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/temporal"
 
@@ -39,7 +38,7 @@ type Config struct {
 	CORS         cors.Config         `yaml:"cors"`
 	Storage      nswstorage.Config   `yaml:"storage"`
 	Authn        authn.Config        `yaml:"authn"`
-	Notification notification.Config `yaml:"notification"`
+	Notification NotificationConfig  `yaml:"notification"`
 	Temporal     temporal.Config     `yaml:"temporal"`
 	Audit        AuditConfig         `yaml:"audit"`
 	Integrations integrations.Config `yaml:"integrations"`

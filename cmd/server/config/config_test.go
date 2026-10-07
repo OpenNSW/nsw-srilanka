@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,7 +12,7 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
-	"github.com/OpenNSW/core/notification"
+	"github.com/OpenNSW/core/notifications/providers"
 	"github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
 
@@ -82,6 +81,12 @@ notification:
   providers:
     email:
       baseURL: https://email.example.com
+      token: email-token
+    sms:
+      baseURL: https://sms.example.com
+      userName: nsw
+      password: sms-password
+      sidCode: NSW
 integrations:
   slpaWebhookSecret: a-secret-shared-with-slpa
 artifactLoader:
@@ -200,9 +205,15 @@ func validConfig() *Config {
 			Audience:  "myapp",
 			ClientIDs: []string{"client1"},
 		},
-		Notification: notification.Config{
-			Providers: map[notification.ChannelType]map[string]any{
-				"email": {"baseURL": "https://email.example.com"},
+		Notification: NotificationConfig{
+			Providers: NotificationProviders{
+				Email: providers.EmailConfig{BaseURL: "https://email.example.com", Token: "email-token"},
+				SMS: providers.SMSConfig{
+					BaseURL:  "https://sms.example.com",
+					UserName: "nsw",
+					Password: "sms-password",
+					SIDCode:  "NSW",
+				},
 			},
 		},
 		Temporal: temporal.Config{
@@ -356,6 +367,14 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"temporal.port",
 		"temporal.namespace",
 		"notification.providers",
+		"notification.providers.email",
+		"notification.providers.email.baseURL",
+		"notification.providers.email.token",
+		"notification.providers.sms",
+		"notification.providers.sms.baseURL",
+		"notification.providers.sms.userName",
+		"notification.providers.sms.password",
+		"notification.providers.sms.sidCode",
 		"integrations.slpaWebhookSecret",
 		"artifactLoader.type",
 		"artifactLoader.local.root",
@@ -537,19 +556,56 @@ func TestLoad_NotificationProviders(t *testing.T) {
 notification:
   providers:
     email:
-      token: email-token
+      token: another-token
     sms:
-      baseURL: https://sms.example.com
+      baseURL: https://sms.example.org
       sidCode: sid
 `))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if got := cfg.Notification.Providers["email"]["token"]; got != "email-token" {
-		t.Errorf("email token = %v, want email-token", got)
+	if got := cfg.Notification.Providers.Email.Token; got != "another-token" {
+		t.Errorf("email token = %q, want another-token", got)
 	}
-	if got := cfg.Notification.Providers["sms"]["sidCode"]; got != "sid" {
-		t.Errorf("sms sidCode = %v, want sid", got)
+	if got := cfg.Notification.Providers.SMS.BaseURL; got != "https://sms.example.org" {
+		t.Errorf("sms baseURL = %q, want https://sms.example.org", got)
+	}
+	if got := cfg.Notification.Providers.SMS.SIDCode; got != "sid" {
+		t.Errorf("sms sidCode = %q, want sid", got)
+	}
+}
+
+// A secret that only looks like a number or a boolean must reach the provider
+// as the text it resolved to. Load clears a placeholder's string tag once it
+// resolves, so the value is re-typed unless its field is a string.
+func TestLoad_NotificationSecretsStayStrings(t *testing.T) {
+	t.Setenv("TEST_EMAIL_TOKEN", "true")
+	t.Setenv("TEST_SMS_PASSWORD", "12345678")
+	t.Setenv("TEST_SMS_SID_CODE", "0123")
+	cfg, err := loadYAML(t, configYAML(t, `
+notification:
+  providers:
+    email:
+      token: "{{env:TEST_EMAIL_TOKEN}}"
+    sms:
+      password: "{{env:TEST_SMS_PASSWORD}}"
+      sidCode: "{{env:TEST_SMS_SID_CODE}}"
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	p := cfg.Notification.Providers
+	for name, got := range map[string][2]string{
+		"email.token":  {p.Email.Token, "true"},
+		"sms.password": {p.SMS.Password, "12345678"},
+		"sms.sidCode":  {p.SMS.SIDCode, "0123"},
+	} {
+		if got[0] != got[1] {
+			t.Errorf("%s = %q, want %q", name, got[0], got[1])
+		}
+	}
+	if err := cfg.Notification.Validate(); err != nil {
+		t.Errorf("Validate() error: %v", err)
 	}
 }
 
@@ -754,12 +810,9 @@ func TestConfigValidate_CORSWildcardCredentialsError(t *testing.T) {
 
 func TestConfigValidate_NotificationError(t *testing.T) {
 	cfg := validConfig()
-	cfg.Notification = notification.Config{} // no Providers → error
+	cfg.Notification.Providers.SMS.Password = ""
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected notification config error")
-	}
-	if !errors.Is(err, notification.ErrProvidersRequired) && !containsString(err.Error(), "invalid notification configuration") {
+	if err == nil || !containsString(err.Error(), "invalid notification configuration: sms: password is required") {
 		t.Errorf("expected notification config error, got: %v", err)
 	}
 }
