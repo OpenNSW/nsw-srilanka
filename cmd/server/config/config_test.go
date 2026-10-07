@@ -535,8 +535,8 @@ audit:
 	if cfg.Database.Postgres.Password != "from-env" {
 		t.Errorf("Database.Password = %q, want it resolved from the env var", cfg.Database.Postgres.Password)
 	}
-	if got := cfg.Audit.ClientConfig(); got.BaseURL != "http://argus:3001" || got.APIKey != "from-file" {
-		t.Errorf("Audit.ClientConfig() = {BaseURL: %q, APIKey: %q}, want the file's values", got.BaseURL, got.APIKey)
+	if cfg.Audit.BaseURL != "http://argus:3001" || cfg.Audit.APIKey != "from-file" {
+		t.Errorf("Audit = {BaseURL: %q, APIKey: %q}, want the file's values", cfg.Audit.BaseURL, cfg.Audit.APIKey)
 	}
 }
 

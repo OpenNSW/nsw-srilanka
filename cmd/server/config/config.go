@@ -15,8 +15,6 @@ import (
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/temporal"
 
-	"github.com/LSFLK/argus/pkg/audit"
-
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
@@ -66,19 +64,12 @@ type ServerConfig struct {
 	IdleTimeout              time.Duration `yaml:"idleTimeout"`
 }
 
-// AuditConfig is what a deployment sets for the Argus audit client. The
-// client's own audit.Config is an SDK constructor input — it carries a signer
-// func and tuning knobs, and no yaml tags — so it is built from this rather
-// than decoded into.
+// AuditConfig is retained so existing config.yaml / Compose still decode the
+// optional audit: section. The process does not use these fields: audit events
+// are written by internal/audit.LogSink (structured logs with category=audit).
 type AuditConfig struct {
 	BaseURL string `yaml:"baseURL"`
 	APIKey  string `yaml:"apiKey"`
-}
-
-// ClientConfig is the audit client configuration a deployment's settings
-// make; everything else keeps the client's defaults.
-func (a AuditConfig) ClientConfig() audit.Config {
-	return audit.Config{BaseURL: a.BaseURL, APIKey: a.APIKey}
 }
 
 // Validate checks that the server configuration is valid.

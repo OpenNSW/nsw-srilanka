@@ -2,15 +2,12 @@ package tasks
 
 import (
 	"context"
-	"crypto"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
-	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
@@ -113,6 +110,26 @@ func TestHandleCompleteTaskStepByToken_RequiresCommand(t *testing.T) {
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", recorder.Code)
 	}
+}
+
+func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, client, 1024)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/steps/step-1", strings.NewReader(`{invalid`))
+	req.SetPathValue("id", "task-123")
+	req.SetPathValue("stepId", "step-1")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.EventTask, recs[0].EventType)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "task-123", recs[0].TargetID)
+	assert.Equal(t, http.StatusBadRequest, recs[0].Metadata["status"])
 }
 
 // --- HandleGetTask ---------------------------------------------------------
@@ -305,8 +322,8 @@ func TestHandleGetTask_ClientPrincipalDenied(t *testing.T) {
 func TestHandleGetTask_DeniedAudited(t *testing.T) {
 	templates := &stubTemplates{}
 	handler := getTaskHandler(t, pendingHSCodeTask(), templates)
-	auditor := &mockAuditor{}
-	handler.Audit = nswaudit.NewRecorder(auditor)
+	client, capture := nswaudit.NewWithCapture()
+	handler.Audit = client
 
 	in := taskauthz.Input{
 		Kind:  taskauthz.KindUser,
@@ -333,17 +350,17 @@ func TestHandleGetTask_DeniedAudited(t *testing.T) {
 		t.Fatalf("got %d, want 404", recorder.Code)
 	}
 
-	require.Len(t, auditor.events, 1)
-	assert.Equal(t, string(nswaudit.ActionRead), auditor.events[0].Action)
-	assert.Equal(t, string(nswaudit.TargetTask), auditor.events[0].TargetType)
-	assert.Equal(t, string(nswaudit.EventTask), auditor.events[0].EventType)
-	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
-	assert.Equal(t, string(nswaudit.ActorMember), auditor.events[0].ActorType)
-	assert.Equal(t, "user-trader-1", auditor.events[0].ActorID)
-	assert.NotEmpty(t, auditor.events[0].Timestamp)
-	require.NotNil(t, auditor.events[0].TargetID)
-	assert.Equal(t, testTaskID, *auditor.events[0].TargetID)
-	assert.Equal(t, "task read access denied", auditor.events[0].Metadata["error"])
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
+	assert.Equal(t, nswaudit.TargetTask, recs[0].TargetType)
+	assert.Equal(t, nswaudit.EventTask, recs[0].EventType)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, nswaudit.ActorMember, recs[0].ActorType)
+	assert.Equal(t, "user-trader-1", recs[0].ActorID)
+	assert.NotEmpty(t, recs[0].Timestamp)
+	assert.Equal(t, testTaskID, recs[0].TargetID)
+	assert.Equal(t, "task read access denied", recs[0].Metadata["error"])
 }
 
 // When handler.Audit is nil, a denied task read must not panic and still return 404.
@@ -546,36 +563,4 @@ func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("got %d, want 500: %s", recorder.Code, recorder.Body.String())
 	}
-}
-
-type mockAuditor struct {
-	mu     sync.Mutex
-	events []*argus.AuditLogRequest
-}
-
-func (m *mockAuditor) LogEvent(ctx context.Context, event *argus.AuditLogRequest) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.events = append(m.events, event)
-	return true
-}
-
-func (m *mockAuditor) IsEnabled() bool { return true }
-
-func (m *mockAuditor) SignEvent(ctx context.Context, event *argus.AuditLogRequest) error {
-	return nil
-}
-
-func (m *mockAuditor) SignMessageBytes(ctx context.Context, message []byte) (string, error) {
-	return "", nil
-}
-
-func (m *mockAuditor) LogSignedEvent(ctx context.Context, event *argus.AuditLogRequest) {}
-
-func (m *mockAuditor) VerifyIntegrity(event *argus.AuditLogRequest, publicKey crypto.PublicKey) (bool, error) {
-	return true, nil
-}
-
-func (m *mockAuditor) Close(ctx context.Context) error {
-	return nil
 }
