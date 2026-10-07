@@ -158,10 +158,12 @@ jobs:
         run: |
           $help = (make 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) { Write-Host $help; throw "make exited $LASTEXITCODE" }
-          $documented = Select-String -Path Makefile -Pattern '^([a-zA-Z_-]+):.*?## ' |
+          # The Unix help colours the target names with ANSI escapes.
+          $help = $help -replace '\x1b\[[0-9;]*m', ''
+          $documented = Select-String -Path Makefile -Pattern '^([a-zA-Z0-9_-]+):.*?## ' |
             ForEach-Object { $_.Matches[0].Groups[1].Value }
           if (-not $documented) { throw 'No documented targets found' }
-          $missing = $documented | Where-Object { $help -notmatch "(?m)^\s*$_\s" }
+          $missing = $documented | Where-Object { $help -notmatch "(?m)^\s*$([regex]::Escape($_))\s" }
           if ($missing) { Write-Host $help; throw "Targets missing from make help: $($missing -join ', ')" }
 
       - name: make setup
