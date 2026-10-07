@@ -430,8 +430,14 @@ func buildSupportDocs(form map[string]any) ([]SupportDoc, error) {
 		return nil, nil
 	}
 
-	scanned, _ := group["scannedDocuments"].([]any)
-	meta, _ := group["metaDocuments"].([]any)
+	scanned, err := supportDocList(group, "scannedDocuments")
+	if err != nil {
+		return nil, err
+	}
+	meta, err := supportDocList(group, "metaDocuments")
+	if err != nil {
+		return nil, err
+	}
 
 	docs := make([]SupportDoc, 0, len(scanned)+len(meta))
 
@@ -485,6 +491,21 @@ func buildSupportDocs(form map[string]any) ([]SupportDoc, error) {
 	}
 
 	return docs, nil
+}
+
+// supportDocList reads one supporting-document collection. A missing field is
+// an empty list. A present value that is not an array is rejected, so a
+// malformed collection is not silently dropped.
+func supportDocList(group map[string]any, key string) ([]any, error) {
+	raw, present := group[key]
+	if !present {
+		return nil, nil
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("customs: %s must be an array", key)
+	}
+	return list, nil
 }
 
 // formatDMY converts the form's ISO date (yyyy-MM-dd) to the dd/MM/yyyy Annex A

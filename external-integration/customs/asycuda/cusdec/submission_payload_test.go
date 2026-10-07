@@ -402,6 +402,21 @@ func TestBuildPayload_RefusesAnIncompleteSupportingDocument(t *testing.T) {
 	}
 }
 
+// A collection that is present but not an array must fail rather than be
+// treated as "no documents", which would drop whatever the trader sent.
+func TestBuildPayload_RefusesASupportingDocumentCollectionThatIsNotAnArray(t *testing.T) {
+	for _, field := range []string{"scannedDocuments", "metaDocuments"} {
+		t.Run(field, func(t *testing.T) {
+			form := minimalForm()
+			form["supportingDocuments"] = map[string]any{field: "not-a-list"}
+
+			_, _, err := BuildPayload(form, "")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), field+" must be an array")
+		})
+	}
+}
+
 // Scanned documents always travel with sequenceNumber 0 and come before the
 // metadata documents, which are numbered from 1. fileName and fileBase64 are
 // both the storage key, so the fileN part filename matches the entry.
