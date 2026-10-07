@@ -157,6 +157,13 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.auditEvent(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventTask,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetTask,
+		TargetID:   taskID,
+		Failure:    false,
+	})
 	httputil.JSON(w, http.StatusOK, zv)
 }
 
