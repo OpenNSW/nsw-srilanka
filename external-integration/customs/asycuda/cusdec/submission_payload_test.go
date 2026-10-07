@@ -329,15 +329,18 @@ func TestBuildPayload_SendsTheCorrectedVoyageFieldNames(t *testing.T) {
 }
 
 // §8 metadata document: a supporting document held elsewhere, referenced rather
-// than attached. Before v1.7 a row with no file was refused outright.
+// than attached. The form collects it under metaDocuments, and the date arrives
+// as ISO-8601 even though Annex A wants dd/MM/yyyy.
 func TestBuildPayload_AcceptsAMetadataSupportingDocument(t *testing.T) {
 	form := minimalForm()
-	form["supportingDocuments"] = []any{
-		map[string]any{
-			"documentCode": "N380",
-			"itemSequence": float64(1),
-			"documentId":   "INV-2026-0042",
-			"dateAsString": "15/09/2026",
+	form["supportingDocuments"] = map[string]any{
+		"metaDocuments": []any{
+			map[string]any{
+				"documentCode": "N380",
+				"itemSequence": "003",
+				"documentId":   "INV-2026-0042",
+				"dateAsString": "2026-09-15",
+			},
 		},
 	}
 
@@ -348,7 +351,7 @@ func TestBuildPayload_AcceptsAMetadataSupportingDocument(t *testing.T) {
 	doc := sub.SupportingDocuments[0]
 	assert.False(t, doc.HasFile(), "a metadata document sends no bytes")
 	assert.Equal(t, 1, doc.SequenceNumber)
-	assert.Equal(t, 1, doc.ItemSequence)
+	assert.Equal(t, "003", doc.ItemSequence)
 	assert.Equal(t, "INV-2026-0042", doc.DocumentID)
 	assert.Equal(t, "15/09/2026", doc.DateAsString)
 
@@ -357,41 +360,87 @@ func TestBuildPayload_AcceptsAMetadataSupportingDocument(t *testing.T) {
 	encoded, err := json.Marshal(doc)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "fileName")
+	assert.NotContains(t, string(encoded), "fileBase64")
 }
 
-// A row that is neither: no file, and none of the reference fields a document
-// without one needs. Left to travel it would promise an attachment that is not
-// in the request, which the endpoint rejects with a 400.
-func TestBuildPayload_RefusesASupportingDocumentThatIsNeither(t *testing.T) {
+// A metadata row missing a reference field, or a scanned row missing its file
+// or code, would be rejected by the endpoint (400).
+func TestBuildPayload_RefusesAnIncompleteSupportingDocument(t *testing.T) {
 	for name, entry := range map[string]map[string]any{
 		"nothing but a code": {"documentCode": "N380"},
-		"no reference":       {"documentCode": "N380", "itemSequence": float64(1), "dateAsString": "15/09/2026"},
-		"no date":            {"documentCode": "N380", "itemSequence": float64(1), "documentId": "INV-1"},
-		"no item number":     {"documentCode": "N380", "documentId": "INV-1", "dateAsString": "15/09/2026"},
+		"no reference":       {"documentCode": "N380", "itemSequence": "001", "dateAsString": "2026-09-15"},
+		"no date":            {"documentCode": "N380", "itemSequence": "001", "documentId": "INV-1"},
+		"no item number":     {"documentCode": "N380", "documentId": "INV-1", "dateAsString": "2026-09-15"},
+		"no document code":   {"itemSequence": "001", "documentId": "INV-1", "dateAsString": "2026-09-15"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			form := minimalForm()
-			form["supportingDocuments"] = []any{entry}
+			form["supportingDocuments"] = map[string]any{
+				"metaDocuments": []any{entry},
+			}
 
 			_, _, err := BuildPayload(form, "")
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "no attached file")
+			assert.Contains(t, err.Error(), "meta document 1")
+		})
+	}
+
+	for name, entry := range map[string]map[string]any{
+		"no file":          {"documentCode": "N380"},
+		"no document code": {"fileBase64": "storage/docs/invoice.pdf"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			form := minimalForm()
+			form["supportingDocuments"] = map[string]any{
+				"scannedDocuments": []any{entry},
+			}
+
+			_, _, err := BuildPayload(form, "")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "scanned document 1")
 		})
 	}
 }
 
-// A scanned document still behaves as it did, and still carries its filename.
+// Scanned documents always travel with sequenceNumber 0 and come before the
+// metadata documents, which are numbered from 1. fileName and fileBase64 are
+// both the storage key, so the fileN part filename matches the entry.
 func TestBuildPayload_AScannedSupportingDocumentStillCarriesItsFile(t *testing.T) {
 	form := minimalForm()
-	form["supportingDocuments"] = []any{
-		map[string]any{"documentCode": "N380", "file": "storage/docs/invoice.pdf"},
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{
+			map[string]any{"documentCode": "AGRM", "fileBase64": "storage/docs/invoice.pdf"},
+			map[string]any{"documentCode": "APH", "fileBase64": "storage/docs/permit.pdf"},
+		},
+		"metaDocuments": []any{
+			map[string]any{
+				"documentCode": "AGRI",
+				"itemSequence": "002",
+				"documentId":   "INV-1092",
+				"dateAsString": "2026-09-15",
+			},
+		},
 	}
 
 	sub, _, err := BuildPayload(form, "")
 	require.NoError(t, err)
-	require.Len(t, sub.SupportingDocuments, 1)
+	require.Len(t, sub.SupportingDocuments, 3)
 
-	doc := sub.SupportingDocuments[0]
-	assert.True(t, doc.HasFile())
-	assert.Equal(t, "storage/docs/invoice.pdf", doc.FileName)
+	first := sub.SupportingDocuments[0]
+	assert.True(t, first.HasFile())
+	assert.Equal(t, 0, first.SequenceNumber)
+	assert.Equal(t, "AGRM", first.DocumentCode)
+	assert.Equal(t, "storage/docs/invoice.pdf", first.FileName)
+	assert.Equal(t, "storage/docs/invoice.pdf", first.FileBase64)
+
+	second := sub.SupportingDocuments[1]
+	assert.True(t, second.HasFile())
+	assert.Equal(t, 0, second.SequenceNumber)
+	assert.Equal(t, "storage/docs/permit.pdf", second.FileName)
+
+	meta := sub.SupportingDocuments[2]
+	assert.False(t, meta.HasFile())
+	assert.Equal(t, 1, meta.SequenceNumber)
+	assert.Equal(t, "002", meta.ItemSequence)
+	assert.Equal(t, "15/09/2026", meta.DateAsString)
 }
