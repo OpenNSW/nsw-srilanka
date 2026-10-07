@@ -267,3 +267,106 @@ func TestAmountToPay_ZeroIsAnAnswer(t *testing.T) {
 	require.NotNil(t, req.Payload.AmountToPay)
 	assert.Equal(t, float64(0), amountToPay(req.Payload))
 }
+
+// --- spec v1.9 assessment ----------------------------------------------------
+
+// specV19Integrated is the §6.2 CUSDEC_INTEGRATED example from spec v1.9, with
+// its processedAt and the totalAssessedAmount its field table lists.
+const specV19Integrated = `{
+  "eventType": "CUSDEC_INTEGRATED",
+  "processedAt": "2026-06-26T04:04:52Z",
+  "payload": {
+    "edgeId": "41d31df5-afab-40e8-bf32-1bec8180c0f6",
+    "integrated": true,
+    "nswId": "111222437000",
+    "totalAssessedAmount": 1350.0,
+    "amountPaid": 1350.0,
+    "amountPayable": 0.0,
+    "cusdecRef": { "number": 59, "office": "CBEX1", "serial": "E", "year": "2026" },
+    "duties": {
+      "globalDuties": [
+        { "paymentMethodCode": "1", "taxAssessedAmount": 1100, "taxBaseAmount": 550, "taxRateNumeric": 2.0, "typeCode": "EPF" },
+        { "paymentMethodCode": "1", "taxAssessedAmount": 250, "taxBaseAmount": 1, "taxRateNumeric": 250.0, "typeCode": "COM" }
+      ],
+      "itemDutiesList": [
+        { "dutyTaxFees": [
+            { "paymentMethodCode": "1", "taxAssessedAmount": 0, "taxBaseAmount": 125, "taxRateNumeric": 0.0, "typeCode": "CED" }
+          ],
+          "itemSequenceNumeric": 1 }
+      ]
+    },
+    "errors": {},
+    "status": "Paid"
+  }
+}`
+
+// The v1.9 example reads in full: the reference, the three amounts, and both
+// levels of the duties breakdown.
+func TestIntegrationResult_ReadsTheV19Assessment(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+	require.NoError(t, json.Unmarshal([]byte(specV19Integrated), &req))
+	require.NoError(t, req.Validate())
+
+	assert.True(t, req.Integrated)
+	assert.Equal(t, DocumentReference{Office: "CBEX1", Year: "2026", Serial: "E", Number: 59}, req.Payload.CusdecRef)
+	require.NotNil(t, req.Payload.TotalAssessedAmount)
+	require.NotNil(t, req.Payload.AmountPaid)
+	require.NotNil(t, req.Payload.AmountPayable)
+	assert.Equal(t, 1350.0, *req.Payload.TotalAssessedAmount)
+	assert.Equal(t, 1350.0, *req.Payload.AmountPaid)
+	assert.Equal(t, 0.0, *req.Payload.AmountPayable)
+
+	require.Len(t, req.Payload.Duties.GlobalDuties, 2)
+	assert.Equal(t, dutyLine{TypeCode: "EPF", TaxBaseAmount: 550, TaxRateNumeric: 2, TaxAssessedAmount: 1100, PaymentMethodCode: "1"},
+		req.Payload.Duties.GlobalDuties[0])
+	require.Len(t, req.Payload.Duties.ItemDutiesList, 1)
+	assert.Equal(t, 1, req.Payload.Duties.ItemDutiesList[0].ItemSequenceNumeric)
+	assert.Equal(t, "CED", req.Payload.Duties.ItemDutiesList[0].DutyTaxFees[0].TypeCode)
+	assert.Equal(t, 1350.0, req.Payload.Duties.total())
+}
+
+// The example is a declaration already settled -- assessed 1350, paid 1350 --
+// so the trader owes nothing. Charging the assessment instead would ask them
+// to pay it twice.
+func TestAmountToPay_V19ChargesWhatIsStillDue(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+	require.NoError(t, json.Unmarshal([]byte(specV19Integrated), &req))
+
+	assert.Equal(t, 0.0, amountToPay(req.Payload))
+}
+
+func TestAmountToPay_V19Fallbacks(t *testing.T) {
+	cases := map[string]struct {
+		payload string
+		want    float64
+	}{
+		"amountPayable wins over v1.7 amountToPay": {
+			payload: `{"amountPayable": 900, "amountToPay": 1254}`,
+			want:    900,
+		},
+		"no amountPayable: assessed less paid": {
+			payload: `{"totalAssessedAmount": 1350.5, "amountPaid": 350.25}`,
+			want:    1000.25,
+		},
+		"assessed with nothing paid yet": {
+			payload: `{"totalAssessedAmount": 1350}`,
+			want:    1350,
+		},
+		"only the duties breakdown: summed": {
+			payload: `{"duties": {"globalDuties": [{"typeCode": "EPF", "taxAssessedAmount": 1100}],
+			           "itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxAssessedAmount": 0.1}]}]}}`,
+			want: 1100.1,
+		},
+		"v1.7 amountToPay still read": {
+			payload: `{"amountToPay": 1254, "taxes": [{"code": "tax1", "rate": 1, "amount": 222}]}`,
+			want:    1254,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var p cusdecResultPayload
+			require.NoError(t, json.Unmarshal([]byte(tc.payload), &p))
+			assert.Equal(t, tc.want, amountToPay(p))
+		})
+	}
+}

@@ -65,14 +65,30 @@ type cusdecResultPayload struct {
 	CusdecRef  DocumentReference `json:"cusDecRef"`
 	EdgeID     string            `json:"edgeId"`
 	Integrated *bool             `json:"integrated"`
-	Taxes      []TaxEntry        `json:"taxes,omitempty"`
-	// AmountToPay is what ASYCUDA says is owed (spec v1.7 §6.2). A pointer
-	// because absent and zero mean different things: a declaration can carry
-	// no duty at all, and only an absent field should fall back to summing the
-	// tax lines. Spec v1.6 had no such field, so a sender that predates it
-	// omits this.
-	AmountToPay *float64        `json:"amountToPay,omitempty"`
-	Errors      json.RawMessage `json:"errors,omitempty"`
+
+	// The assessment as spec v1.9 §6.2 states it, all in LKR. Pointers because
+	// absent and zero mean different things: a declaration settled from a
+	// prepayment account (generalSegment.deferredPayment) arrives with
+	// amountPayable 0, which is an answer, while an absent field is one this
+	// side has to work out another way.
+	//
+	// AmountPayable is what is still due, totalAssessedAmount less amountPaid.
+	TotalAssessedAmount *float64 `json:"totalAssessedAmount,omitempty"`
+	AmountPaid          *float64 `json:"amountPaid,omitempty"`
+	AmountPayable       *float64 `json:"amountPayable,omitempty"`
+
+	// Duties is the v1.9 breakdown: declaration-level globalDuties and
+	// per-item itemDutiesList, the same shape Declaration Verify (§6.6)
+	// returns, so it is read with the same type.
+	Duties verifyDuties `json:"duties"`
+
+	// Taxes and AmountToPay are the v1.7 shape, which v1.9 replaced with
+	// Duties and AmountPayable. Still read, so a sender that has not moved to
+	// v1.9 is charged what it says rather than nothing.
+	Taxes       []TaxEntry `json:"taxes,omitempty"`
+	AmountToPay *float64   `json:"amountToPay,omitempty"`
+
+	Errors json.RawMessage `json:"errors,omitempty"`
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {

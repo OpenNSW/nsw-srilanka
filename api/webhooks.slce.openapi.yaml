@@ -44,21 +44,39 @@ paths:
                   eventType: "CUSDEC_INTEGRATED"
                   processedAt: "2026-06-26T04:04:52Z"
                   payload:
-                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    edgeId: "41d31df5-afab-40e8-bf32-1bec8180c0f6"
                     integrated: true
-                    cusDecRef:
+                    nswId: "111222437000"
+                    totalAssessedAmount: 1350.0
+                    amountPaid: 1350.0
+                    amountPayable: 0.0
+                    cusdecRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
-                      number: 1047
-                    taxes:
-                      - code: "tax1"
-                        rate: 1
-                        amount: 222
-                      - code: "tax2"
-                        rate: 1
-                        amount: 1022
+                      number: 59
+                    duties:
+                      globalDuties:
+                        - typeCode: "EPF"
+                          taxBaseAmount: 550
+                          taxRateNumeric: 2.0
+                          taxAssessedAmount: 1100
+                          paymentMethodCode: "1"
+                        - typeCode: "COM"
+                          taxBaseAmount: 1
+                          taxRateNumeric: 250.0
+                          taxAssessedAmount: 250
+                          paymentMethodCode: "1"
+                      itemDutiesList:
+                        - itemSequenceNumeric: 1
+                          dutyTaxFees:
+                            - typeCode: "CED"
+                              taxBaseAmount: 125
+                              taxRateNumeric: 0.0
+                              taxAssessedAmount: 0
+                              paymentMethodCode: "1"
                     errors: {}
+                    status: "Paid"
               cusdecIntegrationFailed:
                 summary: CUSDEC Integration Result — failure (§6.2)
                 value:
@@ -241,8 +259,62 @@ components:
           example: 1047
           description: Registration number
 
+    DutyTaxFee:
+      type: object
+      description: One assessed duty or tax line (spec v1.9 §6.2). All amounts in LKR.
+      properties:
+        typeCode:
+          type: string
+          description: Duty/tax type code (e.g. EPF, COM, CED).
+          example: "EPF"
+        taxBaseAmount:
+          type: number
+          description: Base amount the rate is applied to.
+          example: 550
+        taxRateNumeric:
+          type: number
+          description: Rate applied to the base.
+          example: 2.0
+        taxAssessedAmount:
+          type: number
+          description: Calculated amount payable.
+          example: 1100
+        paymentMethodCode:
+          type: string
+          description: Method of payment code.
+          example: "1"
+
+    DutyAssessment:
+      type: object
+      description: |
+        Calculated duties and taxes (spec v1.9 §6.2): charges on the declaration
+        as a whole, and charges on each item. Empty when integration failed.
+      properties:
+        globalDuties:
+          type: array
+          description: Duties and taxes assessed at declaration level.
+          items:
+            $ref: '#/components/schemas/DutyTaxFee'
+        itemDutiesList:
+          type: array
+          description: One entry per item carrying duties.
+          items:
+            type: object
+            properties:
+              itemSequenceNumeric:
+                type: integer
+                description: Item number; matches goodsShipments[].sequenceNumeric.
+                example: 1
+              dutyTaxFees:
+                type: array
+                description: Duties and taxes assessed on that item.
+                items:
+                  $ref: '#/components/schemas/DutyTaxFee'
+
     TaxEntry:
       type: object
+      deprecated: true
+      description: Spec v1.7 tax line, replaced by DutyTaxFee in v1.9. Still accepted.
       required:
         - code
         - rate
@@ -264,9 +336,18 @@ components:
         §6.2 Declaration Integration Result. Carries the outcome of processing the
         submission identified by `edgeId`.
 
-        On success: `integrated` = true; `cusDecRef` present; `taxes` populated; `errors` = {}.
-        On failure: `integrated` = false; `cusDecRef` absent/null; `taxes` empty; `errors` populated
+        On success: `integrated` = true; `cusDecRef` present; `duties` populated; `errors` = {}.
+        On failure: `integrated` = false; `cusDecRef` absent/null; `duties` empty; `errors` populated
         and keyed by segment. Success and errors are mutually exclusive.
+
+        All amounts are in LKR. `amountPayable` = `totalAssessedAmount` − `amountPaid`, and it is
+        what the trader is asked to pay. A declaration settled from a prepayment account
+        (generalSegment.deferredPayment) arrives with `amountPayable` 0, and no Payment
+        Notification (§6.5.1) follows for it.
+
+        The v1.7 fields `taxes` and `amountToPay` are deprecated but still accepted: a result
+        without `amountPayable` falls back to `amountToPay`, then `totalAssessedAmount` −
+        `amountPaid`, then the summed `duties`, then the summed `taxes`.
 
         `cusDecRef` is the canonical field name; a `cusdecRef` (lowercase `d`)
         alias is also accepted for compatibility with an earlier draft of this
@@ -309,19 +390,45 @@ components:
                 Deprecated alias for `cusDecRef` (lowercase `d`), accepted for
                 compatibility with an earlier draft of this contract. Present
                 on success; absent/null on failure.
+            nswId:
+              type: string
+              description: NSW-assigned submission identifier (§2.2).
+              example: "111222437000"
+            status:
+              type: string
+              description: Declaration status in ASYCUDA after integration (e.g. Assessed, Paid).
+              example: "Paid"
+            totalAssessedAmount:
+              type: number
+              description: Total duties and taxes assessed on the declaration, in LKR.
+              example: 1350.0
+            amountPaid:
+              type: number
+              description: Amount already paid against the declaration, in LKR. 0 when no payment has been recorded.
+              example: 1350.0
+            amountPayable:
+              type: number
+              description: Amount still due, in LKR (totalAssessedAmount − amountPaid). 0 when fully paid.
+              example: 0.0
+            duties:
+              $ref: '#/components/schemas/DutyAssessment'
             taxes:
               type: array
               maxItems: 100
-              description: Assessed taxes (code, rate, amount). Declaration only.
+              deprecated: true
+              description: Spec v1.7 tax lines, replaced by `duties`. Still accepted.
               items:
                 $ref: '#/components/schemas/TaxEntry'
+            amountToPay:
+              type: number
+              deprecated: true
+              description: Spec v1.7 amount owed, replaced by `amountPayable`. Still accepted.
             errors:
               type: object
               description: Segment-keyed errors (§4.4). Empty object {} on success.
           oneOf:
             - title: Integrated
               required:
-                - taxes
                 - errors
               anyOf:
                 - required: [cusDecRef]
@@ -333,13 +440,6 @@ components:
                   $ref: '#/components/schemas/DocumentReference'
                 cusdecRef:
                   $ref: '#/components/schemas/DocumentReference'
-                taxes:
-                  type: array
-                  minItems: 1
-                  maxItems: 100
-                  description: Assessed taxes (code, rate, amount). Declaration only.
-                  items:
-                    $ref: '#/components/schemas/TaxEntry'
                 errors:
                   type: object
                   maxProperties: 0

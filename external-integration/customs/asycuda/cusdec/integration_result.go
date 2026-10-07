@@ -3,26 +3,44 @@ package cusdec
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-// amountToPay is what the trader is asked to settle on the payment step.
+// amountToPay is what the trader is asked to settle on the payment step: what
+// is still due on the declaration, not what was assessed.
 //
-// ASYCUDA states it outright from spec v1.7 (§6.2 amountToPay) and that value
-// wins: it is the assessment, where a sum of the tax lines is only this side's
-// reconstruction of it. The spec's own example has the two disagree -- 1254
-// against tax lines totalling 1244 -- so reconstructing it is not safe even
-// when every line is present.
+// A figure ASYCUDA states wins over one this side reconstructs, because it is
+// the assessment while a sum of lines is only an estimate of it -- the v1.7
+// example had the two disagree, 1254 against lines totalling 1244. In order:
 //
-// Summing remains the fallback for a result that carries no such field, which
-// is every result sent against v1.6.
+//  1. amountPayable (v1.9): what is still due. 0 is an answer: a declaration
+//     settled from a prepayment account owes nothing, and no Payment
+//     Notification follows for it.
+//  2. amountToPay (v1.7), for a sender still on that shape.
+//  3. totalAssessedAmount less amountPaid (v1.9), the rule amountPayable
+//     follows, for a result that states the parts but not the difference.
+//  4. The v1.9 duties breakdown, summed.
+//  5. The v1.7 tax lines, summed -- every result sent against v1.6.
 func amountToPay(p cusdecResultPayload) float64 {
-	if p.AmountToPay != nil {
+	switch {
+	case p.AmountPayable != nil:
+		return *p.AmountPayable
+	case p.AmountToPay != nil:
 		return *p.AmountToPay
+	case p.TotalAssessedAmount != nil:
+		paid := 0.0
+		if p.AmountPaid != nil {
+			paid = *p.AmountPaid
+		}
+		return math.Round((*p.TotalAssessedAmount-paid)*100) / 100
+	case len(p.Duties.GlobalDuties) > 0 || len(p.Duties.ItemDutiesList) > 0:
+		return p.Duties.total()
+	default:
+		return totalTaxes(p.Taxes)
 	}
-	return totalTaxes(p.Taxes)
 }
 
 // totalTaxes sums the assessed tax lines from a §6.2 integration result. The

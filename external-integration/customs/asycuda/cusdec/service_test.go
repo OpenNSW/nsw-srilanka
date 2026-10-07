@@ -126,6 +126,51 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
+// A v1.9 result hands the review step what is still due, and the assessment
+// and the amount already paid beside it.
+func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	repo := &mockCusdecRepository{declsByEdgeID: make(map[string]*CusdecDeclaration)}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, db, completer)
+
+	assessed, paid, payable := 1350.0, 350.0, 1000.0
+	req := CusdecIntegrationResultRequest{
+		EdgeID:     "edge-v19",
+		Integrated: true,
+		Event:      "CUSDEC_INTEGRATED",
+		ProcessAt:  time.Now(),
+		Payload: cusdecResultPayload{
+			CusdecRef:           DocumentReference{Year: "2026", Office: "CBEX1", Serial: "E", Number: 59},
+			TotalAssessedAmount: &assessed,
+			AmountPaid:          &paid,
+			AmountPayable:       &payable,
+		},
+	}
+
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-v19", "edge-v19", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-v19"))
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("parent-wf-v19", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-v19"))
+
+	completer.On("CompleteTaskStep", mock.Anything, "task-v19", map[string]any{
+		"__command":             "submit",
+		"review_outcome":        "approve",
+		"cusdec_number":         "CBEX1/2026/E/59",
+		"amount_to_pay":         1000.0,
+		"total_assessed_amount": 1350.0,
+		"amount_paid":           350.0,
+	}).Return(nil)
+
+	require.NoError(t, service.ProcessIntegrationResult(ctx, req))
+	completer.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
 func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	ctx := context.Background()
 	db, sqlMock := setupTestDB(t)
