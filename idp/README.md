@@ -21,7 +21,7 @@ on the project's sample resources.
 >   deployment, which is why `thunderid-certs` / `thunderid-secrets` volumes exist.
 > - Bootstrap resources are declarative YAML, not shell scripts.
 > - CORS moved out of `deployment.yaml` into a runtime `server_config` resource.
-> - Token audiences bind to exactly one resource server (see *API authorization*).
+> - Token audiences bind to exactly one resource server (see _API authorization_).
 
 ## Getting Started
 
@@ -44,7 +44,7 @@ A full `docker compose up` runs four IdP services in order:
    and exits.
 3. **`thunderid`** — the long-running server (listens on `https://localhost:8090`).
 4. **`thunderid-seed`** — dev-only; once `thunderid` is healthy, mints an `ADMIN_CLI`
-   token and seeds the sample resources (see *Seeding sample resources*). A bare
+   token and seeds the sample resources (see _Seeding sample resources_). A bare
    `docker compose up thunderid` skips it.
 
 ### Custom Configuration (optional)
@@ -107,7 +107,7 @@ ships `01-default-resources.yaml` and `02-server-configurations.yaml`; we mount 
 document, [`idp/bootstrap/03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml),
 into that directory via `compose.yml`.
 
-> **Changed in 1.0.0.** This used to be numbered *shell scripts* sourcing the image's
+> **Changed in 1.0.0.** This used to be numbered _shell scripts_ sourcing the image's
 > `common.sh`. That mechanism is gone: a `.sh` file in this directory is now **skipped
 > silently** — no error, no log line. If you are porting an old bootstrap script, it
 > has to become a declarative document. Import runs with `upsert=true` (re-running is
@@ -125,7 +125,7 @@ into that directory via `compose.yml`.
      `ADMIN_CLI_SECRET`) in the `default` OU;
   2. an `NSW Admin CLI` role granting it the `system` permission on the System
      resource server, which is what makes a `client_credentials` call yield a
-     **management token** (see *Seeding* below) — the programmatic alternative to
+     **management token** (see _Seeding_ below) — the programmatic alternative to
      copying a token out of the console.
 
   It is deliberately limited to those two: `admin-cli` is the only resource that must
@@ -136,36 +136,38 @@ into that directory via `compose.yml`.
   It grants management scope from a file-supplied secret, so do not mount it into a
   shared or UAT/prod deployment — use an interactively-obtained admin token there.
 
-  Note the role is a *new* role rather than a re-declaration of the built-in
+  Note the role is a _new_ role rather than a re-declaration of the built-in
   `Administrator`. That is deliberate: the importer's role upsert writes only the
   fields present in the document, so partially re-declaring `Administrator` would drop
   its `permissions` block and silently revoke the management scope console login needs.
 
 The project's sample resources are not created by the bootstrap container. They are seeded
-by `idp/sample-resources.sh` (see *Seeding sample resources* below): **automatically** by
+by `idp/sample-resources.sh` (see _Seeding sample resources_ below): **automatically** by
 the `thunderid-seed` service on a full `docker compose up` (after `thunderid` is healthy),
 or **by hand** against any deployment. A bare `docker compose up thunderid` does NOT seed.
 That script creates:
-  - **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
-  - **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / Customs / SLTB** child OUs
-  - **`Private_User`**, **`Government_User`**, and **`Admin_User`** user types
-  - **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
-    matching groups — role inheritance is group-based)
-  - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
-    and **`NswM2M`** roles (machine clients) — see *API authorization* below
-  - **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
-  - **`NSW_API`**, **`AGENCY_API`** and **`CDA API`** OAuth2 resource servers (scopes + token audiences)
-  - **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
-  - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
-    `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
-    `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
-  - **SPA applications** and **M2M applications** (see below)
+
+- **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
+- **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / Customs / SLTB** child OUs
+- **`Private_User`**, **`Government_User`**, and **`Admin_User`** user types
+- **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
+  matching groups — role inheritance is group-based)
+- **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
+  and **`NswM2M`** roles (machine clients) — see _API authorization_ below
+- **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
+- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`** and **`Customs API`** OAuth2 resource servers (scopes + token audiences)
+- **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
+- **`Customs Officers`** group + **`Customs Officer`** role, and the **`NswToCustomsM2M`** role (see `customs.json`)
+- Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
+  `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
+  `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
+- **SPA applications** and **M2M applications** (see below)
 
 ## Seeding sample resources
 
 The project sample resources (OUs, users, groups, roles, SPA + M2M apps) are a generic
 **engine** that reads declarative JSON config from [`idp/resources/`](resources/) (see
-*Resource configuration* below). The script is **idempotent** (existing entities are
+_Resource configuration_ below). The script is **idempotent** (existing entities are
 detected via HTTP 409 and reused) and needs **`jq`** on `PATH`. The management API requires
 a bearer `AUTH_TOKEN` — **including on localhost** (the running server is not
 security-disabled, only the bootstrap container is).
@@ -195,7 +197,7 @@ IdP (`https://thunderid:8090`). A bare `docker compose up thunderid` brings up o
    token must bind to a resource server, and this is the identifier of the System
    resource server the image bootstraps. Omit it and the request fails with
    `invalid_target`, since this deployment configures no `defaultResourceServer` (see
-   *API authorization* below).
+   _API authorization_ below).
 
 2. Run the seed with that token:
 
@@ -236,7 +238,7 @@ There, the privileged default-secret client is never provisioned; instead:
 - **`ADMIN_CLI_SECRET` must be set**, and its failure mode is blunt: the bootstrap
   documents are templated before parsing, an unresolved placeholder is a hard error, and
   the whole bundle is imported as one payload with `continueOnError=false`. So an unset
-  `ADMIN_CLI_SECRET` fails the *entire* import — taking the admin user, `Console` app,
+  `ADMIN_CLI_SECRET` fails the _entire_ import — taking the admin user, `Console` app,
   flows and themes down with it, not just `admin-cli`. There is no `1234` fallback on this
   path (unlike the seed script's `ALLOW_DEFAULT_SECRETS` behaviour). This is why nothing
   else is bootstrapped: a bad `CORS_ORIGINS_*` only fails the seed.
@@ -258,7 +260,7 @@ There, the privileged default-secret client is never provisioned; instead:
 config covers both seeding and teardown. **Adding an agency, company, user, resource server,
 role, group, or assignment is a config edit only — no script changes.**
 
-```
+```text
 idp/resources/
   _scopesets.json              named scope sets (reused by roles + apps)
   shared/
@@ -274,6 +276,7 @@ idp/resources/
     ous.json  user-types.json  groups-roles.json
     agencies.json              the OGA agencies (shorthand, see below)
     cda.json                   CDA, run by this backend in agency mode (explicit, see below)
+    customs.json               Customs, run by this backend in agency mode (explicit, see below)
 ```
 
 CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
@@ -283,6 +286,11 @@ CDA is not in the `agencies` shorthand. It runs as this same backend in agency m
 (`NswToCdaM2M` on `NSW_TO_CDA`), the portal client requesting those scopes, and
 `CDA_TO_NSW` as for any agency. A CDA-only group keeps other agencies' officers, who
 are all in `OGA Reviewers`, out of CDA.
+
+Customs is declared the same way in `customs.json` (`configs/agency/customs/`): the
+`Customs API` resource server's `Customs Officer` role (via `Customs Officers`, holding
+only `customs_officer`) and `NswToCustomsM2M` role (on `NSW_TO_CUSTOMS`), the
+`OGA_PORTAL_APP_CUSTOMS` portal client, and `CUSTOMS_TO_NSW`.
 
 Each file's top-level keys are entity-type buckets (`scopeSets`, `resourceServers`,
 `organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
@@ -305,7 +313,7 @@ from `idp/.env` / the environment. Override those variables in `idp/.env` (see
 ### Adding an agency (the common case)
 
 Append one block to [`idp/resources/government/agencies.json`](resources/government/agencies.json).
-It expands to a child OU, a `Government_User` officer (joined to *OGA Reviewers*), a portal
+It expands to a child OU, a `Government_User` officer (joined to _OGA Reviewers_), a portal
 SPA, the `<H>_TO_NSW` + `NSW_TO_<H>` M2M clients, and their role assignments:
 
 ```json
@@ -329,38 +337,40 @@ the NSW backend, to the backend's `authn.clientIDs` in `configs/config*.yaml`.)
 
 ## Applications created
 
-| App | Client ID | Local URL |
-| --- | --- | --- |
-| TraderApp | `TRADER_PORTAL_APP` | http://localhost:5173 |
-| NPQSPortalApp | `OGA_PORTAL_APP_NPQS` | http://localhost:5174 |
-| FCAUPortalApp | `OGA_PORTAL_APP_FCAU` | http://localhost:5175 |
-| CDAPortalApp | `OGA_PORTAL_APP_CDA` | http://localhost:5176 |
-| SLPAPortalApp | `OGA_PORTAL_APP_SLPA` | http://localhost:5177 |
-| CustomsPortalApp | `OGA_PORTAL_APP_CUSTOMS` | http://localhost:5178 |
-| SLTBPortalApp | `OGA_PORTAL_APP_SLTB` | http://localhost:5179 |
+| App              | Client ID                | Local URL               |
+| ---------------- | ------------------------ | ----------------------- |
+| TraderApp        | `TRADER_PORTAL_APP`      | <http://localhost:5173> |
+| NPQSPortalApp    | `OGA_PORTAL_APP_NPQS`    | <http://localhost:5174> |
+| FCAUPortalApp    | `OGA_PORTAL_APP_FCAU`    | <http://localhost:5175> |
+| CDAPortalApp     | `OGA_PORTAL_APP_CDA`     | <http://localhost:5176> |
+| SLPAPortalApp    | `OGA_PORTAL_APP_SLPA`    | <http://localhost:5177> |
+| CustomsPortalApp | `OGA_PORTAL_APP_CUSTOMS` | <http://localhost:5178> |
+| SLTBPortalApp    | `OGA_PORTAL_APP_SLTB`    | <http://localhost:5179> |
 
 M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
 - **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
   `CDA_TO_NSW`, `SLPA_TO_NSW`, `CUSTOMS_TO_NSW`, `SLTB_TO_NSW`.
 - **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_NPQS`, `NSW_TO_FCAU`,
-  `NSW_TO_SLPA`, `NSW_TO_CUSTOMS`, `NSW_TO_SLTB`.
+  `NSW_TO_SLPA`, `NSW_TO_SLTB`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
+- **NSW → Customs** (`aud=https://api.customs.nsw-agency.local`, `NswToCustomsM2M` role): `NSW_TO_CUSTOMS`.
 
 ## API authorization (OAuth2)
 
 Each protected backend is registered as a **resource server** whose `identifier`
 becomes the access-token **audience** (`aud`):
 
-| `identifier` (= token `aud`) | Backend | Scopes (`<resource>:<action>`) |
-| --- | --- | --- |
-| `https://api.nsw-srilanka.local` | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/` | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
-| `https://api.nsw-agency.local` | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}` |
-| `https://api.cda.nsw-agency.local` | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}` |
+| `identifier` (= token `aud`)           | Backend                                                                  | Scopes (`<resource>:<action>`)                                                                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `https://api.nsw-srilanka.local`       | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`                 | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
+| `https://api.nsw-agency.local`         | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/`   | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                                     |
+| `https://api.cda.nsw-agency.local`     | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)         | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}`                    |
+| `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}`                    |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
-> requirement is not cosmetic: see *How a token gets its audience* below. The identifier
+> requirement is not cosmetic: see _How a token gets its audience_ below. The identifier
 > is also how `idp/resources/**` names a resource server in `resourceServer:` references,
 > so changing one means changing those too.
 >
@@ -376,24 +386,29 @@ becomes the access-token **audience** (`aud`):
 >   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
 >   `configs/services*.example.json`. Changing the identifier means changing all of these
 >   (and any existing local `configs/services*.json`).
+> - **Customs** (`customs-api`): the `Customs API` identifier,
+>   `https://api.customs.nsw-agency.local`, in the same places under
+>   `configs/agency/customs/` and TNSW's `customs` entry in `configs/services*.example.json`.
 
-Scopes are namespaced (`nsw:*` / `agency:*`). The CDA API reuses `nsw:*` names, since it
-is the same backend; that is safe because every caller names its target with `resource`
+Scopes are namespaced (`nsw:*` / `agency:*`). The CDA and Customs APIs reuse `nsw:*` names, since they
+are the same backend; that is safe because every caller names its target with `resource`
 (below), and a token is narrowed to the scopes of that one resource server.
 
 **How a token gets its scopes.** Scopes come from a **role grant on the principal**,
 not from the app's requestable `scopes` list. So every caller is granted the relevant
 scopes via a role:
 
-| Caller | Grant |
-| --- | --- |
-| TraderApp users | `Trader` / `CHA` role (via group) → `NSW_API` scopes |
-| NSW admin users | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite` |
-| `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes |
-| OGA portal users | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes |
-| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject` |
-| CDA portal users | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes |
-| `NSW_TO_CDA` | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject` on the CDA API |
+| Caller                 | Grant                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- |
+| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                  |
+| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite` |
+| `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                     |
+| OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                 |
+| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`             |
+| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                        |
+| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject` on the CDA API             |
+| Customs portal users   | `Customs Officer` role (via `Customs Officers` group) → Customs API scopes                            |
+| `NSW_TO_CUSTOMS`       | **`NswToCustomsM2M` role assigned to the application** → `nsw:workflow:inject` on the Customs API     |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to
@@ -426,7 +441,7 @@ looks like a broken app registration and is genuinely hard to trace. With no def
 gets a hard `invalid_target` at the token endpoint, naming the problem.
 
 > ⚠️ **Do not accept the console's offer to set a default.** Since 1.0.0-beta2 the
-> resource-server creation wizard shows a *pre-ticked* "Make this the default resource
+> resource-server creation wizard shows a _pre-ticked_ "Make this the default resource
 > server" checkbox whenever the deployment has no default — which is precisely our
 > configuration — and the resource-server list offers the same action. Accepting it flips
 > the failure mode above for **every** caller in the deployment, silently: requests that
@@ -436,15 +451,15 @@ gets a hard `invalid_target` at the token endpoint, naming the problem.
 
 So every permission-bearing caller sends `resource`:
 
-| Caller | Sends `resource` | Where it is configured | Token `aud` |
-| --- | --- | --- | --- |
-| TraderApp users | NSW_API | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`) | `https://api.nsw-srilanka.local` |
-| OGA portal users | AGENCY_API | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-agency.local` |
-| `*_TO_NSW` M2M | NSW_API | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-srilanka.local` |
-| `NSW_TO_*` M2M | AGENCY_API | `endpoint_params` in `configs/services*.json` | `https://api.nsw-agency.local` |
-| `SLCE_TO_NSW` webhook | NSW_API | ⚠️ external — see below | `https://api.nsw-srilanka.local` |
-| `admin-cli` management token | System RS | `compose.yml` (Stage D) | `https://localhost:8090/mcp` |
-| `customs-asycuda` | n/a | requests no scopes, so stays unbound | app `defaultAudience` / `client_id` |
+| Caller                       | Sends `resource` | Where it is configured                              | Token `aud`                         |
+| ---------------------------- | ---------------- | --------------------------------------------------- | ----------------------------------- |
+| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`)   | `https://api.nsw-srilanka.local`    |
+| OGA portal users             | AGENCY_API       | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-agency.local`      |
+| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency            | `https://api.nsw-srilanka.local`    |
+| `NSW_TO_*` M2M               | AGENCY_API       | `endpoint_params` in `configs/services*.json`       | `https://api.nsw-agency.local`      |
+| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                             | `https://api.nsw-srilanka.local`    |
+| `admin-cli` management token | System RS        | `compose.yml` (Stage D)                             | `https://localhost:8090/mcp`        |
+| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the
 whole session: the IdP records the value on the authorization code and reuses the bound
@@ -476,7 +491,7 @@ as the SPA variable, so one syntax covers every caller:
 > internally.** At `/authorize` the server rewrites the request's resource to the
 > resolved identifier and persists it on the authorization code; the token exchange reads
 > it back and re-validates it as a `resource` parameter. So a bare name like `NSW_API`
-> fails with `invalid_target: must be an absolute URI` at the *token* endpoint.
+> fails with `invalid_target: must be an absolute URI` at the _token_ endpoint.
 > `client_credentials` is unaffected (no authorization code, so no round-trip), which
 > makes this look like a portal bug when it is really an identifier-format constraint.
 
@@ -494,8 +509,9 @@ as the SPA variable, so one syntax covers every caller:
   > not advice.** There is no migration tooling upstream, and the schema moved
   > underneath the same filenames: `runtimedb`'s tables collapsed into a single
   > `RUNTIME_STORE`, `runtime_persistent.db` is new, `userdb` became `entitydb`, and a
-  > stale `configdb.db` keeps its name so it *is* opened — just without the tables
+  > stale `configdb.db` keeps its name so it _is_ opened — just without the tables
   > 1.0.0 expects. The old certs must go too: they were baked into the 0.42.0 image and
   > are now generated per deployment.
+
 - Role assignment is **group-based**: users inherit effective roles from group
   membership (`Traders` → `Trader`, `CHA` → `CHA`).

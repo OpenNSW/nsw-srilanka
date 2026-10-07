@@ -1,0 +1,76 @@
+{
+  "organizationUnits": [
+    {
+      "key": "government-organization/customs",
+      "handle": "customs",
+      "name": "Customs",
+      "description": "Sri Lanka Customs",
+      "parent": "government-organization",
+      "treePath": "government-organization/customs"
+    }
+  ],
+  "groups": [
+    { "key": "Customs Officers", "name": "Customs Officers", "description": "Customs officers group", "ou": "government-organization/customs" }
+  ],
+  "roles": [
+    { "key": "Customs Officer", "name": "Customs Officer", "description": "Role for Customs officers working tasks in the Customs deployment",
+      "ou": "government-organization/customs", "resourceServer": "https://api.customs.nsw-agency.local", "scopeSet": "customsOfficer" },
+    { "key": "NswToCustomsM2M", "name": "NswToCustomsM2M", "description": "Role for NSW injecting workflows into the Customs deployment",
+      "ou": "government-organization/customs", "resourceServer": "https://api.customs.nsw-agency.local", "scopeSet": "customsInject" }
+  ],
+  "roleAssignments": [
+    { "role": "Customs Officer", "group": "Customs Officers" }
+  ],
+  "users": [
+    {
+      "key": "customs_officer",
+      "type": "Government_User",
+      "ou": "government-organization/customs",
+      "username": "customs_officer",
+      "email": "customs_officer@government.dev",
+      "givenName": "Customs",
+      "familyName": "Officer",
+      "phoneNumber": "+94771234565",
+      "passwordEnv": { "override": "SAMPLE_CUSTOMS_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["Customs Officers"]
+    }
+  ],
+  "applications": [
+    {
+      "key": "OGA_PORTAL_APP_CUSTOMS",
+      "kind": "spa",
+      "name": "CustomsPortalApp",
+      "description": "Application for the Customs officer portal (trader-app in agency mode)",
+      "clientId": "OGA_PORTAL_APP_CUSTOMS",
+      "port": 5178,
+      "allowedUserType": "Government_User",
+      "ou": "government-organization/customs",
+      "scopeSet": "customsOfficer",
+      "redirectUrisEnv": "CUSTOMS_REDIRECT_URIS"
+    },
+    {
+      "key": "CUSTOMS_TO_NSW",
+      "kind": "m2m",
+      "name": "CUSTOMS_TO_NSW_M2M",
+      "description": "Machine-to-machine integration for Customs to NSW",
+      "clientId": "CUSTOMS_TO_NSW",
+      "secretEnv": { "override": "M2M_CUSTOMS_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "m2mNsw"
+    },
+    {
+      "key": "NSW_TO_CUSTOMS",
+      "kind": "m2m",
+      "name": "NSW_TO_CUSTOMS_M2M",
+      "description": "Machine-to-machine integration for NSW to Customs",
+      "clientId": "NSW_TO_CUSTOMS",
+      "secretEnv": { "override": "M2M_NSW_TO_CUSTOMS_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "government-organization",
+      "scopeSet": "customsInject"
+    }
+  ],
+  "appRoleAssignments": [
+    { "role": "AgencyM2M", "app": "CUSTOMS_TO_NSW" },
+    { "role": "NswToCustomsM2M", "app": "NSW_TO_CUSTOMS" }
+  ]
+}

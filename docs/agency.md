@@ -6,7 +6,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 `/api/v1/tasks/{id}`. They differ at the edges:
 
 |                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                  |
-|----------------------|---------------------------------------------------------|------------------------------------------|
+| -------------------- | ------------------------------------------------------- | ---------------------------------------- |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)  |
 | Task ownership       | trader/CHA company owns the consignment                 | `officer` role, on any injected workflow |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`          |

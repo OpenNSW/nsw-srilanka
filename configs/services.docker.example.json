@@ -58,7 +58,7 @@
         "options": {
           "token_url": "http://host.docker.internal:8084/api/nsw/v1/token",
           "client_id": "NSW_TO_SLPA_CLIENT_ID",
-          "client_secret": "env:SLPA_CLIENT_SECRET"
+          "client_secret": "env:M2M_NSW_TO_SLPA_SECRET"
         }
       }
     },
@@ -73,8 +73,8 @@
           "client_id": "NSW_TO_CUSTOMS",
           "client_secret": "env:M2M_NSW_TO_CUSTOMS_SECRET",
           "insecure_skip_tls_verify": true,
-          "scopes": ["agency:application:inject"],
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "scopes": ["nsw:workflow:inject"],
+          "endpoint_params": { "resource": "https://api.customs.nsw-agency.local" }
         }
       }
     },

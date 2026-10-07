@@ -44,14 +44,14 @@ resolved at startup.
 ]
 ```
 
-| Property      | Required | What it is                                       |
-| ------------- | -------- | ------------------------------------------------ |
-| `channel`     | yes      | `"email"` or `"sms"`.                            |
-| `body`        | yes\*    | Message text. SMS uses only this.                |
-| `subject`     | email    | Email subject.                                   |
-| `html_body`   | no       | HTML body, email only (auto-escaped).            |
-| `template_id` | no       | Personalised template instead of inline text.   |
-| `task_code`   | no       | Label shown in logs.                             |
+| Property      | Required | What it is                                    |
+| ------------- | -------- | --------------------------------------------- |
+| `channel`     | yes      | `"email"` or `"sms"`.                         |
+| `body`        | yes\*    | Message text. SMS uses only this.             |
+| `subject`     | email    | Email subject.                                |
+| `html_body`   | no       | HTML body, email only (auto-escaped).         |
+| `template_id` | no       | Personalised template instead of inline text. |
+| `task_code`   | no       | Label shown in logs.                          |
 
 \* `body`/`subject`/`html_body` may come from `template_id` instead of inline.
 
