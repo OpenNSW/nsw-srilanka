@@ -509,9 +509,9 @@ func supportDocList(group map[string]any, key string) ([]any, error) {
 }
 
 // formatDMY converts the form's ISO date (yyyy-MM-dd) to the dd/MM/yyyy Annex A
-// expects for a supporting document. An unexpected shape is passed through
-// trimmed rather than dropped, so a value the endpoint can still interpret is
-// not silently lost.
+// expects for a supporting document. A value that is not that shape comes back
+// empty, so the caller rejects the document instead of sending a date the
+// endpoint will refuse.
 func formatDMY(v string) string {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -519,7 +519,7 @@ func formatDMY(v string) string {
 	}
 	t, err := time.Parse("2006-01-02", v)
 	if err != nil {
-		return v
+		return ""
 	}
 	return t.Format("02/01/2006")
 }

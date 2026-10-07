@@ -370,6 +370,7 @@ func TestBuildPayload_RefusesAnIncompleteSupportingDocument(t *testing.T) {
 		"nothing but a code": {"documentCode": "N380"},
 		"no reference":       {"documentCode": "N380", "itemSequence": "001", "dateAsString": "2026-09-15"},
 		"no date":            {"documentCode": "N380", "itemSequence": "001", "documentId": "INV-1"},
+		"invalid date":       {"documentCode": "N380", "itemSequence": "001", "documentId": "INV-1", "dateAsString": "15/09/2026"},
 		"no item number":     {"documentCode": "N380", "documentId": "INV-1", "dateAsString": "2026-09-15"},
 		"no document code":   {"itemSequence": "001", "documentId": "INV-1", "dateAsString": "2026-09-15"},
 	} {
