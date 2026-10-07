@@ -155,6 +155,33 @@ func TestRunner_RequestRetriesUntilExtractPresent(t *testing.T) {
 	}
 }
 
+// A retried GET that stalls is cancelled when the retry window ends, instead of
+// holding the replay until the whole test times out.
+func TestRunner_RequestRetryBoundsAStalledRequest(t *testing.T) {
+	// The handler answers on its own after 2s, so without the bound the test
+	// fails on the elapsed time instead of hanging.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(2 * time.Second):
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+
+	r := New(srv.URL, srv.Client())
+	flow := &Flow{Name: "t", Steps: []Step{
+		{Name: "read", Request: &Request{Method: "GET", Path: "/api/v1/tasks/t-1", Retry: "200ms"}},
+	}}
+	start := time.Now()
+	err := r.Run(context.Background(), flow)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("Run took %v, want it bounded by the 200ms retry window", elapsed)
+	}
+	if err == nil {
+		t.Error("Run: expected an error from the stalled request")
+	}
+}
+
 func TestRunner_WaitMatchesNode(t *testing.T) {
 	detail := `{"id":"c-1","state":"IN_PROGRESS","workflowNodes":[
 		{"id":"task-init","state":"COMPLETED","workflowNodeTemplate":{"name":"[Trade] Initialize Consignment","type":"APPLICATION"}},

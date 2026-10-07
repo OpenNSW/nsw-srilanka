@@ -198,13 +198,18 @@ func (r *Runner) doRequest(ctx context.Context, req *Request) error {
 	if err != nil {
 		return err
 	}
-	deadline := time.Now().Add(timeout)
+	// Each attempt is bounded by the same deadline, so a request that stalls is
+	// cancelled when the retry window ends rather than holding the replay open.
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	for {
 		err := r.doRequestOnce(ctx, req)
-		if err == nil || time.Now().After(deadline) {
+		if err == nil || ctx.Err() != nil {
 			return err
 		}
-		if err := sleep(ctx, waitPollInterval); err != nil {
+		// The window can close during the pause too; the last attempt's error says
+		// more about why the step never succeeded than the deadline does.
+		if sleep(ctx, waitPollInterval) != nil {
 			return err
 		}
 	}
