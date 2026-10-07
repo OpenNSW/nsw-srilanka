@@ -72,6 +72,11 @@ type Request struct {
 	Body         any               `json:"body,omitempty"`
 	ExpectStatus int               `json:"expectStatus,omitempty"` // default 200
 	Extract      map[string]string `json:"extract,omitempty"`      // var -> response field path (dot-notation, e.g. "consignment.id")
+	// Retry, for a GET only, re-issues the request until it gets the expected
+	// status and every Extract path is present, or this long elapses (e.g. "30s").
+	// For state that lands a moment after a wait matched: a task's step_id is
+	// set when its step is claimed, just after the node shows IN_PROGRESS.
+	Retry string `json:"retry,omitempty"`
 }
 
 // Wait polls the consignment detail until a workflow node matches.
@@ -183,6 +188,29 @@ func (r *Runner) Run(ctx context.Context, flow *Flow) error {
 }
 
 func (r *Runner) doRequest(ctx context.Context, req *Request) error {
+	if req.Retry == "" {
+		return r.doRequestOnce(ctx, req)
+	}
+	if req.Method != http.MethodGet {
+		return fmt.Errorf("retry is only allowed on GET, not %s: retrying could repeat a side effect", req.Method)
+	}
+	timeout, err := parseTimeout(req.Retry, defaultWaitTimeout)
+	if err != nil {
+		return err
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		err := r.doRequestOnce(ctx, req)
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		if err := sleep(ctx, waitPollInterval); err != nil {
+			return err
+		}
+	}
+}
+
+func (r *Runner) doRequestOnce(ctx context.Context, req *Request) error {
 	path := r.interpolate(req.Path)
 
 	var rdr io.Reader

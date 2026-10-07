@@ -21,7 +21,8 @@
         "actor": "trader",
         "method": "GET",
         "path": "/api/v1/tasks/{{initTask}}",
-        "extract": { "initTaskStep": "step_id" }
+        "extract": { "initTaskStep": "step_id" },
+        "retry": "30s"
       }
     },
     {
@@ -44,7 +45,8 @@
         "actor": "cha",
         "method": "GET",
         "path": "/api/v1/tasks/{{hsTask}}",
-        "extract": { "hsTaskStep": "step_id" }
+        "extract": { "hsTaskStep": "step_id" },
+        "retry": "30s"
       }
     },
     {
@@ -67,7 +69,8 @@
         "actor": "trader",
         "method": "GET",
         "path": "/api/v1/tasks/{{fcauApp}}",
-        "extract": { "fcauAppStep": "step_id" }
+        "extract": { "fcauAppStep": "step_id" },
+        "retry": "30s"
       }
     },
     {
@@ -124,7 +127,8 @@
         "actor": "trader",
         "method": "GET",
         "path": "/api/v1/tasks/{{payTask}}",
-        "extract": { "payTaskStep": "step_id" }
+        "extract": { "payTaskStep": "step_id" },
+        "retry": "30s"
       }
     },
     {

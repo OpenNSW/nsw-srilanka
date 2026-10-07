@@ -118,6 +118,43 @@ func TestRunner_RequestExtractAndStatusAssertion(t *testing.T) {
 	}
 }
 
+// A retried GET is re-issued until the extract path appears, as a task's step_id
+// does once its step is claimed.
+func TestRunner_RequestRetriesUntilExtractPresent(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		body := map[string]any{"task_id": "t-1"}
+		if calls >= 3 {
+			body["step_id"] = "s-1"
+		}
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	defer srv.Close()
+
+	r := New(srv.URL, srv.Client())
+	flow := &Flow{Name: "t", Steps: []Step{
+		{Name: "read", Request: &Request{
+			Method: "GET", Path: "/api/v1/tasks/t-1", Retry: "10s",
+			Extract: map[string]string{"step": "step_id"},
+		}},
+	}}
+	if err := r.Run(context.Background(), flow); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if r.Vars["step"] != "s-1" || calls != 3 {
+		t.Errorf("step = %v after %d calls, want s-1 after 3", r.Vars["step"], calls)
+	}
+
+	// Retrying a POST could repeat its side effect, so it is refused.
+	post := &Flow{Name: "t", Steps: []Step{
+		{Name: "submit", Request: &Request{Method: "POST", Path: "/", Retry: "10s"}},
+	}}
+	if err := r.Run(context.Background(), post); err == nil || !strings.Contains(err.Error(), "only allowed on GET") {
+		t.Errorf("POST with retry: err = %v, want a refusal", err)
+	}
+}
+
 func TestRunner_WaitMatchesNode(t *testing.T) {
 	detail := `{"id":"c-1","state":"IN_PROGRESS","workflowNodes":[
 		{"id":"task-init","state":"COMPLETED","workflowNodeTemplate":{"name":"[Trade] Initialize Consignment","type":"APPLICATION"}},
