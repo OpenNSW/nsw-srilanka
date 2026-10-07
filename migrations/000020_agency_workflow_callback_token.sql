@@ -6,7 +6,7 @@
 -- The opaque token the injecting system expects its decision back on
 -- (POST /api/v1/callbacks/{callbackToken} on TNSW). It is recorded with the row, like the
 -- payload, so a retried start seeds the workflow with the token of the first inject.
--- Rows injected before it existed have none.
+-- NULL when the inject carried no token.
 ALTER TABLE agency_workflow ADD COLUMN IF NOT EXISTS callback_token TEXT;
 
 -- @DOWN

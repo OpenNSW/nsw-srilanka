@@ -34,8 +34,8 @@ const gatewayPollInterval = 300 * time.Millisecond
 // implements replay.PaymentGateway.
 //
 // The reference is only rendered into the task's markdown view, so the mock
-// reads it from the payment table rather than over HTTP. The payment service no
-// longer knows which task a payment is for; the payment plugin records it in
+// reads it from the payment table rather than over HTTP. The payment service
+// does not record which task a payment is for; the payment plugin puts it in
 // the checkout metadata (gateway_metadata.task_id), which is what the mock
 // matches on.
 type mockGateway struct {

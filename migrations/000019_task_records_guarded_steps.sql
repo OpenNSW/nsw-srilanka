@@ -3,10 +3,10 @@
 -- inside @UP or @DOWN -- see docs/migrations.md.
 
 -- @UP
--- core taskflow's guarded step writes: a task row now names its parent by the parent's step ID
--- (the Activity to complete) instead of run + node, and tracks the step it is on (active_step_id)
--- and how far it has advanced (seq), which every step write is guarded by. The run/node columns
--- they replace are no longer read or written.
+-- Columns for core taskflow's guarded step writes. parent_step_id names the parent's step (the
+-- Activity to complete when the task ends), active_step_id the step the task is on, and seq how far
+-- it has advanced; every step write is guarded by active_step_id and seq. The run and node columns
+-- dropped below are not used by core taskflow.
 ALTER TABLE task_records_v2 ADD COLUMN IF NOT EXISTS parent_step_id TEXT;
 ALTER TABLE task_records_v2 ADD COLUMN IF NOT EXISTS active_step_id UUID NULL;
 ALTER TABLE task_records_v2 ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL DEFAULT 0;
