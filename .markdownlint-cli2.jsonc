@@ -1,0 +1,44 @@
+// markdownlint-cli2 settings, shared by the pre-commit hook, `make mdlint`,
+// CI (.github/workflows/docs-ci.yml) and the markdownlint editor extension.
+// Rules: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+{
+  "config": {
+    "default": true,
+
+    // Paragraphs are kept on one line. Hard-wrapping them would put line
+    // breaks into the GitHub release notes built from CHANGELOG.md.
+    "MD013": false,
+
+    // CHANGELOG.md repeats "Added", "Fixed", ... under every release.
+    "MD024": { "siblings_only": true },
+
+    // Consecutive notes and GitHub alerts are separate blockquotes, which
+    // GitHub renders as separate boxes.
+    "MD028": false,
+
+    "MD003": { "style": "atx" },
+    "MD004": { "style": "dash" },
+    "MD029": { "style": "ordered" },
+    "MD035": { "style": "---" },
+    "MD046": { "style": "fenced" },
+    "MD048": { "style": "backtick" },
+    // Prettier formats the Markdown under portals/ and writes _emphasis_.
+    "MD049": { "style": "underscore" },
+    "MD050": { "style": "asterisk" },
+    "MD055": { "style": "leading_and_trailing" },
+    // Pad table cells so the columns line up in the raw Markdown, as Prettier does.
+    "MD060": { "style": "aligned" }
+  },
+  "globs": ["**/*.md"],
+  "gitignore": true,
+  // Claude Code worktrees are separate checkouts of this repository.
+  "ignores": [".claude/worktrees/**"],
+  "overrides": [
+    {
+      // GitHub shows the PR or issue title above these templates, so they start at ##.
+      "filter": [".github/pull_request_template.md", ".github/ISSUE_TEMPLATE/*.md"],
+      "config": { "MD041": { "level": 2 } },
+      "combine": "merge"
+    }
+  ]
+}

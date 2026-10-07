@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pre-commit quality gate.
-# Runs: gitleaks → gofmt → golangci-lint → go build → go mod tidy check.
-# Skip individual checks: SKIP_GITLEAKS=1, SKIP_LINT=1, SKIP_BUILD=1, etc.
+# Runs: gitleaks → gofmt → golangci-lint → go build → go mod tidy check → markdownlint.
+# Skip individual checks: SKIP_GITLEAKS=1, SKIP_LINT=1, SKIP_BUILD=1, SKIP_MDLINT=1, etc.
 set -euo pipefail
 
 # ── GOPATH/bin on PATH ────────────────────────────────────────────────────────
@@ -64,6 +64,29 @@ if [ -z "${SKIP_TIDY:-}" ]; then
     echo "ERROR: go.mod/go.sum changed after running 'go mod tidy'."
     echo "Stage the updated go.mod/go.sum and retry the commit."
     exit 1
+  fi
+fi
+
+# ── markdownlint ─────────────────────────────────────────────────────────────
+# Rules: .markdownlint-cli2.jsonc. The version matches MDLINT_VERSION in the Makefile.
+# Lints the staged content, from a copy of the index, so a partially staged file
+# is checked as it will be committed.
+STAGED_MD_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.md')
+if [ -n "$STAGED_MD_FILES" ] && [ -z "${SKIP_MDLINT:-}" ]; then
+  if command -v npx >/dev/null 2>&1; then
+    echo "==> markdownlint: checking staged Markdown files..."
+    MDLINT_TREE=$(mktemp -d)
+    trap 'rm -rf "$MDLINT_TREE"' EXIT
+    # Settings files are copied too: nested ones apply to their directory.
+    { echo "$STAGED_MD_FILES"; git ls-files -- '.markdownlint-cli2.jsonc' '**/.markdownlint-cli2.jsonc'; } \
+      | tr '\n' '\0' | xargs -0 git checkout-index --prefix="$MDLINT_TREE/" --
+    if ! (cd "$MDLINT_TREE" && echo "$STAGED_MD_FILES" | tr '\n' '\0' \
+          | xargs -0 npx --yes markdownlint-cli2@0.23.2 --no-globs); then
+      echo "Most findings can be fixed with: make mdlint-fix"
+      exit 1
+    fi
+  else
+    echo "WARN: npx not found — install Node.js to lint Markdown. Skipping markdownlint."
   fi
 fi
 

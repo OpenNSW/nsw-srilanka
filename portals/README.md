@@ -25,7 +25,7 @@ make help       # See all available commands
 
 ## Project Structure
 
-```
+```text
 portals/
 ├── Makefile               # Team development commands
 ├── pnpm-workspace.yaml    # pnpm workspace configuration

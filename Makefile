@@ -226,3 +226,38 @@ secrets: ## Run gitleaks secret scan on the repository
 
 .PHONY: check
 check: tidy fmt lint test ## Run all quality checks: tidy → fmt → lint → test
+
+# ---------------------------------------------------------------------------
+# Docs quality (mirrors .github/workflows/docs-ci.yml)
+# markdownlint runs through npx (Node.js); lychee and Vale run in Docker.
+# ---------------------------------------------------------------------------
+
+# The pre-commit hook pins the same markdownlint-cli2 version.
+MDLINT_VERSION := 0.23.2
+# markdownlint --fix cannot pad tables, so mdlint-fix runs Prettier for them.
+PRETTIER_VERSION := 3.9.9
+LYCHEE_IMAGE   := lycheeverse/lychee:0.24.2
+VALE_IMAGE     := jdkato/vale:v3.24.0
+# Lazy (=) so git runs only when a target that needs the file list is invoked.
+MD_FILES = $(shell git ls-files "*.md")
+
+.PHONY: mdlint
+mdlint: ## Lint Markdown files (rules: .markdownlint-cli2.jsonc)
+	npx --yes markdownlint-cli2@$(MDLINT_VERSION)
+
+.PHONY: mdlint-fix
+mdlint-fix: ## Apply markdownlint's automatic fixes and align tables with Prettier
+	npx --yes markdownlint-cli2@$(MDLINT_VERSION) --fix || true
+	npx --yes prettier@$(PRETTIER_VERSION) --prose-wrap preserve --embedded-language-formatting off --write $(MD_FILES)
+	npx --yes markdownlint-cli2@$(MDLINT_VERSION)
+
+.PHONY: linkcheck
+linkcheck: ## Check links and #anchors in Markdown files with lychee (needs Docker)
+	docker run --rm -e GITHUB_TOKEN -v "$(CURDIR):/input" -w /input $(LYCHEE_IMAGE) --no-progress $(MD_FILES)
+
+.PHONY: prose
+prose: ## Check Markdown spelling and term casing with Vale (needs Docker)
+	docker run --rm -v "$(CURDIR):/docs" -w /docs $(VALE_IMAGE) $(MD_FILES)
+
+.PHONY: docs-check
+docs-check: mdlint linkcheck prose ## Run all docs checks: mdlint → linkcheck → prose

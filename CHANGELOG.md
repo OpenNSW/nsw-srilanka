@@ -12,12 +12,12 @@ This is the first tagged release of TNSW, and the baseline that later releases a
 
 ### What's in this release
 
-| Component | Artifact |
-| --- | --- |
-| Backend API, including the `otc` CLI | `ghcr.io/opennsw/tnsw-api:0.1.0` |
-| Trader Portal | `ghcr.io/opennsw/tnsw-web:0.1.0` |
-| Schema migrator (16 migrations) | `ghcr.io/opennsw/tnsw-migrate:0.1.0` |
-| Helm chart `lk-tnsw` | `oci://ghcr.io/opennsw/charts/lk-tnsw`, version `0.1.0` |
+| Component                            | Artifact                                                |
+| ------------------------------------ | ------------------------------------------------------- |
+| Backend API, including the `otc` CLI | `ghcr.io/opennsw/tnsw-api:0.1.0`                        |
+| Trader Portal                        | `ghcr.io/opennsw/tnsw-web:0.1.0`                        |
+| Schema migrator (16 migrations)      | `ghcr.io/opennsw/tnsw-migrate:0.1.0`                    |
+| Helm chart `lk-tnsw`                 | `oci://ghcr.io/opennsw/charts/lk-tnsw`, version `0.1.0` |
 
 - Every image is built for `linux/amd64` and `linux/arm64`, with an SBOM and SLSA provenance attached.
 - The API is built on [OpenNSW/core](https://github.com/OpenNSW/core) at `v0.0.0-20260924113947-9d0f524e49ee`.
