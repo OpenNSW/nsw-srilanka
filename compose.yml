@@ -43,6 +43,14 @@ x-cda-config-env: &cda-config-env
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
+# The same for Customs' customs-init and customs-api, on
+# configs/agency/customs/config.docker.yaml.
+x-customs-config-env: &customs-config-env
+  CONFIG_PATH: configs/agency/customs/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+
 services:
   # -------------------------------------------------------------------
   # 1. Shared Infrastructure Database (PostgreSQL)
@@ -501,3 +509,95 @@ services:
     volumes:
       - ./configs/agency/cda/portal-config.js:/usr/share/nginx/html/config.js:ro
       - ./configs/agency/cda/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+
+  # -------------------------------------------------------------------
+  # 9. Customs Agency
+  # -------------------------------------------------------------------
+  # The same backend and trader-app run as Sri Lanka Customs (mode: agency, see
+  # docs/agency.md), next to TNSW, exactly as CDA does above: shared Postgres, Temporal
+  # and IdP, but its own database and Temporal namespace. Config lives in
+  # configs/agency/customs/ (config.docker.yaml for these services). TNSW reaches it at
+  # host.docker.internal:8085, as its services.docker.json "customs" entry already expects.
+
+  # One-shot: creates customs_db on the shared Postgres and the customs Temporal
+  # namespace if missing, then migrates customs_db. Same image as cda-init.
+  customs-init:
+    build:
+      context: .
+      additional_contexts:
+        migrate: service:migrate
+      dockerfile_inline: |
+        FROM postgres:16-alpine
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+        COPY --from=migrate /app/migrations /app/migrations
+        WORKDIR /app
+    container_name: customs-init
+    networks:
+      - nsw-network
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      <<: *customs-config-env
+      PGHOST: db
+      PGUSER: ${DB_USERNAME:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'customs_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE customs_db'
+        temporal operator namespace describe --namespace customs --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace customs --address temporal:7233
+        migrate up
+    depends_on:
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: "no"
+
+  customs-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: customs-api
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: the Customs portal's config and TNSW's "customs" service entry both call 8085.
+      - "8085:8080"
+    volumes:
+      - ./configs:/app/configs:ro
+      # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
+      # clone's customs-v2/ dir.
+      - ${CUSTOMS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/customs-v2}:/app/artifacts:ro
+    environment:
+      # Every server setting lives in configs/agency/customs/config.docker.yaml (see
+      # x-customs-config-env); what follows is only what the file cannot hold.
+      <<: *customs-config-env
+      # Same gate as the api service: insecure TLS is honored only in development.
+      APP_ENV: ${APP_ENV:-}
+      # Customs -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_CUSTOMS_TO_NSW_SECRET: ${M2M_CUSTOMS_TO_NSW_SECRET:-1234}
+    depends_on:
+      customs-init:
+        condition: service_completed_successfully
+      thunderid:
+        condition: service_started
+
+  customs-portal:
+    build:
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: customs-web
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
+      # OGA_PORTAL_APP_CUSTOMS are both on 5178.
+      - "5178:8080"
+    volumes:
+      - ./configs/agency/customs/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/customs/branding.json:/usr/share/nginx/html/configs/branding.json:ro
