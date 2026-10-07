@@ -4,17 +4,17 @@ Configuration to run this backend as Sri Lanka Customs, next to TNSW on the same
 machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
 Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
-| File                   | Purpose                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8085, own database, Temporal namespace, artifacts, authn                                                          |
-| `config.docker.yaml`   | `config.yaml` for the `customs-init` and `customs-api` containers: Postgres, Temporal and the IdP by container hostname                                                |
-| `customs.env`          | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                     |
-| `catalog.json`         | `officer` → the `Customs Officer` role Customs officers hold in the IdP                                                                                                |
-| `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/tasks/{taskId}`), and where storage is proxied, as `CUSTOMS_TO_NSW` |
-| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                  |
-| `services.docker.json` | `services.json` for the `customs-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                       |
-| `portal-config.js`     | Runtime config of the `customs-portal` container: the trader-app in agency mode                                                                                        |
-| `branding.json`        | Branding for the `customs-portal` container, as the Customs officer portal had it in nsw-agency                                                                        |
+| File                   | Purpose                                                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8085, own database, Temporal namespace, artifacts, authn                                                                     |
+| `config.docker.yaml`   | `config.yaml` for the `customs-init` and `customs-api` containers: Postgres, Temporal and the IdP by container hostname                                                           |
+| `customs.env`          | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                                |
+| `catalog.json`         | `officer` → the `Customs Officer` role Customs officers hold in the IdP                                                                                                           |
+| `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `CUSTOMS_TO_NSW` |
+| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                             |
+| `services.docker.json` | `services.json` for the `customs-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
+| `portal-config.js`     | Runtime config of the `customs-portal` container: the trader-app in agency mode                                                                                                   |
+| `branding.json`        | Branding for the `customs-portal` container, as the Customs officer portal had it in nsw-agency                                                                                   |
 
 Customs keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open, upload and delete the documents in TNSW's storage, calling

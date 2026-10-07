@@ -4,17 +4,17 @@ Configuration to run this backend as the Coconut Development Authority, next to
 TNSW on the same machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
 Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
-| File                   | Purpose                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn                                                      |
-| `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                    |
-| `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                 |
-| `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP                                                                                                    |
-| `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/tasks/{taskId}`), and where storage is proxied, as `CDA_TO_NSW` |
-| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                              |
-| `services.docker.json` | `services.json` for the `cda-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                       |
-| `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                        |
-| `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                        |
+| File                   | Purpose                                                                                                                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn                                                                 |
+| `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                               |
+| `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                            |
+| `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP                                                                                                               |
+| `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `CDA_TO_NSW` |
+| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                         |
+| `services.docker.json` | `services.json` for the `cda-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
+| `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                                   |
+| `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                                   |
 
 CDA keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open, upload and delete the documents in TNSW's storage, calling

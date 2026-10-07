@@ -105,7 +105,7 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
    it `STARTED`.
    The payload is seeded as the `notification` variable, and the `callbackToken`, when
    the caller sent one, as the `callbackToken` variable. Both are recorded on the row,
-   so a retried start runs with the first inject's values. A workflow sends its
+   so a retried start runs with the values from the first inject. A workflow sends its
    decision back with it on the caller's `POST /api/v1/callbacks/{callbackToken}`: the
    token names the caller's step, so a late or repeated decision cannot complete a
    later one.

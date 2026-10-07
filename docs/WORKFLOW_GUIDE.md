@@ -292,7 +292,7 @@ Declares if the task is completed by the applicant (`USER_INPUT`) or another age
 }
 ```
 
-An `EXTERNAL_REVIEW` step POSTs `{taskCode, taskId, callbackToken, consignmentId, serviceUrl, data}` to the service's `path` and parks in `QUEUED_EXTERNALLY`. The reviewer calls back on `POST {serviceUrl}/{callbackToken}` (`/api/v1/callbacks/{token}`) with `{"command": "...", "payload": {...}}`. The token is opaque: it names this one step, so a callback that arrives after the task has moved on gets `409` instead of completing a later step, and it doubles as the reviewer's idempotency key. A re-dispatch of the same task (e.g. after an amendment) carries a new token.
+An `EXTERNAL_REVIEW` step sends `{taskCode, taskId, callbackToken, consignmentId, serviceUrl, data}` in a POST to the service's `path` and parks in `QUEUED_EXTERNALLY`. The reviewer calls back on `POST {serviceUrl}/{callbackToken}` (`/api/v1/callbacks/{token}`) with `{"command": "...", "payload": {...}}`. The token is opaque: it names this one step, so a callback that arrives after the task has moved on gets `409` instead of completing a later step, and it is also the key the reviewer uses to recognize a repeated dispatch. A re-dispatch of the same task (e.g. after an amendment) carries a new token.
 
 ### Reference IDs (`REFID_GENERATOR`)
 
