@@ -2,8 +2,8 @@ github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7Oputl
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
 github.com/LSFLK/argus/pkg/audit v0.1.0 h1:UjPm6Bsa0r/4mi9XtN2Q8lHsBrQmboyxuOLoYanTnao=
 github.com/LSFLK/argus/pkg/audit v0.1.0/go.mod h1:4VVVpK0P7nFEQLP+QU44rezK+Ds9PzE42ZyKw07abl0=
-github.com/OpenNSW/core v0.0.0-20261005073626-57f79fc19e01 h1:nmLT30if8zcr1eAUBF4WJW2lYbc2EWZW/dzWbWxbWuI=
-github.com/OpenNSW/core v0.0.0-20261005073626-57f79fc19e01/go.mod h1:yDrguZ4Z42ORsITRr5ymdw7DYC2jSTvbyJ1DQEvg1to=
+github.com/OpenNSW/core v0.0.0-20261007033506-474396a8334a h1:r+edjPtnUeP5kFedzEkCovYwFw0wXQZ8uSu47ewCKNE=
+github.com/OpenNSW/core v0.0.0-20261007033506-474396a8334a/go.mod h1:dY/MeimPd77z5XVQe178yBU5QwDvxr43W9vGzncuBAk=
 github.com/OpenNSW/core/authn v0.3.0 h1:3IuKH2IQm0/GYoDBJFzVMSVWvzVJPLOnmxScHL76B+8=
 github.com/OpenNSW/core/authn v0.3.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
@@ -20,8 +20,8 @@ github.com/OpenNSW/core/notifications v0.0.0-20261006123626-59c34652f2a9 h1:qK7R
 github.com/OpenNSW/core/notifications v0.0.0-20261006123626-59c34652f2a9/go.mod h1:zq+kjDUCYiIlxr3to2pBWJ4Drs4OE/jrWVNmQIyF3n8=
 github.com/OpenNSW/core/pagination v0.1.0 h1:xLpgHAdgYxzJkXXBtQoTMxMxsjZZ9RNYvJOoQC0oddA=
 github.com/OpenNSW/core/pagination v0.1.0/go.mod h1:UdpPJO/wMu2mv1nCJ1G1X0WEvFso8hh9OpDz2meA/Ts=
-github.com/OpenNSW/core/payment v0.2.1-0.20261007023824-886e51c95f12 h1:Yc80slOJgkM9B0cFdg910bKgXj5UpqwjfhqaoriV+R8=
-github.com/OpenNSW/core/payment v0.2.1-0.20261007023824-886e51c95f12/go.mod h1:wQfDe6O4p4gu+ndylpXwLdzLWIovCSh8fLfbHqjYorg=
+github.com/OpenNSW/core/payment v0.2.1-0.20261007033506-474396a8334a h1:T4DVYDhH+uyZmbIXK3FehN9BHdxv2j6u+G/IpDKV+gI=
+github.com/OpenNSW/core/payment v0.2.1-0.20261007033506-474396a8334a/go.mod h1:wQfDe6O4p4gu+ndylpXwLdzLWIovCSh8fLfbHqjYorg=
 github.com/OpenNSW/core/refid v0.2.0 h1:g/ZgVS9iFqvQjK8EynIw3OpBVEwgmb1pzzBY4fE0OIY=
 github.com/OpenNSW/core/refid v0.2.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
 github.com/OpenNSW/core/remote v0.8.0 h1:Ot44DtkEtzqKffy77EI0S6BCH1xDspQ2y2lSFKcZpPg=
@@ -188,8 +188,8 @@ golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJ
 golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20210220032951-036812b2e83c/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
-golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
-golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
+golang.org/x/sync v0.23.0 h1:KameEIfc1IkluZyXWLn39Wd4tURc6GbCiISGiZm2bQk=
+golang.org/x/sync v0.23.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
 golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
