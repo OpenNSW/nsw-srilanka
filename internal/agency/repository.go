@@ -35,13 +35,16 @@ const (
 // passed to the engine, so it is also the RootWorkflowID of every task spawned under it.
 // CaseID groups it with the other workflows working on the same case.
 type Workflow struct {
-	TaskID    string          `gorm:"column:task_id" json:"taskId"`
-	TaskCode  string          `gorm:"column:task_code" json:"taskCode"`
-	CaseID    string          `gorm:"column:case_id" json:"caseId"`
-	Status    Status          `gorm:"column:status" json:"status"`
-	Payload   json.RawMessage `gorm:"column:payload" json:"payload,omitempty"`
-	CreatedAt time.Time       `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt time.Time       `gorm:"column:updated_at" json:"updatedAt"`
+	TaskID   string `gorm:"column:task_id" json:"taskId"`
+	TaskCode string `gorm:"column:task_code" json:"taskCode"`
+	CaseID   string `gorm:"column:case_id" json:"caseId"`
+	Status   Status `gorm:"column:status" json:"status"`
+	// CallbackToken is the token the injecting system expects the decision back on.
+	// Not echoed in responses: only the workflow needs it.
+	CallbackToken string          `gorm:"column:callback_token" json:"-"`
+	Payload       json.RawMessage `gorm:"column:payload" json:"payload,omitempty"`
+	CreatedAt     time.Time       `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt     time.Time       `gorm:"column:updated_at" json:"updatedAt"`
 }
 
 // Repository persists injected workflows.
@@ -77,8 +80,8 @@ func (r *repository) Record(ctx context.Context, w Workflow) error {
 		ON CONFLICT (id) DO NOTHING
 	`
 	const insertWorkflow = `
-		INSERT INTO agency_workflow (task_id, task_code, case_id, status, payload, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, now(), now())
+		INSERT INTO agency_workflow (task_id, task_code, case_id, status, callback_token, payload, created_at, updated_at)
+		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, now(), now())
 		ON CONFLICT (task_id) DO NOTHING
 	`
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -86,7 +89,7 @@ func (r *repository) Record(ctx context.Context, w Workflow) error {
 		if caseResult.Error != nil {
 			return caseResult.Error
 		}
-		result := tx.Exec(insertWorkflow, w.TaskID, w.TaskCode, w.CaseID, StatusStarting, w.Payload)
+		result := tx.Exec(insertWorkflow, w.TaskID, w.TaskCode, w.CaseID, StatusStarting, w.CallbackToken, w.Payload)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -155,7 +158,8 @@ func (r *repository) MarkStarted(ctx context.Context, taskID string) error {
 
 func (r *repository) Get(ctx context.Context, taskID string) (*Workflow, error) {
 	const q = `
-		SELECT task_id, task_code, case_id, status, payload, created_at, updated_at
+		SELECT task_id, task_code, case_id, status, COALESCE(callback_token, '') AS callback_token,
+			payload, created_at, updated_at
 		FROM agency_workflow
 		WHERE task_id = ?
 	`
