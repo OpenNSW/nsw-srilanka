@@ -194,7 +194,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, err
 	}
 	tm := task.Manager
-	paymentService.SetTaskCompleter(activeStepCompleter{manager: tm, store: task.Store})
+	paymentService.SetTaskCompleter(tm)
 
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
@@ -618,23 +618,6 @@ type taskStack struct {
 	Runner    workflow.TemporalManager
 	Store     *gormstore.TaskStore
 	Assembler *zoneview.ZoneViewAssembler
-}
-
-// activeStepCompleter adapts the task manager to core payment's TaskCompleter,
-// which names only the task: it completes whichever step the task is on now.
-// TODO: drop this once core payment carries the step (or the callback token)
-// from dispatch to its webhook, so a late webhook can't complete a later step.
-type activeStepCompleter struct {
-	manager *orchestrator.TaskManager
-	store   *gormstore.TaskStore
-}
-
-func (c activeStepCompleter) CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error {
-	record, ok := c.store.GetTask(ctx, taskID)
-	if !ok {
-		return fmt.Errorf("task %s not found", taskID)
-	}
-	return c.manager.CompleteTaskStep(ctx, taskID, record.ActiveStepID, payload)
 }
 
 // ownershipResolver adapts the consignment service to

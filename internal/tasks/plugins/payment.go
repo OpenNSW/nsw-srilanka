@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/payment"
+	coreplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/shopspring/decimal"
 )
 
@@ -96,12 +97,19 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// omits something the selected gateway requires — the service asks the
 	// gateway to vet the metadata before it persists anything, so the task_code
 	// wrapped in below still names the artifact that has to be fixed.
+	// The settlement completes exactly this step: the payment service hands the
+	// token back to the task manager when the webhook arrives.
+	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
+	if err != nil {
+		return fmt.Errorf("payment: %w", err)
+	}
 	resp, err := p.paymentService.CreateCheckoutSession(ctx.Context, payment.CreateCheckoutRequest{
-		GatewayID: selectedMethod,
-		Amount:    amount,
-		Currency:  currency,
-		ExpiresAt: time.Now().Add(24 * time.Hour), // Aligned with typical TTL
-		Metadata:  buildPaymentMetadata(ctx.Record.TaskID, cfg, selectedMethod),
+		GatewayID:     selectedMethod,
+		Amount:        amount,
+		Currency:      currency,
+		ExpiresAt:     time.Now().Add(24 * time.Hour), // Aligned with typical TTL
+		Metadata:      buildPaymentMetadata(ctx.Record.TaskID, cfg, selectedMethod),
+		CallbackToken: callbackToken,
 	})
 	if err != nil {
 		return fmt.Errorf("payment: failed to create checkout session (task_code %q): %w", cfg.TaskCode, err)
