@@ -346,9 +346,11 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Showing the IDs:** the step doesn't write the namespace a user's own form reads, e.g. the one its `USER_INPUT` step fills. So a form section reading that namespace shows the IDs only once a later step maps them back in. To show them straight away, add a `MARKDOWN` section with `"dataKey": "refid"`.
 
 ### Print-ready HTML documents (`HTML_DOCUMENT_GENERATOR`)
+
 Renders a permit, licence, certificate or receipt as print-ready HTML with [`htmlgen`](https://github.com/OpenNSW/core/tree/main/htmlgen), stores it, and records its storage key. The step is synchronous. Adding one takes four pieces:
 
 1. **The template** (`<task-folder>/permit.gohtml`): the document's HTML with `html/template` actions in it. It addresses the node's inputs by name and formats them with htmlgen's helpers (`decimal`, `date`, `lookup`, …); every value is escaped for where it is printed.
+
    ```html
    <!DOCTYPE html>
    <html><head><meta charset="utf-8"><style>@page { size: A4; margin: 12mm; }</style></head>
@@ -359,7 +361,9 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
      <p>Issued on {{ date .issued_at "2006-01-02" "02/01/2006" }}</p>
    </body></html>
    ```
+
 2. **The subtask template** (`<task-folder>/permit_document.json`): names the template and the stored file.
+
    ```json
    {
      "id": "npqs-permit--generate-document",
@@ -368,7 +372,9 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
      "plugin_properties": { "template_id": "npqs-permit--html", "filename": "permit.html" }
    }
    ```
+
 3. **The workflow node** (`<task-folder>/workflow.json`): its `input_mapping` assembles everything the document prints, and its `output_mapping` takes the key out. Put the issue date in the inputs too; templates have no clock.
+
    ```json
    {
      "id": "generate_permit_document",
@@ -382,7 +388,9 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
      "output_mapping": { "permit_doc.key": "permit_document_key" }
    }
    ```
+
 4. **Two manifest rows**: the template's kind is `html_template` — the HTML file itself, not JSON.
+
    ```json
    { "id": "npqs-permit--generate-document", "kind": "subtask_template", "version": "", "path": "npqs/<task-folder>/permit_document.json" },
    { "id": "npqs-permit--html", "kind": "html_template", "version": "", "path": "npqs/<task-folder>/permit.gohtml" }
@@ -392,7 +400,6 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 - **Validation:** the template is checked with `htmlgen.Validate` each time it is loaded, so a syntax error or an unescapable construct fails the step rather than producing a broken document. A value html/template refuses (a `javascript:` URL in an `href`) also fails the step.
 - **Filename:** names the stored document, not the template: it defaults to `<template_id>.html`, and `.html` is added when missing. Templates use `.gohtml`, as NSW-Agency's certificate templates do, so editors highlight the template actions.
 - **Re-runs:** the step renders and stores a new document every time it runs, so a loop that brings it back after the inputs changed records the document for the new data. A Temporal retry can leave an extra copy in storage that nothing refers to; superseded files are not deleted.
-
 
 ### JSONForm Schemas (`*_jsonform.json`)
 
