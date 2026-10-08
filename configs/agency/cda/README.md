@@ -66,11 +66,11 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 CDA for this deployment, on the `CDA API` resource server
 (`https://api.cda.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                              | Client               | Grant                                                                                                                      |
-| ----------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`         |
-| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on CDA's parked steps                             |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`/`delete` |
+| Caller                              | Client               | Grant                                                                                                              |
+| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
+| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on CDA's parked steps                     |
+| CDA's decision callback and storage | `CDA_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`  |
 
 TNSW's `services.json` `cda` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.cda.nsw-agency.local` (see `configs/services*.example.json`).
