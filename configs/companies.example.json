@@ -6,14 +6,25 @@
       "ouHandle": "adam-pvt-ltd",
       "hasCha": true,
       "data": {
-        "address": "No. 45, Galle Road, Colombo 03, Sri Lanka",
         "br_no": "PV-00123456",
         "vat_no": "VAT-409123456-7000",
         "tin_no": "134256789",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "No. 45, Galle Road, Colombo 03, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345010",
+        "fax": "+94112345011",
+        "web": "https://www.adam-pvt-ltd.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000002"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -24,14 +35,25 @@
       "ouHandle": "edward-pvt-ltd",
       "hasCha": true,
       "data": {
-        "address": "No. 78, Negombo Road, Wattala, Sri Lanka",
         "br_no": "PV-00876543",
         "vat_no": "VAT-409876543-7000",
         "tin_no": "987654321",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "No. 78, Negombo Road, Wattala, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345020",
+        "fax": "+94112345021",
+        "web": "https://www.edward-pvt-ltd.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000003"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -42,14 +64,25 @@
       "ouHandle": "cda-company",
       "hasCha": true,
       "data": {
-        "address": "Coconut Cultivation Board Building, Colombo 05, Sri Lanka",
         "br_no": "PV-00123456",
         "vat_no": "VAT-409123456-7000",
         "tin_no": "134256789",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "Coconut Cultivation Board Building, Colombo 05, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345030",
+        "fax": "+94112345031",
+        "web": "https://www.cda.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000001"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -60,14 +93,25 @@
       "ouHandle": "fcau-company",
       "hasCha": true,
       "data": {
-        "address": "Food Control Administration Unit, Colombo 05, Sri Lanka",
         "br_no": "PV-00876543",
         "vat_no": "VAT-409876543-7000",
         "tin_no": "987654321",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "Food Control Administration Unit, Colombo 05, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345040",
+        "fax": "+94112345041",
+        "web": "https://www.fcau.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000004"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -78,14 +122,25 @@
       "ouHandle": "npqs-company",
       "hasCha": true,
       "data": {
-        "address": "National Plant Quarantine Service, Katunayake, Sri Lanka",
         "br_no": "PV-00000001",
         "vat_no": "VAT-409000000-7000",
         "tin_no": "000000001",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "National Plant Quarantine Service, Katunayake, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345050",
+        "fax": "+94112345051",
+        "web": "https://www.npqs.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000005"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -96,14 +151,25 @@
       "ouHandle": "govtech-company",
       "hasCha": true,
       "data": {
-        "address": "Independence Avenue, Colombo 07, Sri Lanka",
         "br_no": "PV-00000002",
         "vat_no": "VAT-409000001-7000",
         "tin_no": "000000002",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "Independence Avenue, Colombo 07, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345060",
+        "fax": "+94112345061",
+        "web": "https://www.govtech.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000006"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -114,14 +180,25 @@
       "ouHandle": "piu-company",
       "hasCha": true,
       "data": {
-        "address": "Project Implementation Unit, Colombo 01, Sri Lanka",
         "br_no": "PV-00000004",
         "vat_no": "VAT-409000003-7000",
         "tin_no": "000000004",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "Project Implementation Unit, Colombo 01, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345070",
+        "fax": "+94112345071",
+        "web": "https://www.piu.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000007"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
@@ -132,14 +209,25 @@
       "ouHandle": "sltb-company",
       "hasCha": true,
       "data": {
-        "address": "Sri Lanka Tea Board, Colombo 02, Sri Lanka",
         "br_no": "PV-00000005",
         "vat_no": "VAT-409000004-7000",
         "tin_no": "000000005",
+        "tin_valid_from": "2020-01-01T00:00:00.000000",
+        "tin_valid_to": "2030-12-31T23:59:59.999999",
+        "address": "Sri Lanka Tea Board, Colombo 02, Sri Lanka",
+        "address2": "",
+        "address3": "",
+        "address4": "",
+        "tel": "+94112345080",
+        "fax": "+94112345081",
+        "web": "https://www.sltb.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
             "registration_number": "CDA-EXP-000008"
+          },
+          "customs": {
+            "status": 1
           }
         }
       }
