@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
-import { createAjv, type JsonSchema } from '@jsonforms/core'
+import type { JsonSchema } from '@jsonforms/core'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Callout } from '@radix-ui/themes'
 import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
@@ -8,11 +8,9 @@ import { useTranslation } from 'react-i18next'
 import type { Handle, ZoneRendererProps } from '@/features/zone/types'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
+import { createFormErrorTranslator, formAjv } from './formAjv'
 
-// useDefaults: true lets Ajv populate schema `default` values into the data
-// during validation, so defaulted fields (e.g. a single-option country field)
-// are pre-filled without the trader touching them.
-const ajv = createAjv({ useDefaults: true })
+const ajv = formAjv
 
 // useDefaults mutates the object it validates, in place, which React cannot
 // observe: a memo keyed on that object's reference (requiredErrors) would
@@ -137,6 +135,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const validationMode: 'ValidateAndShow' | 'ValidateAndHide' = showErrors ? 'ValidateAndShow' : 'ValidateAndHide'
 
+  const formI18n = useMemo(() => ({ translateError: createFormErrorTranslator(payload.schema) }), [payload.schema])
+
   // Catch dataSeed up to data, synchronously, exactly when additionalErrors
   // or validationMode is about to change — the only moments JsonForms's
   // resync effect actually fires (see EMPTY_ADDITIONAL_ERRORS above).
@@ -225,6 +225,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           readonly={!interactive}
           additionalErrors={stableAdditionalErrors}
           validationMode={validationMode}
+          i18n={formI18n}
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
             setData(next)
