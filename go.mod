@@ -22,6 +22,7 @@ require (
 	github.com/OpenNSW/core/storage v0.3.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
