@@ -22,7 +22,6 @@ func TestRoutes(t *testing.T) {
 	}{
 		UploadRoute:   {http.MethodPost, "/api/v1/storage"},
 		DownloadRoute: {http.MethodGet, "/api/v1/storage/{key}"},
-		DeleteRoute:   {http.MethodDelete, "/api/v1/storage/{key}"},
 	}
 
 	mux := http.NewServeMux()
@@ -61,13 +60,19 @@ func TestRoutes(t *testing.T) {
 	}{
 		{http.MethodPost, "/api/v1/storage", UploadRoute},
 		{http.MethodGet, path.Join("/api/v1/storage", file), DownloadRoute},
-		{http.MethodDelete, path.Join("/api/v1/storage", file), DeleteRoute},
 		{http.MethodPut, path.Join("/api/v1/storage", file, "content"), "PUT /api/v1/storage/{key}/content"},
 		{http.MethodGet, path.Join("/api/v1/storage", file, "content"), "GET /api/v1/storage/{key}/content"},
 	} {
 		if _, got := mux.Handler(httptest.NewRequest(tc.method, tc.target, nil)); got != tc.wantPattern {
 			t.Errorf("%s %s routes to %q, want %q", tc.method, tc.target, got, tc.wantPattern)
 		}
+	}
+
+	// Delete is not mounted: the path exists for GET, so DELETE is refused.
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodDelete, path.Join("/api/v1/storage", file), nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("DELETE %s: status %d, want %d", path.Join("/api/v1/storage", file), rec.Code, http.StatusMethodNotAllowed)
 	}
 }
 

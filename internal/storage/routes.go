@@ -17,6 +17,8 @@ const (
 	UploadRoute = "POST /api/v1/storage"
 	// DownloadRoute returns a time-limited URL to download the file from.
 	DownloadRoute = "GET /api/v1/storage/{key}"
-	// DeleteRoute removes a stored file.
-	DeleteRoute = "DELETE /api/v1/storage/{key}"
 )
+
+// There is deliberately no delete route: nothing uses one, and deleting by
+// raw key would let any holder of the scope remove any file. If it returns,
+// expect it to be admin-only and to take the same file tokens as download.

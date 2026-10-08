@@ -17,7 +17,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `branding.json`        | Branding for the `customs-portal` container, as the Customs officer portal had it in nsw-agency                                                                                   |
 
 Customs keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
-service, so officers open, upload and delete the documents in TNSW's storage, calling
+service, so officers open and upload the documents in TNSW's storage, calling
 TNSW as `CUSTOMS_TO_NSW`. TNSW applies its own upload limits.
 
 ## Run with Docker Compose
@@ -71,7 +71,7 @@ seeds Customs for this deployment, on the `Customs API` resource server
 | -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | Officer `customs_officer`              | `OGA_PORTAL_APP_CUSTOMS` | `Customs Officer` role (via `Customs Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
 | TNSW injecting                         | `NSW_TO_CUSTOMS`         | `NswToCustomsM2M` role: `nsw:workflow:inject`                                                                              |
-| Customs' decision callback and storage | `CUSTOMS_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`delete` on TNSW                                         |
+| Customs' decision callback and storage | `CUSTOMS_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                  |
 
 TNSW's `services.json` `customs` entry requests `nsw:workflow:inject` with
 `resource=https://api.customs.nsw-agency.local` (see `configs/services*.example.json`).
