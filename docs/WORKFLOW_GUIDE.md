@@ -344,6 +344,51 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Not configured:** if the deployment has no `refid.issuers`, the step fails.
 - **Showing the IDs:** the step doesn't write the namespace a user's own form reads, e.g. the one its `USER_INPUT` step fills. So a form section reading that namespace shows the IDs only once a later step maps them back in. To show them straight away, add a `MARKDOWN` section with `"dataKey": "refid"`.
 
+### Payments (`PAYMENT`)
+
+Opens a checkout for a fee with the selected gateway and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. Show the checkout with a `MARKDOWN` or `PAYMENT` section that reads `<output_namespace>` and is visible in `PENDING_PAYMENT`.
+
+```json
+{
+  "id": "cda-pay-app-fee--payment",
+  "task_type": "PAYMENT",
+  "output_namespace": "payment",
+  "plugin_properties": {
+    "task_code": "cda_app_fee_payment_v1",
+    "service_name": "CDA Application Fee",
+    "amount": "2000.00",
+    "currency": "LKR",
+    "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
+    "reference": {
+      "issuer": "CDA",
+      "id_type": "fee_payment_ref",
+      "params": { "exporterId": "/exporter_id" },
+      "values": { "mainCategory": "01", "subCategory": "00002" }
+    }
+  }
+}
+```
+
+| Field              | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task_code`        | Names the fee in the transaction's metadata and in errors.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `service_name`     | Shown with the checkout. Defaults to `Payment`.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `amount`           | The amount to charge when the step has no `amount` input.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `currency`         | Required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `gateway_metadata` | Values the gateway needs for this fee, stored with the transaction. GovPay needs `govpay_subinst_id` and `govpay_service_id`. The keys `task_id`, `task_code`, `method_id`, `reference_issuer`, `reference_id_type` and those starting with `reference_param.` are reserved.                                                                                                                                                                                                       |
+| `reference`        | Optional. The format of the fee's payment reference, from the `refid` section of `configs/config.yaml`: its `issuer` and `id_type`, and the params it expects. `params` maps a param to an absolute JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, for values that vary per payment. `values` gives a param its value as is, for codes fixed per fee. A param may be named in only one of the two. A fee without it takes the default format, `TNSW`/`payment_ref`. |
+
+**Inputs:** `selected_method`, the gateway to pay through (default `govpay`), and `amount`, which overrides the configured amount.
+
+**Outputs:** while the payment is pending, `<output_namespace>` holds `reference_number`, `amount`, `currency`, `selected_method`, `checkout_url`, `instructions`, `flow_type`, `service_name`, `service_type` and `session_id`. When the payment settles, the namespace is replaced with `payment_status`, `reference_number`, `amount` and `currency`.
+
+**Payment reference:**
+
+- **What the payer quotes:** `reference_number` is the reference the payer pays against, generated from the fee's `reference` format or the default.
+- **Format and params travel with the checkout:** the plugin resolves the params and passes the format to the payment service in the checkout's metadata, which is stored with the transaction.
+- **Generated as the checkout opens:** a missing param, or a value the format rejects, fails the step.
+- **Unique:** a reference a transaction already holds fails the step with `payment.ErrDuplicateReference`, and the step's retry generates the next one.
+
 ### JSONForm Schemas (`*_jsonform.json`)
 
 Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and `uiSchema` block:

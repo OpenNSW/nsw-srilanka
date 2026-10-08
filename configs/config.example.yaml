@@ -4,7 +4,8 @@
 # defaults: every setting the server needs is written here, and one left out
 # (or empty) stops the server at startup rather than running on a value the
 # code chose. Only the optional sections (audit, refid, the inactive storage
-# and artifactLoader backends) may be left out.
+# and artifactLoader backends) may be left out; payments and REFID_GENERATOR
+# steps need refid.
 #
 # This is the committed template for a native run (`go run ./cmd/server`,
 # `make test-e2e`), pointed at the `make deps` services on localhost;
@@ -227,54 +228,61 @@ artifactLoader:
 # the officer role instead of trader/CHA. See docs/agency.md.
 mode: tnsw
 
-# Reference ID formats for the REFID_GENERATOR task plugin, in the schema of
-# github.com/OpenNSW/core/refid (see its example_config.yaml for every segment
-# option). A subtask template names each field to fill, by JSON Pointer into
-# the step's inputs, and the format to generate it from; the inputs, with the
-# IDs filled in, land at its output_namespace:
+# Reference ID formats, in the schema of github.com/OpenNSW/core/refid (see its
+# example_config.yaml for every segment option). Two kinds of steps use them.
+#
+# Payments: each checkout's reference, the one the payer pays against, comes
+# from a format here. A PAYMENT fee names its own in plugin_properties.reference;
+# every other fee takes TNSW/payment_ref.
+#
+# REFID_GENERATOR: a subtask template names each field to fill, by JSON Pointer
+# into the step's inputs, and the format to generate it from; the inputs, with
+# the IDs filled in, land at its output_namespace. For a format ACME/order:
 #
 #   {"task_type": "REFID_GENERATOR", "output_namespace": "refid",
 #    "plugin_properties": {"ids": [
-#      {"path": "/reference_id", "issuer": "TNSW", "id_type": "consignment_ref"}]}}
+#      {"path": "/order/order_ref", "issuer": "ACME", "id_type": "order"}]}}
 #
 # "each" fills a field in every element of an array, and "params" names where
-# each param a format expects (a list segment's `param`, or a `{name}` in a
-# scope key) is read from; see docs/WORKFLOW_GUIDE.md. With no issuers, the
-# plugin fails every task that uses it.
+# each param a format expects (a list or param segment's `param`, or a
+# `{name}` in a scope key) is read from; see docs/WORKFLOW_GUIDE.md. A step
+# fails if it names a format missing here.
 refid:
-  issuers: []
-  # issuers:
-  #   - issuer: TNSW
-  #     formats:
-  #       # consignment_ref — resets daily per port. Produces: TNSW-CMB-20260930-000042
-  #       - idType: consignment_ref
-  #         segments:
-  #           - type: literal
-  #             value: "TNSW-"
-  #           - type: list
-  #             list: port
-  #             param: portCode          # input_mapping must supply portCode
-  #           - type: literal
-  #             value: "-"
-  #           - type: date
-  #             layout: "20060102"       # Go reference-date layout, UTC
-  #           - type: literal
-  #             value: "-"
-  #           - type: sequence
-  #             sequence:
-  #               scopeKey: "{issuer}:{idType}:{portCode}:{yyyyMMdd}"
-  #               padding: 6
-  #
-  #       # voucher_code — 8 random characters, unique per id type. Produces: TNSW-VCH-7K2QQXAB
-  #       - idType: voucher_code
-  #         segments:
-  #           - type: literal
-  #             value: "TNSW-VCH-"
-  #           - type: random
-  #             random:
-  #               scopeKey: "{issuer}:{idType}"
-  #               charset: alphanumeric  # numeric | alpha | alphanumeric
-  #               length: 8
-  #
-  # lists:
-  #   port: [CMB, HBT]
+  issuers:
+    - issuer: TNSW
+      formats:
+        # payment_ref — the reference a payer pays against, for fees without a
+        # format of their own; unique per format. Produces: TNSW7K2QQXAB
+        - idType: payment_ref
+          segments:
+            - type: literal
+              value: "TNSW"
+            - type: random
+              random:
+                scopeKey: "{issuer}:{idType}"
+                charset: alphanumeric  # numeric | alpha | alphanumeric
+                length: 8
+
+    - issuer: CDA
+      formats:
+        # fee_payment_ref — a CDA fee's payment reference: the exporter's CDA
+        # registration number (company data agencies.cda.registration_number),
+        # the main service category (01 certificate charges, 02 export income)
+        # and the sub service category (e.g. 00002 quality certificate fee),
+        # which each fee fixes in its reference values, then a sequence counted
+        # per exporter and fee. Produces: 000201000020001
+        - idType: fee_payment_ref
+          segments:
+            - type: param
+              param: exporterId
+              pattern: "[0-9]{4}"
+            - type: param
+              param: mainCategory
+              pattern: "[0-9]{2}"
+            - type: param
+              param: subCategory
+              pattern: "[0-9]{5}"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{exporterId}:{mainCategory}:{subCategory}"
+                padding: 4
