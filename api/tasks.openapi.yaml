@@ -97,7 +97,8 @@ paths:
         Each `payload` field the task's render config declares under `files`
         must hold a file reference issued to the caller, from an upload or
         the task's zone view; the stored value it stands for is what gets
-        stored. For now, a value that is not a reference is stored as sent.
+        stored. A value that is not a reference, such as a raw storage key,
+        is refused with 400.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
@@ -119,8 +120,9 @@ paths:
         '400':
           description: |
             Missing task or step ID, malformed JSON, unexpected trailing data,
-            a missing/empty `command`, or a `payload` that sets the reserved
-            `__command` key.
+            a missing/empty `command`, a `payload` that sets the reserved
+            `__command` key, or a declared file field holding a value that is
+            not a file reference.
           content:
             application/json:
               schema:
@@ -217,8 +219,9 @@ paths:
         '400':
           description: |
             A malformed token, malformed JSON, unexpected trailing data, a
-            missing/empty `command`, or a `payload` that sets the reserved
-            `__command` key.
+            missing/empty `command`, a `payload` that sets the reserved
+            `__command` key, or a declared file field holding a value that is
+            not a file reference.
           content:
             application/json:
               schema:
