@@ -212,10 +212,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "make tidy exited $LASTEXITCODE" }
           git diff --exit-code go.mod go.sum
 
-      # The recipe is a Unix shell script (`test`). cmd.exe has no branch for
-      # it yet, so this check runs on Git Bash and UNIX only.
       - name: make migration scaffolds a file
-        if: matrix.shell_kind != 'cmd'
         run: |
           make migration name=ci_check
           $new = git ls-files --others --exclude-standard -- migrations | Where-Object { $_ -match 'ci_check' }
@@ -224,7 +221,6 @@ jobs:
       # `make` exits 1 on purpose. The pwsh shell exits the step with
       # $LASTEXITCODE, so record make's code and then clear it.
       - name: make migration without a name fails
-        if: matrix.shell_kind != 'cmd'
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
           $ErrorActionPreference = 'Continue'

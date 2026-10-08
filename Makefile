@@ -21,11 +21,6 @@ endef
 # Lazy (=) so `docker compose config` runs only when `make deps` is invoked.
 ALL_SERVICES  = $(subst $(NL), ,$(shell $(COMPOSE) config --services))
 DEPS_SERVICES = $(filter-out $(APP_SERVICES),$(ALL_SERVICES))
-# Migrator version for `make migration`, read straight out of the Dockerfile's
-# ARG so the two cannot drift apart. Lazy (=, not :=) so the sed runs only when
-# `make migration` expands it, not on every make invocation.
-MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
-
 .DEFAULT_GOAL := help
 
 # ---------------------------------------------------------------------------
@@ -79,6 +74,25 @@ test-e2e: ## Run in-process replay E2E tests (needs `make deps`; stops the api c
 # Migrations (uses the OpenNSW/agency migrate tool; generate needs no database)
 # ---------------------------------------------------------------------------
 
+# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
+# and keep Unix recipes. cmd's find is FIND.EXE, so it cannot walk files, and
+# it has no grep or awk. Defined above `migration` because make picks the
+# recipe when it reads the Makefile.
+ifeq ($(OS),Windows_NT)
+ifeq ($(MSYSTEM),)
+  USE_CMD := 1
+endif
+endif
+
+# Migrator version for `make migration`, read from the Dockerfile ARG so the
+# two cannot drift apart. Lazy (=, not :=) so this runs only when `make
+# migration` expands it. cmd.exe has no sed; PowerShell reads the same line.
+ifdef USE_CMD
+MIGRATE_VERSION = $(shell powershell -NoProfile -Command "(Select-String -Path Dockerfile -Pattern '^ARG MIGRATE_VERSION=(.+)').Matches[0].Groups[1].Value")
+else
+MIGRATE_VERSION = $(shell sed -n 's/^ARG MIGRATE_VERSION=//p' Dockerfile)
+endif
+
 .PHONY: migration
 migration: export GOWORK = off
 # generate touches no database: an empty config leaves the migrator on its
@@ -90,8 +104,13 @@ else
 migration: export CONFIG_PATH = /dev/null
 endif
 migration: ## Scaffold a new migration file: make migration name=<description>
+ifdef USE_CMD
+	@if "$(name)"=="" (echo Usage: make migration name=^<description^> & exit 1)
+	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
+else
 	@test -n "$(name)" || { echo "Usage: make migration name=<description>  (e.g. make migration name=add_users_table)"; exit 1; }
 	@go run github.com/OpenNSW/agency/backend/cmd/migrate@$(MIGRATE_VERSION) generate $(name)
+endif
 
 # ---------------------------------------------------------------------------
 # Lifecycle
@@ -114,16 +133,6 @@ config: ## Print the merged dev config (for debugging)
 	$(COMPOSE) config
 
 # ---------------------------------------------------------------------------
-
-# cmd.exe only: Windows_NT with MSYSTEM unset. Git Bash / MSYS set MSYSTEM
-# and keep Unix recipes. cmd's find is FIND.EXE, so it cannot walk files, and
-# it has no grep or awk. Defined above `help` because make picks the recipe
-# when it reads the Makefile.
-ifeq ($(OS),Windows_NT)
-ifeq ($(MSYSTEM),)
-  USE_CMD := 1
-endif
-endif
 
 .PHONY: help
 help: ## Show this help
