@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/OpenNSW/core/remote"
+	coreplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/store"
 )
 
@@ -56,7 +57,11 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	if submission, ok := ctx.Inputs["submission"]; ok {
 		data = submission
 	}
-	body := buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, p.client.callbackTasksURL())
+	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
+	if err != nil {
+		return fmt.Errorf("external_review: %w", err)
+	}
+	body := buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL())
 
 	slog.Info("taskv2 external_review: dispatching to OGA portal",
 		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "path", cfg.Path, "taskCode", cfg.TaskCode)
@@ -68,16 +73,22 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 }
 
 // buildSubmissionBody constructs the full envelope the OGA portal expects.
+// callbackToken is opaque and names the step this dispatch is for; the reviewer
+// calls back on {serviceUrl}/{callbackToken}, so a late or repeated callback
+// can't complete a later step. It is also the reviewer's idempotency key: the
+// same on every retry of this dispatch, different for every step.
+//
 // data carries only the values declared by the workflow node's input_mapping
 // — not the full record state — so the external reviewer sees the explicit
 // contract surface and nothing more.
-func buildSubmissionBody(record *store.TaskRecord, data any, taskCode *string, callbackURL string) map[string]any {
+func buildSubmissionBody(record *store.TaskRecord, data any, taskCode *string, callbackToken, callbackURL string) map[string]any {
 	if taskCode == nil || *taskCode == "" {
 		taskCode = &record.ActiveTaskTemplateID
 	}
 	return map[string]any{
 		"taskCode":      taskCode,
 		"taskId":        record.TaskID,
+		"callbackToken": callbackToken,
 		"consignmentId": record.RootWorkflowID,
 		"serviceUrl":    callbackURL,
 		"data":          data,

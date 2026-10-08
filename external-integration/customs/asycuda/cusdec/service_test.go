@@ -50,8 +50,8 @@ type mockTaskCompleter struct {
 	mock.Mock
 }
 
-func (m *mockTaskCompleter) CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error {
-	args := m.Called(ctx, taskID, payload)
+func (m *mockTaskCompleter) CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error {
+	args := m.Called(ctx, taskID, stepID, payload)
 	return args.Error(0)
 }
 
@@ -104,7 +104,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("parent-wf-123", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-abc"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-abc", "step-task-abc"))
 
 	expectedPayload := map[string]any{
 		"__command":      "submit",
@@ -112,7 +112,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		"cusdec_number":  "COL/2026/C/9876",
 		"amount_to_pay":  float64(1244),
 	}
-	completer.On("CompleteTaskStep", mock.Anything, "task-abc", expectedPayload).Return(nil)
+	completer.On("CompleteTaskStep", mock.Anything, "task-abc", "step-task-abc", expectedPayload).Return(nil)
 
 	err := service.ProcessIntegrationResult(ctx, req)
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("parent-wf-123", "customs-wait-payment", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-payment-123"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-payment-123", "step-task-payment-123"))
 
 	expectedPayload := map[string]any{
 		"__command":      "submit",
@@ -179,7 +179,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 		"currency":       "LKR",
 		"bank_reference": "84004328",
 	}
-	completer.On("CompleteTaskStep", mock.Anything, "task-payment-123", expectedPayload).Return(nil)
+	completer.On("CompleteTaskStep", mock.Anything, "task-payment-123", "step-task-payment-123", expectedPayload).Return(nil)
 
 	err := service.ProcessEvent(ctx, req)
 	require.NoError(t, err)
@@ -274,14 +274,14 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("parent-wf-123", "customs-wait-warranting", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-warranting-123"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-warranting-123", "step-task-warranting-123"))
 
 	expectedPayload := map[string]any{
 		"__command":         "submit",
 		"warranting_status": "WARRANTED",
 		"release_order_no":  "",
 	}
-	completer.On("CompleteTaskStep", mock.Anything, "task-warranting-123", expectedPayload).Return(nil)
+	completer.On("CompleteTaskStep", mock.Anything, "task-warranting-123", "step-task-warranting-123", expectedPayload).Return(nil)
 
 	err := service.ProcessEvent(ctx, req)
 	require.NoError(t, err)
@@ -334,7 +334,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("parent-wf-123", "customs-wait-export-release", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-release-123"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-release-123", "step-task-release-123"))
 
 	expectedPayload := map[string]any{
 		"__command":       "submit",
@@ -343,7 +343,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		"voyage_no":       "023W 08/01/2025",
 		"port_of_loading": "LKCMB",
 	}
-	completer.On("CompleteTaskStep", mock.Anything, "task-release-123", expectedPayload).Return(nil)
+	completer.On("CompleteTaskStep", mock.Anything, "task-release-123", "step-task-release-123", expectedPayload).Return(nil)
 
 	err := service.ProcessEvent(ctx, req)
 	require.NoError(t, err)

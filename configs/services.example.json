@@ -58,7 +58,7 @@
         "options": {
           "token_url": "https://slpa-cms.example.com/api/nsw/v1/token",
           "client_id": "NSW_TO_SLPA_CLIENT_ID",
-          "client_secret": "env:SLPA_CLIENT_SECRET"
+          "client_secret": "env:M2M_NSW_TO_SLPA_SECRET"
         }
       }
     },

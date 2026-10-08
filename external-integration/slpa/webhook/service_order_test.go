@@ -17,12 +17,13 @@ const slug = "8d326f3a-643a-4a1d-8072-87130288b032"
 // completer records what the service asked the task manager to do.
 type orderCompleter struct {
 	taskID  string
+	stepID  string
 	payload map[string]any
 	called  bool
 }
 
-func (c *orderCompleter) CompleteTaskStep(_ context.Context, taskID string, payload map[string]any) error {
-	c.taskID, c.payload, c.called = taskID, payload, true
+func (c *orderCompleter) CompleteTaskStep(_ context.Context, taskID, stepID string, payload map[string]any) error {
+	c.taskID, c.stepID, c.payload, c.called = taskID, stepID, payload, true
 	return nil
 }
 
@@ -46,7 +47,7 @@ func newOrderEvents(t *testing.T) (*OrderEvents, sqlmock.Sqlmock, *orderComplete
 func expectParked(mock sqlmock.Sqlmock, taskID string) {
 	mock.ExpectQuery(`SELECT .*FROM "task_records_v2"`).
 		WithArgs(slug, ApprovalWaitTemplateID, stateQueuedExternally, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow(taskID))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow(taskID, "step-"+taskID))
 }
 
 func orderEvent(name string) OrderEvent {
@@ -73,6 +74,7 @@ func TestOrderEvents_ApprovalReleasesTheStep(t *testing.T) {
 
 	require.True(t, tasks.called)
 	assert.Equal(t, "slpa_3_0_decision:abc", tasks.taskID)
+	assert.Equal(t, "step-slpa_3_0_decision:abc", tasks.stepID)
 	assert.Equal(t, "submit", tasks.payload["__command"])
 	assert.Equal(t, DecisionApproved, tasks.payload["decision"])
 	assert.Equal(t, true, tasks.payload["final"])

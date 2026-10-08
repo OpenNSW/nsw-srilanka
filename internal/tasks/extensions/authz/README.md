@@ -1,8 +1,9 @@
 # Task-step authorization extension
 
 A `PRE_RESUME` task extension that decides whether the caller may run a command on
-a task at its current state. It is the enforcement point behind
-`POST /api/v1/tasks/{id}`.
+a task at its current state. It is the enforcement point behind both task-write
+routes, `POST /api/v1/tasks/{id}/steps/{stepId}` and `POST /api/v1/callbacks/{token}`:
+both complete a step through core's `CompleteTaskStep`, which runs this extension.
 
 It is a **pure evaluator**: the API layer (a task-write middleware) resolves the
 caller's identity and their ownership of the task's consignment and attaches an

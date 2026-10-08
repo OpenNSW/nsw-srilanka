@@ -5,7 +5,7 @@ description: Draft the CHANGELOG.md section for the next TNSW release (vX.Y.Z), 
 
 # Draft Changelog Skill
 
-Drafts the next release's section of `CHANGELOG.md`. Deployers read that section first: the release workflow copies it to the top of the GitHub Release, above the image digests and GitHub's generated list of every merged PR. So the section answers one question — *what do I need to know, or do, to run this version?* — and leaves the complete PR list to the release page.
+Drafts the next release's section of `CHANGELOG.md`. Deployers read that section first: the release workflow copies it to the top of the GitHub Release, above the image digests and GitHub's generated list of every merged PR. So the section answers one question — _what do I need to know, or do, to run this version?_ — and leaves the complete PR list to the release page.
 
 ## Hard rules
 
@@ -19,12 +19,15 @@ Drafts the next release's section of `CHANGELOG.md`. Deployers read that section
 1. `gh auth status` — if it fails, tell the user and stop.
 2. `git fetch origin`, and work from `origin/main`: releases are cut from it, and drafting on a feature branch describes the wrong code. Unless the user already has a release branch, create one: `git switch -c chore/release-vX.Y.Z origin/main`.
 3. Find the previous release on GitHub, and resolve its commit on `origin` — local clones can carry stale test tags with the same names:
+
    ```bash
    prev=$(gh release list --repo OpenNSW/nsw-srilanka --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
    from=$(git ls-remote origin "refs/tags/${prev}^{}" | cut -f1)       # annotated tag
    [ -n "$from" ] || from=$(git ls-remote origin "refs/tags/${prev}" | cut -f1)
    ```
+
    No release yet? Ask the user which commit to start from.
+
 4. Agree the version with the user. Suggest one from what you collect: while on 0.x, a breaking change or a new feature means the next minor (0.2.0 → 0.3.0), fixes alone the next patch (0.2.0 → 0.2.1).
 
 ## Collect
@@ -36,6 +39,7 @@ Run the bundled collector and read all of its output:
 ```
 
 Write it outside the repo (your scratchpad, or `/tmp`) so it is never committed. It is read-only and takes about a second per PR. It prints:
+
 - every PR in the range, grouped the way the GitHub Release will group them (by label, or by title type where a PR was merged without one), each with its Deployment Notes;
 - the deployer-facing changes: files changed, migrations added or removed, env vars the server started or stopped reading, and diffs of `.env.example`, the Helm values, the portal's runtime settings, the API scopes and `go.mod`.
 
@@ -59,7 +63,7 @@ Set `version.txt` to `vX.Y.Z`, the tag name; the CHANGELOG heading stays `X.Y.Z`
 
 Finally, update the link references at the foot of the file:
 
-```
+```markdown
 [Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/vX.Y.Z...HEAD
 [X.Y.Z]: https://github.com/OpenNSW/nsw-srilanka/compare/vPREV...vX.Y.Z
 ```

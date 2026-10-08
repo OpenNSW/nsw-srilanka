@@ -29,7 +29,7 @@ const (
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
 	errWorkflowNotFound      = "workflow execution not found"
-	errNodeIDRequired        = "node ID is required"
+	errStepIDRequired        = "step ID is required"
 	errInvalidRequestBody    = "invalid request body"
 	errInvalidAdminAction    = "action must be one of RETRY, COMPLETE, ABORT"
 	errReasonRequired        = "reason is required"
@@ -450,11 +450,12 @@ type ResolveAdminInterventionRequest struct {
 	Reason               string         `json:"reason"`
 }
 
-// HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/nodes/{nodeId}/resolve.
+// HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/steps/{stepId}/resolve.
 // {id} is the ID of the workflow instance containing the node: the consignment's root workflow or a
-// child-branch workflow (a node's child_workflow_ids). It is not a consignment record ID. {nodeId}
-// is the node's composite ID from that workflow's engine status. A node inside a task workflow is
-// resolved through HandleResolveTaskWorkflowAdminIntervention instead.
+// child-branch workflow (a node's child_workflow_ids). It is not a consignment record ID. {stepId}
+// is the parked node's step_id from that workflow's engine status: it names that one parking, so a
+// resolve sent after the node was resolved and parked again is rejected (409). A node inside a
+// task workflow is resolved through HandleResolveTaskWorkflowAdminIntervention instead.
 //
 // Requires scopes.ConsignmentAdminWrite (see bootstrap/app.go): resolving can change workflow data
 // (GlobalVariablesPatch) or force a path the interpreter didn't choose (Complete/Abort).
@@ -463,7 +464,7 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 }
 
 // HandleResolveTaskWorkflowAdminIntervention handles
-// POST /api/v1/admin/task/{id}/nodes/{nodeId}/resolve. {id} is a task workflow's own workflow ID
+// POST /api/v1/admin/task/{id}/steps/{stepId}/resolve. {id} is a task workflow's own workflow ID
 // (a TASK node's task_workflow_id) — a separate ID space and workflow.Manager from the
 // consignment/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
 // engine-status routes. Otherwise identical, and gated on the same scope.
@@ -478,7 +479,7 @@ func (c *Router) HandleResolveTaskWorkflowAdminIntervention(w http.ResponseWrite
 func (c *Router) handleResolveAdminIntervention(
 	w http.ResponseWriter, r *http.Request,
 	view string,
-	resolve func(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) error,
+	resolve func(ctx context.Context, workflowID string, sig workflow.AdminResolutionSignal) (nodeID string, err error),
 ) {
 	ctx := r.Context()
 	if _, ok := authn.FromContext(ctx); !ok {
@@ -486,13 +487,13 @@ func (c *Router) handleResolveAdminIntervention(
 		return
 	}
 	workflowID := r.PathValue("id")
-	nodeID := r.PathValue("nodeId")
+	stepID := r.PathValue("stepId")
 	if workflowID == "" {
 		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
 		return
 	}
-	if nodeID == "" {
-		httputil.Error(w, r, http.StatusBadRequest, errNodeIDRequired)
+	if stepID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
 		return
 	}
 
@@ -536,7 +537,7 @@ func (c *Router) handleResolveAdminIntervention(
 			Failure:    true,
 			Metadata: map[string]any{
 				"view":   view,
-				"nodeId": nodeID,
+				"stepId": stepID,
 				"action": req.Action,
 				"error":  errMsg,
 			},
@@ -544,12 +545,13 @@ func (c *Router) handleResolveAdminIntervention(
 	}
 
 	sig := workflow.AdminResolutionSignal{
-		NodeID:                 nodeID,
+		ActivationID:           stepID,
 		Action:                 action,
 		WorkflowVariablesPatch: req.GlobalVariablesPatch,
 		Reason:                 req.Reason,
 	}
-	if err := resolve(ctx, workflowID, sig); err != nil {
+	nodeID, err := resolve(ctx, workflowID, sig)
+	if err != nil {
 		switch {
 		case errors.Is(err, ErrEngineWorkflowNotFound):
 			auditFail(errWorkflowNotFound)
@@ -575,6 +577,7 @@ func (c *Router) handleResolveAdminIntervention(
 		Failure:    false,
 		Metadata: map[string]any{
 			"view":   view,
+			"stepId": stepID,
 			"nodeId": nodeID,
 			"action": req.Action,
 			"reason": req.Reason,

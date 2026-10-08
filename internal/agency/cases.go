@@ -64,6 +64,7 @@ type CaseDetail struct {
 // WorkflowNode is one task of any workflow in the case, in the consignment detail's
 // workflowNodes shape.
 type WorkflowNode struct {
+	// ID is the task's ID (one run of a TASK node), not the node's ID in the workflow definition.
 	ID                   string               `json:"id"`
 	CreatedAt            string               `json:"createdAt"`
 	UpdatedAt            string               `json:"updatedAt"`

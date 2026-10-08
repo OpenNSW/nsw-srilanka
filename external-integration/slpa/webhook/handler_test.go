@@ -32,11 +32,11 @@ func handlerOver(t *testing.T, parked bool) (*Handler, *orderCompleter) {
 	mock.MatchExpectationsInOrder(false)
 	for i := 0; i < 4; i++ {
 		if parked {
-			mock.ExpectQuery(`SELECT "task_id" FROM "task_records_v2"`).
-				WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-1"))
+			mock.ExpectQuery(`SELECT "task_id","active_step_id" FROM "task_records_v2"`).
+				WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-1", "step-1"))
 			continue
 		}
-		mock.ExpectQuery(`SELECT "task_id" FROM "task_records_v2"`).WillReturnError(gorm.ErrRecordNotFound)
+		mock.ExpectQuery(`SELECT "task_id","active_step_id" FROM "task_records_v2"`).WillReturnError(gorm.ErrRecordNotFound)
 		mock.ExpectQuery(`SELECT "state" FROM "task_records_v2"`).WillReturnRows(sqlmock.NewRows([]string{"state"}))
 		mock.ExpectQuery(`SELECT count\(\*\) FROM "task_records_v2"`).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))

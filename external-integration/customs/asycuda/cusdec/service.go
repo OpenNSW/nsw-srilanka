@@ -19,8 +19,11 @@ type WebhookService interface {
 
 // TaskCompleter defines the task completion interface needed from the workflow
 // manager to advance suspended tasks.
+//
+// stepID is the parked task's active_step_id, read with the task itself, so a
+// callback only ever completes the step it was matched to.
 type TaskCompleter interface {
-	CompleteTaskStep(ctx context.Context, taskID string, payload map[string]any) error
+	CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error
 }
 
 type webhookService struct {
@@ -145,12 +148,13 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 
 	var task struct {
 		TaskID string `gorm:"column:task_id"`
+		StepID string `gorm:"column:active_step_id"`
 	}
 	err = s.db.WithContext(ctx).
 		Table("task_records_v2").
 		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
 			record.ParentWorkflowID, "customs-cusdec--external-review", "QUEUED_EXTERNALLY").
-		Select("task_id").
+		Select("task_id", "active_step_id").
 		First(&task).Error
 
 	if err != nil {
@@ -188,7 +192,7 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 		}
 	}
 
-	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, payload); err != nil {
+	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, payload); err != nil {
 		slog.ErrorContext(ctx, "failed to complete external review task step", "task_id", task.TaskID, "error", err)
 		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
 	}
@@ -305,12 +309,13 @@ func (s *webhookService) completeEventTaskAndMetadata(
 
 	var task struct {
 		TaskID string `gorm:"column:task_id"`
+		StepID string `gorm:"column:active_step_id"`
 	}
 	err = s.db.WithContext(ctx).
 		Table("task_records_v2").
 		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
 			record.ParentWorkflowID, taskTemplateID, "QUEUED_EXTERNALLY").
-		Select("task_id").
+		Select("task_id", "active_step_id").
 		First(&task).Error
 
 	if err != nil {
@@ -329,7 +334,7 @@ func (s *webhookService) completeEventTaskAndMetadata(
 		return fmt.Errorf("failed to locate event task %s: %w", taskTemplateID, err)
 	}
 
-	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, payload); err != nil {
+	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, payload); err != nil {
 		slog.ErrorContext(ctx, "failed to complete event task step", "task_id", task.TaskID, "error", err)
 		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
 	}

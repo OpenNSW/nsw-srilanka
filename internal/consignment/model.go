@@ -113,7 +113,7 @@ type DetailDTO struct {
 
 // WorkflowNodeResponseDTO represents a workflow node in the response.
 type WorkflowNodeResponseDTO struct {
-	ID                   string                          `json:"id"`                   // Workflow Node ID
+	ID                   string                          `json:"id"`                   // Task ID: one run of a TASK node (not the definition node ID)
 	CreatedAt            string                          `json:"createdAt"`            // Timestamp of node creation
 	UpdatedAt            string                          `json:"updatedAt"`            // Timestamp of last node update
 	WorkflowNodeTemplate WorkflowNodeTemplateResponseDTO `json:"workflowNodeTemplate"` // Workflow node template details

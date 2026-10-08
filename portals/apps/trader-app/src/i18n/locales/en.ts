@@ -146,6 +146,7 @@ const en = {
         fetchFailed: 'Failed to fetch task details.',
         notFound: 'Task not found.',
         submitFailed: 'Failed to submit task. Please try again.',
+        staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
       },
     },
 

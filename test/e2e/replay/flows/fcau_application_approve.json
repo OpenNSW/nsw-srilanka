@@ -16,11 +16,21 @@
       "wait": { "node": "Initialize Consignment", "state": "IN_PROGRESS", "into": "initTask", "timeout": "45s" }
     },
     {
+      "name": "trader reads the step initTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "extract": { "initTaskStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
       "name": "trader initializes consignment (name + CHA)",
       "request": {
         "actor": "trader",
         "method": "POST",
-        "path": "/api/v1/tasks/{{initTask}}",
+        "path": "/api/v1/tasks/{{initTask}}/steps/{{initTaskStep}}",
         "body": { "command": "submit", "payload": { "consignment_name": "E2E FCAU Consignment", "cha_company_id": "adam-pvt-ltd" } },
         "expectStatus": 204
       }
@@ -30,11 +40,21 @@
       "wait": { "node": "Select HS Codes", "state": "IN_PROGRESS", "into": "hsTask", "timeout": "45s" }
     },
     {
+      "name": "cha reads the step hsTask is on",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "extract": { "hsTaskStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
       "name": "cha selects the FCAU HS code",
       "request": {
         "actor": "cha",
         "method": "POST",
-        "path": "/api/v1/tasks/{{hsTask}}",
+        "path": "/api/v1/tasks/{{hsTask}}/steps/{{hsTaskStep}}",
         "body": { "command": "submit", "payload": { "hs_codes": ["fcau-health-certificate-reg"] } },
         "expectStatus": 204
       }
@@ -44,11 +64,21 @@
       "wait": { "node": "[FCAU] Apply for Health Certificate", "state": "IN_PROGRESS", "into": "fcauApp", "timeout": "60s" }
     },
     {
+      "name": "trader reads the step fcauApp is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{fcauApp}}",
+        "extract": { "fcauAppStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
       "name": "trader submits the FCAU application",
       "request": {
         "actor": "trader",
         "method": "POST",
-        "path": "/api/v1/tasks/{{fcauApp}}",
+        "path": "/api/v1/tasks/{{fcauApp}}/steps/{{fcauAppStep}}",
         "body": {
           "command": "submit",
           "payload": {
@@ -92,11 +122,21 @@
       "wait": { "node": "[FCAU] Pay Application Fee", "state": "IN_PROGRESS", "into": "payTask", "timeout": "60s" }
     },
     {
+      "name": "trader reads the step payTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{payTask}}",
+        "extract": { "payTaskStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
       "name": "trader selects the payment method",
       "request": {
         "actor": "trader",
         "method": "POST",
-        "path": "/api/v1/tasks/{{payTask}}",
+        "path": "/api/v1/tasks/{{payTask}}/steps/{{payTaskStep}}",
         "body": { "command": "submit", "payload": { "selected_method": "govpay" } },
         "expectStatus": 204
       }

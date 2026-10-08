@@ -15,6 +15,7 @@ If you discover a security vulnerability, please report it privately using the f
 ### What to Include
 
 When reporting a vulnerability, please include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact

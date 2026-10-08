@@ -1,0 +1,30 @@
+# lychee link checker settings, used by `make linkcheck` and CI
+# (.github/workflows/docs-ci.yml).
+# Reference: https://lychee.cli.rs/guides/config/
+
+# Check #anchors in links between Markdown files, as well as the files.
+include_fragments = "full"
+
+# Local stack addresses (localhost, private IPs) are not reachable from CI.
+exclude_all_private = true
+
+exclude = [
+  # Hostnames that only resolve inside Docker Compose or a deployment: public
+  # hosts always contain a dot, so a hostname without one is a service name.
+  '^https?://[^./:]+([:/]|$)',
+  '^https?://[^/]*\.local([:/]|$)',
+  # Placeholder hosts in examples.
+  '^https?://([^/]*\.)?example\.(com|org)',
+  # This repo's release tags. A release PR's CHANGELOG section links to the tag
+  # it is about to create, which exists only once the PR merges.
+  '^https://github\.com/OpenNSW/nsw-srilanka/(blob|tree)/v\d+\.\d+\.\d+/',
+  '^https://github\.com/OpenNSW/nsw-srilanka/compare/v\d+\.\d+\.\d+\.\.\.',
+]
+
+exclude_path = ['(^|/)tmp/', '(^|/)node_modules/', '(^|/)\.claude/worktrees/']
+
+# Rate-limited responses mean the link exists.
+accept = ["100..=103", "200..=299", "429"]
+
+max_retries = 3
+timeout = 20

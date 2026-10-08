@@ -235,47 +235,72 @@ func TestConsignmentService_RegisterTaskWorkflowManager_AlreadyRegistered(t *tes
 	assert.Error(t, err)
 }
 
-// TestConsignmentService_ResolveAdminIntervention_TranslatesCompositeNodeID guards the actual
-// bug: an admin submits the composite "<template ID>:<uuid>" ID they were shown (EngineNodeDTO.ID
-// — see NodeInfo.ID in core's GraphInterpreterWorkflow), but core's own signal routing
-// (pendingAdminResolutions) keys on the plain template ID — nodeInfo's map key, not its .ID
-// field. Without translating back, core silently drops the signal as routed to an unknown node
-// and the admin's action never applies.
-func TestConsignmentService_ResolveAdminIntervention_TranslatesCompositeNodeID(t *testing.T) {
+// TestConsignmentService_ResolveAdminIntervention_RoutesByStepID: a resolve names only the parked
+// step (EngineNodeDTO.StepID). The service finds the node parked under it and sends core a signal
+// carrying both, since core matches pending resolutions on the ActivationID and silently drops a
+// signal that names no current parking.
+func TestConsignmentService_ResolveAdminIntervention_RoutesByStepID(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockWM := new(MockWM)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
-	workflowID := "task-wf-n1_apply:ca7ed707-1dba-43ca-94bf-10eddf00df3c"
-	compositeNodeID := "officer_review:6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	workflowID := "consignment-1"
+	stepID := "6aad0417-9a6d-4407-9509-2e51d8fcae99"
 
 	instance := &workflow.WorkflowInstance{
 		ID:     workflowID,
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
-			// Keyed by the plain template ID — NodeInfo.ID itself is the composite value an
-			// admin actually sees and submits back (see workflow.go's GraphInterpreterWorkflow).
-			"officer_review": {ID: compositeNodeID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+			"officer_review": {ID: "officer_review", ActivationID: stepID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
 		},
 	}
 	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
 	mockWM.On("ResolveAdminIntervention", ctx, workflowID, "", mock.MatchedBy(func(sig workflow.AdminResolutionSignal) bool {
-		return sig.NodeID == "officer_review"
+		return sig.NodeID == "officer_review" && sig.ActivationID == stepID
 	})).Return(nil)
 
-	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
-		NodeID: compositeNodeID,
-		Action: workflow.AdminActionComplete,
-		Reason: "activity already ran, supplying result manually",
+	nodeID, err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		ActivationID: stepID,
+		Action:       workflow.AdminActionComplete,
+		Reason:       "activity already ran, supplying result manually",
 	})
 	require.NoError(t, err)
+	assert.Equal(t, "officer_review", nodeID)
 	mockWM.AssertExpectations(t)
 }
 
-// A node parked inside a task workflow is resolved through the task workflow manager, with the
-// same composite-to-template ID translation, and the root manager is never consulted.
+// A resolve naming an earlier parking of the node — it was resolved and has parked again under a
+// new step ID since the admin loaded the engine status — is rejected rather than applied to the
+// newer parking, and no signal is sent.
+func TestConsignmentService_ResolveAdminIntervention_StaleStepID(t *testing.T) {
+	db, _ := setupTestDB(t)
+	mockWM := new(MockWM)
+	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+
+	ctx := context.Background()
+	workflowID := "consignment-1"
+	mockWM.On("GetStatus", ctx, workflowID).Return(&workflow.WorkflowInstance{
+		ID:     workflowID,
+		Status: workflow.StatusRunning,
+		NodeInfo: map[string]*workflow.NodeInfo{
+			"officer_review": {ID: "officer_review", ActivationID: "current-step", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+		},
+	}, nil)
+
+	_, err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		ActivationID: "earlier-step",
+		Action:       workflow.AdminActionRetry,
+		Reason:       "retry",
+	})
+	assert.ErrorIs(t, err, ErrNodeNotParked)
+	mockWM.AssertExpectations(t)
+}
+
+// A node parked inside a task workflow is resolved through the task workflow manager, routed by
+// its step ID the same way, and the root manager is never consulted.
 func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager(t *testing.T) {
 	db, _ := setupTestDB(t)
 	rootWM, taskWM := new(MockWM), new(MockWM)
@@ -286,22 +311,22 @@ func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_UsesTaskManager
 
 	ctx := context.Background()
 	taskWorkflowID := "task-wf-n1_apply:ca7ed707-1dba-43ca-94bf-10eddf00df3c"
-	compositeNodeID := "review_step:6aad0417-9a6d-4407-9509-2e51d8fcae99"
+	stepID := "6aad0417-9a6d-4407-9509-2e51d8fcae99"
 	taskWM.On("GetStatus", ctx, taskWorkflowID).Return(&workflow.WorkflowInstance{
 		ID:     taskWorkflowID,
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
-			"review_step": {ID: compositeNodeID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+			"review_step": {ID: "review_step", ActivationID: stepID, Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
 		},
 	}, nil)
 	taskWM.On("ResolveAdminIntervention", ctx, taskWorkflowID, "", mock.MatchedBy(func(sig workflow.AdminResolutionSignal) bool {
-		return sig.NodeID == "review_step"
+		return sig.NodeID == "review_step" && sig.ActivationID == stepID
 	})).Return(nil)
 
-	err := svc.ResolveTaskWorkflowAdminIntervention(ctx, taskWorkflowID, workflow.AdminResolutionSignal{
-		NodeID: compositeNodeID,
-		Action: workflow.AdminActionRetry,
-		Reason: "retry",
+	_, err := svc.ResolveTaskWorkflowAdminIntervention(ctx, taskWorkflowID, workflow.AdminResolutionSignal{
+		ActivationID: stepID,
+		Action:       workflow.AdminActionRetry,
+		Reason:       "retry",
 	})
 	require.NoError(t, err)
 	taskWM.AssertExpectations(t)
@@ -315,8 +340,7 @@ func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 	require.NoError(t, svc.RegisterWorkflowManager(rootWM))
 
-	err := svc.ResolveTaskWorkflowAdminIntervention(context.Background(), "task-wf-1", workflow.AdminResolutionSignal{
-		NodeID: "review_step:x",
+	_, err := svc.ResolveTaskWorkflowAdminIntervention(context.Background(), "task-wf-1", workflow.AdminResolutionSignal{
 		Action: workflow.AdminActionRetry,
 		Reason: "retry",
 	})
@@ -325,7 +349,7 @@ func TestConsignmentService_ResolveTaskWorkflowAdminIntervention_NoTaskManager(t
 	rootWM.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
 }
 
-func TestConsignmentService_ResolveAdminIntervention_UnknownNodeID(t *testing.T) {
+func TestConsignmentService_ResolveAdminIntervention_UnknownStepID(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockWM := new(MockWM)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
@@ -337,15 +361,15 @@ func TestConsignmentService_ResolveAdminIntervention_UnknownNodeID(t *testing.T)
 		ID:     workflowID,
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
-			"officer_review": {ID: "officer_review:known-uuid", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
+			"officer_review": {ID: "officer_review", ActivationID: "step-1", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
 		},
 	}
 	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
 
-	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
-		NodeID: "officer_review:stale-uuid-from-a-prior-run",
-		Action: workflow.AdminActionRetry,
-		Reason: "retry",
+	_, err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		ActivationID: "no-such-step",
+		Action:       workflow.AdminActionRetry,
+		Reason:       "retry",
 	})
 	assert.ErrorIs(t, err, ErrNodeNotParked)
 	mockWM.AssertExpectations(t)
@@ -363,15 +387,15 @@ func TestConsignmentService_ResolveAdminIntervention_NodeNotAwaitingAdmin(t *tes
 		ID:     workflowID,
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
-			"officer_review": {ID: "officer_review:some-uuid", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusRunning},
+			"officer_review": {ID: "officer_review", ActivationID: "step-1", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusRunning},
 		},
 	}
 	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
 
-	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
-		NodeID: "officer_review:some-uuid",
-		Action: workflow.AdminActionRetry,
-		Reason: "retry",
+	_, err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		ActivationID: "step-1",
+		Action:       workflow.AdminActionRetry,
+		Reason:       "retry",
 	})
 	assert.ErrorIs(t, err, ErrNodeNotParked)
 	mockWM.AssertExpectations(t)
@@ -389,15 +413,15 @@ func TestConsignmentService_ResolveAdminIntervention_GatewayCompleteUnsupported(
 		ID:     workflowID,
 		Status: workflow.StatusRunning,
 		NodeInfo: map[string]*workflow.NodeInfo{
-			"gw1": {ID: "gw1:some-uuid", Type: workflow.NodeTypeGateway, Status: workflow.NodeStatusAwaitingAdmin},
+			"gw1": {ID: "gw1", ActivationID: "step-1", Type: workflow.NodeTypeGateway, Status: workflow.NodeStatusAwaitingAdmin},
 		},
 	}
 	mockWM.On("GetStatus", ctx, workflowID).Return(instance, nil)
 
-	err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
-		NodeID: "gw1:some-uuid",
-		Action: workflow.AdminActionComplete,
-		Reason: "complete",
+	_, err := svc.ResolveAdminIntervention(ctx, workflowID, workflow.AdminResolutionSignal{
+		ActivationID: "step-1",
+		Action:       workflow.AdminActionComplete,
+		Reason:       "complete",
 	})
 	assert.ErrorIs(t, err, ErrAdminActionUnsupportedForGateway)
 	// ResolveAdminIntervention on the manager must never be called for a rejected action — no

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
+	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
@@ -32,8 +33,9 @@ func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 
 func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {
 	handler := &HTTPHandler{MaxRequestBytes: 8}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/steps/step-1", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}`))
 	req.SetPathValue("id", "123")
+	req.SetPathValue("stepId", "step-1")
 	recorder := httptest.NewRecorder()
 
 	handler.HandleCompleteTaskStep(recorder, req)
@@ -48,8 +50,9 @@ func TestHandleCompleteTaskStep_RejectsOversizedBody(t *testing.T) {
 
 func TestHandleCompleteTaskStep_RejectsTrailingDataAfterJSON(t *testing.T) {
 	handler := &HTTPHandler{MaxRequestBytes: 1024}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}{"command":"escalate"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/steps/step-1", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}{"command":"escalate"}`))
 	req.SetPathValue("id", "123")
+	req.SetPathValue("stepId", "step-1")
 	recorder := httptest.NewRecorder()
 
 	handler.HandleCompleteTaskStep(recorder, req)
@@ -59,6 +62,56 @@ func TestHandleCompleteTaskStep_RejectsTrailingDataAfterJSON(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), errInvalidRequestBody) {
 		t.Fatalf("expected error body to mention %q, got %s", errInvalidRequestBody, recorder.Body.String())
+	}
+}
+
+// A submission must name the step it was made against; without one it is rejected before it
+// reaches the task manager (nil here, so reaching it would panic).
+func TestHandleCompleteTaskStep_RequiresStepID(t *testing.T) {
+	handler := &HTTPHandler{MaxRequestBytes: 1024}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/123/steps/", strings.NewReader(`{"command":"approve","payload":{"key":"value"}}`))
+	req.SetPathValue("id", "123")
+	recorder := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
+	}
+}
+
+// A callback whose token is not one core produced is rejected before it reaches the task
+// manager (nil here, so reaching it would panic).
+func TestHandleCompleteTaskStepByToken_RejectsMalformedToken(t *testing.T) {
+	handler := &HTTPHandler{MaxRequestBytes: 1024}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/not-a-token", strings.NewReader(`{"command":"approve","payload":{}}`))
+	req.SetPathValue("token", "not-a-token")
+	recorder := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStepByToken(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), errInvalidCallbackToken) {
+		t.Fatalf("expected error body to mention %q, got %s", errInvalidCallbackToken, recorder.Body.String())
+	}
+}
+
+// The token route takes the same envelope as the portal's, so a body without a command is
+// rejected the same way.
+func TestHandleCompleteTaskStepByToken_RequiresCommand(t *testing.T) {
+	token, err := callbacktoken.Encode("6aad0417-9a6d-4407-9509-2e51d8fcae99", "ca7ed707-1dba-43ca-94bf-10eddf00df3c")
+	require.NoError(t, err)
+	handler := &HTTPHandler{MaxRequestBytes: 1024}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/"+token, strings.NewReader(`{"payload":{}}`))
+	req.SetPathValue("token", token)
+	recorder := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStepByToken(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
 	}
 }
 

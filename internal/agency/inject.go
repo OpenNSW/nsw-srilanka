@@ -43,9 +43,12 @@ var ErrConflict = errors.New("taskId already injected with different details")
 
 // InjectRequest is the request body for POST /api/v1/inject.
 type InjectRequest struct {
-	TaskID        string          `json:"taskId"`
-	TaskCode      string          `json:"taskCode"`
-	ConsignmentID string          `json:"consignmentId"`
+	TaskID        string `json:"taskId"`
+	TaskCode      string `json:"taskCode"`
+	ConsignmentID string `json:"consignmentId"`
+	// CallbackToken is the opaque token the caller expects the decision back on. It
+	// names the caller's step, so the workflow hands it back unchanged.
+	CallbackToken string          `json:"callbackToken"`
 	Data          json.RawMessage `json:"data"`
 }
 
@@ -80,8 +83,9 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 		TaskID:   req.TaskID,
 		TaskCode: req.TaskCode,
 		// Callers speak trade, so the case is keyed by their consignment id.
-		CaseID:  req.ConsignmentID,
-		Payload: req.Data,
+		CaseID:        req.ConsignmentID,
+		CallbackToken: req.CallbackToken,
+		Payload:       req.Data,
 	}); err != nil {
 		return nil, fmt.Errorf("agency: failed to record workflow: %w", err)
 	}
@@ -116,7 +120,7 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 
 // start loads workflowID and starts it with w.TaskID as the instance ID. Variables
 // are seeded from the recorded row, not the current request, so a retried start runs
-// with the first payload.
+// with the first payload and callback token.
 func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) error {
 	def, err := workflowdef.Load(ctx, s.artifactRegistry, workflowID)
 	if err != nil {
@@ -135,6 +139,11 @@ func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) err
 		"taskCode":      w.TaskCode,
 		"consignmentId": w.CaseID,
 		"notification":  notification,
+	}
+	// Seeded only when the caller sent one: a workflow that calls back by it then fails
+	// on the missing variable at the start, instead of calling back on an empty token.
+	if w.CallbackToken != "" {
+		vars["callbackToken"] = w.CallbackToken
 	}
 
 	if err := s.wm.StartWorkflow(ctx, w.TaskID, def, vars); err != nil {

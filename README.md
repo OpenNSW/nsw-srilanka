@@ -1,7 +1,7 @@
 # NSW Sri Lanka Platform
 
 [![Go Version](https://img.shields.io/badge/Go-1.27-blue.svg)](https://golang.org)
-[![Platform](https://img.shields.io/badge/NSW-Platform-green.svg)](#)
+![Platform](https://img.shields.io/badge/NSW-Platform-green.svg)
 
 `nsw-srilanka` is the deployer-specific application repository for the **Sri Lanka instance** of the National Single Window (NSW) Platform.
 
@@ -11,7 +11,7 @@ It depends on the open-source core engine published at [github.com/OpenNSW/core]
 
 ## Repository Layout
 
-```
+```text
 nsw-srilanka/
 ├── cmd/
 │   ├── server/                            # Main API entry point: loads config, builds the app, runs the HTTP server
@@ -52,7 +52,8 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ---
 
 ## How to Run Locally
->[!NOTE]
+
+> [!NOTE]
 > ⚠️ **This quickstart is for local development only.** The example configs enable
 > insecure TLS (`authn.insecureSkipTLSVerify: true`, `insecure_skip_tls_verify`
 > in `services.json`) for the self-signed local IdP. The backend only honors these
@@ -72,12 +73,14 @@ This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.
 > [!NOTE]
 > `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.
 > See the [official install guide](https://golangci-lint.run) for all platforms, e.g.:
+>
 > - macOS/Linux (Homebrew): `brew install golangci-lint`
 > - Any platform with Go: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`
 
 Edit the seeded files for your environment before starting the stack. See the [Configuration Reference](#configuration-reference) for what each one holds.
 
 ### 2. Start the Docker Stack
+
 The repository provides a `compose.yml` stack that brings up all backing services (PostgreSQL, IDP, Temporal), the Go backend API, and the Trader Portal frontend. Use the `Makefile` targets:
 
 ```bash
@@ -87,14 +90,15 @@ make help     # list all targets
 ```
 
 This spins up:
-* **`nsw-postgres`** (Port `5432`): Database populated with base tables/schemas.
-* **`thunderid`** (Port `8090`): ThunderID Identity Provider.
-* **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
-* **`tnsw-api`** (Port `8080`): The Go backend server.
-* **`tnsw-web`** (Port `5173`): The React Trader Portal frontend.
+
+- **`nsw-postgres`** (Port `5432`): Database populated with base tables/schemas.
+- **`thunderid`** (Port `8090`): ThunderID Identity Provider.
+- **`temporal`** (Port `7233`) & **`temporal-ui`** (Port `8233`): Temporal workflow orchestration engine.
+- **`tnsw-api`** (Port `8080`): The Go backend server.
+- **`tnsw-web`** (Port `5173`): The React Trader Portal frontend.
 
 > [!IMPORTANT]
-> **`docker compose up` gives you the *development* stack.**
+> **`docker compose up` gives you the _development_ stack.**
 > A `compose.override.yml` sits next to `compose.yml` and Docker Compose
 > **auto-merges it** on any bare `docker compose` command — so a plain
 > `docker compose up` runs the hot-reload dev stack (stock language images,
@@ -103,7 +107,7 @@ This spins up:
 > `-f compose.yml`.
 >
 > | Goal                  | Command                                                                 |
-> |-----------------------|-------------------------------------------------------------------------|
+> | --------------------- | ----------------------------------------------------------------------- |
 > | Dev (hot reload)      | `make dev` &nbsp;·&nbsp; `docker compose up`                            |
 > | Preview (real images) | `make preview` &nbsp;·&nbsp; `docker compose -f compose.yml up --build` |
 >
@@ -120,6 +124,7 @@ The Trader Portal frontend runs as part of the stack — `make dev` serves it vi
 In `make dev`, the API container runs [`air`](https://github.com/air-verse/air) against your bind-mounted source. Saving a `.go` file triggers an automatic rebuild and restart of the server inside the container — usually a second or two — while PostgreSQL, Temporal, and the IDP keep running undisturbed. There is nothing to restart manually.
 
 To watch the rebuild output:
+
 ```bash
 make logs
 ```
@@ -128,27 +133,34 @@ make logs
 
 This repo depends on the core engine as a normal, version-pinned Go module — there is **no** sibling clone, `replace` directive, or `GOWORK` setting involved by default (see [Upstream Dependency](#upstream-dependency)). Two common workflows:
 
-* **Bump to a newer engine release** — update `go.mod` to a new version and let the dev container pick it up on its next rebuild:
+- **Bump to a newer engine release** — update `go.mod` to a new version and let the dev container pick it up on its next rebuild:
+
   ```bash
   go get github.com/OpenNSW/core@latest
   go mod tidy
   ```
-* **Develop the engine and this repo together** — use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across both repositories.
+
+- **Develop the engine and this repo together** — use the [native cross-repo workflow](#native-cross-repo-development) below for a live edit loop across both repositories.
 
 #### Native cross-repo development
 
 The dev container is hermetic: it builds from the pinned `go.mod` version, ignores any `go.work` (`GOWORK=off`), and does **not** mount sibling repos. That's intentional — it keeps every container build reproducible. When you need to edit `OpenNSW/core` and see the change live, run the **Go API natively on your host** and use Docker only for the backing services:
 
 1. **Clone `OpenNSW/core`** next to `nsw-srilanka` and create a workspace (`go.work` is gitignored, so this stays personal):
+
    ```bash
    go work init . ../core
    ```
+
 2. **Prepare config** — the `configs/config.yaml` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`, and `.env` supplies the secrets it references. The host binary also needs the `localhost` variant of the service endpoints, `configs/services.json` (also seeded by `make setup`) — in `configs/config.yaml`, switch `server.servicesConfigPath` to the commented-out `./configs/services.json` line.
 3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
+
    ```bash
    make deps
    ```
+
 4. **Run the API on the host**, where your `go.work` is fully honored:
+
    ```bash
    go run ./cmd/server
    ```
@@ -259,7 +271,7 @@ it with no config file at all.
 
 The core engine is pulled directly from GitHub via Go modules:
 
-```
+```text
 github.com/OpenNSW/core v0.0.0-…  // pinned to a specific commit
 ```
 
@@ -278,16 +290,16 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 ## Configuration Reference
 
-| File                           | Purpose                                                                          | Source of truth                        |
-|--------------------------------|----------------------------------------------------------------------------------|----------------------------------------|
-| `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)     | `.env.example`                         |
-| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                 | `idp/.env.example`                     |
-| `configs/services.docker.json` | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`) | `configs/services.docker.example.json` |
-| `configs/services.json`        | Outbound service endpoints — uses `localhost` (for native/host dev runs)         | `configs/services.example.json`        |
-| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)          | `configs/payment_methods.example.json` |
-| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids           | `configs/catalog.example.json`         |
-| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)              | `configs/companies.example.json`       |
-| `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml` |
-| `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname  | `configs/config.docker.example.yaml`   |
+| File                           | Purpose                                                                                                                                                                        | Source of truth                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                   | `.env.example`                         |
+| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                               | `idp/.env.example`                     |
+| `configs/services.docker.json` | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`)                                                                                               | `configs/services.docker.example.json` |
+| `configs/services.json`        | Outbound service endpoints — uses `localhost` (for native/host dev runs)                                                                                                       | `configs/services.example.json`        |
+| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)                                                                                                        | `configs/payment_methods.example.json` |
+| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids                                                                                                         | `configs/catalog.example.json`         |
+| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                            | `configs/companies.example.json`       |
+| `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`          |
+| `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname                                                                                                | `configs/config.docker.example.yaml`   |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

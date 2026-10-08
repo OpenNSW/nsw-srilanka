@@ -38,13 +38,14 @@ type AgencyConfig struct {
 // AgencyInbound describes the endpoint the mock SERVER exposes to receive injects
 // from the NSW app.
 type AgencyInbound struct {
-	Endpoint    string `json:"endpoint"`    // Go mux pattern, e.g. "POST /api/v1/inject"
-	TaskIDField string `json:"taskIDField"` // JSON field carrying the task id, e.g. "taskId"
+	Endpoint           string `json:"endpoint"`           // Go mux pattern, e.g. "POST /api/v1/inject"
+	TaskIDField        string `json:"taskIDField"`        // JSON field carrying the task id, e.g. "taskId"
+	CallbackTokenField string `json:"callbackTokenField"` // JSON field carrying the callback token, e.g. "callbackToken"; fills {callbackToken} in outbound.callbackPath
 }
 
 // AgencyOutbound describes how the mock CLIENT calls back to the NSW app.
 type AgencyOutbound struct {
-	CallbackPath string `json:"callbackPath"` // URL path template, e.g. "/api/v1/tasks/{taskId}"
+	CallbackPath string `json:"callbackPath"` // URL path template, e.g. "/api/v1/callbacks/{callbackToken}"
 	CommandField string `json:"commandField"` // payload field for the command string
 	PayloadField string `json:"payloadField"` // payload field for the content map
 }
@@ -121,6 +122,9 @@ func loadAgencyConfigs(t *testing.T) []AgencyConfig {
 		}
 		if cfg.Inbound.TaskIDField == "" {
 			t.Fatalf("agency config %q is missing required inbound.taskIDField field", cfg.ID)
+		}
+		if cfg.Inbound.CallbackTokenField == "" {
+			t.Fatalf("agency config %q is missing required inbound.callbackTokenField field", cfg.ID)
 		}
 		if cfg.Outbound.CallbackPath == "" {
 			t.Fatalf("agency config %q is missing required outbound.callbackPath field", cfg.ID)

@@ -2,7 +2,7 @@
 
 Data-driven end-to-end tests for the NSW backend. Each business flow is a JSON file; adding coverage means writing JSON, not Go.
 
-The generic engine (flow schema, variable store, step execution, polling) lives in [`internal/replay`](../../internal/replay). This package is the in-process wiring, the actor configs (`configs/`), the flow files (`flows/`), and the tests that run them (`runner_e2e_test.go`).
+The generic engine (flow schema, variable store, step execution, polling) lives in [`internal/replay`](../../../internal/replay). This package is the in-process wiring, the actor configs (`configs/`), the flow files (`flows/`), and the tests that run them (`runner_e2e_test.go`).
 
 ## How it works
 
@@ -12,8 +12,9 @@ The harness starts the full app in-process with `bootstrap.Build` (no test-only 
 - **Config path.** `TestMain` calls `os.Chdir(repoRoot)` so `bootstrap.Build`'s working-directory-relative `configs/` path resolves under `go test`. No production change.
 
 Per-step identity is chosen by the flow's `actor`, which must match an actor `id` in one of the config files:
-- `"trader"` → MEMBER user (authorization_code token), defined in `configs/members/trader.json`.
-- `"<agencyId>"` (e.g. `"fcau"`) → SERVICE/M2M client (client_credentials token), defined in `configs/agencies/fcau.json`.
+
+- `"trader"` → MEMBER user (`authorization_code` token), defined in `configs/members/trader.json`.
+- `"<agencyId>"` (e.g. `"fcau"`) → SERVICE/M2M client (`client_credentials` token), defined in `configs/agencies/fcau.json`.
 
 **External agency flows** are handled by a generic mock agency (`mockagency_test.go`) that receives injects from the app and, when a `callback` step fires, posts the configured callback payload back to complete the parked EXTERNAL_REVIEW task.
 
@@ -23,7 +24,7 @@ FCAU is the sample flow exercising both. Other agency or payment flows need only
 
 ## Directory layout
 
-```
+```text
 test/e2e/replay/
 ├── configs/
 │   ├── members/        # MEMBER actor configs (Trader, CHA, …) — identity for token minting
@@ -83,21 +84,22 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
   },
   "inbound": {
     "endpoint": "POST /api/v1/inject",
-    "taskIDField": "taskId"
+    "taskIDField": "taskId",
+    "callbackTokenField": "callbackToken"
   },
   "outbound": {
-    "callbackPath": "/api/v1/tasks/{taskId}",
+    "callbackPath": "/api/v1/callbacks/{callbackToken}",
     "commandField": "command",
     "payloadField": "payload"
   }
 }
 ```
 
-| Section | Purpose |
-|---|---|
-| `identity` | IdP credentials — used to mint/validate the M2M token |
-| `inbound` | The HTTP endpoint the mock agency exposes to receive injects from the NSW app |
-| `outbound` | How the mock posts the callback back to the NSW app |
+| Section    | Purpose                                                                                                                                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identity` | IdP credentials — used to mint/validate the M2M token                                                                                                                                                                               |
+| `inbound`  | The HTTP endpoint the mock agency exposes to receive injects from the NSW app                                                                                                                                                       |
+| `outbound` | How the mock posts the callback back to the NSW app. `{callbackToken}` in `callbackPath` is the token the inject carried (`inbound.callbackTokenField`): it names the one step the inject was for, and the app completes only that. |
 
 ### `configs/payments/<id>.json`
 
@@ -143,24 +145,37 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 }
 ```
 
-| Field | Notes |
-|---|---|
-| `actor` | Must match an `id` in `configs/members/` or `configs/agencies/`. |
-| `method` | HTTP method. |
-| `path` | URL path; `{{var}}` tokens interpolated. |
-| `body` | JSON body; `{{var}}` in string values interpolated. |
-| `expectStatus` | Expected status code (default 200). |
-| `extract` | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`). |
+| Field          | Notes                                                                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `actor`        | Must match an `id` in `configs/members/` or `configs/agencies/`.                                                     |
+| `method`       | HTTP method.                                                                                                         |
+| `path`         | URL path; `{{var}}` tokens interpolated.                                                                             |
+| `body`         | JSON body; `{{var}}` in string values interpolated.                                                                  |
+| `expectStatus` | Expected status code (default 200).                                                                                  |
+| `extract`      | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`).                                      |
+| `retry`        | GET only: re-issue until the status matches and every `extract` path is present, for up to this long (e.g. `"30s"`). |
 
 #### Completing a USER_INPUT task
 
+A submission is posted to the step it completes, so read the task's `step_id` first, as the same actor, the way the portal does. The node shows `IN_PROGRESS` a moment before its step is claimed, so the read retries until `step_id` is there:
+
 ```json
+{
+  "name": "trader reads the step initTask is on",
+  "request": {
+    "actor": "trader",
+    "method": "GET",
+    "path": "/api/v1/tasks/{{initTask}}",
+    "extract": { "initTaskStep": "step_id" },
+    "retry": "30s"
+  }
+},
 {
   "name": "trader initializes consignment",
   "request": {
     "actor": "trader",
     "method": "POST",
-    "path": "/api/v1/tasks/{{initTask}}",
+    "path": "/api/v1/tasks/{{initTask}}/steps/{{initTaskStep}}",
     "body": {
       "command": "submit",
       "payload": { "consignment_name": "My Consignment", "cha_company_id": "adam-pvt-ltd" }
@@ -188,12 +203,12 @@ The `command` is `"submit"` for user-facing tasks. The `payload` must include ev
 }
 ```
 
-| Field | Notes |
-|---|---|
-| `node` | Substring match on the node display name (the render config's root `title`). |
-| `state` | Required node state (e.g. `"IN_PROGRESS"`, `"COMPLETED"`). Omit to match any state. |
-| `into` | Variable to store the matched node's task id (used by later steps). |
-| `timeout` | Poll timeout; default 45s. On timeout, current nodes are dumped for debugging. |
+| Field     | Notes                                                                               |
+| --------- | ----------------------------------------------------------------------------------- |
+| `node`    | Substring match on the node display name (the render config's root `title`).        |
+| `state`   | Required node state (e.g. `"IN_PROGRESS"`, `"COMPLETED"`). Omit to match any state. |
+| `into`    | Variable to store the matched node's task id (used by later steps).                 |
+| `timeout` | Poll timeout; default 45s. On timeout, current nodes are dumped for debugging.      |
 
 Polls `GET /api/v1/consignments/{{consignmentId}}` (set by an earlier `extract`).
 
@@ -216,12 +231,12 @@ Polls `GET /api/v1/consignments/{{consignmentId}}` (set by an earlier `extract`)
 }
 ```
 
-| Field | Notes |
-|---|---|
+| Field     | Notes                                                                              |
+| --------- | ---------------------------------------------------------------------------------- |
 | `taskVar` | Name of the flow variable holding the task id (set by a prior `wait` with `into`). |
-| `command` | Outcome command sent to NSW (e.g. `"approve"`, `"reject"`). |
-| `content` | Reviewer payload. `{{var}}` tokens interpolated. |
-| `timeout` | Wait for the inject to arrive; default 30s. |
+| `command` | Outcome command sent to NSW (e.g. `"approve"`, `"reject"`).                        |
+| `content` | Reviewer payload. `{{var}}` tokens interpolated.                                   |
+| `timeout` | Wait for the inject to arrive; default 30s.                                        |
 
 The mock agency waits until the app sends the inject for that task id, then posts the callback using the wire format defined in `configs/agencies/<id>.json`.
 
@@ -240,12 +255,12 @@ The mock agency waits until the app sends the inject for that task id, then post
 }
 ```
 
-| Field | Notes |
-|---|---|
-| `taskVar` | Name of the flow variable holding the pay task id. |
-| `method` | Payment gateway id — must match an `id` in `configs/payments/`. |
-| `status` | Gateway success status (default `"paid"`). |
-| `timeout` | Wait for the payment record to appear; default 45s. |
+| Field     | Notes                                                           |
+| --------- | --------------------------------------------------------------- |
+| `taskVar` | Name of the flow variable holding the pay task id.              |
+| `method`  | Payment gateway id — must match an `id` in `configs/payments/`. |
+| `status`  | Gateway success status (default `"paid"`).                      |
+| `timeout` | Wait for the payment record to appear; default 45s.             |
 
 ---
 

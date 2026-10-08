@@ -43,8 +43,8 @@ func (m *MockWM) StartWorkflow(ctx context.Context, id string, workflowDefinitio
 	return args.Error(0)
 }
 
-func (m *MockWM) TaskDone(ctx context.Context, workflowID, runID, nodeID string, output map[string]any) error {
-	args := m.Called(ctx, workflowID, runID, nodeID, output)
+func (m *MockWM) CompleteActivation(ctx context.Context, workflowID, runID, activationID string, output map[string]any) error {
+	args := m.Called(ctx, workflowID, runID, activationID, output)
 	return args.Error(0)
 }
 
