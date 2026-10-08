@@ -1,0 +1,260 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / Storage API
+  description: |
+    OpenAPI 3.0 specification for file storage: reserving an upload and
+    getting a download URL. The file's bytes never pass through this API:
+    they go to the storage backend through the presigned `upload_url` and
+    `download_url` it hands out.
+
+    Callers hold **file references**, not storage keys. A reference is an
+    opaque string issued to one caller, which they get from an upload or a
+    task's zone view (see the Tasks API) and pass back here or in a task
+    submission:
+
+    - A user's reference works only for that user, and expires after the
+      deployment's `storage.tokenTTLSeconds` (an hour by default).
+    - A machine client's (an OGA's) works only for that client, and never
+      expires.
+
+    An agency runs this API in front of the deployment that stores its files.
+    It relays that deployment's rejections with their status and message, and
+    answers 502 when that deployment fails or refuses the agency's
+    credentials.
+
+    All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
+    carrying the scope named on each operation. Every error response uses the
+    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+  version: 1.0.0
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/storage:
+    post:
+      summary: Reserve an upload
+      description: |
+        Reserves a stored file and returns a file reference to it, issued to
+        the caller, with the URL to upload the file to:
+
+        1. `PUT` the file's bytes to `upload_url`, with the `Content-Type`
+           given as `mime_type` and exactly `size` bytes.
+        2. Keep `key` as the file's value, for example in a form's file field.
+
+        The allowed types and the size limit are the deployment's
+        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`).
+
+        Requires scope `nsw:storage:write`.
+      operationId: reserveUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadRequest'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: |
+            Malformed JSON, a missing `filename` or `mime_type`, a `size` that
+            is not positive, or a file over the size limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:storage:write`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: The file type is not allowed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error reserving the upload or issuing its reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: |
+            Agency only. The deployment that stores the files failed, or
+            refused this deployment's credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/storage/{key}:
+    get:
+      summary: Get a download URL
+      description: |
+        Returns a time-limited URL to download the file `{key}` stands for,
+        and when the URL expires.
+
+        `{key}` is a file reference issued to the caller. For now, a value
+        that is not a reference is taken to be a storage key.
+
+        Requires scope `nsw:storage:read`.
+      operationId: getDownloadURL
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: A file reference issued to the caller.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadResponse'
+        '400':
+          description: |
+            Missing `{key}`, or a value that is neither a file reference nor
+            a valid storage key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            The bearer token lacks scope `nsw:storage:read`, or `{key}` is a
+            file reference issued to someone else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: |
+            `{key}` is a file reference that has expired. Refetch the task
+            for a fresh one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error resolving the reference or signing the URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: |
+            Agency only. The deployment that stores the files failed, or
+            refused this deployment's credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "this file reference has expired; reload to get a new one"
+        correlationId:
+          type: string
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    UploadRequest:
+      type: object
+      required:
+        - filename
+        - mime_type
+        - size
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          example: "invoice.pdf"
+        mime_type:
+          type: string
+          minLength: 1
+          description: The file's MIME type; the upload must send it as its `Content-Type`.
+          example: "application/pdf"
+        size:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The file's size in bytes; the upload must send exactly this many.
+          example: 482133
+
+    UploadResponse:
+      type: object
+      required:
+        - key
+        - name
+        - upload_url
+      properties:
+        key:
+          type: string
+          description: |
+            A file reference to the reserved file, issued to the caller. Opaque:
+            store and send it as it is.
+        name:
+          type: string
+          description: The file name, as sent.
+          example: "invoice.pdf"
+        upload_url:
+          type: string
+          description: The presigned URL to `PUT` the file's bytes to. It expires in minutes.
+        size:
+          type: integer
+          format: int64
+          example: 482133
+        mime_type:
+          type: string
+          example: "application/pdf"
+
+    DownloadResponse:
+      type: object
+      required:
+        - download_url
+        - expires_at
+      properties:
+        download_url:
+          type: string
+          description: |
+            The presigned URL to download the file from. With local storage it
+            can be a path on this API's host.
+        expires_at:
+          type: integer
+          format: int64
+          description: When `download_url` stops working, in Unix seconds.
+          example: 1791460800
