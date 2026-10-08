@@ -430,7 +430,7 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 1. **Parent Workflow Hot-Reload**:
    - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
 2. **Form schemas and markdown templates**:
-   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `ARTIFACT_LOADER_TYPE=local`). `html_template` documents are likewise fetched each time a document is generated.
+   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `artifactLoader.type: local`). `html_template` documents are likewise fetched each time a document is generated.
 3. **Render configs**:
    - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
 4. **The manifest**:
