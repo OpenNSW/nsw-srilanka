@@ -36,9 +36,8 @@ const (
 	ProfileRead = "nsw:profile:read"
 
 	// Storage resource.
-	StorageRead   = "nsw:storage:read"
-	StorageWrite  = "nsw:storage:write"
-	StorageDelete = "nsw:storage:delete"
+	StorageRead  = "nsw:storage:read"
+	StorageWrite = "nsw:storage:write"
 
 	// SLCE webhook resource.
 	SLCEWebhooksWrite = "nsw:slce-webhooks:write"

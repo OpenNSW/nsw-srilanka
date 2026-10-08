@@ -17,6 +17,4 @@ const (
 	UploadRoute = "POST /api/v1/storage"
 	// DownloadRoute returns a time-limited URL to download the file from.
 	DownloadRoute = "GET /api/v1/storage/{key}"
-	// DeleteRoute removes a stored file.
-	DeleteRoute = "DELETE /api/v1/storage/{key}"
 )

@@ -22,7 +22,7 @@
             { "handle": "profile", "name": "Profile",
               "actions": [ { "handle": "read", "name": "Read" } ] },
             { "handle": "storage", "name": "Storage",
-              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "delete", "name": "Delete" } ] },
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
             { "handle": "slce-webhooks", "name": "SLCE Webhooks",
               "actions": [{ "handle": "write", "name": "Write" } ] },
             { "handle": "payment-webhooks", "name": "Payment Webhooks",
@@ -70,7 +70,7 @@
             { "handle": "profile", "name": "Profile",
               "actions": [ { "handle": "read", "name": "Read" } ] },
             { "handle": "storage", "name": "Storage",
-              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "delete", "name": "Delete" } ] }
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] }
           ]
         }
       ]
@@ -93,7 +93,7 @@
             { "handle": "profile", "name": "Profile",
               "actions": [ { "handle": "read", "name": "Read" } ] },
             { "handle": "storage", "name": "Storage",
-              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" }, { "handle": "delete", "name": "Delete" } ] }
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] }
           ]
         }
       ]

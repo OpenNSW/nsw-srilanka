@@ -361,12 +361,12 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 Each protected backend is registered as a **resource server** whose `identifier`
 becomes the access-token **audience** (`aud`):
 
-| `identifier` (= token `aud`)           | Backend                                                                  | Scopes (`<resource>:<action>`)                                                                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `https://api.nsw-srilanka.local`       | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`                 | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,delete}` |
-| `https://api.nsw-agency.local`         | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/`   | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                                     |
-| `https://api.cda.nsw-agency.local`     | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)         | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}`                    |
-| `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write,delete}`                    |
+| `identifier` (= token `aud`)           | Backend                                                                  | Scopes (`<resource>:<action>`)                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://api.nsw-srilanka.local`       | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`                 | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write}` |
+| `https://api.nsw-agency.local`         | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/`   | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                              |
+| `https://api.cda.nsw-agency.local`     | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)         | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
