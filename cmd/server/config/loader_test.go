@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -163,6 +164,8 @@ func TestLoadFile_ExamplesLoad(t *testing.T) {
 	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
 		t.Setenv(k, "example-"+k)
 	}
+	// Validated as a keyset, so it takes the form .env.example gives it.
+	t.Setenv("STORAGE_TOKEN_KEYSET", "example:"+base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	// Both are dev templates, run under APP_ENV=development (make dev, make
 	// test-e2e), which lets their insecure-TLS settings through.
 	t.Setenv("APP_ENV", "development")

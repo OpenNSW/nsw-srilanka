@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
@@ -31,6 +34,8 @@ const (
 	errInvalidRequestBody   = "invalid request body"
 	errStaleStep            = "this step is no longer active; refetch the task"
 	errRequestBodyTooLarge  = "request body too large"
+	errFileNotYours         = "a file in the submission was issued to someone else"
+	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -47,6 +52,9 @@ type HTTPHandler struct {
 	AuthzCatalog    taskauthz.Catalog
 	Audit           *nswaudit.Recorder
 	MaxRequestBytes int64
+	// Files swaps the task's declared file fields: stored values out as
+	// references for a reader, references in as stored values on a submission.
+	Files *FileBinding
 }
 
 func NewHTTPHandler(
@@ -54,6 +62,7 @@ func NewHTTPHandler(
 	store TaskFetcher,
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
+	files *FileBinding,
 	audit *nswaudit.Recorder,
 	maxRequestBytes int64,
 ) *HTTPHandler {
@@ -62,6 +71,7 @@ func NewHTTPHandler(
 		Store:           store,
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
+		Files:           files,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
@@ -120,7 +130,15 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(ctx, record, claims)
+	// The reader gets references to the task's files, never their stored values.
+	p, _ := authn.FromContext(ctx)
+	view, err := h.Files.ForReader(record, p)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to issue file references", err, "taskId", taskID)
+		return
+	}
+
+	zv, err := h.Assembler.Assemble(ctx, view, claims)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
@@ -154,7 +172,7 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	}
 
 	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
-	if !ok {
+	if !ok || !h.resolveFiles(w, r, taskID, stepID, payload) {
 		return
 	}
 	// Read before the call: core may strip system keys from the payload.
@@ -184,7 +202,7 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	}
 
 	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
-	if !ok {
+	if !ok || !h.resolveFiles(w, r, taskID, stepID, payload) {
 		return
 	}
 	// Read before the call: core may strip system keys from the payload.
@@ -258,6 +276,41 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 
 	slog.InfoContext(r.Context(), "tasks: processing complete step command", append(logAttrs, "command", req.Command)...)
 	return payload, true
+}
+
+// resolveFiles replaces the file references in a submission for step stepID
+// of task taskID with the stored values they stand for, so only those are
+// stored. On failure it writes the response and returns false.
+func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskID, stepID string, payload map[string]any) bool {
+	ctx := r.Context()
+	record, ok := h.Store.GetTask(ctx, taskID)
+	if !ok {
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return false
+	}
+	// Which fields hold files depends on the step. Core rejects a submission
+	// for a step that is not active anyway; do it first, before resolving
+	// anything against the wrong step.
+	if record.ActiveStepID != stepID {
+		err := fmt.Errorf("%w: call was for step %q, active step is %q", orchestrator.ErrStaleStep, stepID, record.ActiveStepID)
+		h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID)
+		return false
+	}
+
+	p, _ := authn.FromContext(ctx)
+	err := h.Files.FromCaller(ctx, record, payload, p)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, fileaccess.ErrNotYours):
+		slog.WarnContext(ctx, "tasks: submission carries a file issued to someone else", "taskId", taskID, "stepId", stepID, "error", err)
+		httputil.Error(w, r, http.StatusForbidden, errFileNotYours)
+	case errors.Is(err, fileaccess.ErrExpired):
+		httputil.Error(w, r, http.StatusGone, errFileExpired)
+	default:
+		httputil.InternalServerError(w, r, "tasks: failed to resolve file references", err, "taskId", taskID, "stepId", stepID)
+	}
+	return false
 }
 
 // writeCompletion answers a completion attempt: 204 when the workflow accepted the

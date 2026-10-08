@@ -27,6 +27,8 @@ type Service interface {
 	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 	// GetDownloadURL returns a time-limited URL the client downloads the file from.
 	GetDownloadURL(ctx context.Context, key string) (string, error)
+	// DownloadURL is GetDownloadURL plus the Unix time the URL expires at.
+	DownloadURL(ctx context.Context, key string) (string, int64, error)
 	// Delete removes a stored file.
 	Delete(ctx context.Context, key string) error
 }

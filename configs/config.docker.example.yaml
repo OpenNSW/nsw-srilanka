@@ -102,6 +102,15 @@ storage:
     - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
   # Largest upload, in bytes (32 MiB). Not read when type is proxy.
   maxUploadBytes: 33554432
+  # Seals the file tokens clients hold in place of stored file keys:
+  # comma-separated kid:key pairs, newest first, each key 32 random bytes in
+  # base64 (openssl rand -base64 32). Required whatever the type, and different
+  # for every deployment. Rotate by putting a new pair first; keep the old ones
+  # while their tokens must still open, which for tokens given to agencies is
+  # for good.
+  tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
+  # How long a user's file token lasts, in seconds. Optional: 3600 when unset.
+  tokenTTLSeconds: 3600
   # Only read when type is local.
   local:
     baseDir: ./bucket
