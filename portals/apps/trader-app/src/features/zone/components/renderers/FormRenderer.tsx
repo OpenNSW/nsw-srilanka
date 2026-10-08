@@ -135,10 +135,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const validationMode: 'ValidateAndShow' | 'ValidateAndHide' = showErrors ? 'ValidateAndShow' : 'ValidateAndHide'
 
-  const formI18n = useMemo(
-    () => ({ translateError: createFormErrorTranslator(payload.schema) }),
-    [payload.schema],
-  )
+  const formI18n = useMemo(() => ({ translateError: createFormErrorTranslator(payload.schema) }), [payload.schema])
 
   // Catch dataSeed up to data, synchronously, exactly when additionalErrors
   // or validationMode is about to change — the only moments JsonForms's

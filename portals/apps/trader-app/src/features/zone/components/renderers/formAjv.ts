@@ -1,9 +1,4 @@
-import {
-  createAjv,
-  defaultErrorTranslator,
-  type ErrorTranslator,
-  type JsonSchema,
-} from '@jsonforms/core'
+import { createAjv, defaultErrorTranslator, type ErrorTranslator, type JsonSchema } from '@jsonforms/core'
 
 // $data: true — needed for formatMaximum: { $data: "1/<sibling>" } date-order rules in schemas.
 export const formAjv = createAjv({ useDefaults: true, $data: true })
@@ -14,7 +9,7 @@ function parentObjectSchema(root: JsonSchema, instancePath: string): JsonSchema 
   let current: JsonSchema | undefined = root
   for (const seg of segments.slice(0, -1)) {
     if (!current || typeof current !== 'object' || !current.properties?.[seg]) return undefined
-    current = current.properties[seg] as JsonSchema
+    current = current.properties[seg]
   }
   return current
 }
