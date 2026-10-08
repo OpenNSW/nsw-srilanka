@@ -122,8 +122,9 @@ type FileFetcher interface {
 // targets via remote.Manager and posts the OGA submission envelope. Payment
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
-// dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string) error {
+// dispatches SMS/email through notifications.Manager. ogaFiles issues the file
+// tokens EXTERNAL_REVIEW sends OGAs.
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, ogaFiles OGAFiles, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -133,13 +134,16 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	if paymentService == nil {
 		return fmt.Errorf("plugins: payment service is nil")
 	}
+	if ogaFiles.ClientFor == nil || ogaFiles.IssueForClient == nil {
+		return fmt.Errorf("plugins: OGA file tokens are not configured")
+	}
 
 	entries := []struct {
 		taskType string
 		plugin   flowplugins.TaskPlugin
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
-		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL)},
+		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, ogaFiles)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},

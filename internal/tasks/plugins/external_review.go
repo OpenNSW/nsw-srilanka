@@ -15,12 +15,14 @@ import (
 // fully-populated submission envelope.
 type ExternalReviewPlugin struct {
 	client *dispatchHelper
+	files  OGAFiles
 }
 
 // NewExternalReviewPlugin builds a plugin that POSTs the trader's submitted
-// form to the configured service+path with a rich body shape.
-func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string) *ExternalReviewPlugin {
-	return &ExternalReviewPlugin{client: newDispatchHelper(manager, backendBaseURL)}
+// form to the configured service+path with a rich body shape. The files in it
+// are sent as tokens for the OGA, issued through files.
+func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string, files OGAFiles) *ExternalReviewPlugin {
+	return &ExternalReviewPlugin{client: newDispatchHelper(manager, backendBaseURL), files: files}
 }
 
 type externalReviewConfig struct {
@@ -54,8 +56,15 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	// supports dot-paths natively). Otherwise the whole inputs bag is sent
 	// (default fallback for simple cases).
 	var data any = ctx.Inputs
+	root := ""
 	if submission, ok := ctx.Inputs["submission"]; ok {
-		data = submission
+		data, root = submission, "submission"
+	}
+	// The task's declared file fields are rooted at its data, which holds the
+	// inputs; the OGA gets tokens for the ones it is sent.
+	data, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
+	if err != nil {
+		return fmt.Errorf("external_review: %w", err)
 	}
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
 	if err != nil {

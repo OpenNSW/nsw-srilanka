@@ -267,6 +267,7 @@ The backend never hands a declared value to a caller as it is stored:
 
 - `GET /api/v1/tasks/{id}` replaces each one with a **file reference** issued to the reader. `GET /api/v1/storage/{ref}` accepts it from that reader only, for `storage.tokenTTLSeconds` (an hour by default), and refuses anyone else's with a `403` and an expired one with a `410`.
 - A submission must send each declared field back as a reference issued to the submitter, and the value it stands for is what gets stored. Someone else's reference is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
+- An `EXTERNAL_REVIEW` step sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`). It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 
