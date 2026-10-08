@@ -129,6 +129,7 @@ The child subworkflow defines the execution path of a single transaction stage.
 - `type`: A user-facing category for the view. `APPLICATION` (trader/applicant submission view) and `REVIEW` (officer review split pane) are the common ones; the shipped configs also use `PAYMENT`, `SYSTEM`, `LAB_TEST`, `SAMPLE_COLLECTION`, `VISUAL_ASSESSMENT`, and `CERTIFICATE_ISSUANCE`.
 - `title`: Human-readable name for the whole task view (e.g. `[Trade] Select HS Codes`).
 - `read`: **Who may read this task at all** — see [Read authorization](#read-authorization) below.
+- `files`: **Which values in the task's data are stored files** — see [File fields](#file-fields) below.
 - `sections`: Map of slots (e.g. `user_form`, `status_messsage`). The slot key is the section's identifier: it is sent to the frontend as the `id` of the section's view entry, and `layouts` refer to sections by it. Sections have no `id` field of their own.
   - `templateId`: Identifies the schema file to display (maps to `id` in the respective `*_jsonform.json`).
   - `projector`: `FORM` (interactive JSONForm), `MARKDOWN` (static instructions), or `PAYMENT` (checkout page).
@@ -237,6 +238,30 @@ In the same `PENDING_USER` state the CHA gets the form and its submit button, wh
 
 > [!IMPORTANT]
 > This is presentation-layer scoping and the read gate — it does not authorize _writes_. Who may run a command is a separate, deny-by-default rule in the subtask template's `authz` extension (see [`internal/tasks/extensions/authz/README.md`](../internal/tasks/extensions/authz/README.md)). A section hidden here still needs its command denied there.
+
+### File fields
+
+`files` (top level) lists the values in the task's data that are stored files, such as the value a form's file upload puts in a field. Each entry is a path into the task's data, starting at the top-level key, which is usually a step's output namespace:
+
+```json
+{
+  "id": "cda-apply-coconut-cert-flow:render",
+  "files": ["userform.invoice", "userform.supportingDocuments[*].file"],
+  "sections": { "...": "..." }
+}
+```
+
+A path is names joined by `.`. A name can be followed by `[*]` to step into every element of an array, once per level of nesting. Names are letters, digits, `_` and `-`; there are no indexes and no wildcard names.
+
+| Path                                     | Points at                                    |
+| ---------------------------------------- | -------------------------------------------- |
+| `traderinput.invoice_file_url`           | one file in a field                          |
+| `fcau.analysis_certificates[*]`          | every file in an array                       |
+| `userform.supportingDocuments[*].file`   | the `file` field of every object in an array |
+| `userform.items[*].lines[*].certificate` | a field of objects in arrays inside an array |
+| `review.batches[*][*]`                   | every file in an array of arrays             |
+
+A path with no data behind it, or an empty string, has no file and is skipped. Like the rest of `render.json`, `files` is snapshotted when the task starts, so a field added later only covers tasks started after it.
 
 ### Interactive Form Template Example (`render.json`)
 
