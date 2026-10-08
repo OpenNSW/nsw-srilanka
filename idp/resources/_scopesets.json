@@ -20,8 +20,7 @@
       "nsw:task:write",
       "nsw:consignment:read",
       "nsw:storage:read",
-      "nsw:storage:write",
-      "nsw:storage:delete"
+      "nsw:storage:write"
     ],
     "agencyReviewer": [
       "agency:application:read",
@@ -48,8 +47,7 @@
       "nsw:task:write",
       "nsw:profile:read",
       "nsw:storage:read",
-      "nsw:storage:write",
-      "nsw:storage:delete"
+      "nsw:storage:write"
     ],
     "nswToCda": [
       "nsw:workflow:inject",
@@ -61,8 +59,7 @@
       "nsw:task:write",
       "nsw:profile:read",
       "nsw:storage:read",
-      "nsw:storage:write",
-      "nsw:storage:delete"
+      "nsw:storage:write"
     ],
     "customsInject": [
       "nsw:workflow:inject"

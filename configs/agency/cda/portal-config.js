@@ -8,7 +8,7 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.cda.nsw-agency.local',
   APP_URL: 'http://localhost:5176',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:storage:delete,nsw:profile:read',
+    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read',
   IDP_ROLE_CLAIM_NAME: 'roles',
   // Officers sign in as the app's "Trader" role; agency mode hides the role switcher
   // and the backend checks the real officer role (see docs/agency.md).

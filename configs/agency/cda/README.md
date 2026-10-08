@@ -17,7 +17,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                                   |
 
 CDA keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
-service, so officers open, upload and delete the documents in TNSW's storage, calling
+service, so officers open and upload the documents in TNSW's storage, calling
 TNSW as `CDA_TO_NSW`. TNSW applies its own upload limits.
 
 ## Run with Docker Compose

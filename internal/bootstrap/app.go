@@ -439,7 +439,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Storage
 	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
 	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
-	mux.Handle(nswstorage.DeleteRoute, withAuth(withScope(scopes.StorageDelete)(http.HandlerFunc(storageHandler.Delete))))
 
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
