@@ -61,7 +61,7 @@ storage:
     downloadPath: /api/v1/storage/{key}
     deletePath: /api/v1/storage/{key}
 
-# Officers sign in through the CDA portal client, and NSW injects as NSW_TO_CDA.
+# Officers sign in through the CDA portal client, and NSW injects and replies as NSW_TO_CDA.
 # The audience is the CDA API resource server in
 # idp/resources/shared/resource-servers.json. The keys are fetched in-network;
 # the issuer is the browser-facing host the tokens are minted for.

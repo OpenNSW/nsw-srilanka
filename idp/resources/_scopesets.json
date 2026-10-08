@@ -51,8 +51,9 @@
       "nsw:storage:write",
       "nsw:storage:delete"
     ],
-    "cdaInject": [
-      "nsw:workflow:inject"
+    "nswToCda": [
+      "nsw:workflow:inject",
+      "nsw:task:write"
     ],
     "customsOfficer": [
       "nsw:consignment:read",
