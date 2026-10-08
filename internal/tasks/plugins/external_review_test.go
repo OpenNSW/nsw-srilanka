@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/OpenNSW/core/remote"
@@ -32,17 +33,37 @@ type receivedCall struct {
 	body map[string]any
 }
 
+// reviewService records the calls a fake review service received. The handler runs
+// on the server's goroutines, so received is guarded by mu.
+type reviewService struct {
+	mu       sync.Mutex
+	received []receivedCall
+}
+
+// calls returns a copy of the calls received so far.
+func (s *reviewService) calls() []receivedCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]receivedCall(nil), s.received...)
+}
+
 // newReviewService starts a fake review service answering every call with status
-// and returns a remote.Manager that knows it as "agency", plus the calls it saw.
-func newReviewService(t *testing.T, status int) (*remote.Manager, *[]receivedCall) {
+// and returns a remote.Manager that knows it as "agency", plus the service.
+func newReviewService(t *testing.T, status int) (*remote.Manager, *reviewService) {
 	t.Helper()
-	var calls []receivedCall
+	svc := &reviewService{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		// assert, not require: FailNow must not be called off the test's goroutine,
+		// and the client still needs a response.
 		var body map[string]any
-		require.NoError(t, json.Unmarshal(raw, &body))
-		calls = append(calls, receivedCall{path: r.URL.Path, body: body})
+		raw, err := io.ReadAll(r.Body)
+		if !assert.NoError(t, err) || !assert.NoError(t, json.Unmarshal(raw, &body)) {
+			http.Error(w, "bad request body", http.StatusBadRequest)
+			return
+		}
+		svc.mu.Lock()
+		svc.received = append(svc.received, receivedCall{path: r.URL.Path, body: body})
+		svc.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(`{}`))
@@ -54,7 +75,7 @@ func newReviewService(t *testing.T, status int) (*remote.Manager, *[]receivedCal
 	require.NoError(t, os.WriteFile(file, []byte(services), 0o600))
 	mgr := remote.NewManager()
 	require.NoError(t, mgr.LoadServices(file))
-	return mgr, &calls
+	return mgr, svc
 }
 
 func reviewContext(inputs map[string]any) plugins.PluginContext {
@@ -73,7 +94,7 @@ func ownToken(t *testing.T) string {
 }
 
 func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
-	mgr, calls := newReviewService(t, http.StatusOK)
+	mgr, svc := newReviewService(t, http.StatusOK)
 	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
 	ctx := reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}})
 
@@ -81,8 +102,9 @@ func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrSuspended)
 	assert.Equal(t, "QUEUED_EXTERNALLY", ctx.Record.State)
-	require.Len(t, *calls, 1)
-	call := (*calls)[0]
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	call := calls[0]
 	assert.Equal(t, "/api/v1/inject", call.path)
 	assert.Equal(t, reviewTaskID, call.body["taskId"])
 	assert.Equal(t, "review_v1", call.body["taskCode"])
@@ -91,19 +113,20 @@ func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 }
 
 func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
-	mgr, calls := newReviewService(t, http.StatusOK)
+	mgr, svc := newReviewService(t, http.StatusOK)
 	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
 	ctx := reviewContext(map[string]any{"replyToken": "", "submission": map[string]any{}})
 
 	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject", "reply_command": "submit"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
-	require.Len(t, *calls, 1)
-	assert.Equal(t, "/api/v1/inject", (*calls)[0].path)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "/api/v1/inject", calls[0].path)
 }
 
 func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
-	mgr, calls := newReviewService(t, http.StatusOK)
+	mgr, svc := newReviewService(t, http.StatusOK)
 	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
@@ -115,8 +138,9 @@ func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrSuspended)
 	assert.Equal(t, "QUEUED_EXTERNALLY", ctx.Record.State)
-	require.Len(t, *calls, 1)
-	call := (*calls)[0]
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	call := calls[0]
 	assert.Equal(t, "/api/v1/callbacks/tok_x", call.path)
 	assert.Equal(t, map[string]any{
 		"command": "submit",
@@ -168,13 +192,13 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr, calls := newReviewService(t, http.StatusOK)
+			mgr, svc := newReviewService(t, http.StatusOK)
 			p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
 
 			err := p.Execute(reviewContext(tt.inputs), json.RawMessage(tt.config))
 
 			require.ErrorContains(t, err, tt.want)
-			assert.Empty(t, *calls)
+			assert.Empty(t, svc.calls())
 		})
 	}
 }
