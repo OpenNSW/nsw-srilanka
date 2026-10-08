@@ -365,7 +365,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	storageHandler := storageStack.Handler
 	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
@@ -464,7 +463,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/users/me", withAuth(withScope(scopes.ProfileRead)(http.HandlerFunc(profileHandler.HandleGetProfile))))
 
 	// Storage
-	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
+	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(fileHandler.Upload))))
 	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(fileHandler.Download))))
 
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook

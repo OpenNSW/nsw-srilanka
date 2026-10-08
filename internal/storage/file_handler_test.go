@@ -6,9 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,6 +126,10 @@ func TestFileHandler_Download(t *testing.T) {
 
 type failingRefs struct{}
 
+func (failingRefs) IssueFor(*authn.Principal, string) (string, error) {
+	return "", errors.New("keyset unavailable")
+}
+
 func (failingRefs) Resolve(*authn.Principal, string) (string, error) {
 	return "", errors.New("keyset unavailable")
 }
@@ -203,10 +209,14 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	}
 	tnswService := corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...))
 	tnswFiles := NewFileHandler(tnswService, tnswAccess)
-	mux.HandleFunc(DownloadRoute, func(w http.ResponseWriter, r *http.Request) {
-		client := &authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}
-		tnswFiles.Download(w, r.WithContext(authn.ContextWithPrincipal(r.Context(), client)))
-	})
+	asAgency := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			client := &authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}
+			next(w, r.WithContext(authn.ContextWithPrincipal(r.Context(), client)))
+		}
+	}
+	mux.HandleFunc(UploadRoute, asAgency(tnswFiles.Upload))
+	mux.HandleFunc(DownloadRoute, asAgency(tnswFiles.Download))
 	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
 
 	key := uploadKey(t, tnswService)
@@ -229,4 +239,116 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 
 	assertDownloadURL(t, download(agencyFiles, officerToken, officer))
 	assertStatus(t, download(agencyFiles, officerToken, user("another-officer")), http.StatusForbidden)
+
+	// An officer's own upload goes to TNSW too: TNSW issues the agency a
+	// token, and the agency wraps it for the officer.
+	uploaded := upload(agencyFiles, officer, `{"filename":"cert.pdf","mime_type":"application/pdf","size":10}`)
+	assertStatus(t, uploaded, http.StatusOK)
+	var meta struct {
+		Key string `json:"key"`
+	}
+	if err := json.NewDecoder(uploaded.Body).Decode(&meta); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := agencyAccess.Resolve(officer, meta.Key)
+	if err != nil {
+		t.Fatalf("the officer's upload reference: %v", err)
+	}
+	if _, err := tnswAccess.Resolve(&authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}, stored); err != nil {
+		t.Fatalf("what the agency stores is not TNSW's token for it: %v", err)
+	}
+	assertDownloadURL(t, download(agencyFiles, meta.Key, officer))
+}
+
+// upload calls h.Upload with body as p (no principal when p is nil).
+func upload(h *FileHandler, p *authn.Principal, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage", strings.NewReader(body))
+	if p != nil {
+		req = req.WithContext(authn.ContextWithPrincipal(req.Context(), p))
+	}
+	rec := httptest.NewRecorder()
+	h.Upload(rec, req)
+	return rec
+}
+
+func TestFileHandler_UploadReturnsAReference(t *testing.T) {
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	access, _ := testFileAccess(t)
+	h := NewFileHandler(stack.Service, access)
+
+	rec := upload(h, user("alice"), `{"filename":"invoice.pdf","mime_type":"application/pdf","size":10}`)
+	assertStatus(t, rec, http.StatusOK)
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["id"]; ok {
+		t.Errorf("response %v has an id, which is the stored key without its extension", body)
+	}
+	if body["name"] != "invoice.pdf" || body["upload_url"] == "" {
+		t.Errorf("response %v, want the name and an upload_url", body)
+	}
+	ref, _ := body["key"].(string)
+	stored, err := access.Resolve(user("alice"), ref)
+	if err != nil {
+		t.Fatalf("key %q is not a reference for the uploader: %v", ref, err)
+	}
+	if !strings.Contains(body["upload_url"].(string), stored) {
+		t.Errorf("upload_url %v does not name the stored file %q", body["upload_url"], stored)
+	}
+	assertDownloadURL(t, download(h, ref, user("alice")))
+	assertStatus(t, download(h, ref, user("bob")), http.StatusForbidden)
+}
+
+func TestFileHandler_UploadRejects(t *testing.T) {
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	access, _ := testFileAccess(t)
+	h := NewFileHandler(stack.Service, access)
+
+	tests := []struct {
+		name, body  string
+		p           *authn.Principal
+		wantStatus  int
+		wantMessage string
+	}{
+		{"no principal", `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`, nil, http.StatusUnauthorized, "authentication required"},
+		{"bad body", `{`, user("alice"), http.StatusBadRequest, "invalid request body"},
+		{"no filename", `{"mime_type":"application/pdf","size":10}`, user("alice"), http.StatusBadRequest, "filename is required"},
+		{"no type", `{"filename":"a.pdf","size":10}`, user("alice"), http.StatusBadRequest, "mime_type is required"},
+		{"no size", `{"filename":"a.pdf","mime_type":"application/pdf"}`, user("alice"), http.StatusBadRequest, "size must be greater than 0"},
+		{"too large", fmt.Sprintf(`{"filename":"a.pdf","mime_type":"application/pdf","size":%d}`, testMaxUploadBytes+1), user("alice"), http.StatusBadRequest, "file size exceeds 1MB limit"},
+		{"type not allowed", `{"filename":"a.exe","mime_type":"application/x-msdownload","size":10}`, user("alice"), http.StatusUnsupportedMediaType, "invalid or prohibited file type"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := upload(h, tt.p, tt.body)
+			assertStatus(t, rec, tt.wantStatus)
+			if !strings.Contains(rec.Body.String(), tt.wantMessage) {
+				t.Errorf("body %s, want it to say %q", rec.Body.String(), tt.wantMessage)
+			}
+		})
+	}
+
+	t.Run("no reference can be issued", func(t *testing.T) {
+		rec := upload(NewFileHandler(stack.Service, failingRefs{}), user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`)
+		assertStatus(t, rec, http.StatusInternalServerError)
+	})
+}
+
+// In proxy mode the owning service's rejection is relayed, and its failure to
+// accept this service's credentials is a gateway failure.
+func TestFileHandler_UploadThroughProxy(t *testing.T) {
+	access, _ := testFileAccess(t)
+
+	h := NewFileHandler(newProxyStack(t, ownerToken).Service, access)
+	assertStatus(t, upload(h, user("alice"), `{"filename":"a.exe","mime_type":"application/x-msdownload","size":10}`), http.StatusUnsupportedMediaType)
+
+	h = NewFileHandler(newProxyStack(t, "wrong-token").Service, access)
+	assertStatus(t, upload(h, user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`), http.StatusBadGateway)
 }
