@@ -151,8 +151,15 @@ kubectl create secret generic nsw-secrets \
   --from-literal=m2m-asycuda-secret=... \
   --from-literal=argus-api-key=... \
   --from-literal=notification-email-token=... \
-  --from-literal=notification-sms-password=...
+  --from-literal=notification-sms-password=... \
+  --from-literal=storage-token-keyset=...
 ```
+
+`storage-token-keyset` seals the file tokens clients hold in place of stored
+file keys: comma-separated `kid:key` pairs, newest first, each key 32 random
+bytes in base64 (`openssl rand -base64 32`), such as `2026-10:<key>`. To rotate,
+put a new pair first and keep the old ones: tokens given to agencies never
+expire, so dropping a key breaks the files those agencies hold.
 
 The GovPay+ gateway also needs this GO's RSA private key. GovPay+ encrypts
 every call to the matching public key, so it must be given that public key.

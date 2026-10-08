@@ -86,6 +86,12 @@ backend:
     NOTIFICATION_SMS_PASSWORD:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: notification-sms-password }
+    # Seals the file tokens clients hold in place of stored file keys
+    # (storage.tokenKeyset). Keep old keys when rotating: tokens given to
+    # agencies never expire.
+    STORAGE_TOKEN_KEYSET:
+      valueFrom:
+        secretKeyRef: { name: nsw-secrets, key: storage-token-keyset }
 
     # --- Outbound M2M (NSW -> Agency): client secrets referenced as
     # env:M2M_NSW_TO_<AGENCY>_SECRET in configs/services*.json. ---
@@ -213,6 +219,11 @@ backend:
         - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
       # Largest upload, in bytes (32 MiB). Not read when type is proxy.
       maxUploadBytes: 33554432
+      # Seals the file tokens clients hold in place of stored file keys.
+      # Required whatever the type.
+      tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
+      # How long a user's file token lasts, in seconds. Optional: 3600 when unset.
+      tokenTTLSeconds: 3600
       s3:
         bucket: nsw-uploads
         region: auto

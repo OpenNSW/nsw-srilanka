@@ -24,7 +24,7 @@ import (
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, v)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
@@ -174,6 +174,7 @@ func getTaskHandler(t *testing.T, fetcher *fakeTaskFetcher, templates *stubTempl
 		Store:        fetcher,
 		Assembler:    zoneview.NewZoneViewAssembler(zoneview.NewTaskRenderer(asm)),
 		AuthzCatalog: taskauthz.Catalog{Roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
+		Files:        NewFileBinding(newFakeFileRefs(), nil),
 	}
 }
 
@@ -578,4 +579,126 @@ func (m *mockAuditor) VerifyIntegrity(event *argus.AuditLogRequest, publicKey cr
 
 func (m *mockAuditor) Close(ctx context.Context) error {
 	return nil
+}
+
+// --- File fields -----------------------------------------------------------
+
+const fileTaskRenderConfig = `{
+  "id": "x:render",
+  "files": ["form.invoice"],
+  "sections": {
+    "workspace": { "templateId": "form", "projector": "FORM", "dataKey": "form" }
+  },
+  "states": { "PENDING_USER": { "actions": [{ "command": "submit" }] } }
+}`
+
+func pendingFileTask() *fakeTaskFetcher {
+	return &fakeTaskFetcher{
+		found: true,
+		record: store.TaskRecord{
+			TaskID:               testTaskID,
+			TaskType:             "APPLICATION",
+			State:                "PENDING_USER",
+			RootWorkflowID:       testConsignmentID,
+			RenderConfig:         json.RawMessage(fileTaskRenderConfig),
+			ActiveTaskTemplateID: "form-step",
+			ActiveStepID:         "step-1",
+			Data:                 map[string]any{"form": map[string]any{"invoice": "stored-invoice-key"}},
+		},
+	}
+}
+
+// A reader gets a reference to each declared file, never its stored value.
+func TestHandleGetTask_GivesFileReferences(t *testing.T) {
+	refs := newFakeFileRefs()
+	fetcher := pendingFileTask()
+	h := getTaskHandler(t, fetcher, &stubTemplates{})
+	h.Files = NewFileBinding(refs, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
+	req.SetPathValue("id", testTaskID)
+	in := ownerInput("Trader", "trader")
+	ctx := taskauthz.WithInput(req.Context(), in)
+	req = req.WithContext(authn.ContextWithPrincipal(ctx, userPrincipal("alice")))
+	recorder := httptest.NewRecorder()
+	h.HandleGetTask(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), `"invoice":"ref1"`)
+	assert.NotContains(t, recorder.Body.String(), "stored-invoice-key")
+	value, err := refs.Resolve(userPrincipal("alice"), "ref1")
+	require.NoError(t, err)
+	assert.Equal(t, "stored-invoice-key", value)
+	assert.Equal(t, "stored-invoice-key", fetcher.record.Data["form"].(map[string]any)["invoice"], "the stored record must not change")
+}
+
+func TestHandleGetTask_BadFileDeclarationIsAnError(t *testing.T) {
+	fetcher := pendingFileTask()
+	fetcher.record.RenderConfig = json.RawMessage(`{"id":"x:render","files":["form.invoice[0]"],"sections":{}}`)
+	in := ownerInput("Trader", "trader")
+	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
+
+	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+// submitStep posts payload to the portal route as p. The handler has no task
+// manager, so a request that got past the file references would panic.
+func submitStep(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, stepID string, p *authn.Principal, payload map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+	var calls int
+	h := &HTTPHandler{
+		Store:           fetcher,
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+	}
+	body, err := json.Marshal(map[string]any{"command": "submit", "payload": payload})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/"+stepID, strings.NewReader(string(body)))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", stepID)
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), p))
+	recorder := httptest.NewRecorder()
+	h.HandleCompleteTaskStep(recorder, req)
+	return recorder
+}
+
+func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
+	refs := newFakeFileRefs()
+	alicesRef, _ := refs.IssueFor(userPrincipal("alice"), "k")
+	expiredRef, _ := refs.IssueFor(userPrincipal("bob"), "k")
+	refs.expired[expiredRef] = true
+
+	tests := []struct {
+		name       string
+		fetcher    *fakeTaskFetcher
+		stepID     string
+		payload    map[string]any
+		wantStatus int
+	}{
+		{"missing task", &fakeTaskFetcher{}, "step-1", map[string]any{}, http.StatusNotFound},
+		{"step no longer active", pendingFileTask(), "step-0", map[string]any{"invoice": alicesRef}, http.StatusConflict},
+		{"someone else's file", pendingFileTask(), "step-1", map[string]any{"invoice": alicesRef}, http.StatusForbidden},
+		{"expired file", pendingFileTask(), "step-1", map[string]any{"invoice": expiredRef}, http.StatusGone},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := submitStep(t, tt.fetcher, refs, tt.stepID, userPrincipal("bob"), tt.payload)
+			assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
+		})
+	}
+}
+
+func TestResolveFiles_StoresTheValues(t *testing.T) {
+	refs := newFakeFileRefs()
+	ref, _ := refs.IssueFor(userPrincipal("alice"), "stored-invoice-key")
+	var calls int
+	h := &HTTPHandler{Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))}
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
+	payload := map[string]any{"invoice": ref, "__command": "submit"}
+
+	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload)
+
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
 }
