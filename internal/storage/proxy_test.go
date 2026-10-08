@@ -62,8 +62,8 @@ func newOwningService(t *testing.T) *httptest.Server {
 	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...)))
 	mux.HandleFunc(UploadRoute, h.Upload)
 	mux.HandleFunc(DownloadRoute, h.Download)
-	// core's handler can still delete; this application no longer mounts a
-	// delete route, but ProxyService keeps Delete as part of Service.
+	// ProxyService keeps Delete as part of Service, though this application
+	// mounts no delete route.
 	mux.HandleFunc("DELETE /api/v1/storage/{key}", h.Delete)
 	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
 	return srv
