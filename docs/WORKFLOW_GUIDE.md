@@ -266,8 +266,8 @@ A path with no data behind it, or an empty string, has no file and is skipped. L
 The backend never hands a declared value to a caller as it is stored:
 
 - An upload (`POST /api/v1/storage`) returns a file reference issued to the uploader as its `key`, which is what a form's file field holds.
-- `GET /api/v1/tasks/{id}` replaces each one with a **file reference** issued to the reader. `GET /api/v1/storage/{ref}` accepts it from that reader only, for `storage.tokenTTLSeconds` (an hour by default), and refuses anyone else's with a `403` and an expired one with a `410`.
-- A submission must send each declared field back as a reference issued to the submitter, and the value it stands for is what gets stored. Someone else's reference is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
+- `GET /api/v1/tasks/{id}` replaces each one with a **file reference** issued to the reader. `GET /api/v1/storage/{ref}` accepts it from that reader only, for `storage.tokenTTLSeconds` (an hour by default). It refuses anything else with a `403`, a raw storage key included, and an expired reference with a `410`.
+- A submission must send each declared field back as a reference issued to the submitter, and the value it stands for is what gets stored. Someone else's reference is refused with a `403`, an expired one with a `410`, and a value that is not a reference at all, such as a raw storage key, with a `400`.
 - An `EXTERNAL_REVIEW` step sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`). It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.

@@ -108,12 +108,12 @@ func TestFileHandler_Download(t *testing.T) {
 	t.Run("someone else's token", func(t *testing.T) {
 		assertStatus(t, download(h, token, user("bob")), http.StatusForbidden)
 	})
-	// Until every caller holds file tokens.
+	// A raw storage key grants nothing, even to whoever uploaded the file.
 	t.Run("a stored value", func(t *testing.T) {
-		assertDownloadURL(t, download(h, key, user("bob")))
+		assertStatus(t, download(h, key, user("alice")), http.StatusForbidden)
 	})
-	t.Run("a value core/storage could not have made", func(t *testing.T) {
-		assertStatus(t, download(h, "../outside", user("alice")), http.StatusBadRequest)
+	t.Run("anything else that is not a reference", func(t *testing.T) {
+		assertStatus(t, download(h, "../outside", user("alice")), http.StatusForbidden)
 	})
 	t.Run("no principal", func(t *testing.T) {
 		assertStatus(t, download(h, token, nil), http.StatusUnauthorized)

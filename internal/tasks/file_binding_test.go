@@ -168,16 +168,14 @@ func TestFileBinding_FromCallerRefuses(t *testing.T) {
 	assert.ErrorIs(t, err, fileaccess.ErrExpired)
 }
 
-// Until every caller sends file tokens, a value that is not one is stored as
-// sent.
-func TestFileBinding_FromCallerKeepsValuesThatAreNotReferences(t *testing.T) {
+// A raw storage key, or anything else that is not a reference, is not stored.
+func TestFileBinding_FromCallerRefusesValuesThatAreNotReferences(t *testing.T) {
 	var calls int
 	b := NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls))
 	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
-	payload := map[string]any{"invoice": "k-raw"}
 
-	require.NoError(t, b.FromCaller(context.Background(), record, payload, userPrincipal("alice")))
-	assert.Equal(t, map[string]any{"invoice": "k-raw"}, payload)
+	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "k-raw"}, userPrincipal("alice"))
+	assert.ErrorIs(t, err, fileaccess.ErrInvalid)
 }
 
 func TestFileBinding_FromCallerWithoutNamespaceOrFiles(t *testing.T) {
