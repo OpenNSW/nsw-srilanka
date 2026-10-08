@@ -3,6 +3,7 @@ package cusdec
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
 )
@@ -149,28 +150,31 @@ type Remittance struct {
 
 // SupportDoc is one entry of the supportingDocuments array.
 //
-// §8 recognises two kinds, told apart by the fields the entry carries:
+// The trader form groups supporting documents into two kinds, and the sequence
+// number the endpoint expects differs between them:
 //
-//   - a scanned document, which needs fileName and documentCode and has a
-//     matching fileN part in the multipart request; and
-//   - a metadata document, which references a document held elsewhere and
-//     needs itemSequence, documentCode, documentId and dateAsString, with no
-//     file attached at all.
+//   - a scanned document, which carries documentCode, fileBase64 and fileName,
+//     has a matching fileN part in the multipart request, and always travels
+//     with sequenceNumber 0; and
+//   - a metadata document, which references a document held elsewhere, needs
+//     itemSequence, documentCode, documentId and dateAsString, attaches no
+//     file, and is numbered from 1 upward.
 //
-// An entry may be both, in which case it satisfies both sets.
-//
+// FileBase64 is the storage key passed through from the form unchanged (despite
+// the name it is not encoded bytes; the bytes travel as the fileN part).
 // FileName must match the filename on the corresponding fileN part (§6.1.2),
 // which BuildPayload guarantees by deriving both from the same storage key.
 type SupportDoc struct {
 	SequenceNumber int    `json:"sequenceNumber"`
 	DocumentCode   string `json:"documentCode"`
+	FileBase64     string `json:"fileBase64,omitempty"`
 	FileName       string `json:"fileName,omitempty"`
 
 	// The metadata half. ItemSequence is the item the document applies to and
-	// must match a goodsShipments[].sequenceNumeric in the same declaration.
-	// DateAsString is dd/MM/yyyy, which is not the ISO-8601 the rest of the
-	// interface uses.
-	ItemSequence int    `json:"itemSequence,omitempty"`
+	// must match a goodsShipments[].sequenceNumeric in the same declaration; it
+	// is forwarded as the string the form sends (e.g. "003"). DateAsString is
+	// dd/MM/yyyy, which is not the ISO-8601 the rest of the interface uses.
+	ItemSequence string `json:"itemSequence,omitempty"`
 	DocumentID   string `json:"documentId,omitempty"`
 	DateAsString string `json:"dateAsString,omitempty"`
 
@@ -405,48 +409,119 @@ func buildRemittances(financial map[string]any, currency string) []Remittance {
 	return []Remittance{r}
 }
 
-// buildSupportDocs maps the form's supporting-document rows onto Annex A
-// entries. fileName is the storage key rather than the trader's original
-// filename: §6.1.2 matches part filenames against supportingDocuments entries
-// one-to-one, and two files uploaded under the same original name would make
-// that match ambiguous. Keys are unique by construction and keep the uploaded
-// extension, so they satisfy both that rule and §8's PDF requirement.
+// buildSupportDocs maps the form's supporting-document group onto Annex A
+// entries. The form sends supportingDocuments as an object with two arrays:
+//
+//   - scannedDocuments, each an uploaded PDF, which always travel with
+//     sequenceNumber 0; and
+//   - metaDocuments, each a reference to a document held elsewhere, numbered
+//     from 1 upward.
+//
+// Scanned entries come first so the array order and the fileN part numbering
+// stay in step. fileName (and fileBase64) are the storage key rather than the
+// trader's original filename: §6.1.2 matches part filenames against
+// supportingDocuments entries one-to-one, and two files uploaded under the same
+// original name would make that match ambiguous. Keys are unique by
+// construction and keep the uploaded extension, so they satisfy both that rule
+// and §8's PDF requirement.
 func buildSupportDocs(form map[string]any) ([]SupportDoc, error) {
-	raw, ok := form["supportingDocuments"].([]any)
-	if !ok || len(raw) == 0 {
+	group := nested(form, "supportingDocuments")
+	if len(group) == 0 {
 		return nil, nil
 	}
 
-	docs := make([]SupportDoc, 0, len(raw))
-	for i, entry := range raw {
+	scanned, err := supportDocList(group, "scannedDocuments")
+	if err != nil {
+		return nil, err
+	}
+	meta, err := supportDocList(group, "metaDocuments")
+	if err != nil {
+		return nil, err
+	}
+
+	docs := make([]SupportDoc, 0, len(scanned)+len(meta))
+
+	// Scanned documents: sequenceNumber is always 0 (§8).
+	for i, entry := range scanned {
 		m, ok := entry.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("customs: supporting document %d is not an object", i+1)
+			return nil, fmt.Errorf("customs: scanned document %d is not an object", i+1)
+		}
+
+		key := strings.TrimSpace(str(m, "fileBase64"))
+		code := str(m, "documentCode")
+		if key == "" || code == "" {
+			return nil, fmt.Errorf(
+				"customs: scanned document %d is missing its file or document code", i+1)
+		}
+
+		docs = append(docs, SupportDoc{
+			SequenceNumber: 0,
+			DocumentCode:   code,
+			FileBase64:     key,
+			FileName:       key,
+			storageKey:     key,
+		})
+	}
+
+	// Metadata documents: sequenceNumber runs from 1 upward.
+	for i, entry := range meta {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("customs: meta document %d is not an object", i+1)
 		}
 
 		doc := SupportDoc{
 			SequenceNumber: i + 1,
 			DocumentCode:   str(m, "documentCode"),
-			ItemSequence:   integer(m, "itemSequence"),
+			ItemSequence:   str(m, "itemSequence"),
 			DocumentID:     strings.TrimSpace(str(m, "documentId")),
-			DateAsString:   strings.TrimSpace(str(m, "dateAsString")),
+			DateAsString:   formatDMY(str(m, "dateAsString")),
 		}
 
-		// A file makes it a scanned document (§8); without one it has to stand
-		// as a metadata document instead, and those carry the reference in
-		// place of the bytes. A row with neither promises an attachment that is
-		// not there, which the endpoint rejects (400).
-		if key := strings.TrimSpace(str(m, "file")); key != "" {
-			doc.FileName = key
-			doc.storageKey = key
-		} else if doc.DocumentID == "" || doc.DateAsString == "" || doc.ItemSequence == 0 {
+		// A metadata document stands in for bytes held elsewhere, so it must
+		// carry the reference fields that identify the document; without them
+		// the endpoint rejects it (400).
+		if doc.DocumentCode == "" || doc.ItemSequence == "" || doc.DocumentID == "" || doc.DateAsString == "" {
 			return nil, fmt.Errorf(
-				"customs: supporting document %d has no attached file, and is missing the item number, reference or date a document without one needs", i+1)
+				"customs: meta document %d is missing the item number, document code, reference or date it needs", i+1)
 		}
 
 		docs = append(docs, doc)
 	}
+
 	return docs, nil
+}
+
+// supportDocList reads one supporting-document collection. A missing field is
+// an empty list. A present value that is not an array is rejected, so a
+// malformed collection is not silently dropped.
+func supportDocList(group map[string]any, key string) ([]any, error) {
+	raw, present := group[key]
+	if !present {
+		return nil, nil
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("customs: %s must be an array", key)
+	}
+	return list, nil
+}
+
+// formatDMY converts the form's ISO date (yyyy-MM-dd) to the dd/MM/yyyy Annex A
+// expects for a supporting document. A value that is not that shape comes back
+// empty, so the caller rejects the document instead of sending a date the
+// endpoint will refuse.
+func formatDMY(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	t, err := time.Parse("2006-01-02", v)
+	if err != nil {
+		return ""
+	}
+	return t.Format("02/01/2006")
 }
 
 // --- form accessors -------------------------------------------------------
