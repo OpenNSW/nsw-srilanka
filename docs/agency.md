@@ -114,8 +114,9 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
    `STARTED` row is returned without touching the engine. That matters: once a
    workflow completes, Temporal would accept the same ID as a new run. A repeat
    `taskId` with a different `consignmentId` or `taskCode` is not a retry: it is a 409
-   and starts nothing. A repeat inject is never a new review round either: a
-   resubmission comes back as a reply on the agency's own token (below).
+   and starts nothing. Nor is it a new review round: where the artifacts are wired
+   for replies, a resubmission comes back as a reply on the agency's own token
+   (below), not as a repeat inject.
 5. Tasks spawned under the workflow have `RootWorkflowID == taskId`. The agency's task
    authz gate (`agency.OfficerGate`) reports `officer` ownership for any root that is
    an `agency_workflow` row, so `readauthz` and the write extension treat officers
@@ -123,8 +124,10 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
 
 ## Asking for more information
 
-Only the first round goes through inject. After that, each side calls back on the
-other side's waiting step, by the token that step handed over:
+Where the artifacts are wired for it (a `replyToken` input and a `reply_command` on
+the `EXTERNAL_REVIEW` steps), only the first round goes through inject. After that,
+each side calls back on the other side's waiting step, by the token that step handed
+over:
 
 1. TNSW's `EXTERNAL_REVIEW` step injects with its token `tok_b` and parks.
 2. The officer asks for more information. The review workflow's own `EXTERNAL_REVIEW`
@@ -140,7 +143,9 @@ other side's waiting step, by the token that step handed over:
 
 A token names one waiting step, so a reply cannot complete a stale or different one:
 core answers `409`. The step that sent the reply then fails without retrying and parks
-for an admin, since no retry can succeed. How a step replies is in
+for an admin, since no retry can succeed. Artifacts that are not wired for replies
+keep injecting: their resubmission is still a repeat inject, which the agency takes
+for a retry and does not deliver. How a step replies is in
 [`docs/WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md#task-types-configuration-traderinputjson--officerinputjson).
 
 ## Task configs
