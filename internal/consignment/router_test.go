@@ -82,7 +82,8 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
 	svc := mustNewService(t, db, nil, nil, mockCompany, nil, mockTaskStore)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
-	r := mustNewRouter(t, svc, nil, mockCompany, nil)
+	client, capture := nswaudit.NewWithCapture()
+	r := mustNewRouter(t, svc, nil, mockCompany, client)
 
 	consignmentID := uuid.NewString()
 	companyID := "company-trader"
@@ -103,6 +104,14 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.HandleGetConsignmentByID(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, consignmentID, recs[0].TargetID)
+	assert.Equal(t, companyID, recs[0].Metadata["callerCompanyId"])
+
 	mockCompany.AssertExpectations(t)
 	mockTaskStore.AssertExpectations(t)
 }
@@ -663,7 +672,8 @@ func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
 	db, _ := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
-	r := mustNewRouter(t, svc, nil, mockCompany, nil)
+	client, capture := nswaudit.NewWithCapture()
+	r := mustNewRouter(t, svc, nil, mockCompany, client)
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(nil, company.ErrCompanyNotFound)
@@ -674,6 +684,11 @@ func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
 	r.HandleGetConsignments(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "company not found", recs[0].Metadata["error"])
+	assert.Equal(t, "trader", recs[0].Metadata["role"])
 }
 
 func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
@@ -721,7 +736,8 @@ func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
 // any company lookup — the entitlement check must short-circuit ahead of it.
 func TestConsignmentRouter_HandleGetConsignments_RoleNotHeld(t *testing.T) {
 	mockCompany := new(MockCompanyService)
-	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, mockCompany, nil)
+	client, capture := nswaudit.NewWithCapture()
+	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, mockCompany, client)
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=cha", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
@@ -730,6 +746,13 @@ func TestConsignmentRouter_HandleGetConsignments_RoleNotHeld(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	mockCompany.AssertNotCalled(t, "GetCompanyByOUHandle", mock.Anything, mock.Anything)
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "role not held", recs[0].Metadata["error"])
+	assert.Equal(t, "cha", recs[0].Metadata["role"])
 }
 
 // An empty/unusable OU handle surfaces as ErrInvalidCompanyID and must fail
@@ -738,7 +761,8 @@ func TestConsignmentRouter_HandleGetConsignments_RoleNotHeld(t *testing.T) {
 func TestConsignmentRouter_HandleGetConsignments_InvalidCompanyID(t *testing.T) {
 	mockCompany := new(MockCompanyService)
 	svc := mustNewService(t, nil, nil, nil, mockCompany, nil, nil)
-	r := mustNewRouter(t, svc, nil, mockCompany, nil)
+	client, capture := nswaudit.NewWithCapture()
+	r := mustNewRouter(t, svc, nil, mockCompany, client)
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "").
 		Return(nil, company.ErrInvalidCompanyID)
@@ -749,6 +773,10 @@ func TestConsignmentRouter_HandleGetConsignments_InvalidCompanyID(t *testing.T) 
 	r.HandleGetConsignments(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "company not found", recs[0].Metadata["error"])
 }
 
 func TestNewRouter_ValidatesRoles(t *testing.T) {

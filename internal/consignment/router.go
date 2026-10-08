@@ -124,7 +124,6 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		TargetType: nswaudit.TargetConsignment,
 		TargetID:   consignment.ID,
 		Failure:    false,
-		Message:    consignment,
 		Metadata: map[string]any{
 			"flow":            consignment.Flow,
 			"traderCompanyId": consignment.TraderCompanyID,
@@ -190,6 +189,16 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(p.Roles, requiredTokenRole) {
+		c.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionRead,
+			TargetType: nswaudit.TargetConsignment,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error": "role not held",
+				"role":  role,
+			},
+		})
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return
 	}
@@ -197,6 +206,16 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
+			c.auditEvent(ctx, nswaudit.Event{
+				EventType:  nswaudit.EventConsignment,
+				Action:     nswaudit.ActionRead,
+				TargetType: nswaudit.TargetConsignment,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error": "company not found",
+					"role":  role,
+				},
+			})
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
@@ -277,6 +296,16 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	c.auditEvent(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignmentID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"callerCompanyId": userCompany.ID,
+		},
+	})
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 

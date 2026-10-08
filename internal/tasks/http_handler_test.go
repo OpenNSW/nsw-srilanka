@@ -363,6 +363,36 @@ func TestHandleGetTask_DeniedAudited(t *testing.T) {
 	assert.Equal(t, "task read access denied", recs[0].Metadata["error"])
 }
 
+// A successful task read must emit a success audit event (counterpart to DeniedAudited).
+func TestHandleGetTask_SuccessAudited(t *testing.T) {
+	handler := getTaskHandler(t, pendingHSCodeTask(), &stubTemplates{})
+	client, capture := nswaudit.NewWithCapture()
+	handler.Audit = client
+
+	in := ownerInput("Trader", "trader")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
+	req.SetPathValue("id", testTaskID)
+	ctx := taskauthz.WithInput(req.Context(), in)
+	ctx = authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "user-trader-1",
+	})
+	req = req.WithContext(ctx)
+
+	recorder := httptest.NewRecorder()
+	handler.HandleGetTask(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.EventTask, recs[0].EventType)
+	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
+	assert.Equal(t, nswaudit.TargetTask, recs[0].TargetType)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, testTaskID, recs[0].TargetID)
+	assert.Equal(t, "user-trader-1", recs[0].ActorID)
+}
+
 // When handler.Audit is nil, a denied task read must not panic and still return 404.
 func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
 	templates := &stubTemplates{}
