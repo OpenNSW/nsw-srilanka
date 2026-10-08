@@ -278,6 +278,7 @@ Each reference names who it was issued to and lists its **scopes**, what it allo
 
 - `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state, or it has none. It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default): anyone else's is refused with a `403` and an expired one with a `410`.
 - A submission must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
+- An `EXTERNAL_REVIEW` step sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 

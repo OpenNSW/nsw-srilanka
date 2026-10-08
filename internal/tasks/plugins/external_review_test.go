@@ -95,7 +95,7 @@ func ownToken(t *testing.T) string {
 
 func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 	ctx := reviewContext(map[string]any{"submission": map[string]any{"field": "v1"}})
 
 	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject", "task_code": "review_v1"}`))
@@ -114,7 +114,7 @@ func TestExternalReview_DispatchesWithoutReplyToken(t *testing.T) {
 
 func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 	ctx := reviewContext(map[string]any{"replyToken": "", "submission": map[string]any{}})
 
 	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject", "reply_command": "submit"}`))
@@ -127,7 +127,7 @@ func TestExternalReview_EmptyReplyTokenDispatches(t *testing.T) {
 
 func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"submission": map[string]any{"field": "v2"},
@@ -153,7 +153,7 @@ func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 
 func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusConflict)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -168,7 +168,7 @@ func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 
 func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusServiceUnavailable)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
@@ -193,7 +193,7 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mgr, svc := newReviewService(t, http.StatusOK)
-			p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+			p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 
 			err := p.Execute(reviewContext(tt.inputs), json.RawMessage(tt.config))
 
