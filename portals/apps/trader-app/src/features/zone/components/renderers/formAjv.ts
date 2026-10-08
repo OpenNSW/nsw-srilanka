@@ -4,7 +4,6 @@ import {
   type ErrorTranslator,
   type JsonSchema,
 } from '@jsonforms/core'
-import type { ErrorObject } from 'ajv'
 
 // $data: true — needed for formatMaximum: { $data: "1/<sibling>" } date-order rules in schemas.
 export const formAjv = createAjv({ useDefaults: true, $data: true })
@@ -38,7 +37,7 @@ function siblingTitleFromDataRef(
 }
 
 export function createFormErrorTranslator(rootSchema: JsonSchema | undefined): ErrorTranslator {
-  return (error: ErrorObject, translate, uischema) => {
+  return (error, translate, uischema) => {
     if (error.keyword === 'formatMaximum' && error.parentSchema && typeof error.parentSchema === 'object') {
       const selfTitle =
         typeof (error.parentSchema as JsonSchema).title === 'string'
