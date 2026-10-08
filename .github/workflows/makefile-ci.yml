@@ -203,11 +203,13 @@ jobs:
       - name: make fmt (must leave the tree clean)
         run: |
           make fmt
+          if ($LASTEXITCODE -ne 0) { throw "make fmt exited $LASTEXITCODE" }
           git diff --exit-code -- '*.go'
 
       - name: make tidy (must leave the tree clean)
         run: |
           make tidy
+          if ($LASTEXITCODE -ne 0) { throw "make tidy exited $LASTEXITCODE" }
           git diff --exit-code go.mod go.sum
 
       # The recipe is a Unix shell script (`test`). cmd.exe has no branch for
