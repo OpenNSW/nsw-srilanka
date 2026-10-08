@@ -36,9 +36,9 @@ const TaskTypeRefIDGenerator = "REFID_GENERATOR"
 // path must be relative, so each element gets an ID of its own. Entries are
 // filled in the order listed, and elements in index order.
 //
-// params maps each param a format expects (a list segment's param, or a
-// scope-key placeholder) to a pointer to its value. Params are read before any
-// ID of the step is generated. A field that already holds an ID is kept,
+// params maps each param a format expects (a list or param segment's param, or
+// a scope-key placeholder) to a pointer to its value. Params are read before
+// any ID of the step is generated. A field that already holds an ID is kept,
 // unless its entry sets "overwrite": true.
 type RefIDGeneratorPlugin struct {
 	refIDs refid.Registry

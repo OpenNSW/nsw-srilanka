@@ -322,12 +322,12 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Absolute:** a pointer starting with `/` is a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901) from the root of the inputs.
 - **Relative:** a pointer starting with `0/` is a [Relative JSON Pointer](https://datatracker.ietf.org/doc/html/draft-bhutton-relative-json-pointer) from the current element. It's only allowed in an entry with `each`. Only `0/` is supported.
 
-| Field       | Meaning                                                                                                                                                                                                                                 |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`      | The field to fill. Without `each` it is absolute. With `each` it must be relative, so each element gets its own ID. Two paths in the same scope (the root, or one `each` array) can't overlap: neither may sit inside the other.        |
-| `each`      | Optional. An absolute pointer to an array of objects; the entry applies to every element. A missing or `null` array has nothing to fill.                                                                                                |
-| `params`    | Optional. Maps each param the format expects (a list segment's `param`, or a `{name}` in a scope key) to a pointer to its value. A pointer with no value leaves that param out. Params are read before any ID of the step is generated. |
-| `overwrite` | Optional, default `false`. When `true`, the field is generated on every run, even if it already holds a value.                                                                                                                          |
+| Field       | Meaning                                                                                                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `path`      | The field to fill. Without `each` it is absolute. With `each` it must be relative, so each element gets its own ID. Two paths in the same scope (the root, or one `each` array) can't overlap: neither may sit inside the other.                 |
+| `each`      | Optional. An absolute pointer to an array of objects; the entry applies to every element. A missing or `null` array has nothing to fill.                                                                                                         |
+| `params`    | Optional. Maps each param the format expects (a list or param segment's `param`, or a `{name}` in a scope key) to a pointer to its value. A pointer with no value leaves that param out. Params are read before any ID of the step is generated. |
+| `overwrite` | Optional, default `false`. When `true`, the field is generated on every run, even if it already holds a value.                                                                                                                                   |
 
 **Behaviour:**
 

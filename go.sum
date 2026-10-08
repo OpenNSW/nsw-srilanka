@@ -22,8 +22,8 @@ github.com/OpenNSW/core/pagination v0.1.0 h1:xLpgHAdgYxzJkXXBtQoTMxMxsjZZ9RNYvJO
 github.com/OpenNSW/core/pagination v0.1.0/go.mod h1:UdpPJO/wMu2mv1nCJ1G1X0WEvFso8hh9OpDz2meA/Ts=
 github.com/OpenNSW/core/payment v0.2.1-0.20261007033506-474396a8334a h1:T4DVYDhH+uyZmbIXK3FehN9BHdxv2j6u+G/IpDKV+gI=
 github.com/OpenNSW/core/payment v0.2.1-0.20261007033506-474396a8334a/go.mod h1:wQfDe6O4p4gu+ndylpXwLdzLWIovCSh8fLfbHqjYorg=
-github.com/OpenNSW/core/refid v0.2.0 h1:g/ZgVS9iFqvQjK8EynIw3OpBVEwgmb1pzzBY4fE0OIY=
-github.com/OpenNSW/core/refid v0.2.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
+github.com/OpenNSW/core/refid v0.3.0 h1:Uwom1jGsNGULG/+zm6ogJCGs3E/5eVmvDrnz94XYidM=
+github.com/OpenNSW/core/refid v0.3.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
 github.com/OpenNSW/core/remote v0.8.0 h1:Ot44DtkEtzqKffy77EI0S6BCH1xDspQ2y2lSFKcZpPg=
 github.com/OpenNSW/core/remote v0.8.0/go.mod h1:BzfC7ppzEAd5fUQmIsgeR2lZ6LzygNU4prNjvDpDH+4=
 github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrxBChQ=
