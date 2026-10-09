@@ -8,7 +8,7 @@ import (
 )
 
 func TestMiddlewareRecordsRoutePatternAndStatus(t *testing.T) {
-	srv := newServer(t)
+	srv := New()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/tasks/{id}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -42,7 +42,7 @@ func TestMiddlewareRecordsRoutePatternAndStatus(t *testing.T) {
 }
 
 func TestMiddlewareRecordsUnmatchedAs404(t *testing.T) {
-	srv := newServer(t)
+	srv := New()
 	mux := http.NewServeMux()
 	mux.Handle("GET "+Path, srv.Handler())
 	h := srv.Middleware(mux)
@@ -66,7 +66,7 @@ func TestMiddlewareRecordsUnmatchedAs404(t *testing.T) {
 }
 
 func TestMiddlewareDefaultsUnwrittenStatusTo200(t *testing.T) {
-	srv := newServer(t)
+	srv := New()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /empty", func(http.ResponseWriter, *http.Request) {})
 	mux.Handle("GET "+Path, srv.Handler())
@@ -87,20 +87,6 @@ func TestRouteLabel(t *testing.T) {
 	if got := routeLabel(""); got != "unmatched" {
 		t.Fatalf("routeLabel = %q", got)
 	}
-}
-
-func newServer(t *testing.T) *Server {
-	t.Helper()
-	srv, err := New()
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := srv.Shutdown(t.Context()); err != nil {
-			t.Errorf("shutdown: %v", err)
-		}
-	})
-	return srv
 }
 
 func scrape(t *testing.T, h http.Handler) string {
