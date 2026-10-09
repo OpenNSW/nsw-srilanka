@@ -317,8 +317,8 @@ components:
         §6.2 Declaration Integration Result. Carries the outcome of processing the
         submission identified by `edgeId`.
 
-        On success: `integrated` = true; `cusDecRef` present; `duties` populated; `errors` = {}.
-        On failure: `integrated` = false; `cusDecRef` absent/null; `duties` empty; `errors` populated
+        On success: `integrated` = true; `cusdecRef` present; `duties` populated; `errors` = {}.
+        On failure: `integrated` = false; `cusdecRef` absent/null; `duties` empty; `errors` populated
         and keyed by segment. Success and errors are mutually exclusive.
 
         All amounts are in LKR. `amountPayable` = `totalAssessedAmount` − `amountPaid`, and it is
@@ -326,9 +326,9 @@ components:
         (generalSegment.deferredPayment) arrives with `amountPayable` 0, and no Payment
         Notification (§6.5.1) follows for it.
 
-        `cusDecRef` is the canonical field name; a `cusdecRef` (lowercase `d`)
-        alias is also accepted for compatibility with an earlier draft of this
-        contract, but `cusDecRef` should be sent going forward.
+        `cusdecRef` is the canonical field name, as spec v1.9 uses throughout.
+        `cusDecRef` (capital `D`), from an earlier draft of this contract, is
+        still accepted as an alias.
       required:
         - eventType
         - processedAt
@@ -360,13 +360,13 @@ components:
               type: boolean
               description: true on success, false on failure.
               example: true
-            cusDecRef:
-              description: Registered reference (§4.1). Present on success; absent/null on failure.
             cusdecRef:
+              description: Registered reference (§4.1). Present on success; absent/null on failure.
+            cusDecRef:
               description: |
-                Deprecated alias for `cusDecRef` (lowercase `d`), accepted for
-                compatibility with an earlier draft of this contract. Present
-                on success; absent/null on failure.
+                Alias for `cusdecRef` (capital `D`), from an earlier draft of
+                this contract; still accepted. Present on success; absent/null
+                on failure.
             nswId:
               type: string
               description: NSW-assigned submission identifier (§2.2).
@@ -415,16 +415,16 @@ components:
               properties:
                 integrated:
                   enum: [false]
-                cusDecRef:
-                  type: object
-                  nullable: true
-                  enum: [null]
-                  description: Registered reference (§4.1). Present on success; absent/null on failure.
                 cusdecRef:
                   type: object
                   nullable: true
                   enum: [null]
-                  description: Deprecated alias for `cusDecRef`. Present on success; absent/null on failure.
+                  description: Registered reference (§4.1). Present on success; absent/null on failure.
+                cusDecRef:
+                  type: object
+                  nullable: true
+                  enum: [null]
+                  description: Alias for `cusdecRef`, from an earlier draft. Present on success; absent/null on failure.
                 duties:
                   type: object
                   description: Empty on failure.
