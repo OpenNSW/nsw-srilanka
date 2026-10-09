@@ -3,38 +3,21 @@ package cusdec
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-// amountToPay is what the trader is asked to settle on the payment step: what
-// is still due on the declaration, not what was assessed (spec v1.9 §6.2).
-//
-// A figure ASYCUDA states wins over one this side reconstructs, so in order:
-//
-//  1. amountPayable: what is still due. 0 is an answer: a declaration settled
-//     from a prepayment account owes nothing, and no Payment Notification
-//     follows for it.
-//  2. totalAssessedAmount less amountPaid, the rule amountPayable follows,
-//     for a result that states the parts but not the difference.
-//  3. The duties breakdown, summed.
-//
-// A result carrying none of these owes nothing this side can read, so 0.
+// amountToPay is what the trader is asked to settle on the payment step:
+// amountPayable, what is still due on the declaration (spec v1.9 §6.2).
+// 0 is an answer: a declaration settled from a prepayment account owes
+// nothing, and no Payment Notification follows for it. A result without
+// amountPayable is read as owing nothing.
 func amountToPay(p cusdecResultPayload) float64 {
-	switch {
-	case p.AmountPayable != nil:
-		return *p.AmountPayable
-	case p.TotalAssessedAmount != nil:
-		paid := 0.0
-		if p.AmountPaid != nil {
-			paid = *p.AmountPaid
-		}
-		return math.Round((*p.TotalAssessedAmount-paid)*100) / 100
-	default:
-		return p.Duties.total()
+	if p.AmountPayable == nil {
+		return 0
 	}
+	return *p.AmountPayable
 }
 
 // describeErrors renders the §4.5 segment-keyed errors object as a readable

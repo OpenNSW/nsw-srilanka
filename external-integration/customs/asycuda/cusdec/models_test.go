@@ -280,29 +280,26 @@ func TestAmountToPay_V19ChargesWhatIsStillDue(t *testing.T) {
 	assert.Equal(t, 0.0, amountToPay(req.Payload))
 }
 
-func TestAmountToPay_V19Fallbacks(t *testing.T) {
+// amountPayable is the only source: the parts it is computed from and the
+// duties breakdown are not used to reconstruct it.
+func TestAmountToPay_ReadsOnlyAmountPayable(t *testing.T) {
 	cases := map[string]struct {
 		payload string
 		want    float64
 	}{
-		"amountPayable wins over assessed less paid": {
+		"amountPayable is charged": {
 			payload: `{"amountPayable": 900, "totalAssessedAmount": 1350, "amountPaid": 0}`,
 			want:    900,
 		},
-		"no amountPayable: assessed less paid": {
-			payload: `{"totalAssessedAmount": 1350.5, "amountPaid": 350.25}`,
-			want:    1000.25,
+		"assessed and paid without amountPayable: not reconstructed": {
+			payload: `{"totalAssessedAmount": 1350, "amountPaid": 350}`,
+			want:    0,
 		},
-		"assessed with nothing paid yet": {
-			payload: `{"totalAssessedAmount": 1350}`,
-			want:    1350,
+		"duties without amountPayable: not summed": {
+			payload: `{"duties": {"globalDuties": [{"typeCode": "EPF", "taxAssessedAmount": 1100}]}}`,
+			want:    0,
 		},
-		"only the duties breakdown: summed": {
-			payload: `{"duties": {"globalDuties": [{"typeCode": "EPF", "taxAssessedAmount": 1100}],
-			           "itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxAssessedAmount": 0.1}]}]}}`,
-			want: 1100.1,
-		},
-		"nothing stated: nothing owed": {
+		"nothing stated": {
 			payload: `{}`,
 			want:    0,
 		},
