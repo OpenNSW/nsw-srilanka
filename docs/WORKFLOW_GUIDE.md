@@ -344,6 +344,29 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Not configured:** if the deployment has no `refid.issuers`, the step fails.
 - **Showing the IDs:** the step doesn't write the namespace a user's own form reads, e.g. the one its `USER_INPUT` step fills. So a form section reading that namespace shows the IDs only once a later step maps them back in. To show them straight away, add a `MARKDOWN` section with `"dataKey": "refid"`.
 
+### Payments (`PAYMENT`)
+
+Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise.
+
+```json
+{
+  "plugin_properties": {
+    "task_code": "cda_app_fee_payment_v1",
+    "amount": "2000.00",
+    "currency": "LKR",
+    "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
+    "reference": {
+      "issuer": "CDA",
+      "id_type": "fee_payment_ref",
+      "params": { "exporterId": "/exporter_id" },
+      "values": { "mainCategory": "01", "subCategory": "00002" }
+    }
+  }
+}
+```
+
+In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
+
 ### JSONForm Schemas (`*_jsonform.json`)
 
 Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and `uiSchema` block:

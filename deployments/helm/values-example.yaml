@@ -266,24 +266,32 @@ backend:
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
-    # Reference ID formats for the REFID_GENERATOR task plugin. Empty means
-    # generation is off, and any task using the plugin fails.
+    # Reference ID formats for payment references and REFID_GENERATOR steps;
+    # see configs/config.example.yaml. A step fails if it names a format
+    # missing here.
     refid:
-      issuers: []
-      # issuers:
-      #   - issuer: TNSW
-      #     formats:
-      #       - idType: consignment_ref       # TNSW-CMB-20260930-000042
-      #         segments:
-      #           - {type: literal, value: "TNSW-"}
-      #           - {type: list, list: port, param: portCode}
-      #           - {type: literal, value: "-"}
-      #           - {type: date, layout: "20060102"}
-      #           - {type: literal, value: "-"}
-      #           - type: sequence
-      #             sequence: {scopeKey: "{issuer}:{idType}:{portCode}:{yyyyMMdd}", padding: 6}
-      # lists:
-      #   port: [CMB, HBT]
+      issuers:
+        - issuer: TNSW
+          formats:
+            # The reference a payer pays against, for fees without a format of
+            # their own. Produces: TNSW7K2QQXAB
+            - idType: payment_ref
+              segments:
+                - {type: literal, value: "TNSW"}
+                - type: random
+                  random: {scopeKey: "{issuer}:{idType}", charset: alphanumeric, length: 8}
+        - issuer: CDA
+          formats:
+            # A CDA fee's payment reference: <registration number><main
+            # category><sub category><sequence per exporter and fee>.
+            # Produces: 000201000020001
+            - idType: fee_payment_ref
+              segments:
+                - {type: param, param: exporterId, pattern: "[0-9]{4}"}
+                - {type: param, param: mainCategory, pattern: "[0-9]{2}"}
+                - {type: param, param: subCategory, pattern: "[0-9]{5}"}
+                - type: sequence
+                  sequence: {scopeKey: "{issuer}:{idType}:{exporterId}:{mainCategory}:{subCategory}", padding: 4}
 
   # Expose the backend API. Enable the one that matches your platform.
   #

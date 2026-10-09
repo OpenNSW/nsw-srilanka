@@ -2,12 +2,14 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/store"
+	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,4 +189,135 @@ func TestPaymentPlugin_Execute_RejectsInvalidAmountWithoutCallingGateway(t *test
 	assert.False(t, svc.called, "the gateway must never be called with a rejected amount")
 	assert.NotEqual(t, "PENDING_PAYMENT", ctx.Record.State,
 		"the task must not be marked PENDING_PAYMENT when the amount is rejected")
+}
+
+const feeReferenceConfigJSON = `{"task_code":"CODE1","currency":"LKR","amount":12500,
+	"reference":{"issuer":"CDA","id_type":"fee_payment_ref","params":{"exporterId":"/exporter_id"},
+		"values":{"mainCategory":"01","subCategory":"00002"}}}`
+
+func checkoutResponse() *payment.CreateCheckoutResponse {
+	return &payment.CreateCheckoutResponse{SessionID: "session-1", ReferenceNumber: "000201000020001", Type: payment.FlowTypeInstruction}
+}
+
+// generatedFrom feeds a checkout's metadata to nswpayment.RefGenerator, as the
+// payment service does, and returns the refid call it makes.
+func generatedFrom(t *testing.T, req payment.CreateCheckoutRequest) refIDCall {
+	t.Helper()
+	refIDs := &fakeRefIDs{}
+	_, err := nswpayment.NewRefGenerator(refIDs).GenerateReference(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, refIDs.calls, 1)
+	return refIDs.calls[0]
+}
+
+// A fee's reference format reaches the payment service in the checkout's
+// metadata: the generator draws from its issuer and id_type, with a param read
+// from the inputs and the fixed values. The reference the service issues is the
+// step's reference_number.
+func TestPaymentPlugin_Execute_PassesFeeReferenceFormat(t *testing.T) {
+	svc := &fakePaymentService{resp: checkoutResponse()}
+	ctx := paymentPluginCtx(map[string]any{"exporter_id": "0002"})
+	ctx.OutputNamespace = "payment"
+
+	err := NewPaymentPlugin(svc).Execute(ctx, []byte(feeReferenceConfigJSON))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Equal(t, refIDCall{issuer: "CDA", idType: "fee_payment_ref", params: map[string]string{
+		"exporterId": "0002", "mainCategory": "01", "subCategory": "00002",
+	}}, generatedFrom(t, svc.lastReq))
+	assert.Equal(t, "000201000020001", ctx.Record.Data["payment"].(map[string]any)["reference_number"])
+}
+
+// A fee without a reference format takes the default format.
+func TestPaymentPlugin_Execute_DefaultReferenceFormat(t *testing.T) {
+	svc := &fakePaymentService{resp: checkoutResponse()}
+
+	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	call := generatedFrom(t, svc.lastReq)
+	assert.Equal(t, nswpayment.DefaultReferenceIssuer, call.issuer)
+	assert.Equal(t, nswpayment.DefaultReferenceIDType, call.idType)
+	assert.Empty(t, call.params)
+}
+
+// gateway_metadata cannot set the reference format: the generator draws from
+// the fee's own format, or the default.
+func TestPaymentPlugin_Execute_ReferenceKeysAreReserved(t *testing.T) {
+	planted := `"gateway_metadata":{"reference_issuer":"X","reference_id_type":"y","reference_param.exporterId":"9999"}`
+	for name, tc := range map[string]struct {
+		config string
+		want   refIDCall
+	}{
+		"fee without a format": {
+			config: `{"task_code":"CODE1","currency":"LKR","amount":12500,` + planted + `}`,
+			want:   refIDCall{issuer: nswpayment.DefaultReferenceIssuer, idType: nswpayment.DefaultReferenceIDType, params: map[string]string{}},
+		},
+		"fee with a format": {
+			config: `{"task_code":"CODE1","currency":"LKR","amount":12500,` + planted + `,
+				"reference":{"issuer":"CDA","id_type":"fee_payment_ref","values":{"exporterId":"0002"}}}`,
+			want: refIDCall{issuer: "CDA", idType: "fee_payment_ref", params: map[string]string{"exporterId": "0002"}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := &fakePaymentService{resp: checkoutResponse()}
+
+			err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(tc.config))
+
+			require.ErrorIs(t, err, ErrSuspended)
+			assert.Equal(t, tc.want, generatedFrom(t, svc.lastReq))
+		})
+	}
+}
+
+func TestPaymentPlugin_Execute_RejectsMalformedReference(t *testing.T) {
+	for name, tc := range map[string]struct {
+		reference string
+		inputs    map[string]any
+		want      string
+	}{
+		"no issuer":  {reference: `{"id_type":"fee_payment_ref"}`, want: "needs an issuer and an id_type"},
+		"no id_type": {reference: `{"issuer":"CDA"}`, want: "needs an issuer and an id_type"},
+		"empty param name": {
+			reference: `{"issuer":"CDA","id_type":"fee_payment_ref","params":{"":"/exporter_id"}}`,
+			want:      "params has an empty name",
+		},
+		"empty value name": {
+			reference: `{"issuer":"CDA","id_type":"fee_payment_ref","values":{"":"01"}}`,
+			want:      "values has an empty name",
+		},
+		"param in params and values": {
+			reference: `{"issuer":"CDA","id_type":"fee_payment_ref","params":{"exporterId":"/exporter_id"},"values":{"exporterId":"0002"}}`,
+			want:      `names "exporterId" in both params and values`,
+		},
+		"relative pointer": {
+			reference: `{"issuer":"CDA","id_type":"fee_payment_ref","params":{"exporterId":"0/exporter_id"}}`,
+			want:      "params.exporterId",
+		},
+		"param is not a string": {
+			reference: `{"issuer":"CDA","id_type":"fee_payment_ref","params":{"exporterId":"/exporter_id"}}`,
+			inputs:    map[string]any{"exporter_id": 2.0},
+			want:      `param "exporterId" (/exporter_id) is a float64, not a string`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := &fakePaymentService{resp: checkoutResponse()}
+			config := `{"task_code":"CODE1","currency":"LKR","amount":12500,"reference":` + tc.reference + `}`
+
+			err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(tc.inputs), []byte(config))
+
+			require.ErrorContains(t, err, tc.want)
+			assert.False(t, svc.called, "the checkout opens only with a valid reference format")
+		})
+	}
+}
+
+// A reference a transaction already holds reaches the step as
+// payment.ErrDuplicateReference; the step's retry generates a new one.
+func TestPaymentPlugin_Execute_DuplicateReference(t *testing.T) {
+	svc := &fakePaymentService{err: fmt.Errorf("failed to persist transaction: %w", payment.ErrDuplicateReference)}
+
+	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, payment.ErrDuplicateReference)
 }
