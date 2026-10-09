@@ -68,6 +68,8 @@ storage:
   presignTTLSeconds: 900
   allowedUploadTypes: [application/pdf, image/png]
   maxUploadBytes: 1048576
+  # A test key: 32 bytes of 0x07.
+  tokenKeyset: "test:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
 authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090
@@ -195,6 +197,8 @@ func validConfig() *Config {
 			},
 			AllowedUploadTypes: []string{"application/pdf"},
 			MaxUploadBytes:     1 << 20,
+			// A test key: 32 bytes of 0x07.
+			TokenKeyset: "test:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
 		},
 		Integrations: integrations.Config{
 			SLPAWebhookSecret: "a-secret-shared-with-slpa",
@@ -359,6 +363,7 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"storage.presignTTLSeconds",
 		"storage.allowedUploadTypes",
 		"storage.maxUploadBytes",
+		"storage.tokenKeyset",
 		"authn.jwksURL",
 		"authn.issuer",
 		"authn.audience",
@@ -708,6 +713,7 @@ func TestConfigValidate_StorageProxy(t *testing.T) {
 			DownloadPath: nswstorage.DefaultProxyDownloadPath,
 			DeletePath:   nswstorage.DefaultProxyDeletePath,
 		},
+		TokenKeyset: cfg.Storage.TokenKeyset,
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v, want nil for a complete proxy configuration", err)

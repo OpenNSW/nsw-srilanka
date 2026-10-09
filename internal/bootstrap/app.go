@@ -12,6 +12,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
+	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
@@ -49,6 +50,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -168,6 +171,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
+	}
+	// The file tokens callers hold in place of stored file values.
+	fileAccess, err := newFileAccess(cfg.Storage)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to initialize file tokens: %w", err)
 	}
 
 	// -------------------------------------------------------------------
@@ -349,9 +358,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
 	storageHandler := storageStack.Handler
+	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), recorder, cfg.Server.MaxRequestBytes)
+	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -446,7 +457,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	// Storage
 	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
-	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(storageHandler.Download))))
+	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(fileHandler.Download))))
 
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
@@ -672,6 +683,32 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 		return "", nil
 	}
 	return rec.ID, nil
+}
+
+// newFileAccess builds the file tokens this deployment issues from its storage
+// settings.
+func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
+	keys, err := filetoken.ParseKeyset(cfg.TokenKeyset)
+	if err != nil {
+		return nil, fmt.Errorf("storage.tokenKeyset: %w", err)
+	}
+	codec, err := filetoken.NewCodec(keys, nil)
+	if err != nil {
+		return nil, err
+	}
+	return fileaccess.New(codec, cfg.TokenTTL())
+}
+
+// stepNamespace looks up a step template's output namespace in the artifact
+// registry.
+func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
+	return func(ctx context.Context, stepTemplateID string) (string, error) {
+		template, err := steptemplate.Load(ctx, reg, stepTemplateID)
+		if err != nil {
+			return "", err
+		}
+		return template.OutputNamespace, nil
+	}
 }
 
 // registryTemplateProvider adapts the artifact registry to uiprojector's

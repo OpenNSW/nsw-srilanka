@@ -26,6 +26,13 @@ paths:
         same as one that does not exist (404), so the response cannot be
         used to probe which task IDs exist.
 
+        Each value the task's render config declares under `files` is
+        replaced by a **file reference** issued to the caller: an opaque
+        string to pass to `GET /api/v1/storage/{key}`, or back in a
+        submission, never the stored file's key. A reference expires after
+        the deployment's `storage.tokenTTLSeconds`; refetch the task for
+        fresh ones.
+
         Requires scope `nsw:task:read`.
       operationId: getTask
       parameters:
@@ -64,7 +71,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error resolving access or assembling the view.
+          description: |
+            Internal error resolving access, issuing file references (a
+            render config whose `files` does not parse included), or
+            assembling the view.
           content:
             application/json:
               schema:
@@ -83,6 +93,11 @@ paths:
         the task has since left is rejected with 409 and changes nothing.
         External reviewers call back on `POST /api/v1/callbacks/{token}`
         instead.
+
+        Each `payload` field the task's render config declares under `files`
+        must hold a file reference issued to the caller, from an upload or
+        the task's zone view; the stored value it stands for is what gets
+        stored. For now, a value that is not a reference is stored as sent.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
@@ -117,7 +132,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: The caller may not perform this action on this task.
+          description: |
+            The caller may not perform this action on this task, or a
+            declared file field holds a file reference issued to someone
+            else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such task.
           content:
             application/json:
               schema:
@@ -130,6 +154,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: |
+            A declared file field holds a file reference that has expired.
+            Refetch the task, or upload the file again, and resubmit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           description: Request body exceeds the configured maximum size.
           content:
@@ -137,7 +169,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error completing the step.
+          description: |
+            Internal error resolving the submission's file references (a
+            render config whose `files` does not parse included) or
+            completing the step.
           content:
             application/json:
               schema:
@@ -157,7 +192,9 @@ paths:
 
         The body is the same envelope as the portal's
         `POST /api/v1/tasks/{id}/steps/{stepId}`, and must contain exactly one
-        JSON value.
+        JSON value. Its declared file fields follow the same rule: each must
+        hold a file reference issued to the caller's client, such as one the
+        dispatch carried or an upload returned.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStepByCallbackToken
@@ -193,7 +230,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: The caller may not perform this action on this task.
+          description: |
+            The caller may not perform this action on this task, or a
+            declared file field holds a file reference issued to someone
+            else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such task.
           content:
             application/json:
               schema:
@@ -206,6 +252,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: |
+            A declared file field holds a file reference that has expired.
+            Refetch the task, or upload the file again, and resubmit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           description: Request body exceeds the configured maximum size.
           content:
@@ -213,7 +267,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error completing the step.
+          description: |
+            Internal error resolving the submission's file references (a
+            render config whose `files` does not parse included) or
+            completing the step.
           content:
             application/json:
               schema:
