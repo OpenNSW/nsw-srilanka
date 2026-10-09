@@ -2,6 +2,7 @@ package cusdec
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,8 @@ func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
+			"totalAssessedAmount": 1244,
+			"amountPayable": 1244,
 			"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
 	}`)
@@ -34,6 +37,8 @@ func TestCusdecIntegrationResultRequest_DualFieldUnmarshaling(t *testing.T) {
 		"payload": {
 			"edgeId": "edge-123",
 			"integrated": true,
+			"totalAssessedAmount": 1244,
+			"amountPayable": 1244,
 			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 		}
 	}`)
@@ -55,6 +60,7 @@ func TestCusdecIntegrationResultRequest_NestedPayloadFields(t *testing.T) {
 			"payload": {
 				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
 				"integrated": true,
+				"totalAssessedAmount": 1244,
 				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047},
 				"amountPayable": 1100,
 				"duties": {"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}]},
@@ -311,4 +317,40 @@ func TestAmountToPay_ReadsOnlyAmountPayable(t *testing.T) {
 			assert.Equal(t, tc.want, amountToPay(p))
 		})
 	}
+}
+
+// A successful result must state its assessment. Without amountPayable it
+// would read as owing nothing and skip the payment step, so it is refused.
+func TestIntegrationResult_SuccessMustStateItsAssessment(t *testing.T) {
+	base := `{"eventType": "CUSDEC_INTEGRATED", "processedAt": "2026-06-26T04:04:52Z",
+	  "payload": {"edgeId": "e1", "integrated": true,
+	    "cusdecRef": {"office": "CBEX1", "year": "2026", "serial": "E", "number": 59}%s}}`
+	cases := map[string]struct {
+		amounts string
+		wantErr string
+	}{
+		"both stated":            {`, "totalAssessedAmount": 1350, "amountPayable": 0`, ""},
+		"no amountPayable":       {`, "totalAssessedAmount": 1350`, "payload.amountPayable is required when integrated is true"},
+		"no totalAssessedAmount": {`, "amountPayable": 1000`, "payload.totalAssessedAmount is required when integrated is true"},
+		"neither":                {``, "payload.amountPayable is required when integrated is true"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var req CusdecIntegrationResultRequest
+			require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(base, tc.amounts)), &req))
+			if tc.wantErr == "" {
+				assert.NoError(t, req.Validate())
+			} else {
+				assert.EqualError(t, req.Validate(), tc.wantErr)
+			}
+		})
+	}
+}
+
+// A rejection assesses nothing, so it needs no amounts.
+func TestIntegrationResult_RejectionNeedsNoAssessment(t *testing.T) {
+	var req CusdecIntegrationResultRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"eventType": "CUSDEC_INTEGRATED", "processedAt": "2026-06-26T04:04:52Z",
+	  "payload": {"edgeId": "e1", "integrated": false, "errors": {"0": [{"code": 410, "description": "Missing HS code"}]}}}`), &req))
+	assert.NoError(t, req.Validate())
 }

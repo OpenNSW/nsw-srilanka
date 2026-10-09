@@ -57,6 +57,7 @@ func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 		"payload": {
 			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
 			"integrated": true,
+			"totalAssessedAmount": 1244,
 			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
 			"amountPayable": 1244,
 			"duties": {
@@ -374,6 +375,8 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-missing",
 				"integrated": true,
+				"totalAssessedAmount": 1244,
+				"amountPayable": 1244,
 				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 			}
 		}`
@@ -422,6 +425,8 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-err",
 				"integrated": true,
+				"totalAssessedAmount": 1244,
+				"amountPayable": 1244,
 				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 			}
 		}`
@@ -437,4 +442,31 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 		assert.Contains(t, w.Body.String(), "An error occurred while processing your request")
 	})
+}
+
+// A success callback without amountPayable is refused at the boundary: read
+// as owing nothing, it would skip the payment step.
+func TestSLCEHandler_CusdecIntegratedWithoutAmountPayableIsRejected(t *testing.T) {
+	cusdecSvc := new(mockCusdecService)
+	handler := NewHandler(cusdecSvc, new(mockCDNService))
+
+	payload := `{
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T11:00:00Z",
+		"payload": {
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": true,
+			"totalAssessedAmount": 1350,
+			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
+			"errors": {}
+		}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleWebhook(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	cusdecSvc.AssertNotCalled(t, "ProcessIntegrationResult", mock.Anything, mock.Anything)
 }

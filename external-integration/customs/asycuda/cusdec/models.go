@@ -157,6 +157,17 @@ func (r CusdecIntegrationResultRequest) Validate() error {
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
 		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
 	}
+	// Spec v1.9 §6.2: a successful integration states its assessment. The
+	// amount the trader pays is amountPayable alone, so a result without it
+	// would read as owing nothing and skip the payment step; it is refused
+	// instead, so SLC Edge sees the fault rather than the payment going
+	// unasked.
+	if r.Integrated && r.Payload.AmountPayable == nil {
+		return errors.New("payload.amountPayable is required when integrated is true")
+	}
+	if r.Integrated && r.Payload.TotalAssessedAmount == nil {
+		return errors.New("payload.totalAssessedAmount is required when integrated is true")
+	}
 	return nil
 }
 
