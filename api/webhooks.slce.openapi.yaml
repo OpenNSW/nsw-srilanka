@@ -390,7 +390,14 @@ components:
               description: Amount still due, in LKR (totalAssessedAmount − amountPaid). 0 when fully paid.
               example: 0.0
             duties:
-              $ref: '#/components/schemas/DutyAssessment'
+              nullable: true
+              description: |
+                The duty breakdown. Populated on success. Empty on failure, where an
+                empty object, an empty array and null are all accepted.
+              anyOf:
+                - $ref: '#/components/schemas/DutyAssessment'
+                - type: array
+                  maxItems: 0
             errors:
               type: object
               description: Segment-keyed errors (§4.4). Empty object {} on success.
@@ -430,14 +437,20 @@ components:
                   enum: [null]
                   description: Alias for `cusdecRef`, from an earlier draft. Present on success; absent/null on failure.
                 duties:
-                  type: object
-                  description: Empty on failure.
-                  properties:
-                    globalDuties:
-                      type: array
-                      maxItems: 0
-                    itemDutiesList:
-                      type: array
+                  nullable: true
+                  description: |
+                    Empty on failure. The spec does not say how, so an empty
+                    object, an empty array and null are all accepted.
+                  anyOf:
+                    - type: object
+                      properties:
+                        globalDuties:
+                          type: array
+                          maxItems: 0
+                        itemDutiesList:
+                          type: array
+                          maxItems: 0
+                    - type: array
                       maxItems: 0
                 errors:
                   type: object

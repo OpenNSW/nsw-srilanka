@@ -271,7 +271,7 @@ func TestIntegrationResult_ReadsTheV19Assessment(t *testing.T) {
 	assert.Equal(t, dutyLine{TypeCode: "EPF", TaxBaseAmount: 550, TaxRateNumeric: 2, TaxAssessedAmount: 1100, PaymentMethodCode: "1"},
 		req.Payload.Duties.GlobalDuties[0])
 	require.Len(t, req.Payload.Duties.ItemDutiesList, 1)
-	assert.Equal(t, 1, req.Payload.Duties.ItemDutiesList[0].ItemSequenceNumeric)
+	assert.Equal(t, itemNumber(1), req.Payload.Duties.ItemDutiesList[0].ItemSequenceNumeric)
 	assert.Equal(t, "CED", req.Payload.Duties.ItemDutiesList[0].DutyTaxFees[0].TypeCode)
 	assert.Equal(t, 1350.0, req.Payload.Duties.total())
 }
@@ -353,4 +353,40 @@ func TestIntegrationResult_RejectionNeedsNoAssessment(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"eventType": "CUSDEC_INTEGRATED", "processedAt": "2026-06-26T04:04:52Z",
 	  "payload": {"edgeId": "e1", "integrated": false, "errors": {"0": [{"code": 410, "description": "Missing HS code"}]}}}`), &req))
 	assert.NoError(t, req.Validate())
+}
+
+// The spec says duties is "empty when integration failed" without saying how.
+// Every empty form is read as no duties, so the rejection still reaches the
+// trader rather than failing the whole callback.
+func TestIntegrationResult_FailureWithEmptyDutiesInAnyForm(t *testing.T) {
+	for _, duties := range []string{`[]`, `{}`, `null`} {
+		t.Run(duties, func(t *testing.T) {
+			var req CusdecIntegrationResultRequest
+			require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"eventType": "CUSDEC_INTEGRATED", "processedAt": "2026-06-26T04:04:52Z",
+			  "payload": {"edgeId": "e1", "integrated": false, "duties": %s,
+			    "errors": {"0": [{"code": 410, "description": "Missing HS code"}]}}}`, duties)), &req))
+			assert.False(t, req.Integrated)
+			assert.Empty(t, req.Payload.Duties.GlobalDuties)
+			assert.Empty(t, req.Payload.Duties.ItemDutiesList)
+			assert.NoError(t, req.Validate())
+		})
+	}
+}
+
+// A non-empty array cannot be the breakdown, so it is still refused.
+func TestIntegrationResult_DutiesAsANonEmptyArrayIsRefused(t *testing.T) {
+	var p cusdecResultPayload
+	err := json.Unmarshal([]byte(`{"duties": [{"typeCode": "EPF"}]}`), &p)
+	assert.ErrorContains(t, err, "duties: expected an object")
+}
+
+// A whole item number written as 1.0 is read as 1; a fraction cannot name an
+// item and is refused.
+func TestIntegrationResult_ItemSequenceNumericAcceptsAWholeFloat(t *testing.T) {
+	var p cusdecResultPayload
+	require.NoError(t, json.Unmarshal([]byte(`{"duties": {"itemDutiesList": [{"itemSequenceNumeric": 1.0, "dutyTaxFees": []}]}}`), &p))
+	assert.Equal(t, itemNumber(1), p.Duties.ItemDutiesList[0].ItemSequenceNumeric)
+
+	err := json.Unmarshal([]byte(`{"duties": {"itemDutiesList": [{"itemSequenceNumeric": 1.5}]}}`), &p)
+	assert.ErrorContains(t, err, "is not a whole number")
 }

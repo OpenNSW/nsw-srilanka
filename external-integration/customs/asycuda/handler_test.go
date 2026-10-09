@@ -470,3 +470,33 @@ func TestSLCEHandler_CusdecIntegratedWithoutAmountPayableIsRejected(t *testing.T
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	cusdecSvc.AssertNotCalled(t, "ProcessIntegrationResult", mock.Anything, mock.Anything)
 }
+
+// A rejection whose duties is written as an empty array still reaches the
+// service, so the trader hears about it.
+func TestSLCEHandler_CusdecRejectionWithEmptyDutiesArrayIsProcessed(t *testing.T) {
+	cusdecSvc := new(mockCusdecService)
+	handler := NewHandler(cusdecSvc, new(mockCDNService))
+
+	payload := `{
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T11:00:00Z",
+		"payload": {
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": false,
+			"duties": [],
+			"errors": { "0": [ { "code": 410, "description": "Missing HS code" } ] }
+		}
+	}`
+	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecIntegrationResultRequest) bool {
+		return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" && !r.Integrated
+	})).Return(nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleWebhook(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	cusdecSvc.AssertExpectations(t)
+}
