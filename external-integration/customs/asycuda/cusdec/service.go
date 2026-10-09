@@ -184,6 +184,18 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 			// follows -- ASYCUDA's own figure where it sent one.
 			"amount_to_pay": amountToPay(req.Payload),
 		}
+		// The rest of the v1.9 assessment, passed on only when ASYCUDA sent it,
+		// so the review step can state what was assessed and what is already
+		// paid next to what is still due.
+		if v := req.Payload.TotalAssessedAmount; v != nil {
+			payload["total_assessed_amount"] = *v
+		}
+		if v := req.Payload.AmountPaid; v != nil {
+			payload["amount_paid"] = *v
+		}
+		if duties, ok := dutiesForTask(req.Payload.Duties); ok {
+			payload["duties"] = duties
+		}
 	} else {
 		payload = map[string]any{
 			"__command":        "submit",

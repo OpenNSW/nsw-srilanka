@@ -2,6 +2,7 @@ package cusdec
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -69,6 +70,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 
 func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	ctx := context.Background()
+	payable1244 := 1244.0
 	db, sqlMock := setupTestDB(t)
 
 	repo := &mockCusdecRepository{
@@ -89,12 +91,9 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 				Serial: "C",
 				Number: 9876,
 			},
-			// §6.2 returns the assessed duty alongside the reference; its total
-			// is what the trader is asked to settle on the payment step.
-			Taxes: []TaxEntry{
-				{Code: "tax1", Rate: 1, Amount: 222},
-				{Code: "tax2", Rate: 1, Amount: 1022},
-			},
+			// §6.2 returns what is still due alongside the reference; that is
+			// what the trader is asked to settle on the payment step.
+			AmountPayable: &payable1244,
 		},
 	}
 
@@ -122,6 +121,66 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	assert.Equal(t, "COL", repo.createdDecl.CusdecOffice)
 	assert.Equal(t, 9876, repo.createdDecl.CusdecNumber)
 
+	completer.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// A v1.9 result hands the review step what is still due, and the assessment
+// and the amount already paid beside it.
+func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
+	ctx := context.Background()
+	db, sqlMock := setupTestDB(t)
+
+	repo := &mockCusdecRepository{declsByEdgeID: make(map[string]*CusdecDeclaration)}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, db, completer)
+
+	assessed, paid, payable := 1350.0, 350.0, 1000.0
+	req := CusdecIntegrationResultRequest{
+		EdgeID:     "edge-v19",
+		Integrated: true,
+		Event:      "CUSDEC_INTEGRATED",
+		ProcessAt:  time.Now(),
+		Payload: cusdecResultPayload{
+			CusdecRef:           DocumentReference{Year: "2026", Office: "CBEX1", Serial: "E", Number: 59},
+			TotalAssessedAmount: &assessed,
+			AmountPaid:          &paid,
+			AmountPayable:       &payable,
+		},
+	}
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}],
+		"itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxBaseAmount": 125, "taxRateNumeric": 0.0, "taxAssessedAmount": 250, "paymentMethodCode": "1"}]}]
+	}`), &req.Payload.Duties))
+
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("edge-v19", "edge-v19", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-v19"))
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
+		WithArgs("parent-wf-v19", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-v19", "step-task-v19"))
+
+	completer.On("CompleteTaskStep", mock.Anything, "task-v19", "step-task-v19", map[string]any{
+		"__command":             "submit",
+		"review_outcome":        "approve",
+		"cusdec_number":         "CBEX1/2026/E/59",
+		"amount_to_pay":         1000.0,
+		"total_assessed_amount": 1350.0,
+		"amount_paid":           350.0,
+		// The breakdown, in the spec's own field names, for the review panel.
+		"duties": map[string]any{
+			"globalDuties": []any{
+				map[string]any{"typeCode": "EPF", "taxBaseAmount": 550.0, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100.0, "paymentMethodCode": "1"},
+			},
+			"itemDutiesList": []any{
+				map[string]any{"itemSequenceNumeric": 1.0, "dutyTaxFees": []any{
+					map[string]any{"typeCode": "CED", "taxBaseAmount": 125.0, "taxRateNumeric": 0.0, "taxAssessedAmount": 250.0, "paymentMethodCode": "1"},
+				}},
+			},
+		},
+	}).Return(nil)
+
+	require.NoError(t, service.ProcessIntegrationResult(ctx, req))
 	completer.AssertExpectations(t)
 	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
