@@ -69,6 +69,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 
 func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	ctx := context.Background()
+	payable1244 := 1244.0
 	db, sqlMock := setupTestDB(t)
 
 	repo := &mockCusdecRepository{
@@ -89,12 +90,9 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 				Serial: "C",
 				Number: 9876,
 			},
-			// §6.2 returns the assessed duty alongside the reference; its total
-			// is what the trader is asked to settle on the payment step.
-			Taxes: []TaxEntry{
-				{Code: "tax1", Rate: 1, Amount: 222},
-				{Code: "tax2", Rate: 1, Amount: 1022},
-			},
+			// §6.2 returns what is still due alongside the reference; that is
+			// what the trader is asked to settle on the payment step.
+			AmountPayable: &payable1244,
 		},
 	}
 

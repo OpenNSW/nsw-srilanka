@@ -311,25 +311,6 @@ components:
                 items:
                   $ref: '#/components/schemas/DutyTaxFee'
 
-    TaxEntry:
-      type: object
-      deprecated: true
-      description: Spec v1.7 tax line, replaced by DutyTaxFee in v1.9. Still accepted.
-      required:
-        - code
-        - rate
-        - amount
-      properties:
-        code:
-          type: string
-          example: "tax1"
-        rate:
-          type: number
-          example: 1.0
-        amount:
-          type: number
-          example: 222.0
-
     CusdecIntegrationResultRequest:
       type: object
       description: |
@@ -344,10 +325,6 @@ components:
         what the trader is asked to pay. A declaration settled from a prepayment account
         (generalSegment.deferredPayment) arrives with `amountPayable` 0, and no Payment
         Notification (§6.5.1) follows for it.
-
-        The v1.7 fields `taxes` and `amountToPay` are deprecated but still accepted: a result
-        without `amountPayable` falls back to `amountToPay`, then `totalAssessedAmount` −
-        `amountPaid`, then the summed `duties`, then the summed `taxes`.
 
         `cusDecRef` is the canonical field name; a `cusdecRef` (lowercase `d`)
         alias is also accepted for compatibility with an earlier draft of this
@@ -412,17 +389,6 @@ components:
               example: 0.0
             duties:
               $ref: '#/components/schemas/DutyAssessment'
-            taxes:
-              type: array
-              maxItems: 100
-              deprecated: true
-              description: Spec v1.7 tax lines, replaced by `duties`. Still accepted.
-              items:
-                $ref: '#/components/schemas/TaxEntry'
-            amountToPay:
-              type: number
-              deprecated: true
-              description: Spec v1.7 amount owed, replaced by `amountPayable`. Still accepted.
             errors:
               type: object
               description: Segment-keyed errors (§4.4). Empty object {} on success.
@@ -459,10 +425,16 @@ components:
                   nullable: true
                   enum: [null]
                   description: Deprecated alias for `cusDecRef`. Present on success; absent/null on failure.
-                taxes:
-                  type: array
-                  maxItems: 0
-                  description: Empty array on failure.
+                duties:
+                  type: object
+                  description: Empty on failure.
+                  properties:
+                    globalDuties:
+                      type: array
+                      maxItems: 0
+                    itemDutiesList:
+                      type: array
+                      maxItems: 0
                 errors:
                   type: object
                   minProperties: 1

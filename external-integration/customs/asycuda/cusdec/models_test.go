@@ -56,7 +56,8 @@ func TestCusdecIntegrationResultRequest_NestedPayloadFields(t *testing.T) {
 				"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
 				"integrated": true,
 				"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047},
-				"taxes": [{"code": "tax1", "rate": 1, "amount": 222}],
+				"amountPayable": 1100,
+				"duties": {"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}]},
 				"errors": {}
 			}
 		}`)
@@ -65,7 +66,7 @@ func TestCusdecIntegrationResultRequest_NestedPayloadFields(t *testing.T) {
 		assert.Equal(t, "CUSDEC_INTEGRATED", req.Event)
 		assert.Equal(t, "5516e4c8-a93d-429d-8a18-6a484d331176", req.EdgeID)
 		assert.True(t, req.Integrated)
-		assert.Len(t, req.Payload.Taxes, 1)
+		assert.Len(t, req.Payload.Duties.GlobalDuties, 1)
 		assert.JSONEq(t, `{}`, string(req.Errors))
 		assert.NoError(t, req.Validate())
 	})
@@ -140,14 +141,14 @@ func TestCusdecIntegrationResultRequest_ReusedReceiverIsReset(t *testing.T) {
 			"edgeId": "edge-first",
 			"integrated": true,
 			"cusdecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 1047},
-			"taxes": [{"code": "tax1", "rate": 1, "amount": 222}],
+			"duties": {"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}]},
 			"errors": {}
 		}
 	}`)
 	require.NoError(t, json.Unmarshal(first, &req))
 	require.Equal(t, "edge-first", req.EdgeID)
 	require.True(t, req.Integrated)
-	require.Len(t, req.Payload.Taxes, 1)
+	require.Len(t, req.Payload.Duties.GlobalDuties, 1)
 
 	second := []byte(`{
 		"eventType": "CUSDEC_INTEGRATED",
@@ -162,7 +163,7 @@ func TestCusdecIntegrationResultRequest_ReusedReceiverIsReset(t *testing.T) {
 
 	assert.Equal(t, "edge-second", req.EdgeID)
 	assert.False(t, req.Integrated)
-	assert.Empty(t, req.Payload.Taxes, "taxes from the first document must not survive")
+	assert.Empty(t, req.Payload.Duties.GlobalDuties, "duties from the first document must not survive")
 	assert.False(t, req.Payload.CusdecRef.IsValid(), "cusdecRef from the first document must not survive")
 	assert.JSONEq(t, `{"Declaration.HSCode": ["Invalid HS code"]}`, string(req.Errors))
 }
@@ -210,62 +211,6 @@ func TestCusdecEventRequest_DualFieldUnmarshaling(t *testing.T) {
 	assert.Equal(t, "PAYMENT", req.Event)
 	assert.Equal(t, "CBEX1", req.Payload.CusdecRef.Office)
 	assert.NoError(t, req.Validate())
-}
-
-// --- spec v1.7 amountToPay ---------------------------------------------------
-
-// §6.2 gained amountToPay in v1.7. It is the assessment, so it wins over any
-// sum this side computes -- the spec's own example has the two disagree, 1254
-// against tax lines totalling 1244.
-func TestAmountToPay_PrefersWhatASYCUDASent(t *testing.T) {
-	var req CusdecIntegrationResultRequest
-	require.NoError(t, json.Unmarshal([]byte(`{
-      "eventType": "CUSDEC_INTEGRATED",
-      "payload": {
-        "edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
-        "integrated": true,
-        "amountToPay": 1254,
-        "taxes": [
-          { "code": "tax1", "rate": 1, "amount": 222 },
-          { "code": "tax2", "rate": 1, "amount": 1022 }
-        ]
-      }
-    }`), &req))
-
-	assert.Equal(t, float64(1254), amountToPay(req.Payload))
-	assert.Equal(t, float64(1244), totalTaxes(req.Payload.Taxes),
-		"the tax lines are still read; they are simply not the assessment")
-}
-
-// Every result sent against v1.6 carries no such field, and summing the lines
-// stays the answer for those.
-func TestAmountToPay_FallsBackToTheTaxLines(t *testing.T) {
-	var req CusdecIntegrationResultRequest
-	require.NoError(t, json.Unmarshal([]byte(`{
-      "payload": {
-        "integrated": true,
-        "taxes": [ { "code": "tax1", "rate": 1, "amount": 222 } ]
-      }
-    }`), &req))
-
-	assert.Nil(t, req.Payload.AmountToPay)
-	assert.Equal(t, float64(222), amountToPay(req.Payload))
-}
-
-// Nothing to pay is a real assessment, not a missing one, so an explicit zero
-// must not fall through to the tax lines.
-func TestAmountToPay_ZeroIsAnAnswer(t *testing.T) {
-	var req CusdecIntegrationResultRequest
-	require.NoError(t, json.Unmarshal([]byte(`{
-      "payload": {
-        "integrated": true,
-        "amountToPay": 0,
-        "taxes": [ { "code": "tax1", "rate": 1, "amount": 222 } ]
-      }
-    }`), &req))
-
-	require.NotNil(t, req.Payload.AmountToPay)
-	assert.Equal(t, float64(0), amountToPay(req.Payload))
 }
 
 // --- spec v1.9 assessment ----------------------------------------------------
@@ -340,8 +285,8 @@ func TestAmountToPay_V19Fallbacks(t *testing.T) {
 		payload string
 		want    float64
 	}{
-		"amountPayable wins over v1.7 amountToPay": {
-			payload: `{"amountPayable": 900, "amountToPay": 1254}`,
+		"amountPayable wins over assessed less paid": {
+			payload: `{"amountPayable": 900, "totalAssessedAmount": 1350, "amountPaid": 0}`,
 			want:    900,
 		},
 		"no amountPayable: assessed less paid": {
@@ -357,9 +302,9 @@ func TestAmountToPay_V19Fallbacks(t *testing.T) {
 			           "itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxAssessedAmount": 0.1}]}]}}`,
 			want: 1100.1,
 		},
-		"v1.7 amountToPay still read": {
-			payload: `{"amountToPay": 1254, "taxes": [{"code": "tax1", "rate": 1, "amount": 222}]}`,
-			want:    1254,
+		"nothing stated: nothing owed": {
+			payload: `{}`,
+			want:    0,
 		},
 	}
 	for name, tc := range cases {

@@ -54,13 +54,6 @@ func (s CusdecStatus) hasReached(target CusdecStatus) bool {
 	return eventStatusOrder[s] >= eventStatusOrder[target]
 }
 
-// TaxEntry represents an assessed tax line item on a declaration (§6.2).
-type TaxEntry struct {
-	Code   string  `json:"code"`
-	Rate   float64 `json:"rate"`
-	Amount float64 `json:"amount"`
-}
-
 type cusdecResultPayload struct {
 	CusdecRef  DocumentReference `json:"cusDecRef"`
 	EdgeID     string            `json:"edgeId"`
@@ -81,12 +74,6 @@ type cusdecResultPayload struct {
 	// per-item itemDutiesList, the same shape Declaration Verify (§6.6)
 	// returns, so it is read with the same type.
 	Duties verifyDuties `json:"duties"`
-
-	// Taxes and AmountToPay are the v1.7 shape, which v1.9 replaced with
-	// Duties and AmountPayable. Still read, so a sender that has not moved to
-	// v1.9 is charged what it says rather than nothing.
-	Taxes       []TaxEntry `json:"taxes,omitempty"`
-	AmountToPay *float64   `json:"amountToPay,omitempty"`
 
 	Errors json.RawMessage `json:"errors,omitempty"`
 }

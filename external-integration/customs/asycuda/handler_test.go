@@ -58,10 +58,13 @@ func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
 			"integrated": true,
 			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
-			"taxes": [
-				{ "code": "tax1", "rate": 1, "amount": 222 },
-				{ "code": "tax2", "rate": 1, "amount": 1022 }
-			],
+			"amountPayable": 1244,
+			"duties": {
+				"globalDuties": [
+					{ "typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1" },
+					{ "typeCode": "COM", "taxBaseAmount": 1, "taxRateNumeric": 144.0, "taxAssessedAmount": 144, "paymentMethodCode": "1" }
+				]
+			},
 			"errors": {}
 		}
 	}`
@@ -72,7 +75,7 @@ func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 			r.Event == "CUSDEC_INTEGRATED" &&
 			r.Payload.CusdecRef.Office == "CMB" &&
 			r.Payload.CusdecRef.Number == 1001 &&
-			len(r.Payload.Taxes) == 2
+			len(r.Payload.Duties.GlobalDuties) == 2
 	})).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))

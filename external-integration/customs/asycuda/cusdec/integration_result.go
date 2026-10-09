@@ -10,48 +10,31 @@ import (
 )
 
 // amountToPay is what the trader is asked to settle on the payment step: what
-// is still due on the declaration, not what was assessed.
+// is still due on the declaration, not what was assessed (spec v1.9 §6.2).
 //
-// A figure ASYCUDA states wins over one this side reconstructs, because it is
-// the assessment while a sum of lines is only an estimate of it -- the v1.7
-// example had the two disagree, 1254 against lines totalling 1244. In order:
+// A figure ASYCUDA states wins over one this side reconstructs, so in order:
 //
-//  1. amountPayable (v1.9): what is still due. 0 is an answer: a declaration
-//     settled from a prepayment account owes nothing, and no Payment
-//     Notification follows for it.
-//  2. amountToPay (v1.7), for a sender still on that shape.
-//  3. totalAssessedAmount less amountPaid (v1.9), the rule amountPayable
-//     follows, for a result that states the parts but not the difference.
-//  4. The v1.9 duties breakdown, summed.
-//  5. The v1.7 tax lines, summed -- every result sent against v1.6.
+//  1. amountPayable: what is still due. 0 is an answer: a declaration settled
+//     from a prepayment account owes nothing, and no Payment Notification
+//     follows for it.
+//  2. totalAssessedAmount less amountPaid, the rule amountPayable follows,
+//     for a result that states the parts but not the difference.
+//  3. The duties breakdown, summed.
+//
+// A result carrying none of these owes nothing this side can read, so 0.
 func amountToPay(p cusdecResultPayload) float64 {
 	switch {
 	case p.AmountPayable != nil:
 		return *p.AmountPayable
-	case p.AmountToPay != nil:
-		return *p.AmountToPay
 	case p.TotalAssessedAmount != nil:
 		paid := 0.0
 		if p.AmountPaid != nil {
 			paid = *p.AmountPaid
 		}
 		return math.Round((*p.TotalAssessedAmount-paid)*100) / 100
-	case len(p.Duties.GlobalDuties) > 0 || len(p.Duties.ItemDutiesList) > 0:
-		return p.Duties.total()
 	default:
-		return totalTaxes(p.Taxes)
+		return p.Duties.total()
 	}
-}
-
-// totalTaxes sums the assessed tax lines from a §6.2 integration result. The
-// spec carries the duty as a per-code breakdown, while the payment step that
-// follows asks the trader for a single figure.
-func totalTaxes(taxes []TaxEntry) float64 {
-	var total float64
-	for _, t := range taxes {
-		total += t.Amount
-	}
-	return total
 }
 
 // describeErrors renders the §4.5 segment-keyed errors object as a readable
