@@ -153,9 +153,9 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-v19"))
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("parent-wf-v19", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id"}).AddRow("task-v19"))
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-v19", "step-task-v19"))
 
-	completer.On("CompleteTaskStep", mock.Anything, "task-v19", map[string]any{
+	completer.On("CompleteTaskStep", mock.Anything, "task-v19", "step-task-v19", map[string]any{
 		"__command":             "submit",
 		"review_outcome":        "approve",
 		"cusdec_number":         "CBEX1/2026/E/59",
