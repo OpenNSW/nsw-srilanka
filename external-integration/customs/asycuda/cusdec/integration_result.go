@@ -20,6 +20,26 @@ func amountToPay(p cusdecResultPayload) float64 {
 	return *p.AmountPayable
 }
 
+// dutiesForTask turns the duties breakdown into the plain JSON shape the task
+// stores, keeping the spec's field names (globalDuties, itemDutiesList,
+// dutyTaxFees, typeCode, taxAssessedAmount, ...) so a review panel can list
+// the charges. It reports false when ASYCUDA assessed no charges at all, so an
+// empty breakdown is left out rather than rendered as an empty list.
+func dutiesForTask(d verifyDuties) (map[string]any, bool) {
+	if len(d.GlobalDuties) == 0 && len(d.ItemDutiesList) == 0 {
+		return nil, false
+	}
+	raw, err := json.Marshal(d)
+	if err != nil {
+		return nil, false
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
 // describeErrors renders the §4.5 segment-keyed errors object as a readable
 // message for the trader.
 //

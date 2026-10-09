@@ -193,6 +193,9 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 		if v := req.Payload.AmountPaid; v != nil {
 			payload["amount_paid"] = *v
 		}
+		if duties, ok := dutiesForTask(req.Payload.Duties); ok {
+			payload["duties"] = duties
+		}
 	} else {
 		payload = map[string]any{
 			"__command":        "submit",

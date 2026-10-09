@@ -2,6 +2,7 @@ package cusdec
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -147,6 +148,10 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 			AmountPayable:       &payable,
 		},
 	}
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}],
+		"itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxBaseAmount": 125, "taxRateNumeric": 0.0, "taxAssessedAmount": 250, "paymentMethodCode": "1"}]}]
+	}`), &req.Payload.Duties))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-v19", "edge-v19", 1).
@@ -162,6 +167,17 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 		"amount_to_pay":         1000.0,
 		"total_assessed_amount": 1350.0,
 		"amount_paid":           350.0,
+		// The breakdown, in the spec's own field names, for the review panel.
+		"duties": map[string]any{
+			"globalDuties": []any{
+				map[string]any{"typeCode": "EPF", "taxBaseAmount": 550.0, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100.0, "paymentMethodCode": "1"},
+			},
+			"itemDutiesList": []any{
+				map[string]any{"itemSequenceNumeric": 1.0, "dutyTaxFees": []any{
+					map[string]any{"typeCode": "CED", "taxBaseAmount": 125.0, "taxRateNumeric": 0.0, "taxAssessedAmount": 250.0, "paymentMethodCode": "1"},
+				}},
+			},
+		},
 	}).Return(nil)
 
 	require.NoError(t, service.ProcessIntegrationResult(ctx, req))
