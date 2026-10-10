@@ -109,6 +109,67 @@ artifactLoader:
   #   ref: feat/add-cda-agency-config-to-workflows
   #   basePath: cda-v2
 
-# The cda-v2 artifacts use no REFID_GENERATOR tasks.
+# Reference ID formats for the cda-v2 REFID_GENERATOR tasks, in the schema of
+# github.com/OpenNSW/core/refid. The counters live in cda_db (refid_sequences)
+# and restart at 0001 each year, on the UTC calendar.
 refid:
-  issuers: []
+  issuers:
+    - issuer: CDA
+      formats:
+        # Salmonella Free / Physical Quality Certificate application, numbered
+        # when the officer review opens. certType is the trader's cert_type: P
+        # (physical), S (salmonella) or PS (both). Produces: PQC/PS/0042/26/T
+        - idType: pqc_application_ref
+          segments:
+            - type: literal
+              value: "PQC/"
+            - type: list
+              list: pqc_cert_type
+              param: certType
+            - type: literal
+              value: "/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
+            - type: literal
+              value: "/"
+            - type: date
+              layout: "06"
+            - type: literal
+              value: "/T"
+
+        # The certificates' shared serial, drawn once per issuance so that when
+        # both are issued they carry the same number and year. Produces: 1205/26
+        - idType: pqc_certificate_serial
+          segments:
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
+            - type: literal
+              value: "/"
+            - type: date
+              layout: "06"
+
+        # Physical Quality Certificate number, from the serial. Produces:
+        # PQC/P/1205/26
+        - idType: pqc_physical_certificate
+          segments:
+            - type: literal
+              value: "PQC/P/"
+            - type: param
+              param: serial
+              pattern: "[0-9]{4}/[0-9]{2}"
+
+        # Salmonella Free Certificate number, from the serial. Produces:
+        # PQC/S/1205/26
+        - idType: pqc_salmonella_certificate
+          segments:
+            - type: literal
+              value: "PQC/S/"
+            - type: param
+              param: serial
+              pattern: "[0-9]{4}/[0-9]{2}"
+  lists:
+    pqc_cert_type: [P, S, PS]

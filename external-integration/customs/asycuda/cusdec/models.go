@@ -54,25 +54,28 @@ func (s CusdecStatus) hasReached(target CusdecStatus) bool {
 	return eventStatusOrder[s] >= eventStatusOrder[target]
 }
 
-// TaxEntry represents an assessed tax line item on a declaration (§6.2).
-type TaxEntry struct {
-	Code   string  `json:"code"`
-	Rate   float64 `json:"rate"`
-	Amount float64 `json:"amount"`
-}
-
 type cusdecResultPayload struct {
 	CusdecRef  DocumentReference `json:"cusDecRef"`
 	EdgeID     string            `json:"edgeId"`
 	Integrated *bool             `json:"integrated"`
-	Taxes      []TaxEntry        `json:"taxes,omitempty"`
-	// AmountToPay is what ASYCUDA says is owed (spec v1.7 §6.2). A pointer
-	// because absent and zero mean different things: a declaration can carry
-	// no duty at all, and only an absent field should fall back to summing the
-	// tax lines. Spec v1.6 had no such field, so a sender that predates it
-	// omits this.
-	AmountToPay *float64        `json:"amountToPay,omitempty"`
-	Errors      json.RawMessage `json:"errors,omitempty"`
+
+	// The assessment as spec v1.9 §6.2 states it, all in LKR. Pointers because
+	// absent and zero mean different things: a declaration settled from a
+	// prepayment account (generalSegment.deferredPayment) arrives with
+	// amountPayable 0, which is an answer, while an absent field is one this
+	// side has to work out another way.
+	//
+	// AmountPayable is what is still due, totalAssessedAmount less amountPaid.
+	TotalAssessedAmount *float64 `json:"totalAssessedAmount,omitempty"`
+	AmountPaid          *float64 `json:"amountPaid,omitempty"`
+	AmountPayable       *float64 `json:"amountPayable,omitempty"`
+
+	// Duties is the v1.9 breakdown: declaration-level globalDuties and
+	// per-item itemDutiesList, the same shape Declaration Verify (§6.6)
+	// returns, so it is read with the same type.
+	Duties verifyDuties `json:"duties"`
+
+	Errors json.RawMessage `json:"errors,omitempty"`
 }
 
 func (p *cusdecResultPayload) UnmarshalJSON(data []byte) error {
@@ -153,6 +156,17 @@ func (r CusdecIntegrationResultRequest) Validate() error {
 	}
 	if r.Integrated && !r.Payload.CusdecRef.IsValid() {
 		return errors.New("payload.cusDecRef must be fully populated when integrated is true")
+	}
+	// Spec v1.9 §6.2: a successful integration states its assessment. The
+	// amount the trader pays is amountPayable alone, so a result without it
+	// would read as owing nothing and skip the payment step; it is refused
+	// instead, so SLC Edge sees the fault rather than the payment going
+	// unasked.
+	if r.Integrated && r.Payload.AmountPayable == nil {
+		return errors.New("payload.amountPayable is required when integrated is true")
+	}
+	if r.Integrated && r.Payload.TotalAssessedAmount == nil {
+		return errors.New("payload.totalAssessedAmount is required when integrated is true")
 	}
 	return nil
 }

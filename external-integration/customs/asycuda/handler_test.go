@@ -57,11 +57,15 @@ func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 		"payload": {
 			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
 			"integrated": true,
+			"totalAssessedAmount": 1244,
 			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
-			"taxes": [
-				{ "code": "tax1", "rate": 1, "amount": 222 },
-				{ "code": "tax2", "rate": 1, "amount": 1022 }
-			],
+			"amountPayable": 1244,
+			"duties": {
+				"globalDuties": [
+					{ "typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1" },
+					{ "typeCode": "COM", "taxBaseAmount": 1, "taxRateNumeric": 144.0, "taxAssessedAmount": 144, "paymentMethodCode": "1" }
+				]
+			},
 			"errors": {}
 		}
 	}`
@@ -72,7 +76,7 @@ func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 			r.Event == "CUSDEC_INTEGRATED" &&
 			r.Payload.CusdecRef.Office == "CMB" &&
 			r.Payload.CusdecRef.Number == 1001 &&
-			len(r.Payload.Taxes) == 2
+			len(r.Payload.Duties.GlobalDuties) == 2
 	})).Return(nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
@@ -371,6 +375,8 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-missing",
 				"integrated": true,
+				"totalAssessedAmount": 1244,
+				"amountPayable": 1244,
 				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 			}
 		}`
@@ -419,6 +425,8 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 			"payload": {
 				"edgeId": "edge-err",
 				"integrated": true,
+				"totalAssessedAmount": 1244,
+				"amountPayable": 1244,
 				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}
 			}
 		}`
@@ -434,4 +442,61 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 		assert.Contains(t, w.Body.String(), "An error occurred while processing your request")
 	})
+}
+
+// A success callback without amountPayable is refused at the boundary: read
+// as owing nothing, it would skip the payment step.
+func TestSLCEHandler_CusdecIntegratedWithoutAmountPayableIsRejected(t *testing.T) {
+	cusdecSvc := new(mockCusdecService)
+	handler := NewHandler(cusdecSvc, new(mockCDNService))
+
+	payload := `{
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T11:00:00Z",
+		"payload": {
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": true,
+			"totalAssessedAmount": 1350,
+			"cusdecRef": { "year": "2026", "office": "CMB", "serial": "C", "number": 1001 },
+			"errors": {}
+		}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleWebhook(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	cusdecSvc.AssertNotCalled(t, "ProcessIntegrationResult", mock.Anything, mock.Anything)
+}
+
+// A rejection whose duties is written as an empty array still reaches the
+// service, so the trader hears about it.
+func TestSLCEHandler_CusdecRejectionWithEmptyDutiesArrayIsProcessed(t *testing.T) {
+	cusdecSvc := new(mockCusdecService)
+	handler := NewHandler(cusdecSvc, new(mockCDNService))
+
+	payload := `{
+		"eventType": "CUSDEC_INTEGRATED",
+		"processedAt": "2026-07-23T11:00:00Z",
+		"payload": {
+			"edgeId": "5516e4c8-a93d-429d-8a18-6a484d331176",
+			"integrated": false,
+			"duties": [],
+			"errors": { "0": [ { "code": 410, "description": "Missing HS code" } ] }
+		}
+	}`
+	cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.MatchedBy(func(r cusdec.CusdecIntegrationResultRequest) bool {
+		return r.EdgeID == "5516e4c8-a93d-429d-8a18-6a484d331176" && !r.Integrated
+	})).Return(nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.HandleWebhook(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	cusdecSvc.AssertExpectations(t)
 }

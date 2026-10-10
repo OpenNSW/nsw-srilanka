@@ -10,17 +10,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// initRefIDs builds the registry the REFID_GENERATOR plugin generates from.
-// NewRegistry compiles every configured format up front, so a malformed refid
-// section in config.yaml stops the boot instead of failing the first task that
-// uses it.
+// initRefIDs builds the registry that REFID_GENERATOR steps and payment
+// references generate from. NewRegistry compiles every configured format up
+// front, so a malformed refid section in config.yaml stops the boot.
 //
 // The stores share db's connection pool, and their tables come from migration
 // 000017.
 func initRefIDs(cfg refid.Config, db *gorm.DB) (refid.Registry, error) {
 	if len(cfg.Issuers) == 0 {
-		slog.Info("reference ID generation not configured; tasks using " +
-			"REFID_GENERATOR will fail until config.yaml defines refid.issuers")
+		slog.Info("reference ID generation not configured; REFID_GENERATOR " +
+			"steps and payments fail until config.yaml defines refid.issuers")
 		return disabledRefIDs{}, nil
 	}
 
