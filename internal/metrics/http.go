@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -64,18 +63,17 @@ func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 	if !p.enabled {
 		return next
 	}
-	return otelhttp.NewHandler(next, operation,
-		otelhttp.WithMeterProvider(p.mp),
-		// otelhttp records http.route on metrics only when Route is set; with a
-		// ServeMux the pattern is on the request after the handler runs.
-		otelhttp.WithMetricAttributesFn(func(r *http.Request) []attribute.KeyValue {
-			route := routeFromPattern(r.Pattern)
-			if route == "" {
-				return nil
+	// otelhttp does not set metrics http.route from ServeMux Pattern; tag it via
+	// Labeler after next runs (Pattern is set by then, before otelhttp records).
+	tagged := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if route := routeFromPattern(r.Pattern); route != "" {
+			if labeler, ok := otelhttp.LabelerFromContext(r.Context()); ok {
+				labeler.Add(semconv.HTTPRoute(route))
 			}
-			return []attribute.KeyValue{semconv.HTTPRoute(route)}
-		}),
-	)
+		}
+	})
+	return otelhttp.NewHandler(tagged, operation, otelhttp.WithMeterProvider(p.mp))
 }
 
 // Shutdown flushes and stops the meter provider.
