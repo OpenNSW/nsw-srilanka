@@ -224,8 +224,12 @@ REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own after a 
 
 ## Database migrations
 
-Schema migrations live in `migrations/` as `NNN_name.sql` files, each holding a
-`-- @UP` and a `-- @DOWN` block. They are applied by the standalone migrator from
+Schema migrations live in `migrations/` as `NNNNNN_name.sql` files, numbered from
+`000001` in order, each holding a `-- @UP` and a `-- @DOWN` block. A new
+migration's `@DOWN` must undo its schema changes, and an applied migration is
+never edited: the **Migrations** check in CI enforces both (see
+[CONTRIBUTING.md](CONTRIBUTING.md#migration-check-migrationsyml)).
+They are applied by the standalone migrator from
 [`agency`](https://github.com/OpenNSW/agency) (`backend/cmd/migrate`),
 which tracks applied versions in a `__migrations` table and runs each migration
 in its own transaction.
@@ -263,7 +267,7 @@ CONFIG_PATH=./configs/config.yaml \
   migrate up        # or: status | down | generate <name>
 ```
 
-`migrate generate <name>` scaffolds the next `NNN_<name>.sql` with empty
+`migrate generate <name>` scaffolds the next `NNNNNN_<name>.sql` with empty
 `@UP`/`@DOWN` stubs; it needs no database, so `make migration name=<name>` runs
 it with no config file at all.
 
