@@ -41,6 +41,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
+	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -131,7 +132,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to load payment registry: %w", err)
 	}
-	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry)
+	// Built before the payment service, which takes its references from it, and
+	// passed to the task stack for REFID_GENERATOR.
+	refIDs, err := initRefIDs(cfg.RefID, db)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, err
+	}
+	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
 
 	artifactRegistry, err := initArtifactRegistry(ctx, cfg)
 	if err != nil {
@@ -187,7 +195,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.CompleteActivation(context.Background(), parentWorkflowID, "", parentStepID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -723,6 +731,7 @@ func initTask(
 	temporalClient client.Client,
 	remoteManager *remote.Manager,
 	paymentService payment.PaymentService,
+	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
 	artifactRegistry *artifact.Registry,
@@ -734,10 +743,6 @@ func initTask(
 	pluginsRegistry := plugins.NewRegistry()
 	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
-	}
-	refIDs, err := initRefIDs(cfg.RefID, db)
-	if err != nil {
-		return nil, nil, err
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, artifactRegistry, storageService); err != nil {
 		return nil, nil, err

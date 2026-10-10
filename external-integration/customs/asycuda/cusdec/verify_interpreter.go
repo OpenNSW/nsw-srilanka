@@ -197,9 +197,53 @@ type verifyResponse struct {
 type verifyDuties struct {
 	GlobalDuties   []dutyLine `json:"globalDuties"`
 	ItemDutiesList []struct {
-		ItemSequenceNumeric int        `json:"itemSequenceNumeric"`
+		ItemSequenceNumeric itemNumber `json:"itemSequenceNumeric"`
 		DutyTaxFees         []dutyLine `json:"dutyTaxFees"`
 	} `json:"itemDutiesList"`
+}
+
+// UnmarshalJSON accepts every way an empty breakdown has been written. The
+// spec says duties is "empty when integration failed" without saying how,
+// and an object, null and an empty array are all read as no duties. Refusing
+// [] would fail the whole callback, so a rejected declaration would never
+// reach the trader; a non-empty array is still an error, as it cannot be the
+// breakdown.
+func (d *verifyDuties) UnmarshalJSON(data []byte) error {
+	*d = verifyDuties{}
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "null" {
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "[") {
+		var items []json.RawMessage
+		if err := json.Unmarshal(data, &items); err != nil {
+			return err
+		}
+		if len(items) == 0 {
+			return nil
+		}
+		return fmt.Errorf("duties: expected an object, got a non-empty array")
+	}
+	type plain verifyDuties
+	return json.Unmarshal(data, (*plain)(d))
+}
+
+// itemNumber is an item's sequence number. JSON has one number type, and a
+// serializer may write a whole number as 1.0; that is read as 1 rather than
+// failing the whole message. A fractional value is still refused, as it
+// cannot name an item.
+type itemNumber int
+
+func (n *itemNumber) UnmarshalJSON(data []byte) error {
+	var f float64
+	if err := json.Unmarshal(data, &f); err != nil {
+		return fmt.Errorf("itemSequenceNumeric: %w", err)
+	}
+	if f != math.Trunc(f) {
+		return fmt.Errorf("itemSequenceNumeric: %v is not a whole number", f)
+	}
+	*n = itemNumber(f)
+	return nil
 }
 
 type dutyLine struct {

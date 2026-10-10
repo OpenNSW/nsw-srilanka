@@ -323,12 +323,12 @@ The task workflow node passes the order in and takes it back out: `"input_mappin
 - **Absolute:** a pointer starting with `/` is a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901) from the root of the inputs.
 - **Relative:** a pointer starting with `0/` is a [Relative JSON Pointer](https://datatracker.ietf.org/doc/html/draft-bhutton-relative-json-pointer) from the current element. It's only allowed in an entry with `each`. Only `0/` is supported.
 
-| Field       | Meaning                                                                                                                                                                                                                                 |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`      | The field to fill. Without `each` it is absolute. With `each` it must be relative, so each element gets its own ID. Two paths in the same scope (the root, or one `each` array) can't overlap: neither may sit inside the other.        |
-| `each`      | Optional. An absolute pointer to an array of objects; the entry applies to every element. A missing or `null` array has nothing to fill.                                                                                                |
-| `params`    | Optional. Maps each param the format expects (a list segment's `param`, or a `{name}` in a scope key) to a pointer to its value. A pointer with no value leaves that param out. Params are read before any ID of the step is generated. |
-| `overwrite` | Optional, default `false`. When `true`, the field is generated on every run, even if it already holds a value.                                                                                                                          |
+| Field       | Meaning                                                                                                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `path`      | The field to fill. Without `each` it is absolute. With `each` it must be relative, so each element gets its own ID. Two paths in the same scope (the root, or one `each` array) can't overlap: neither may sit inside the other.                 |
+| `each`      | Optional. An absolute pointer to an array of objects; the entry applies to every element. A missing or `null` array has nothing to fill.                                                                                                         |
+| `params`    | Optional. Maps each param the format expects (a list or param segment's `param`, or a `{name}` in a scope key) to a pointer to its value. A pointer with no value leaves that param out. Params are read before any ID of the step is generated. |
+| `overwrite` | Optional, default `false`. When `true`, the field is generated on every run, even if it already holds a value.                                                                                                                                   |
 
 **Behaviour:**
 
@@ -400,6 +400,29 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 - **Validation:** the template is checked with `htmlgen.Validate` each time it is loaded, so a syntax error or an unescapable construct fails the step rather than producing a broken document. A value html/template refuses (a `javascript:` URL in an `href`) also fails the step.
 - **Filename:** names the stored document, not the template: it defaults to `<template_id>.html`, and `.html` is added when missing. Templates use `.gohtml`, as NSW-Agency's certificate templates do, so editors highlight the template actions.
 - **Re-runs:** the step renders and stores a new document every time it runs, so a loop that brings it back after the inputs changed records the document for the new data. A Temporal retry can leave an extra copy in storage that nothing refers to; superseded files are not deleted.
+
+### Payments (`PAYMENT`)
+
+Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise.
+
+```json
+{
+  "plugin_properties": {
+    "task_code": "cda_app_fee_payment_v1",
+    "amount": "2000.00",
+    "currency": "LKR",
+    "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
+    "reference": {
+      "issuer": "CDA",
+      "id_type": "fee_payment_ref",
+      "params": { "exporterId": "/exporter_id" },
+      "values": { "mainCategory": "01", "subCategory": "00002" }
+    }
+  }
+}
+```
+
+In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 

@@ -36,9 +36,9 @@ const TaskTypeRefIDGenerator = "REFID_GENERATOR"
 // path must be relative, so each element gets an ID of its own. Entries are
 // filled in the order listed, and elements in index order.
 //
-// params maps each param a format expects (a list segment's param, or a
-// scope-key placeholder) to a pointer to its value. Params are read before any
-// ID of the step is generated. A field that already holds an ID is kept,
+// params maps each param a format expects (a list or param segment's param, or
+// a scope-key placeholder) to a pointer to its value. Params are read before
+// any ID of the step is generated. A field that already holds an ID is kept,
 // unless its entry sets "overwrite": true.
 type RefIDGeneratorPlugin struct {
 	refIDs refid.Registry
@@ -311,19 +311,30 @@ func newRefIDTarget(root, elem map[string]any, e *refIDEntry, label string) (ref
 		}
 	}
 
-	params := make(map[string]string, len(e.params))
-	for name, p := range e.params {
+	params, err := readRefIDParams(root, elem, e.params)
+	if err != nil {
+		return refIDTarget{}, fmt.Errorf("%s: %w", label, err)
+	}
+	return refIDTarget{obj: obj, ptr: e.path.ptr, label: label, entry: e, params: params}, nil
+}
+
+// readRefIDParams reads the value of each param through its pointer. A pointer
+// with no value leaves its param out, and a non-string value is an error. elem
+// is the current element, nil without "each".
+func readRefIDParams(root, elem map[string]any, pointers map[string]refIDPointer) (map[string]string, error) {
+	params := make(map[string]string, len(pointers))
+	for name, p := range pointers {
 		v, ok := jsonpointer.Get(p.in(root, elem), p.ptr)
 		if !ok || v == nil {
 			continue
 		}
 		s, isString := v.(string)
 		if !isString {
-			return refIDTarget{}, fmt.Errorf("%s: param %q (%s) is a %T, not a string", label, name, p.raw, v)
+			return nil, fmt.Errorf("param %q (%s) is a %T, not a string", name, p.raw, v)
 		}
 		params[name] = s
 	}
-	return refIDTarget{obj: obj, ptr: e.path.ptr, label: label, entry: e, params: params}, nil
+	return params, nil
 }
 
 // checkObjectPath reports an error when a segment before the last one in

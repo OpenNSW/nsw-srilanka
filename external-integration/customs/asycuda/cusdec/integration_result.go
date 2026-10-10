@@ -8,32 +8,36 @@ import (
 	"strings"
 )
 
-// amountToPay is what the trader is asked to settle on the payment step.
-//
-// ASYCUDA states it outright from spec v1.7 (§6.2 amountToPay) and that value
-// wins: it is the assessment, where a sum of the tax lines is only this side's
-// reconstruction of it. The spec's own example has the two disagree -- 1254
-// against tax lines totalling 1244 -- so reconstructing it is not safe even
-// when every line is present.
-//
-// Summing remains the fallback for a result that carries no such field, which
-// is every result sent against v1.6.
+// amountToPay is what the trader is asked to settle on the payment step:
+// amountPayable, what is still due on the declaration (spec v1.9 §6.2).
+// 0 is an answer: a declaration settled from a prepayment account owes
+// nothing, and no Payment Notification follows for it. A result without
+// amountPayable is read as owing nothing.
 func amountToPay(p cusdecResultPayload) float64 {
-	if p.AmountToPay != nil {
-		return *p.AmountToPay
+	if p.AmountPayable == nil {
+		return 0
 	}
-	return totalTaxes(p.Taxes)
+	return *p.AmountPayable
 }
 
-// totalTaxes sums the assessed tax lines from a §6.2 integration result. The
-// spec carries the duty as a per-code breakdown, while the payment step that
-// follows asks the trader for a single figure.
-func totalTaxes(taxes []TaxEntry) float64 {
-	var total float64
-	for _, t := range taxes {
-		total += t.Amount
+// dutiesForTask turns the duties breakdown into the plain JSON shape the task
+// stores, keeping the spec's field names (globalDuties, itemDutiesList,
+// dutyTaxFees, typeCode, taxAssessedAmount, ...) so a review panel can list
+// the charges. It reports false when ASYCUDA assessed no charges at all, so an
+// empty breakdown is left out rather than rendered as an empty list.
+func dutiesForTask(d verifyDuties) (map[string]any, bool) {
+	if len(d.GlobalDuties) == 0 && len(d.ItemDutiesList) == 0 {
+		return nil, false
 	}
-	return total
+	raw, err := json.Marshal(d)
+	if err != nil {
+		return nil, false
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, false
+	}
+	return out, true
 }
 
 // describeErrors renders the §4.5 segment-keyed errors object as a readable

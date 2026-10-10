@@ -443,3 +443,31 @@ func TestRefIDGenerator_RealRegistry(t *testing.T) {
 	assert.Equal(t, "W1-0001", outLines(t, again)[0].(map[string]any)["line_no"])
 	assert.Equal(t, "W2-0002", outLines(t, again)[3].(map[string]any)["line_no"], "only the new line gets a number")
 }
+
+// A param segment embeds a step input as is: the holder number and a serial
+// drawn by an earlier step land in the ID unchanged, each checked against its
+// format's pattern before any ID is generated.
+func TestRefIDGenerator_ParamSegments(t *testing.T) {
+	reg, err := refid.NewRegistry(refid.Config{
+		Issuers: []refid.IssuerConfig{{
+			Issuer: "ACME",
+			Formats: []refid.FormatConfig{{IDType: "certificate", Segments: []refid.SegmentConfig{
+				{Type: refid.SegmentTypeLiteral, Value: "CERT-"},
+				{Type: refid.SegmentTypeParam, Param: "holder", Pattern: "[0-9]{4}"},
+				{Type: refid.SegmentTypeLiteral, Value: "-"},
+				{Type: refid.SegmentTypeParam, Param: "serial", Pattern: "[0-9]{4}/[0-9]{2}"},
+			}}},
+		}},
+	})
+	require.NoError(t, err)
+	const props = `{"ids": [{"path": "/certificate_no", "issuer": "ACME", "id_type": "certificate",
+		"params": {"holder": "/holder_no", "serial": "/serial"}}]}`
+
+	ctx := refIDCtx(map[string]any{"holder_no": "0042", "serial": "1205/26"})
+	require.NoError(t, execRefIDs(t, reg, ctx, props))
+	assert.Equal(t, "CERT-0042-1205/26", output(t, ctx)["certificate_no"])
+
+	rejected := refIDCtx(map[string]any{"holder_no": "42", "serial": "1205/26"})
+	require.ErrorIs(t, execRefIDs(t, reg, rejected, props), refid.ErrInvalidParam)
+	assert.NotContains(t, rejected.Record.Data, "refid", "a rejected param writes no output")
+}
