@@ -282,7 +282,7 @@ idp/resources/
 CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
 (`configs/agency/cda/`, `docs/agency.md`), whose routes check `nsw:*` scopes, so
 `cda.json` declares it explicitly: the `CDA API` resource server's officer role
-(`CDA Officer`, via a `CDA Officers` group holding only `cda_officer`) and inject role
+(`CDA Officer`, via a `CDA Officers` group holding only `cda_officer`) and NSW role
 (`NswToCdaM2M` on `NSW_TO_CDA`), the portal client requesting those scopes, and
 `CDA_TO_NSW` as for any agency. A CDA-only group keeps other agencies' officers, who
 are all in `OGA Reviewers`, out of CDA.
@@ -398,17 +398,17 @@ are the same backend; that is safe because every caller names its target with `r
 not from the app's requestable `scopes` list. So every caller is granted the relevant
 scopes via a role:
 
-| Caller                 | Grant                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- |
-| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                  |
-| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite` |
-| `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                     |
-| OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                 |
-| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`             |
-| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                        |
-| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject` on the CDA API             |
-| Customs portal users   | `Customs Officer` role (via `Customs Officers` group) → Customs API scopes                            |
-| `NSW_TO_CUSTOMS`       | **`NswToCustomsM2M` role assigned to the application** → `nsw:workflow:inject` on the Customs API     |
+| Caller                 | Grant                                                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                        |
+| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite`       |
+| `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                           |
+| OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                       |
+| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`                   |
+| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                              |
+| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the CDA API |
+| Customs portal users   | `Customs Officer` role (via `Customs Officers` group) → Customs API scopes                                  |
+| `NSW_TO_CUSTOMS`       | **`NswToCustomsM2M` role assigned to the application** → `nsw:workflow:inject` on the Customs API           |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to

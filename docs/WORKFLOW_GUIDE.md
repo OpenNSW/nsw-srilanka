@@ -294,6 +294,13 @@ Declares if the task is completed by the applicant (`USER_INPUT`) or another age
 
 An `EXTERNAL_REVIEW` step sends `{taskCode, taskId, callbackToken, consignmentId, serviceUrl, data}` in a POST to the service's `path` and parks in `QUEUED_EXTERNALLY`. The reviewer calls back on `POST {serviceUrl}/{callbackToken}` (`/api/v1/callbacks/{token}`) with `{"command": "...", "payload": {...}}`. The token is opaque: it names this one step, so a callback that arrives after the task has moved on gets `409` instead of completing a later step, and it is also the key the reviewer uses to recognize a repeated dispatch. A re-dispatch of the same task (e.g. after an amendment) carries a new token.
 
+The step **replies** instead of dispatching when its inputs carry a `replyToken`: the token a step on the other side parked on and handed over. It then sends a POST with `{"command": "<reply_command>", "payload": {...}}` to that service's `/api/v1/callbacks/{replyToken}` and parks, as for a dispatch. The payload is the step's mapped inputs plus `callbackToken`, this step's own token, for the other side to answer on. `reply_command` in `plugin_properties` is required to reply, and `path` only to dispatch. An empty `replyToken` dispatches, so the first round, which has none, goes through `path` as before. A `409` on a reply (the other step is no longer waiting) fails the step without retries, which parks it for an admin; other failures are retried. This is how a review asks for more information and gets the resubmission back on the same task (see `docs/agency.md`):
+
+```json
+"input_mapping":  { "userform": "submission", "agency_token?": "replyToken" },
+"output_mapping": { "verification_outcome": "verificationform.verification_outcome", "callbackToken?": "agency_token" }
+```
+
 ### Reference IDs (`REFID_GENERATOR`)
 
 Fills fields of a copy of the step's inputs with reference IDs, and writes the filled copy to `<output_namespace>`. The formats are defined in the `refid` section of `configs/config.yaml` (see `configs/config.example.yaml`). The step is synchronous. It reads only its inputs, which come through `input_mapping`, and writes only its own namespace.

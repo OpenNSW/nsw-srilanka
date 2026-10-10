@@ -15,8 +15,8 @@
   "roles": [
     { "key": "CDA Officer", "name": "CDA Officer", "description": "Role for CDA officers working tasks in the CDA deployment",
       "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaOfficer" },
-    { "key": "NswToCdaM2M", "name": "NswToCdaM2M", "description": "Role for NSW injecting workflows into the CDA deployment",
-      "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaInject" }
+    { "key": "NswToCdaM2M", "name": "NswToCdaM2M", "description": "Role for NSW injecting workflows into the CDA deployment and replying on its parked steps",
+      "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "nswToCda" }
   ],
   "roleAssignments": [
     { "role": "CDA Officer", "group": "CDA Officers" }
@@ -66,7 +66,7 @@
       "clientId": "NSW_TO_CDA",
       "secretEnv": { "override": "M2M_NSW_TO_CDA_SECRET", "default": "M2M_CLIENT_SECRET" },
       "ou": "government-organization",
-      "scopeSet": "cdaInject"
+      "scopeSet": "nswToCda"
     }
   ],
   "appRoleAssignments": [
