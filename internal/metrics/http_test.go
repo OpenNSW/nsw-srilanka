@@ -3,18 +3,72 @@ package metrics
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
-func TestMiddlewareRecordsRoutePatternAndStatus(t *testing.T) {
-	srv := New()
+func TestStartNoopWithoutEndpoint(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")
+	t.Setenv("OTEL_METRICS_EXPORTER", "")
+
+	p, err := Start(t.Context())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := p.Shutdown(t.Context()); err != nil {
+			t.Errorf("shutdown: %v", err)
+		}
+	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := p.Handler("tnsw-api", mux)
+	if h != mux {
+		t.Fatal("expected Handler to return next unchanged when OTLP is unset")
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestStartNoopWhenMetricsExporterNone(t *testing.T) {
+	t.Setenv("OTEL_METRICS_EXPORTER", "none")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+
+	p, err := Start(t.Context())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer p.Shutdown(t.Context())
+
+	next := http.NewServeMux()
+	if p.Handler("tnsw-api", next) != next {
+		t.Fatal("expected no-op Handler when OTEL_METRICS_EXPORTER=none")
+	}
+}
+
+func TestHandlerRecordsRoutePattern(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
+
+	p := &Provider{mp: mp, enabled: true, shutdown: mp.Shutdown}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/tasks/{id}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	})
-	mux.Handle("GET "+Path, srv.Handler())
-	h := srv.Middleware(mux)
+	h := p.Handler("tnsw-api", mux)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc-123", nil))
@@ -22,79 +76,71 @@ func TestMiddlewareRecordsRoutePatternAndStatus(t *testing.T) {
 		t.Fatalf("status = %d, want 201", rec.Code)
 	}
 
-	body := scrape(t, h)
-	if strings.Contains(body, "abc-123") {
-		t.Fatalf("raw path leaked into metrics:\n%s", body)
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(t.Context(), &rm); err != nil {
+		t.Fatalf("Collect: %v", err)
 	}
-	for _, want := range []string{
-		"http_server_request_duration_seconds",
-		`http_request_method="POST"`,
-		`http_response_status_code="201"`,
-		`http_route="/api/v1/tasks/{id}"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("metrics missing %s:\n%s", want, body)
-		}
+	attrs := durationAttributes(t, rm)
+	if got := attrString(attrs, semconv.HTTPRouteKey); got != "/api/v1/tasks/{id}" {
+		t.Fatalf("http.route = %q, want /api/v1/tasks/{id}", got)
 	}
-	if strings.Contains(body, `http_route="/metrics"`) {
-		t.Fatalf("scrape was recorded:\n%s", body)
+	if got := attrString(attrs, semconv.HTTPRequestMethodKey); got != http.MethodPost {
+		t.Fatalf("http.request.method = %q, want POST", got)
 	}
-}
-
-func TestMiddlewareRecordsUnmatchedAs404(t *testing.T) {
-	srv := New()
-	mux := http.NewServeMux()
-	mux.Handle("GET "+Path, srv.Handler())
-	h := srv.Middleware(mux)
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/no/such", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
+	if got := attrInt(attrs, semconv.HTTPResponseStatusCodeKey); got != http.StatusCreated {
+		t.Fatalf("http.response.status_code = %d, want 201", got)
 	}
-
-	body := scrape(t, h)
-	for _, want := range []string{
-		`http_request_method="GET"`,
-		`http_response_status_code="404"`,
-		`http_route="unmatched"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("metrics missing %s:\n%s", want, body)
+	for _, a := range attrs {
+		if a.Key == semconv.HTTPRouteKey && a.Value.AsString() == "/api/v1/tasks/abc-123" {
+			t.Fatal("raw path leaked into http.route")
 		}
 	}
 }
 
-func TestMiddlewareDefaultsUnwrittenStatusTo200(t *testing.T) {
-	srv := New()
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /empty", func(http.ResponseWriter, *http.Request) {})
-	mux.Handle("GET "+Path, srv.Handler())
-	h := srv.Middleware(mux)
-
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/empty", nil))
-
-	body := scrape(t, h)
-	if !strings.Contains(body, `http_response_status_code="200"`) || !strings.Contains(body, `http_route="/empty"`) {
-		t.Fatalf("metrics missing default status:\n%s", body)
+func TestRouteFromPattern(t *testing.T) {
+	if got := routeFromPattern("GET /api/v1/tasks/{id}"); got != "/api/v1/tasks/{id}" {
+		t.Fatalf("routeFromPattern = %q", got)
+	}
+	if got := routeFromPattern(""); got != "" {
+		t.Fatalf("routeFromPattern = %q", got)
 	}
 }
 
-func TestRouteLabel(t *testing.T) {
-	if got := routeLabel("GET /api/v1/tasks/{id}"); got != "/api/v1/tasks/{id}" {
-		t.Fatalf("routeLabel = %q", got)
-	}
-	if got := routeLabel(""); got != "unmatched" {
-		t.Fatalf("routeLabel = %q", got)
-	}
-}
-
-func scrape(t *testing.T, h http.Handler) string {
+func durationAttributes(t *testing.T, rm metricdata.ResourceMetrics) []attribute.KeyValue {
 	t.Helper()
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, Path, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("scrape status = %d, body %s", rec.Code, rec.Body.String())
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "http.server.request.duration" {
+				continue
+			}
+			hist, ok := m.Data.(metricdata.Histogram[float64])
+			if !ok {
+				t.Fatalf("unexpected data type %T", m.Data)
+			}
+			if len(hist.DataPoints) == 0 {
+				t.Fatal("no histogram points")
+			}
+			return hist.DataPoints[0].Attributes.ToSlice()
+		}
 	}
-	return rec.Body.String()
+	t.Fatal("http.server.request.duration not found")
+	return nil
+}
+
+func attrString(attrs []attribute.KeyValue, key attribute.Key) string {
+	for _, a := range attrs {
+		if a.Key == key {
+			return a.Value.AsString()
+		}
+	}
+	return ""
+}
+
+func attrInt(attrs []attribute.KeyValue, key attribute.Key) int {
+	for _, a := range attrs {
+		if a.Key == key {
+			return int(a.Value.AsInt64())
+		}
+	}
+	return 0
 }

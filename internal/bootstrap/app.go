@@ -473,15 +473,27 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// One middleware covers every route, including ones mounted above.
-	// /metrics is public, like /health, and is not itself recorded.
-	httpMetrics := metrics.New()
-	mux.Handle("GET "+metrics.Path, httpMetrics.Handler())
-	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(httpMetrics.Middleware(mux)))
+	// OTLP metrics when OTEL_EXPORTER_OTLP_* is set; otherwise a no-op wrap.
+	httpMetrics, err := metrics.Start(ctx)
+	if err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = authnManager.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to start http metrics: %w", err)
+	}
+	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(httpMetrics.Handler("tnsw-api", mux)))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
 		var closeErrs []error
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := httpMetrics.Shutdown(shutdownCtx); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down http metrics: %w", err))
+		}
+		cancel()
 
 		if auditClient != nil && auditClient.IsEnabled() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

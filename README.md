@@ -174,7 +174,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
-- Request metrics: `curl http://localhost:8080/metrics` returns Prometheus text, including `http_server_request_duration_seconds`.
+- Request metrics: set `OTEL_EXPORTER_OTLP_ENDPOINT` (and optionally `OTEL_SERVICE_NAME`) to push OTLP metrics. Unset, local runs are unchanged.
 - Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)

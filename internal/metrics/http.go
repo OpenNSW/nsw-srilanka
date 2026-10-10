@@ -1,90 +1,103 @@
-// Package metrics records HTTP server request duration and serves it in
-// Prometheus text format.
+// Package metrics instruments the HTTP server with OpenTelemetry and exports
+// via OTLP when configured through the standard OTEL_* environment variables.
 package metrics
 
 import (
+	"context"
+	"fmt"
 	"net/http"
-	"strconv"
+	"os"
 	"strings"
-	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
-// Path is the unauthenticated scrape endpoint, registered like /health.
-const Path = "/metrics"
-
-// durationBuckets match the usual HTTP latency boundaries, in seconds.
-var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
-
-// Server records one histogram for every request except the scrape itself.
-type Server struct {
-	handler  http.Handler
-	duration *prometheus.HistogramVec
+// Provider owns the meter provider used by Handler.
+type Provider struct {
+	mp       metric.MeterProvider
+	enabled  bool
+	shutdown func(context.Context) error
 }
 
-// New builds a registry whose only series is http_server_request_duration_seconds.
-func New() *Server {
-	reg := prometheus.NewRegistry()
-	duration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "http_server_request_duration_seconds",
-		Help:    "Duration of HTTP server requests.",
-		Buckets: durationBuckets,
-	}, []string{"http_request_method", "http_route", "http_response_status_code"})
-	reg.MustRegister(duration)
-	return &Server{
-		handler:  promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
-		duration: duration,
+// Start builds an OTLP meter provider when an OTLP endpoint is set. With no
+// endpoint (and when OTEL_METRICS_EXPORTER=none), Handler is a no-op wrap so
+// local runs need no collector.
+func Start(ctx context.Context) (*Provider, error) {
+	if !exportConfigured() {
+		return &Provider{
+			shutdown: func(context.Context) error { return nil },
+		}, nil
 	}
+
+	exporter, err := otlpmetrichttp.New(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create OTLP metric exporter: %w", err)
+	}
+	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithTelemetrySDK(),
+	)
+	if err != nil {
+		_ = exporter.Shutdown(ctx)
+		return nil, fmt.Errorf("create resource: %w", err)
+	}
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter)),
+		sdkmetric.WithResource(res),
+	)
+	return &Provider{
+		mp:       mp,
+		enabled:  true,
+		shutdown: mp.Shutdown,
+	}, nil
 }
 
-// Handler serves Prometheus text for this server's registry.
-func (s *Server) Handler() http.Handler { return s.handler }
-
-// Middleware records method, mux route pattern, and status code. The route
-// label is the pattern (for example /api/v1/tasks/{id}), never the raw path.
-// Requests to Path are served and not recorded.
-func (s *Server) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == Path {
-			next.ServeHTTP(w, r)
-			return
-		}
-		start := time.Now()
-		sw := &statusWriter{ResponseWriter: w}
-		next.ServeHTTP(sw, r)
-		status := sw.status
-		if status == 0 {
-			status = http.StatusOK
-		}
-		s.duration.WithLabelValues(r.Method, routeLabel(r.Pattern), strconv.Itoa(status)).
-			Observe(time.Since(start).Seconds())
-	})
+// Handler wraps next with otelhttp so every mux route records HTTP metrics.
+// When Start found no OTLP endpoint, next is returned unchanged.
+func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
+	if !p.enabled {
+		return next
+	}
+	return otelhttp.NewHandler(next, operation,
+		otelhttp.WithMeterProvider(p.mp),
+		// otelhttp records http.route on metrics only when Route is set; with a
+		// ServeMux the pattern is on the request after the handler runs.
+		otelhttp.WithMetricAttributesFn(func(r *http.Request) []attribute.KeyValue {
+			route := routeFromPattern(r.Pattern)
+			if route == "" {
+				return nil
+			}
+			return []attribute.KeyValue{semconv.HTTPRoute(route)}
+		}),
+	)
 }
 
-// routeLabel strips the method from a Go 1.22 ServeMux pattern. Unmatched
-// requests share one label so arbitrary paths cannot raise cardinality.
-func routeLabel(pattern string) string {
+// Shutdown flushes and stops the meter provider.
+func (p *Provider) Shutdown(ctx context.Context) error {
+	return p.shutdown(ctx)
+}
+
+func exportConfigured() bool {
+	if os.Getenv("OTEL_METRICS_EXPORTER") == "none" {
+		return false
+	}
+	return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" ||
+		os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") != ""
+}
+
+// routeFromPattern strips the method from a Go ServeMux pattern.
+func routeFromPattern(pattern string) string {
 	if pattern == "" {
-		return "unmatched"
+		return ""
 	}
-	if _, rest, ok := strings.Cut(pattern, " "); ok {
-		return rest
+	if idx := strings.IndexByte(pattern, '/'); idx >= 0 {
+		return pattern[idx:]
 	}
-	return pattern
+	return ""
 }
-
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusWriter) WriteHeader(code int) {
-	if w.status == 0 {
-		w.status = code
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
