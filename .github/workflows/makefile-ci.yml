@@ -1,0 +1,251 @@
+name: Makefile CI
+# Runs the Makefile the way each developer shell runs it, on PRs to main and in
+# the merge queue, when the Makefile, the git hooks or an example config file
+# change; otherwise the checks are skipped. A recipe that only breaks under
+# Windows (cmd.exe from PowerShell, Git Bash) or under the Unix recipes (BSD
+# grep/awk/sed and Apple's Make) would otherwise be found by the first developer
+# on that machine after merge.
+#
+# One leg per shell the Makefile supports:
+#   Windows (cmd.exe) — GNU Make from PowerShell, with no sh on PATH. The Makefile
+#                       selects its USE_CMD recipes here (OS=Windows_NT, no MSYSTEM).
+#   Windows (Git Bash) — MSYSTEM set, sh on PATH: the Unix recipes plus the
+#                       cygpath PATH handling.
+#   UNIX              — the Unix recipes, on the macOS runner: Apple's GNU Make
+#                       and the BSD userland (grep, awk, sed, find).
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lists the files this PR or merge-queue entry changes, and reports whether
+  # any is one this workflow checks. The jobs below skip only when this job
+  # succeeds and finds none; if it fails, they run.
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.match.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Match changed files
+        id: match
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          PATTERN: '^Makefile$|^\.githooks/|\.example(\.|$)|^go\.(mod|sum)$|^\.github/workflows/makefile-ci\.yml$'
+        run: |
+          # --no-renames lists both paths of a rename, so a file moved out of a
+          # watched path still counts as a change to it.
+          FILES=$(git diff --no-renames --name-only "$BASE...$HEAD")
+          if grep -qE "$PATTERN" <<< "$FILES"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "None of the changed files is one this workflow checks, so its jobs are skipped."
+          fi
+
+  makefile:
+    name: Makefile on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (cmd.exe)
+            os: windows-latest
+            shell_kind: cmd
+          - name: Windows (Git Bash)
+            os: windows-latest
+            shell_kind: gitbash
+          - name: UNIX
+            os: macos-latest
+            shell_kind: unix
+    # Every step is driven from PowerShell 7 (on all three runners); what differs
+    # per leg is the environment `make` itself sees, set up below.
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GOWORK: off
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # `make tools` requires golangci-lint v2 to be installed already (it only
+      # installs the other tools). Same version as backend-ci.yml.
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.1
+          install-only: true
+
+      # Pinned to the GNU Make that the Windows developers run
+      # (GNU Make 4.4.1, Built for Windows32 — the Chocolatey/ezwinports build).
+      - name: Install GNU Make 4.4.1 (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --version 4.4.1 --no-progress -y
+
+      # GitHub's Windows image has Git's sh.exe on PATH, and make runs recipes
+      # with sh.exe whenever it finds one, which would run the Unix recipes and
+      # hide every cmd.exe breakage. Drop Git's bin directories so make falls
+      # back to cmd.exe like a developer's PowerShell, then prove it did.
+      - name: Hide sh from make (Windows cmd.exe)
+        if: matrix.shell_kind == 'cmd'
+        run: |
+          $kept = $env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\Git\\(bin|usr\\bin|mingw64\\bin)\\?$' }
+          "PATH=$($kept -join ';')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $env:PATH = $kept -join ';'
+          if (Get-Command sh -ErrorAction SilentlyContinue) {
+            throw "sh is still on PATH ($((Get-Command sh).Source)); make would not use cmd.exe"
+          }
+
+      # Git Bash sets MSYSTEM; a plain `pwsh` step on the runner does not.
+      - name: Mark the shell as Git Bash (Windows Git Bash)
+        if: matrix.shell_kind == 'gitbash'
+        run: '"MSYSTEM=MINGW64" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8'
+
+      - name: Show the make environment
+        run: |
+          make --version
+          "OS=$env:OS MSYSTEM=$env:MSYSTEM"
+          if ($env:RUNNER_OS -eq 'macOS' -and ($env:OS -eq 'Windows_NT' -or $env:MSYSTEM)) {
+            throw "UNIX leg would not run the Unix recipes (OS=$env:OS MSYSTEM=$env:MSYSTEM)"
+          }
+
+      # `make -n` parses the whole Makefile and expands every recipe without
+      # running it. Catches syntax errors, bad ifdef/endif nesting and bad
+      # variable expansion in all targets, including the ones the steps below
+      # cannot run on a CI runner (they start Docker containers).
+      - name: Dry-run every target
+        run: |
+          $targets = Select-String -Path Makefile -Pattern '^\.PHONY:\s*(\S+)' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value }
+          if (-not $targets) { throw 'No .PHONY targets found in the Makefile' }
+          $failed = @()
+          foreach ($t in $targets) {
+            $out = make -n $t name=ci_check 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              $failed += $t
+              Write-Host "::error::make -n $t failed (exit $LASTEXITCODE)"
+              $out | ForEach-Object { Write-Host "    $_" }
+            } else {
+              Write-Host "ok   make -n $t"
+            }
+          }
+          if ($failed) { throw "Targets that do not parse: $($failed -join ', ')" }
+
+      # The default goal. Every target with a `##` comment must be listed.
+      - name: make (default goal prints the help)
+        run: |
+          $help = (make 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { Write-Host $help; throw "make exited $LASTEXITCODE" }
+          # The Unix help colours the target names with ANSI escapes.
+          $help = $help -replace '\x1b\[[0-9;]*m', ''
+          $documented = Select-String -Path Makefile -Pattern '^([a-zA-Z0-9_-]+):.*?## ' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value }
+          if (-not $documented) { throw 'No documented targets found' }
+          $missing = $documented | Where-Object { $help -notmatch "(?m)^\s*$([regex]::Escape($_))\s" }
+          if ($missing) { Write-Host $help; throw "Targets missing from make help: $($missing -join ', ')" }
+
+      - name: make setup
+        run: make setup
+
+      # What `make setup` must leave behind, the same on every shell. A file
+      # seeded by one branch of the Makefile but not the other shows up here.
+      - name: Check the files make setup seeds
+        run: |
+          $expected = @(
+            '.env',
+            'idp/.env',
+            'portals/apps/trader-app/public/config.js',
+            'configs/services.json',
+            'configs/services.docker.json',
+            'configs/payment_methods.json',
+            'configs/catalog.json',
+            'configs/companies.json',
+            'configs/config.yaml',
+            'configs/config.docker.yaml'
+          )
+          $missing = $expected | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "make setup did not create: $($missing -join ', ')" }
+          if ((git config core.hooksPath) -ne '.githooks') { throw 'make setup did not set core.hooksPath' }
+
+      - name: make setup again (must not overwrite)
+        run: |
+          'edited' | Out-File -FilePath .env -Encoding utf8
+          make setup
+          if ((Get-Content .env -Raw).Trim() -ne 'edited') { throw 'make setup overwrote an existing .env' }
+
+      - name: make fmt (must leave the tree clean)
+        run: |
+          make fmt
+          if ($LASTEXITCODE -ne 0) { throw "make fmt exited $LASTEXITCODE" }
+          git diff --exit-code -- '*.go'
+
+      - name: make tidy (must leave the tree clean)
+        run: |
+          make tidy
+          if ($LASTEXITCODE -ne 0) { throw "make tidy exited $LASTEXITCODE" }
+          git diff --exit-code go.mod go.sum
+
+      - name: make migration scaffolds a file
+        run: |
+          make migration name=ci_check
+          $new = git ls-files --others --exclude-standard -- migrations | Where-Object { $_ -match 'ci_check' }
+          if (-not $new) { throw 'make migration created no file in migrations/' }
+
+      # `make` exits 1 on purpose. The pwsh shell exits the step with
+      # $LASTEXITCODE, so record make's code and then clear it.
+      - name: make migration without a name fails
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $ErrorActionPreference = 'Continue'
+          $out = make migration 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($code -eq 0) { throw 'make migration without name= succeeded' }
+          if ($out -notmatch 'Usage: make migration') { Write-Host $out; throw 'no usage message' }
+
+  # The required check for this workflow. A skipped matrix job reports a single
+  # check whose name isn't expanded, so the per-shell checks can't be required;
+  # this job passes when every leg passed, or when the legs were skipped
+  # because no watched file changed.
+  makefile-ci:
+    name: Makefile
+    needs: [changes, makefile]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the Makefile legs
+        env:
+          LEGS: ${{ needs.makefile.result }}
+        run: |
+          echo "Makefile legs: ${LEGS}"
+          case "$LEGS" in
+            success|skipped) ;;
+            *) echo "::error::A Makefile leg did not succeed (${LEGS})."; exit 1 ;;
+          esac
