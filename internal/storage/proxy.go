@@ -92,6 +92,45 @@ func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, 
 	return &meta, nil
 }
 
+// Save stores content on the owning service: it allocates the key there, as
+// Upload does, then puts the content to the presigned URL itself. The owning
+// service decides which MIME types it accepts.
+func (s *ProxyService) Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error) {
+	meta, err := s.Upload(ctx, filename, size, mime)
+	if err != nil {
+		return nil, err
+	}
+	// An owning service that omits the type from its reply signed the URL
+	// for the one requested.
+	if meta.MimeType == "" {
+		meta.MimeType = mime
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, meta.UploadURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("storage proxy: build upload request: %w", err)
+	}
+	// The URL was signed for this size, and a presigned S3 upload refuses a
+	// chunked body; net/http sends one for a reader it can't measure.
+	req.ContentLength = size
+	// A presigned upload is signed over its content type, so it must be sent
+	// as the type it was allocated for.
+	req.Header.Set("Content-Type", meta.MimeType)
+	resp, err := s.fetchClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("storage proxy: upload %s: %w", meta.Key, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxProxyErrorBody))
+		return nil, fmt.Errorf("storage proxy: upload %s: owning service returned %d: %s", meta.Key, resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+
+	// The URL was for this upload only; the key is what to persist.
+	meta.UploadURL = ""
+	return meta, nil
+}
+
 // GetDownloadURL returns the owning service's time-limited download URL.
 func (s *ProxyService) GetDownloadURL(ctx context.Context, key string) (string, error) {
 	downloadURL, _, err := s.DownloadURL(ctx, key)

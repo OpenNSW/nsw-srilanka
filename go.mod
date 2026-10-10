@@ -10,6 +10,7 @@ require (
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
 	github.com/OpenNSW/core/database v0.3.0
+	github.com/OpenNSW/core/htmlgen v0.0.0-20261006063237-d8b90361237e
 	github.com/OpenNSW/core/httputil v0.1.0
 	github.com/OpenNSW/core/json v0.0.0-20260917101529-36df0ddf30e0
 	github.com/OpenNSW/core/notifications v0.0.0-20261006123626-59c34652f2a9

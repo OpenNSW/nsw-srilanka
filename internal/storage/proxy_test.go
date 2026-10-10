@@ -282,3 +282,103 @@ func TestKeyPath_KeyAnywhereInPath(t *testing.T) {
 		t.Errorf("keyPath = %q, want /api/v1/abc.pdf/content", got)
 	}
 }
+
+// TestProxy_Save stores content under a key the owning service allocates and
+// reads it back.
+func TestProxy_Save(t *testing.T) {
+	svc := newProxyStack(t, ownerToken).Service
+	ctx := context.Background()
+
+	content := []byte("%PDF-1.4 generated on the server")
+	meta, err := svc.Save(ctx, "permit.pdf", "application/pdf", bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !strings.HasSuffix(meta.Key, ".pdf") || meta.Size != int64(len(content)) || meta.UploadURL != "" {
+		t.Fatalf("Save metadata = %+v, want a .pdf key, the content's size and no upload URL", meta)
+	}
+
+	body, mime, err := svc.Download(ctx, meta.Key)
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+	got, _ := io.ReadAll(body)
+	if !bytes.Equal(got, content) || mime != "application/pdf" {
+		t.Errorf("Download = (%q, %q), want (%q, application/pdf)", got, mime, content)
+	}
+}
+
+// TestNew_BackendSave stores content through a local backend's Service, which
+// is core/storage's own, and reads it back.
+func TestNew_BackendSave(t *testing.T) {
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+
+	content := []byte("<!DOCTYPE html><p>Permit</p>")
+	meta, err := stack.Service.Save(ctx, "permit.html", "text/html; charset=utf-8", bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !strings.HasSuffix(meta.Key, ".html") || meta.Name != "permit.html" || meta.Size != int64(len(content)) {
+		t.Fatalf("Save metadata = %+v, want a .html key named permit.html with the content's size", meta)
+	}
+
+	body, mime, err := stack.Service.Download(ctx, meta.Key)
+	if err != nil {
+		t.Fatalf("Download: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+	got, _ := io.ReadAll(body)
+	if !bytes.Equal(got, content) || mime != "text/html; charset=utf-8" {
+		t.Errorf("Download = (%q, %q), want the saved content and type", got, mime)
+	}
+}
+
+// TestProxy_SaveFallsBackToRequestedType sends the content as the type it
+// asked for when the owning service's reply leaves the type out; sending no
+// type would not match a URL signed over it. The content goes with the length
+// it was given, not chunked, even from a reader that can't report its own.
+func TestProxy_SaveFallsBackToRequestedType(t *testing.T) {
+	var putType string
+	var putLength int64
+	var putChunked bool
+	var putBody []byte
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"key":"0f8e7c1a-0000-4000-8000-000000000001.html","upload_url":%q}`, srv.URL+"/content")
+		case http.MethodPut:
+			putType = r.Header.Get("Content-Type")
+			putLength = r.ContentLength
+			putChunked = len(r.TransferEncoding) > 0
+			putBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	svc, err := NewProxyService(newRegistry(t, srv.URL, ownerToken), defaultProxyConfig())
+	if err != nil {
+		t.Fatalf("NewProxyService: %v", err)
+	}
+	content := "<p>x</p>"
+	// MultiReader hides the length that net/http would read off a
+	// *strings.Reader or *bytes.Reader by itself.
+	body := io.MultiReader(strings.NewReader(content))
+	meta, err := svc.Save(context.Background(), "doc.html", "text/html; charset=utf-8", body, int64(len(content)))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if putType != "text/html; charset=utf-8" || meta.MimeType != "text/html; charset=utf-8" {
+		t.Errorf("PUT Content-Type = %q, metadata type = %q; want the requested type for both", putType, meta.MimeType)
+	}
+	if putChunked || putLength != int64(len(content)) || string(putBody) != content {
+		t.Errorf("PUT chunked = %v, Content-Length = %d, body = %q; want %d bytes of %q, not chunked", putChunked, putLength, putBody, len(content), content)
+	}
+}

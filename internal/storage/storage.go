@@ -29,6 +29,11 @@ type Service interface {
 	GetDownloadURL(ctx context.Context, key string) (string, error)
 	// Delete removes a stored file.
 	Delete(ctx context.Context, key string) error
+	// Save stores content this service produced itself — a generated
+	// document, say — under a new key and returns its metadata. Unlike
+	// Upload, nothing is left for a client to do, and the upload limits don't
+	// apply. size is the length of body; it is recorded as given.
+	Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error)
 }
 
 // Handler serves the storage API routes. It is satisfied by core/storage's
