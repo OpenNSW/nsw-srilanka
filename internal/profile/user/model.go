@@ -14,6 +14,7 @@ type Record struct {
 	PhoneNumber string          `gorm:"type:varchar(20);column:phone_number" json:"phoneNumber"`
 	OUID        string          `gorm:"type:varchar(255);column:ou_id" json:"ouId"`
 	OUHandle    string          `gorm:"type:varchar(255);column:ou_handle;not null" json:"ouHandle"`
+	DisplayName string          `gorm:"type:varchar(255);column:display_name;not null;default:''" json:"displayName"` // given and family names from the token; "" until one carries them
 	Data        json.RawMessage `gorm:"type:jsonb;column:data" json:"data"`
 	CreatedAt   time.Time       `gorm:"column:created_at;autoCreateTime" json:"createdAt"`
 	UpdatedAt   time.Time       `gorm:"column:updated_at;autoUpdateTime" json:"updatedAt"`

@@ -16,5 +16,5 @@ type authUserProfileAdapter struct {
 }
 
 func (a *authUserProfileAdapter) GetOrCreateUser(ctx context.Context, p *nswauthn.Principal) (string, error) {
-	return a.svc.GetOrCreateUser(ctx, p.IDPUserID, p.Email, p.PhoneNumber, p.OUID, p.OUHandle)
+	return a.svc.GetOrCreateUser(ctx, p.IDPUserID, p.Email, p.PhoneNumber, p.OUID, p.OUHandle, p.DisplayName)
 }

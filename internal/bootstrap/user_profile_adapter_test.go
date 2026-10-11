@@ -12,22 +12,27 @@ import (
 type stubUserService struct {
 	idpUserID                    string
 	email, phone, ouID, ouHandle string
+	displayName                  string
 	callCount                    int
 	returnID                     string
 	returnErr                    error
+	// record and getErr are what GetUser returns.
+	record *user.Record
+	getErr error
 }
 
 func (s *stubUserService) GetUser(ctx context.Context, id string) (*user.Record, error) {
-	return nil, nil
+	return s.record, s.getErr
 }
 
-func (s *stubUserService) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle string) (string, error) {
+func (s *stubUserService) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle, displayName string) (string, error) {
 	s.callCount++
 	s.idpUserID = idpUserID
 	s.email = email
 	s.phone = phone
 	s.ouID = ouID
 	s.ouHandle = ouHandle
+	s.displayName = displayName
 	if s.returnErr != nil {
 		return "", s.returnErr
 	}
@@ -53,6 +58,7 @@ func TestAuthUserProfileAdapter_ForwardsPrincipalFields(t *testing.T) {
 		PhoneNumber: "+61400111222",
 		OUID:        "OU-001",
 		OUHandle:    "ou-001",
+		DisplayName: "Kamal Perera",
 	})
 	if err != nil {
 		t.Fatalf("GetOrCreateUser() error = %v", err)
@@ -64,7 +70,7 @@ func TestAuthUserProfileAdapter_ForwardsPrincipalFields(t *testing.T) {
 		t.Fatalf("expected underlying service to be called once, got %d", stub.callCount)
 	}
 	if stub.idpUserID != "idp-1" || stub.email != "trader@example.com" || stub.phone != "+61400111222" ||
-		stub.ouID != "OU-001" || stub.ouHandle != "ou-001" {
+		stub.ouID != "OU-001" || stub.ouHandle != "ou-001" || stub.displayName != "Kamal Perera" {
 		t.Fatalf("unexpected forwarded args: %+v", stub)
 	}
 }
@@ -84,7 +90,7 @@ func TestAuthUserProfileAdapter_UnsetFieldsForwardEmptyStrings(t *testing.T) {
 	if stub.idpUserID != "idp-2" {
 		t.Fatalf("expected idp user id to be forwarded, got %q", stub.idpUserID)
 	}
-	if stub.email != "" || stub.phone != "" || stub.ouID != "" || stub.ouHandle != "" {
+	if stub.email != "" || stub.phone != "" || stub.ouID != "" || stub.ouHandle != "" || stub.displayName != "" {
 		t.Fatalf("expected empty strings for unset principal fields, got %+v", stub)
 	}
 }

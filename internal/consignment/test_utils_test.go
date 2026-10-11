@@ -94,8 +94,8 @@ func (m *MockUserService) GetUser(ctx context.Context, id string) (*user.Record,
 	return args.Get(0).(*user.Record), args.Error(1)
 }
 
-func (m *MockUserService) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle string) (string, error) {
-	args := m.Called(ctx, idpUserID, email, phone, ouID, ouHandle)
+func (m *MockUserService) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle, displayName string) (string, error) {
+	args := m.Called(ctx, idpUserID, email, phone, ouID, ouHandle, displayName)
 	return args.String(0), args.Error(1)
 }
 

@@ -21,7 +21,9 @@ type Service interface {
 	// GetOrCreateUser creates or retrieves a user record by idpUserID.
 	// Returns the user ID of the created or existing record, or an error on failure.
 	// If err is non-nil, the returned user ID will be empty.
-	GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle string) (string, error)
+	// displayName is stored on creation, and replaces an existing record's when it
+	// is non-empty and different, so a name changed at the IdP follows the user.
+	GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle, displayName string) (string, error)
 
 	// UpdateUserData updates the Data field for an existing user record.
 	// The provided data should be valid JSON bytes.
@@ -65,17 +67,18 @@ func (s *service) GetUser(ctx context.Context, id string) (*Record, error) {
 // GetOrCreateUser creates a new user record in the database if one does not exist.
 // Returns the existing user ID when a record already exists.
 // The Data field is initialized to an empty JSON object for new records.
-func (s *service) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle string) (string, error) {
+func (s *service) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, ouID, ouHandle, displayName string) (string, error) {
 	if idpUserID == "" {
 		return "", ErrInvalidUserID
 	}
 
-	existingID, err := s.getUserIDByIDP(ctx, idpUserID)
+	existing, err := s.getUserByIDP(ctx, idpUserID)
 	if err != nil {
 		return "", err
 	}
-	if existingID != nil {
-		return *existingID, nil
+	if existing != nil {
+		s.refreshDisplayName(ctx, existing, displayName)
+		return existing.ID, nil
 	}
 
 	userID := uuid.New().String()
@@ -86,6 +89,7 @@ func (s *service) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, 
 		PhoneNumber: phone,
 		OUID:        ouID,
 		OUHandle:    ouHandle,
+		DisplayName: displayName,
 		Data:        []byte(`{}`),
 	}
 
@@ -98,13 +102,13 @@ func (s *service) GetOrCreateUser(ctx context.Context, idpUserID, email, phone, 
 		return "", fmt.Errorf("database insert failed: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		duplicateID, lookupErr := s.getUserIDByIDP(ctx, idpUserID)
+		duplicate, lookupErr := s.getUserByIDP(ctx, idpUserID)
 		if lookupErr != nil {
 			return "", lookupErr
 		}
-		if duplicateID != nil {
-			slog.Debug("user record already exists after insert", "idp_user_id", idpUserID, "user_id", *duplicateID)
-			return *duplicateID, nil
+		if duplicate != nil {
+			slog.Debug("user record already exists after insert", "idp_user_id", idpUserID, "user_id", duplicate.ID)
+			return duplicate.ID, nil
 		}
 		return "", fmt.Errorf("user record insert skipped but existing record not found")
 	}
@@ -134,9 +138,24 @@ func (s *service) UpdateUserData(ctx context.Context, userID string, data []byte
 	return nil
 }
 
-// getUserIDByIDP checks if a user record exists for the given idpUserID.
-// Returns nil, nil if the user does not exist.
-func (s *service) getUserIDByIDP(ctx context.Context, idpUserID string) (*string, error) {
+// refreshDisplayName stores displayName on an existing record when it is
+// non-empty and differs from the stored one. A token without the name claims
+// leaves the stored name alone. Failing to store it is logged, not returned: it
+// is no reason to fail the caller's request.
+func (s *service) refreshDisplayName(ctx context.Context, record *Record, displayName string) {
+	if displayName == "" || displayName == record.DisplayName {
+		return
+	}
+	if err := s.db.WithContext(ctx).Model(&Record{}).Where("id = ?", record.ID).Update("display_name", displayName).Error; err != nil {
+		slog.Error("failed to update user display name", "id", record.ID, "error", err)
+		return
+	}
+	record.DisplayName = displayName
+}
+
+// getUserByIDP returns the user record for the given idpUserID, or nil, nil if
+// the user does not exist.
+func (s *service) getUserByIDP(ctx context.Context, idpUserID string) (*Record, error) {
 	if idpUserID == "" {
 		return nil, ErrInvalidUserID
 	}
@@ -152,7 +171,7 @@ func (s *service) getUserIDByIDP(ctx context.Context, idpUserID string) (*string
 		return nil, fmt.Errorf("database query failed: %w", result.Error)
 	}
 
-	return &record.ID, nil
+	return &record, nil
 }
 
 // Health checks if the service can access the database.
