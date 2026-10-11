@@ -172,6 +172,15 @@ audit:
   baseURL: http://argus:3001
   apiKey: "{{env:ARGUS_API_KEY}}"
 
+# Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section) leaves
+# metrics off. serviceName is required when endpoint is set so TNSW, CDA and
+# Customs can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# metrics:
+#   endpoint: http://otel-collector:4318/v1/metrics
+#   serviceName: tnsw-api
+#   headers:
+#     Authorization: "{{env:METRICS_AUTH_HEADER}}"
+
 integrations:
   # Shared with SLPA out of band. Their Cargo Management System signs each
   # service-order webhook with it (X-NSW-Signature: sha256=<hex> over the raw

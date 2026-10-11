@@ -12,11 +12,7 @@ import (
 )
 
 func TestStartNoopWithoutEndpoint(t *testing.T) {
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	t.Setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")
-	t.Setenv("OTEL_METRICS_EXPORTER", "")
-
-	p, err := Start(t.Context())
+	p, err := Start(t.Context(), Config{})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -32,7 +28,7 @@ func TestStartNoopWithoutEndpoint(t *testing.T) {
 	})
 	h := p.Handler("tnsw-api", mux)
 	if h != mux {
-		t.Fatal("expected Handler to return next unchanged when OTLP is unset")
+		t.Fatal("expected Handler to return next unchanged when endpoint is unset")
 	}
 
 	rec := httptest.NewRecorder()
@@ -42,28 +38,8 @@ func TestStartNoopWithoutEndpoint(t *testing.T) {
 	}
 }
 
-func TestStartNoopWhenMetricsExporterNone(t *testing.T) {
-	t.Setenv("OTEL_METRICS_EXPORTER", "none")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
-
-	p, err := Start(t.Context())
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer p.Shutdown(t.Context())
-
-	next := http.NewServeMux()
-	if p.Handler("tnsw-api", next) != next {
-		t.Fatal("expected no-op Handler when OTEL_METRICS_EXPORTER=none")
-	}
-}
-
 func TestHandlerRecordsRoutePattern(t *testing.T) {
-	reader := sdkmetric.NewManualReader()
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
-
-	p := &Provider{mp: mp, enabled: true, shutdown: mp.Shutdown}
+	p := testProvider(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/tasks/{id}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -76,11 +52,7 @@ func TestHandlerRecordsRoutePattern(t *testing.T) {
 		t.Fatalf("status = %d, want 201", rec.Code)
 	}
 
-	var rm metricdata.ResourceMetrics
-	if err := reader.Collect(t.Context(), &rm); err != nil {
-		t.Fatalf("Collect: %v", err)
-	}
-	attrs := durationAttributes(t, rm)
+	attrs := durationAttributes(t, collect(t, p))
 	if got := attrString(attrs, semconv.HTTPRouteKey); got != "/api/v1/tasks/{id}" {
 		t.Fatalf("http.route = %q, want /api/v1/tasks/{id}", got)
 	}
@@ -97,6 +69,35 @@ func TestHandlerRecordsRoutePattern(t *testing.T) {
 	}
 }
 
+func TestHandlerDropsServerAddressFromHost(t *testing.T) {
+	p := testProvider(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := p.Handler("tnsw-api", mux)
+
+	for _, host := range []string{"a.example", "b.example:8443", "c.example:443"} {
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("host %q: status = %d, want 200", host, rec.Code)
+		}
+	}
+
+	points := durationDataPoints(t, collect(t, p))
+	if len(points) != 1 {
+		t.Fatalf("got %d series, want 1 (server.address/port must not split by Host)", len(points))
+	}
+	for _, a := range points[0].Attributes.ToSlice() {
+		if a.Key == semconv.ServerAddressKey || a.Key == semconv.ServerPortKey {
+			t.Fatalf("unexpected attribute %s=%v", a.Key, a.Value.AsInterface())
+		}
+	}
+}
+
 func TestRouteFromPattern(t *testing.T) {
 	if got := routeFromPattern("GET /api/v1/tasks/{id}"); got != "/api/v1/tasks/{id}" {
 		t.Fatalf("routeFromPattern = %q", got)
@@ -106,7 +107,41 @@ func TestRouteFromPattern(t *testing.T) {
 	}
 }
 
+type testMeterProvider struct {
+	*Provider
+	reader *sdkmetric.ManualReader
+}
+
+func testProvider(t *testing.T) *testMeterProvider {
+	t.Helper()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(reader),
+		sdkmetric.WithView(httpServerAttributeView()),
+	)
+	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
+	return &testMeterProvider{
+		Provider: &Provider{mp: mp, enabled: true, shutdown: mp.Shutdown},
+		reader:   reader,
+	}
+}
+
+func collect(t *testing.T, p *testMeterProvider) metricdata.ResourceMetrics {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	if err := p.reader.Collect(t.Context(), &rm); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	return rm
+}
+
 func durationAttributes(t *testing.T, rm metricdata.ResourceMetrics) []attribute.KeyValue {
+	t.Helper()
+	points := durationDataPoints(t, rm)
+	return points[0].Attributes.ToSlice()
+}
+
+func durationDataPoints(t *testing.T, rm metricdata.ResourceMetrics) []metricdata.HistogramDataPoint[float64] {
 	t.Helper()
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
@@ -120,7 +155,7 @@ func durationAttributes(t *testing.T, rm metricdata.ResourceMetrics) []attribute
 			if len(hist.DataPoints) == 0 {
 				t.Fatal("no histogram points")
 			}
-			return hist.DataPoints[0].Attributes.ToSlice()
+			return hist.DataPoints
 		}
 	}
 	t.Fatal("http.server.request.duration not found")

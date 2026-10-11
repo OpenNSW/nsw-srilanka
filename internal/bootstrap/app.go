@@ -498,8 +498,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// OTLP metrics when OTEL_EXPORTER_OTLP_* is set; otherwise a no-op wrap.
-	httpMetrics, err := metrics.Start(ctx)
+	// OTLP metrics when metrics.endpoint is set; otherwise a no-op wrap.
+	httpMetrics, err := metrics.Start(ctx, cfg.Metrics)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()

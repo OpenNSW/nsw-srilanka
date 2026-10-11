@@ -1,15 +1,15 @@
 // Package metrics instruments the HTTP server with OpenTelemetry and exports
-// via OTLP when configured through the standard OTEL_* environment variables.
+// via OTLP/HTTP when metrics.endpoint is set in config.yaml.
 package metrics
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -24,22 +24,27 @@ type Provider struct {
 	shutdown func(context.Context) error
 }
 
-// Start builds an OTLP meter provider when an OTLP endpoint is set. With no
-// endpoint (and when OTEL_METRICS_EXPORTER=none), Handler is a no-op wrap so
-// local runs need no collector.
-func Start(ctx context.Context) (*Provider, error) {
-	if !exportConfigured() {
+// Start builds an OTLP meter provider when cfg.Endpoint is set. With an empty
+// endpoint, Handler is a no-op wrap so local runs need no collector.
+func Start(ctx context.Context, cfg Config) (*Provider, error) {
+	if !cfg.Enabled() {
 		return &Provider{
 			shutdown: func(context.Context) error { return nil },
 		}, nil
 	}
 
-	exporter, err := otlpmetrichttp.New(ctx)
+	opts := []otlpmetrichttp.Option{
+		otlpmetrichttp.WithEndpointURL(strings.TrimSpace(cfg.Endpoint)),
+	}
+	if len(cfg.Headers) > 0 {
+		opts = append(opts, otlpmetrichttp.WithHeaders(cfg.Headers))
+	}
+	exporter, err := otlpmetrichttp.New(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create OTLP metric exporter: %w", err)
 	}
 	res, err := resource.New(ctx,
-		resource.WithFromEnv(),
+		resource.WithAttributes(semconv.ServiceName(strings.TrimSpace(cfg.ServiceName))),
 		resource.WithTelemetrySDK(),
 	)
 	if err != nil {
@@ -49,6 +54,7 @@ func Start(ctx context.Context) (*Provider, error) {
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter)),
 		sdkmetric.WithResource(res),
+		sdkmetric.WithView(httpServerAttributeView()),
 	)
 	return &Provider{
 		mp:       mp,
@@ -58,7 +64,7 @@ func Start(ctx context.Context) (*Provider, error) {
 }
 
 // Handler wraps next with otelhttp so every mux route records HTTP metrics.
-// When Start found no OTLP endpoint, next is returned unchanged.
+// When Start found no endpoint, next is returned unchanged.
 func (p *Provider) Handler(operation string, next http.Handler) http.Handler {
 	if !p.enabled {
 		return next
@@ -81,12 +87,16 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	return p.shutdown(ctx)
 }
 
-func exportConfigured() bool {
-	if os.Getenv("OTEL_METRICS_EXPORTER") == "none" {
-		return false
-	}
-	return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" ||
-		os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") != ""
+// httpServerAttributeView drops server.address and server.port from HTTP
+// server metrics. otelhttp takes those from the request Host header, so a
+// client can create a new series per value; they are constant per service.
+func httpServerAttributeView() sdkmetric.View {
+	return sdkmetric.NewView(
+		sdkmetric.Instrument{Name: "http.server.*"},
+		sdkmetric.Stream{AttributeFilter: attribute.NewDenyKeysFilter(
+			semconv.ServerAddressKey, semconv.ServerPortKey,
+		)},
+	)
 }
 
 // routeFromPattern strips the method from a Go ServeMux pattern.

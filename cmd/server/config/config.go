@@ -20,6 +20,7 @@ import (
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
+	"github.com/OpenNSW/nsw-srilanka/internal/metrics"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
@@ -41,6 +42,7 @@ type Config struct {
 	Notification NotificationConfig  `yaml:"notification"`
 	Temporal     temporal.Config     `yaml:"temporal"`
 	Audit        AuditConfig         `yaml:"audit"`
+	Metrics      metrics.Config      `yaml:"metrics"`
 	Integrations integrations.Config `yaml:"integrations"`
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
@@ -189,6 +191,12 @@ func (c *Config) Validate() error {
 	if err := guardServicesConfigTLS(c.Server.ServicesConfigPath); err != nil {
 		return err
 	}
+	return c.validateAuxiliary()
+}
+
+// validateAuxiliary checks the remaining config sections. Kept separate so
+// Validate stays under the gocyclo limit.
+func (c *Config) validateAuxiliary() error {
 	if err := c.Temporal.Validate(); err != nil {
 		return fmt.Errorf("invalid temporal configuration: %w", err)
 	}
@@ -200,6 +208,24 @@ func (c *Config) Validate() error {
 	}
 	if err := c.ArtifactLoader.Validate(); err != nil {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
+	}
+	if err := validateMetrics(c.Metrics); err != nil {
+		return fmt.Errorf("invalid metrics configuration: %w", err)
+	}
+	return nil
+}
+
+// validateMetrics checks the optional metrics section. Empty endpoint leaves
+// metrics off; when set, the OTLP/HTTP URL and serviceName are required.
+func validateMetrics(c metrics.Config) error {
+	if !c.Enabled() {
+		return nil
+	}
+	if err := HTTPURL("metrics.endpoint", c.Endpoint); err != nil {
+		return err
+	}
+	if strings.TrimSpace(c.ServiceName) == "" {
+		return fmt.Errorf("metrics.serviceName is required when metrics.endpoint is set")
 	}
 	return nil
 }
