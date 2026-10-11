@@ -221,7 +221,10 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 // The check and the submission are separate calls, so a holder who releases the
 // claim while their submission is in flight can still have it accepted. The
 // workflow accepts only one submission per step, so the step is never completed
-// twice.
+// twice. This is safe only because nobody but the holder can release a claim: a
+// forced or supervisor release would let another user take the claim between the
+// check and the submission, and would need the check fenced with the submission
+// (see core taskflow's integration guide).
 func (h *HTTPHandler) requireClaim(w http.ResponseWriter, r *http.Request, taskID string, logAttrs ...any) bool {
 	ctx := r.Context()
 	in, ok := taskauthz.InputFromContext(ctx)
