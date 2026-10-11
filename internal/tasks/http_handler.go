@@ -53,7 +53,10 @@ type HTTPHandler struct {
 	Assembler *zoneview.ZoneViewAssembler
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
-	AuthzCatalog    taskauthz.Catalog
+	AuthzCatalog taskauthz.Catalog
+	// Users names a task's claim holder in the task view. When nil, the holder is
+	// shown by id only.
+	Users           HolderNames
 	Audit           *nswaudit.Recorder
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
@@ -67,6 +70,7 @@ func NewHTTPHandler(
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
+	users HolderNames,
 	audit *nswaudit.Recorder,
 	maxRequestBytes int64,
 ) *HTTPHandler {
@@ -77,6 +81,7 @@ func NewHTTPHandler(
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
 		Files:           files,
+		Users:           users,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
@@ -85,7 +90,8 @@ func NewHTTPHandler(
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
 // caller: they must own the task's consignment in a role the task's render
 // config admits, and the claims resolved for them decide which sections of the
-// view they see.
+// view they see. The response also says who holds the task's claim, and the claim
+// facts (ClaimFactMine etc.) are passed to the renderer with the role claims.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -143,13 +149,14 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(ctx, view, claims)
+	// The claim comes from the stored record: the view only swaps file values.
+	zv, err := h.Assembler.Assemble(ctx, view, withClaimFacts(claims, in, record))
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
 	}
 
-	httputil.JSON(w, http.StatusOK, zv)
+	httputil.JSON(w, http.StatusOK, taskResponse{ZoneView: zv, Claim: h.claimOf(ctx, in, record)})
 }
 
 // HandleCompleteTaskStep advances a task by completing one of its steps. It is the

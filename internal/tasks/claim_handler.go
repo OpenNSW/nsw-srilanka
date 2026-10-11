@@ -5,9 +5,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
+	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
+	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
@@ -20,6 +23,91 @@ const (
 	errNotClaimHolder    = "this task is claimed by another user"
 	errClaimRequired     = "claim this task before acting on it"
 )
+
+// Claim facts passed to the renderer with the caller's role claims, so a render
+// config can show or hide a section by who holds the task's claim, e.g.
+// "visibleWhen": {"requireClaim": "claim:mine"}. Exactly one is true on every read.
+const (
+	ClaimFactMine  = "claim:mine"  // the caller holds the claim
+	ClaimFactOther = "claim:other" // another user holds it
+	ClaimFactNone  = "claim:none"  // nobody holds it
+)
+
+// HolderNames resolves a claim holder's user id to the name shown for them.
+type HolderNames interface {
+	// HolderName returns the name to show for userID, or "" when there is none.
+	HolderName(ctx context.Context, userID string) (string, error)
+}
+
+// taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
+// and who holds the task's claim, as seen by the caller.
+type taskResponse struct {
+	zoneview.ZoneView
+	Claim taskClaim `json:"claim"`
+}
+
+// taskClaim is the task's claim as the caller sees it. It is always present, so a
+// client can tell whether it must claim the task before acting on it.
+type taskClaim struct {
+	// Holder is who holds the claim; absent when the task is unclaimed.
+	Holder    *claimHolder `json:"holder,omitempty"`
+	ClaimedAt *time.Time   `json:"claimed_at,omitempty"`
+	// Mine reports whether the caller holds the claim. It is decided here, from the
+	// caller's internal user id, so clients never compare ids or emails themselves.
+	Mine bool `json:"mine"`
+	// RequiredToSubmit reports whether this deployment requires the caller to hold
+	// the claim to submit a step (see taskauthz.Input.RequireClaimToSubmit).
+	RequiredToSubmit bool `json:"required_to_submit"`
+}
+
+type claimHolder struct {
+	ID string `json:"id"`
+	// Name is the holder's name, or "" if it could not be found.
+	Name string `json:"name"`
+}
+
+// claimOf describes record's claim as the caller (in) sees it.
+func (h *HTTPHandler) claimOf(ctx context.Context, in taskauthz.Input, record store.TaskRecord) taskClaim {
+	c := taskClaim{
+		ClaimedAt:        record.ClaimedAt,
+		Mine:             isClaimHolder(in, record),
+		RequiredToSubmit: in.Kind == taskauthz.KindUser && in.RequireClaimToSubmit,
+	}
+	if record.ClaimedBy == "" {
+		return c
+	}
+	c.Holder = &claimHolder{ID: record.ClaimedBy}
+	if h.Users != nil {
+		// A missing name is not worth failing the read over: the view still says the
+		// task is claimed, and by whom.
+		name, err := h.Users.HolderName(ctx, record.ClaimedBy)
+		if err != nil {
+			slog.WarnContext(ctx, "tasks: failed to resolve claim holder's name", "taskId", record.TaskID, "error", err)
+		}
+		c.Holder.Name = name
+	}
+	return c
+}
+
+// withClaimFacts returns the caller's role claims with the claim facts added, for
+// the renderer.
+func withClaimFacts(claims map[string]bool, in taskauthz.Input, record store.TaskRecord) map[string]bool {
+	out := make(map[string]bool, len(claims)+3)
+	for k, v := range claims {
+		out[k] = v
+	}
+	mine := isClaimHolder(in, record)
+	out[ClaimFactMine] = mine
+	out[ClaimFactOther] = record.ClaimedBy != "" && !mine
+	out[ClaimFactNone] = record.ClaimedBy == ""
+	return out
+}
+
+// isClaimHolder reports whether the caller holds record's claim. A caller without a
+// user id never does, so an unclaimed task's empty holder cannot match them.
+func isClaimHolder(in taskauthz.Input, record store.TaskRecord) bool {
+	return in.Kind == taskauthz.KindUser && in.UserID != "" && record.ClaimedBy == in.UserID
+}
 
 // TaskClaimer is the narrow surface the claim routes need from the task manager.
 // *orchestrator.TaskManager satisfies it.
@@ -146,7 +234,7 @@ func (h *HTTPHandler) requireClaim(w http.ResponseWriter, r *http.Request, taskI
 	case !ok:
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return false
-	case in.UserID != "" && record.ClaimedBy == in.UserID:
+	case isClaimHolder(in, record):
 		return true
 	case record.ClaimedBy == "":
 		slog.InfoContext(ctx, "tasks: submission refused: task not claimed", logAttrs...)
