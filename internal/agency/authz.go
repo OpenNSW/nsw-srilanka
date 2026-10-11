@@ -16,6 +16,10 @@ import (
 // roles may act on a task is up to the task's own authz and read rules. The read and
 // write evaluators then treat officers like any other owner, and agency tasks go
 // through the normal /api/v1/tasks/{id} routes.
+//
+// Every user holding a catalog role owns every injected workflow, so ownership alone
+// cannot keep two of them off the same task. A user must therefore claim a task before
+// submitting any of its steps; everyone who can read the task can still view it.
 type RoleGate struct {
 	repo  Repository
 	roles []string // the catalog's logical role names
@@ -47,7 +51,13 @@ func (g *RoleGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	case authn.KindClient:
 		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
 	case authn.KindUser:
-		return taskauthz.Input{Kind: taskauthz.KindUser, Roles: p.Roles, OwnedRoles: g.ownedRoles}, true
+		return taskauthz.Input{
+			Kind:                 taskauthz.KindUser,
+			Roles:                p.Roles,
+			OwnedRoles:           g.ownedRoles,
+			UserID:               p.UserID,
+			RequireClaimToSubmit: true,
+		}, true
 	default:
 		return taskauthz.Input{}, false
 	}
