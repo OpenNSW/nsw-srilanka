@@ -2,11 +2,13 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
@@ -290,6 +292,115 @@ func TestSubmitStep_NoLookupWhenNoClaimIsRequired(t *testing.T) {
 	submitForClaimPolicy(t, getTaskHandler(t, fetcher, &stubTemplates{}), chaUser(), false)
 
 	assert.Zero(t, fetcher.calls)
+}
+
+// --- the claim on the task view ------------------------------------------------
+
+// fakeNames names users from a map, or fails with err.
+type fakeNames struct {
+	names map[string]string
+	err   error
+}
+
+func (f fakeNames) HolderName(_ context.Context, userID string) (string, error) {
+	return f.names[userID], f.err
+}
+
+// viewTask reads the test task as in and decodes the response.
+func viewTask(t *testing.T, h *HTTPHandler, in *taskauthz.Input) taskResponse {
+	t.Helper()
+	recorder := getTask(t, h, in)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var resp taskResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp), recorder.Body.String())
+	return resp
+}
+
+func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
+	at := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
+	names := fakeNames{names: map[string]string{testUserID: "me@example.com", "user-2": "other@example.com"}}
+
+	tests := []struct {
+		name         string
+		holder       string
+		in           *taskauthz.Input
+		wantHolder   *claimHolder
+		wantMine     bool
+		wantRequired bool
+	}{
+		{"unclaimed", "", chaUser(), nil, false, false},
+		{"claimed by the caller", testUserID, chaUser(), &claimHolder{ID: testUserID, Name: "me@example.com"}, true, false},
+		{"claimed by another user", "user-2", chaUser(), &claimHolder{ID: "user-2", Name: "other@example.com"}, false, false},
+		{"claim required to submit", "", agencyUser(), nil, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fetcher := claimedHSCodeTask(tt.holder)
+			if tt.holder != "" {
+				fetcher.record.ClaimedAt = &at
+			}
+			h := getTaskHandler(t, fetcher, &stubTemplates{})
+			h.Users = names
+
+			got := viewTask(t, h, tt.in).Claim
+
+			assert.Equal(t, tt.wantHolder, got.Holder)
+			assert.Equal(t, tt.wantMine, got.Mine)
+			assert.Equal(t, tt.wantRequired, got.RequiredToSubmit)
+			if tt.holder != "" {
+				require.NotNil(t, got.ClaimedAt)
+				assert.True(t, got.ClaimedAt.Equal(at))
+			} else {
+				assert.Nil(t, got.ClaimedAt)
+			}
+		})
+	}
+}
+
+// The view is still served when the holder's name cannot be found, or there is no
+// way to look it up: it says who holds the claim by id.
+func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
+	for name, users := range map[string]HolderNames{
+		"lookup fails": fakeNames{err: errors.New("db down")},
+		"no lookup":    nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := getTaskHandler(t, claimedHSCodeTask("user-2"), &stubTemplates{})
+			h.Users = users
+
+			got := viewTask(t, h, chaUser()).Claim
+
+			assert.Equal(t, &claimHolder{ID: "user-2"}, got.Holder)
+		})
+	}
+}
+
+// claimGatedRenderConfig shows one section per claim fact, so the view shows which
+// fact was true for the caller.
+const claimGatedRenderConfig = `{
+  "read": { "roles": ["cha"] },
+  "sections": {
+    "mine":  { "templateId": "t", "projector": "MARKDOWN", "visibleWhen": { "requireClaim": "claim:mine" } },
+    "other": { "templateId": "t", "projector": "MARKDOWN", "visibleWhen": { "requireClaim": "claim:other" } },
+    "none":  { "templateId": "t", "projector": "MARKDOWN", "visibleWhen": { "requireClaim": "claim:none" } }
+  }
+}`
+
+// Exactly one claim fact is true, so a render config can show each caller the
+// section that fits who holds the claim.
+func TestHandleGetTask_ClaimFactsGateSections(t *testing.T) {
+	for holder, want := range map[string]string{"": "none", testUserID: "mine", "user-2": "other"} {
+		t.Run(want, func(t *testing.T) {
+			fetcher := claimedHSCodeTask(holder)
+			fetcher.record.RenderConfig = json.RawMessage(claimGatedRenderConfig)
+
+			resp := viewTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), chaUser())
+
+			view := decodeSlots(t, resp.ZoneView)
+			assert.Len(t, view, 1, "view = %v", view)
+			assert.Contains(t, view, want)
+		})
+	}
 }
 
 // The other user's id is not revealed in the conflict response.
