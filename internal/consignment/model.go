@@ -125,6 +125,23 @@ type DetailDTO struct {
 	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details
 }
 
+// AdminDetailDTO is the ops/admin view of a consignment: its detail plus its flows, so an
+// admin can open each flow's engine status by workflow ID.
+type AdminDetailDTO struct {
+	DetailDTO
+	Flows []FlowDTO `json:"flows"`
+}
+
+// FlowDTO is one flow (top-level workflow) of a consignment, see internal/caseflow.
+type FlowDTO struct {
+	WorkflowID   string `json:"workflowId"`
+	TemplateID   string `json:"templateId"`
+	TemplateName string `json:"templateName"` // the workflow definition's name, else TemplateID
+	Status       string `json:"status"`       // STARTING, STARTED or COMPLETED
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
+}
+
 // WorkflowNodeResponseDTO represents a workflow node in the response.
 type WorkflowNodeResponseDTO struct {
 	ID                   string                          `json:"id"`                   // Task ID: one run of a TASK node (not the definition node ID)

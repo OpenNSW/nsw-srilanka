@@ -249,11 +249,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
 		}
 		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifactRegistry)
-		if err := consignmentService.RegisterFlowStarter(flowService); err != nil {
+		if err := consignmentService.RegisterCaseFlows(flowService); err != nil {
 			_ = stopTask()
 			temporalClient.Close()
 			_ = database.Close(db)
-			return nil, fmt.Errorf("failed to register flow starter with consignment service: %w", err)
+			return nil, fmt.Errorf("failed to register case flows with consignment service: %w", err)
 		}
 		upstream = flowService
 	}

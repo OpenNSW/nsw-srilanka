@@ -1,3 +1,5 @@
+import type { ConsignmentDetail } from '@/features/consignment/types'
+
 // Raw engine state as reported by the workflow manager (see
 // OpenNSW/core workflow.NodeInfo / workflow.WorkflowInstance) — distinct from
 // the trader-facing WorkflowNodeState in features/consignment/types.ts, which
@@ -46,7 +48,7 @@ export interface EngineNode {
   // Set only for a TASK node whose task has actually started — the workflow ID of the
   // independent per-task ("micro") workflow spawned to fulfill it. A separate ID space/manager
   // from child_workflow_ids above: fetch it via getTaskWorkflowEngineStatus, not
-  // getConsignmentEngineStatus, to drill down (see EngineNodeDTO.TaskWorkflowID on the backend).
+  // getWorkflowEngineStatus, to drill down (see EngineNodeDTO.TaskWorkflowID on the backend).
   task_workflow_id?: string
   // The most recent raw Activity result for a TASK node, if its Activity already ran — cleared
   // once the node fully completes. When present on a node AWAITING_ADMIN, the Activity has
@@ -68,7 +70,7 @@ export interface EngineEdge {
 }
 
 export interface EngineStatus {
-  consignment_id: string
+  workflow_id: string
   status: EngineWorkflowStatus
   nodes: EngineNode[]
   audit_trail: string[]
@@ -78,11 +80,11 @@ export interface EngineStatus {
   edges?: EngineEdge[]
 }
 
-// Which family of admin routes addresses a workflow instance. 'consignment' covers a consignment's
-// root workflow and its child-branch workflows; 'task' is a TASK node's own task workflow
+// Which family of admin routes addresses a workflow instance. 'workflow' covers a consignment's
+// flows and their child-branch workflows; 'task' is a TASK node's own task workflow
 // (EngineNode.task_workflow_id), a separate ID space on a separate workflow manager. The
 // engine-status and resolve endpoints are split the same way.
-export type AdminWorkflowKind = 'consignment' | 'task'
+export type AdminWorkflowKind = 'workflow' | 'task'
 
 // How an admin resolves a node parked in AWAITING_ADMIN (see core/workflow.AdminResolutionAction
 // on the backend). COMPLETE is rejected by the engine for GATEWAY nodes — a gateway's routing
@@ -97,4 +99,21 @@ export interface AdminResolutionRequest {
   // workflow-wide and persists, so it affects later nodes too. Only RETRY and COMPLETE use it.
   global_variables_patch?: Record<string, unknown>
   reason: string
+}
+
+// One top-level workflow (flow) of a consignment: the export flow, a flow a trader started, a
+// notice. Its engine state is fetched by workflowId (getWorkflowEngineStatus).
+export interface ConsignmentFlow {
+  workflowId: string
+  templateId: string
+  // The workflow definition's name, else templateId.
+  templateName: string
+  status: 'STARTING' | 'STARTED' | 'COMPLETED'
+  createdAt: string
+  updatedAt: string
+}
+
+// The admin view of a consignment: its detail plus its flows, oldest first.
+export interface AdminConsignmentDetail extends ConsignmentDetail {
+  flows: ConsignmentFlow[]
 }

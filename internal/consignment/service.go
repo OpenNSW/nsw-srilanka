@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -30,10 +29,11 @@ type TaskStore interface {
 	GetAllTasks(ctx context.Context, parentWorkflowID string) []store.TaskRecord
 }
 
-// FlowStarter creates a case and starts its flows. *caseflow.Service satisfies it.
-type FlowStarter interface {
+// CaseFlows creates a case and starts and lists its flows. *caseflow.Service satisfies it.
+type CaseFlows interface {
 	EnsureCase(ctx context.Context, caseID string) error
 	StartFlow(ctx context.Context, req caseflow.StartRequest) (*caseflow.Flow, error)
+	Flows(ctx context.Context, caseID string) ([]caseflow.Flow, error)
 }
 
 // Service handles consignment-related operations. A consignment is a case (see
@@ -42,7 +42,7 @@ type FlowStarter interface {
 type Service struct {
 	db               *gorm.DB
 	artifactRegistry *artifact.Registry
-	flows            FlowStarter
+	flows            CaseFlows
 	// wm is the parent workflow manager, read for engine status and admin resolution.
 	wm workflow.Manager
 	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
@@ -107,25 +107,16 @@ func (s *Service) RegisterTaskWorkflowManager(wm workflow.Manager) error {
 	return nil
 }
 
-// RegisterFlowStarter registers what starts the consignment's flows.
-func (s *Service) RegisterFlowStarter(flows FlowStarter) error {
+// RegisterCaseFlows registers what starts and lists the consignment's flows.
+func (s *Service) RegisterCaseFlows(flows CaseFlows) error {
 	if s.flows != nil {
-		return fmt.Errorf("flow starter already registered for ConsignmentService")
+		return fmt.Errorf("case flows already registered for ConsignmentService")
 	}
 	if flows == nil {
-		return fmt.Errorf("flow starter cannot be nil")
+		return fmt.Errorf("case flows cannot be nil")
 	}
 	s.flows = flows
 	return nil
-}
-
-// getWorkflowStatus checks that a workflow is reachable on the registered workflow manager.
-func (s *Service) getWorkflowStatus(ctx context.Context, workflowID string) error {
-	if s.wm == nil {
-		return fmt.Errorf("no workflow manager registered for ConsignmentService")
-	}
-	_, err := s.wm.GetStatus(ctx, workflowID)
-	return err
 }
 
 // CreateAndStartConsignment creates an export consignment, with its cases row, and starts
@@ -152,7 +143,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		return nil, fmt.Errorf("failed to get workflow template %q: %w", templateID, err)
 	}
 	if s.flows == nil {
-		return nil, fmt.Errorf("no flow starter registered for ConsignmentService")
+		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
 	}
 
 	consignment := &Consignment{
@@ -174,13 +165,10 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		return nil, fmt.Errorf("failed to create consignment: %w", err)
 	}
 
-	// The export flow takes the consignment ID as its workflow ID: the admin engine-status
-	// and resolve routes address it by that ID. The start runs after the commit, so the
-	// flow is recorded against a case that exists.
+	// The start runs after the commit, so the flow is recorded against a case that exists.
 	if _, err := s.flows.StartFlow(ctx, caseflow.StartRequest{
 		CaseID:     consignment.ID,
 		TemplateID: templateID,
-		WorkflowID: consignment.ID,
 		Vars:       initialVars,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to start the export flow: %w", err)
@@ -233,15 +221,51 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	return s.buildConsignmentResponse(ctx, consignment)
 }
 
-// GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID but
-// performs no trader/CHA ownership check — callers must already be gated to ConsignmentAdminRead
-// by the router (see HandleAdminGetConsignmentByID).
-func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID string) (*DetailDTO, error) {
+// GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID, plus
+// the consignment's flows, but performs no trader/CHA ownership check — callers must already be
+// gated to ConsignmentAdminRead by the router (see HandleAdminGetConsignmentByID).
+func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID string) (*AdminDetailDTO, error) {
 	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
 	if err != nil {
 		return nil, err
 	}
-	return s.buildConsignmentResponse(ctx, consignment)
+	detail, err := s.buildConsignmentResponse(ctx, consignment)
+	if err != nil {
+		return nil, err
+	}
+	flows, err := s.flowDTOs(ctx, consignmentID)
+	if err != nil {
+		return nil, err
+	}
+	return &AdminDetailDTO{DetailDTO: *detail, Flows: flows}, nil
+}
+
+// flowDTOs lists the consignment's flows, oldest first, each named by its workflow
+// definition's name (its template ID when the definition has none or cannot be loaded).
+func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO, error) {
+	if s.flows == nil {
+		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
+	}
+	flows, err := s.flows.Flows(ctx, consignmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list flows of consignment %s: %w", consignmentID, err)
+	}
+	dtos := make([]FlowDTO, 0, len(flows))
+	for _, f := range flows {
+		name := f.TemplateID
+		if def, err := workflowdef.Load(ctx, s.artifactRegistry, f.TemplateID); err == nil && def.Name != "" {
+			name = def.Name
+		}
+		dtos = append(dtos, FlowDTO{
+			WorkflowID:   f.WorkflowID,
+			TemplateID:   f.TemplateID,
+			TemplateName: name,
+			Status:       string(f.Status),
+			CreatedAt:    f.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:    f.UpdatedAt.Format(time.RFC3339),
+		})
+	}
+	return dtos, nil
 }
 
 // consignmentColumns selects a Consignment from withCase, Name and State included.
@@ -268,10 +292,6 @@ func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID stri
 }
 
 func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment) (*DetailDTO, error) {
-	if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
-		slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignment.ID, "error", err)
-	}
-
 	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build consignment response DTO: %w", err)
