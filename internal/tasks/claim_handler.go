@@ -18,6 +18,7 @@ const (
 	errClaimHeld         = "this task is claimed by another user; refetch it to see who"
 	errClaimTaskComplete = "this task is completed and can no longer be claimed"
 	errNotClaimHolder    = "this task is claimed by another user"
+	errClaimRequired     = "claim this task before acting on it"
 )
 
 // TaskClaimer is the narrow surface the claim routes need from the task manager.
@@ -116,6 +117,45 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
 	default:
 		httputil.InternalServerError(w, r, "tasks: failed to "+op+" task", err, "taskId", taskID)
+	}
+}
+
+// requireClaim enforces the deployment's claim policy on a step submission. When
+// the caller is a user and the deployment requires a claim to submit
+// (taskauthz.Input.RequireClaimToSubmit), they must hold the task's claim; otherwise
+// it answers 403 (404 for a missing task) and returns false. It returns true when
+// the submission may go ahead.
+//
+// Clients are never held to it: they complete steps by callback token and cannot
+// hold a claim. Users are held to it on the callback route as well, because a
+// callback token is not signed and a user who can see a task's step can build one.
+//
+// The check and the submission are separate calls, so a holder who releases the
+// claim while their submission is in flight can still have it accepted. The
+// workflow accepts only one submission per step, so the step is never completed
+// twice.
+func (h *HTTPHandler) requireClaim(w http.ResponseWriter, r *http.Request, taskID string, logAttrs ...any) bool {
+	ctx := r.Context()
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok || in.Kind != taskauthz.KindUser || !in.RequireClaimToSubmit {
+		return true
+	}
+
+	record, ok := h.Store.GetTask(ctx, taskID)
+	switch {
+	case !ok:
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return false
+	case in.UserID != "" && record.ClaimedBy == in.UserID:
+		return true
+	case record.ClaimedBy == "":
+		slog.InfoContext(ctx, "tasks: submission refused: task not claimed", logAttrs...)
+		httputil.Error(w, r, http.StatusForbidden, errClaimRequired)
+		return false
+	default:
+		slog.InfoContext(ctx, "tasks: submission refused: task claimed by another user", logAttrs...)
+		httputil.Error(w, r, http.StatusForbidden, errNotClaimHolder)
+		return false
 	}
 }
 
