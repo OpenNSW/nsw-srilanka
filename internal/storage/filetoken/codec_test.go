@@ -66,13 +66,13 @@ func TestSealOpenRoundTrip(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	want := filetoken.Claims{
-		Value:    "traders/invoice.pdf",
+		Resource: "traders/invoice.pdf",
 		Holder:   "u:alice",
 		IssuedAt: c.t,
 		Expires:  c.t.Add(time.Hour),
 	}
 	if !got.IssuedAt.Equal(want.IssuedAt) || !got.Expires.Equal(want.Expires) ||
-		got.Value != want.Value || got.Holder != want.Holder {
+		got.Resource != want.Resource || got.Holder != want.Holder {
 		t.Errorf("Open = %+v, want %+v", got, want)
 	}
 }
@@ -92,7 +92,7 @@ func TestOpenExpiry(t *testing.T) {
 	if !errors.Is(err, filetoken.ErrExpired) {
 		t.Fatalf("Open at expiry: err = %v, want ErrExpired", err)
 	}
-	if got.Holder != "u:alice" || got.Value != "v" {
+	if got.Holder != "u:alice" || got.Resource != "v" {
 		t.Errorf("an expired token's claims = %+v, want them returned", got)
 	}
 }
@@ -188,7 +188,7 @@ func encrypt(t *testing.T, enc jose.ContentEncryption, rcpt jose.Recipient, opts
 func TestOpenRejectsOtherJWEs(t *testing.T) {
 	c := newClock()
 	codec := newCodec(t, entry("k1", 1), c)
-	claims := `{"v":"v","h":"h","iat":1}`
+	claims := `{"res":"v","h":"h","iat":1}`
 	typed := (&jose.EncrypterOptions{}).WithType("nsw-file+jwe")
 
 	cases := map[string]string{
@@ -202,8 +202,8 @@ func TestOpenRejectsOtherJWEs(t *testing.T) {
 		"another content encryption": encrypt(t, jose.A128GCM,
 			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1)[:16], KeyID: "k1"}, typed, claims),
 		"no holder": encrypt(t, jose.A256GCM,
-			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"v":"v","iat":1}`),
-		"no value": encrypt(t, jose.A256GCM,
+			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"res":"v","iat":1}`),
+		"no resource": encrypt(t, jose.A256GCM,
 			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"h":"h","iat":1}`),
 		"not JSON": encrypt(t, jose.A256GCM,
 			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, "v"),
@@ -245,10 +245,10 @@ func TestSealRejects(t *testing.T) {
 		value, holder string
 		lifetime      time.Duration
 	}{
-		{"no value", "", "h", 0},
+		{"no resource", "", "h", 0},
 		{"no holder", "v", "", 0},
 		{"negative lifetime", "v", "h", -time.Second},
-		{"a value too long to open", strings.Repeat("v", 2000), "h", 0},
+		{"a resource too long to open", strings.Repeat("v", 2000), "h", 0},
 	}
 	for _, tc := range cases {
 		if _, err := codec.Seal(tc.value, tc.holder, tc.lifetime); err == nil {
@@ -271,10 +271,10 @@ func TestSealNestedToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("agency Open: %v", err)
 	}
-	if got.Value != inner {
-		t.Fatalf("agency Open value = %q, want TNSW's token", got.Value)
+	if got.Resource != inner {
+		t.Fatalf("agency Open resource = %q, want TNSW's token", got.Resource)
 	}
-	if _, err := tnsw.Open(got.Value); err != nil {
+	if _, err := tnsw.Open(got.Resource); err != nil {
 		t.Errorf("TNSW Open of the unwrapped token: %v", err)
 	}
 }

@@ -151,7 +151,7 @@ func TestCallerWithoutIdentity(t *testing.T) {
 func TestIssueRejects(t *testing.T) {
 	a, _ := newAccess(t, 1)
 	if _, err := a.IssueFor(user("alice"), ""); err == nil {
-		t.Error("IssueFor with no value succeeded")
+		t.Error("IssueFor with no resource succeeded")
 	}
 	if _, err := a.IssueForClient("", "v"); err == nil {
 		t.Error("IssueForClient with no client ID succeeded")

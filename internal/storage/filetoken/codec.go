@@ -1,5 +1,6 @@
-// Package filetoken seals a stored file's value, and the holder allowed to use
-// it, into an opaque token, and opens such tokens again.
+// Package filetoken seals a resource, and the holder allowed to use it, into
+// an opaque token, and opens such tokens again. A resource is an opaque string
+// to this package: callers decide what it is, such as a stored file's key.
 //
 // A token is a compact JWE ("dir" + A256GCM). Its claims are encrypted, and
 // the GCM tag makes any change to them or to the header detectable, so only
@@ -21,8 +22,8 @@ import (
 // made for some other purpose never opens as a file token.
 const typ = "nsw-file+jwe"
 
-// maxTokenLength bounds what Open parses. A token carries one stored value
-// and one holder, so a real one is well under a kilobyte, even when the value
+// maxTokenLength bounds what Open parses. A token carries one resource and
+// one holder, so a real one is well under a kilobyte, even when the resource
 // is itself a token from another deployment.
 const maxTokenLength = 2048
 
@@ -36,8 +37,8 @@ var (
 
 // Claims is what a token carries.
 type Claims struct {
-	// Value is the stored value the token stands for.
-	Value string
+	// Resource is what the token grants access to.
+	Resource string
 	// Holder names who may use the token, in whatever form the caller chose.
 	Holder string
 	// IssuedAt is when the token was sealed.
@@ -49,7 +50,7 @@ type Claims struct {
 
 // payload is the encrypted JSON form of Claims. Times are Unix seconds.
 type payload struct {
-	Value    string `json:"v"`
+	Resource string `json:"res"`
 	Holder   string `json:"h"`
 	IssuedAt int64  `json:"iat"`
 	Expires  int64  `json:"exp,omitempty"`
@@ -73,17 +74,17 @@ func NewCodec(keys *Keyset, now func() time.Time) (*Codec, error) {
 	return &Codec{keys: keys, now: now}, nil
 }
 
-// Seal returns a token carrying value and holder. lifetime is how long the
+// Seal returns a token carrying resource and holder. lifetime is how long the
 // token is usable for; zero means it never expires.
-func (c *Codec) Seal(value, holder string, lifetime time.Duration) (string, error) {
-	if value == "" || holder == "" {
-		return "", errors.New("filetoken: value and holder are required")
+func (c *Codec) Seal(resource, holder string, lifetime time.Duration) (string, error) {
+	if resource == "" || holder == "" {
+		return "", errors.New("filetoken: resource and holder are required")
 	}
 	if lifetime < 0 {
 		return "", errors.New("filetoken: lifetime must not be negative")
 	}
 	now := c.now()
-	p := payload{Value: value, Holder: holder, IssuedAt: now.Unix()}
+	p := payload{Resource: resource, Holder: holder, IssuedAt: now.Unix()}
 	if lifetime > 0 {
 		p.Expires = now.Add(lifetime).Unix()
 	}
@@ -106,7 +107,7 @@ func (c *Codec) Seal(value, holder string, lifetime time.Duration) (string, erro
 		return "", fmt.Errorf("filetoken: serialize: %w", err)
 	}
 	if len(token) > maxTokenLength {
-		return "", fmt.Errorf("filetoken: value too long: the token would be %d bytes, Open accepts at most %d", len(token), maxTokenLength)
+		return "", fmt.Errorf("filetoken: resource too long: the token would be %d bytes, Open accepts at most %d", len(token), maxTokenLength)
 	}
 	return token, nil
 }
@@ -131,10 +132,10 @@ func (c *Codec) Open(token string) (Claims, error) {
 		return Claims{}, ErrInvalid
 	}
 	var p payload
-	if err := json.Unmarshal(plaintext, &p); err != nil || p.Value == "" || p.Holder == "" {
+	if err := json.Unmarshal(plaintext, &p); err != nil || p.Resource == "" || p.Holder == "" {
 		return Claims{}, ErrInvalid
 	}
-	claims := Claims{Value: p.Value, Holder: p.Holder, IssuedAt: time.Unix(p.IssuedAt, 0)}
+	claims := Claims{Resource: p.Resource, Holder: p.Holder, IssuedAt: time.Unix(p.IssuedAt, 0)}
 	if p.Expires != 0 {
 		claims.Expires = time.Unix(p.Expires, 0)
 		if !c.now().Before(claims.Expires) {
