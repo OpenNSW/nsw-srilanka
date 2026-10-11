@@ -46,7 +46,9 @@ type TaskFetcher interface {
 }
 
 type HTTPHandler struct {
-	Manager   *orchestrator.TaskManager
+	Manager *orchestrator.TaskManager
+	// Claims claims and releases tasks. NewHTTPHandler sets it to Manager.
+	Claims    TaskClaimer
 	Store     TaskFetcher
 	Assembler *zoneview.ZoneViewAssembler
 	// AuthzCatalog names the logical roles a reader may own the task's
@@ -70,6 +72,7 @@ func NewHTTPHandler(
 ) *HTTPHandler {
 	return &HTTPHandler{
 		Manager:         manager,
+		Claims:          manager,
 		Store:           store,
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
