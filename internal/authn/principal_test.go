@@ -71,6 +71,8 @@ func TestPrincipalFromAuthContext_UserFlattensDeclaredClaims(t *testing.T) {
 				"phone_number": "+94771234567",
 				"ouId":         "OU-001",
 				"ouHandle":     "ou-001",
+				"given_name":   "Kamal",
+				"family_name":  "Perera",
 			},
 		},
 	})
@@ -81,7 +83,7 @@ func TestPrincipalFromAuthContext_UserFlattensDeclaredClaims(t *testing.T) {
 		t.Fatalf("unexpected identity: %#v", p)
 	}
 	if p.Email != "trader@example.com" || p.PhoneNumber != "+94771234567" ||
-		p.OUID != "OU-001" || p.OUHandle != "ou-001" {
+		p.OUID != "OU-001" || p.OUHandle != "ou-001" || p.DisplayName != "Kamal Perera" {
 		t.Fatalf("unexpected claims: %#v", p)
 	}
 	if len(p.Roles) != 1 || p.Roles[0] != "Trader" {
@@ -99,8 +101,40 @@ func TestPrincipalFromAuthContext_UserWithoutExtraClaims(t *testing.T) {
 	if p == nil {
 		t.Fatal("expected a principal")
 	}
-	if p.Email != "" || p.PhoneNumber != "" || p.OUID != "" || p.OUHandle != "" {
+	if p.Email != "" || p.PhoneNumber != "" || p.OUID != "" || p.OUHandle != "" || p.DisplayName != "" {
 		t.Fatalf("expected empty claim fields, got %#v", p)
+	}
+}
+
+// The IdP has no single name claim, so the display name joins whichever of the
+// given and family names the token carries.
+func TestDisplayNameFrom(t *testing.T) {
+	tests := map[string]struct {
+		claims coreauthn.ExtraClaims
+		want   string
+	}{
+		"both":        {coreauthn.ExtraClaims{"given_name": "CDA", "family_name": "Officer"}, "CDA Officer"},
+		"given only":  {coreauthn.ExtraClaims{"given_name": "Kamal"}, "Kamal"},
+		"family only": {coreauthn.ExtraClaims{"family_name": "Perera"}, "Perera"},
+		"neither":     {coreauthn.ExtraClaims{"email": "a@b.com"}, ""},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := displayNameFrom(tt.claims); got != tt.want {
+				t.Errorf("displayNameFrom() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The login path maps the same display name as the per-request principal.
+func TestPrincipalFromUserPrincipal_CarriesDisplayName(t *testing.T) {
+	p := principalFromUserPrincipal(&coreauthn.UserPrincipal{
+		Subject:     "idp1",
+		ExtraClaims: coreauthn.ExtraClaims{"given_name": "CDA", "family_name": "Officer"},
+	})
+	if p == nil || p.DisplayName != "CDA Officer" {
+		t.Fatalf("principal = %#v, want DisplayName %q", p, "CDA Officer")
 	}
 }
 

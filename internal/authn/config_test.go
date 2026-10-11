@@ -21,7 +21,7 @@ func TestConfig_DeclaresEveryClaimPrincipalReads(t *testing.T) {
 	spec := validConfig().coreConfig().UserClaims
 	declared := slices.Concat(spec.Required, spec.Optional)
 
-	for _, claim := range []string{claimEmail, claimPhoneNumber, claimOUID, claimOUHandle} {
+	for _, claim := range []string{claimEmail, claimPhoneNumber, claimOUID, claimOUHandle, claimGivenName, claimFamilyName} {
 		if !slices.Contains(declared, claim) {
 			t.Errorf("claim %q is read by principalFromAuthContext but never declared to core/authn", claim)
 		}
@@ -38,6 +38,17 @@ func TestConfig_OUHandleIsRequired(t *testing.T) {
 	}
 	if !slices.Contains(spec.Optional, claimPhoneNumber) {
 		t.Errorf("%q should be optional, got required=%v optional=%v", claimPhoneNumber, spec.Required, spec.Optional)
+	}
+}
+
+// A user without a name at the IdP must still be able to sign in: the names only
+// feed the display name, so they are optional.
+func TestConfig_NameClaimsAreOptional(t *testing.T) {
+	spec := validConfig().coreConfig().UserClaims
+	for _, claim := range []string{claimGivenName, claimFamilyName} {
+		if !slices.Contains(spec.Optional, claim) || slices.Contains(spec.Required, claim) {
+			t.Errorf("%q should be optional, got required=%v optional=%v", claim, spec.Required, spec.Optional)
+		}
 	}
 }
 

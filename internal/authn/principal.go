@@ -24,6 +24,8 @@ const (
 	claimPhoneNumber = "phone_number"
 	claimOUID        = "ouId"
 	claimOUHandle    = "ouHandle"
+	claimGivenName   = "given_name"
+	claimFamilyName  = "family_name"
 )
 
 // Kind distinguishes a human caller from a machine (M2M) client.
@@ -61,6 +63,9 @@ type Principal struct {
 	PhoneNumber string
 	OUID        string
 	OUHandle    string
+	// DisplayName is the user's given and family names joined ("CDA Officer"),
+	// or whichever of them the token carries; "" when it carries neither.
+	DisplayName string
 }
 
 // Subject returns a stable identifier for the principal: the persisted user ID
