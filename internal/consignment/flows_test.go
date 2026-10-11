@@ -28,7 +28,10 @@ var slpaPayment = FlowOption{TemplateID: "slpa_payment", Label: "SLPA sundry pay
 func newFlowsService(t *testing.T) (*Service, sqlmock.Sqlmock, *caseFlowsSpy) {
 	t.Helper()
 	db, sqlMock := setupTestDB(t)
-	svc := mustNewService(t, db, newExportRegistry(), nil, new(MockCompanyService), nil, nil)
+	companies := new(MockCompanyService)
+	companies.On("GetCompanyByID", mock.Anything, mock.Anything).
+		Return(&company.Record{ID: "co-trader", Name: "Trader Co", Data: []byte(`{}`)}, nil).Maybe()
+	svc := mustNewService(t, db, newExportRegistry(), nil, companies, nil, nil)
 	svc.flowOptions = []FlowOption{slpaPayment}
 	flows := &caseFlowsSpy{}
 	require.NoError(t, svc.RegisterCaseFlows(flows))
@@ -48,8 +51,7 @@ func TestStartConsignmentFlow(t *testing.T) {
 		id := uuid.NewString()
 		expectConsignment(sqlMock, id, "co-trader", "FINISHED")
 
-		inputs := map[string]any{"invoiceNo": "INV-1", "consignmentId": "spoofed"}
-		got, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", inputs, "co-trader", []string{"Trader"})
+		got, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", "co-trader", []string{"Trader"})
 		require.NoError(t, err)
 		assert.Equal(t, "slpa_payment", got.TemplateID)
 
@@ -58,14 +60,17 @@ func TestStartConsignmentFlow(t *testing.T) {
 		assert.Equal(t, id, req.CaseID)
 		assert.Equal(t, "slpa_payment", req.TemplateID)
 		assert.Empty(t, req.WorkflowID)
-		// The consignment ID is seeded by the server, never taken from the inputs.
-		assert.Equal(t, map[string]any{"invoiceNo": "INV-1", "consignmentId": id}, req.Vars)
+		// Every variable is set by the server, from the consignment: the consignment ID and
+		// the trader company, as the export flow gets.
+		assert.Equal(t, id, req.Vars["consignmentId"])
+		assert.Contains(t, req.Vars, "traderCompany")
+		assert.Len(t, req.Vars, 2)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 
 	t.Run("a flow that is not startable is refused before any read", func(t *testing.T) {
 		svc, sqlMock, flows := newFlowsService(t)
-		_, err := svc.StartConsignmentFlow(context.Background(), uuid.NewString(), "trade-export-v1", nil, "co-trader", []string{"Trader"})
+		_, err := svc.StartConsignmentFlow(context.Background(), uuid.NewString(), "trade-export-v1", "co-trader", []string{"Trader"})
 		assert.ErrorIs(t, err, ErrFlowNotAllowed)
 		assert.Empty(t, flows.reqs)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
@@ -76,7 +81,7 @@ func TestStartConsignmentFlow(t *testing.T) {
 		id := uuid.NewString()
 		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
 
-		_, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", nil, "co-other", []string{"Trader"})
+		_, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", "co-other", []string{"Trader"})
 		assert.ErrorIs(t, err, ErrAccessDenied)
 		assert.Empty(t, flows.reqs)
 	})
@@ -86,7 +91,7 @@ func TestStartConsignmentFlow(t *testing.T) {
 		id := uuid.NewString()
 		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
 
-		_, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", nil, "co-trader", []string{"CHA"})
+		_, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", "co-trader", []string{"CHA"})
 		assert.ErrorIs(t, err, ErrAccessDenied)
 		assert.Empty(t, flows.reqs)
 	})
@@ -97,7 +102,7 @@ func TestStartConsignmentFlow(t *testing.T) {
 		id := uuid.NewString()
 		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
 
-		_, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", nil, "co-trader", []string{"Trader"})
+		_, err := svc.StartConsignmentFlow(context.Background(), id, "slpa_payment", "co-trader", []string{"Trader"})
 		assert.ErrorContains(t, err, "engine down")
 	})
 }
@@ -121,7 +126,7 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 		id := uuid.NewString()
 		expectConsignment(sqlMock, id, "co-trader", "IN_PROGRESS")
 
-		w := call(t, svc, `{"templateId":"slpa_payment","inputs":{"invoiceNo":"INV-1"}}`, id)
+		w := call(t, svc, `{"templateId":"slpa_payment"}`, id)
 		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 		var got FlowDTO
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
@@ -142,6 +147,13 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 
 		w := call(t, svc, `{"templateId":"slpa_payment"}`, id)
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("variables for the flow are refused", func(t *testing.T) {
+		svc, _, flows := newFlowsService(t)
+		w := call(t, svc, `{"templateId":"slpa_payment","inputs":{"payment":{"status":"PAID"}}}`, uuid.NewString())
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Empty(t, flows.reqs)
 	})
 
 	t.Run("unknown field", func(t *testing.T) {

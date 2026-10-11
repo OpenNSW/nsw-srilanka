@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -236,12 +235,14 @@ func (s *Service) authorize(consignment *Consignment, callerCompanyID string, ca
 }
 
 // StartConsignmentFlow starts one of the configured flows (Config.Flows) on a consignment for
-// a trader or CHA caller, under the same access check as GetConsignmentByID. inputs seed the
-// flow's variables, alongside consignmentId. A consignment that has FINISHED still takes new
-// flows; starting one sets it back to IN_PROGRESS.
+// a trader or CHA caller, under the same access check as GetConsignmentByID. The caller only
+// picks the flow: its variables are set here, from the consignment (consignmentId and the
+// trader company, as the export flow gets), never from the request, so a caller cannot pre-set
+// state the flow trusts. Anything the caller supplies is collected by the flow's own tasks. A
+// consignment that has FINISHED still takes new flows; starting one sets it back to
+// IN_PROGRESS.
 func (s *Service) StartConsignmentFlow(
-	ctx context.Context, consignmentID, templateID string, inputs map[string]any,
-	callerCompanyID string, callerRoles []string,
+	ctx context.Context, consignmentID, templateID string, callerCompanyID string, callerRoles []string,
 ) (*FlowDTO, error) {
 	if !slices.ContainsFunc(s.flowOptions, func(o FlowOption) bool { return o.TemplateID == templateID }) {
 		return nil, fmt.Errorf("%w: %q", ErrFlowNotAllowed, templateID)
@@ -257,9 +258,15 @@ func (s *Service) StartConsignmentFlow(
 		return nil, err
 	}
 
-	vars := make(map[string]any, len(inputs)+1)
-	maps.Copy(vars, inputs)
-	vars["consignmentId"] = consignmentID
+	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
+	if err != nil {
+		return nil, fmt.Errorf("trader company lookup failed: %w", err)
+	}
+	traderCompanyVars, err := companyRecordToMap(traderCompany)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal trader company: %w", err)
+	}
+	vars := map[string]any{"consignmentId": consignmentID, "traderCompany": traderCompanyVars}
 	f, err := s.flows.StartFlow(ctx, caseflow.StartRequest{CaseID: consignmentID, TemplateID: templateID, Vars: vars})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start flow %q on consignment %s: %w", templateID, consignmentID, err)

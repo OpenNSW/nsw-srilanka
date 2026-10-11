@@ -232,8 +232,8 @@ paths:
                 $ref: '#/components/schemas/FlowDTO'
         '400':
           description: >-
-            Missing consignment ID; an invalid request body (malformed JSON, an
-            unknown field, or anything after the JSON value); or a `templateId`
+            Missing consignment ID; an invalid request body (malformed JSON, any
+            field besides `templateId`, or anything after the JSON value); or a `templateId`
             that is not one of the consignment's startable flows.
           content:
             application/json:
@@ -526,13 +526,11 @@ components:
       properties:
         templateId:
           type: string
-          description: One of the consignment's `startableFlows`.
-        inputs:
-          type: object
           description: >-
-            Seeds the flow's variables. `consignmentId` is always set to the
-            consignment's ID and cannot be overridden.
-          additionalProperties: true
+            One of the consignment's `startableFlows`. It is the whole request:
+            the server sets the flow's variables (the consignment ID and the
+            trader company), and the flow's own tasks collect anything from
+            the user.
 
     FlowDTO:
       type: object

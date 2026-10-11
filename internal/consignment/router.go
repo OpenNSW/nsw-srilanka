@@ -297,7 +297,8 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 // HandleStartConsignmentFlow handles POST /api/v1/consignments/{id}/flows. A trader or CHA starts
 // one of the consignment's startable flows (DetailDTO.StartableFlows) — e.g. an SLPA sundry
 // payment — under the same company-and-role check as HandleGetConsignmentByID. Body:
-// StartFlowRequest. Response: 201 with the started flow's FlowDTO.
+// StartFlowRequest, which names the flow and nothing else: any other field, such as variables
+// for the flow, is rejected. Response: 201 with the started flow's FlowDTO.
 func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p, ok := authn.FromContext(ctx)
@@ -348,7 +349,7 @@ func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
-	flow, err := c.cs.StartConsignmentFlow(ctx, consignmentID, req.TemplateID, req.Inputs, userCompany.ID, p.Roles)
+	flow, err := c.cs.StartConsignmentFlow(ctx, consignmentID, req.TemplateID, userCompany.ID, p.Roles)
 	if err != nil {
 		auditEvent(true, map[string]any{"error": err.Error(), "callerCompanyId": userCompany.ID})
 		switch {

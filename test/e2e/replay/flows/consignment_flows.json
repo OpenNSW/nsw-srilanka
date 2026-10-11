@@ -13,7 +13,12 @@
     },
     {
       "name": "wait for Initialize Consignment task",
-      "wait": { "node": "Initialize Consignment", "state": "IN_PROGRESS", "into": "initTask", "timeout": "45s" }
+      "wait": {
+        "node": "Initialize Consignment",
+        "state": "IN_PROGRESS",
+        "into": "initTask",
+        "timeout": "45s"
+      }
     },
     {
       "name": "admin lists the consignment's flows (the export flow)",
@@ -53,6 +58,19 @@
       }
     },
     {
+      "name": "a request that sets the flow's variables is refused",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments/{{consignmentId}}/flows",
+        "body": {
+          "templateId": "trade-export-v1",
+          "inputs": { "payment": { "status": "PAID" } }
+        },
+        "expectStatus": 400
+      }
+    },
+    {
       "name": "a CHA not yet chosen for the consignment cannot start a flow",
       "request": {
         "actor": "cha",
@@ -68,7 +86,7 @@
         "actor": "trader",
         "method": "POST",
         "path": "/api/v1/consignments/{{consignmentId}}/flows",
-        "body": { "templateId": "trade-export-v1", "inputs": { "note": "e2e" } },
+        "body": { "templateId": "trade-export-v1" },
         "expectStatus": 201,
         "extract": { "secondFlow": "workflowId" }
       }

@@ -131,9 +131,9 @@ type DetailDTO struct {
 // StartFlowRequest is the request body for POST /api/v1/consignments/{id}/flows.
 type StartFlowRequest struct {
 	// TemplateID names one of the consignment's startable flows (DetailDTO.StartableFlows).
+	// It is the whole request: the flow's variables are set by the server, never by the
+	// caller.
 	TemplateID string `json:"templateId"`
-	// Inputs seed the flow's variables. Optional.
-	Inputs map[string]any `json:"inputs,omitempty"`
 }
 
 // AdminDetailDTO is the ops/admin view of a consignment: its detail plus its flows, so an
