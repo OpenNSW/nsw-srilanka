@@ -28,7 +28,7 @@ const (
 
 // TaskLister is the narrow surface CaseHandler needs from the task store.
 type TaskLister interface {
-	GetAllTasks(ctx context.Context, rootWorkflowID string) []store.TaskRecord
+	GetAllTasks(ctx context.Context, caseID string) []store.TaskRecord
 }
 
 // CaseHandler serves the officer-facing case list and detail. Responses reuse the

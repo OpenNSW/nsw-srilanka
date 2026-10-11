@@ -42,7 +42,7 @@ func newCHAPersist(t *testing.T) (*CHAPersistPlugin, sqlmock.Sqlmock) {
 func pluginContext(inputs map[string]any) plugins.PluginContext {
 	return plugins.PluginContext{
 		Context: context.Background(),
-		Record:  &store.TaskRecord{ParentWorkflowID: "C1:aux:u1", RootWorkflowID: "C1"},
+		Record:  &store.TaskRecord{ParentWorkflowID: "C1:aux:u1", CaseID: "C1"},
 		Inputs:  inputs,
 	}
 }

@@ -59,11 +59,11 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 	if ctx.Record == nil {
 		return fmt.Errorf("cha_persist: task record is nil")
 	}
-	// Every flow of a consignment runs with the consignment ID as its root workflow ID, at
-	// any depth of nesting (see internal/caseflow).
-	consignmentID := ctx.Record.RootWorkflowID
+	// Every flow of a consignment runs with the consignment ID as its case ID, at any depth
+	// of nesting (see internal/caseflow).
+	consignmentID := ctx.Record.CaseID
 	if consignmentID == "" {
-		return fmt.Errorf("cha_persist: root workflow id is empty")
+		return fmt.Errorf("cha_persist: case id is empty")
 	}
 
 	name, _ := ctx.Inputs["consignment_name"].(string)

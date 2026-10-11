@@ -32,10 +32,10 @@ const (
 )
 
 // OwnedRolesFunc lazily resolves which logical owner roles the caller's company
-// satisfies for the task's root workflow (keyed by the catalog's logical role
+// satisfies for the task's case (keyed by the catalog's logical role
 // names, e.g. "trader"/"cha"). It performs the database work, so callers invoke
 // it only once they know the answer can matter. It is nil for client principals.
-type OwnedRolesFunc func(ctx context.Context, rootWorkflowID string) (map[string]bool, error)
+type OwnedRolesFunc func(ctx context.Context, caseID string) (map[string]bool, error)
 
 // Input is the authorization context Layer 1 resolves and attaches for a Layer-2
 // evaluator to judge. It carries no domain detail — only the caller's kind, token
