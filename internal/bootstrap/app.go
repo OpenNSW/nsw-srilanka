@@ -711,8 +711,8 @@ func taskCatalog(c *catalog.Catalog) taskauthz.Catalog {
 	return taskauthz.Catalog{Roles: c.Roles, Clients: c.Clients}
 }
 
-// userDisplayNames names a user by the email on their user record, the only name
-// the record holds. A user without a record has no name ("").
+// userDisplayNames names a user by the display name on their user record, or their
+// email until a login has stored one. A user without a record has no name ("").
 type userDisplayNames struct{ svc user.Service }
 
 func (n userDisplayNames) GetDisplayName(ctx context.Context, userID string) (string, error) {
@@ -722,6 +722,9 @@ func (n userDisplayNames) GetDisplayName(ctx context.Context, userID string) (st
 			return "", nil
 		}
 		return "", err
+	}
+	if rec.DisplayName != "" {
+		return rec.DisplayName, nil
 	}
 	return rec.Email, nil
 }

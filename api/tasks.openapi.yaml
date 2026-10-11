@@ -612,6 +612,7 @@ components:
         name:
           type: string
           description: |
-            The name to show for the holder (currently their email). Empty
-            when it could not be found.
-          example: "officer@cda.gov.lk"
+            The name to show for the holder: their display name (given and
+            family names from their login token), or their email until a
+            login has stored one. Empty when it could not be found.
+          example: "CDA Officer"

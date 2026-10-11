@@ -167,9 +167,11 @@ before acting on it, and the task shows everyone who holds it:
 - Submitting a step, `POST /api/v1/tasks/{id}/steps/{stepId}`, needs the claim. Without
   it the submission is a 403 ("claim this task before acting on it"). Every officer
   can still open the task.
-- `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `id` and `name`
-  (their email for now), `claimed_at`, `mine` and `required_to_submit`. Use `mine`
-  rather than comparing IDs or emails in the portal.
+- `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `id` and `name`,
+  `claimed_at`, `mine` and `required_to_submit`. Use `mine` rather than comparing
+  IDs or emails in the portal. The name is the holder's display name, which their
+  login stores from the token's `given_name` and `family_name`, or their email
+  until they have logged in with a name.
 
 Claim and release need the `nsw:task:write` scope, and are open to anyone who can
 read the task. They are recorded in the audit trail as task updates. The full contract

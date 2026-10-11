@@ -109,3 +109,30 @@ func TestAuthUserProfileAdapter_PropagatesError(t *testing.T) {
 		t.Fatalf("expected error %v, got %v", wantErr, err)
 	}
 }
+
+// A user is named by their display name, falling back to their email until a
+// login has stored one.
+func TestUserDisplayNames(t *testing.T) {
+	tests := []struct {
+		name   string
+		stub   *stubUserService
+		want   string
+		wantOK bool
+	}{
+		{"display name", &stubUserService{record: &user.Record{Email: "kamal@example.com", DisplayName: "Kamal Perera"}}, "Kamal Perera", true},
+		{"email until a name is stored", &stubUserService{record: &user.Record{Email: "kamal@example.com"}}, "kamal@example.com", true},
+		{"holder without a record", &stubUserService{getErr: user.ErrUserNotFound}, "", true},
+		{"lookup failure", &stubUserService{getErr: errors.New("db down")}, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := userDisplayNames{svc: tt.stub}.GetDisplayName(context.Background(), "user-1")
+			if (err == nil) != tt.wantOK {
+				t.Fatalf("GetDisplayName() error = %v, want ok = %v", err, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Errorf("GetDisplayName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

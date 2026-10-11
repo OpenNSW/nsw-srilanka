@@ -54,8 +54,8 @@ export type AuditEntry = {
   details?: string
 }
 
-// ClaimHolder is the user holding a task's claim. name is their email for now, and
-// empty if it could not be found.
+// ClaimHolder is the user holding a task's claim. name is their display name, their
+// email until a login has stored one, or empty if it could not be found.
 export type ClaimHolder = {
   id: string
   name: string
