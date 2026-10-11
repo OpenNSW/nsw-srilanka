@@ -181,11 +181,11 @@ func pendingHSCodeTask() *fakeTaskFetcher {
 	return &fakeTaskFetcher{
 		found: true,
 		record: store.TaskRecord{
-			TaskID:         testTaskID,
-			TaskType:       "APPLICATION",
-			State:          "PENDING_USER",
-			RootWorkflowID: testConsignmentID,
-			RenderConfig:   json.RawMessage(hsCodeTaskRenderConfig),
+			TaskID:       testTaskID,
+			TaskType:     "APPLICATION",
+			State:        "PENDING_USER",
+			CaseID:       testConsignmentID,
+			RenderConfig: json.RawMessage(hsCodeTaskRenderConfig),
 		},
 	}
 }

@@ -44,8 +44,8 @@ func (e Eligibility) Any(names []string) bool {
 	return false
 }
 
-// Eligible determines which of names the caller may act in on the task rooted at
-// rootWorkflowID.
+// Eligible determines which of names the caller may act in on a task of case
+// caseID.
 //
 // Ownership costs a database round trip, so it is resolved at most once and only
 // when the caller holds the token role of at least one of names. A caller whose
@@ -53,7 +53,7 @@ func (e Eligibility) Any(names []string) bool {
 // alone. A client principal, or a user with no ownership resolver attached, is
 // eligible for nothing; both are reported as such rather than as an error, so the
 // decision stays with the policy layer that knows what a denial means.
-func (c Catalog) Eligible(ctx context.Context, in Input, rootWorkflowID string, names []string) (Eligibility, error) {
+func (c Catalog) Eligible(ctx context.Context, in Input, caseID string, names []string) (Eligibility, error) {
 	e := Eligibility{
 		held:  make(map[string]bool, len(names)),
 		owned: map[string]bool{},
@@ -75,7 +75,7 @@ func (c Catalog) Eligible(ctx context.Context, in Input, rootWorkflowID string, 
 		return e, nil
 	}
 
-	owned, err := in.OwnedRoles(ctx, rootWorkflowID)
+	owned, err := in.OwnedRoles(ctx, caseID)
 	if err != nil {
 		return Eligibility{}, fmt.Errorf("taskauthz: resolve ownership: %w", err)
 	}

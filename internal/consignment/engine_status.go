@@ -97,7 +97,7 @@ var ErrAdminActionUnsupportedForGateway = errors.New("complete is not supported 
 // workflow.AdminInterventionResolver.
 var ErrAdminInterventionUnsupported = errors.New("workflow manager does not support resolving admin interventions")
 
-// GetEngineStatus returns the raw engine state for workflowID — the consignment's root workflow,
+// GetEngineStatus returns the raw engine state for workflowID — one of a consignment's flows,
 // or (queried the same way, via this same endpoint) a nested child spawned by a SPLIT_TASK/
 // BATCH_SPLIT/PARALLEL_SPLIT node — straight from the registered workflow.Manager, an interface
 // so this stays agnostic to whatever engine actually backs it. Unlike GetConsignmentByID, it
@@ -120,7 +120,7 @@ func (s *Service) GetEngineStatus(ctx context.Context, workflowID string) (*Engi
 
 	dto := buildEngineStatusDTO(workflowID, instance)
 	// Fetches every task record for the whole consignment, not just the ones under workflowID's
-	// own branch — the task store only supports filtering by root workflow ID (see
+	// own branch — the task store only supports filtering by case ID (see
 	// attachTaskWorkflowIDs), so a nested child-branch call re-fetches the same consignment-wide
 	// list. Acceptable for an admin screen opened manually and rarely; would need a narrower
 	// query on the task store itself (TaskRecord.ParentWorkflowID already holds the more specific
@@ -197,24 +197,24 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 }
 
 // attachTaskWorkflowIDs fills in TaskWorkflowID on each TASK-type node in nodes, when its task
-// has started. Task records are stored keyed by the true consignment root workflow ID
-// (store.TaskRecord.RootWorkflowID) even for a node nested several levels deep in a
-// BATCH_SPLIT/PARALLEL_SPLIT branch — so the root ID is read off instance.WorkflowVariables
-// (workflow.VarRootWorkflowID, propagated by the engine to every level of nesting) rather than
+// has started. Task records are stored keyed by the consignment's case ID
+// (store.TaskRecord.CaseID) even for a node nested several levels deep in a
+// BATCH_SPLIT/PARALLEL_SPLIT branch — so the case ID is read off instance.WorkflowVariables
+// (workflow.VarCaseID, propagated by the engine to every level of nesting) rather than
 // assumed to be the workflowID GetEngineStatus was actually called with. Best-effort: if
-// taskStore is nil or the root ID can't be determined, nodes are left without TaskWorkflowID
+// taskStore is nil or the case ID can't be determined, nodes are left without TaskWorkflowID
 // rather than failing the whole engine-status read.
 func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.WorkflowInstance, nodes []EngineNodeDTO) {
 	if s.taskStore == nil {
 		return
 	}
-	rootWorkflowID, _ := instance.WorkflowVariables[workflow.VarRootWorkflowID].(string)
-	if rootWorkflowID == "" {
+	caseID, _ := instance.WorkflowVariables[workflow.VarCaseID].(string)
+	if caseID == "" {
 		return
 	}
 
 	byNodeID := make(map[string]string, len(nodes))
-	for _, rec := range s.taskStore.GetAllTasks(ctx, rootWorkflowID) {
+	for _, rec := range s.taskStore.GetAllTasks(ctx, caseID) {
 		if rec.TaskWorkflowID != "" {
 			byNodeID[rec.TaskID] = rec.TaskWorkflowID
 		}
@@ -230,7 +230,7 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 }
 
 // ResolveAdminIntervention sends an admin's decision (RETRY/COMPLETE/ABORT) to a node parked
-// in AWAITING_ADMIN on workflowID, a consignment's root workflow or one of its child-branch
+// in AWAITING_ADMIN on workflowID, one of a consignment's flows or one of its child-branch
 // workflows, through the same manager GetEngineStatus queries. A task workflow is a separate ID
 // space on its own manager: see ResolveTaskWorkflowAdminIntervention. sig.ActivationID names the
 // parked step.

@@ -136,7 +136,7 @@ func TestConsignmentService_GetEngineStatus_NoWorkflowManager(t *testing.T) {
 }
 
 // A TASK node's TaskWorkflowID is filled in from the task store, keyed off
-// workflow.VarRootWorkflowID rather than the queried workflow ID itself — this matters when
+// workflow.VarCaseID rather than the queried workflow ID itself — this matters when
 // GetEngineStatus is called on a nested child branch, not just the consignment root.
 func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T) {
 	db, _ := setupTestDB(t)
@@ -146,14 +146,14 @@ func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T)
 	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
 
 	ctx := context.Background()
-	rootWorkflowID := uuid.NewString()
+	caseID := uuid.NewString()
 	childWorkflowID := uuid.NewString()
 
 	instance := &workflow.WorkflowInstance{
 		ID:     childWorkflowID,
 		Status: workflow.StatusRunning,
 		WorkflowVariables: map[string]any{
-			workflow.VarRootWorkflowID: rootWorkflowID,
+			workflow.VarCaseID: caseID,
 		},
 		NodeInfo: map[string]*workflow.NodeInfo{
 			"officer_review": {ID: "officer_review", Type: workflow.NodeTypeTask, Status: workflow.NodeStatusAwaitingAdmin},
@@ -161,7 +161,7 @@ func TestConsignmentService_GetEngineStatus_AttachesTaskWorkflowID(t *testing.T)
 		},
 	}
 	mockWM.On("GetStatus", ctx, childWorkflowID).Return(instance, nil)
-	mockTaskStore.On("GetAllTasks", ctx, rootWorkflowID).Return([]store.TaskRecord{
+	mockTaskStore.On("GetAllTasks", ctx, caseID).Return([]store.TaskRecord{
 		{TaskID: "officer_review", TaskWorkflowID: "task-wf-officer_review"},
 	})
 

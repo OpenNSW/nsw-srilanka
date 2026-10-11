@@ -544,7 +544,7 @@ func (s *Service) buildConsignmentDetailDTO(
 	}, nil
 }
 
-// buildNodeDTOsFromTaskRecords queries tasks via the TaskStore by root_workflow_id and converts each
+// buildNodeDTOsFromTaskRecords queries the consignment's tasks via the TaskStore by case ID and converts each
 // non-SYSTEM record into a WorkflowNodeResponseDTO for the consignment detail response.
 func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentID string) ([]WorkflowNodeResponseDTO, error) {
 	if s.taskStore == nil {

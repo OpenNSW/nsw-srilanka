@@ -114,9 +114,9 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
    workflow completes, Temporal would accept the same ID as a new run. A repeat
    `taskId` with a different `consignmentId` or `taskCode` is not a retry: it is a 409
    and starts nothing.
-5. Tasks spawned under the workflow have `RootWorkflowID == taskId`. The agency's task
-   authz gate (`agency.OfficerGate`) reports `officer` ownership for any root that is
-   an `agency_workflow` row, so `readauthz` and the write extension treat officers
+5. The workflow is started as its own case, so tasks spawned under it have
+   `CaseID == taskId`. The agency's task authz gate (`agency.OfficerGate`) reports
+   `officer` ownership for any case ID that is an `agency_workflow` row, so `readauthz` and the write extension treat officers
    like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
 
 ## Task configs

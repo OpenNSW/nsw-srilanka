@@ -27,10 +27,11 @@ const (
 	roleCHA    = "cha"
 )
 
-// OwnershipResolver returns the trader and CHA company ids that own a
-// consignment. *consignment.Service satisfies it via GetOwnership.
-type OwnershipResolver interface {
-	GetOwnership(ctx context.Context, consignmentID string) (traderCompanyID, chaCompanyID string, err error)
+// CaseOwnership returns the trader and CHA company ids that own a case — in TNSW, the
+// consignment whose ID is the task's case ID. *consignment.Service satisfies it via
+// GetOwnership.
+type CaseOwnership interface {
+	GetOwnership(ctx context.Context, caseID string) (traderCompanyID, chaCompanyID string, err error)
 }
 
 // CompanyResolver resolves a user's company id from their OU handle. It must
@@ -43,7 +44,7 @@ type CompanyResolver interface {
 // Middleware attaches the authz.Input (principal facts + a lazy ownership
 // resolver) for task-write requests.
 type Middleware struct {
-	ownership OwnershipResolver
+	ownership CaseOwnership
 	company   CompanyResolver
 }
 
@@ -51,7 +52,7 @@ type Middleware struct {
 // roles is the global catalog's Roles map, validated here so a catalog missing
 // a role ownedRolesFor depends on fails construction instead of silently
 // denying every request in that role.
-func NewMiddleware(ownership OwnershipResolver, company CompanyResolver, roles map[string]string) (*Middleware, error) {
+func NewMiddleware(ownership CaseOwnership, company CompanyResolver, roles map[string]string) (*Middleware, error) {
 	if err := catalog.RequireRoles(roles, roleTrader, roleCHA); err != nil {
 		return nil, err
 	}
@@ -90,14 +91,14 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 }
 
 // ownedRolesFor returns a resolver bound to the caller's OU handle. The extension
-// invokes it (with the task's root workflow id) only when a user rule matches by
+// invokes it (with the task's case id) only when a user rule matches by
 // role; that is the only point at which the DB is touched.
 func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
-	return func(ctx context.Context, rootWorkflowID string) (map[string]bool, error) {
+	return func(ctx context.Context, caseID string) (map[string]bool, error) {
 		owned := map[string]bool{}
 		// Nothing (or nobody) to match against: no task, or a caller with no OU
 		// handle. Skip the lookups entirely.
-		if rootWorkflowID == "" || ouHandle == "" {
+		if caseID == "" || ouHandle == "" {
 			return owned, nil
 		}
 		userCompanyID, err := m.company.CompanyIDByOUHandle(ctx, ouHandle)
@@ -107,7 +108,7 @@ func (m *Middleware) ownedRolesFor(ouHandle string) taskauthz.OwnedRolesFunc {
 		if userCompanyID == "" {
 			return owned, nil // no company profile — owns nothing; skip ownership lookup
 		}
-		traderCompanyID, chaCompanyID, err := m.ownership.GetOwnership(ctx, rootWorkflowID)
+		traderCompanyID, chaCompanyID, err := m.ownership.GetOwnership(ctx, caseID)
 		if err != nil {
 			return nil, err
 		}

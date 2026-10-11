@@ -95,10 +95,10 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// RootWorkflowID is the consignment id, so this decides the caller's access
+	// The case ID is the consignment id, so this decides the caller's access
 	// from their role-tied ownership of the task's consignment, and returns the
 	// claims that shape their view of it.
-	claims, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.RootWorkflowID)
+	claims, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.CaseID)
 	if err != nil {
 		if !errors.Is(err, readauthz.ErrDenied) {
 			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)

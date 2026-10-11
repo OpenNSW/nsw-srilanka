@@ -40,10 +40,10 @@ func (f fakeCaseRepo) ListWorkflows(_ context.Context, caseID string) ([]CaseWor
 	return f.workflows[caseID], nil
 }
 
-type fakeTasks map[string][]store.TaskRecord // root workflow id -> tasks
+type fakeTasks map[string][]store.TaskRecord // case id -> tasks
 
-func (f fakeTasks) GetAllTasks(_ context.Context, rootWorkflowID string) []store.TaskRecord {
-	return f[rootWorkflowID]
+func (f fakeTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
+	return f[caseID]
 }
 
 func requestAs(roles []string, target string, id string) *http.Request {

@@ -147,7 +147,7 @@ func TestExtension_Execute(t *testing.T) {
 			if !tc.noInput {
 				ctx = taskauthz.WithInput(ctx, in)
 			}
-			record := &store.TaskRecord{TaskID: "task-1", State: tc.state, RootWorkflowID: "c1"}
+			record := &store.TaskRecord{TaskID: "task-1", State: tc.state, CaseID: "c1"}
 
 			err := NewExtension(testCatalog()).Execute(ctx, record, map[string]any{"__command": tc.command}, mustProps(t, tc.props))
 
