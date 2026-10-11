@@ -73,6 +73,21 @@ export async function createConsignment(): Promise<CreateConsignmentResponse> {
   return data
 }
 
+// Starts one of the consignment's startableFlows as its own workflow on the consignment; its
+// tasks then appear among the consignment's workflow nodes.
+export async function startConsignmentFlow(
+  consignmentId: string,
+  templateId: string,
+  inputs?: Record<string, unknown>,
+): Promise<void> {
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/consignments/${encodeURIComponent(consignmentId)}/flows`,
+    method: 'POST',
+    data: { templateId, inputs },
+    attachToken: true,
+  })
+}
+
 export async function getConsignment(id: string): Promise<Consignment | null> {
   try {
     const { data } = await http.request<Consignment>({

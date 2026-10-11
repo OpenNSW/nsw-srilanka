@@ -472,6 +472,7 @@ components:
         - traderId
         - traderCompanyId
         - workflowNodes
+        - startableFlows
       properties:
         id:
           type: string
@@ -500,6 +501,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
+        startableFlows:
+          type: array
+          description: The flows a trader or CHA may start on the consignment.
+          items:
+            $ref: '#/components/schemas/FlowOption'
+
+    FlowOption:
+      type: object
+      required:
+        - templateId
+        - label
+      properties:
+        templateId:
+          type: string
+        label:
+          type: string
 
     AdminDetailDTO:
       description: The consignment's full detail plus its flows.

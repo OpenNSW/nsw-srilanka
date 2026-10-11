@@ -99,6 +99,13 @@ const en = {
           consignmentId: 'Consignment ID',
           dateCreated: 'Date Created',
         },
+        flows: {
+          confirmTitle: 'Start {{label}}?',
+          confirmDescription: 'This starts {{label}} on the consignment. Its steps appear in the list below.',
+          cancel: 'Cancel',
+          start: 'Start',
+          failed: 'Could not start {{label}}. Please try again.',
+        },
         noWorkflow: {
           title: 'No Workflow Steps',
           description: "This consignment doesn't have any workflow steps configured.",

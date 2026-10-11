@@ -4,6 +4,7 @@ import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { ActionListView } from '@/features/consignment/components/WorkflowViewer'
+import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
@@ -30,12 +31,16 @@ interface ConsignmentDetailScreenProps {
   backTo?: string
   // Accessible label for the back button. Defaults to matching the trader/CHA backTo default.
   backLabel?: string
+  // Whether to offer the consignment's startableFlows. The admin view, whose callers cannot
+  // start flows, turns it off.
+  canStartFlows?: boolean
 }
 
 export function ConsignmentDetailScreen({
   fetcher = getConsignment,
   backTo = '/consignments',
   backLabel = 'Back to consignments list',
+  canStartFlows = true,
 }: ConsignmentDetailScreenProps = {}) {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
@@ -280,6 +285,15 @@ export function ConsignmentDetailScreen({
         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
           {consignment.flow}
         </Badge>
+        {canStartFlows && (
+          <div className="ml-auto">
+            <StartFlowButtons
+              consignmentId={consignment.id}
+              flows={consignment.startableFlows ?? []}
+              onStarted={handleRefresh}
+            />
+          </div>
+        )}
       </div>
 
       <div className="mb-4 md:mb-6 flex items-start gap-10">

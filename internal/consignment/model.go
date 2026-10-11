@@ -123,6 +123,17 @@ type DetailDTO struct {
 	CreatedAt       string                    `json:"createdAt"`       // Timestamp of consignment creation
 	UpdatedAt       string                    `json:"updatedAt"`       // Timestamp of last consignment update
 	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details
+	// StartableFlows are the flows the caller may start on the consignment
+	// (POST /api/v1/consignments/{id}/flows).
+	StartableFlows []FlowOption `json:"startableFlows"`
+}
+
+// StartFlowRequest is the request body for POST /api/v1/consignments/{id}/flows.
+type StartFlowRequest struct {
+	// TemplateID names one of the consignment's startable flows (DetailDTO.StartableFlows).
+	TemplateID string `json:"templateId"`
+	// Inputs seed the flow's variables. Optional.
+	Inputs map[string]any `json:"inputs,omitempty"`
 }
 
 // AdminDetailDTO is the ops/admin view of a consignment: its detail plus its flows, so an

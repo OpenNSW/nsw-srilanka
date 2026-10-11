@@ -111,7 +111,7 @@ func (m *MockUserService) Health(ctx context.Context) error {
 // immediately if construction errors.
 func mustNewService(t *testing.T, db *gorm.DB, artifactRegistry *artifact.Registry, chaService cha.Service, companyService company.Service, userService user.Service, taskStore TaskStore) *Service {
 	t.Helper()
-	svc, err := NewService(db, artifactRegistry, chaService, companyService, userService, taskStore, testCatalogRoles)
+	svc, err := NewService(db, artifactRegistry, chaService, companyService, userService, taskStore, testCatalogRoles, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

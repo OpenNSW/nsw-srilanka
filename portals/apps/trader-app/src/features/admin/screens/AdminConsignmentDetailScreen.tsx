@@ -14,6 +14,7 @@ export function AdminConsignmentDetailScreen() {
       fetcher={getConsignmentForAdmin}
       backTo={`/admin/consignments/${consignmentId}`}
       backLabel="Back to engine status"
+      canStartFlows={false}
     />
   )
 }
