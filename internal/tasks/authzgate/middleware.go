@@ -80,10 +80,14 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	case authn.KindClient:
 		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
 	case authn.KindUser:
+		// TNSW does not require a claim to submit: a step is already limited to the
+		// trader or CHA company that owns the consignment. Users can still claim
+		// tasks, to show the rest of their company who is working on one.
 		return taskauthz.Input{
 			Kind:       taskauthz.KindUser,
 			Roles:      p.Roles,
 			OwnedRoles: m.ownedRolesFor(p.OUHandle),
+			UserID:     p.UserID,
 		}, true
 	default:
 		return taskauthz.Input{}, false
