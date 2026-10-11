@@ -36,9 +36,13 @@ type Consignment struct {
 	UpdatedAt time.Time `gorm:"type:timestamptz;column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
 
 	// Core attributes
-	Name  *string `gorm:"type:varchar(255);column:name" json:"name,omitempty"`
-	Flow  Flow    `gorm:"type:varchar(50);column:flow;not null" json:"flow"`   // IMPORT or EXPORT
-	State State   `gorm:"type:varchar(50);column:state;not null" json:"state"` // IN_PROGRESS → FINISHED
+	Flow Flow `gorm:"type:varchar(50);column:flow;not null" json:"flow"` // IMPORT or EXPORT
+
+	// Name and State live on the consignment's cases row (see internal/caseflow), which
+	// shares its ID. They are read through a join (Service.withCase) and never written
+	// through this struct; caseflow keeps State in step with the consignment's flows.
+	Name  *string `gorm:"->;column:name" json:"name,omitempty"`
+	State State   `gorm:"->;column:state" json:"state"` // IN_PROGRESS → FINISHED
 
 	// Trader
 	TraderID        string `gorm:"type:varchar(100);column:trader_id;not null" json:"traderId"`                // Trader user who created the consignment
@@ -150,13 +154,3 @@ type Filter struct {
 	Offset          *int    `json:"offset,omitempty"`
 	Limit           *int    `json:"limit,omitempty"`
 }
-
-// ── Internal ──────────────────────────────────────────────────────────────────
-
-// WorkflowStatus represents the lifecycle status received from the workflow engine,
-// used to propagate state changes to the consignment domain.
-type WorkflowStatus string
-
-const (
-	WorkflowStatusCompleted WorkflowStatus = "COMPLETED"
-)

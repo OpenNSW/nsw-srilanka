@@ -252,7 +252,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
 
 	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+	require.NoError(t, svc.RegisterFlowStarter(&flowStarterSpy{}))
 	auditor := &mockAuditor{}
 	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
 
@@ -262,9 +262,9 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
-	mockWM.On("StartWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return(nil)
 
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
