@@ -95,6 +95,13 @@ func (r *repository) Record(ctx context.Context, f Flow) error {
 		if caseResult.Error != nil {
 			return caseResult.Error
 		}
+		// The flow row goes in before the case is reopened below, and that order is what keeps
+		// this safe against MarkCompleted finishing the case at the same moment. The insert's
+		// foreign key check on case_flows.case_id takes a key-share lock on the case row, which
+		// conflicts with MarkCompleted's FOR UPDATE, so one of the two waits for the other.
+		// The reopen UPDATE alone would not: while the case reads IN_PROGRESS it matches no row
+		// and takes no lock. Dropping that foreign key, or reopening before the insert, would
+		// let the case be marked FINISHED with this flow still pending.
 		result := tx.Exec(insertFlow, f.WorkflowID, f.CaseID, f.TemplateID, StatusStarting, f.Payload)
 		if result.Error != nil {
 			return result.Error
