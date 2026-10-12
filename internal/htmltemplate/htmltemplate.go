@@ -6,7 +6,6 @@ import (
 	"context"
 
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/htmlgen"
 )
 
 // Kind is the manifest kind of an htmlgen template: the target HTML with
@@ -20,11 +19,11 @@ type loadable struct {
 
 func (loadable) Kind() artifact.Kind { return Kind }
 
-// Parse validates raw as an htmlgen template that calls no resolvers.
+// Parse keeps the source as it is. A template is loaded each time it is
+// rendered, and rendering compiles and checks it, so checking it here as well
+// would only repeat that. Which resolvers it may call is up to whoever renders
+// it.
 func (l *loadable) Parse(raw []byte) error {
-	if err := htmlgen.Validate(raw); err != nil {
-		return err
-	}
 	l.src = raw
 	return nil
 }

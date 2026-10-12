@@ -157,6 +157,8 @@ func TestHTMLDocumentGenerator_Failures(t *testing.T) {
 		"invalid config":       {props: `[]`},
 		"unknown template":     {props: `{"template_id": "nope"}`},
 		"missing namespace":    {props: `{"template_id": "permit"}`, namespace: "-"},
+		"broken template":      {props: `{"template_id": "permit"}`, templates: fakeTemplates{"permit": `<p>{{ .a </p>`}, wantIs: htmlgen.ErrParseTemplate},
+		"unsafe template":      {props: `{"template_id": "permit"}`, templates: fakeTemplates{"permit": `<a href="{{ .u }}`}, wantIs: htmlgen.ErrUnsafeTemplate},
 		"render failure":       {props: `{"template_id": "permit"}`, templates: fakeTemplates{"permit": `{{ .application }}`}, wantIs: htmlgen.ErrUnsupportedValue},
 		"unsafe value refused": {props: `{"template_id": "permit"}`, templates: fakeTemplates{"permit": `<a href="{{ .link }}">x</a>`}, wantIs: htmlgen.ErrUnsafeValue},
 		"storage failure":      {props: `{"template_id": "permit"}`, saveErr: storeErr, wantIs: storeErr},

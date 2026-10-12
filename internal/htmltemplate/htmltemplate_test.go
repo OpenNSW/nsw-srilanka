@@ -7,7 +7,6 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/testutil"
-	"github.com/OpenNSW/core/htmlgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,11 +19,9 @@ func TestLoad(t *testing.T) {
 	reg := artifact.NewRegistry(testutil.MemLoader{
 		"npqs/permit.gohtml": []byte(permitTemplate),
 		"npqs/broken.gohtml": []byte(`<p>{{ .a </p>`),
-		"npqs/unsafe.gohtml": []byte(`<a href="{{ .u }}`),
 	})
 	reg.RegisterArtifact("permit", Kind, "", "npqs/permit.gohtml")
 	reg.RegisterArtifact("broken", Kind, "", "npqs/broken.gohtml")
-	reg.RegisterArtifact("unsafe", Kind, "", "npqs/unsafe.gohtml")
 	reg.RegisterArtifact("wrong-kind", generictemplate.Kind, "", "npqs/permit.gohtml")
 	ctx := context.Background()
 
@@ -32,11 +29,9 @@ func TestLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, permitTemplate, string(src))
 
-	_, err = Load(ctx, reg, "broken")
-	assert.ErrorIs(t, err, htmlgen.ErrParseTemplate, "a template is validated as it is loaded")
-
-	_, err = Load(ctx, reg, "unsafe")
-	assert.ErrorIs(t, err, htmlgen.ErrUnsafeTemplate, "a template is validated as it is loaded")
+	src, err = Load(ctx, reg, "broken")
+	require.NoError(t, err, "a template is checked when it is rendered, not as it is loaded")
+	assert.Equal(t, `<p>{{ .a </p>`, string(src))
 
 	_, err = Load(ctx, reg, "missing")
 	assert.ErrorIs(t, err, artifact.ErrNotFound)
