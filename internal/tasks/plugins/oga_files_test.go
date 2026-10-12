@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 )
 
 // tokenFor stands in for file tokens: "<client>/<value>".
@@ -98,6 +100,21 @@ func TestOGAFiles_TokenizeErrors(t *testing.T) {
 	failing.IssueForClient = func(string, string) (string, error) { return "", errors.New("no keyset") }
 	_, err = failing.tokenize(json.RawMessage(reviewRenderConfig), "submission", reviewInputs(t)["submission"], "cda")
 	assert.ErrorContains(t, err, "no keyset")
+}
+
+// A declared file field of another shape than declared is not pushed as it
+// is: the push fails, and nothing reaches the OGA.
+func TestExternalReview_DoesNotPushMismatchedFileFields(t *testing.T) {
+	m, pushed := newOGA(t)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	in := reviewInputs(t)
+	in["submission"].(map[string]any)["invoice"] = []any{"k-invoice", "k-other"}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review"}`))
+
+	require.ErrorIs(t, err, filefields.ErrShape)
+	assert.Empty(t, *pushed)
 }
 
 // newOGA stands up an OGA portal as the outbound service "cda", recording the
