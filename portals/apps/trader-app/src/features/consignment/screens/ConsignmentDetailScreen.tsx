@@ -90,7 +90,7 @@ export function ConsignmentDetailScreen({
 
         const awaitingProvisioning =
           (result.workflowNodes?.length ?? 0) === 0 &&
-          (result.state === 'INITIALIZED' || result.state === 'IN_PROGRESS')
+          result.state === 'IN_PROGRESS'
 
         if (awaitingProvisioning && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
@@ -154,7 +154,7 @@ export function ConsignmentDetailScreen({
 
         const awaitingProvisioning =
           (result.workflowNodes?.length ?? 0) === 0 &&
-          (result.state === 'INITIALIZED' || result.state === 'IN_PROGRESS')
+          result.state === 'IN_PROGRESS'
 
         if (awaitingProvisioning && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)

@@ -49,7 +49,7 @@ export interface CHA {
 
 export type TradeFlow = 'IMPORT' | 'EXPORT'
 
-export type ConsignmentState = 'INITIALIZED' | 'IN_PROGRESS' | 'FAILED' | 'FINISHED'
+export type ConsignmentState = 'IN_PROGRESS' | 'FINISHED'
 
 export type WorkflowNodeState = 'READY' | 'LOCKED' | 'IN_PROGRESS' | 'QUEUED_EXTERNALLY' | 'COMPLETED' | 'FAILED'
 

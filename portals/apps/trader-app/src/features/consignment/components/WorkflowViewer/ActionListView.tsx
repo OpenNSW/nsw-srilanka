@@ -44,7 +44,7 @@ export function ActionListView({
     }
   }, [filteredSteps])
 
-  const isConsignmentTerminal = consignmentState === 'FINISHED' || consignmentState === 'FAILED'
+  const isConsignmentTerminal = consignmentState === 'FINISHED'
 
   const RefreshButton =
     onRefresh && !isConsignmentTerminal ? (
