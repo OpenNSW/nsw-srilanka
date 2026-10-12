@@ -36,7 +36,11 @@ const (
 	errInvalidAdminAction    = "action must be one of RETRY, COMPLETE, ABORT"
 	errReasonRequired        = "reason is required"
 	errFlowNotAllowed        = "templateId is not a flow that can be started on this consignment"
+	errRequestBodyTooLarge   = "request body too large"
 )
+
+// maxStartFlowRequestBytes caps a StartFlowRequest body, which only names a template.
+const maxStartFlowRequestBytes = 1 << 10
 
 // validAdminActions maps the wire-format action string onto the core/workflow constant, and
 // doubles as the allowlist HandleResolveAdminIntervention validates against.
@@ -313,13 +317,24 @@ func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req StartFlowRequest
+	r.Body = http.MaxBytesReader(w, r.Body, maxStartFlowRequestBytes)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
-		return
+	err := dec.Decode(&req)
+	if err == nil {
+		// One JSON value only: anything after it is rejected too.
+		if err = dec.Decode(new(struct{})); errors.Is(err, io.EOF) {
+			err = nil
+		} else if err == nil {
+			err = errors.New("unexpected data after JSON value")
+		}
 	}
-	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			httputil.Error(w, r, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge)
+			return
+		}
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
 		return
 	}

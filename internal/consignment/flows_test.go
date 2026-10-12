@@ -161,6 +161,21 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 		w := call(t, svc, `{"templateId":"slpa_payment","workflowId":"x"}`, uuid.NewString())
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
+
+	t.Run("trailing data", func(t *testing.T) {
+		svc, _, flows := newFlowsService(t)
+		w := call(t, svc, `{"templateId":"slpa_payment"} {}`, uuid.NewString())
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Empty(t, flows.reqs)
+	})
+
+	t.Run("body too large", func(t *testing.T) {
+		svc, _, flows := newFlowsService(t)
+		body := `{"templateId":"` + strings.Repeat("a", maxStartFlowRequestBytes) + `"}`
+		w := call(t, svc, body, uuid.NewString())
+		assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+		assert.Empty(t, flows.reqs)
+	})
 }
 
 func TestDetailListsStartableFlows(t *testing.T) {
