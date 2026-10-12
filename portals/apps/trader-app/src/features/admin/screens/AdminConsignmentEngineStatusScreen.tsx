@@ -197,8 +197,11 @@ function ConsignmentDebugger({ consignmentId }: { consignmentId: string }) {
     )
   }
 
-  const selectedId = searchParams.get('flow') ?? consignment.flows[0]?.workflowId ?? null
-  const selectedFlow = consignment.flows.find((flow) => flow.workflowId === selectedId)
+  // ?flow= selects only among this consignment's flows; any other ID falls back to the
+  // first flow, so another workflow's nodes never show under this consignment.
+  const requestedId = searchParams.get('flow')
+  const selectedFlow = consignment.flows.find((flow) => flow.workflowId === requestedId) ?? consignment.flows[0]
+  const selectedId = selectedFlow?.workflowId ?? null
 
   return (
     <div className="p-4 md:p-6">
