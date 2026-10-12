@@ -52,8 +52,8 @@ func (f fakeOwnership) GetOwnership(context.Context, string) (string, string, er
 // adapter, consignment.ErrConsignmentNotFound propagated as a non-sentinel error
 // and the task-write handler mapped it to a 500. Reporting "no owner" instead
 // leaves the caller owning neither side, which the policy layer denies.
-func TestOwnershipResolverReportsMissingConsignmentAsNoOwner(t *testing.T) {
-	r := ownershipResolver{svc: fakeOwnership{err: consignment.ErrConsignmentNotFound}}
+func TestCaseOwnershipReportsMissingConsignmentAsNoOwner(t *testing.T) {
+	r := caseOwnership{svc: fakeOwnership{err: consignment.ErrConsignmentNotFound}}
 
 	trader, cha, err := r.GetOwnership(context.Background(), "gone")
 	if err != nil {
@@ -66,9 +66,9 @@ func TestOwnershipResolverReportsMissingConsignmentAsNoOwner(t *testing.T) {
 
 // Any other failure is a real one and must not be flattened into a denial:
 // silently reporting "no owner" would turn a database outage into a blanket 404.
-func TestOwnershipResolverPropagatesRealFailures(t *testing.T) {
+func TestCaseOwnershipPropagatesRealFailures(t *testing.T) {
 	boom := errors.New("connection refused")
-	r := ownershipResolver{svc: fakeOwnership{err: boom}}
+	r := caseOwnership{svc: fakeOwnership{err: boom}}
 
 	if _, _, err := r.GetOwnership(context.Background(), "c-1"); !errors.Is(err, boom) {
 		t.Errorf("got %v, want the underlying error propagated", err)
@@ -77,8 +77,8 @@ func TestOwnershipResolverPropagatesRealFailures(t *testing.T) {
 
 // The pass-through case: an existing consignment reports its two owner companies
 // unchanged.
-func TestOwnershipResolverPassesOwnersThrough(t *testing.T) {
-	r := ownershipResolver{svc: fakeOwnership{trader: "acme", cha: "clearco"}}
+func TestCaseOwnershipPassesOwnersThrough(t *testing.T) {
+	r := caseOwnership{svc: fakeOwnership{trader: "acme", cha: "clearco"}}
 
 	trader, cha, err := r.GetOwnership(context.Background(), "c-1")
 	if err != nil {
