@@ -22,11 +22,14 @@
 (?i)migrator
 (?i)namespaced?
 (?i)npm
+(?i)offboard(ing)?
+(?i)onboard(ing)?
 (?i)oxc
 (?i)params?
 (?i)pnpm
 (?i)Postgres
 (?i)proxied
+(?i)stdin
 (?i)substring
 (?i)subworkflows?
 (?i)TNSW
