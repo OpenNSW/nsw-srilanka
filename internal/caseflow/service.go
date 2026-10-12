@@ -11,6 +11,10 @@
 //
 // This package knows nothing of consignments or agencies; callers supply the case ID
 // and the template.
+//
+// The repository uses database/sql with plain SQL and no ORM, like core's refid stores:
+// its correctness rests on statement order and row locks (see Record and MarkCompleted),
+// which the SQL states directly. New repositories follow this style.
 package caseflow
 
 import (
@@ -175,6 +179,13 @@ func (s *Service) start(ctx context.Context, f *Flow, def workflow.WorkflowDefin
 		return fmt.Errorf("caseflow: failed to start workflow %q: %w", f.WorkflowID, err)
 	}
 	return nil
+}
+
+// EnsureCase creates the cases row for caseID if it does not exist yet, so a domain row
+// that references the case (a consignment) can be inserted after it. It runs on its own:
+// if the domain insert then fails, the empty case is left behind, which is harmless.
+func (s *Service) EnsureCase(ctx context.Context, caseID string) error {
+	return s.repo.EnsureCase(ctx, caseID)
 }
 
 // Flows returns a case's flows, oldest first.

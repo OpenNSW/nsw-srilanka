@@ -2,32 +2,34 @@ package caseflow
 
 import (
 	"context"
+	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
-
-func newMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
-	t.Helper()
-	mockDB, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	db, err := gorm.Open(postgres.New(postgres.Config{Conn: mockDB, DriverName: "postgres"}),
-		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db, mock
-}
 
 func newMockRepo(t *testing.T) (Repository, sqlmock.Sqlmock) {
 	t.Helper()
-	db, mock := newMockDB(t)
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	return NewRepository(db), mock
+}
+
+func TestEnsureCase(t *testing.T) {
+	repo, mock := newMockRepo(t)
+	mock.ExpectExec(`INSERT INTO cases .* ON CONFLICT \(id\) DO NOTHING`).WithArgs("C1").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := repo.EnsureCase(context.Background(), "C1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRecord(t *testing.T) {
@@ -41,11 +43,29 @@ func TestRecord(t *testing.T) {
 			WithArgs("C1:export:u1", "C1", "export", StatusStarting, []byte(`{"a":1}`)).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec(`UPDATE cases SET state`).
-			WithArgs(CaseInProgress, "C1", CaseInProgress).
+			WithArgs(CaseInProgress, "C1").
 			WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectCommit()
 
 		if err := repo.Record(context.Background(), f); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("no payload is stored as NULL", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectBegin()
+		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec(`INSERT INTO case_flows`).
+			WithArgs("C1:export:u2", "C1", "export", StatusStarting, nil).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectCommit()
+
+		if err := repo.Record(context.Background(), Flow{WorkflowID: "C1:export:u2", CaseID: "C1", TemplateID: "export"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -83,6 +103,21 @@ func TestRecord(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("a failed insert rolls back", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectBegin()
+		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`INSERT INTO case_flows`).WillReturnError(sql.ErrConnDone)
+		mock.ExpectRollback()
+
+		if err := repo.Record(context.Background(), f); err == nil {
+			t.Fatal("want the insert's error")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestMarkStarted(t *testing.T) {
@@ -93,6 +128,45 @@ func TestMarkStarted(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		if err := repo.MarkStarted(context.Background(), "W1"); err != ErrFlowNotFound {
+			t.Fatalf("err = %v, want ErrFlowNotFound", err)
+		}
+	})
+}
+
+func TestGet(t *testing.T) {
+	columns := []string{"workflow_id", "case_id", "template_id", "status", "payload", "created_at", "updated_at"}
+	now := time.Now()
+
+	t.Run("scans the row", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(`SELECT workflow_id.* FROM case_flows\s+WHERE workflow_id = \$1`).WithArgs("W1").
+			WillReturnRows(sqlmock.NewRows(columns).AddRow("W1", "C1", "export", "STARTED", []byte(`{"a":1}`), now, now))
+
+		f, err := repo.Get(context.Background(), "W1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.CaseID != "C1" || f.Status != StatusStarted || string(f.Payload) != `{"a":1}` {
+			t.Errorf("got %+v", f)
+		}
+	})
+
+	t.Run("NULL payload", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(`FROM case_flows`).
+			WillReturnRows(sqlmock.NewRows(columns).AddRow("W1", "C1", "export", "STARTING", nil, now, now))
+
+		f, err := repo.Get(context.Background(), "W1")
+		if err != nil || f.Payload != nil {
+			t.Fatalf("payload = %q, err = %v; want nil, nil", f.Payload, err)
+		}
+	})
+
+	t.Run("unknown workflow", func(t *testing.T) {
+		repo, mock := newMockRepo(t)
+		mock.ExpectQuery(`FROM case_flows`).WillReturnRows(sqlmock.NewRows(columns))
+
+		if _, err := repo.Get(context.Background(), "W1"); err != ErrFlowNotFound {
 			t.Fatalf("err = %v, want ErrFlowNotFound", err)
 		}
 	})
@@ -109,7 +183,7 @@ func TestMarkCompleted(t *testing.T) {
 		mock.ExpectExec(`UPDATE case_flows SET status`).WithArgs(StatusCompleted, "W1").
 			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec(`UPDATE cases SET state`).
-			WithArgs(CaseFinished, "C1", CaseFinished, "C1", StatusCompleted).
+			WithArgs(CaseFinished, "C1", StatusCompleted).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectCommit()
 
@@ -137,17 +211,4 @@ func TestMarkCompleted(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-}
-
-func TestEnsureCase(t *testing.T) {
-	db, mock := newMockDB(t)
-	mock.ExpectExec(`INSERT INTO cases .* ON CONFLICT \(id\) DO NOTHING`).WithArgs("C1").
-		WillReturnResult(sqlmock.NewResult(0, 0))
-
-	if err := EnsureCase(context.Background(), db, "C1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
 }

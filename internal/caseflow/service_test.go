@@ -37,6 +37,8 @@ func newMemRepo(rows ...Flow) *memRepo {
 	return r
 }
 
+func (r *memRepo) EnsureCase(context.Context, string) error { return nil }
+
 func (r *memRepo) Record(_ context.Context, f Flow) error {
 	if _, ok := r.flows[f.WorkflowID]; !ok {
 		f.Status = StatusStarting
