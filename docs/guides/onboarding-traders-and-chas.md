@@ -96,26 +96,33 @@ Create a child OU under **Private Sector** (handle `private-sector`).
 | Name        | `ACME EXPORTS (PVT) LTD` |
 | Description | free text                |
 
-**API** (same calls `idp/sample-resources.sh` makes):
+**API** (same calls `idp/sample-resources.sh` makes). Read the management token with a
+silent prompt so it stays out of shell history, and send it from a file descriptor so it
+never appears in `curl`'s arguments, which other users can see in the process list:
 
 ```sh
 IDP=https://idp.example.com
-TOKEN=...   # management token
+read -rs -p 'Management token: ' TOKEN; echo
 
-PRIVATE_SECTOR_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-  "$IDP/organization-units/tree/private-sector" | jq -r .id)
+# curl with the auth header read from a file descriptor; request bodies go on stdin (-d @-).
+idp() {
+  curl -s -H @<(printf 'Authorization: Bearer %s\n' "$TOKEN") \
+    -H 'Content-Type: application/json' "$@"
+}
 
-curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "$IDP/organization-units" -d "{
-    \"handle\": \"acme-exports\",
-    \"name\": \"ACME EXPORTS (PVT) LTD\",
-    \"description\": \"ACME EXPORTS (PVT) LTD\",
-    \"parent\": \"$PRIVATE_SECTOR_ID\"
-  }" | jq .
+PRIVATE_SECTOR_ID=$(idp "$IDP/organization-units/tree/private-sector" | jq -r .id)
 
-OU_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-  "$IDP/organization-units/tree/private-sector/acme-exports" | jq -r .id)
+jq -n --arg parent "$PRIVATE_SECTOR_ID" '{
+  handle: "acme-exports",
+  name: "ACME EXPORTS (PVT) LTD",
+  description: "ACME EXPORTS (PVT) LTD",
+  parent: $parent
+}' | idp -X POST "$IDP/organization-units" -d @- | jq .
+
+OU_ID=$(idp "$IDP/organization-units/tree/private-sector/acme-exports" | jq -r .id)
 ```
+
+Run the later API steps in the same shell, and `unset TOKEN` when you are done.
 
 The **handle** is what ends up in the token. Write it down exactly; Step 4 needs it.
 
@@ -129,22 +136,27 @@ Create each user in the new OU with user type **`Private_User`**. That type requ
 
 **API:**
 
-```sh
-curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "$IDP/users" -d "$(jq -n --arg ou "$OU_ID" '{
-    type: "Private_User",
-    ouId: $ou,
-    attributes: {
-      username: "kamal",
-      password: "<initial password>",
-      email: "kamal@acme-exports.lk",
-      given_name: "Kamal",
-      family_name: "Perera",
-      phone_number: "+94771234567"
-    }
-  }')" | jq .
+The initial password is prompted for too, and reaches `jq` through its environment
+(`$ENV`) rather than its arguments:
 
-USER_ID=$(curl -s -H "Authorization: Bearer $TOKEN" "$IDP/users?limit=100&offset=0" \
+```sh
+read -rs -p 'Initial password for kamal: ' INITIAL_PASSWORD; echo
+
+INITIAL_PASSWORD="$INITIAL_PASSWORD" jq -n --arg ou "$OU_ID" '{
+  type: "Private_User",
+  ouId: $ou,
+  attributes: {
+    username: "kamal",
+    password: $ENV.INITIAL_PASSWORD,
+    email: "kamal@acme-exports.lk",
+    given_name: "Kamal",
+    family_name: "Perera",
+    phone_number: "+94771234567"
+  }
+}' | idp -X POST "$IDP/users" -d @- | jq .
+unset INITIAL_PASSWORD
+
+USER_ID=$(idp "$IDP/users?limit=100&offset=0" \
   | jq -r '.users[] | select(.attributes.username == "kamal") | .id')
 ```
 
@@ -167,12 +179,11 @@ Adding a user to `CHA` only makes sense if the company will have `hasCha: true` 
 **API:**
 
 ```sh
-GROUP_ID=$(curl -s -H "Authorization: Bearer $TOKEN" "$IDP/groups?limit=100&offset=0" \
+GROUP_ID=$(idp "$IDP/groups?limit=100&offset=0" \
   | jq -r --arg ou "$PRIVATE_SECTOR_ID" '.groups[] | select(.name == "Traders" and .ouId == $ou) | .id')
 
-curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "$IDP/groups/$GROUP_ID/members/add" \
-  -d "{\"members\": [{\"id\": \"$USER_ID\", \"type\": \"user\"}]}" | jq .
+jq -n --arg id "$USER_ID" '{members: [{id: $id, type: "user"}]}' \
+  | idp -X POST "$IDP/groups/$GROUP_ID/members/add" -d @- | jq .
 ```
 
 Repeat with `CHA` as needed.
