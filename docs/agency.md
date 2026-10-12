@@ -122,7 +122,8 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
 ## Task configs
 
 Each `taskCode` a caller may inject has a `task_config` artifact, registered in the
-agency manifest under the task code as its id:
+agency manifests under the task code as its id. An inject records the manifest version
+current when it arrives, and the workflow runs on it:
 
 ```json
 {
@@ -136,7 +137,7 @@ agency manifest under the task code as its id:
 This is `schemaVersion` 2, as defined by `schemas/taskconfig.v2.schema.json` in
 `one-trade-artifacts`; version 1 configs are rejected. It follows the sibling
 nsw-agency service's `task_config` (same kind name, lookup by manifest id, parsed and
-validated on every load, no startup validation), but that service reads version 1,
+validated on every load), but that service reads version 1,
 which defines the task inline. Version 2 has `workflow` in place of its `forms`,
 `behavior` and `permissions`: here the workflow's
 own artifacts (render config, review workflow) decide screens and outcomes. `meta`

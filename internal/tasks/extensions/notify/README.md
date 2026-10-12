@@ -89,8 +89,9 @@ to weave in data the trader entered. The document is JSON with up to three
   blank) — a broken template is caught, not sent half-empty.
 - **`html_body` is auto-escaped**; `subject` and `body` are plain text.
 
-**Register the document** in the artifacts `manifest.json` as a `generic_template`
-whose `id` matches `template_id`, then restart the server. The manifest and
+**Register the document** in a new artifacts manifest (`manifest_v<N+1>.json`) as a
+`generic_template` whose `id` matches `template_id`, then restart the server. A task
+resolves the template through the manifest version its flow started on. The manifest and
 templates live in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts)
 under `tnsw/` (fetched at startup by the artifact loader — see `ARTIFACT_*` env in
 [`.env.example`](../../../../.env.example)), not in this repo:

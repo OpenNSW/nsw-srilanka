@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/adapter/corechecks"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
+	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
@@ -36,6 +38,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
+	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig/taskconfigart"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
@@ -142,7 +145,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	}
 	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
 
-	artifactRegistry, err := initArtifactRegistry(ctx, cfg)
+	artifacts, err := initArtifacts(ctx, cfg)
 	if err != nil {
 		_ = database.Close(db)
 		return nil, err
@@ -196,7 +199,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.CompleteActivation(context.Background(), parentWorkflowID, "", parentStepID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -225,7 +228,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		upstream = agencyCompletion(db)
 	} else {
-		consignmentService, err = consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
+		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -248,7 +251,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
 		}
-		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifactRegistry)
+		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifacts)
 		if err := consignmentService.RegisterCaseFlows(flowService); err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -265,10 +268,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
-	pr.RegisterDefinitionHandler(func(templateID string) (workflow.WorkflowDefinition, error) {
-		def, err := workflowdef.Load(context.Background(), artifactRegistry, templateID)
+	pr.RegisterDefinitionHandler(func(manifestVersion int, templateID string) (workflow.WorkflowDefinition, error) {
+		ctx := context.Background()
+		reg, err := artifacts.Registry(ctx, manifestVersion)
 		if err != nil {
-			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in artifact registry: %w", templateID, err)
+			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q: %w", templateID, err)
+		}
+		def, err := workflowdef.Load(ctx, reg, templateID)
+		if err != nil {
+			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in manifest version %d: %w", templateID, manifestVersion, err)
 		}
 		return def, nil
 	})
@@ -368,7 +376,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		paymentHandler = payment.NewHTTPHandler(paymentService)
 	}
 
-	staticDataHandler := staticdata.NewHandler(artifactRegistry)
+	staticDataHandler := staticdata.NewHandler(artifacts)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
@@ -476,7 +484,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
+		mountAgency(mux, db, artifacts, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
@@ -699,17 +707,28 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 	return rec.ID, nil
 }
 
-// registryTemplateProvider adapts the artifact registry to uiprojector's
-// TemplateProvider contract. Generic templates (JSONForms schemas, markdown
-// bodies, etc.) are resolved through generictemplate.Load.
+// registryTemplateProvider adapts the artifact manifests to uiprojector's
+// TemplateProvider contract and the notify extension's loader. Generic templates
+// (JSONForms schemas, markdown bodies, etc.) are resolved through generictemplate.Load
+// in the manifest version of the task being rendered or completed, which the task
+// manager puts on ctx (artifact.WithManifestVersion). A call without one is a wiring
+// fault: falling back to the current version would change a form under an open task.
 type registryTemplateProvider struct {
-	reg *artifact.Registry
+	artifacts *artifact.Set
 }
 
 func (p registryTemplateProvider) GetTemplate(ctx context.Context, id string) ([]byte, error) {
-	raw, err := generictemplate.Load(ctx, p.reg, id)
+	version, ok := artifact.ManifestVersionFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("template %q: no artifact manifest version on the context", id)
+	}
+	reg, err := p.artifacts.Registry(ctx, version)
 	if err != nil {
-		return nil, fmt.Errorf("template %q not found: %w", id, err)
+		return nil, fmt.Errorf("template %q: %w", id, err)
+	}
+	raw, err := generictemplate.Load(ctx, reg, id)
+	if err != nil {
+		return nil, fmt.Errorf("template %q not found in manifest version %d: %w", id, version, err)
 	}
 	return []byte(raw), nil
 }
@@ -758,7 +777,7 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
-	artifactRegistry *artifact.Registry,
+	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
@@ -776,7 +795,7 @@ func initTask(
 
 	// Construct UI projectors and the renderer/zoneview assembler
 	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector())
-	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{reg: artifactRegistry}, projectors)
+	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{artifacts: artifacts}, projectors)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)
 	}
@@ -821,13 +840,13 @@ func initTask(
 	}
 
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}); err != nil {
+	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{artifacts: artifacts}); err != nil {
 		return nil, nil, fmt.Errorf("register notification extension: %w", err)
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
-	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
+	tm = orchestrator.NewTaskManager(taskStore, artifacts, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
 
 	if err := workflowRunner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start micro workflow worker: %w", err)
@@ -846,28 +865,51 @@ func initTask(
 	}, stop, nil
 }
 
-// initArtifactRegistry initializes the artifact loader, registry, and registers
-// the manifest.
-func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Registry, error) {
+// initArtifacts creates the artifact loader and loads every published manifest
+// (manifest_v1.json, manifest_v2.json, …). New flows start on the highest version, or on
+// artifacts.manifestVersion when it pins one. Unless artifacts.skipStartupValidation is
+// set, every artifact of that version is fetched and checked first, so a manifest that
+// lists a missing file, a malformed artifact or a dangling reference stops the deploy.
+func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, error) {
 	artifactLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
 	}
 
-	data, err := artifactLoader.Load(ctx, artifact.ManifestFilename)
+	artifacts, err := artifact.LoadSet(ctx, artifactLoader, artifact.WithPinnedVersion(cfg.Artifacts.ManifestVersion))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load root manifest %q: %w", artifact.ManifestFilename, err)
+		return nil, fmt.Errorf("failed to load artifact manifests: %w", err)
 	}
 
-	var manifestCfg artifact.ManifestConfig
-	if err := json.Unmarshal(data, &manifestCfg); err != nil {
-		return nil, fmt.Errorf("failed to parse manifest %q: %w", artifact.ManifestFilename, err)
+	if cfg.Artifacts.SkipStartupValidation {
+		slog.WarnContext(ctx, "artifact manifest not validated at startup", "manifest_version", artifacts.Current())
+		return artifacts, nil
 	}
-
-	artifactRegistry := artifact.NewRegistry(artifactLoader)
-	if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
-		return nil, fmt.Errorf("failed to register manifest %q: %w", artifact.ManifestFilename, err)
+	if err := artifacts.Validate(ctx, artifacts.Current(), artifactChecks()); err != nil {
+		return nil, fmt.Errorf("artifact manifest %d is invalid: %w", artifacts.Current(), err)
 	}
+	slog.InfoContext(ctx, "artifact manifest validated", "manifest_version", artifacts.Current())
+	return artifacts, nil
+}
 
-	return artifactRegistry, nil
+// artifactChecks returns the check for every artifact kind this binary reads: core's
+// and the host's own. A step template's check also reports the templates its
+// notification extensions name, which only this binary knows the shape of.
+func artifactChecks() artifact.Checks {
+	checks := corechecks.Checks()
+	checks[taskconfigart.Kind] = taskconfigart.Check
+	checks[staticdata.Kind] = staticdata.Check
+	stepCheck := checks[steptemplate.Kind]
+	checks[steptemplate.Kind] = func(raw []byte) ([]artifact.Ref, error) {
+		refs, err := stepCheck(raw)
+		if err != nil {
+			return nil, err
+		}
+		extra, err := notify.TemplateRefs(raw)
+		if err != nil {
+			return nil, err
+		}
+		return append(refs, extra...), nil
+	}
+	return checks
 }

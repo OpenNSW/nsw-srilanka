@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	argus "github.com/LSFLK/argus/pkg/audit"
-	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
@@ -263,12 +262,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
 
-	loader := &mockLoader{content: make(map[string][]byte)}
-	reg := artifact.NewRegistry(loader)
-	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
-
-	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
+	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
 	auditor := &mockAuditor{}
 	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(auditor))

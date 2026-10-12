@@ -174,7 +174,7 @@ backend:
           maxOpenConns: 100
           maxConnLifetimeSeconds: 3600
 
-    # Workflow/form definitions and manifest.json, fetched at startup from
+    # Workflow/form definitions and versioned manifests, fetched at startup from
     # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
     # image.
     artifactLoader:
@@ -187,6 +187,16 @@ backend:
         # Required for a private repo (lifts the rate limit on a public one).
         # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
         # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
+        # Startup validation fetches every artifact of the current manifest,
+        # far more than the unauthenticated REST limit allows: use the
+        # raw-content host for a public repo, or a token.
+        useRawHost: true
+
+    # Manifest version new flows start on (0: the highest published) and
+    # whether its artifacts are checked at startup (see configs/config.example.yaml).
+    artifacts:
+      manifestVersion: 0
+      skipStartupValidation: false
 
     # Trader/agency portals calling this API.
     cors:
