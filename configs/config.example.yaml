@@ -3,9 +3,9 @@
 # start without it. There are no built-in
 # defaults: every setting the server needs is written here, and one left out
 # (or empty) stops the server at startup rather than running on a value the
-# code chose. Only the optional sections (audit, refid, the inactive storage
-# and artifactLoader backends) may be left out; payments and REFID_GENERATOR
-# steps need refid.
+# code chose. Only the optional sections (audit, metrics, refid, the inactive
+# storage and artifactLoader backends) may be left out; payments and
+# REFID_GENERATOR steps need refid.
 #
 # This is the committed template for a native run (`go run ./cmd/server`,
 # `make test-e2e`), pointed at the `make deps` services on localhost;
@@ -173,6 +173,15 @@ temporal:
 audit:
   baseURL: http://localhost:3001
   apiKey: "{{env:ARGUS_API_KEY}}"
+
+# Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section) leaves
+# metrics off. serviceName is required when endpoint is set so TNSW, CDA and
+# Customs can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# metrics:
+#   endpoint: http://otel-collector:4318/v1/metrics
+#   serviceName: tnsw-api
+#   headers:
+#     Authorization: "{{env:METRICS_AUTH_HEADER}}"
 
 integrations:
   # Shared with SLPA out of band. Their Cargo Management System signs each

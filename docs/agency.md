@@ -164,10 +164,10 @@ finished if it was the last. A completion for anything that is not an injected
 workflow is an error, since nothing else runs parent workflows in an agency. The case
 row is locked while deciding, so two workflows completing at once cannot both leave it
 `IN_PROGRESS`.
-The intended next step, as a separate PR to main, is to move the trader/CHA columns
-off `consignments` into such a table and retire `consignments` in favour of `cases`.
-Until then TNSW writes only `consignments` and the agency only `cases`; nothing mirrors
-rows between them.
+TNSW uses the same table: a consignment is a case with the same id, and `consignments`
+holds only its trade data (`flow`, trader and CHA). TNSW starts and completes its flows
+through `internal/caseflow` (`case_flows`), which applies the same state rule. The
+agency still records its workflows in `agency_workflow`.
 
 The inject API keeps `consignmentId`, and so does the workflow variable of that name,
 because callers and artifacts speak trade. Internally it is the case id.

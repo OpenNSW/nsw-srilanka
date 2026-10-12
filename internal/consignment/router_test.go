@@ -96,7 +96,6 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID))
 
-	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
@@ -130,7 +129,6 @@ func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T)
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID))
 
-	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
@@ -239,6 +237,25 @@ func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
 	mockCompany.AssertExpectations(t)
 }
 
+func TestConsignmentRouter_HandleGetConsignments_RejectsUnknownFilters(t *testing.T) {
+	for _, query := range []string{"state=INITIALIZED", "state=FAILED", "flow=TRANSIT"} {
+		t.Run(query, func(t *testing.T) {
+			db, _ := setupTestDB(t)
+			mockCompany := new(MockCompanyService)
+			svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
+			r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+			req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&"+query, nil)
+			req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
+			w := httptest.NewRecorder()
+			r.HandleGetConsignments(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			mockCompany.AssertNotCalled(t, "GetCompanyByOUHandle", mock.Anything, mock.Anything)
+		})
+	}
+}
+
 func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockUser := new(MockUserService)
@@ -252,7 +269,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
 
 	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
 	auditor := &mockAuditor{}
 	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
 
@@ -262,7 +279,6 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
-	mockWM.On("StartWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return(nil)
 
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -360,7 +376,7 @@ var resolveRoutes = []resolveRoute{
 // resolveTestStepID on resolveTestWorkflowID. The handlers read their path values, not the
 // URL, so the same request serves both routes.
 func newResolveRequest(body string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/"+resolveTestWorkflowID+"/steps/"+resolveTestStepID+"/resolve", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/workflows/"+resolveTestWorkflowID+"/steps/"+resolveTestStepID+"/resolve", strings.NewReader(body))
 	req.SetPathValue("id", resolveTestWorkflowID)
 	req.SetPathValue("stepId", resolveTestStepID)
 	return req.WithContext(withAuthContext(req.Context(), "admin-1"))

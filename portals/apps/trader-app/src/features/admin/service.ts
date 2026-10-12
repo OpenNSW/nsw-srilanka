@@ -1,7 +1,6 @@
 import { http, HttpError } from '@/services/http'
 import { API_BASE_URL } from '@/constants'
-import type { AdminResolutionRequest, AdminWorkflowKind, EngineStatus } from './types'
-import type { ConsignmentDetail } from '@/features/consignment/types'
+import type { AdminConsignmentDetail, AdminResolutionRequest, AdminWorkflowKind, EngineStatus } from './types'
 
 // Ids are interpolated into URL paths through encodeURIComponent throughout this file. Workflow ids
 // are often "<name>:<uuid>" composites and node ids are workflow-definition ids, so both come from
@@ -23,12 +22,14 @@ async function fetchOrNull<T>(url: string): Promise<T | null> {
   }
 }
 
-export function getConsignmentEngineStatus(consignmentId: string): Promise<EngineStatus | null> {
-  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/consignments/${encodeURIComponent(consignmentId)}/engine-status`)
+// One workflow's engine state: a consignment's flow (AdminConsignmentDetail.flows) or a child
+// workflow of one (EngineNode.child_workflow_ids).
+export function getWorkflowEngineStatus(workflowId: string): Promise<EngineStatus | null> {
+  return fetchOrNull(`${API_BASE_URL}/api/v1/admin/workflows/${encodeURIComponent(workflowId)}/engine-status`)
 }
 
 // A TASK node's independent per-task ("micro") workflow (see EngineNode.task_workflow_id) — a
-// separate ID space/manager from getConsignmentEngineStatus's consignment/child-workflow IDs.
+// separate ID space/manager from getWorkflowEngineStatus's flow/child-workflow IDs.
 export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<EngineStatus | null> {
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/task/${encodeURIComponent(taskWorkflowId)}/engine-status`)
 }
@@ -36,10 +37,10 @@ export function getTaskWorkflowEngineStatus(taskWorkflowId: string): Promise<Eng
 // Resolves a node AWAITING_ADMIN, addressed by its parking: stepId is the node's step_id from the
 // engine status, so a resolve made after the node re-parked is rejected (409). workflowId is the
 // workflow instance containing the node, and
-// workflowKind says which route family it belongs to: 'consignment' for the root or a child branch
+// workflowKind says which route family it belongs to: 'workflow' for a flow or a child branch
 // (child_workflow_ids), 'task' for a task workflow (task_workflow_id), which is a separate ID space
 // with its own route, like the two engine-status functions above. Required rather than defaulted, so
-// a caller can't silently address a task workflow through the consignment route. Requires
+// a caller can't silently address a task workflow through the workflows route. Requires
 // nsw:consignment:adminwrite.
 export async function resolveAdminIntervention(
   workflowId: string,
@@ -47,7 +48,7 @@ export async function resolveAdminIntervention(
   request: AdminResolutionRequest,
   workflowKind: AdminWorkflowKind,
 ): Promise<void> {
-  const route = workflowKind === 'task' ? 'task' : 'consignments'
+  const route = workflowKind === 'task' ? 'task' : 'workflows'
   await http.request({
     url: `${API_BASE_URL}/api/v1/admin/${route}/${encodeURIComponent(workflowId)}/steps/${encodeURIComponent(stepId)}/resolve`,
     method: 'POST',
@@ -56,9 +57,9 @@ export async function resolveAdminIntervention(
   })
 }
 
-// Ops/admin view of the full consignment detail, no trader/CHA ownership check — not the
-// trader/CHA-facing getConsignment() in features/consignment/service.ts, which 404s/403s for
-// admins inspecting a consignment outside their own company.
-export function getConsignmentForAdmin(consignmentId: string): Promise<ConsignmentDetail | null> {
+// Ops/admin view of the full consignment detail plus its flows, no trader/CHA ownership check —
+// not the trader/CHA-facing getConsignment() in features/consignment/service.ts, which 404s/403s
+// for admins inspecting a consignment outside their own company.
+export function getConsignmentForAdmin(consignmentId: string): Promise<AdminConsignmentDetail | null> {
   return fetchOrNull(`${API_BASE_URL}/api/v1/admin/consignments/${encodeURIComponent(consignmentId)}`)
 }

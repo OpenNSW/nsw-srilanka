@@ -64,10 +64,8 @@ const en = {
         filter: {
           statePlaceholder: 'State',
           allStates: 'All States',
-          initialized: 'Initialized',
           inProgress: 'In Progress',
           finished: 'Finished',
-          failed: 'Failed',
           tradeFlowPlaceholder: 'Trade Flow',
           allTypes: 'All Types',
           import: 'Import',

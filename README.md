@@ -174,6 +174,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
+- Request metrics: set `metrics.endpoint` and `metrics.serviceName` in `config.yaml` to push OTLP/HTTP metrics. Leave `metrics.endpoint` empty (or omit the section) for a no-op.
 - Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)
@@ -224,8 +225,12 @@ REDIRECT-type gateways (e.g. `lankapay`) fire this webhook on their own after a 
 
 ## Database migrations
 
-Schema migrations live in `migrations/` as `NNN_name.sql` files, each holding a
-`-- @UP` and a `-- @DOWN` block. They are applied by the standalone migrator from
+Schema migrations live in `migrations/` as `NNNNNN_name.sql` files, numbered from
+`000001` in order, each holding a `-- @UP` and a `-- @DOWN` block. A new
+migration's `@DOWN` must undo its schema changes, and an applied migration is
+never edited: the **Migrations** check in CI enforces both (see
+[CONTRIBUTING.md](CONTRIBUTING.md#migration-check-migrationsyml)).
+They are applied by the standalone migrator from
 [`agency`](https://github.com/OpenNSW/agency) (`backend/cmd/migrate`),
 which tracks applied versions in a `__migrations` table and runs each migration
 in its own transaction.
@@ -263,7 +268,7 @@ CONFIG_PATH=./configs/config.yaml \
   migrate up        # or: status | down | generate <name>
 ```
 
-`migrate generate <name>` scaffolds the next `NNN_<name>.sql` with empty
+`migrate generate <name>` scaffolds the next `NNNNNN_<name>.sql` with empty
 `@UP`/`@DOWN` stubs; it needs no database, so `make migration name=<name>` runs
 it with no config file at all.
 

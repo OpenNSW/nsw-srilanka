@@ -15,7 +15,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
-	workflow "github.com/OpenNSW/core/workflow"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 )
@@ -94,24 +94,6 @@ func TestConsignmentService_RegisterWorkflowManager(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot be nil")
 }
 
-func TestConsignmentService_CompletionHandler(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
-	consignmentID := uuid.NewString()
-
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1`).
-		WithArgs(consignmentID, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "state"}).AddRow(consignmentID, "IN_PROGRESS"))
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`UPDATE "consignments"`).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	sqlMock.ExpectCommit()
-
-	err := svc.CompletionHandler(consignmentID, nil)
-	assert.NoError(t, err)
-	assert.NoError(t, sqlMock.ExpectationsWereMet())
-}
-
 func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockWM := new(MockWM)
@@ -123,12 +105,11 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 	consignmentID := uuid.NewString()
 	companyID := "company-trader"
 
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(consignmentID, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "My Test Consignment", "IMPORT", "trader1", companyID, "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByID(ctx, consignmentID, companyID, []string{"Trader"})
@@ -146,22 +127,24 @@ func TestConsignmentService_GetConsignmentByID(t *testing.T) {
 // reaches this path for a ConsignmentAdminRead-scoped caller (see HandleGetConsignmentByID).
 func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
-	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
-	svc := mustNewService(t, db, nil, nil, nil, nil, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+	svc := mustNewService(t, db, newExportRegistry(), nil, nil, nil, mockTaskStore)
 
 	ctx := context.Background()
 	consignmentID := uuid.NewString()
+	started := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
+	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{flows: []caseflow.Flow{
+		{WorkflowID: consignmentID + ":trade-export-v1:u1", CaseID: consignmentID, TemplateID: "trade-export-v1", Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
+		{WorkflowID: consignmentID + ":slpa_payment:u2", CaseID: consignmentID, TemplateID: "slpa_payment", Status: caseflow.StatusStarted, CreatedAt: started, UpdatedAt: started},
+	}}))
 
 	// Row belongs to a company entirely unrelated to whoever's inspecting it — there is no
 	// caller company to even compare against here, which is the point of this path.
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(consignmentID, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(consignmentID, "Someone Else's Consignment", "IMPORT", "trader1", "some-other-company", "IN_PROGRESS", time.Now(), time.Now()))
 
-	mockWM.On("GetStatus", ctx, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByIDForAdmin(ctx, consignmentID)
@@ -169,7 +152,14 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, consignmentID, result.ID)
 	assert.Equal(t, "Someone Else's Consignment", result.Name)
-	mockWM.AssertExpectations(t)
+
+	// Each flow is named by its definition's name, else its template ID.
+	require.Len(t, result.Flows, 2)
+	assert.Equal(t, FlowDTO{
+		WorkflowID: consignmentID + ":trade-export-v1:u1", TemplateID: "trade-export-v1", TemplateName: "Trade Export V1",
+		Status: "COMPLETED", CreatedAt: "2026-10-11T09:00:00Z", UpdatedAt: "2026-10-11T09:00:00Z",
+	}, result.Flows[0])
+	assert.Equal(t, "slpa_payment", result.Flows[1].TemplateName)
 	mockTaskStore.AssertExpectations(t)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
@@ -179,7 +169,7 @@ func TestConsignmentService_GetConsignmentByIDForAdmin_NotFound(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
@@ -195,7 +185,7 @@ func TestConsignmentService_GetConsignmentByID_AccessDenied(t *testing.T) {
 	id := uuid.NewString()
 	// The row belongs to other companies and the caller matches neither, so ErrAccessDenied is
 	// returned right after the single read — no workflow/task work is attempted (no WM, nil store).
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", "trader-co", "cha-co"))
@@ -216,7 +206,7 @@ func TestConsignmentService_GetConsignmentByID_CompanyMatchesCHASlot_TraderRoleO
 
 	id := uuid.NewString()
 	callerCompanyID := "company-cha"
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", "company-trader", callerCompanyID))
@@ -234,7 +224,7 @@ func TestConsignmentService_GetConsignmentByID_CompanyMatchesTraderSlot_CHARoleO
 
 	id := uuid.NewString()
 	callerCompanyID := "company-trader"
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(id, "IN_PROGRESS", callerCompanyID))
 
@@ -255,11 +245,10 @@ func TestConsignmentService_GetConsignmentByID_SameCompanyBothSlots_SingleRoleGr
 
 	id := uuid.NewString()
 	companyID := "company-both"
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(id, "IN_PROGRESS", companyID, companyID))
-	mockWM.On("GetStatus", mock.Anything, id).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, id).Return(([]store.TaskRecord)(nil))
 
 	result, err := svc.GetConsignmentByID(context.Background(), id, companyID, []string{"CHA"})
@@ -316,7 +305,7 @@ func TestConsignmentService_ListConsignments_EmptyQuery(t *testing.T) {
 	emptyQuery := ""
 
 	// Empty query string is ignored — no LIKE clause should appear
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE trader_company_id`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE trader_company_id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID, Query: &emptyQuery})
@@ -332,7 +321,7 @@ func TestConsignmentService_ListConsignments_TraderCompany_Empty(t *testing.T) {
 	ctx := context.Background()
 	companyID := "company-1"
 
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE trader_company_id = \$1`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE trader_company_id = \$1`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{TraderCompanyID: &companyID})
@@ -358,7 +347,7 @@ func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {
 	chaCompanyID := "cha-company-1"
 	consignmentID := uuid.NewString()
 
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" WHERE cha_company_id`).
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE cha_company_id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "state", "trader_id", "trader_company_id", "cha_company_id", "created_at", "updated_at"}).
 			AddRow(consignmentID, "EXPORT", "IN_PROGRESS", "trader1", "trader-co", chaCompanyID, time.Now(), time.Now()))
 
@@ -379,7 +368,7 @@ func TestConsignmentService_ListConsignments_WithFilters(t *testing.T) {
 	state := InProgress
 	flow := FlowExport
 
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" WHERE trader_company_id`).
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE trader_company_id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
 	result, err := svc.ListConsignments(ctx, Filter{
@@ -397,7 +386,7 @@ func TestConsignmentService_GetConsignmentByID_NotFound(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
@@ -405,20 +394,49 @@ func TestConsignmentService_GetConsignmentByID_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrConsignmentNotFound)
 }
 
-func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
-	mockUser := new(MockUserService)
-	mockCompany := new(MockCompanyService)
-	mockWM := new(MockWM)
-	mockTaskStore := new(MockTaskStore)
+// caseFlowsSpy records each case created and each StartFlow request, and answers StartFlow
+// with err; Flows returns flows.
+type caseFlowsSpy struct {
+	cases []string
+	reqs  []caseflow.StartRequest
+	err   error
+	flows []caseflow.Flow
+}
 
+func (f *caseFlowsSpy) EnsureCase(_ context.Context, caseID string) error {
+	f.cases = append(f.cases, caseID)
+	return nil
+}
+
+func (f *caseFlowsSpy) Flows(context.Context, string) ([]caseflow.Flow, error) {
+	return f.flows, f.err
+}
+
+func (f *caseFlowsSpy) StartFlow(_ context.Context, req caseflow.StartRequest) (*caseflow.Flow, error) {
+	f.reqs = append(f.reqs, req)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &caseflow.Flow{WorkflowID: req.WorkflowID, CaseID: req.CaseID, TemplateID: req.TemplateID, Status: caseflow.StatusStarted}, nil
+}
+
+func newExportRegistry() *artifact.Registry {
 	loader := &mockLoader{content: make(map[string][]byte)}
 	reg := artifact.NewRegistry(loader)
 	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
 	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
+	return reg
+}
 
-	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockUser := new(MockUserService)
+	mockCompany := new(MockCompanyService)
+	mockTaskStore := new(MockTaskStore)
+	flows := &caseFlowsSpy{}
+
+	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, mockTaskStore)
+	require.NoError(t, svc.RegisterCaseFlows(flows))
 
 	traderID := "trader1"
 	traderCompanyID := uuid.NewString()
@@ -426,12 +444,11 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
-	mockWM.On("StartWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return(nil)
 
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "flow", "trader_id", "trader_company_id", "state", "created_at", "updated_at"}).
 			AddRow(returnedID, "EXPORT", traderID, traderCompanyID, "IN_PROGRESS", time.Now(), time.Now()))
 	mockTaskStore.On("GetAllTasks", mock.Anything, returnedID).Return([]store.TaskRecord(nil))
@@ -441,9 +458,20 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, returnedID, result.ID)
 	assert.Equal(t, FlowExport, result.Flow)
+	assert.Equal(t, InProgress, result.State)
+
+	// The case is created first, then the export flow runs on it, under a workflow ID
+	// StartFlow builds.
+	require.Len(t, flows.reqs, 1)
+	req := flows.reqs[0]
+	assert.NotEmpty(t, req.CaseID)
+	assert.Equal(t, []string{req.CaseID}, flows.cases)
+	assert.Empty(t, req.WorkflowID)
+	assert.Equal(t, defaultExportWorkflowTemplateID, req.TemplateID)
+	assert.Contains(t, req.Vars, "traderCompany")
+
 	mockUser.AssertExpectations(t)
 	mockCompany.AssertExpectations(t)
-	mockWM.AssertExpectations(t)
 	mockTaskStore.AssertExpectations(t)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }
@@ -471,33 +499,48 @@ func TestConsignmentService_CreateAndStartConsignment_CompanyLookupFails(t *test
 	assert.Contains(t, err.Error(), "trader company lookup failed")
 }
 
-func TestConsignmentService_CreateAndStartConsignment_StartWorkflowFails(t *testing.T) {
+func TestConsignmentService_CreateAndStartConsignment_StartFlowFails(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockUser := new(MockUserService)
 	mockCompany := new(MockCompanyService)
-	mockWM := new(MockWM)
+	flows := &caseFlowsSpy{err: errors.New("workflow engine unavailable")}
 
-	loader := &mockLoader{content: make(map[string][]byte)}
-	reg := artifact.NewRegistry(loader)
-	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
-
-	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, nil)
-	require.NoError(t, svc.RegisterWorkflowManager(mockWM))
+	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, nil)
+	require.NoError(t, svc.RegisterCaseFlows(flows))
 
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", Data: []byte(`{}`)}, nil)
-	mockWM.On("StartWorkflow", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).
-		Return(errors.New("workflow engine unavailable"))
 
 	sqlMock.ExpectBegin()
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
-	sqlMock.ExpectRollback()
+	sqlMock.ExpectCommit()
 
 	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to register workflow")
+	assert.Contains(t, err.Error(), "failed to start the export flow")
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestConsignmentService_CreateAndStartConsignment_NoCaseFlows(t *testing.T) {
+	db, sqlMock := setupTestDB(t)
+	mockUser := new(MockUserService)
+	mockCompany := new(MockCompanyService)
+	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, nil)
+
+	mockUser.On("GetUser", mock.Anything, "trader1").Return(&user.Record{ID: "trader1", OUHandle: "trader-ou"}, nil)
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", Data: []byte(`{}`)}, nil)
+
+	_, err := svc.CreateAndStartConsignment(context.Background(), "trader1", defaultExportWorkflowTemplateID)
+	assert.ErrorContains(t, err, "no case flows registered")
+	// Nothing is written without a way to start the export flow.
+	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func TestConsignmentService_RegisterCaseFlows(t *testing.T) {
+	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
+	assert.ErrorContains(t, svc.RegisterCaseFlows(nil), "cannot be nil")
+	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
+	assert.ErrorContains(t, svc.RegisterCaseFlows(&caseFlowsSpy{}), "already registered")
 }
 
 func TestConsignmentService_GetConsignmentByID_DBError(t *testing.T) {
@@ -505,7 +548,7 @@ func TestConsignmentService_GetConsignmentByID_DBError(t *testing.T) {
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
 
 	id := uuid.NewString()
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnError(errors.New("connection refused"))
 
@@ -513,12 +556,6 @@ func TestConsignmentService_GetConsignmentByID_DBError(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, ErrConsignmentNotFound)
 	assert.Contains(t, err.Error(), "failed to retrieve consignment")
-}
-
-func TestConsignmentService_OnWorkflowStatusChanged_Default(t *testing.T) {
-	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
-	err := svc.OnWorkflowStatusChanged(context.Background(), nil, "wf-1", WorkflowStatus("UNKNOWN"))
-	assert.NoError(t, err)
 }
 
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) {
@@ -559,51 +596,17 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 
 func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {
 	// nil taskStore → buildNodeDTOsFromTaskRecords fails → buildConsignmentDetailDTO returns error.
-	// Also covers the getWorkflowStatus no-wm-registered warning path (s.wm == nil).
 	db, sqlMock := setupTestDB(t)
 	svc := mustNewService(t, db, nil, nil, nil, nil, nil) // no taskStore, no wm
 	id := uuid.NewString()
 
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
+	sqlMock.ExpectQuery(`SELECT consignments\.\*, cases\.name, cases\.state FROM "consignments" JOIN cases ON cases\.id = consignments\.id WHERE consignments\.id = \$1 ORDER BY "consignments"."id" LIMIT \$2`).
 		WithArgs(id, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(id, "IN_PROGRESS", "company-1"))
 
 	_, err := svc.GetConsignmentByID(context.Background(), id, "company-1", []string{"Trader"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "task store not initialized")
-}
-
-func TestConsignmentService_CompletionHandler_SaveFails(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
-	svc := mustNewService(t, db, nil, nil, nil, nil, nil)
-	id := uuid.NewString()
-
-	sqlMock.ExpectQuery(`SELECT \* FROM "consignments" WHERE id = \$1`).
-		WithArgs(id, 1).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "state"}).AddRow(id, "IN_PROGRESS"))
-	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`UPDATE "consignments"`).
-		WillReturnError(errors.New("constraint violation"))
-	sqlMock.ExpectRollback()
-
-	err := svc.CompletionHandler(id, nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to update consignment")
-	assert.NoError(t, sqlMock.ExpectationsWereMet())
-}
-
-func TestConsignmentService_startWorkflow_NoWM(t *testing.T) {
-	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
-	err := svc.startWorkflow(context.Background(), "id", workflow.WorkflowDefinition{}, nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no workflow manager registered")
-}
-
-func TestConsignmentService_getWorkflowStatus_NoWM(t *testing.T) {
-	svc := mustNewService(t, nil, nil, nil, nil, nil, nil)
-	err := svc.getWorkflowStatus(context.Background(), "id")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no workflow manager registered")
 }
 
 func TestConsignmentService_GetAgencySummary(t *testing.T) {

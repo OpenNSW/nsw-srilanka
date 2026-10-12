@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/core/pagination"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
@@ -29,13 +29,22 @@ type TaskStore interface {
 	GetAllTasks(ctx context.Context, parentWorkflowID string) []store.TaskRecord
 }
 
-// Service handles consignment-related operations.
-// It coordinates between workflow templates, nodes, and the workflow manager.
-// It also implements WorkflowEventHandler for domain-specific lifecycle callbacks.
+// CaseFlows creates a case and starts and lists its flows. *caseflow.Service satisfies it.
+type CaseFlows interface {
+	EnsureCase(ctx context.Context, caseID string) error
+	StartFlow(ctx context.Context, req caseflow.StartRequest) (*caseflow.Flow, error)
+	Flows(ctx context.Context, caseID string) ([]caseflow.Flow, error)
+}
+
+// Service handles consignment-related operations. A consignment is a case (see
+// internal/caseflow): its flows are started through flows, which also keeps the case's
+// state in step with them.
 type Service struct {
 	db               *gorm.DB
 	artifactRegistry *artifact.Registry
-	wm               workflow.Manager
+	flows            CaseFlows
+	// wm is the parent workflow manager, read for engine status and admin resolution.
+	wm workflow.Manager
 	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
 	// manager/task queue from wm.
 	taskWm         workflow.Manager
@@ -98,39 +107,20 @@ func (s *Service) RegisterTaskWorkflowManager(wm workflow.Manager) error {
 	return nil
 }
 
-// startWorkflow starts a workflow on the registered workflow manager.
-func (s *Service) startWorkflow(ctx context.Context, workflowID string, def workflow.WorkflowDefinition, vars map[string]any) error {
-	if s.wm == nil {
-		return fmt.Errorf("no workflow manager registered for ConsignmentService")
+// RegisterCaseFlows registers what starts and lists the consignment's flows.
+func (s *Service) RegisterCaseFlows(flows CaseFlows) error {
+	if s.flows != nil {
+		return fmt.Errorf("case flows already registered for ConsignmentService")
 	}
-	return s.wm.StartWorkflow(ctx, workflowID, def, vars)
-}
-
-// getWorkflowStatus checks that a workflow is reachable on the registered workflow manager.
-func (s *Service) getWorkflowStatus(ctx context.Context, workflowID string) error {
-	if s.wm == nil {
-		return fmt.Errorf("no workflow manager registered for ConsignmentService")
+	if flows == nil {
+		return fmt.Errorf("case flows cannot be nil")
 	}
-	_, err := s.wm.GetStatus(ctx, workflowID)
-	return err
+	s.flows = flows
+	return nil
 }
 
-// CompletionHandler is called by the workflow runtime when a workflow completes.
-func (s *Service) CompletionHandler(workflowID string, finalContext map[string]any) error {
-	return s.OnWorkflowStatusChanged(context.Background(), s.db, workflowID, WorkflowStatusCompleted)
-}
-
-// OnWorkflowStatusChanged handles workflow lifecycle state propagation to consignment domain state.
-func (s *Service) OnWorkflowStatusChanged(ctx context.Context, tx *gorm.DB, workflowID string, toStatus WorkflowStatus) error {
-	switch toStatus {
-	case WorkflowStatusCompleted:
-		return s.markConsignmentAsFinished(ctx, tx, workflowID)
-	default:
-		return nil
-	}
-}
-
-// CreateAndStartConsignment creates an export consignment and starts its workflow directly.
+// CreateAndStartConsignment creates an export consignment, with its cases row, and starts
+// its export flow.
 func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string, templateID string) (*DetailDTO, error) {
 	traderUser, err := s.userService.GetUser(ctx, traderID)
 	if err != nil {
@@ -148,9 +138,12 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	}
 	initialVars := map[string]any{"traderCompany": traderCompanyVars}
 
-	def, err := workflowdef.Load(ctx, s.artifactRegistry, templateID)
-	if err != nil {
+	// Checked before anything is written, so an unknown template creates no consignment.
+	if _, err := workflowdef.Load(ctx, s.artifactRegistry, templateID); err != nil {
 		return nil, fmt.Errorf("failed to get workflow template %q: %w", templateID, err)
+	}
+	if s.flows == nil {
+		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
 	}
 
 	consignment := &Consignment{
@@ -158,28 +151,31 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		Flow:            FlowExport,
 		TraderID:        traderID,
 		TraderCompanyID: traderCompany.ID,
-		State:           InProgress,
 	}
-
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", tx.Error)
+	// The case comes first: the consignment references it. caseflow creates it in its own
+	// statement, so a failed consignment insert leaves an empty case behind, which is
+	// harmless (a consignment is only ever listed through its consignments row).
+	// TODO(#653): once consignments move off GORM to database/sql, create the case and the
+	// consignment in one transaction (EnsureCase taking the *sql.Tx), so a failed insert
+	// leaves no empty case.
+	if err := s.flows.EnsureCase(ctx, consignment.ID); err != nil {
+		return nil, fmt.Errorf("failed to create case: %w", err)
 	}
-	defer tx.Rollback()
-
-	if err := tx.Create(consignment).Error; err != nil {
+	if err := s.db.WithContext(ctx).Create(consignment).Error; err != nil {
 		return nil, fmt.Errorf("failed to create consignment: %w", err)
 	}
 
-	if err := s.startWorkflow(ctx, consignment.ID, def, initialVars); err != nil {
-		return nil, fmt.Errorf("failed to register workflow: %w", err)
+	// The start runs after the commit, so the flow is recorded against a case that exists.
+	if _, err := s.flows.StartFlow(ctx, caseflow.StartRequest{
+		CaseID:     consignment.ID,
+		TemplateID: templateID,
+		Vars:       initialVars,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to start the export flow: %w", err)
 	}
 
-	if err := tx.Commit().Error; err != nil {
-		return nil, fmt.Errorf("failed to commit: %w", err)
-	}
-
-	if err := s.db.WithContext(ctx).First(consignment, "id = ?", consignment.ID).Error; err != nil {
+	consignment, err = s.fetchConsignmentRecord(ctx, consignment.ID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to reload consignment: %w", err)
 	}
 
@@ -225,20 +221,67 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	return s.buildConsignmentResponse(ctx, consignment)
 }
 
-// GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID but
-// performs no trader/CHA ownership check — callers must already be gated to ConsignmentAdminRead
-// by the router (see HandleAdminGetConsignmentByID).
-func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID string) (*DetailDTO, error) {
+// GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID, plus
+// the consignment's flows, but performs no trader/CHA ownership check — callers must already be
+// gated to ConsignmentAdminRead by the router (see HandleAdminGetConsignmentByID).
+func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID string) (*AdminDetailDTO, error) {
 	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
 	if err != nil {
 		return nil, err
 	}
-	return s.buildConsignmentResponse(ctx, consignment)
+	detail, err := s.buildConsignmentResponse(ctx, consignment)
+	if err != nil {
+		return nil, err
+	}
+	flows, err := s.flowDTOs(ctx, consignmentID)
+	if err != nil {
+		return nil, err
+	}
+	return &AdminDetailDTO{DetailDTO: *detail, Flows: flows}, nil
+}
+
+// flowDTOs lists the consignment's flows, oldest first, each named by its workflow
+// definition's name (its template ID when the definition has none or cannot be loaded).
+func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO, error) {
+	if s.flows == nil {
+		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
+	}
+	flows, err := s.flows.Flows(ctx, consignmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list flows of consignment %s: %w", consignmentID, err)
+	}
+	dtos := make([]FlowDTO, 0, len(flows))
+	for _, f := range flows {
+		name := f.TemplateID
+		if def, err := workflowdef.Load(ctx, s.artifactRegistry, f.TemplateID); err == nil && def.Name != "" {
+			name = def.Name
+		}
+		dtos = append(dtos, FlowDTO{
+			WorkflowID:   f.WorkflowID,
+			TemplateID:   f.TemplateID,
+			TemplateName: name,
+			Status:       string(f.Status),
+			CreatedAt:    f.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:    f.UpdatedAt.Format(time.RFC3339),
+		})
+	}
+	return dtos, nil
+}
+
+// consignmentColumns selects a Consignment from withCase, Name and State included.
+const consignmentColumns = "consignments.*, cases.name, cases.state"
+
+// withCase joins consignments to their cases row, which holds Name and State. Rows are
+// read with Select(consignmentColumns); columns both tables have (id, timestamps) are
+// qualified in conditions.
+func (s *Service) withCase(ctx context.Context) *gorm.DB {
+	return s.db.WithContext(ctx).Model(&Consignment{}).
+		Joins("JOIN cases ON cases.id = consignments.id")
 }
 
 func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID string) (*Consignment, error) {
 	var consignment Consignment
-	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
+	result := s.withCase(ctx).Select(consignmentColumns).First(&consignment, "consignments.id = ?", consignmentID)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, ErrConsignmentNotFound
@@ -249,10 +292,6 @@ func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID stri
 }
 
 func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Consignment) (*DetailDTO, error) {
-	if err := s.getWorkflowStatus(ctx, consignment.ID); err != nil {
-		slog.WarnContext(ctx, "workflow status check failed", "consignmentID", consignment.ID, "error", err)
-	}
-
 	responseDTO, err := s.buildConsignmentDetailDTO(ctx, consignment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build consignment response DTO: %w", err)
@@ -314,9 +353,9 @@ func (s *Service) ListConsignments(ctx context.Context, filter Filter) (*ListRes
 	}
 	var baseQuery *gorm.DB
 	if filter.CHACompanyID != nil {
-		baseQuery = s.db.WithContext(ctx).Model(&Consignment{}).Where("cha_company_id = ?", *filter.CHACompanyID)
+		baseQuery = s.withCase(ctx).Where("cha_company_id = ?", *filter.CHACompanyID)
 	} else {
-		baseQuery = s.db.WithContext(ctx).Model(&Consignment{}).Where("trader_company_id = ?", *filter.TraderCompanyID)
+		baseQuery = s.withCase(ctx).Where("trader_company_id = ?", *filter.TraderCompanyID)
 	}
 	return s.listConsignmentsWithBaseQuery(ctx, baseQuery, filter)
 }
@@ -329,7 +368,7 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 	filteredQuery := func() *gorm.DB {
 		q := baseQuery
 		if filter.State != nil {
-			q = q.Where("state = ?", *filter.State)
+			q = q.Where("cases.state = ?", *filter.State)
 		}
 		if filter.Flow != nil {
 			q = q.Where("flow = ?", *filter.Flow)
@@ -339,7 +378,7 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			escaped = strings.ReplaceAll(escaped, "%", "\\%")
 			escaped = strings.ReplaceAll(escaped, "_", "\\_")
 			queryVal := "%" + strings.ToLower(escaped) + "%"
-			q = q.Where("LOWER(id) LIKE ? ESCAPE '\\' OR LOWER(name) LIKE ? ESCAPE '\\'", queryVal, queryVal)
+			q = q.Where("LOWER(consignments.id) LIKE ? ESCAPE '\\' OR LOWER(cases.name) LIKE ? ESCAPE '\\'", queryVal, queryVal)
 		}
 		return q
 	}
@@ -347,9 +386,10 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 	var consignments []Consignment
 	if err := filteredQuery().
 		WithContext(ctx).
+		Select(consignmentColumns).
 		Offset(finalOffset).
 		Limit(finalLimit).
-		Order("created_at DESC").
+		Order("consignments.created_at DESC").
 		Find(&consignments).Error; err != nil {
 		return nil, fmt.Errorf("failed to retrieve consignments: %w", err)
 	}
@@ -403,19 +443,6 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 
 	result := pagination.NewPageResult(consignmentDTOs, totalCount, finalOffset, finalLimit)
 	return &result, nil
-}
-
-// markConsignmentAsFinished updates the consignment state to FINISHED.
-func (s *Service) markConsignmentAsFinished(ctx context.Context, tx *gorm.DB, consignmentID string) error {
-	var consignment Consignment
-	if err := tx.WithContext(ctx).First(&consignment, "id = ?", consignmentID).Error; err != nil {
-		return fmt.Errorf("failed to retrieve consignment %s: %w", consignmentID, err)
-	}
-	consignment.State = Finished
-	if err := tx.WithContext(ctx).Save(&consignment).Error; err != nil {
-		return fmt.Errorf("failed to update consignment %s state to FINISHED: %w", consignmentID, err)
-	}
-	return nil
 }
 
 // buildConsignmentDetailDTO builds a DetailDTO from a Consignment.
