@@ -1,21 +1,6 @@
 {
   "agencies": [
     {
-      "handle": "npqs",
-      "name": "NPQS",
-      "description": "National Plant Quarantine Service",
-      "officer": {
-        "username": "npqs_officer", "email": "npqs_officer@government.dev",
-        "givenName": "NPQS", "familyName": "Officer", "phoneNumber": "+94771234560",
-        "passwordEnv": { "override": "SAMPLE_NPQS_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
-      },
-      "portal": { "name": "NPQSPortalApp", "clientId": "OGA_PORTAL_APP_NPQS", "port": 5174, "redirectUrisEnv": "NPQS_REDIRECT_URIS" },
-      "m2m": {
-        "toNsw": { "clientId": "NPQS_TO_NSW", "secretEnv": { "override": "M2M_NPQS_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
-        "nswTo": { "clientId": "NSW_TO_NPQS", "secretEnv": { "override": "M2M_NSW_TO_NPQS_SECRET", "default": "M2M_CLIENT_SECRET" } }
-      }
-    },
-    {
       "handle": "fcau",
       "name": "FCAU",
       "description": "Food Control Administration Unit",

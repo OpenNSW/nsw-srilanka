@@ -62,6 +62,17 @@
     ],
     "customsInject": [
       "nsw:workflow:inject"
+    ],
+    "npqsOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "npqsInject": [
+      "nsw:workflow:inject"
     ]
   }
 }
