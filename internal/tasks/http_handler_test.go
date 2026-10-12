@@ -679,6 +679,7 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 		{"step no longer active", pendingFileTask(), "step-0", map[string]any{"invoice": alicesRef}, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", map[string]any{"invoice": alicesRef}, http.StatusForbidden},
 		{"expired file", pendingFileTask(), "step-1", map[string]any{"invoice": expiredRef}, http.StatusGone},
+		{"a list where one file is declared", pendingFileTask(), "step-1", map[string]any{"invoice": []any{alicesRef, expiredRef}}, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

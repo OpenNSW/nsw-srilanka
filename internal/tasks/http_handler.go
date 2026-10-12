@@ -20,6 +20,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
@@ -36,6 +37,7 @@ const (
 	errRequestBodyTooLarge  = "request body too large"
 	errFileNotYours         = "a file in the submission was issued to someone else"
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
+	errFileShape            = "a file field in the submission does not have the shape the task declares"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -307,6 +309,9 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 		httputil.Error(w, r, http.StatusForbidden, errFileNotYours)
 	case errors.Is(err, fileaccess.ErrExpired):
 		httputil.Error(w, r, http.StatusGone, errFileExpired)
+	case errors.Is(err, filefields.ErrShape):
+		slog.WarnContext(ctx, "tasks: submission has a file field of the wrong shape", "taskId", taskID, "stepId", stepID, "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errFileShape)
 	default:
 		httputil.InternalServerError(w, r, "tasks: failed to resolve file references", err, "taskId", taskID, "stepId", stepID)
 	}
