@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/htmlgen"
 	corestorage "github.com/OpenNSW/core/storage"
 )
@@ -19,51 +18,12 @@ import (
 // html_template artifact and the task's inputs, and stores it.
 const TaskTypeHTMLDocumentGenerator = "HTML_DOCUMENT_GENERATOR"
 
-// HTMLTemplateKind is the artifact kind of an htmlgen template: the target
-// HTML with html/template actions in it, stored as the file itself rather
-// than wrapped in JSON.
-const HTMLTemplateKind artifact.Kind = "html_template"
-
 // htmlDocumentMIME is the type the document is stored and served as.
 const htmlDocumentMIME = "text/html; charset=utf-8"
-
-// HTMLTemplate is an html_template artifact. Parse validates it with htmlgen,
-// so a broken template fails when it is loaded rather than part-way through a
-// render.
-type HTMLTemplate struct {
-	Source []byte
-}
-
-// Kind identifies the artifact kind.
-func (HTMLTemplate) Kind() artifact.Kind { return HTMLTemplateKind }
-
-// Parse validates raw as an htmlgen template that calls no resolvers.
-func (t *HTMLTemplate) Parse(raw []byte) error {
-	if err := htmlgen.Validate(raw); err != nil {
-		return err
-	}
-	t.Source = raw
-	return nil
-}
 
 // HTMLTemplateSource returns an html_template's source by id.
 type HTMLTemplateSource interface {
 	HTMLTemplate(ctx context.Context, id string) ([]byte, error)
-}
-
-// RegistryHTMLTemplates serves html_template artifacts from the artifact
-// registry, taking the latest version of each.
-type RegistryHTMLTemplates struct {
-	Registry *artifact.Registry
-}
-
-// HTMLTemplate loads the latest version of the template id.
-func (r RegistryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]byte, error) {
-	t, err := artifact.Latest[HTMLTemplate](ctx, r.Registry, id)
-	if err != nil {
-		return nil, err
-	}
-	return t.Source, nil
 }
 
 // DocumentSaver stores a document this service produced. The storage service
