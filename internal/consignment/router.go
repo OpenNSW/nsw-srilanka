@@ -299,7 +299,7 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 }
 
 // HandleStartConsignmentFlow handles POST /api/v1/consignments/{id}/flows. A trader or CHA starts
-// one of the consignment's startable flows (DetailDTO.StartableFlows) — e.g. an SLPA sundry
+// one of the consignment's startable flows (DetailDTO.StartableFlows) — e.g. a port or agency fee
 // payment — under the same company-and-role check as HandleGetConsignmentByID. Body:
 // StartFlowRequest, which names the flow and nothing else: any other field, such as variables
 // for the flow, is rejected. Response: 201 with the started flow's FlowDTO.
