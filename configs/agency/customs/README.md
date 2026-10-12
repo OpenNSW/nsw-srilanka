@@ -70,10 +70,10 @@ seeds Customs for this deployment, on the `Customs API` resource server
 | Caller                                 | Client                   | Grant                                                                                                                      |
 | -------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | Officer `customs_officer`              | `OGA_PORTAL_APP_CUSTOMS` | `Customs Officer` role (via `Customs Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                         | `NSW_TO_CUSTOMS`         | `NswToCustomsM2M` role: `nsw:workflow:inject`                                                                              |
+| TNSW injecting and replying            | `NSW_TO_CUSTOMS`         | `NswToCustomsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on Customs' parked steps                      |
 | Customs' decision callback and storage | `CUSTOMS_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                  |
 
-TNSW's `services.json` `customs` entry requests `nsw:workflow:inject` with
+TNSW's `services.json` `customs` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.customs.nsw-agency.local` (see `configs/services*.example.json`).
 An IdP seeded before this change still has the old Customs entities, and a re-seed skips
 anything that exists: `OGA_PORTAL_APP_CUSTOMS` keeps its `agency:*` scopes,
