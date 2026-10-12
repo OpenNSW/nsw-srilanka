@@ -12,7 +12,8 @@ import (
 // ErrFlowNotFound is returned when no case_flows row exists for a workflow ID.
 var ErrFlowNotFound = errors.New("case flow not found")
 
-// Status is this package's view of a flow's lifecycle.
+// Status is this package's view of a flow's lifecycle, matching the
+// case_flows_status_check constraint.
 type Status string
 
 const (

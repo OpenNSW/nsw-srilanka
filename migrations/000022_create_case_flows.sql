@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS case_flows (
 	workflow_id text NOT NULL PRIMARY KEY,
 	case_id text NOT NULL REFERENCES cases (id),
 	template_id text NOT NULL,
-	status text NOT NULL,
+	status text NOT NULL CONSTRAINT case_flows_status_check CHECK (status IN ('STARTING', 'STARTED', 'COMPLETED')),
 	payload jsonb,
 	created_at timestamp with time zone DEFAULT now() NOT NULL,
 	updated_at timestamp with time zone DEFAULT now() NOT NULL
