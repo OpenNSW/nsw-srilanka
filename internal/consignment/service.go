@@ -30,8 +30,9 @@ type TaskStore interface {
 	GetAllTasks(ctx context.Context, parentWorkflowID string) []store.TaskRecord
 }
 
-// FlowStarter starts a case's flows. *caseflow.Service satisfies it.
+// FlowStarter creates a case and starts its flows. *caseflow.Service satisfies it.
 type FlowStarter interface {
+	EnsureCase(ctx context.Context, caseID string) error
 	StartFlow(ctx context.Context, req caseflow.StartRequest) (*caseflow.Flow, error)
 }
 
@@ -160,16 +161,17 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 		TraderID:        traderID,
 		TraderCompanyID: traderCompany.ID,
 	}
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := caseflow.EnsureCase(ctx, tx, consignment.ID); err != nil {
-			return fmt.Errorf("failed to create case: %w", err)
-		}
-		if err := tx.Create(consignment).Error; err != nil {
-			return fmt.Errorf("failed to create consignment: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
+	// The case comes first: the consignment references it. caseflow creates it in its own
+	// statement, so a failed consignment insert leaves an empty case behind, which is
+	// harmless (a consignment is only ever listed through its consignments row).
+	// TODO(#653): once consignments move off GORM to database/sql, create the case and the
+	// consignment in one transaction (EnsureCase taking the *sql.Tx), so a failed insert
+	// leaves no empty case.
+	if err := s.flows.EnsureCase(ctx, consignment.ID); err != nil {
+		return nil, fmt.Errorf("failed to create case: %w", err)
+	}
+	if err := s.db.WithContext(ctx).Create(consignment).Error; err != nil {
+		return nil, fmt.Errorf("failed to create consignment: %w", err)
 	}
 
 	// The export flow takes the consignment ID as its workflow ID: the admin engine-status

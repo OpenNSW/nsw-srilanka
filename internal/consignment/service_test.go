@@ -388,10 +388,17 @@ func TestConsignmentService_GetConsignmentByID_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrConsignmentNotFound)
 }
 
-// flowStarterSpy records each StartFlow request and answers with err.
+// flowStarterSpy records each case created and each StartFlow request, and answers
+// StartFlow with err.
 type flowStarterSpy struct {
-	reqs []caseflow.StartRequest
-	err  error
+	cases []string
+	reqs  []caseflow.StartRequest
+	err   error
+}
+
+func (f *flowStarterSpy) EnsureCase(_ context.Context, caseID string) error {
+	f.cases = append(f.cases, caseID)
+	return nil
 }
 
 func (f *flowStarterSpy) StartFlow(_ context.Context, req caseflow.StartRequest) (*caseflow.Flow, error) {
@@ -427,9 +434,7 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	mockUser.On("GetUser", mock.Anything, traderID).Return(&user.Record{ID: traderID, OUHandle: "trader-ou"}, nil)
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
 
-	// The cases row comes first: the consignment references it.
 	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments" JOIN cases`).
@@ -445,9 +450,11 @@ func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
 	assert.Equal(t, InProgress, result.State)
 
 	// The export flow runs on the consignment's case, under the consignment ID.
+	// The case is created first, then the export flow runs on it.
 	require.Len(t, flows.reqs, 1)
 	req := flows.reqs[0]
 	assert.NotEmpty(t, req.CaseID)
+	assert.Equal(t, []string{req.CaseID}, flows.cases)
 	assert.Equal(t, req.CaseID, req.WorkflowID)
 	assert.Equal(t, defaultExportWorkflowTemplateID, req.TemplateID)
 	assert.Contains(t, req.Vars, "traderCompany")
@@ -494,7 +501,6 @@ func TestConsignmentService_CreateAndStartConsignment_StartFlowFails(t *testing.
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co1", Data: []byte(`{}`)}, nil)
 
 	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 

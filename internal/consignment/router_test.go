@@ -264,7 +264,6 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: traderCompanyID, Data: []byte(`{}`)}, nil)
 
 	sqlMock.ExpectBegin()
-	sqlMock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 1))
 	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).

@@ -241,7 +241,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		}
 		// A consignment is a case: caseflow starts its flows and, as the completion
 		// callback, keeps its state in step with them.
-		flowService = caseflow.NewService(caseflow.NewRepository(db), artifactRegistry)
+		sqlDB, err := db.DB()
+		if err != nil {
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
+		}
+		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifactRegistry)
 		if err := consignmentService.RegisterFlowStarter(flowService); err != nil {
 			_ = stopTask()
 			temporalClient.Close()
