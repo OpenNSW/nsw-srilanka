@@ -25,6 +25,8 @@ const (
 	errUnauthorized          = "unauthorized"
 	errConsignmentIDRequired = "consignment ID is required"
 	errInvalidRole           = "query param role must be trader or cha"
+	errInvalidState          = "query param state must be IN_PROGRESS or FINISHED"
+	errInvalidFlow           = "query param flow must be IMPORT or EXPORT"
 	errForbiddenRole         = "caller does not hold the requested role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
@@ -134,21 +136,34 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	httputil.JSON(w, http.StatusCreated, consignment)
 }
 
-// buildConsignmentFilter parses optional query filters (state, flow, q) from the request.
-func buildConsignmentFilter(r *http.Request, offset, limit *int) Filter {
+// buildConsignmentFilter parses pagination and the optional query filters (state, flow, q)
+// from the request. Invalid pagination, or an unknown state or flow, returns the
+// client-facing error message to send with a 400.
+func buildConsignmentFilter(r *http.Request) (Filter, string) {
+	offset, limit, err := pagination.ParsePaginationParams(r)
+	if err != nil {
+		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err)
+		return Filter{}, "invalid pagination parameters"
+	}
 	filter := Filter{Offset: offset, Limit: limit}
 	if stateStr := r.URL.Query().Get("state"); stateStr != "" {
 		state := State(stateStr)
+		if !state.Valid() {
+			return Filter{}, errInvalidState
+		}
 		filter.State = &state
 	}
 	if flowStr := r.URL.Query().Get("flow"); flowStr != "" {
 		flow := Flow(flowStr)
+		if !flow.Valid() {
+			return Filter{}, errInvalidFlow
+		}
 		filter.Flow = &flow
 	}
 	if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
 		filter.Query = &q
 	}
-	return filter
+	return filter, ""
 }
 
 // HandleGetConsignments handles GET /api/v1/consignments
@@ -166,13 +181,11 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	if role == "" {
 		role = "trader"
 	}
-	offset, limit, err := pagination.ParsePaginationParams(r)
-	if err != nil {
-		slog.WarnContext(r.Context(), "invalid pagination parameters", "error", err)
-		httputil.Error(w, r, http.StatusBadRequest, "invalid pagination parameters")
+	filter, filterErr := buildConsignmentFilter(r)
+	if filterErr != "" {
+		httputil.Error(w, r, http.StatusBadRequest, filterErr)
 		return
 	}
-	filter := buildConsignmentFilter(r, offset, limit)
 
 	// Role-based identity resolution.
 	if role != "trader" && role != "cha" {

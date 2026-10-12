@@ -19,6 +19,11 @@ const (
 	FlowExport Flow = "EXPORT"
 )
 
+// Valid reports whether f is one of the defined flows.
+func (f Flow) Valid() bool {
+	return f == FlowImport || f == FlowExport
+}
+
 // State represents the lifecycle state of a consignment.
 type State string
 
@@ -26,6 +31,11 @@ const (
 	InProgress State = "IN_PROGRESS"
 	Finished   State = "FINISHED"
 )
+
+// Valid reports whether s is one of the defined states.
+func (s State) Valid() bool {
+	return s == InProgress || s == Finished
+}
 
 // ── Entity ────────────────────────────────────────────────────────────────────
 

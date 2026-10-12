@@ -239,6 +239,25 @@ func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
 	mockCompany.AssertExpectations(t)
 }
 
+func TestConsignmentRouter_HandleGetConsignments_RejectsUnknownFilters(t *testing.T) {
+	for _, query := range []string{"state=INITIALIZED", "state=FAILED", "flow=TRANSIT"} {
+		t.Run(query, func(t *testing.T) {
+			db, _ := setupTestDB(t)
+			mockCompany := new(MockCompanyService)
+			svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
+			r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+
+			req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&"+query, nil)
+			req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
+			w := httptest.NewRecorder()
+			r.HandleGetConsignments(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			mockCompany.AssertNotCalled(t, "GetCompanyByOUHandle", mock.Anything, mock.Anything)
+		})
+	}
+}
+
 func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockUser := new(MockUserService)
