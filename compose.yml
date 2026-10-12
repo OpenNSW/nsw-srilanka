@@ -51,6 +51,14 @@ x-customs-config-env: &customs-config-env
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
+# The same for NPQS' npqs-init and npqs-api, on
+# configs/agency/npqs/config.docker.yaml.
+x-npqs-config-env: &npqs-config-env
+  CONFIG_PATH: configs/agency/npqs/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+
 services:
   # -------------------------------------------------------------------
   # 1. Shared Infrastructure Database (PostgreSQL)
@@ -600,3 +608,96 @@ services:
     volumes:
       - ./configs/agency/customs/portal-config.js:/usr/share/nginx/html/config.js:ro
       - ./configs/agency/customs/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+
+  # -------------------------------------------------------------------
+  # 10. NPQS Agency
+  # -------------------------------------------------------------------
+  # The same backend and trader-app run as NPQS, the National Plant Quarantine Service
+  # (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA and Customs do
+  # above: shared Postgres, Temporal and IdP, but its own database and Temporal
+  # namespace. Config lives in configs/agency/npqs/ (config.docker.yaml for these
+  # services). TNSW reaches it at host.docker.internal:8081, as its
+  # services.docker.json "npqs" entry already expects.
+
+  # One-shot: creates npqs_db on the shared Postgres and the npqs Temporal
+  # namespace if missing, then migrates npqs_db. Same image as cda-init.
+  npqs-init:
+    build:
+      context: .
+      additional_contexts:
+        migrate: service:migrate
+      dockerfile_inline: |
+        FROM postgres:16-alpine
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+        COPY --from=migrate /app/migrations /app/migrations
+        WORKDIR /app
+    container_name: npqs-init
+    networks:
+      - nsw-network
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      <<: *npqs-config-env
+      PGHOST: db
+      PGUSER: ${DB_USERNAME:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'npqs_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE npqs_db'
+        temporal operator namespace describe --namespace npqs --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace npqs --address temporal:7233
+        migrate up
+    depends_on:
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: "no"
+
+  npqs-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: npqs-api
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: the NPQS portal's config and TNSW's "npqs" service entry both call 8081.
+      - "8081:8080"
+    volumes:
+      - ./configs:/app/configs:ro
+      # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
+      # clone's npqs-v2/ dir.
+      - ${NPQS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/npqs-v2}:/app/artifacts:ro
+    environment:
+      # Every server setting lives in configs/agency/npqs/config.docker.yaml (see
+      # x-npqs-config-env); what follows is only what the file cannot hold.
+      <<: *npqs-config-env
+      # Same gate as the api service: insecure TLS is honored only in development.
+      APP_ENV: ${APP_ENV:-}
+      # NPQS -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_NPQS_TO_NSW_SECRET: ${M2M_NPQS_TO_NSW_SECRET:-1234}
+    depends_on:
+      npqs-init:
+        condition: service_completed_successfully
+      thunderid:
+        condition: service_started
+
+  npqs-portal:
+    build:
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: npqs-web
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
+      # OGA_PORTAL_APP_NPQS are both on 5174.
+      - "5174:8080"
+    volumes:
+      - ./configs/agency/npqs/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/npqs/branding.json:/usr/share/nginx/html/configs/branding.json:ro
