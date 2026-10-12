@@ -42,6 +42,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
+	"github.com/OpenNSW/nsw-srilanka/internal/metrics"
 	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -497,11 +498,27 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(mux))
+	// OTLP metrics when metrics.endpoint is set; otherwise a no-op wrap.
+	httpMetrics, err := metrics.Start(ctx, cfg.Metrics)
+	if err != nil {
+		_ = stopParentRunner()
+		_ = stopTask()
+		temporalClient.Close()
+		_ = authnManager.Close()
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to start http metrics: %w", err)
+	}
+	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(httpMetrics.Handler("tnsw-api", mux)))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
 		var closeErrs []error
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := httpMetrics.Shutdown(shutdownCtx); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down http metrics: %w", err))
+		}
+		cancel()
 
 		if auditClient != nil && auditClient.IsEnabled() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -696,6 +696,38 @@ func TestConfigValidate_StorageError(t *testing.T) {
 	}
 }
 
+func TestConfigValidate_Metrics(t *testing.T) {
+	cfg := validConfig()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() with metrics unset: %v", err)
+	}
+
+	cfg.Metrics.Endpoint = "http://otel-collector:4318/v1/metrics"
+	cfg.Metrics.ServiceName = "tnsw-api"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() with metrics set: %v", err)
+	}
+
+	cfg.Metrics.ServiceName = ""
+	err := cfg.Validate()
+	if err == nil || !containsString(err.Error(), "metrics.serviceName") {
+		t.Errorf("expected metrics.serviceName error, got: %v", err)
+	}
+
+	cfg.Metrics.ServiceName = "tnsw-api"
+	cfg.Metrics.Endpoint = "not-a-url"
+	err = cfg.Validate()
+	if err == nil || !containsString(err.Error(), "metrics.endpoint") {
+		t.Errorf("expected metrics.endpoint error, got: %v", err)
+	}
+
+	cfg.Metrics.Endpoint = "http://otel-collector:4318"
+	err = cfg.Validate()
+	if err == nil || !containsString(err.Error(), "OTLP path") {
+		t.Errorf("expected metrics.endpoint path error, got: %v", err)
+	}
+}
+
 func TestConfigValidate_StorageProxy(t *testing.T) {
 	cfg := validConfig()
 	// Proxy mode validates the proxy settings, not the core/storage backend,
