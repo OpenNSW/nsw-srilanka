@@ -37,7 +37,7 @@ type DocumentSaver interface {
 // task's inputs, stores the document, and records where it went:
 //
 //	{"task_type": "HTML_DOCUMENT_GENERATOR", "output_namespace": "permit_doc",
-//	 "plugin_properties": {"template_id": "npqs_permit_html", "filename": "permit.html"}}
+//	 "plugin_properties": {"template_id": "npqs-permit--html", "filename": "permit.html"}}
 //
 // The node's input_mapping assembles everything the document prints into the
 // inputs — form submissions, reviewer decisions, a reference ID generated
