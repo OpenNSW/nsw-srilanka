@@ -381,30 +381,32 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 	httputil.JSON(w, http.StatusOK, dto)
 }
 
-// HandleGetConsignmentEngineStatus handles GET /api/v1/admin/consignments/{id}/engine-status.
-// Returns the root workflow's raw engine state (per-node status straight from the workflow
+// HandleGetWorkflowEngineStatus handles GET /api/v1/admin/workflows/{id}/engine-status.
+// {id} is a workflow ID: one of a consignment's flows (see the flows of
+// HandleAdminGetConsignmentByID) or a child workflow of one (a node's child_workflow_ids).
+// Returns that workflow's raw engine state (per-node status straight from the workflow
 // manager, e.g. RUNNING/COMPLETED/AWAITING_ADMIN) — an ops/admin view distinct from the
 // trader-facing GetConsignmentByID, which reflects task-store/business state instead.
 //
 // Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go), not on the
 // trader/CHA nsw:consignment:read scope — this performs no per-consignment ownership
-// check, so any caller holding the admin scope can view any consignment's engine state
+// check, so any caller holding the admin scope can view any workflow's engine state
 // by design.
-func (c *Router) HandleGetConsignmentEngineStatus(w http.ResponseWriter, r *http.Request) {
+func (c *Router) HandleGetWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
 	c.handleEngineStatus(w, r, "engine-status", c.cs.GetEngineStatus)
 }
 
 // HandleGetTaskWorkflowEngineStatus handles GET /api/v1/admin/task/{id}/engine-status.
 // {id} is a task workflow's own workflow ID (see EngineNodeDTO.TaskWorkflowID, surfaced by
-// HandleGetConsignmentEngineStatus on the TASK node that spawned it) — a separate ID space and
-// workflow.Manager from the consignment/child-workflow IDs HandleGetConsignmentEngineStatus
+// HandleGetWorkflowEngineStatus on the TASK node that spawned it) — a separate ID space and
+// workflow.Manager from the flow/child-workflow IDs HandleGetWorkflowEngineStatus
 // queries. Gated on scopes.ConsignmentAdminRead at the route (see bootstrap/app.go).
 func (c *Router) HandleGetTaskWorkflowEngineStatus(w http.ResponseWriter, r *http.Request) {
 	c.handleEngineStatus(w, r, "task-workflow-engine-status", c.cs.GetTaskWorkflowEngineStatus)
 }
 
 // handleEngineStatus is the common request/response handling shared by
-// HandleGetConsignmentEngineStatus and HandleGetTaskWorkflowEngineStatus — they differ only in
+// HandleGetWorkflowEngineStatus and HandleGetTaskWorkflowEngineStatus — they differ only in
 // which Service method resolves {id} into an *EngineStatusDTO and the audit "view" label.
 func (c *Router) handleEngineStatus(
 	w http.ResponseWriter, r *http.Request,
@@ -463,9 +465,9 @@ type ResolveAdminInterventionRequest struct {
 	Reason               string         `json:"reason"`
 }
 
-// HandleResolveAdminIntervention handles POST /api/v1/admin/consignments/{id}/steps/{stepId}/resolve.
-// {id} is the ID of the workflow instance containing the node: the consignment's root workflow or a
-// child-branch workflow (a node's child_workflow_ids). It is not a consignment record ID. {stepId}
+// HandleResolveAdminIntervention handles POST /api/v1/admin/workflows/{id}/steps/{stepId}/resolve.
+// {id} is the ID of the workflow instance containing the node: one of a consignment's flows or a
+// child-branch workflow (a node's child_workflow_ids). {stepId}
 // is the parked node's step_id from that workflow's engine status: it names that one parking, so a
 // resolve sent after the node was resolved and parked again is rejected (409). A node inside a
 // task workflow is resolved through HandleResolveTaskWorkflowAdminIntervention instead.
@@ -479,7 +481,7 @@ func (c *Router) HandleResolveAdminIntervention(w http.ResponseWriter, r *http.R
 // HandleResolveTaskWorkflowAdminIntervention handles
 // POST /api/v1/admin/task/{id}/steps/{stepId}/resolve. {id} is a task workflow's own workflow ID
 // (a TASK node's task_workflow_id) — a separate ID space and workflow.Manager from the
-// consignment/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
+// flow/child-workflow IDs HandleResolveAdminIntervention takes, the same split as the two
 // engine-status routes. Otherwise identical, and gated on the same scope.
 func (c *Router) HandleResolveTaskWorkflowAdminIntervention(w http.ResponseWriter, r *http.Request) {
 	c.handleResolveAdminIntervention(w, r, "task-workflow-admin-resolve", c.cs.ResolveTaskWorkflowAdminIntervention)

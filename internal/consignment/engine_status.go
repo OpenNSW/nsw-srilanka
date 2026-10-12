@@ -61,12 +61,13 @@ type EngineNodeDTO struct {
 	CachedTaskResult map[string]any `json:"cached_task_result,omitempty"`
 }
 
-// EngineStatusDTO is the root workflow's raw engine state for a consignment.
+// EngineStatusDTO is one workflow's raw engine state: a consignment's flow, or a child
+// workflow of one.
 type EngineStatusDTO struct {
-	ConsignmentID string          `json:"consignment_id"`
-	Status        string          `json:"status"`
-	Nodes         []EngineNodeDTO `json:"nodes"`
-	AuditTrail    []string        `json:"audit_trail"`
+	WorkflowID string          `json:"workflow_id"`
+	Status     string          `json:"status"`
+	Nodes      []EngineNodeDTO `json:"nodes"`
+	AuditTrail []string        `json:"audit_trail"`
 	// GlobalVariables is the workflow instance's shared, dynamic business data
 	// (workflow.WorkflowInstance.WorkflowVariables) — workflow-wide, not per node; every node in
 	// this workflow sees the same snapshot. May hold business/PII data, hence ConsignmentAdminRead
@@ -186,7 +187,7 @@ func buildEngineStatusDTO(workflowID string, instance *workflow.WorkflowInstance
 	})
 
 	return &EngineStatusDTO{
-		ConsignmentID:   workflowID,
+		WorkflowID:      workflowID,
 		Status:          string(instance.Status),
 		Nodes:           nodes,
 		AuditTrail:      instance.AuditTrail,

@@ -96,7 +96,6 @@ func TestConsignmentRouter_HandleGetConsignmentByID(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id"}).AddRow(consignmentID, "IN_PROGRESS", companyID))
 
-	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
@@ -130,7 +129,6 @@ func TestConsignmentRouter_HandleGetConsignmentByID_SameCompanyCHA(t *testing.T)
 		WillReturnRows(sqlmock.NewRows([]string{"id", "state", "trader_company_id", "cha_company_id"}).
 			AddRow(consignmentID, "IN_PROGRESS", "company-trader", chaCompanyID))
 
-	mockWM.On("GetStatus", mock.Anything, consignmentID).Return((*workflow.WorkflowInstance)(nil), nil)
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(([]store.TaskRecord)(nil))
 
 	req, _ := http.NewRequest("GET", "/api/v1/consignments/"+consignmentID, nil)
@@ -271,7 +269,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
 
 	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
-	require.NoError(t, svc.RegisterFlowStarter(&flowStarterSpy{}))
+	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
 	auditor := &mockAuditor{}
 	r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(auditor))
 
@@ -378,7 +376,7 @@ var resolveRoutes = []resolveRoute{
 // resolveTestStepID on resolveTestWorkflowID. The handlers read their path values, not the
 // URL, so the same request serves both routes.
 func newResolveRequest(body string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/consignments/"+resolveTestWorkflowID+"/steps/"+resolveTestStepID+"/resolve", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/workflows/"+resolveTestWorkflowID+"/steps/"+resolveTestStepID+"/resolve", strings.NewReader(body))
 	req.SetPathValue("id", resolveTestWorkflowID)
 	req.SetPathValue("stepId", resolveTestStepID)
 	return req.WithContext(withAuthContext(req.Context(), "admin-1"))
