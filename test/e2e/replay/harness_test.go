@@ -144,6 +144,10 @@ func newHarness(t *testing.T) *harness {
 	signed := newSignedAuth(t, cfg.Authn.Issuer, cfg.Authn.Audience, memberUserIDs, members, agencies, payments)
 	cfg.Authn.JWKSURL = signed.jwks.URL
 
+	// Every replay builds its own app; checking all of the manifest's artifacts each time
+	// would refetch them per test. The artifacts repo's CI checks every manifest.
+	cfg.Artifacts.SkipStartupValidation = true
+
 	app, err := bootstrap.Build(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("bootstrap.Build: %v", err)

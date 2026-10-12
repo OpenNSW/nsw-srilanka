@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig"
 )
@@ -36,4 +37,14 @@ func Load(ctx context.Context, reg *artifact.Registry, taskCode string) (*taskco
 		return nil, err
 	}
 	return &l.TaskConfig, nil
+}
+
+// Check parses and validates a task config for artifact.Set.Validate, and returns the
+// workflow it starts, which the same manifest must list.
+func Check(raw []byte) ([]artifact.Ref, error) {
+	var l loadable
+	if err := l.Parse(raw); err != nil {
+		return nil, err
+	}
+	return []artifact.Ref{{ID: l.Workflow, Kinds: []artifact.Kind{workflowdef.Kind}, Field: "workflow"}}, nil
 }

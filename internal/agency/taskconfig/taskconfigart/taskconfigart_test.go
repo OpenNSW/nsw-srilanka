@@ -47,3 +47,16 @@ func TestLoad(t *testing.T) {
 		}
 	})
 }
+
+func TestCheck(t *testing.T) {
+	refs, err := taskconfigart.Check([]byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`))
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(refs) != 1 || refs[0].ID != "verify_wf" || len(refs[0].Kinds) != 1 || refs[0].Kinds[0] != "workflow" {
+		t.Errorf("refs = %+v, want the workflow verify_wf", refs)
+	}
+	if _, err := taskconfigart.Check([]byte(`{"schemaVersion":1,"taskCode":"verify"}`)); err == nil {
+		t.Error("expected an error for an unsupported schemaVersion")
+	}
+}

@@ -191,7 +191,7 @@ consignment:
   #   - templateId: slpa_sundry_payment
   #     label: SLPA sundry payment
 
-# Where artifacts (workflow definitions, templates, manifest.json) are fetched
+# Where artifacts (workflow definitions, templates, versioned manifests) are fetched
 # from at startup: local | github | s3. Only the settings for the selected type
 # are read, in the schema of github.com/OpenNSW/core/artifact/loaders.
 #
@@ -212,8 +212,12 @@ artifactLoader:
     # baseURL: https://api.github.com
     # Fetch from the raw-content host instead of the REST Contents API (no
     # token, no REST rate limit; best for public repos pinned to an immutable
-    # ref).
-    # useRawHost: false
+    # ref). On here: startup validation fetches every artifact of the current
+    # manifest, more than the unauthenticated REST limit allows. The raw host
+    # caches each file of a branch ref for a few minutes on its own, so a
+    # restart just after a publish can see a new manifest before its files and
+    # fail validation; restart again a few minutes later, or pin ref to a SHA.
+    useRawHost: true
     # rawBaseURL: https://raw.githubusercontent.com
   # Offline alternative: clone the artifacts repo and set ARTIFACT_LOCAL_ROOT in
   # .env to its tnsw dir; compose bind-mounts that at /app/artifacts.
@@ -230,6 +234,19 @@ artifactLoader:
   #   secretKey: "{{env:ARTIFACT_S3_SECRET_KEY}}"
   #   # Optional in-bucket key prefix every path resolves against.
   #   prefix: ""
+
+# How this deployment uses the versioned manifests in the artifacts
+# (manifest_v1.json, manifest_v2.json, …). A published manifest and the files
+# it lists never change; a change is a new file plus a new manifest. Each flow
+# runs on the version current when it started. Optional.
+artifacts:
+  # Pin the version new flows start on, e.g. to roll back. 0 takes the highest
+  # published one.
+  manifestVersion: 0
+  # At startup every artifact of that version is fetched and checked (exists,
+  # parses, points only at listed artifacts), one request each. Skip only where
+  # that cannot be afforded, e.g. the unauthenticated GitHub Contents API.
+  skipStartupValidation: false
 
 # What this deployment runs as: "tnsw" or "agency". Required.
 # The modes are exclusive. An agency serves inject and the officer case views in

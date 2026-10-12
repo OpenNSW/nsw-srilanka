@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
@@ -69,7 +68,7 @@ func TestCaseHandler(t *testing.T) {
 	now := time.Now()
 	repo := fakeCaseRepo{
 		cases:     map[string]Case{"C1": {ID: "C1", State: "IN_PROGRESS", CreatedAt: now, UpdatedAt: now}},
-		workflows: map[string][]CaseWorkflow{"C1": {{"task-1", "code-a"}, {"task-2", "code-unregistered"}}},
+		workflows: map[string][]CaseWorkflow{"C1": {{"task-1", "code-a", 1}, {"task-2", "code-unregistered", 1}}},
 	}
 	tasks := fakeTasks{
 		"task-1": {{TaskID: "n1", TaskType: "APPLICATION", State: "PENDING_USER", RenderConfig: json.RawMessage(`{"title":"Review"}`)}},
@@ -78,10 +77,9 @@ func TestCaseHandler(t *testing.T) {
 			{TaskID: "n3", TaskType: "SYSTEM", State: "COMPLETED"},
 		},
 	}
-	reg := artifact.NewRegistry(testutil.MemLoader{
-		"a.json": []byte(`{"schemaVersion":2,"taskCode":"code-a","workflow":"wf-a","meta":{"title":"Verify","description":"Officer verifies"}}`),
-	})
-	reg.RegisterArtifact("code-a", "task_config", "", "a.json")
+	reg := newSet(t, map[string]string{
+		"a.json": `{"schemaVersion":2,"taskCode":"code-a","workflow":"wf-a","meta":{"title":"Verify","description":"Officer verifies"}}`,
+	}, []artifact.ManifestRow{row("code-a", "task_config", "a.json")})
 	h := NewCaseHandler(repo, tasks, reg, "Officer")
 
 	t.Run("requires the officer role", func(t *testing.T) {

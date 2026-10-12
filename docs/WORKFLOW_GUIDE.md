@@ -7,7 +7,7 @@ This document serves as an exhaustive reference for creating, modifying, and deb
 ## 1. Directory Structure: Folder-as-Task Convention
 
 > [!IMPORTANT]
-> These workflow/form artifacts are **not** committed to this application repo. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path (`tnsw/manifest.json` + `tnsw/<agency_code>/…`) and are fetched at startup by the artifact loader (see `artifactLoader` in [`configs/config.example.yaml`](../configs/config.example.yaml)). Every path below is relative to that base path, so `<agency_code>/…` here means `tnsw/<agency_code>/…` in the artifacts repo. To edit them locally, clone that repo and point the local loader at its `tnsw` dir (`artifactLoader.type: local`, `artifactLoader.local.root: <path>/tnsw`).
+> These workflow/form artifacts are **not** committed to this application repo. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path (`tnsw/manifest_v<N>.json` + `tnsw/<agency_code>/…`) and are fetched at startup by the artifact loader (see `artifactLoader` in [`configs/config.example.yaml`](../configs/config.example.yaml)). Every path below is relative to that base path, so `<agency_code>/…` here means `tnsw/<agency_code>/…` in the artifacts repo. To edit them locally, clone that repo and point the local loader at its `tnsw` dir (`artifactLoader.type: local`, `artifactLoader.local.root: <path>/tnsw`).
 
 Task definitions are grouped into self-contained folders representing micro-workflows under an agency-specific folder (e.g. `<agency_code>/`).
 
@@ -393,11 +393,21 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 
 ## 6. Development Workflow & Hot-Reloading
 
-1. **Parent Workflow Hot-Reload**:
-   - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
-2. **Form schemas and markdown templates**:
-   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `artifactLoader.type: local`).
-3. **Render configs**:
-   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
-4. **The manifest**:
-   - `manifest.json` is read once at startup. Adding a new template file means adding its row there **and** restarting the server.
+1. **Manifests are read at startup**:
+   - The server loads every `manifest_v<N>.json` once at startup, and new flows start on the highest one (or on `artifacts.manifestVersion` when it pins one). A new manifest takes effect for new flows on the next restart.
+2. **A flow keeps its manifest version**:
+   - Every flow records the manifest version it started on, and every task, form render and notification in it resolves through that version. Running flows never pick up a newer manifest; start a **fresh consignment** to see a change.
+3. **Files are still read on use**:
+   - Within a manifest version, files are fetched through the artifact loader when needed, so with `artifactLoader.type: local` an in-place edit shows up on the next request. That is only for local experiments: published files are immutable (see [Changing artifacts](#changing-artifacts)).
+4. **Render configs**:
+   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only**.
+
+### Changing artifacts
+
+A published manifest and every file it lists are immutable; the artifacts repo's CI rejects a pull request that edits or deletes them. To change an artifact:
+
+1. Add the changed content as a **new file**, with the version in its name (`render_v2.json`).
+2. Add `manifest_v<N+1>.json`: a copy of the highest manifest with that artifact's row pointing at the new file. Artifacts refer to each other by ID, so nothing that uses the changed artifact needs a new file too.
+3. Restart the server (or roll out a deploy). New flows start on the new manifest; running flows finish on theirs.
+
+Manifest versions must be contiguous: the server probes `manifest_v1.json` upward and stops at the first one missing. To roll back, set `artifacts.manifestVersion` to the last good version.

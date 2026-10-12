@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -134,8 +135,8 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 	consignmentID := uuid.NewString()
 	started := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{flows: []caseflow.Flow{
-		{WorkflowID: consignmentID + ":trade-export-v1:u1", CaseID: consignmentID, TemplateID: "trade-export-v1", Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
-		{WorkflowID: consignmentID + ":slpa_payment:u2", CaseID: consignmentID, TemplateID: "slpa_payment", Status: caseflow.StatusStarted, CreatedAt: started, UpdatedAt: started},
+		{WorkflowID: consignmentID + ":trade-export-v1:u1", CaseID: consignmentID, TemplateID: "trade-export-v1", ManifestVersion: 1, Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
+		{WorkflowID: consignmentID + ":slpa_payment:u2", CaseID: consignmentID, TemplateID: "slpa_payment", ManifestVersion: 1, Status: caseflow.StatusStarted, CreatedAt: started, UpdatedAt: started},
 	}}))
 
 	// Row belongs to a company entirely unrelated to whoever's inspecting it — there is no
@@ -420,12 +421,16 @@ func (f *caseFlowsSpy) StartFlow(_ context.Context, req caseflow.StartRequest) (
 	return &caseflow.Flow{WorkflowID: req.WorkflowID, CaseID: req.CaseID, TemplateID: req.TemplateID, Status: caseflow.StatusStarted}, nil
 }
 
-func newExportRegistry() *artifact.Registry {
-	loader := &mockLoader{content: make(map[string][]byte)}
-	reg := artifact.NewRegistry(loader)
-	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
-	return reg
+// newExportRegistry is a one-manifest artifact set holding the trade-export-v1 workflow.
+func newExportRegistry() *artifact.Set {
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"workflows/trade-export-v1": []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`),
+		"manifest_v1.json":          []byte(`{"artifacts":[{"id":"trade-export-v1","kind":"workflow","path":"workflows/trade-export-v1"}]}`),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return set
 }
 
 func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {

@@ -46,6 +46,10 @@ type Config struct {
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
 
+	// Artifacts picks the manifest version new flows start on and whether its artifacts
+	// are checked at startup. Optional.
+	Artifacts ArtifactsConfig `yaml:"artifacts"`
+
 	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
 	// one. Optional; an agency ignores it.
 	Consignment consignment.Config `yaml:"consignment"`
@@ -69,6 +73,31 @@ type ServerConfig struct {
 	ReadTimeout              time.Duration `yaml:"readTimeout"`
 	WriteTimeout             time.Duration `yaml:"writeTimeout"`
 	IdleTimeout              time.Duration `yaml:"idleTimeout"`
+}
+
+// ArtifactsConfig is how this deployment uses the versioned artifact manifests the
+// artifact loader reads (manifest_v1.json, manifest_v2.json, …; see core/artifact).
+type ArtifactsConfig struct {
+	// ManifestVersion pins the manifest version new flows start on. 0, the default,
+	// takes the highest published one. Pin to roll back to the last good manifest, or to
+	// publish a manifest before turning it on. Flows already running keep the version
+	// they started on either way.
+	ManifestVersion int `yaml:"manifestVersion"`
+	// SkipStartupValidation skips fetching every artifact of the current manifest at
+	// startup to check that each exists, parses, and points only at artifacts the
+	// manifest lists. Leave it false wherever artifacts change: a broken manifest then
+	// stops the deploy instead of the first flow that reaches the broken artifact. The
+	// check makes one request per artifact, which an unauthenticated GitHub Contents API
+	// loader cannot afford; use useRawHost or a token there.
+	SkipStartupValidation bool `yaml:"skipStartupValidation"`
+}
+
+// Validate checks the artifacts configuration.
+func (a ArtifactsConfig) Validate() error {
+	if a.ManifestVersion < 0 {
+		return fmt.Errorf("artifacts.manifestVersion must be 0 (the highest published) or a published version, got %d", a.ManifestVersion)
+	}
+	return nil
 }
 
 // AuditConfig is what a deployment sets for the Argus audit client. The
@@ -217,6 +246,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.ArtifactLoader.Validate(); err != nil {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
+	}
+	if err := c.Artifacts.Validate(); err != nil {
+		return fmt.Errorf("invalid artifacts configuration: %w", err)
 	}
 	return nil
 }

@@ -45,7 +45,7 @@ nsw-srilanka/
 └── go.sum
 ```
 
-The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which files to load at startup.
+The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest_v<N>.json` files are the index that tells the artifact registry which file each artifact ID resolves to. A published manifest and its files never change: a change is a new file plus a new manifest, and each flow keeps the manifest version it started on (see [Changing artifacts](docs/WORKFLOW_GUIDE.md#changing-artifacts)).
 
 For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
 
@@ -174,7 +174,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
-- Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
+- Logs will report DB connection, Temporal worker startup, and the artifact manifests loaded and validated via the artifact loader from `tnsw/manifest_v<N>.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)
 

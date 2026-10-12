@@ -33,14 +33,14 @@ func TestEnsureCase(t *testing.T) {
 }
 
 func TestRecord(t *testing.T) {
-	f := Flow{WorkflowID: "C1:export:u1", CaseID: "C1", TemplateID: "export", Payload: []byte(`{"a":1}`)}
+	f := Flow{WorkflowID: "C1:export:u1", CaseID: "C1", TemplateID: "export", ManifestVersion: 3, Payload: []byte(`{"a":1}`)}
 
 	t.Run("new flow reopens its case", func(t *testing.T) {
 		repo, mock := newMockRepo(t)
 		mock.ExpectBegin()
 		mock.ExpectExec(`INSERT INTO cases`).WithArgs("C1").WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec(`INSERT INTO case_flows`).
-			WithArgs("C1:export:u1", "C1", "export", StatusStarting, []byte(`{"a":1}`)).
+			WithArgs("C1:export:u1", "C1", "export", 3, StatusStarting, []byte(`{"a":1}`)).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec(`UPDATE cases SET state`).
 			WithArgs(CaseInProgress, "C1").
@@ -60,7 +60,7 @@ func TestRecord(t *testing.T) {
 		mock.ExpectBegin()
 		mock.ExpectExec(`INSERT INTO cases`).WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec(`INSERT INTO case_flows`).
-			WithArgs("C1:export:u2", "C1", "export", StatusStarting, nil).
+			WithArgs("C1:export:u2", "C1", "export", 0, StatusStarting, nil).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec(`UPDATE cases SET state`).WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectCommit()
@@ -134,19 +134,19 @@ func TestMarkStarted(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	columns := []string{"workflow_id", "case_id", "template_id", "status", "payload", "created_at", "updated_at"}
+	columns := []string{"workflow_id", "case_id", "template_id", "manifest_version", "status", "payload", "created_at", "updated_at"}
 	now := time.Now()
 
 	t.Run("scans the row", func(t *testing.T) {
 		repo, mock := newMockRepo(t)
 		mock.ExpectQuery(`SELECT workflow_id.* FROM case_flows\s+WHERE workflow_id = \$1`).WithArgs("W1").
-			WillReturnRows(sqlmock.NewRows(columns).AddRow("W1", "C1", "export", "STARTED", []byte(`{"a":1}`), now, now))
+			WillReturnRows(sqlmock.NewRows(columns).AddRow("W1", "C1", "export", 4, "STARTED", []byte(`{"a":1}`), now, now))
 
 		f, err := repo.Get(context.Background(), "W1")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if f.CaseID != "C1" || f.Status != StatusStarted || string(f.Payload) != `{"a":1}` {
+		if f.CaseID != "C1" || f.ManifestVersion != 4 || f.Status != StatusStarted || string(f.Payload) != `{"a":1}` {
 			t.Errorf("got %+v", f)
 		}
 	})
@@ -154,7 +154,7 @@ func TestGet(t *testing.T) {
 	t.Run("NULL payload", func(t *testing.T) {
 		repo, mock := newMockRepo(t)
 		mock.ExpectQuery(`FROM case_flows`).
-			WillReturnRows(sqlmock.NewRows(columns).AddRow("W1", "C1", "export", "STARTING", nil, now, now))
+			WillReturnRows(sqlmock.NewRows(columns).AddRow("W1", "C1", "export", 0, "STARTING", nil, now, now))
 
 		f, err := repo.Get(context.Background(), "W1")
 		if err != nil || f.Payload != nil {

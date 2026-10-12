@@ -31,19 +31,19 @@ func newAgencyTaskGate(db *gorm.DB, roles map[string]string) (*agency.OfficerGat
 func mountAgency(
 	mux *http.ServeMux,
 	db *gorm.DB,
-	artifactRegistry *artifact.Registry,
+	artifacts *artifact.Set,
 	wm workflow.Manager,
 	tasks agency.TaskLister,
 	roles map[string]string,
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
-	svc := agency.NewService(agency.NewRepository(db), artifactRegistry, wm)
+	svc := agency.NewService(agency.NewRepository(db), artifacts, wm)
 	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeWorkflowInject)(http.HandlerFunc(svc.HandleInject))))
 
 	// ConsignmentRead is the read scope the portal's token already carries; the
 	// handler additionally requires the officer token role.
-	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifactRegistry, roles[agency.RoleOfficer])
+	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifacts, roles[agency.RoleOfficer])
 	mux.Handle("GET /api/v1/cases", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleListCases))))
 	mux.Handle("GET /api/v1/cases/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleGetCase))))
 }
