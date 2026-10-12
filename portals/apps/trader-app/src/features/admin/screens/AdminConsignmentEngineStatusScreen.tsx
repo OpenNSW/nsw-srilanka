@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AlertDialog, Badge, Button, Dialog, IconButton, Spinner, Text, TextArea, Tooltip } from '@radix-ui/themes'
 import {
   ArrowLeftIcon,
@@ -12,14 +12,16 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
-  getConsignmentEngineStatus,
   getConsignmentForAdmin,
   getTaskWorkflowEngineStatus,
+  getWorkflowEngineStatus,
   resolveAdminIntervention,
 } from '@/features/admin/service'
 import type {
+  AdminConsignmentDetail,
   AdminResolutionAction,
   AdminWorkflowKind,
+  ConsignmentFlow,
   EngineEdge,
   EngineNode,
   EngineNodeStatus,
@@ -27,7 +29,6 @@ import type {
   EngineWorkflowStatus,
   ParkCategory,
 } from '@/features/admin/types'
-import type { ConsignmentDetail } from '@/features/consignment/types'
 import { formatDateTime, formatState, getStateColor } from '@/features/consignment/utils'
 import { humanizeStatus } from '@/utils/formatStatus'
 
@@ -102,10 +103,11 @@ const NO_EXPAND_SIGNAL: ExpandSignal = { gen: 0, expand: false }
 // execution), or failed for some other reason.
 type FetchError = 'notFound' | 'loadFailed' | null
 
-// Internal ops view of a consignment's raw engine state — the same picture you'd
-// otherwise need the Temporal UI for. Backend gates this behind the
-// ConsignmentAdminRead scope (see HandleGetConsignmentEngineStatus); reachable
-// only by direct URL, not linked from trader/CHA navigation.
+// Internal ops view of a consignment: its flows, each with its raw engine state — the same
+// picture you'd otherwise need the Temporal UI for. Backend gates this behind the
+// ConsignmentAdminRead scope (see HandleAdminGetConsignmentByID and
+// HandleGetWorkflowEngineStatus); reachable only by direct URL, not linked from trader/CHA
+// navigation.
 export function AdminConsignmentEngineStatusScreen() {
   const { consignmentId } = useParams<{ consignmentId: string }>()
 
@@ -117,12 +119,196 @@ export function AdminConsignmentEngineStatusScreen() {
     )
   }
 
-  // Keyed on consignmentId so navigating to a different root remounts fresh.
-  return <EngineStatusView key={consignmentId} workflowId={consignmentId} />
+  // Keyed on consignmentId so navigating to a different consignment remounts fresh.
+  return <ConsignmentDebugger key={consignmentId} consignmentId={consignmentId} />
 }
 
-// Identifies which workflow instance's global variables are open in the dialog — the root
-// consignment workflow, or one of its expanded child branches. Each workflow instance has its
+const FLOW_STATUS_COLOR: Record<ConsignmentFlow['status'], 'gray' | 'orange' | 'green'> = {
+  STARTING: 'gray',
+  STARTED: 'orange',
+  COMPLETED: 'green',
+}
+
+const FLOW_ROW_GRID = 'grid grid-cols-[1fr_130px_170px_1.5fr] gap-2 items-center'
+
+// The consignment's business-side detail and its flows. The flow on screen is ?flow=<workflowId>
+// (so a link can point at one), else the first flow, which is the export flow.
+function ConsignmentDebugger({ consignmentId }: { consignmentId: string }) {
+  const [consignment, setConsignment] = useState<AdminConsignmentDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<FetchError>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const reload = useCallback(async () => {
+    try {
+      const result = await getConsignmentForAdmin(consignmentId)
+      setConsignment(result)
+      setError(result ? null : 'notFound')
+    } catch (err) {
+      console.error('Failed to fetch consignment:', err)
+      setError('loadFailed')
+    }
+  }, [consignmentId])
+
+  useEffect(() => {
+    let cancelled = false
+    getConsignmentForAdmin(consignmentId)
+      .then((result) => {
+        if (cancelled) return
+        setConsignment(result)
+        setError(result ? null : 'notFound')
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        console.error('Failed to fetch consignment:', err)
+        setError('loadFailed')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [consignmentId])
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center py-12">
+        <Spinner size="3" />
+        <Text size="3" color="gray" className="ml-3">
+          Loading consignment…
+        </Text>
+      </div>
+    )
+  }
+
+  if (error || !consignment) {
+    return (
+      <div className="p-6">
+        <div className="bg-app-surface rounded-lg shadow p-8 text-center">
+          <Text size="5" color="red" weight="medium" className="block mb-2">
+            {error === 'notFound' ? 'Consignment not found' : 'Failed to load consignment'}
+          </Text>
+          <Button variant="soft" onClick={() => void reload()}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ?flow= selects only among this consignment's flows; any other ID falls back to the
+  // first flow, so another workflow's nodes never show under this consignment.
+  const requestedId = searchParams.get('flow')
+  const selectedFlow = consignment.flows.find((flow) => flow.workflowId === requestedId) ?? consignment.flows[0]
+  const selectedId = selectedFlow?.workflowId ?? null
+
+  return (
+    <div className="p-4 md:p-6">
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-foreground">Consignment Debugger</h1>
+        <Button variant="soft" color="gray" size="2" asChild>
+          <Link to={`/admin/consignments/${consignmentId}/view`}>View consignment</Link>
+        </Button>
+      </div>
+
+      <div className="mb-2 flex items-center gap-2 flex-wrap">
+        <Text size="3" weight="medium" className="text-foreground">
+          {consignment.name || 'Untitled consignment'}
+        </Text>
+        <Badge size="1" color={getStateColor(consignment.state)}>
+          {formatState(consignment.state)}
+        </Badge>
+        <Badge size="1" variant="soft" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'}>
+          {consignment.flow}
+        </Badge>
+      </div>
+
+      <div className="mb-6 flex items-center gap-4 flex-wrap">
+        <p className="text-xs font-mono text-foreground-muted">{consignmentId}</p>
+        <p className="text-xs text-foreground-muted">Created {formatDateTime(consignment.createdAt)}</p>
+        <p className="text-xs text-foreground-muted">
+          Trader <span className="font-mono">{consignment.traderId}</span>
+        </p>
+      </div>
+
+      <FlowList
+        flows={consignment.flows}
+        selectedId={selectedId}
+        onSelect={(workflowId) => setSearchParams({ flow: workflowId })}
+      />
+
+      {selectedId ? (
+        <EngineStatusView
+          key={selectedId}
+          workflowId={selectedId}
+          title={selectedFlow?.templateName ?? selectedId}
+          onRefresh={() => void reload()}
+        />
+      ) : (
+        <Text size="2" color="gray">
+          No flow has started on this consignment.
+        </Text>
+      )}
+    </div>
+  )
+}
+
+// A consignment's flows, oldest first. Picking one shows its engine state underneath.
+function FlowList({
+  flows,
+  selectedId,
+  onSelect,
+}: {
+  flows: ConsignmentFlow[]
+  selectedId: string | null
+  onSelect: (workflowId: string) => void
+}) {
+  return (
+    <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
+      <div className={`${FLOW_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
+        <div className="p-3 font-medium text-foreground-subtle text-sm">Flow</div>
+        <div className="p-3 font-medium text-foreground-subtle text-sm">Status</div>
+        <div className="p-3 font-medium text-foreground-subtle text-sm">Started</div>
+        <div className="p-3 font-medium text-foreground-subtle text-sm">Workflow ID</div>
+      </div>
+      {flows.length === 0 ? (
+        <Text size="2" color="gray" className="block p-3">
+          No flows yet.
+        </Text>
+      ) : (
+        flows.map((flow) => {
+          const selected = flow.workflowId === selectedId
+          return (
+            <button
+              key={flow.workflowId}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onSelect(flow.workflowId)}
+              className={`${FLOW_ROW_GRID} min-w-[700px] w-full text-left border-b border-app-border last:border-0 ${
+                selected ? 'bg-primary-subtle' : 'hover:bg-app-surface-muted'
+              }`}
+            >
+              <div className="p-3 text-sm text-foreground" title={flow.templateId}>
+                {flow.templateName}
+              </div>
+              <div className="p-3">
+                <Badge size="1" color={FLOW_STATUS_COLOR[flow.status]}>
+                  {humanizeStatus(flow.status)}
+                </Badge>
+              </div>
+              <div className="p-3 text-xs text-foreground-muted">{formatDateTime(flow.createdAt)}</div>
+              <div className="p-3 text-xs font-mono text-foreground-muted break-all">{flow.workflowId}</div>
+            </button>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+// Identifies which workflow instance's global variables are open in the dialog — the flow on
+// screen, or one of its expanded child branches. Each workflow instance has its
 // own independent WorkflowVariables snapshot, so the dialog is always scoped to exactly one.
 interface WorkflowVariablesTarget {
   workflowId: string
@@ -158,7 +344,17 @@ interface AdminResolutionTarget {
   onResolved: () => void
 }
 
-function EngineStatusView({ workflowId }: { workflowId: string }) {
+// One flow's raw engine state: its nodes (child and task workflows expand in place), audit trail
+// and variables. onRefresh also reloads the consignment, so the flow list's statuses follow.
+function EngineStatusView({
+  workflowId,
+  title,
+  onRefresh,
+}: {
+  workflowId: string
+  title: string
+  onRefresh: () => void
+}) {
   const [status, setStatus] = useState<EngineStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -176,46 +372,25 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   const toggleAllExpansion = useCallback(() => {
     setExpandSignal((prev) => ({ gen: prev.gen + 1, expand: !prev.expand }))
   }, [])
-  // Supplementary business-side context (name, state, trader) fetched independently of the
-  // engine status — best-effort only, so a failure here just hides this section rather than
-  // blocking the ops view the admin actually came here for.
-  const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getConsignmentForAdmin(workflowId)
-      .then((result) => {
-        if (!cancelled) setConsignment(result)
-      })
-      .catch((err: unknown) => {
-        console.error('Failed to fetch consignment details:', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [workflowId])
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      const result = await getConsignmentEngineStatus(workflowId)
+      const result = await getWorkflowEngineStatus(workflowId)
       setStatus(result)
       setError(result ? null : 'notFound')
     } catch (err) {
-      console.error('Failed to fetch consignment engine status:', err)
+      console.error('Failed to fetch workflow engine status:', err)
       setError('loadFailed')
     } finally {
       setRefreshing(false)
     }
-    // Best-effort: the business-side panel just keeps its last-known values on failure.
-    getConsignmentForAdmin(workflowId)
-      .then(setConsignment)
-      .catch((err: unknown) => console.error('Failed to fetch consignment details:', err))
-  }, [workflowId])
+    onRefresh()
+  }, [workflowId, onRefresh])
 
   useEffect(() => {
     let cancelled = false
-    getConsignmentEngineStatus(workflowId)
+    getWorkflowEngineStatus(workflowId)
       .then((result) => {
         if (cancelled) return
         setStatus(result)
@@ -223,7 +398,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        console.error('Failed to fetch consignment engine status:', err)
+        console.error('Failed to fetch workflow engine status:', err)
         setError('loadFailed')
       })
       .finally(() => {
@@ -236,7 +411,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-12">
         <Spinner size="3" />
         <Text size="3" color="gray" className="ml-3">
           Loading engine status…
@@ -247,20 +422,18 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
 
   if (error || !status) {
     return (
-      <div className="p-6">
-        <div className="bg-app-surface rounded-lg shadow p-8 text-center">
-          <Text size="5" color="red" weight="medium" className="block mb-2">
-            {error === 'notFound' ? 'No workflow execution found' : 'Failed to load engine status'}
-          </Text>
-          <Button variant="soft" onClick={() => void refresh()}>
-            Try again
-          </Button>
-        </div>
+      <div className="bg-app-surface rounded-lg shadow p-8 text-center">
+        <Text size="5" color="red" weight="medium" className="block mb-2">
+          {error === 'notFound' ? 'No workflow execution found' : 'Failed to load engine status'}
+        </Text>
+        <Button variant="soft" onClick={() => void refresh()}>
+          Try again
+        </Button>
       </div>
     )
   }
 
-  // Resolving a node takes over the whole screen rather than opening a dialog — there's enough
+  // Resolving a node takes over the flow's view rather than opening a dialog — there's enough
   // detail here (last error, cached task result, variables patch) that a modal crowds it. Back and
   // Cancel both just clear resolveTarget, returning to this same debugger view underneath.
   if (resolveTarget) {
@@ -270,21 +443,18 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
   const topLevelNodes = visibleNodes(status.nodes, showAllNodes)
 
   return (
-    <div className="p-4 md:p-6">
+    <div>
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-foreground">Consignment Debugger</h1>
+          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           <Badge size="2" color={WORKFLOW_STATUS_COLOR[status.status]} title="Engine execution status">
             {status.status}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="soft" color="gray" size="2" asChild>
-            <Link to={`/admin/consignments/${workflowId}/view`}>View consignment</Link>
-          </Button>
           <GlobalVariablesButton
             workflowId={workflowId}
-            label="Root workflow"
+            label={title}
             variables={status.global_variables}
             onOpen={setVariablesTarget}
           />
@@ -317,31 +487,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
         </div>
       </div>
 
-      {consignment && (
-        <div className="mb-2 flex items-center gap-2 flex-wrap">
-          <Text size="3" weight="medium" className="text-foreground">
-            {consignment.name || 'Untitled consignment'}
-          </Text>
-          <Badge size="1" color={getStateColor(consignment.state)}>
-            {formatState(consignment.state)}
-          </Badge>
-          <Badge size="1" variant="soft" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'}>
-            {consignment.flow}
-          </Badge>
-        </div>
-      )}
-
-      <div className="mb-6 flex items-center gap-4 flex-wrap">
-        <p className="text-xs font-mono text-foreground-muted">{status.consignment_id}</p>
-        {consignment && (
-          <>
-            <p className="text-xs text-foreground-muted">Created {formatDateTime(consignment.createdAt)}</p>
-            <p className="text-xs text-foreground-muted">
-              Trader <span className="font-mono">{consignment.traderId}</span>
-            </p>
-          </>
-        )}
-      </div>
+      <p className="mb-4 text-xs font-mono text-foreground-muted">{status.workflow_id}</p>
 
       <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
         <div className={`${NODE_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
@@ -363,7 +509,7 @@ function EngineStatusView({ workflowId }: { workflowId: string }) {
                 node={node}
                 depth={0}
                 workflowId={workflowId}
-                workflowKind="consignment"
+                workflowKind="workflow"
                 edges={status.edges ?? []}
                 variables={status.global_variables}
                 showAllNodes={showAllNodes}
@@ -963,12 +1109,12 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
 }
 
 // Which nested-workflow drilldown a branch renders: a native engine child (SPLIT_TASK/
-// BATCH_SPLIT/PARALLEL_SPLIT, fetched via getConsignmentEngineStatus) or a TASK node's own task
+// BATCH_SPLIT/PARALLEL_SPLIT, fetched via getWorkflowEngineStatus) or a TASK node's own task
 // workflow (a separate ID space/manager, fetched via getTaskWorkflowEngineStatus).
 type WorkflowBranchKind = 'child' | 'task'
 
 const BRANCH_FETCHER: Record<WorkflowBranchKind, (id: string) => Promise<EngineStatus | null>> = {
-  child: getConsignmentEngineStatus,
+  child: getWorkflowEngineStatus,
   task: getTaskWorkflowEngineStatus,
 }
 
@@ -1279,7 +1425,7 @@ function ChildWorkflowBranch({
       {expanded && (
         <WorkflowBranchBody
           workflowId={workflowId}
-          workflowKind="consignment"
+          workflowKind="workflow"
           depth={depth}
           loading={loading}
           status={status}

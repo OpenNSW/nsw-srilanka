@@ -59,31 +59,38 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 	if ctx.Record == nil {
 		return fmt.Errorf("cha_persist: task record is nil")
 	}
-	// ParentWorkflowID is the root workflow's ID, which equals the consignment ID
-	// for any task running outside a SPLIT_TASK branch (see taskv2/store/model.go).
-	consignmentID := ctx.Record.ParentWorkflowID
+	// Every flow of a consignment runs with the consignment ID as its root workflow ID, at
+	// any depth of nesting (see internal/caseflow).
+	consignmentID := ctx.Record.RootWorkflowID
 	if consignmentID == "" {
-		return fmt.Errorf("cha_persist: parent workflow id is empty")
+		return fmt.Errorf("cha_persist: root workflow id is empty")
 	}
 
-	updates := map[string]any{"cha_company_id": chaCompanyID}
-	if name, ok := ctx.Inputs["consignment_name"].(string); ok && strings.TrimSpace(name) != "" {
-		if len([]rune(name)) > 255 {
-			return fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters")
+	name, _ := ctx.Inputs["consignment_name"].(string)
+	if strings.TrimSpace(name) == "" {
+		name = ""
+	}
+	if len([]rune(name)) > 255 {
+		return fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters")
+	}
+
+	// The name lives on the consignment's cases row; the CHA company on the consignment.
+	return p.db.WithContext(ctx.Context).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&consignment.Consignment{}).
+			Where("id = ?", consignmentID).
+			Update("cha_company_id", chaCompanyID)
+		if result.Error != nil {
+			return fmt.Errorf("cha_persist: failed to update consignment %q: %w", consignmentID, result.Error)
 		}
-		updates["name"] = name
-	}
-
-	result := p.db.WithContext(ctx.Context).
-		Model(&consignment.Consignment{}).
-		Where("id = ?", consignmentID).
-		Updates(updates)
-	if result.Error != nil {
-		return fmt.Errorf("cha_persist: failed to update consignment %q: %w", consignmentID, result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("cha_persist: consignment %q not found", consignmentID)
-	}
-
-	return nil
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("cha_persist: consignment %q not found", consignmentID)
+		}
+		if name == "" {
+			return nil
+		}
+		if err := tx.Exec(`UPDATE cases SET name = ?, updated_at = now() WHERE id = ?`, name, consignmentID).Error; err != nil {
+			return fmt.Errorf("cha_persist: failed to name consignment %q: %w", consignmentID, err)
+		}
+		return nil
+	})
 }

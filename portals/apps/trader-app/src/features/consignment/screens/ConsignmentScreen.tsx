@@ -140,10 +140,8 @@ export function ConsignmentScreen() {
                 <Select.Trigger placeholder={t('consignments.list.filter.statePlaceholder')} />
                 <Select.Content>
                   <Select.Item value="all">{t('consignments.list.filter.allStates')}</Select.Item>
-                  <Select.Item value="INITIALIZED">{t('consignments.list.filter.initialized')}</Select.Item>
                   <Select.Item value="IN_PROGRESS">{t('consignments.list.filter.inProgress')}</Select.Item>
                   <Select.Item value="FINISHED">{t('consignments.list.filter.finished')}</Select.Item>
-                  <Select.Item value="FAILED">{t('consignments.list.filter.failed')}</Select.Item>
                 </Select.Content>
               </Select.Root>
               <Select.Root

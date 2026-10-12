@@ -47,7 +47,7 @@ func TestConsignmentService_GetEngineStatus(t *testing.T) {
 
 	result, err := svc.GetEngineStatus(ctx, consignmentID)
 	require.NoError(t, err)
-	assert.Equal(t, consignmentID, result.ConsignmentID)
+	assert.Equal(t, consignmentID, result.WorkflowID)
 	assert.Equal(t, "RUNNING", result.Status)
 	assert.Equal(t, []string{"workflow started"}, result.AuditTrail)
 	assert.Equal(t, map[string]any{"declared_value": float64(1000)}, result.GlobalVariables)
@@ -196,7 +196,7 @@ func TestConsignmentService_GetTaskWorkflowEngineStatus(t *testing.T) {
 
 	result, err := svc.GetTaskWorkflowEngineStatus(ctx, taskWorkflowID)
 	require.NoError(t, err)
-	assert.Equal(t, taskWorkflowID, result.ConsignmentID)
+	assert.Equal(t, taskWorkflowID, result.WorkflowID)
 	require.Len(t, result.Nodes, 1)
 	assert.Equal(t, "AWAITING_ADMIN", result.Nodes[0].Status)
 	assert.Equal(t, "output mapping error", result.Nodes[0].LastError)

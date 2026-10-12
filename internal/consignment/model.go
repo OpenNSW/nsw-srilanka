@@ -19,6 +19,11 @@ const (
 	FlowExport Flow = "EXPORT"
 )
 
+// Valid reports whether f is one of the defined flows.
+func (f Flow) Valid() bool {
+	return f == FlowImport || f == FlowExport
+}
+
 // State represents the lifecycle state of a consignment.
 type State string
 
@@ -26,6 +31,11 @@ const (
 	InProgress State = "IN_PROGRESS"
 	Finished   State = "FINISHED"
 )
+
+// Valid reports whether s is one of the defined states.
+func (s State) Valid() bool {
+	return s == InProgress || s == Finished
+}
 
 // ── Entity ────────────────────────────────────────────────────────────────────
 
@@ -36,9 +46,13 @@ type Consignment struct {
 	UpdatedAt time.Time `gorm:"type:timestamptz;column:updated_at;not null;autoUpdateTime" json:"updatedAt"`
 
 	// Core attributes
-	Name  *string `gorm:"type:varchar(255);column:name" json:"name,omitempty"`
-	Flow  Flow    `gorm:"type:varchar(50);column:flow;not null" json:"flow"`   // IMPORT or EXPORT
-	State State   `gorm:"type:varchar(50);column:state;not null" json:"state"` // IN_PROGRESS → FINISHED
+	Flow Flow `gorm:"type:varchar(50);column:flow;not null" json:"flow"` // IMPORT or EXPORT
+
+	// Name and State live on the consignment's cases row (see internal/caseflow), which
+	// shares its ID. They are read through a join (Service.withCase) and never written
+	// through this struct; caseflow keeps State in step with the consignment's flows.
+	Name  *string `gorm:"->;column:name" json:"name,omitempty"`
+	State State   `gorm:"->;column:state" json:"state"` // IN_PROGRESS → FINISHED
 
 	// Trader
 	TraderID        string `gorm:"type:varchar(100);column:trader_id;not null" json:"traderId"`                // Trader user who created the consignment
@@ -111,6 +125,23 @@ type DetailDTO struct {
 	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details
 }
 
+// AdminDetailDTO is the ops/admin view of a consignment: its detail plus its flows, so an
+// admin can open each flow's engine status by workflow ID.
+type AdminDetailDTO struct {
+	DetailDTO
+	Flows []FlowDTO `json:"flows"`
+}
+
+// FlowDTO is one flow (top-level workflow) of a consignment, see internal/caseflow.
+type FlowDTO struct {
+	WorkflowID   string `json:"workflowId"`
+	TemplateID   string `json:"templateId"`
+	TemplateName string `json:"templateName"` // the workflow definition's name, else TemplateID
+	Status       string `json:"status"`       // STARTING, STARTED or COMPLETED
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
+}
+
 // WorkflowNodeResponseDTO represents a workflow node in the response.
 type WorkflowNodeResponseDTO struct {
 	ID                   string                          `json:"id"`                   // Task ID: one run of a TASK node (not the definition node ID)
@@ -150,13 +181,3 @@ type Filter struct {
 	Offset          *int    `json:"offset,omitempty"`
 	Limit           *int    `json:"limit,omitempty"`
 }
-
-// ── Internal ──────────────────────────────────────────────────────────────────
-
-// WorkflowStatus represents the lifecycle status received from the workflow engine,
-// used to propagate state changes to the consignment domain.
-type WorkflowStatus string
-
-const (
-	WorkflowStatusCompleted WorkflowStatus = "COMPLETED"
-)

@@ -263,6 +263,16 @@ backend:
       baseURL: "http://argus:3001"
       apiKey: "{{env:ARGUS_API_KEY}}"
 
+    # Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section)
+    # leaves metrics off. serviceName is required when endpoint is set so each
+    # deployment can be told apart. Auth headers use "{{env:NAME}}" with the
+    # secret exposed via backend.env.
+    # metrics:
+    #   endpoint: http://otel-collector:4318/v1/metrics
+    #   serviceName: tnsw-api
+    #   headers:
+    #     Authorization: "{{env:METRICS_AUTH_HEADER}}"
+
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 

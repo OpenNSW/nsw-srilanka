@@ -3,8 +3,8 @@ info:
   title: NSW Sri Lanka / Admin API
   description: |
     OpenAPI 3.0 specification for the ops/admin views of any consignment —
-    full detail and raw workflow-engine state, with no trader/CHA ownership
-    check.
+    full detail, its flows, and each flow's raw workflow-engine state, with no
+    trader/CHA ownership check.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -17,12 +17,14 @@ security:
 paths:
   /api/v1/admin/consignments/{id}:
     get:
-      summary: "[Admin] Get any consignment's full detail"
+      summary: "[Admin] Get any consignment's full detail and flows"
       description: |
         Ops/admin view: fetches the full consignment detail for **any**
         consignment, with no trader/CHA ownership check — unlike
         `GET /api/v1/consignments/{id}`, which is scoped to the caller's own
-        consignments.
+        consignments. `flows` lists the consignment's top-level workflows
+        (the export flow, flows a trader started, notices); open one with
+        `GET /api/v1/admin/workflows/{id}/engine-status`.
 
         Requires scope `nsw:consignment:adminread`.
       operationId: adminGetConsignmentByID
@@ -34,7 +36,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DetailDTO'
+                $ref: '#/components/schemas/AdminDetailDTO'
         '400':
           description: Missing consignment ID.
           content:
@@ -66,24 +68,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/admin/consignments/{id}/engine-status:
+  /api/v1/admin/workflows/{id}/engine-status:
     get:
-      summary: "[Admin] Get a consignment's raw workflow-engine state"
+      summary: "[Admin] Get a workflow's raw engine state"
       description: |
-        Returns the root workflow's raw engine state (per-node status
-        straight from the workflow manager, e.g. `RUNNING` /
-        `COMPLETED` / `AWAITING_ADMIN`) — distinct from the trader-facing
+        Returns a workflow's raw engine state (per-node status straight
+        from the workflow manager, e.g. `RUNNING` / `COMPLETED` /
+        `AWAITING_ADMIN`) — distinct from the trader-facing
         `GET /api/v1/consignments/{id}`, which reflects task-store/business
-        state instead. No per-consignment ownership check: any caller
-        holding the admin scope may view any consignment's engine state.
+        state instead. `{id}` is one of a consignment's flows
+        (`AdminDetailDTO.flows`) or a child-branch workflow of one
+        (`EngineNodeDTO.child_workflow_ids`). No per-consignment ownership
+        check: any caller holding the admin scope may view any workflow's
+        engine state.
 
         `global_variables` may hold business/PII data, which is why this is
         gated on the admin scope rather than the trader/CHA read scope.
 
         Requires scope `nsw:consignment:adminread`.
-      operationId: getConsignmentEngineStatus
+      operationId: getWorkflowEngineStatus
       parameters:
-        - $ref: '#/components/parameters/ConsignmentID'
+        - $ref: '#/components/parameters/WorkflowID'
       responses:
         '200':
           description: OK.
@@ -92,7 +97,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/EngineStatusDTO'
         '400':
-          description: Missing consignment ID.
+          description: Missing workflow ID.
           content:
             application/json:
               schema:
@@ -110,7 +115,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: No workflow execution exists for this consignment ID.
+          description: No workflow execution exists for this ID.
           content:
             application/json:
               schema:
@@ -128,8 +133,8 @@ paths:
       description: |
         Returns the raw engine state of a TASK node's independent per-task
         ("micro") workflow — a separate ID space and workflow manager from
-        the consignment/child-workflow IDs used by
-        `GET /api/v1/admin/consignments/{id}/engine-status`. The ID is
+        the flow/child-workflow IDs used by
+        `GET /api/v1/admin/workflows/{id}/engine-status`. The ID is
         obtained from `EngineNodeDTO.task_workflow_id` on the TASK node that
         spawned it.
 
@@ -180,7 +185,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/v1/admin/consignments/{id}/steps/{stepId}/resolve:
+  /api/v1/admin/workflows/{id}/steps/{stepId}/resolve:
     post:
       summary: "[Admin] Resolve a node parked for admin intervention"
       description: |
@@ -189,10 +194,9 @@ paths:
         retry it, complete it without running it, or abort it. See `action`
         on the request body.
 
-        `{id}` is the ID of the workflow instance that contains the node, not
-        a consignment record ID (for a consignment's root workflow the two
-        are the same). It is the root workflow or a child-branch workflow
-        (`EngineNodeDTO.child_workflow_ids`). A node inside a task workflow
+        `{id}` is the ID of the workflow instance that contains the node: one
+        of a consignment's flows (`AdminDetailDTO.flows`) or a child-branch
+        workflow of one (`EngineNodeDTO.child_workflow_ids`). A node inside a task workflow
         is resolved through
         `POST /api/v1/admin/task/{id}/steps/{stepId}/resolve` instead, which
         takes the task workflow's own ID. `{stepId}` is the parked node's
@@ -214,8 +218,8 @@ paths:
           in: path
           required: true
           description: >-
-            The ID of the root or child-branch workflow instance containing the
-            node (see above), not a consignment record ID.
+            The ID of the flow or child-branch workflow instance containing the
+            node (see above).
           schema:
             type: string
         - name: stepId
@@ -288,9 +292,9 @@ paths:
 
         `{id}` is a task workflow's own workflow ID, from
         `EngineNodeDTO.task_workflow_id` on the TASK node that spawned it: a
-        separate ID space and workflow manager from the consignment and
+        separate ID space and workflow manager from the flow and
         child-workflow IDs of
-        `POST /api/v1/admin/consignments/{id}/steps/{stepId}/resolve`, the
+        `POST /api/v1/admin/workflows/{id}/steps/{stepId}/resolve`, the
         same split as the two engine-status endpoints. `{stepId}` is the
         parked node's `EngineNodeDTO.step_id` from that task workflow's
         response to `GET /api/v1/admin/task/{id}/engine-status`.
@@ -387,6 +391,15 @@ components:
       schema:
         type: string
         format: uuid
+    WorkflowID:
+      name: id
+      in: path
+      required: true
+      description: >-
+        A workflow ID: one of a consignment's flows (`AdminDetailDTO.flows`)
+        or a child-branch workflow of one.
+      schema:
+        type: string
 
   schemas:
     ErrorResponse:
@@ -487,6 +500,48 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
+
+    AdminDetailDTO:
+      description: The consignment's full detail plus its flows.
+      allOf:
+        - $ref: '#/components/schemas/DetailDTO'
+        - type: object
+          required:
+            - flows
+          properties:
+            flows:
+              type: array
+              description: The consignment's top-level workflows, oldest first.
+              items:
+                $ref: '#/components/schemas/FlowDTO'
+
+    FlowDTO:
+      type: object
+      description: One top-level workflow (flow) of a consignment.
+      required:
+        - workflowId
+        - templateId
+        - templateName
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        workflowId:
+          type: string
+        templateId:
+          type: string
+        templateName:
+          type: string
+          description: The workflow definition's name, else `templateId`.
+        status:
+          type: string
+          enum: [STARTING, STARTED, COMPLETED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     EngineNodeDTO:
       type: object
@@ -602,17 +657,16 @@ components:
     EngineStatusDTO:
       type: object
       required:
-        - consignment_id
+        - workflow_id
         - status
         - nodes
         - audit_trail
       properties:
-        consignment_id:
+        workflow_id:
           type: string
-          format: uuid
         status:
           type: string
-          description: The root workflow's overall status, e.g. RUNNING, COMPLETED, AWAITING_ADMIN.
+          description: The workflow's overall status, e.g. RUNNING, COMPLETED, AWAITING_ADMIN.
         nodes:
           type: array
           description: Only nodes the interpreter has already reached; not-yet-started nodes are omitted.
