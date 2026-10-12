@@ -396,7 +396,7 @@ cors:
 	if err == nil {
 		t.Fatal("expected error for wildcard origin with credentials=true, got nil")
 	}
-	if !containsString(err.Error(), "wildcard origin '*' is not allowed when AllowCredentials is true") {
+	if !containsString(err.Error(), "allowedOrigins cannot contain the wildcard '*' when allowCredentials is true") {
 		t.Errorf("expected error mentioning wildcard credentials constraint, got: %v", err)
 	}
 }
@@ -791,8 +791,8 @@ func TestConfigValidate_CORSError(t *testing.T) {
 	cfg := validConfig()
 	cfg.CORS = cors.Config{} // empty AllowedOrigins → CORS error
 	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "CORS_ALLOWED_ORIGINS is required") {
-		t.Errorf("expected CORS config error mentioning 'CORS_ALLOWED_ORIGINS is required', got: %v", err)
+	if err == nil || !containsString(err.Error(), "allowedOrigins is required") {
+		t.Errorf("expected CORS config error mentioning 'allowedOrigins is required', got: %v", err)
 	}
 }
 
@@ -803,7 +803,7 @@ func TestConfigValidate_CORSWildcardCredentialsError(t *testing.T) {
 		AllowCredentials: true,
 	}
 	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "wildcard origin '*' is not allowed when AllowCredentials is true") {
+	if err == nil || !containsString(err.Error(), "allowedOrigins cannot contain the wildcard '*' when allowCredentials is true") {
 		t.Errorf("expected invalid CORS configuration error for wildcard origin with AllowCredentials=true, got: %v", err)
 	}
 }
