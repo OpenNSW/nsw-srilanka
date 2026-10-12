@@ -69,8 +69,7 @@ type repository struct {
 	db *sql.DB
 }
 
-// NewRepository creates a Repository on db, the app's shared connection pool (the
-// *sql.DB behind its *gorm.DB, as for the refid stores).
+// NewRepository creates a Repository on db, the app's shared connection pool.
 func NewRepository(db *sql.DB) Repository {
 	return &repository{db: db}
 }

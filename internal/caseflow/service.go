@@ -12,9 +12,9 @@
 // This package knows nothing of consignments or agencies; callers supply the case ID
 // and the template.
 //
-// The repository uses database/sql with plain SQL and no ORM, like core's refid stores:
-// its correctness rests on statement order and row locks (see Record and MarkCompleted),
-// which the SQL states directly. New repositories follow this style.
+// The repository uses database/sql with plain SQL and no ORM: its correctness rests on
+// statement order and row locks (see Record and MarkCompleted), which the SQL states
+// directly. New repositories follow this style.
 package caseflow
 
 import (
