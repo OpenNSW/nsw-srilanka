@@ -38,6 +38,7 @@ import (
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
@@ -218,6 +219,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	var (
 		consignmentService *consignment.Service
 		consignmentRouter  *consignment.Router
+		flowService        *caseflow.Service
 		upstream           parentUpstreamService
 	)
 	if agencyMode {
@@ -237,7 +239,23 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to build consignment router: %w", err)
 		}
-		upstream = consignmentService
+		// A consignment is a case: caseflow starts its flows and, as the completion
+		// callback, keeps its state in step with them.
+		sqlDB, err := db.DB()
+		if err != nil {
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
+		}
+		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifactRegistry)
+		if err := consignmentService.RegisterFlowStarter(flowService); err != nil {
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register flow starter with consignment service: %w", err)
+		}
+		upstream = flowService
 	}
 
 	pr, stopParentRunner, err := wireParentRunner(temporalClient, cfg.Temporal.Namespace, tm, upstream)
@@ -257,6 +275,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	parentRunner = pr
 
 	if !agencyMode {
+		if err := flowService.RegisterWorkflowManager(parentRunner); err != nil {
+			_ = stopParentRunner()
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register workflow manager with flow service: %w", err)
+		}
 		if err := consignmentService.RegisterWorkflowManager(parentRunner); err != nil {
 			_ = stopParentRunner()
 			_ = stopTask()
@@ -533,8 +558,8 @@ type parentTaskActivator interface {
 }
 
 // parentUpstreamService is the narrow surface wireParentRunner needs to notify
-// a downstream domain (consignment) when a parent workflow completes.
-// *consignment.Service satisfies this directly via its CompletionHandler method.
+// a downstream domain when a parent workflow completes: *caseflow.Service in TNSW,
+// agency.CompletionHandler in an agency.
 // taskGate is Layer 1 of task authorization on the task routes: authzgate's
 // trader/CHA middleware in TNSW, agency.OfficerGate in an agency.
 type taskGate interface {
@@ -581,7 +606,7 @@ func newAdminParkLogger(scope string) func(workflow.AdminParkPayload) error {
 // parentWorkflowQueue. When a parent workflow reaches a Task node, the
 // activator's StartTask is invoked to spawn the corresponding task workflow.
 // On parent-workflow completion, upstream.CompletionHandler is invoked so
-// consignment can advance its own state.
+// the workflow's case can advance its state.
 func wireParentRunner(c client.Client, namespace string, activator parentTaskActivator, upstream parentUpstreamService) (workflow.TemporalManager, func() error, error) {
 	if activator == nil {
 		return nil, nil, fmt.Errorf("parent task activator cannot be nil")
