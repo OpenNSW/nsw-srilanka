@@ -453,9 +453,6 @@ func sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// lookupPath resolves a dot-notation path (e.g. "consignment.id") against a
-// decoded JSON object, descending through nested objects. Returns false if any
-// segment is missing or a non-object is encountered mid-path.
 // lookupPath reads a dot-notation path from obj. A segment selects an object's field, or,
 // when it is a number, an array's element (e.g. "flows.0.workflowId").
 func lookupPath(obj map[string]any, path string) (any, bool) {
