@@ -209,23 +209,8 @@ func (c *Config) validateAuxiliary() error {
 	if err := c.ArtifactLoader.Validate(); err != nil {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
 	}
-	if err := validateMetrics(c.Metrics); err != nil {
+	if err := c.Metrics.Validate(); err != nil {
 		return fmt.Errorf("invalid metrics configuration: %w", err)
-	}
-	return nil
-}
-
-// validateMetrics checks the optional metrics section. Empty endpoint leaves
-// metrics off; when set, the OTLP/HTTP URL and serviceName are required.
-func validateMetrics(c metrics.Config) error {
-	if !c.Enabled() {
-		return nil
-	}
-	if err := HTTPURL("metrics.endpoint", c.Endpoint); err != nil {
-		return err
-	}
-	if strings.TrimSpace(c.ServiceName) == "" {
-		return fmt.Errorf("metrics.serviceName is required when metrics.endpoint is set")
 	}
 	return nil
 }

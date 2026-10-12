@@ -3,9 +3,9 @@
 # start without it. There are no built-in
 # defaults: every setting the server needs is written here, and one left out
 # (or empty) stops the server at startup rather than running on a value the
-# code chose. Only the optional sections (audit, refid, the inactive storage
-# and artifactLoader backends) may be left out; payments and REFID_GENERATOR
-# steps need refid.
+# code chose. Only the optional sections (audit, metrics, refid, the inactive
+# storage and artifactLoader backends) may be left out; payments and
+# REFID_GENERATOR steps need refid.
 #
 # This is the committed template for a native run (`go run ./cmd/server`,
 # `make test-e2e`), pointed at the `make deps` services on localhost;

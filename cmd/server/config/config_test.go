@@ -720,6 +720,12 @@ func TestConfigValidate_Metrics(t *testing.T) {
 	if err == nil || !containsString(err.Error(), "metrics.endpoint") {
 		t.Errorf("expected metrics.endpoint error, got: %v", err)
 	}
+
+	cfg.Metrics.Endpoint = "http://otel-collector:4318"
+	err = cfg.Validate()
+	if err == nil || !containsString(err.Error(), "OTLP path") {
+		t.Errorf("expected metrics.endpoint path error, got: %v", err)
+	}
 }
 
 func TestConfigValidate_StorageProxy(t *testing.T) {
