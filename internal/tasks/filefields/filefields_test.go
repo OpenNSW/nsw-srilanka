@@ -103,6 +103,20 @@ func TestParseRejects(t *testing.T) {
 	}
 }
 
+// A field declared twice would be rewritten twice, so it is refused like a
+// path that does not parse.
+func TestParseRejectsDuplicates(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{"files": []string{"form.invoice", "form.docs[*]", "form.invoice"}})
+	_, err := filefields.Parse(raw)
+	if err == nil || !strings.Contains(err.Error(), `"form.invoice" is declared twice`) {
+		t.Fatalf("Parse = %v, want an error naming the duplicate", err)
+	}
+	raw, _ = json.Marshal(map[string]any{"files": []string{"form.docs", "form.docs[*]"}})
+	if _, err := filefields.Parse(raw); err != nil {
+		t.Errorf("Parse(form.docs, form.docs[*]) = %v; they are different paths", err)
+	}
+}
+
 func TestRebase(t *testing.T) {
 	cases := []struct {
 		path, prefix, want string
@@ -163,23 +177,19 @@ func TestReplace(t *testing.T) {
 	}
 }
 
-// Anything that is not a non-empty string where a path leads is left alone.
+// Where there is no file, a path is skipped: a missing value, null, or an
+// empty string, at the end of the path or on the way to it.
 func TestReplaceSkips(t *testing.T) {
 	const doc = `{
-		"empty": {"file": ""},
-		"null": {"file": null},
-		"number": {"file": 3},
-		"object": {"file": {"key": "k"}},
-		"notArray": {"files": "k"},
-		"notObject": "k",
-		"mixed": {"files": ["", null, 1, ["k"], {"k": "k"}]}
+		"empty": {"file": "", "files": ["", null]},
+		"null": {"file": null, "files": null, "object": null}
 	}`
 	data := decode(t, doc)
 	var seen []string
 	paths := parse(t,
-		"empty.file", "null.file", "number.file", "object.file",
-		"notArray.files[*]", "notObject.file", "mixed.files[*]",
-		"missing.file", "empty.missing",
+		"empty.file", "empty.files[*]",
+		"null.file", "null.files[*]", "null.object.file",
+		"missing.file", "empty.missing", "null.missing[*].file",
 	)
 	if err := filefields.Replace(data, paths, mark(&seen)); err != nil {
 		t.Fatalf("Replace: %v", err)
@@ -189,6 +199,81 @@ func TestReplaceSkips(t *testing.T) {
 	}
 	if !reflect.DeepEqual(data, decode(t, doc)) {
 		t.Errorf("Replace changed data: %v", data)
+	}
+}
+
+// Any other value of another shape than the declaration says fails, naming
+// where the path met it, rather than leaving a file unprotected.
+func TestReplaceRefusesOtherShapes(t *testing.T) {
+	const doc = `{
+		"form": {
+			"invoice": ["k1", "k2"],
+			"single": "k3",
+			"number": 3,
+			"flag": true,
+			"object": {"key": "k4"},
+			"docs": [{"file": "k5"}, "k6"],
+			"text": "k7"
+		},
+		"scalar": "k8"
+	}`
+	tests := []struct {
+		path, want string
+	}{
+		{"form.invoice", "form.invoice holds a list, not one file; declare form.invoice[*]"},
+		{"form.single[*]", "form.single holds a string, not a list; declare it without [*]"},
+		{"form.number", "form.number holds a number, not a file"},
+		{"form.flag", "form.flag holds a boolean, not a file"},
+		{"form.object", "form.object holds an object, not a file"},
+		{"form.object[*]", "form.object holds an object, not a list"},
+		{"form.docs[*].file", "form.docs[*] holds a string, not an object"},
+		{"form.text.file", "form.text holds a string, not an object"},
+		{"scalar.file", "scalar holds a string, not an object"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			var seen []string
+			err := filefields.Replace(decode(t, doc), parse(t, tt.path), mark(&seen))
+			if !errors.Is(err, filefields.ErrShape) {
+				t.Fatalf("err = %v, want ErrShape", err)
+			}
+			if !strings.Contains(err.Error(), tt.want) || !strings.Contains(err.Error(), tt.path) {
+				t.Errorf("err = %q, want it to name %q and say %q", err, tt.path, tt.want)
+			}
+			if tt.path != "form.docs[*].file" && len(seen) != 0 {
+				t.Errorf("fn saw %q, want nothing", seen)
+			}
+		})
+	}
+
+	if err := filefields.Replace("k", parse(t, "form.file"), mark(new([]string))); !errors.Is(err, filefields.ErrShape) {
+		t.Errorf("data that is not an object: err = %v, want ErrShape", err)
+	}
+	// A value that was not JSON-decoded is named by its Go type.
+	err := filefields.Replace(map[string]any{"form": []string{"k"}}, parse(t, "form[*]"), mark(new([]string)))
+	if !errors.Is(err, filefields.ErrShape) || !strings.Contains(err.Error(), "holds a []string") {
+		t.Errorf("a Go-typed value: err = %v, want ErrShape naming []string", err)
+	}
+}
+
+// A task with no data holds no files.
+func TestReplaceNoData(t *testing.T) {
+	var seen []string
+	if err := filefields.Replace(nil, parse(t, "form.invoice"), mark(&seen)); err != nil || len(seen) != 0 {
+		t.Errorf("Replace(nil) = %v, fn saw %q; want nothing", err, seen)
+	}
+}
+
+// A Path that names nothing, such as the zero Path a failed Rebase returns, is
+// skipped rather than walked.
+func TestReplaceSkipsEmptyPath(t *testing.T) {
+	data := decode(t, `{"form": {"invoice": "k1"}}`)
+	var seen []string
+	if err := filefields.Replace(data, []filefields.Path{{}}, mark(&seen)); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if len(seen) != 0 {
+		t.Errorf("fn saw %q, want nothing", seen)
 	}
 }
 

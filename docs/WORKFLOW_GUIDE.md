@@ -261,7 +261,15 @@ A path is names joined by `.`. A name can be followed by `[*]` to step into ever
 | `userform.items[*].lines[*].certificate` | a field of objects in arrays inside an array |
 | `review.batches[*][*]`                   | every file in an array of arrays             |
 
-A path with no data behind it, or an empty string, has no file and is skipped. Like the rest of `render.json`, `files` is snapshotted when the task starts, so a field added later only covers tasks started after it.
+Each path must be listed once and must match the data's shape. A field that holds several files is a list, so declare it with `[*]`. A file upload that allows more than one file (`maxFiles` above 1) stores a list even when its schema says `string`.
+
+- A missing value, `null` or an empty string has no file and is skipped.
+- Any other value of another shape fails the request rather than going out unprotected: a list where one file was declared, `[*]` on a single file, or an object or number at the end of a path.
+
+Like the rest of `render.json`, `files` is snapshotted when the task starts, so a field added later only covers tasks started after it.
+
+> [!WARNING]
+> **Known limitation:** the backend protects only the paths listed in `files`. A file value at a path that isn't listed goes out exactly as stored: a raw storage key, which opens nothing once only file references are accepted. A server-side step that reads files, such as a CusDec or ePhyto attachment, fetches whatever key such a field holds. one-trade-artifacts' CI checks that every file field is declared.
 
 ### Interactive Form Template Example (`render.json`)
 
