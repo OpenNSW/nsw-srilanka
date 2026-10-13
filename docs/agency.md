@@ -176,7 +176,7 @@ read the task. They are recorded in the audit trail as task updates. The full co
 is in `api/tasks.openapi.yaml`.
 
 Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
-`claimed_at`, added by migration `000022`). The claim lasts until its holder releases
+`claimed_at`, added by migration `000025`). The claim lasts until its holder releases
 it: across every step of the task, and after the task completes, as a record of who
 worked on it. There is no expiry and no forced release yet, so an officer who leaves
 keeps their claims.
