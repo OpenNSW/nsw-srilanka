@@ -65,6 +65,7 @@ jobs:
   makefile:
     name: Makefile on ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     strategy:
