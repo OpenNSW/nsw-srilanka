@@ -73,6 +73,17 @@
     ],
     "npqsInject": [
       "nsw:workflow:inject"
+    ],
+    "sltbOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "sltbInject": [
+      "nsw:workflow:inject"
     ]
   }
 }

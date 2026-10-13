@@ -155,10 +155,11 @@ That script creates:
 - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
   and **`NswM2M`** roles (machine clients) — see _API authorization_ below
 - **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
-- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`Customs API`** and **`NPQS API`** OAuth2 resource servers (scopes + token audiences)
+- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`Customs API`**, **`NPQS API`** and **`SLTB API`** OAuth2 resource servers (scopes + token audiences)
 - **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
 - **`Customs Officers`** group + **`Customs Officer`** role, and the **`NswToCustomsM2M`** role (see `customs.json`)
 - **`NPQS Officers`** group + **`NPQS Officer`** role, and the **`NswToNpqsM2M`** role (see `npqs.json`)
+- **`SLTB Officers`** group + **`SLTB Officer`** role, and the **`NswToSltbM2M`** role (see `sltb.json`)
 - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
   `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
   `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
@@ -279,6 +280,7 @@ idp/resources/
     cda.json                   CDA, run by this backend in agency mode (explicit, see below)
     customs.json               Customs, run by this backend in agency mode (explicit, see below)
     npqs.json                  NPQS, run by this backend in agency mode (explicit, see below)
+    sltb.json                  SLTB, run by this backend in agency mode (explicit, see below)
 ```
 
 CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
@@ -298,6 +300,11 @@ NPQS is declared the same way in `npqs.json` (`configs/agency/npqs/`): the `NPQS
 resource server's `NPQS Officer` role (via `NPQS Officers`, holding only `npqs_officer`)
 and `NswToNpqsM2M` role (on `NSW_TO_NPQS`), the `OGA_PORTAL_APP_NPQS` portal client, and
 `NPQS_TO_NSW`.
+
+SLTB is declared the same way in `sltb.json` (`configs/agency/sltb/`): the `SLTB API`
+resource server's `SLTB Officer` role (via `SLTB Officers`, holding only `sltb_officer`)
+and `NswToSltbM2M` role (on `NSW_TO_SLTB`), the `OGA_PORTAL_APP_SLTB` portal client, and
+`SLTB_TO_NSW`.
 
 Each file's top-level keys are entity-type buckets (`scopeSets`, `resourceServers`,
 `organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
@@ -358,11 +365,11 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
 - **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
   `CDA_TO_NSW`, `SLPA_TO_NSW`, `CUSTOMS_TO_NSW`, `SLTB_TO_NSW`.
-- **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_FCAU`, `NSW_TO_SLPA`,
-  `NSW_TO_SLTB`.
+- **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_FCAU`, `NSW_TO_SLPA`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
 - **NSW → Customs** (`aud=https://api.customs.nsw-agency.local`, `NswToCustomsM2M` role): `NSW_TO_CUSTOMS`.
 - **NSW → NPQS** (`aud=https://api.npqs.nsw-agency.local`, `NswToNpqsM2M` role): `NSW_TO_NPQS`.
+- **NSW → SLTB** (`aud=https://api.sltb.nsw-agency.local`, `NswToSltbM2M` role): `NSW_TO_SLTB`.
 
 ## API authorization (OAuth2)
 
@@ -376,6 +383,7 @@ becomes the access-token **audience** (`aud`):
 | `https://api.cda.nsw-agency.local`     | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)         | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 | `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 | `https://api.npqs.nsw-agency.local`    | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.sltb.nsw-agency.local`    | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -401,8 +409,11 @@ becomes the access-token **audience** (`aud`):
 > - **NPQS** (`npqs-api`): the `NPQS API` identifier, `https://api.npqs.nsw-agency.local`,
 >   in the same places under `configs/agency/npqs/` and TNSW's `npqs` entry in
 >   `configs/services*.example.json`.
+> - **SLTB** (`sltb-api`): the `SLTB API` identifier, `https://api.sltb.nsw-agency.local`,
+>   in the same places under `configs/agency/sltb/` and TNSW's `sltb` entry in
+>   `configs/services*.example.json`.
 
-Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, Customs and NPQS APIs reuse `nsw:*` names, since they
+Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, Customs, NPQS and SLTB APIs reuse `nsw:*` names, since they
 are the same backend; that is safe because every caller names its target with `resource`
 (below), and a token is narrowed to the scopes of that one resource server.
 
@@ -422,7 +433,9 @@ scopes via a role:
 | Customs portal users   | `Customs Officer` role (via `Customs Officers` group) → Customs API scopes                            |
 | `NSW_TO_CUSTOMS`       | **`NswToCustomsM2M` role assigned to the application** → `nsw:workflow:inject` on the Customs API     |
 | NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                     |
+| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                     |
 | `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject` on the NPQS API           |
+| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject` on the SLTB API           |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to

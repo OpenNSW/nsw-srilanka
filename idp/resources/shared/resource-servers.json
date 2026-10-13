@@ -120,6 +120,29 @@
           ]
         }
       ]
+    },
+    {
+      "name": "SLTB API",
+      "identifier": "https://api.sltb.nsw-agency.local",
+      "ou": "default",
+      "resources": [
+        {
+          "handle": "nsw",
+          "name": "SLTB API",
+          "resources": [
+            { "handle": "workflow", "name": "Workflow",
+              "actions": [ { "handle": "inject", "name": "Inject" } ] },
+            { "handle": "consignment", "name": "Consignment",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "task", "name": "Task",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] },
+            { "handle": "profile", "name": "Profile",
+              "actions": [ { "handle": "read", "name": "Read" } ] },
+            { "handle": "storage", "name": "Storage",
+              "actions": [ { "handle": "read", "name": "Read" }, { "handle": "write", "name": "Write" } ] }
+          ]
+        }
+      ]
     }
   ]
 }

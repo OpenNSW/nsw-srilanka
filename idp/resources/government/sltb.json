@@ -1,0 +1,76 @@
+{
+  "organizationUnits": [
+    {
+      "key": "government-organization/sltb",
+      "handle": "sltb",
+      "name": "SLTB",
+      "description": "Sri Lanka Tea Board",
+      "parent": "government-organization",
+      "treePath": "government-organization/sltb"
+    }
+  ],
+  "groups": [
+    { "key": "SLTB Officers", "name": "SLTB Officers", "description": "SLTB officers group", "ou": "government-organization/sltb" }
+  ],
+  "roles": [
+    { "key": "SLTB Officer", "name": "SLTB Officer", "description": "Role for SLTB officers working tasks in the SLTB deployment",
+      "ou": "government-organization/sltb", "resourceServer": "https://api.sltb.nsw-agency.local", "scopeSet": "sltbOfficer" },
+    { "key": "NswToSltbM2M", "name": "NswToSltbM2M", "description": "Role for NSW injecting workflows into the SLTB deployment",
+      "ou": "government-organization/sltb", "resourceServer": "https://api.sltb.nsw-agency.local", "scopeSet": "sltbInject" }
+  ],
+  "roleAssignments": [
+    { "role": "SLTB Officer", "group": "SLTB Officers" }
+  ],
+  "users": [
+    {
+      "key": "sltb_officer",
+      "type": "Government_User",
+      "ou": "government-organization/sltb",
+      "username": "sltb_officer",
+      "email": "sltb_officer@government.dev",
+      "givenName": "SLTB",
+      "familyName": "Officer",
+      "phoneNumber": "+94771234566",
+      "passwordEnv": { "override": "SAMPLE_SLTB_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["SLTB Officers"]
+    }
+  ],
+  "applications": [
+    {
+      "key": "OGA_PORTAL_APP_SLTB",
+      "kind": "spa",
+      "name": "SLTBPortalApp",
+      "description": "Application for the SLTB officer portal (trader-app in agency mode)",
+      "clientId": "OGA_PORTAL_APP_SLTB",
+      "port": 5179,
+      "allowedUserType": "Government_User",
+      "ou": "government-organization/sltb",
+      "scopeSet": "sltbOfficer",
+      "redirectUrisEnv": "SLTB_REDIRECT_URIS"
+    },
+    {
+      "key": "SLTB_TO_NSW",
+      "kind": "m2m",
+      "name": "SLTB_TO_NSW_M2M",
+      "description": "Machine-to-machine integration for SLTB to NSW",
+      "clientId": "SLTB_TO_NSW",
+      "secretEnv": { "override": "M2M_SLTB_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "m2mNsw"
+    },
+    {
+      "key": "NSW_TO_SLTB",
+      "kind": "m2m",
+      "name": "NSW_TO_SLTB_M2M",
+      "description": "Machine-to-machine integration for NSW to SLTB",
+      "clientId": "NSW_TO_SLTB",
+      "secretEnv": { "override": "M2M_NSW_TO_SLTB_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "government-organization",
+      "scopeSet": "sltbInject"
+    }
+  ],
+  "appRoleAssignments": [
+    { "role": "AgencyM2M", "app": "SLTB_TO_NSW" },
+    { "role": "NswToSltbM2M", "app": "NSW_TO_SLTB" }
+  ]
+}

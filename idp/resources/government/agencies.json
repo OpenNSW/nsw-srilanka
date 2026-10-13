@@ -29,21 +29,6 @@
         "toNsw": { "clientId": "SLPA_TO_NSW", "secretEnv": { "override": "M2M_SLPA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
         "nswTo": { "clientId": "NSW_TO_SLPA", "secretEnv": { "override": "M2M_NSW_TO_SLPA_SECRET", "default": "M2M_CLIENT_SECRET" } }
       }
-    },
-    {
-      "handle": "sltb",
-      "name": "SLTB",
-      "description": "Sri Lanka Tea Board",
-      "officer": {
-        "username": "sltb_officer", "email": "sltb_officer@government.dev",
-        "givenName": "SLTB", "familyName": "Officer", "phoneNumber": "+94771234566",
-        "passwordEnv": { "override": "SAMPLE_SLTB_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
-      },
-      "portal": { "name": "SLTBPortalApp", "clientId": "OGA_PORTAL_APP_SLTB", "port": 5179, "redirectUrisEnv": "SLTB_REDIRECT_URIS" },
-      "m2m": {
-        "toNsw": { "clientId": "SLTB_TO_NSW", "secretEnv": { "override": "M2M_SLTB_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
-        "nswTo": { "clientId": "NSW_TO_SLTB", "secretEnv": { "override": "M2M_NSW_TO_SLTB_SECRET", "default": "M2M_CLIENT_SECRET" } }
-      }
     }
   ]
 }
