@@ -332,3 +332,18 @@ func mustWrite(t *testing.T, path, content string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+func TestLookupPathIndexesArrays(t *testing.T) {
+	obj := map[string]any{"flows": []any{map[string]any{"workflowId": "w0"}, map[string]any{"workflowId": "w1"}}}
+	for path, want := range map[string]any{"flows.1.workflowId": "w1", "flows.0.workflowId": "w0"} {
+		got, ok := lookupPath(obj, path)
+		if !ok || got != want {
+			t.Errorf("lookupPath(%q) = %v, %v; want %v", path, got, ok, want)
+		}
+	}
+	for _, path := range []string{"flows.2.workflowId", "flows.x.workflowId", "flows.-1", "flows.0.missing"} {
+		if got, ok := lookupPath(obj, path); ok {
+			t.Errorf("lookupPath(%q) = %v; want not present", path, got)
+		}
+	}
+}

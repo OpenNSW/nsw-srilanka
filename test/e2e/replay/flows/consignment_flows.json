@@ -1,0 +1,113 @@
+{
+  "name": "consignment_flows",
+  "steps": [
+    {
+      "name": "trader creates consignment",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments",
+        "expectStatus": 201,
+        "extract": { "consignmentId": "id" }
+      }
+    },
+    {
+      "name": "wait for Initialize Consignment task",
+      "wait": {
+        "node": "Initialize Consignment",
+        "state": "IN_PROGRESS",
+        "into": "initTask",
+        "timeout": "45s"
+      }
+    },
+    {
+      "name": "admin lists the consignment's flows (the export flow)",
+      "request": {
+        "actor": "admin",
+        "method": "GET",
+        "path": "/api/v1/admin/consignments/{{consignmentId}}",
+        "extract": { "exportFlow": "flows.0.workflowId" }
+      }
+    },
+    {
+      "name": "admin opens the export flow's engine status",
+      "request": {
+        "actor": "admin",
+        "method": "GET",
+        "path": "/api/v1/admin/workflows/{{exportFlow}}/engine-status",
+        "extract": { "exportFlowId": "workflow_id" }
+      }
+    },
+    {
+      "name": "a trader cannot use the admin routes",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/admin/consignments/{{consignmentId}}",
+        "expectStatus": 403
+      }
+    },
+    {
+      "name": "a template that is not a startable flow is refused",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments/{{consignmentId}}/flows",
+        "body": { "templateId": "fcau-health-cert-v1" },
+        "expectStatus": 400
+      }
+    },
+    {
+      "name": "a request that sets the flow's variables is refused",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments/{{consignmentId}}/flows",
+        "body": {
+          "templateId": "trade-export-v1",
+          "inputs": { "payment": { "status": "PAID" } }
+        },
+        "expectStatus": 400
+      }
+    },
+    {
+      "name": "a CHA not yet chosen for the consignment cannot start a flow",
+      "request": {
+        "actor": "cha",
+        "method": "POST",
+        "path": "/api/v1/consignments/{{consignmentId}}/flows",
+        "body": { "templateId": "trade-export-v1" },
+        "expectStatus": 404
+      }
+    },
+    {
+      "name": "trader starts a flow on the consignment",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments/{{consignmentId}}/flows",
+        "body": { "templateId": "trade-export-v1" },
+        "expectStatus": 201,
+        "extract": { "secondFlow": "workflowId" }
+      }
+    },
+    {
+      "name": "admin sees both flows",
+      "request": {
+        "actor": "admin",
+        "method": "GET",
+        "path": "/api/v1/admin/consignments/{{consignmentId}}",
+        "extract": { "listedSecondFlow": "flows.1.workflowId" }
+      }
+    },
+    {
+      "name": "admin opens the second flow's engine status",
+      "request": {
+        "actor": "admin",
+        "method": "GET",
+        "path": "/api/v1/admin/workflows/{{secondFlow}}/engine-status",
+        "extract": { "secondFlowId": "workflow_id" }
+      }
+    }
+  ]
+}

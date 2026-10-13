@@ -226,7 +226,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		upstream = agencyCompletion(db)
 	} else {
-		consignmentService, err = consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles)
+		consignmentService, err = consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()

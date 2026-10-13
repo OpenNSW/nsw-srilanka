@@ -19,6 +19,7 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 	"github.com/OpenNSW/nsw-srilanka/internal/metrics"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
@@ -46,6 +47,10 @@ type Config struct {
 	Integrations integrations.Config `yaml:"integrations"`
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
+
+	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
+	// one. Optional; an agency ignores it.
+	Consignment consignment.Config `yaml:"consignment"`
 
 	// RefID holds the reference ID formats the REFID_GENERATOR task plugin
 	// generates from. Optional: with no issuers, generation is disabled and a
@@ -158,6 +163,21 @@ func loadFile(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// validateTNSW checks TNSW's trade integrations and consignments; an agency builds none of
+// them.
+func (c *Config) validateTNSW() error {
+	if c.Mode == ModeAgency {
+		return nil
+	}
+	if err := c.Integrations.Validate(); err != nil {
+		return fmt.Errorf("invalid external integration configuration: %w", err)
+	}
+	if err := c.Consignment.Validate(); err != nil {
+		return fmt.Errorf("invalid consignment configuration: %w", err)
+	}
+	return nil
+}
+
 // Validate checks that all required configuration is present.
 func (c *Config) Validate() error {
 	if err := c.Mode.Validate(); err != nil {
@@ -175,11 +195,8 @@ func (c *Config) Validate() error {
 	if err := c.Authn.Validate(); err != nil {
 		return fmt.Errorf("invalid authn configuration: %w", err)
 	}
-	// TNSW's trade integrations; an agency builds none of them.
-	if c.Mode != ModeAgency {
-		if err := c.Integrations.Validate(); err != nil {
-			return fmt.Errorf("invalid external integration configuration: %w", err)
-		}
+	if err := c.validateTNSW(); err != nil {
+		return err
 	}
 	// Refuse to skip JWKS TLS verification outside development: a forged
 	// signing-key response here means full JWT forgery / auth bypass.

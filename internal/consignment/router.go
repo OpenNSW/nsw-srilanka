@@ -35,7 +35,12 @@ const (
 	errInvalidRequestBody    = "invalid request body"
 	errInvalidAdminAction    = "action must be one of RETRY, COMPLETE, ABORT"
 	errReasonRequired        = "reason is required"
+	errFlowNotAllowed        = "templateId is not a flow that can be started on this consignment"
+	errRequestBodyTooLarge   = "request body too large"
 )
+
+// maxStartFlowRequestBytes caps a StartFlowRequest body, which only names a template.
+const maxStartFlowRequestBytes = 1 << 10
 
 // validAdminActions maps the wire-format action string onto the core/workflow constant, and
 // doubles as the allowlist HandleResolveAdminIntervention validates against.
@@ -291,6 +296,92 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	}
 
 	httputil.JSON(w, http.StatusOK, consignment)
+}
+
+// HandleStartConsignmentFlow handles POST /api/v1/consignments/{id}/flows. A trader or CHA starts
+// one of the consignment's startable flows (DetailDTO.StartableFlows) — e.g. a port or agency fee
+// payment — under the same company-and-role check as HandleGetConsignmentByID. Body:
+// StartFlowRequest, which names the flow and nothing else: any other field, such as variables
+// for the flow, is rejected. Response: 201 with the started flow's FlowDTO.
+func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	p, ok := authn.FromContext(ctx)
+	if !ok || p.Kind != authn.KindUser {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	consignmentID := r.PathValue("id")
+	if consignmentID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+
+	var req StartFlowRequest
+	r.Body = http.MaxBytesReader(w, r.Body, maxStartFlowRequestBytes)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&req)
+	if err == nil {
+		// One JSON value only: anything after it is rejected too.
+		if err = dec.Decode(new(struct{})); errors.Is(err, io.EOF) {
+			err = nil
+		} else if err == nil {
+			err = errors.New("unexpected data after JSON value")
+		}
+	}
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			httputil.Error(w, r, http.StatusRequestEntityTooLarge, errRequestBodyTooLarge)
+			return
+		}
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+
+	// Resolve the caller's company. Fail closed on any identity problem, as
+	// HandleGetConsignmentByID does.
+	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
+	if err != nil {
+		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
+			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
+			return
+		}
+		httputil.InternalServerError(w, r, "failed to resolve user company", err, "ouHandle", p.OUHandle)
+		return
+	}
+
+	auditEvent := func(failure bool, metadata map[string]any) {
+		metadata["view"] = "start-flow"
+		metadata["templateId"] = req.TemplateID
+		c.audit.Record(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionUpdate,
+			TargetType: nswaudit.TargetConsignment,
+			TargetID:   consignmentID,
+			Failure:    failure,
+			Metadata:   metadata,
+		})
+	}
+
+	flow, err := c.cs.StartConsignmentFlow(ctx, consignmentID, req.TemplateID, userCompany.ID, p.Roles)
+	if err != nil {
+		auditEvent(true, map[string]any{"error": err.Error(), "callerCompanyId": userCompany.ID})
+		switch {
+		case errors.Is(err, ErrFlowNotAllowed):
+			httputil.Error(w, r, http.StatusBadRequest, errFlowNotAllowed)
+		case errors.Is(err, ErrAccessDenied), errors.Is(err, ErrConsignmentNotFound):
+			// 404 for a denied caller too, as HandleGetConsignmentByID does, so the
+			// response cannot be used to probe which IDs exist.
+			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
+		default:
+			httputil.InternalServerError(w, r, "failed to start flow", err)
+		}
+		return
+	}
+
+	auditEvent(false, map[string]any{"workflowId": flow.WorkflowID})
+	httputil.JSON(w, http.StatusCreated, flow)
 }
 
 // HandleAdminGetConsignmentByID handles GET /api/v1/admin/consignments/{id}. Ops/admin callers

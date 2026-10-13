@@ -1,0 +1,9 @@
+{
+  "id": "admin",
+  "ouHandle": "adam-pvt-ltd",
+  "identity": {
+    "clientID": "TRADER_PORTAL_APP",
+    "roles": ["NSW Admin"],
+    "scopes": ["nsw:consignment:adminread", "nsw:consignment:adminwrite"]
+  }
+}

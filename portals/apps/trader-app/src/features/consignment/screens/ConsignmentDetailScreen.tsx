@@ -4,6 +4,7 @@ import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { ActionListView } from '@/features/consignment/components/WorkflowViewer'
+import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
@@ -14,7 +15,8 @@ type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 // A freshly created consignment can be returned before its workflow has been
 // provisioned (workflowNodes still empty). Rather than flashing the empty
 // "no workflow" state, re-fetch a bounded number of times with exponential
-// backoff until the nodes appear or the consignment reaches a terminal state.
+// backoff until the nodes appear or the consignment reaches a terminal state. The same
+// backoff waits for a newly started flow's first step to appear.
 const PROVISION_MAX_ATTEMPTS = 5
 const PROVISION_BASE_DELAY_MS = 1000
 const PROVISION_MAX_DELAY_MS = 5000
@@ -30,12 +32,16 @@ interface ConsignmentDetailScreenProps {
   backTo?: string
   // Accessible label for the back button. Defaults to matching the trader/CHA backTo default.
   backLabel?: string
+  // Whether to offer the consignment's startableFlows. The admin view, whose callers cannot
+  // start flows, turns it off.
+  canStartFlows?: boolean
 }
 
 export function ConsignmentDetailScreen({
   fetcher = getConsignment,
   backTo = '/consignments',
   backLabel = 'Back to consignments list',
+  canStartFlows = true,
 }: ConsignmentDetailScreenProps = {}) {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
@@ -48,11 +54,21 @@ export function ConsignmentDetailScreen({
   const provisionAttemptsRef = useRef(0)
   const provisionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestCountRef = useRef(0)
+  // The step IDs shown when a flow was started, or null when no start is pending. Fetches
+  // keep polling until a step outside this set (the new flow's first) appears.
+  const stepsBeforeStartRef = useRef<Set<string> | null>(null)
 
   const clearProvisionTimer = useCallback(() => {
     if (provisionTimerRef.current) {
       clearTimeout(provisionTimerRef.current)
       provisionTimerRef.current = null
+    }
+  }, [])
+
+  const stopAwaitingStartedFlow = useCallback(() => {
+    if (stepsBeforeStartRef.current !== null) {
+      stepsBeforeStartRef.current = null
+      setRefreshing(false)
     }
   }, [])
 
@@ -88,15 +104,21 @@ export function ConsignmentDetailScreen({
         setConsignment(result)
         setError(null)
 
-        const awaitingProvisioning = (result.workflowNodes?.length ?? 0) === 0 && result.state === 'IN_PROGRESS'
+        const nodes = result.workflowNodes ?? []
+        const awaitingProvisioning = nodes.length === 0 && result.state === 'IN_PROGRESS'
+        const stepsBeforeStart = stepsBeforeStartRef.current
+        const awaitingStartedFlow = stepsBeforeStart !== null && nodes.every((node) => stepsBeforeStart.has(node.id))
 
-        if (awaitingProvisioning && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
+        if ((awaitingProvisioning || awaitingStartedFlow) && provisionAttemptsRef.current < PROVISION_MAX_ATTEMPTS) {
           const delay = Math.min(PROVISION_BASE_DELAY_MS * 2 ** provisionAttemptsRef.current, PROVISION_MAX_DELAY_MS)
           provisionAttemptsRef.current += 1
-          setProvisioning(true)
+          // A started flow is awaited on the current view, under the refresh spinner, not
+          // the full-page set-up spinner.
+          setProvisioning(awaitingProvisioning && !awaitingStartedFlow)
           provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
         } else {
           setProvisioning(false)
+          stopAwaitingStartedFlow()
         }
       } catch (err) {
         if (requestId !== requestCountRef.current) return
@@ -112,16 +134,18 @@ export function ConsignmentDetailScreen({
           provisionTimerRef.current = setTimeout(() => void fetchConsignmentRef.current?.('poll'), delay)
         } else {
           setProvisioning(false)
+          stopAwaitingStartedFlow()
           setError('loadFailed')
         }
       } finally {
         if (requestId === requestCountRef.current) {
           if (mode === 'initial') setLoading(false)
-          if (mode === 'refresh') setRefreshing(false)
+          // While a started flow is awaited, the refresh spinner stays until the wait ends.
+          if (mode === 'refresh' && stepsBeforeStartRef.current === null) setRefreshing(false)
         }
       }
     },
-    [consignmentId, fetcher, clearProvisionTimer],
+    [consignmentId, fetcher, clearProvisionTimer, stopAwaitingStartedFlow],
   )
 
   const handleRefresh = () => {
@@ -131,6 +155,13 @@ export function ConsignmentDetailScreen({
     setRefreshing(true)
     setError(null)
     void fetchConsignment('refresh')
+  }
+
+  // A started flow's first step is created a moment after the start returns, so reload until
+  // a step that was not shown before appears.
+  const handleFlowStarted = () => {
+    stepsBeforeStartRef.current = new Set((consignment?.workflowNodes ?? []).map((node) => node.id))
+    handleRefresh()
   }
 
   useEffect(() => {
@@ -280,6 +311,15 @@ export function ConsignmentDetailScreen({
         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
           {consignment.flow}
         </Badge>
+        {canStartFlows && (
+          <div className="ml-auto">
+            <StartFlowButtons
+              consignmentId={consignment.id}
+              flows={consignment.startableFlows ?? []}
+              onStarted={handleFlowStarted}
+            />
+          </div>
+        )}
       </div>
 
       <div className="mb-4 md:mb-6 flex items-start gap-10">

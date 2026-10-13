@@ -53,12 +53,15 @@ type Service struct {
 	userService    user.Service
 	taskStore      TaskStore
 	roles          map[string]string // logical name ("trader"/"cha") -> IdP token role
+	// flowOptions are the flows a trader or CHA may start on a consignment (Config.Flows).
+	flowOptions []FlowOption
 }
 
 // NewService creates a new instance of Service. roles is the global catalog's Roles
 // map; it must define "trader" and "cha" (validated via validateRoles, the same
 // function NewRouter uses) so GetConsignmentByID can tie a caller's matched company
-// slot to the JWT role required for that slot.
+// slot to the JWT role required for that slot. flowOptions are the flows a trader or CHA
+// may start on a consignment (Config.Flows).
 func NewService(
 	db *gorm.DB,
 	artifactRegistry *artifact.Registry,
@@ -67,11 +70,13 @@ func NewService(
 	userService user.Service,
 	taskStore TaskStore,
 	roles map[string]string,
+	flowOptions []FlowOption,
 ) (*Service, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
 	return &Service{
+		flowOptions:      flowOptions,
 		db:               db,
 		artifactRegistry: artifactRegistry,
 		chaService:       chaService,
@@ -201,12 +206,21 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorize(consignment, callerCompanyID, callerRoles); err != nil {
+		return nil, err
+	}
+	return s.buildConsignmentResponse(ctx, consignment)
+}
 
+// authorize is GetConsignmentByID's access check (see there): the caller's company must be
+// the consignment's trader company with the "trader" role, or its CHA company with the "cha"
+// role. It returns ErrAccessDenied otherwise.
+func (s *Service) authorize(consignment *Consignment, callerCompanyID string, callerRoles []string) error {
 	// The empty-callerCompanyID guard documents the invariant the check relies on (a
 	// resolved company always has a non-null id) and ensures an empty caller id can never
 	// match an unassigned (empty) CHA company.
 	if callerCompanyID == "" {
-		return nil, ErrAccessDenied
+		return ErrAccessDenied
 	}
 	chaCompanyID := ""
 	if consignment.CHACompanyID != nil {
@@ -215,10 +229,50 @@ func (s *Service) GetConsignmentByID(ctx context.Context, consignmentID, callerC
 	isTraderMatch := callerCompanyID == consignment.TraderCompanyID && slices.Contains(callerRoles, s.roles["trader"])
 	isCHAMatch := callerCompanyID == chaCompanyID && slices.Contains(callerRoles, s.roles["cha"])
 	if !isTraderMatch && !isCHAMatch {
-		return nil, ErrAccessDenied
+		return ErrAccessDenied
+	}
+	return nil
+}
+
+// StartConsignmentFlow starts one of the configured flows (Config.Flows) on a consignment for
+// a trader or CHA caller, under the same access check as GetConsignmentByID. The caller only
+// picks the flow: its variables are set here, from the consignment (consignmentId and the
+// trader company, as the export flow gets), never from the request, so a caller cannot pre-set
+// state the flow trusts. Anything the caller supplies is collected by the flow's own tasks. A
+// consignment that has FINISHED still takes new flows; starting one sets it back to
+// IN_PROGRESS.
+func (s *Service) StartConsignmentFlow(
+	ctx context.Context, consignmentID, templateID string, callerCompanyID string, callerRoles []string,
+) (*FlowDTO, error) {
+	if !slices.ContainsFunc(s.flowOptions, func(o FlowOption) bool { return o.TemplateID == templateID }) {
+		return nil, fmt.Errorf("%w: %q", ErrFlowNotAllowed, templateID)
+	}
+	if s.flows == nil {
+		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
+	}
+	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorize(consignment, callerCompanyID, callerRoles); err != nil {
+		return nil, err
 	}
 
-	return s.buildConsignmentResponse(ctx, consignment)
+	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
+	if err != nil {
+		return nil, fmt.Errorf("trader company lookup failed: %w", err)
+	}
+	traderCompanyVars, err := companyRecordToMap(traderCompany)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal trader company: %w", err)
+	}
+	vars := map[string]any{"consignmentId": consignmentID, "traderCompany": traderCompanyVars}
+	f, err := s.flows.StartFlow(ctx, caseflow.StartRequest{CaseID: consignmentID, TemplateID: templateID, Vars: vars})
+	if err != nil {
+		return nil, fmt.Errorf("failed to start flow %q on consignment %s: %w", templateID, consignmentID, err)
+	}
+	dto := s.flowDTO(ctx, *f)
+	return &dto, nil
 }
 
 // GetConsignmentByIDForAdmin returns the same full consignment detail as GetConsignmentByID, plus
@@ -240,8 +294,7 @@ func (s *Service) GetConsignmentByIDForAdmin(ctx context.Context, consignmentID 
 	return &AdminDetailDTO{DetailDTO: *detail, Flows: flows}, nil
 }
 
-// flowDTOs lists the consignment's flows, oldest first, each named by its workflow
-// definition's name (its template ID when the definition has none or cannot be loaded).
+// flowDTOs lists the consignment's flows, oldest first.
 func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO, error) {
 	if s.flows == nil {
 		return nil, fmt.Errorf("no case flows registered for ConsignmentService")
@@ -252,20 +305,26 @@ func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO
 	}
 	dtos := make([]FlowDTO, 0, len(flows))
 	for _, f := range flows {
-		name := f.TemplateID
-		if def, err := workflowdef.Load(ctx, s.artifactRegistry, f.TemplateID); err == nil && def.Name != "" {
-			name = def.Name
-		}
-		dtos = append(dtos, FlowDTO{
-			WorkflowID:   f.WorkflowID,
-			TemplateID:   f.TemplateID,
-			TemplateName: name,
-			Status:       string(f.Status),
-			CreatedAt:    f.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:    f.UpdatedAt.Format(time.RFC3339),
-		})
+		dtos = append(dtos, s.flowDTO(ctx, f))
 	}
 	return dtos, nil
+}
+
+// flowDTO presents f, named by its workflow definition's name (its template ID when the
+// definition has none or cannot be loaded).
+func (s *Service) flowDTO(ctx context.Context, f caseflow.Flow) FlowDTO {
+	name := f.TemplateID
+	if def, err := workflowdef.Load(ctx, s.artifactRegistry, f.TemplateID); err == nil && def.Name != "" {
+		name = def.Name
+	}
+	return FlowDTO{
+		WorkflowID:   f.WorkflowID,
+		TemplateID:   f.TemplateID,
+		TemplateName: name,
+		Status:       string(f.Status),
+		CreatedAt:    f.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    f.UpdatedAt.Format(time.RFC3339),
+	}
 }
 
 // consignmentColumns selects a Consignment from withCase, Name and State included.
@@ -481,6 +540,7 @@ func (s *Service) buildConsignmentDetailDTO(
 		CreatedAt:       consignment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       consignment.UpdatedAt.Format(time.RFC3339),
 		WorkflowNodes:   nodeResponseDTOs,
+		StartableFlows:  append([]FlowOption{}, s.flowOptions...),
 	}, nil
 }
 
