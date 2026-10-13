@@ -53,6 +53,12 @@ func (i *Interpreter) BuildHeaders(inputs map[string]any) map[string]string {
 // Interpret reports whether the CMS raised the order and captures what identifies
 // it afterwards.
 func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
+	return interpret(callErr, resp, "SLPA did not raise your service order:")
+}
+
+// interpret is Interpret for either kind of order; intro opens the message a
+// trader is shown when the CMS did not raise it.
+func interpret(callErr error, resp map[string]any, intro string) (bool, map[string]any) {
 	body := cms.Flatten(resp)
 	accepted := callErr == nil && !cms.HasErrors(body) && raised(body)
 
@@ -65,7 +71,7 @@ func (i *Interpreter) Interpret(callErr error, resp map[string]any) (bool, map[s
 		"error", "errors", "detail",
 	)
 	if !accepted {
-		out["error"] = describeFailure(callErr, body)
+		out["error"] = describeFailure(callErr, body, intro)
 	}
 	return accepted, out
 }
@@ -92,8 +98,7 @@ func raised(body map[string]any) bool {
 
 // describeFailure builds the trader-facing message for an order the CMS did not
 // raise, preferring the CMS's own reasons over anything invented here.
-func describeFailure(callErr error, body map[string]any) string {
-	const intro = "SLPA did not raise your service order:"
+func describeFailure(callErr error, body map[string]any, intro string) string {
 	const outro = "\n\nPlease correct the details and submit again."
 
 	return cms.Failure(callErr, body, intro, outro)

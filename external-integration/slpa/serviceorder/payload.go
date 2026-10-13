@@ -18,9 +18,9 @@ import (
 // Request is the create-order body.
 //
 // A standard order names the declaration with CusdecNo; the sundry (add-on)
-// order, which keys off a parent invoice instead, is not raised here. Neither is
-// an order for loose cargo, which the CMS takes as lcl_containers — only FCL
-// declarations are supported for now.
+// order, which keys off a parent invoice instead, is SundryRequest. An order for
+// loose cargo, which the CMS takes as lcl_containers, is not raised here — only
+// FCL declarations are supported for now.
 type Request struct {
 	CusdecNo       string      `json:"cusdec_no"`
 	SundryInvoice  bool        `json:"sundry_invoice"`
