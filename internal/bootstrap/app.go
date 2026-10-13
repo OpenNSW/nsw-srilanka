@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -45,7 +46,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
 	"github.com/OpenNSW/nsw-srilanka/internal/htmltemplate"
-	"github.com/OpenNSW/nsw-srilanka/internal/metrics"
 	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
@@ -65,6 +65,7 @@ import (
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/systemcaller"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
 
@@ -534,25 +535,27 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// OTLP metrics when metrics.endpoint is set; otherwise a no-op wrap.
-	httpMetrics, err := metrics.Start(ctx, cfg.Metrics)
+	// OTLP metrics/logs/traces when otel.endpoint is set; otherwise a no-op.
+	tel, err := telemetry.Start(ctx, cfg.Otel)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
 		temporalClient.Close()
 		_ = authnManager.Close()
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to start http metrics: %w", err)
+		return nil, fmt.Errorf("failed to start telemetry: %w", err)
 	}
-	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(httpMetrics.Handler("tnsw-api", mux)))
+	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
+	configureLogging(cfg, os.Stdout, tel.SlogHandler())
+	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(tel.Handler("tnsw-api", mux)))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
 		var closeErrs []error
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := httpMetrics.Shutdown(shutdownCtx); err != nil {
-			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down http metrics: %w", err))
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down telemetry: %w", err))
 		}
 		cancel()
 

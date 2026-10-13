@@ -698,35 +698,29 @@ func TestConfigValidate_StorageError(t *testing.T) {
 	}
 }
 
-func TestConfigValidate_Metrics(t *testing.T) {
+func TestConfigValidate_Otel(t *testing.T) {
 	cfg := validConfig()
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() with metrics unset: %v", err)
+		t.Fatalf("Validate() with otel unset: %v", err)
 	}
 
-	cfg.Metrics.Endpoint = "http://otel-collector:4318/v1/metrics"
-	cfg.Metrics.ServiceName = "tnsw-api"
+	cfg.Otel.Endpoint = "http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default"
+	cfg.Otel.ServiceName = "tnsw-api"
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() with metrics set: %v", err)
+		t.Fatalf("Validate() with otel set: %v", err)
 	}
 
-	cfg.Metrics.ServiceName = ""
+	cfg.Otel.ServiceName = ""
 	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "metrics.serviceName") {
-		t.Errorf("expected metrics.serviceName error, got: %v", err)
+	if err == nil || !containsString(err.Error(), "otel.serviceName") {
+		t.Errorf("expected otel.serviceName error, got: %v", err)
 	}
 
-	cfg.Metrics.ServiceName = "tnsw-api"
-	cfg.Metrics.Endpoint = "not-a-url"
+	cfg.Otel.ServiceName = "tnsw-api"
+	cfg.Otel.Endpoint = "not-a-url"
 	err = cfg.Validate()
-	if err == nil || !containsString(err.Error(), "metrics.endpoint") {
-		t.Errorf("expected metrics.endpoint error, got: %v", err)
-	}
-
-	cfg.Metrics.Endpoint = "http://otel-collector:4318"
-	err = cfg.Validate()
-	if err == nil || !containsString(err.Error(), "OTLP path") {
-		t.Errorf("expected metrics.endpoint path error, got: %v", err)
+	if err == nil || !containsString(err.Error(), "otel.endpoint") {
+		t.Errorf("expected otel.endpoint error, got: %v", err)
 	}
 }
 

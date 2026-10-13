@@ -23,7 +23,8 @@
 #     --from-literal=m2m-slpa-secret=... \
 #     --from-literal=m2m-efc-secret=... \
 #     --from-literal=m2m-sltb-secret=... \
-#     --from-literal=m2m-asycuda-secret=...
+#     --from-literal=m2m-asycuda-secret=... \
+#     --from-literal=otel-auth-header=...   # e.g. "Basic <base64(email:password)>" for OpenObserve
 #   kubectl create secret generic govpay-go-private-key \
 #     --from-file=go_private.pem=...
 #
@@ -119,6 +120,13 @@ backend:
     M2M_NSW_TO_ASYCUDA_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-asycuda-secret }
+
+    # OTLP auth for OpenObserve (or other backend). Only needed when backend.config
+    # otel.endpoint is set; value is the full Authorization header, e.g.
+    # "Basic <base64(email:password)>".
+    # OTEL_AUTH_HEADER:
+    #   valueFrom:
+    #     secretKeyRef: { name: nsw-secrets, key: otel-auth-header }
 
   # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
   # gateway needs the private key. payment_methods.json points at it with
@@ -270,15 +278,15 @@ backend:
       baseURL: "http://argus:3001"
       apiKey: "{{env:ARGUS_API_KEY}}"
 
-    # Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section)
-    # leaves metrics off. serviceName is required when endpoint is set so each
-    # deployment can be told apart. Auth headers use "{{env:NAME}}" with the
-    # secret exposed via backend.env.
-    # metrics:
-    #   endpoint: http://otel-collector:4318/v1/metrics
+    # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
+    # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
+    # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
+    # OTEL_AUTH_HEADER in backend.env when required.
+    # otel:
+    #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
     #   serviceName: tnsw-api
     #   headers:
-    #     Authorization: "{{env:METRICS_AUTH_HEADER}}"
+    #     Authorization: "{{env:OTEL_AUTH_HEADER}}"
 
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"

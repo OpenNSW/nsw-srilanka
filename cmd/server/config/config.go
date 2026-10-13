@@ -21,8 +21,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
-	"github.com/OpenNSW/nsw-srilanka/internal/metrics"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
+	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 )
 
 // defaultConfigPath is where Load looks for config.yaml when CONFIG_PATH is
@@ -43,7 +43,7 @@ type Config struct {
 	Notification NotificationConfig  `yaml:"notification"`
 	Temporal     temporal.Config     `yaml:"temporal"`
 	Audit        AuditConfig         `yaml:"audit"`
-	Metrics      metrics.Config      `yaml:"metrics"`
+	Otel         telemetry.Config    `yaml:"otel"`
 	Integrations integrations.Config `yaml:"integrations"`
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
@@ -226,8 +226,8 @@ func (c *Config) validateAuxiliary() error {
 	if err := c.ArtifactLoader.Validate(); err != nil {
 		return fmt.Errorf("invalid artifact loader configuration: %w", err)
 	}
-	if err := c.Metrics.Validate(); err != nil {
-		return fmt.Errorf("invalid metrics configuration: %w", err)
+	if err := c.Otel.Validate(); err != nil {
+		return fmt.Errorf("invalid otel configuration: %w", err)
 	}
 	return nil
 }
