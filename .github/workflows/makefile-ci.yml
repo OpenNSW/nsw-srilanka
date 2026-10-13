@@ -110,7 +110,7 @@ jobs:
           install-only: true
 
       # Pinned to the GNU Make that the Windows developers run
-      # (GNU Make 4.4.1, Built for Windows32 — the Chocolatey/ezwinports build).
+      # (GNU Make 4.4.1, Built for x86_64-w64-mingw32 — the Chocolatey/ezwinports build).
       - name: Install GNU Make 4.4.1 (Windows)
         if: runner.os == 'Windows'
         run: choco install make --version 4.4.1 --no-progress -y
@@ -180,22 +180,15 @@ jobs:
       - name: make setup
         run: make setup
 
-      # What `make setup` must leave behind, the same on every shell. A file
-      # seeded by one branch of the Makefile but not the other shows up here.
+      # What `make setup` must leave behind, the same on every shell. Derive
+      # targets from the setup-seeded examples in git so this check cannot drift
+      # from the Makefile the way a duplicated list can.
       - name: Check the files make setup seeds
         run: |
-          $expected = @(
-            '.env',
-            'idp/.env',
-            'portals/apps/trader-app/public/config.js',
-            'configs/services.json',
-            'configs/services.docker.json',
-            'configs/payment_methods.json',
-            'configs/catalog.json',
-            'configs/companies.json',
-            'configs/config.yaml',
-            'configs/config.docker.yaml'
-          )
+          $expected = git ls-files '*.example*' |
+            Where-Object { $_ -match '^(\.env|idp/\.env|configs/[^/]+|portals/apps/trader-app/public/config)\.example' } |
+            ForEach-Object { $_ -replace '\.example', '' }
+          if (-not $expected) { throw 'No setup example files matched in git' }
           $missing = $expected | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "make setup did not create: $($missing -join ', ')" }
           if ((git config core.hooksPath) -ne '.githooks') { throw 'make setup did not set core.hooksPath' }
