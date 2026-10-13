@@ -173,7 +173,7 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 	}
 	// Only someone who can read the task may claim or release it. A denial is answered
 	// as not found, as HandleGetTask does, so it cannot be used to probe task ids.
-	if _, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.RootWorkflowID); err != nil {
+	if _, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.CaseID); err != nil {
 		if !errors.Is(err, readauthz.ErrDenied) {
 			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
 			return
