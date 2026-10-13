@@ -172,6 +172,7 @@ const en = {
         inProgress: 'In Progress',
         locked: 'Locked',
         failed: 'Failed',
+        rejected: 'Rejected',
         awaitingFeedback: 'Awaiting Feedback',
       },
     },

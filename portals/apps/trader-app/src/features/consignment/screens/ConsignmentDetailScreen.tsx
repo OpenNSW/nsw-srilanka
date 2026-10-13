@@ -7,7 +7,9 @@ import { ActionListView } from '@/features/consignment/components/WorkflowViewer
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
+import { isRejectedSltbConsignment } from '@/features/consignment/rejectionDisplay'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { CONTENT_TOP_PX } from '@/components/Layout'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
@@ -279,6 +281,10 @@ export function ConsignmentDetailScreen({
   }
 
   const workflowNodes = consignment.workflowNodes || []
+  const isRejected = isRejectedSltbConsignment(
+    workflowNodes.filter((n) => isTraderVisibleNodeType(n.workflowNodeTemplate.type)),
+    consignment.state,
+  )
 
   return (
     <div
@@ -305,8 +311,8 @@ export function ConsignmentDetailScreen({
 
       <div className="mb-3 mt-2 flex items-center gap-3">
         <h1 className="text-xl font-semibold text-foreground">{consignment.name || t('consignments.detail.title')}</h1>
-        <Badge size="2" color={getStateColor(consignment.state)}>
-          {formatState(consignment.state)}
+        <Badge size="2" color={isRejected ? 'red' : getStateColor(consignment.state)}>
+          {isRejected ? t('workflow.status.rejected') : formatState(consignment.state)}
         </Badge>
         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
           {consignment.flow}

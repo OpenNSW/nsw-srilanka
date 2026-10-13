@@ -3,6 +3,10 @@ import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
+import {
+  isRejectedSltbBlendSheetStep,
+  isRejectedSltbConsignment,
+} from '@/features/consignment/rejectionDisplay'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
@@ -45,6 +49,18 @@ export function ActionListView({
   }, [filteredSteps])
 
   const isConsignmentTerminal = consignmentState === 'FINISHED'
+  const isRejected = isRejectedSltbConsignment(filteredSteps, consignmentState)
+  const terminalAccent = isRejected ? 'red' : 'green'
+  const terminalBarClass = isRejected ? 'bg-error' : 'bg-success'
+
+  const cardFor = (step: WorkflowNode) => (
+    <ActionCard
+      key={step.id}
+      step={step}
+      consignmentId={consignmentId}
+      rejected={isRejectedSltbBlendSheetStep(step, filteredSteps, consignmentState)}
+    />
+  )
 
   const RefreshButton =
     onRefresh && !isConsignmentTerminal ? (
@@ -61,22 +77,16 @@ export function ActionListView({
           <Box mb="6">
             <Flex align="center" justify="between" my="4" px="3">
               <Flex align="center" gap="2">
-                <div
-                  className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-success' : 'bg-error'} rounded-full`}
-                />
-                <Heading size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
+                <div className={`w-1.5 h-5 ${terminalBarClass} rounded-full`} />
+                <Heading size="4" color={terminalAccent} weight="bold">
                   {t('workflow.taskHistory')}
                 </Heading>
-                <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
+                <Badge color={terminalAccent} variant="solid" radius="full">
                   {groups.finished.length}
                 </Badge>
               </Flex>
             </Flex>
-            <Box px="0.5">
-              {groups.finished.map((step) => (
-                <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
-              ))}
-            </Box>
+            <Box px="0.5">{groups.finished.map(cardFor)}</Box>
           </Box>
         ) : (
           <>
@@ -93,11 +103,7 @@ export function ActionListView({
                     </Badge>
                   </Flex>
                 </Flex>
-                <Box px="0.5">
-                  {groups.active.map((step) => (
-                    <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
-                  ))}
-                </Box>
+                <Box px="0.5">{groups.active.map(cardFor)}</Box>
               </Box>
             ) : null}
 
@@ -114,11 +120,7 @@ export function ActionListView({
                     </Badge>
                   </Flex>
                 </Flex>
-                <Box px="0.5">
-                  {groups.inReview.map((step) => (
-                    <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
-                  ))}
-                </Box>
+                <Box px="0.5">{groups.inReview.map(cardFor)}</Box>
               </Box>
             ) : null}
 
@@ -136,9 +138,7 @@ export function ActionListView({
             ) : null}
 
             <CollapsibleSection title={t('workflow.processHistory')} count={groups.finished.length} color="green">
-              {groups.finished.map((step) => (
-                <ActionCard key={step.id} step={step} consignmentId={consignmentId} />
-              ))}
+              {groups.finished.map(cardFor)}
             </CollapsibleSection>
           </>
         )}

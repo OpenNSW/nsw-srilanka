@@ -67,6 +67,8 @@ const statusConfig: Record<
 export interface ActionCardProps {
   step: WorkflowNode
   consignmentId: string
+  /** When true, show a red Rejected badge instead of the step's raw state. */
+  rejected?: boolean
 }
 
 // Keyed by the Radix semantic color names in statusConfig above, mapped to
@@ -80,10 +82,15 @@ const statusStyles: Record<string, string> = {
   red: 'bg-error-subtle text-error-strong',
 }
 
-export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
+export const ActionCard = ({ step, consignmentId, rejected = false }: ActionCardProps) => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const config = statusConfig[step.state] || { color: 'gray', label: step.state, icon: null }
+  const config = rejected
+    ? statusConfig.FAILED
+    : statusConfig[step.state] || { color: 'gray' as const, label: step.state, icon: null }
+  const statusLabel = rejected
+    ? t('workflow.status.rejected')
+    : t(`workflow.status.${WORKFLOW_STATUS_I18N_KEYS[step.state] ?? 'inProgress'}`)
 
   const handleOpen = () => void navigate(`/consignments/${consignmentId}/tasks/${step.id}`)
 
@@ -127,7 +134,7 @@ export const ActionCard = ({ step, consignmentId }: ActionCardProps) => {
                 <Badge color={config.color} variant="soft" size="1">
                   <Flex align="center" gap="1">
                     {config.icon}
-                    {t(`workflow.status.${WORKFLOW_STATUS_I18N_KEYS[step.state] ?? 'inProgress'}`)}
+                    {statusLabel}
                   </Flex>
                 </Badge>
               </Flex>
