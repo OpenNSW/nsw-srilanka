@@ -14,14 +14,9 @@ export function isRejectedSltbBlendSheetStep(
   if (consignmentState !== 'FINISHED' || step.state !== 'COMPLETED') return false
   if ((step.workflowNodeTemplate.name ?? '') !== SLTB_BLEND_SHEET_REVIEW_TITLE) return false
   // Titles are "[SLTB] …" or "[SLTB 3A] …" — match the common "[SLTB" prefix.
-  return !allSteps.some(
-    (other) => other.id !== step.id && (other.workflowNodeTemplate.name ?? '').startsWith('[SLTB'),
-  )
+  return !allSteps.some((other) => other.id !== step.id && (other.workflowNodeTemplate.name ?? '').startsWith('[SLTB'))
 }
 
-export function isRejectedSltbConsignment(
-  steps: WorkflowNode[],
-  consignmentState?: ConsignmentState,
-): boolean {
+export function isRejectedSltbConsignment(steps: WorkflowNode[], consignmentState?: ConsignmentState): boolean {
   return steps.some((step) => isRejectedSltbBlendSheetStep(step, steps, consignmentState))
 }

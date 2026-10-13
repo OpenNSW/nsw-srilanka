@@ -3,10 +3,7 @@ import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
 import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
-import {
-  isRejectedSltbBlendSheetStep,
-  isRejectedSltbConsignment,
-} from '@/features/consignment/rejectionDisplay'
+import { isRejectedSltbBlendSheetStep, isRejectedSltbConsignment } from '@/features/consignment/rejectionDisplay'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { ActionCard } from './ActionCard'
 import { CollapsibleSection } from './CollapsibleSection'
