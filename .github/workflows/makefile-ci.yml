@@ -106,7 +106,7 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: v2.14.0
           install-only: true
 
       # Pinned to the GNU Make that the Windows developers run
