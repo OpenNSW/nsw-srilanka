@@ -21,6 +21,7 @@ endef
 # Lazy (=) so `docker compose config` runs only when `make deps` is invoked.
 ALL_SERVICES  = $(subst $(NL), ,$(shell $(COMPOSE) config --services))
 DEPS_SERVICES = $(filter-out $(APP_SERVICES),$(ALL_SERVICES))
+
 .DEFAULT_GOAL := help
 
 # ---------------------------------------------------------------------------
