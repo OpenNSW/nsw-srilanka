@@ -13,7 +13,8 @@ window.__APP_CONFIG__ = {
   // Officers sign in as the app's "Trader" role; agency mode hides the role switcher
   // and the backend checks the real catalog roles (see docs/agency.md).
   IDP_TRADER_ROLE_NAME: 'CDA Officer',
-  IDP_CHA_ROLE_NAME: 'CHA',
+  // TEMPORARY (#602 test): admits a user holding only the reviewer role, as the app's "CHA" role.
+  IDP_CHA_ROLE_NAME: 'CDA Reviewer',
   IDP_NSW_ADMIN_ROLE_NAME: 'NSW Admin',
   SHOW_AUTOFILL_BUTTON: 'false',
   APP_MODE: 'agency',

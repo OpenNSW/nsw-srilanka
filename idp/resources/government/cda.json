@@ -10,16 +10,20 @@
     }
   ],
   "groups": [
-    { "key": "CDA Officers", "name": "CDA Officers", "description": "CDA officers group", "ou": "government-organization/cda" }
+    { "key": "CDA Officers", "name": "CDA Officers", "description": "CDA officers group", "ou": "government-organization/cda" },
+    { "key": "CDA Reviewers", "name": "CDA Reviewers", "description": "TEMPORARY test group for per-task roles (#602); remove when RBAC lands", "ou": "government-organization/cda" }
   ],
   "roles": [
     { "key": "CDA Officer", "name": "CDA Officer", "description": "Role for CDA officers working tasks in the CDA deployment",
+      "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaOfficer" },
+    { "key": "CDA Reviewer", "name": "CDA Reviewer", "description": "TEMPORARY test role for per-task roles (#602); remove when RBAC lands",
       "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaOfficer" },
     { "key": "NswToCdaM2M", "name": "NswToCdaM2M", "description": "Role for NSW injecting workflows into the CDA deployment",
       "ou": "government-organization/cda", "resourceServer": "https://api.cda.nsw-agency.local", "scopeSet": "cdaInject" }
   ],
   "roleAssignments": [
-    { "role": "CDA Officer", "group": "CDA Officers" }
+    { "role": "CDA Officer", "group": "CDA Officers" },
+    { "role": "CDA Reviewer", "group": "CDA Reviewers" }
   ],
   "users": [
     {
@@ -33,6 +37,18 @@
       "phoneNumber": "+94771234563",
       "passwordEnv": { "override": "SAMPLE_CDA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
       "groups": ["CDA Officers"]
+    },
+    {
+      "key": "cda_reviewer",
+      "type": "Government_User",
+      "ou": "government-organization/cda",
+      "username": "cda_reviewer",
+      "email": "cda_reviewer@government.dev",
+      "givenName": "CDA",
+      "familyName": "Reviewer",
+      "phoneNumber": "+94771234562",
+      "passwordEnv": { "override": "SAMPLE_CDA_REVIEWER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["CDA Reviewers"]
     }
   ],
   "applications": [

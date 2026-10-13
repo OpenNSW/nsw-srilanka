@@ -1,5 +1,6 @@
 {
   "roles": {
-    "officer": "CDA Officer"
+    "officer": "CDA Officer",
+    "reviewer": "CDA Reviewer"
   }
 }

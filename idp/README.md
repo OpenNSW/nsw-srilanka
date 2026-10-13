@@ -288,7 +288,7 @@ idp/resources/
 CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
 (`configs/agency/cda/`, `docs/agency.md`), whose routes check `nsw:*` scopes, so
 `cda.json` declares it explicitly: the `CDA API` resource server's officer role
-(`CDA Officer`, via a `CDA Officers` group holding only `cda_officer`) and inject role
+(`CDA Officer`, via a `CDA Officers` group holding `cda_officer` and the temporary test user `cda_reviewer`) and inject role
 (`NswToCdaM2M` on `NSW_TO_CDA`), the portal client requesting those scopes, and
 `CDA_TO_NSW` as for any agency. A CDA-only group keeps other agencies' officers, who
 are all in `OGA Reviewers`, out of CDA.
