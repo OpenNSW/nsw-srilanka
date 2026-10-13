@@ -53,7 +53,7 @@ clone next to this repo (`../one-trade-artifacts/npqs-v2`); set
 
 ## Run natively
 
-With the shared stack up (`docker compose up db thunderid temporal`):
+With the shared stack up (`docker compose up db thunderid thunderid-seed temporal`):
 
 ```sh
 # Once: the NPQS database and Temporal namespace
