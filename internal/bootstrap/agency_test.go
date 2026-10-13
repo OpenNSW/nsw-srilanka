@@ -1,18 +1,18 @@
 package bootstrap
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
-// An agency's catalog only has to map the officer role, and must: it is the only
-// role anyone can act in on an agency's tasks.
+// An agency's catalog requires no particular role: the gate owns whichever roles the
+// catalog maps, so a catalog without an officer role still builds.
 func TestNewAgencyTaskGate(t *testing.T) {
-	if _, err := newAgencyTaskGate(nil, map[string]string{"officer": "Officer"}); err != nil {
-		t.Fatalf("officer-only catalog: %v", err)
-	}
-	_, err := newAgencyTaskGate(nil, map[string]string{"trader": "Trader", "cha": "CHA"})
-	if err == nil || !strings.Contains(err.Error(), "officer") {
-		t.Fatalf("catalog without officer: err = %v, want missing officer", err)
+	for name, roles := range map[string]map[string]string{
+		"officer only":       {"officer": "Officer"},
+		"officer + reviewer": {"officer": "Officer", "reviewer": "Reviewer"},
+		"no officer":         {"reviewer": "Reviewer"},
+	} {
+		gate, err := newAgencyTaskGate(nil, roles)
+		if err != nil || gate == nil {
+			t.Errorf("%s: gate = %v, err = %v, want a gate", name, gate, err)
+		}
 	}
 }

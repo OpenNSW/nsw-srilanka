@@ -9,23 +9,22 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
-// RoleOfficer is the logical catalog role an agency officer acts in. An agency
-// deployment's catalog must define it.
-const RoleOfficer = "officer"
-
 // OfficerGate is Layer 1 of task authorization in agency mode, in place of TNSW's
 // authzgate. It attaches the same taskauthz.Input, but the only ownership it resolves
-// is officer ownership of injected workflows: an agency has no consignments, so there
-// is no trader or CHA company to look up. The read and write evaluators then treat
-// officers like any other owner, and agency tasks go through the normal
-// /api/v1/tasks/{id} routes.
+// is that of injected workflows, in every role of the agency's catalog: an agency has
+// no consignments, so there is no trader or CHA company to look up, and which of those
+// roles may act on a task is up to the task's own authz and read rules. The read and
+// write evaluators then treat officers like any other owner, and agency tasks go
+// through the normal /api/v1/tasks/{id} routes.
 type OfficerGate struct {
-	repo Repository
+	repo  Repository
+	roles []string // the catalog's logical role names
 }
 
-// NewOfficerGate creates an OfficerGate.
-func NewOfficerGate(repo Repository) *OfficerGate {
-	return &OfficerGate{repo: repo}
+// NewOfficerGate creates an OfficerGate that reports ownership in each of roles, the
+// logical role names of the agency's catalog.
+func NewOfficerGate(repo Repository, roles []string) *OfficerGate {
+	return &OfficerGate{repo: repo, roles: roles}
 }
 
 // Handler wraps next, attaching the caller's taskauthz.Input. An unauthenticated
@@ -54,16 +53,21 @@ func (g *OfficerGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	}
 }
 
-// ownedRoles reports officer ownership of the task's case: true when it is an injected
-// workflow, which is its own case (see Workflow). Token-role checks stay in taskauthz.Eligible, which calls this
-// only once the caller is known to hold a relevant role.
+// ownedRoles reports ownership of the task's case in every catalog role: true when it
+// is an injected workflow, which is its own case (see Workflow). Token-role checks stay
+// in taskauthz.Eligible, which calls this only once the caller is known to hold a
+// relevant role.
 func (g *OfficerGate) ownedRoles(ctx context.Context, caseID string) (map[string]bool, error) {
+	owned := make(map[string]bool, len(g.roles))
 	if caseID == "" {
-		return map[string]bool{}, nil
+		return owned, nil
 	}
 	injected, err := g.repo.Exists(ctx, caseID)
 	if err != nil {
 		return nil, fmt.Errorf("agency: resolve officer ownership: %w", err)
 	}
-	return map[string]bool{RoleOfficer: injected}, nil
+	for _, name := range g.roles {
+		owned[name] = injected
+	}
+	return owned, nil
 }
