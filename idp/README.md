@@ -148,21 +148,21 @@ or **by hand** against any deployment. A bare `docker compose up thunderid` does
 That script creates:
 
 - **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
-- **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / Customs / SLTB** child OUs
+- **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / EFC / SLTB** child OUs
 - **`Private_User`**, **`Government_User`**, and **`Admin_User`** user types
 - **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
   matching groups — role inheritance is group-based)
 - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
   and **`NswM2M`** roles (machine clients) — see _API authorization_ below
 - **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
-- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`Customs API`**, **`NPQS API`**, **`SLTB API`** and **`FCAU API`** OAuth2 resource servers (scopes + token audiences)
+- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`EFC API`**, **`NPQS API`**, **`SLTB API`** and **`FCAU API`** OAuth2 resource servers (scopes + token audiences)
 - **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
-- **`Customs Officers`** group + **`Customs Officer`** role, and the **`NswToCustomsM2M`** role (see `customs.json`)
+- **`EFC Officers`** group + **`EFC Officer`** role, and the **`NswToEfcM2M`** role (see `efc.json`)
 - **`NPQS Officers`** group + **`NPQS Officer`** role, and the **`NswToNpqsM2M`** role (see `npqs.json`)
 - **`SLTB Officers`** group + **`SLTB Officer`** role, and the **`NswToSltbM2M`** role (see `sltb.json`)
 - **`FCAU Officers`** group + **`FCAU Officer`** role, and the **`NswToFcauM2M`** role (see `fcau.json`)
 - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
-  `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
+  `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `efc_officer` /
   `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
 - **SPA applications** and **M2M applications** (see below)
 
@@ -279,7 +279,7 @@ idp/resources/
     ous.json  user-types.json  groups-roles.json
     agencies.json              the OGA agencies (shorthand, see below)
     cda.json                   CDA, run by this backend in agency mode (explicit, see below)
-    customs.json               Customs, run by this backend in agency mode (explicit, see below)
+    efc.json                   EFC (Export Facilitation Center), run by this backend in agency mode (explicit, see below)
     npqs.json                  NPQS, run by this backend in agency mode (explicit, see below)
     sltb.json                  SLTB, run by this backend in agency mode (explicit, see below)
     fcau.json                  FCAU, run by this backend in agency mode (explicit, see below)
@@ -293,10 +293,10 @@ CDA is not in the `agencies` shorthand. It runs as this same backend in agency m
 `CDA_TO_NSW` as for any agency. A CDA-only group keeps other agencies' officers, who
 are all in `OGA Reviewers`, out of CDA.
 
-Customs is declared the same way in `customs.json` (`configs/agency/customs/`): the
-`Customs API` resource server's `Customs Officer` role (via `Customs Officers`, holding
-only `customs_officer`) and `NswToCustomsM2M` role (on `NSW_TO_CUSTOMS`), the
-`OGA_PORTAL_APP_CUSTOMS` portal client, and `CUSTOMS_TO_NSW`.
+EFC is declared the same way in `efc.json` (`configs/agency/efc/`): the
+`EFC API` resource server's `EFC Officer` role (via `EFC Officers`, holding
+only `efc_officer`) and `NswToEfcM2M` role (on `NSW_TO_EFC`), the
+`OGA_PORTAL_APP_EFC` portal client, and `EFC_TO_NSW`.
 
 NPQS is declared the same way in `npqs.json` (`configs/agency/npqs/`): the `NPQS API`
 resource server's `NPQS Officer` role (via `NPQS Officers`, holding only `npqs_officer`)
@@ -358,23 +358,23 @@ the NSW backend, to the backend's `authn.clientIDs` in `configs/config*.yaml`.)
 
 ## Applications created
 
-| App              | Client ID                | Local URL               |
-| ---------------- | ------------------------ | ----------------------- |
-| TraderApp        | `TRADER_PORTAL_APP`      | <http://localhost:5173> |
-| NPQSPortalApp    | `OGA_PORTAL_APP_NPQS`    | <http://localhost:5174> |
-| FCAUPortalApp    | `OGA_PORTAL_APP_FCAU`    | <http://localhost:5175> |
-| CDAPortalApp     | `OGA_PORTAL_APP_CDA`     | <http://localhost:5176> |
-| SLPAPortalApp    | `OGA_PORTAL_APP_SLPA`    | <http://localhost:5177> |
-| CustomsPortalApp | `OGA_PORTAL_APP_CUSTOMS` | <http://localhost:5178> |
-| SLTBPortalApp    | `OGA_PORTAL_APP_SLTB`    | <http://localhost:5179> |
+| App           | Client ID             | Local URL               |
+| ------------- | --------------------- | ----------------------- |
+| TraderApp     | `TRADER_PORTAL_APP`   | <http://localhost:5173> |
+| NPQSPortalApp | `OGA_PORTAL_APP_NPQS` | <http://localhost:5174> |
+| FCAUPortalApp | `OGA_PORTAL_APP_FCAU` | <http://localhost:5175> |
+| CDAPortalApp  | `OGA_PORTAL_APP_CDA`  | <http://localhost:5176> |
+| SLPAPortalApp | `OGA_PORTAL_APP_SLPA` | <http://localhost:5177> |
+| EfcPortalApp  | `OGA_PORTAL_APP_EFC`  | <http://localhost:5178> |
+| SLTBPortalApp | `OGA_PORTAL_APP_SLTB` | <http://localhost:5179> |
 
 M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
 - **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
-  `CDA_TO_NSW`, `SLPA_TO_NSW`, `CUSTOMS_TO_NSW`, `SLTB_TO_NSW`.
+  `CDA_TO_NSW`, `SLPA_TO_NSW`, `EFC_TO_NSW`, `SLTB_TO_NSW`.
 - **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_SLPA`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
-- **NSW → Customs** (`aud=https://api.customs.nsw-agency.local`, `NswToCustomsM2M` role): `NSW_TO_CUSTOMS`.
+- **NSW → EFC** (`aud=https://api.efc.nsw-agency.local`, `NswToEfcM2M` role): `NSW_TO_EFC`.
 - **NSW → NPQS** (`aud=https://api.npqs.nsw-agency.local`, `NswToNpqsM2M` role): `NSW_TO_NPQS`.
 - **NSW → SLTB** (`aud=https://api.sltb.nsw-agency.local`, `NswToSltbM2M` role): `NSW_TO_SLTB`.
 - **NSW → FCAU** (`aud=https://api.fcau.nsw-agency.local`, `NswToFcauM2M` role): `NSW_TO_FCAU`.
@@ -384,15 +384,15 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 Each protected backend is registered as a **resource server** whose `identifier`
 becomes the access-token **audience** (`aud`):
 
-| `identifier` (= token `aud`)           | Backend                                                                  | Scopes (`<resource>:<action>`)                                                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://api.nsw-srilanka.local`       | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`                 | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write}` |
-| `https://api.nsw-agency.local`         | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/`   | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                              |
-| `https://api.cda.nsw-agency.local`     | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)         | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
-| `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
-| `https://api.npqs.nsw-agency.local`    | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
-| `https://api.sltb.nsw-agency.local`    | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
-| `https://api.fcau.nsw-agency.local`    | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `identifier` (= token `aud`)        | Backend                                                                | Scopes (`<resource>:<action>`)                                                                                                            |
+| ----------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`               | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write}` |
+| `https://api.nsw-agency.local`      | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                              |
+| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -412,9 +412,9 @@ becomes the access-token **audience** (`aud`):
 >   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
 >   `configs/services*.example.json`. Changing the identifier means changing all of these
 >   (and any existing local `configs/services*.json`).
-> - **Customs** (`customs-api`): the `Customs API` identifier,
->   `https://api.customs.nsw-agency.local`, in the same places under
->   `configs/agency/customs/` and TNSW's `customs` entry in `configs/services*.example.json`.
+> - **EFC** (`efc-api`): the `EFC API` identifier,
+>   `https://api.efc.nsw-agency.local`, in the same places under
+>   `configs/agency/efc/` and TNSW's `efc` entry in `configs/services*.example.json`.
 > - **NPQS** (`npqs-api`): the `NPQS API` identifier, `https://api.npqs.nsw-agency.local`,
 >   in the same places under `configs/agency/npqs/` and TNSW's `npqs` entry in
 >   `configs/services*.example.json`.
@@ -425,7 +425,7 @@ becomes the access-token **audience** (`aud`):
 >   in the same places under `configs/agency/fcau/` and TNSW's `fcau` entry in
 >   `configs/services*.example.json`.
 
-Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, Customs, NPQS, SLTB and FCAU APIs reuse `nsw:*` names, since they
+Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, EFC, NPQS, SLTB and FCAU APIs reuse `nsw:*` names, since they
 are the same backend; that is safe because every caller names its target with `resource`
 (below), and a token is narrowed to the scopes of that one resource server.
 
@@ -442,8 +442,8 @@ scopes via a role:
 | `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`             |
 | CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                        |
 | `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject` on the CDA API             |
-| Customs portal users   | `Customs Officer` role (via `Customs Officers` group) → Customs API scopes                            |
-| `NSW_TO_CUSTOMS`       | **`NswToCustomsM2M` role assigned to the application** → `nsw:workflow:inject` on the Customs API     |
+| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                        |
+| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `nsw:workflow:inject` on the EFC API             |
 | NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                     |
 | SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                     |
 | `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject` on the NPQS API           |

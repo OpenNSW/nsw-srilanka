@@ -114,7 +114,7 @@ func TestClientTokenNeverExpires(t *testing.T) {
 	c.t = c.t.AddDate(10, 0, 0)
 	for _, token := range []string{fromUpload, fromPush} {
 		assertResolves(t, a, client("CDA_TO_NSW"), token, "consignments/cert.pdf")
-		assertRefused(t, a, client("CUSTOMS_TO_NSW"), token, fileaccess.ErrNotYours)
+		assertRefused(t, a, client("EFC_TO_NSW"), token, fileaccess.ErrNotYours)
 		assertRefused(t, a, user("CDA_TO_NSW"), token, fileaccess.ErrNotYours)
 	}
 }

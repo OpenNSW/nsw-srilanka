@@ -76,13 +76,13 @@
       ]
     },
     {
-      "name": "Customs API",
-      "identifier": "https://api.customs.nsw-agency.local",
+      "name": "EFC API",
+      "identifier": "https://api.efc.nsw-agency.local",
       "ou": "default",
       "resources": [
         {
           "handle": "nsw",
-          "name": "Customs API",
+          "name": "EFC API",
           "resources": [
             { "handle": "workflow", "name": "Workflow",
               "actions": [ { "handle": "inject", "name": "Inject" } ] },

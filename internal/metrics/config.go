@@ -14,7 +14,7 @@ type Config struct {
 	// are on: the exporter posts to the URL as given.
 	Endpoint string `yaml:"endpoint"`
 	// ServiceName is the service.name resource attribute. Required when
-	// Endpoint is set so TNSW, CDA and Customs can be told apart.
+	// Endpoint is set so TNSW, CDA and EFC can be told apart.
 	ServiceName string `yaml:"serviceName"`
 	// Headers are sent with each OTLP export. Secrets go in as
 	// "{{env:NAME}}" placeholders in config.yaml.

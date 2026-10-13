@@ -1,0 +1,76 @@
+{
+  "organizationUnits": [
+    {
+      "key": "government-organization/efc",
+      "handle": "efc",
+      "name": "EFC",
+      "description": "Export Facilitation Center",
+      "parent": "government-organization",
+      "treePath": "government-organization/efc"
+    }
+  ],
+  "groups": [
+    { "key": "EFC Officers", "name": "EFC Officers", "description": "EFC officers group", "ou": "government-organization/efc" }
+  ],
+  "roles": [
+    { "key": "EFC Officer", "name": "EFC Officer", "description": "Role for EFC officers working tasks in the EFC deployment",
+      "ou": "government-organization/efc", "resourceServer": "https://api.efc.nsw-agency.local", "scopeSet": "efcOfficer" },
+    { "key": "NswToEfcM2M", "name": "NswToEfcM2M", "description": "Role for NSW injecting workflows into the EFC deployment",
+      "ou": "government-organization/efc", "resourceServer": "https://api.efc.nsw-agency.local", "scopeSet": "efcInject" }
+  ],
+  "roleAssignments": [
+    { "role": "EFC Officer", "group": "EFC Officers" }
+  ],
+  "users": [
+    {
+      "key": "efc_officer",
+      "type": "Government_User",
+      "ou": "government-organization/efc",
+      "username": "efc_officer",
+      "email": "efc_officer@government.dev",
+      "givenName": "EFC",
+      "familyName": "Officer",
+      "phoneNumber": "+94771234565",
+      "passwordEnv": { "override": "SAMPLE_EFC_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["EFC Officers"]
+    }
+  ],
+  "applications": [
+    {
+      "key": "OGA_PORTAL_APP_EFC",
+      "kind": "spa",
+      "name": "EfcPortalApp",
+      "description": "Application for the EFC officer portal (trader-app in agency mode)",
+      "clientId": "OGA_PORTAL_APP_EFC",
+      "port": 5178,
+      "allowedUserType": "Government_User",
+      "ou": "government-organization/efc",
+      "scopeSet": "efcOfficer",
+      "redirectUrisEnv": "EFC_REDIRECT_URIS"
+    },
+    {
+      "key": "EFC_TO_NSW",
+      "kind": "m2m",
+      "name": "EFC_TO_NSW_M2M",
+      "description": "Machine-to-machine integration for EFC to NSW",
+      "clientId": "EFC_TO_NSW",
+      "secretEnv": { "override": "M2M_EFC_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "m2mNsw"
+    },
+    {
+      "key": "NSW_TO_EFC",
+      "kind": "m2m",
+      "name": "NSW_TO_EFC_M2M",
+      "description": "Machine-to-machine integration for NSW to EFC",
+      "clientId": "NSW_TO_EFC",
+      "secretEnv": { "override": "M2M_NSW_TO_EFC_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "government-organization",
+      "scopeSet": "efcInject"
+    }
+  ],
+  "appRoleAssignments": [
+    { "role": "AgencyM2M", "app": "EFC_TO_NSW" },
+    { "role": "NswToEfcM2M", "app": "NSW_TO_EFC" }
+  ]
+}

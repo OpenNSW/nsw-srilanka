@@ -21,7 +21,7 @@
 #     --from-literal=m2m-fcau-secret=... \
 #     --from-literal=m2m-cda-secret=... \
 #     --from-literal=m2m-slpa-secret=... \
-#     --from-literal=m2m-customs-secret=... \
+#     --from-literal=m2m-efc-secret=... \
 #     --from-literal=m2m-sltb-secret=... \
 #     --from-literal=m2m-asycuda-secret=...
 #   kubectl create secret generic govpay-go-private-key \
@@ -103,9 +103,9 @@ backend:
     M2M_NSW_TO_SLPA_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-slpa-secret }
-    M2M_NSW_TO_CUSTOMS_SECRET:
+    M2M_NSW_TO_EFC_SECRET:
       valueFrom:
-        secretKeyRef: { name: nsw-secrets, key: m2m-customs-secret }
+        secretKeyRef: { name: nsw-secrets, key: m2m-efc-secret }
     M2M_NSW_TO_SLTB_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-sltb-secret }
@@ -235,7 +235,7 @@ backend:
         - NPQS_TO_NSW
         - CDA_TO_NSW
         - SLPA_TO_NSW
-        - CUSTOMS_TO_NSW
+        - EFC_TO_NSW
         - SLTB_TO_NSW
         - SLCE_TO_NSW
         - GOVPAY_TO_NSW

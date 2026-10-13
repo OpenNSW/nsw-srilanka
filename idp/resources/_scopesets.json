@@ -52,7 +52,7 @@
     "cdaInject": [
       "nsw:workflow:inject"
     ],
-    "customsOfficer": [
+    "efcOfficer": [
       "nsw:consignment:read",
       "nsw:task:read",
       "nsw:task:write",
@@ -60,7 +60,7 @@
       "nsw:storage:read",
       "nsw:storage:write"
     ],
-    "customsInject": [
+    "efcInject": [
       "nsw:workflow:inject"
     ],
     "npqsOfficer": [
