@@ -1,0 +1,114 @@
+# SLTB (Sri Lanka Tea Board) agency deployment, for the Docker Compose
+# sltb-init and sltb-api services (compose.yml points their CONFIG_PATH here). See
+# configs/agency/sltb/README.md. A native run reads config.yaml instead; the two
+# differ only in reaching the shared services by container hostname here rather
+# than localhost. Every key is documented in configs/config.docker.example.yaml.
+#
+# Never write a secret into this file: use "{{env:NAME}}" or "{{file:/path}}".
+# The ones below are passed to the containers by compose.yml.
+
+mode: agency
+
+# Its own database on the shared Postgres, created by sltb-init.
+db:
+  driver: postgres
+  postgres:
+    host: db
+    port: 5432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: sltb_db
+    sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
+
+server:
+  port: 8080
+  logLevel: debug
+  # The browser-facing URL: the host port compose publishes. TNSW's
+  # services.docker.json "sltb" entry also calls 8086.
+  serviceURL: http://localhost:8086
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+  # services.docker.json: "tnsw" at api:8080, where notify_decision posts the
+  # decision back.
+  servicesConfigPath: configs/agency/sltb/services.docker.json
+  paymentMethodsConfigPath: configs/agency/sltb/payment_methods.json
+  catalogConfigPath: configs/agency/sltb/catalog.json
+
+# The SLTB portal (the trader-app in agency mode).
+cors:
+  allowedOrigins:
+    - http://localhost:5179
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+
+# SLTB keeps no files of its own: it serves TNSW's storage, calling TNSW as
+# SLTB_TO_NSW (services.json, service tnsw), so officers open the documents
+# traders uploaded there. TNSW applies its own upload limits.
+storage:
+  type: proxy
+  proxy:
+    service: "tnsw"
+    uploadPath: /api/v1/storage
+    downloadPath: /api/v1/storage/{key}
+    deletePath: /api/v1/storage/{key}
+
+# Officers sign in through the SLTB portal client, and NSW injects as NSW_TO_SLTB.
+# The audience is the SLTB API resource server in
+# idp/resources/shared/resource-servers.json. The keys are fetched in-network;
+# the issuer is the browser-facing host the tokens are minted for.
+authn:
+  jwksURL: https://thunderid:8090/oauth2/jwks
+  issuer: https://localhost:8090
+  audience: https://api.sltb.nsw-agency.local
+  clientIDs:
+    - OGA_PORTAL_APP_SLTB
+    - NSW_TO_SLTB
+  # Only honored when APP_ENV=development.
+  insecureSkipTLSVerify: true
+
+# Placeholder providers.
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: replace-with-actual-username
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: sidCode
+
+# Its own namespace, created by sltb-init, so TNSW and SLTB workers never pick up
+# each other's workflows.
+temporal:
+  host: temporal
+  port: 7233
+  namespace: sltb
+
+# The sltb-v2 folder of a one-trade-artifacts clone, which compose bind-mounts
+# at /app/artifacts: ../one-trade-artifacts/sltb-v2 by default, or set
+# SLTB_ARTIFACT_LOCAL_ROOT in .env to another clone's sltb-v2 dir.
+artifactLoader:
+  type: local
+  local:
+    root: /app/artifacts
+  # Or straight from GitHub (branch feat/sltb-v2-agency
+  # until it merges), with type: github:
+  # github:
+  #   owner: OpenNSW
+  #   repo: one-trade-artifacts
+  #   ref: feat/sltb-v2-agency
+  #   basePath: sltb-v2
+
+# The sltb-v2 artifacts use no REFID_GENERATOR tasks.
+refid:
+  issuers: []
