@@ -1,7 +1,8 @@
 name: Makefile CI
 # Runs the Makefile the way each developer shell runs it, on PRs to main and in
-# the merge queue, when the Makefile, the git hooks or an example config file
-# change; otherwise the checks are skipped. A recipe that only breaks under
+# the merge queue, when the Makefile, the git hooks, this workflow, or a
+# setup-seeded example file is added or removed; otherwise the checks are
+# skipped. A recipe that only breaks under
 # Windows (cmd.exe from PowerShell, Git Bash) or under the Unix recipes (BSD
 # grep/awk/sed and Apple's Make) would otherwise be found by the first developer
 # on that machine after merge.
@@ -48,12 +49,13 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
-          PATTERN: '^Makefile$|^\.githooks/|\.example(\.|$)|^go\.(mod|sum)$|^\.github/workflows/makefile-ci\.yml$'
         run: |
           # --no-renames lists both paths of a rename, so a file moved out of a
           # watched path still counts as a change to it.
-          FILES=$(git diff --no-renames --name-only "$BASE...$HEAD")
-          if grep -qE "$PATTERN" <<< "$FILES"; then
+          ALL=$(git diff --no-renames --name-only "$BASE...$HEAD")
+          AD=$(git diff --no-renames --diff-filter=AD --name-only "$BASE...$HEAD")
+          if grep -qE '^Makefile$|^\.githooks/|^\.github/workflows/makefile-ci\.yml$' <<< "$ALL" \
+            || grep -qE '^(idp/)?\.env\.example$|^configs/[^/]+\.example\.(json|yaml)$|^portals/apps/trader-app/public/config\.example\.js$' <<< "$AD"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
