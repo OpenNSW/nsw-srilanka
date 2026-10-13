@@ -67,6 +67,11 @@ const (
 	// a trader starts from the consignment page once the main order is invoiced.
 	TaskTypeSLPASundryOrder = "SLPA_SUNDRY_ORDER"
 
+	// TaskTypeSLPASundryServices looks up the sundry services the CMS offers, so
+	// the sundry form lists what SLPA can be ordered for today rather than a copy
+	// of it. A GET with nothing to send but the trader's client key.
+	TaskTypeSLPASundryServices = "SLPA_SUNDRY_SERVICES"
+
 	// TaskTypeSLPAInvoiceGenerate asks the CMS to issue the official invoice for
 	// an approved service order. Asked for rather than waited on: the Single
 	// Window knows when the accountant approved the order, so a step that waited
@@ -156,6 +161,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},
+		{TaskTypeSLPASundryServices, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewServicesInterpreter())},
 		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},
