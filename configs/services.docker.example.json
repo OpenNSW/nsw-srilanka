@@ -114,9 +114,9 @@
           "client_secret": "env:M2M_NSW_TO_SLTB_SECRET",
           "insecure_skip_tls_verify": true,
           "scopes": [
-            "agency:application:inject"
+            "nsw:workflow:inject"
           ],
-          "endpoint_params": { "resource": "https://api.nsw-agency.local" }
+          "endpoint_params": { "resource": "https://api.sltb.nsw-agency.local" }
         }
       }
     }
