@@ -28,6 +28,15 @@ func TestReplay_FCAUApplicationApprove(t *testing.T) {
 	runFlow(t, h, "fcau_application_approve.json")
 }
 
+// TestReplay_ConsignmentFlows covers a consignment's flows: the admin lists them and opens
+// each by workflow ID, and a trader starts another flow, while a template that is not
+// startable, a CHA not chosen for the consignment and a trader on the admin routes are refused.
+func TestReplay_ConsignmentFlows(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "consignment_flows.json")
+}
+
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()

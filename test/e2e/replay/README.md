@@ -145,15 +145,15 @@ Each step has a `name` and exactly one of: `request`, `wait`, `callback`, `pay`.
 }
 ```
 
-| Field          | Notes                                                                                                                |
-| -------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `actor`        | Must match an `id` in `configs/members/` or `configs/agencies/`.                                                     |
-| `method`       | HTTP method.                                                                                                         |
-| `path`         | URL path; `{{var}}` tokens interpolated.                                                                             |
-| `body`         | JSON body; `{{var}}` in string values interpolated.                                                                  |
-| `expectStatus` | Expected status code (default 200).                                                                                  |
-| `extract`      | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`).                                      |
-| `retry`        | GET only: re-issue until the status matches and every `extract` path is present, for up to this long (e.g. `"30s"`). |
+| Field          | Notes                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `actor`        | Must match an `id` in `configs/members/` or `configs/agencies/`.                                                                        |
+| `method`       | HTTP method.                                                                                                                            |
+| `path`         | URL path; `{{var}}` tokens interpolated.                                                                                                |
+| `body`         | JSON body; `{{var}}` in string values interpolated.                                                                                     |
+| `expectStatus` | Expected status code (default 200).                                                                                                     |
+| `extract`      | `varName → dot.notation.path` from the JSON response (e.g. `"consignment.id"`; a number indexes an array, e.g. `"flows.0.workflowId"`). |
+| `retry`        | GET only: re-issue until the status matches and every `extract` path is present, for up to this long (e.g. `"30s"`).                    |
 
 #### Completing a USER_INPUT task
 

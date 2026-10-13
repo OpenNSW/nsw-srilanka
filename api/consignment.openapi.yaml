@@ -198,6 +198,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/consignments/{id}/flows:
+    post:
+      summary: Start a flow on one of the caller's own consignments
+      description: |
+        Starts one of the consignment's startable flows
+        (`DetailDTO.startableFlows`, set by the deployment's
+        `consignment.flows`), e.g. a port or agency fee payment, as its own
+        workflow on the consignment. Its tasks appear in the consignment's
+        `workflowNodes`. A consignment that has `FINISHED` still takes new
+        flows; starting one sets it back to `IN_PROGRESS`.
+
+        Access is checked as for `GET /api/v1/consignments/{id}`: a
+        consignment the caller's company/role does not own is reported as
+        not found.
+
+        Requires scope `nsw:consignment:write`.
+      operationId: startConsignmentFlow
+      parameters:
+        - $ref: '#/components/parameters/ConsignmentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartFlowRequest'
+      responses:
+        '201':
+          description: The flow started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowDTO'
+        '400':
+          description: >-
+            Missing consignment ID; an invalid request body (malformed JSON, any
+            field besides `templateId`, or anything after the JSON value); or a `templateId`
+            that is not one of the consignment's startable flows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. Missing or invalid bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The caller has no resolvable company profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            No such consignment, or the caller's company/role does not own
+            it (indistinguishable from "not found" by design).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body is larger than 1 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/consignments/{id}/agency:
     get:
       summary: Get the allowlisted agency-facing summary of a consignment
@@ -400,6 +474,7 @@ components:
         - traderId
         - traderCompanyId
         - workflowNodes
+        - startableFlows
       properties:
         id:
           type: string
@@ -428,3 +503,65 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
+        startableFlows:
+          type: array
+          description: >-
+            The flows the caller may start on the consignment with
+            `POST /api/v1/consignments/{id}/flows`.
+          items:
+            $ref: '#/components/schemas/FlowOption'
+
+    FlowOption:
+      type: object
+      description: A flow that can be started on a consignment.
+      required:
+        - templateId
+        - label
+      properties:
+        templateId:
+          type: string
+        label:
+          type: string
+          description: The text of the flow's button.
+
+    StartFlowRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - templateId
+      properties:
+        templateId:
+          type: string
+          description: >-
+            One of the consignment's `startableFlows`. It is the whole request:
+            the server sets the flow's variables (the consignment ID and the
+            trader company), and the flow's own tasks collect anything from
+            the user.
+
+    FlowDTO:
+      type: object
+      description: One top-level workflow (flow) of a consignment.
+      required:
+        - workflowId
+        - templateId
+        - templateName
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        workflowId:
+          type: string
+        templateId:
+          type: string
+        templateName:
+          type: string
+          description: The workflow definition's name, else `templateId`.
+        status:
+          type: string
+          enum: [STARTING, STARTED, COMPLETED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

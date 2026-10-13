@@ -190,6 +190,16 @@ integrations:
   # never hear the answer to.
   slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
+# Flows a trader or CHA may start on a consignment from its page
+# (POST /api/v1/consignments/{id}/flows), besides the export flow that creating
+# it starts. Each names a workflow template in the artifacts; label is the
+# text of its button. Empty: no such flow can be started.
+consignment:
+  flows: []
+  # flows:
+  #   - templateId: <a workflow template in your artifacts>
+  #     label: <the text of its button>
+
 # Where artifacts (workflow definitions, templates, manifest.json) are fetched
 # from at startup: local | github | s3. Only the settings for the selected type
 # are read, in the schema of github.com/OpenNSW/core/artifact/loaders.

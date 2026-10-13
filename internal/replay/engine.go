@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -71,7 +72,7 @@ type Request struct {
 	Path         string            `json:"path"`
 	Body         any               `json:"body,omitempty"`
 	ExpectStatus int               `json:"expectStatus,omitempty"` // default 200
-	Extract      map[string]string `json:"extract,omitempty"`      // var -> response field path (dot-notation, e.g. "consignment.id")
+	Extract      map[string]string `json:"extract,omitempty"`      // var -> response field path (dot-notation, e.g. "consignment.id"; a number indexes an array, e.g. "flows.0.workflowId")
 	// Retry, for a GET only, re-issues the request until it gets the expected
 	// status and every Extract path is present, or this long elapses (e.g. "30s").
 	// For state that lands a moment after a wait matched: a task's step_id is
@@ -452,18 +453,25 @@ func sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// lookupPath resolves a dot-notation path (e.g. "consignment.id") against a
-// decoded JSON object, descending through nested objects. Returns false if any
-// segment is missing or a non-object is encountered mid-path.
+// lookupPath reads a dot-notation path from obj. A segment selects an object's field, or,
+// when it is a number, an array's element (e.g. "flows.0.workflowId").
 func lookupPath(obj map[string]any, path string) (any, bool) {
 	var cur any = obj
 	for _, seg := range strings.Split(path, ".") {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		cur, ok = m[seg]
-		if !ok {
+		switch node := cur.(type) {
+		case map[string]any:
+			v, ok := node[seg]
+			if !ok {
+				return nil, false
+			}
+			cur = v
+		case []any:
+			i, err := strconv.Atoi(seg)
+			if err != nil || i < 0 || i >= len(node) {
+				return nil, false
+			}
+			cur = node[i]
+		default:
 			return nil, false
 		}
 	}

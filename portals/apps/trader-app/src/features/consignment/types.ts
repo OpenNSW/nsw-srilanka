@@ -117,6 +117,16 @@ export interface ConsignmentDetail {
   createdAt: string
   updatedAt: string
   workflowNodes: WorkflowNode[]
+  // Flows the caller may start on the consignment (startConsignmentFlow), besides the export
+  // flow creating it started.
+  startableFlows?: FlowOption[]
+}
+
+// A flow that can be started on a consignment, e.g. a port or agency fee payment.
+export interface FlowOption {
+  templateId: string
+  // The text of its button.
+  label: string
 }
 
 // Deprecated: Use ConsignmentDetail or ConsignmentSummary

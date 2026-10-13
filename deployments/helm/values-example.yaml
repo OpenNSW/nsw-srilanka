@@ -276,6 +276,11 @@ backend:
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
 
+    # Flows a trader or CHA may start on a consignment, besides the export
+    # flow; see configs/config.example.yaml.
+    consignment:
+      flows: []
+
     # Reference ID formats for payment references and REFID_GENERATOR steps;
     # see configs/config.example.yaml. A step fails if it names a format
     # missing here.
