@@ -230,3 +230,49 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	assertDownloadURL(t, download(agencyFiles, officerToken, officer))
 	assertStatus(t, download(agencyFiles, officerToken, user("another-officer")), http.StatusForbidden)
 }
+
+// An owning service that answers 200 with a response this service can't use
+// failed, as surely as one that answered 5xx: a gateway failure, not this
+// service's own (500).
+func TestFileHandler_DownloadOwnerBadResponseIsBadGateway(t *testing.T) {
+	access, _ := testFileAccess(t)
+	for name, body := range map[string]string{
+		"no download_url":       `{"expires_at": 1}`,
+		"relative download_url": `{"download_url": "/api/v1/storage/k/content", "expires_at": 1}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			owner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(body))
+			}))
+			t.Cleanup(owner.Close)
+			svc, err := NewProxyService(newRegistry(t, owner.URL, ownerToken), defaultProxyConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+			token, err := access.IssueFor(user("alice"), "any-key")
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertStatus(t, download(NewFileHandler(svc, access), token, user("alice")), http.StatusBadGateway)
+		})
+	}
+}
+
+// A backend of this deployment's own failing is this service's error (500),
+// not a gateway's.
+func TestFileHandler_DownloadBackendFailureIsInternal(t *testing.T) {
+	access, _ := testFileAccess(t)
+	token, err := access.IssueFor(user("alice"), "any-key.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStatus(t, download(NewFileHandler(failingService{}, access), token, user("alice")), http.StatusInternalServerError)
+}
+
+// failingService is a Service whose backend fails every call.
+type failingService struct{ Service }
+
+func (failingService) DownloadURL(context.Context, string) (string, int64, error) {
+	return "", 0, errors.New("backend unavailable")
+}
