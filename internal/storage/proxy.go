@@ -123,6 +123,8 @@ func (s *ProxyService) DownloadURL(ctx context.Context, key string) (string, int
 }
 
 // Download streams the file from the owning service via its download URL.
+// Every failure is the owning service's (its URL, the route to it, or its
+// answer), so each is an upstream failure.
 func (s *ProxyService) Download(ctx context.Context, key string) (io.ReadCloser, string, error) {
 	downloadURL, err := s.GetDownloadURL(ctx, key)
 	if err != nil {
@@ -131,16 +133,16 @@ func (s *ProxyService) Download(ctx context.Context, key string) (io.ReadCloser,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("storage proxy: build download request: %w", err)
+		return nil, "", wrapUpstreamFailure("build download request", err)
 	}
 	resp, err := s.fetchClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("storage proxy: download %s: %w", key, err)
+		return nil, "", wrapUpstreamFailure("download "+key, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer func() { _ = resp.Body.Close() }()
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxProxyErrorBody))
-		return nil, "", fmt.Errorf("storage proxy: download %s: owning service returned %d: %s", key, resp.StatusCode, strings.TrimSpace(string(msg)))
+		return nil, "", wrapUpstreamFailure("download "+key, fmt.Errorf("owning service returned %d: %s", resp.StatusCode, strings.TrimSpace(string(msg))))
 	}
 
 	contentType := resp.Header.Get("Content-Type")

@@ -282,3 +282,36 @@ func TestKeyPath_KeyAnywhereInPath(t *testing.T) {
 		t.Errorf("keyPath = %q, want /api/v1/abc.pdf/content", got)
 	}
 }
+
+// Fetching a file's content fails the same way as the rest of the proxy: as
+// an upstream failure, whether the owning service's download URL answers an
+// error or can't be reached.
+func TestProxyService_DownloadFailuresAreUpstream(t *testing.T) {
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+	for name, contentURL := range map[string]func(owner string) string{
+		"content answers 500": func(owner string) string { return owner + "/content" },
+		"content unreachable": func(string) string { return closed.URL + "/content" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var owner *httptest.Server
+			owner = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/content") {
+					http.Error(w, "storage backend down", http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"download_url": contentURL(owner.URL), "expires_at": 1})
+			}))
+			t.Cleanup(owner.Close)
+			svc, err := NewProxyService(newRegistry(t, owner.URL, ownerToken), defaultProxyConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = svc.Download(context.Background(), "k.pdf")
+			if !isUpstreamFailure(err) {
+				t.Fatalf("Download: err = %v, want an upstream failure", err)
+			}
+		})
+	}
+}
