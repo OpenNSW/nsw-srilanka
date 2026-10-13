@@ -156,6 +156,9 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	return p.shutdown(ctx)
 }
 
+// httpServerAttributeView drops server.address and server.port from HTTP
+// server metrics. otelhttp takes those from the request Host header, so a
+// client can create a new series per value; they are constant per service.
 func httpServerAttributeView() sdkmetric.View {
 	return sdkmetric.NewView(
 		sdkmetric.Instrument{Name: "http.server.*"},
@@ -165,6 +168,7 @@ func httpServerAttributeView() sdkmetric.View {
 	)
 }
 
+// routeFromPattern strips the method from a Go ServeMux pattern.
 func routeFromPattern(pattern string) string {
 	if pattern == "" {
 		return ""
