@@ -27,17 +27,12 @@ type FileRefs interface {
 type FileHandler struct {
 	svc  Service
 	refs FileRefs
-	// proxied is set when svc is a ProxyService, whose failures other than
-	// the rejections it relays are the owning service's: a gateway error,
-	// not this service's.
-	proxied bool
 }
 
 // NewFileHandler creates a FileHandler over svc, resolving references with
 // refs.
 func NewFileHandler(svc Service, refs FileRefs) *FileHandler {
-	_, proxied := svc.(*ProxyService)
-	return &FileHandler{svc: svc, refs: refs, proxied: proxied}
+	return &FileHandler{svc: svc, refs: refs}
 }
 
 // Download returns a time-limited URL to download the file the reference in
@@ -89,9 +84,18 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 	switch {
 	case errors.Is(err, corestorage.ErrInvalidKey):
 		httputil.Error(w, r, http.StatusBadRequest, "invalid key format")
-	case h.proxied:
+	case isUpstreamFailure(err):
 		writeProxyError(w, r, err, fallback)
 	default:
 		httputil.InternalServerError(w, r, "storage: "+fallback, err)
 	}
+}
+
+// isUpstreamFailure reports errors from a remote storage service, including
+// rejections that should be relayed. The HTTP handler maps the error's meaning
+// rather than inspecting which Service implementation returned it.
+func isUpstreamFailure(err error) bool {
+	var rejection *RemoteRejection
+	var failure *upstreamFailure
+	return errors.As(err, &rejection) || errors.As(err, &failure)
 }
