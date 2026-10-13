@@ -1,4 +1,4 @@
-package metrics
+package telemetry
 
 import (
 	"net/http"
@@ -29,6 +29,9 @@ func TestStartNoopWithoutEndpoint(t *testing.T) {
 	h := p.Handler("tnsw-api", mux)
 	if h != mux {
 		t.Fatal("expected Handler to return next unchanged when endpoint is unset")
+	}
+	if p.SlogHandler() != nil {
+		t.Fatal("expected SlogHandler nil when endpoint is unset")
 	}
 
 	rec := httptest.NewRecorder()
