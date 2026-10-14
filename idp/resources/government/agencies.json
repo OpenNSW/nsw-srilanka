@@ -1,21 +1,6 @@
 {
   "agencies": [
     {
-      "handle": "fcau",
-      "name": "FCAU",
-      "description": "Food Control Administration Unit",
-      "officer": {
-        "username": "fcau_officer", "email": "fcau_officer@government.dev",
-        "givenName": "FCAU", "familyName": "Officer", "phoneNumber": "+94771234561",
-        "passwordEnv": { "override": "SAMPLE_FCAU_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" }
-      },
-      "portal": { "name": "FCAUPortalApp", "clientId": "OGA_PORTAL_APP_FCAU", "port": 5175, "redirectUrisEnv": "FCAU_REDIRECT_URIS" },
-      "m2m": {
-        "toNsw": { "clientId": "FCAU_TO_NSW", "secretEnv": { "override": "M2M_FCAU_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
-        "nswTo": { "clientId": "NSW_TO_FCAU", "secretEnv": { "override": "M2M_NSW_TO_FCAU_SECRET", "default": "M2M_CLIENT_SECRET" } }
-      }
-    },
-    {
       "handle": "slpa",
       "name": "SLPA",
       "description": "Sri Lanka Ports Authority",

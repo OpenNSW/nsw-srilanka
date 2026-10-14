@@ -84,6 +84,17 @@
     ],
     "sltbInject": [
       "nsw:workflow:inject"
+    ],
+    "fcauOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "fcauInject": [
+      "nsw:workflow:inject"
     ]
   }
 }

@@ -155,11 +155,12 @@ That script creates:
 - **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
   and **`NswM2M`** roles (machine clients) — see _API authorization_ below
 - **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
-- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`Customs API`**, **`NPQS API`** and **`SLTB API`** OAuth2 resource servers (scopes + token audiences)
+- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`Customs API`**, **`NPQS API`**, **`SLTB API`** and **`FCAU API`** OAuth2 resource servers (scopes + token audiences)
 - **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
 - **`Customs Officers`** group + **`Customs Officer`** role, and the **`NswToCustomsM2M`** role (see `customs.json`)
 - **`NPQS Officers`** group + **`NPQS Officer`** role, and the **`NswToNpqsM2M`** role (see `npqs.json`)
 - **`SLTB Officers`** group + **`SLTB Officer`** role, and the **`NswToSltbM2M`** role (see `sltb.json`)
+- **`FCAU Officers`** group + **`FCAU Officer`** role, and the **`NswToFcauM2M`** role (see `fcau.json`)
 - Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
   `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `customs_officer` /
   `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
@@ -281,6 +282,7 @@ idp/resources/
     customs.json               Customs, run by this backend in agency mode (explicit, see below)
     npqs.json                  NPQS, run by this backend in agency mode (explicit, see below)
     sltb.json                  SLTB, run by this backend in agency mode (explicit, see below)
+    fcau.json                  FCAU, run by this backend in agency mode (explicit, see below)
 ```
 
 CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
@@ -305,6 +307,11 @@ SLTB is declared the same way in `sltb.json` (`configs/agency/sltb/`): the `SLTB
 resource server's `SLTB Officer` role (via `SLTB Officers`, holding only `sltb_officer`)
 and `NswToSltbM2M` role (on `NSW_TO_SLTB`), the `OGA_PORTAL_APP_SLTB` portal client, and
 `SLTB_TO_NSW`.
+
+FCAU is declared the same way in `fcau.json` (`configs/agency/fcau/`): the `FCAU API`
+resource server's `FCAU Officer` role (via `FCAU Officers`, holding only `fcau_officer`)
+and `NswToFcauM2M` role (on `NSW_TO_FCAU`), the `OGA_PORTAL_APP_FCAU` portal client, and
+`FCAU_TO_NSW`.
 
 Each file's top-level keys are entity-type buckets (`scopeSets`, `resourceServers`,
 `organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
@@ -365,11 +372,12 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
 - **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
   `CDA_TO_NSW`, `SLPA_TO_NSW`, `CUSTOMS_TO_NSW`, `SLTB_TO_NSW`.
-- **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_FCAU`, `NSW_TO_SLPA`.
+- **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_SLPA`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
 - **NSW → Customs** (`aud=https://api.customs.nsw-agency.local`, `NswToCustomsM2M` role): `NSW_TO_CUSTOMS`.
 - **NSW → NPQS** (`aud=https://api.npqs.nsw-agency.local`, `NswToNpqsM2M` role): `NSW_TO_NPQS`.
 - **NSW → SLTB** (`aud=https://api.sltb.nsw-agency.local`, `NswToSltbM2M` role): `NSW_TO_SLTB`.
+- **NSW → FCAU** (`aud=https://api.fcau.nsw-agency.local`, `NswToFcauM2M` role): `NSW_TO_FCAU`.
 
 ## API authorization (OAuth2)
 
@@ -384,6 +392,7 @@ becomes the access-token **audience** (`aud`):
 | `https://api.customs.nsw-agency.local` | this backend as Customs (`mode: agency`, `customs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 | `https://api.npqs.nsw-agency.local`    | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 | `https://api.sltb.nsw-agency.local`    | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.fcau.nsw-agency.local`    | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -412,8 +421,11 @@ becomes the access-token **audience** (`aud`):
 > - **SLTB** (`sltb-api`): the `SLTB API` identifier, `https://api.sltb.nsw-agency.local`,
 >   in the same places under `configs/agency/sltb/` and TNSW's `sltb` entry in
 >   `configs/services*.example.json`.
+> - **FCAU** (`fcau-api`): the `FCAU API` identifier, `https://api.fcau.nsw-agency.local`,
+>   in the same places under `configs/agency/fcau/` and TNSW's `fcau` entry in
+>   `configs/services*.example.json`.
 
-Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, Customs, NPQS and SLTB APIs reuse `nsw:*` names, since they
+Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, Customs, NPQS, SLTB and FCAU APIs reuse `nsw:*` names, since they
 are the same backend; that is safe because every caller names its target with `resource`
 (below), and a token is narrowed to the scopes of that one resource server.
 
@@ -436,6 +448,8 @@ scopes via a role:
 | SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                     |
 | `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject` on the NPQS API           |
 | `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject` on the SLTB API           |
+| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                     |
+| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject` on the FCAU API           |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to
