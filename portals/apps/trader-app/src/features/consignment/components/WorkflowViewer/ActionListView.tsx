@@ -55,7 +55,7 @@ export function ActionListView({
       key={step.id}
       step={step}
       consignmentId={consignmentId}
-      rejected={isRejectedSltbBlendSheetStep(step, filteredSteps, consignmentState)}
+      rejected={isRejectedSltbBlendSheetStep(step, filteredSteps)}
     />
   )
 
