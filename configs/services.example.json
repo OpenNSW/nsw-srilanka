@@ -11,7 +11,7 @@
           "token_url": "https://localhost:8090/oauth2/token",
           "client_id": "NSW_TO_NPQS",
           "client_secret": "env:M2M_NSW_TO_NPQS_SECRET",
-          "scopes": ["nsw:workflow:inject"],
+          "scopes": ["nsw:workflow:inject", "nsw:task:write"],
           "insecure_skip_tls_verify": true,
           "endpoint_params": { "resource": "https://api.npqs.nsw-agency.local" }
         }

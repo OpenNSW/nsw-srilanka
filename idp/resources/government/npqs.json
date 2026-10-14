@@ -15,8 +15,8 @@
   "roles": [
     { "key": "NPQS Officer", "name": "NPQS Officer", "description": "Role for NPQS officers working tasks in the NPQS deployment",
       "ou": "government-organization/npqs", "resourceServer": "https://api.npqs.nsw-agency.local", "scopeSet": "npqsOfficer" },
-    { "key": "NswToNpqsM2M", "name": "NswToNpqsM2M", "description": "Role for NSW injecting workflows into the NPQS deployment",
-      "ou": "government-organization/npqs", "resourceServer": "https://api.npqs.nsw-agency.local", "scopeSet": "npqsInject" }
+    { "key": "NswToNpqsM2M", "name": "NswToNpqsM2M", "description": "Role for NSW injecting workflows into the NPQS deployment and replying on its parked steps",
+      "ou": "government-organization/npqs", "resourceServer": "https://api.npqs.nsw-agency.local", "scopeSet": "nswToNpqs" }
   ],
   "roleAssignments": [
     { "role": "NPQS Officer", "group": "NPQS Officers" }
@@ -66,7 +66,7 @@
       "clientId": "NSW_TO_NPQS",
       "secretEnv": { "override": "M2M_NSW_TO_NPQS_SECRET", "default": "M2M_CLIENT_SECRET" },
       "ou": "government-organization",
-      "scopeSet": "npqsInject"
+      "scopeSet": "nswToNpqs"
     }
   ],
   "appRoleAssignments": [

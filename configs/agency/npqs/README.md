@@ -81,10 +81,10 @@ seeds NPQS for this deployment, on the `NPQS API` resource server
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                     | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`                                                                           |
+| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps                     |
 | NPQS decision callback and storage | `NPQS_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                            |
 
-TNSW's `services.json` `npqs` entry requests `nsw:workflow:inject` with
+TNSW's `services.json` `npqs` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/services*.example.json`).
 An IdP seeded before this change still has the old NPQS entities, and a re-seed skips
 anything that exists: `OGA_PORTAL_APP_NPQS` keeps its `agency:*` scopes,
