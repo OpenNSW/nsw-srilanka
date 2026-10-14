@@ -23,8 +23,10 @@
 #     --from-literal=m2m-slpa-secret=... \
 #     --from-literal=m2m-efc-secret=... \
 #     --from-literal=m2m-sltb-secret=... \
-#     --from-literal=m2m-asycuda-secret=... \
-#     --from-literal=otel-auth-header=...   # e.g. "Basic <base64(email:password)>" for OpenObserve
+#     --from-literal=m2m-asycuda-secret=...
+#   # OpenObserve OTLP auth (only when backend.config otel is enabled):
+#   kubectl create secret generic otel-auth-header \
+#     --from-literal=Authorization="Basic $(printf '%s:%s' email password | base64)"
 #   kubectl create secret generic govpay-go-private-key \
 #     --from-file=go_private.pem=...
 #
@@ -122,11 +124,10 @@ backend:
         secretKeyRef: { name: nsw-secrets, key: m2m-asycuda-secret }
 
     # OTLP auth for OpenObserve (or other backend). Only needed when backend.config
-    # otel.endpoint is set; value is the full Authorization header, e.g.
-    # "Basic <base64(email:password)>".
+    # otel.endpoint is set; value is the full Authorization header value.
     # OTEL_AUTH_HEADER:
     #   valueFrom:
-    #     secretKeyRef: { name: nsw-secrets, key: otel-auth-header }
+    #     secretKeyRef: { name: otel-auth-header, key: Authorization }
 
   # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
   # gateway needs the private key. payment_methods.json points at it with
