@@ -449,7 +449,7 @@ scopes via a role:
 | `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the NPQS API |
 | `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the SLTB API |
 | FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                             |
-| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject` on the FCAU API                   |
+| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the FCAU API |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to

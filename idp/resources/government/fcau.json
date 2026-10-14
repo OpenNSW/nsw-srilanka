@@ -15,8 +15,8 @@
   "roles": [
     { "key": "FCAU Officer", "name": "FCAU Officer", "description": "Role for FCAU officers working tasks in the FCAU deployment",
       "ou": "government-organization/fcau", "resourceServer": "https://api.fcau.nsw-agency.local", "scopeSet": "fcauOfficer" },
-    { "key": "NswToFcauM2M", "name": "NswToFcauM2M", "description": "Role for NSW injecting workflows into the FCAU deployment",
-      "ou": "government-organization/fcau", "resourceServer": "https://api.fcau.nsw-agency.local", "scopeSet": "fcauInject" }
+    { "key": "NswToFcauM2M", "name": "NswToFcauM2M", "description": "Role for NSW injecting workflows into the FCAU deployment and replying on its parked steps",
+      "ou": "government-organization/fcau", "resourceServer": "https://api.fcau.nsw-agency.local", "scopeSet": "nswToFcau" }
   ],
   "roleAssignments": [
     { "role": "FCAU Officer", "group": "FCAU Officers" }
@@ -66,7 +66,7 @@
       "clientId": "NSW_TO_FCAU",
       "secretEnv": { "override": "M2M_NSW_TO_FCAU_SECRET", "default": "M2M_CLIENT_SECRET" },
       "ou": "government-organization",
-      "scopeSet": "fcauInject"
+      "scopeSet": "nswToFcau"
     }
   ],
   "appRoleAssignments": [

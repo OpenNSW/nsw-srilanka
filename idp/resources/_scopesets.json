@@ -97,8 +97,9 @@
       "nsw:storage:read",
       "nsw:storage:write"
     ],
-    "fcauInject": [
-      "nsw:workflow:inject"
+    "nswToFcau": [
+      "nsw:workflow:inject",
+      "nsw:task:write"
     ]
   }
 }
