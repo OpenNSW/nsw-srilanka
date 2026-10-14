@@ -74,7 +74,7 @@ Deploy with workflow artifacts that include [one-trade-artifacts#164](https://gi
 
 #### Workflow artifacts
 
-- Pin `artifactLoader.github.ref` to a one-trade-artifacts commit at or after [`3b65bb5`](https://github.com/OpenNSW/one-trade-artifacts/commit/3b65bb548b7998a755f7abd895bb4fd3f80f308f) (14 October 2026). It holds every artifact change this release depends on:
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`14e7d9e`](https://github.com/OpenNSW/one-trade-artifacts/commit/14e7d9e05c0b80fc0ef3811c65e3485d0765b20f) (14 October 2026). It holds every artifact change this release depends on:
   - [one-trade-artifacts#138](https://github.com/OpenNSW/one-trade-artifacts/pull/138): CusDec supporting documents as scanned and metadata lists, which the API now reads ([#590](https://github.com/OpenNSW/nsw-srilanka/pull/590));
   - [one-trade-artifacts#140](https://github.com/OpenNSW/one-trade-artifacts/pull/140): the CDA containerization date check ([#597](https://github.com/OpenNSW/nsw-srilanka/pull/597));
   - [one-trade-artifacts#142](https://github.com/OpenNSW/one-trade-artifacts/pull/142): the `input_mapping` every `BATCH_SPLIT` must now declare ([#648](https://github.com/OpenNSW/nsw-srilanka/pull/648));
