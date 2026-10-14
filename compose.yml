@@ -67,6 +67,14 @@ x-sltb-config-env: &sltb-config-env
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
+# The same for FCAU's fcau-init and fcau-api, on
+# configs/agency/fcau/config.docker.yaml.
+x-fcau-config-env: &fcau-config-env
+  CONFIG_PATH: configs/agency/fcau/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+
 services:
   # -------------------------------------------------------------------
   # 1. Shared Infrastructure Database (PostgreSQL)
@@ -802,3 +810,96 @@ services:
     volumes:
       - ./configs/agency/sltb/portal-config.js:/usr/share/nginx/html/config.js:ro
       - ./configs/agency/sltb/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+
+  # -------------------------------------------------------------------
+  # 12. FCAU Agency
+  # -------------------------------------------------------------------
+  # The same backend and trader-app run as FCAU, the Food Control Administration
+  # Unit (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA, Customs,
+  # NPQS and SLTB do above: shared Postgres, Temporal and IdP, but its own database
+  # and Temporal namespace. Config lives in configs/agency/fcau/ (config.docker.yaml
+  # for these services). TNSW reaches it at host.docker.internal:8082, as its
+  # services.docker.json "fcau" entry already expects.
+
+  # One-shot: creates fcau_db on the shared Postgres and the fcau Temporal
+  # namespace if missing, then migrates fcau_db. Same image as cda-init.
+  fcau-init:
+    build:
+      context: .
+      additional_contexts:
+        migrate: service:migrate
+      dockerfile_inline: |
+        FROM postgres:16-alpine
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+        COPY --from=migrate /app/migrations /app/migrations
+        WORKDIR /app
+    container_name: fcau-init
+    networks:
+      - nsw-network
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      <<: *fcau-config-env
+      PGHOST: db
+      PGUSER: ${DB_USERNAME:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'fcau_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE fcau_db'
+        temporal operator namespace describe --namespace fcau --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace fcau --address temporal:7233
+        migrate up
+    depends_on:
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: "no"
+
+  fcau-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fcau-api
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: the FCAU portal's config and TNSW's "fcau" service entry both call 8082.
+      - "8082:8080"
+    volumes:
+      - ./configs:/app/configs:ro
+      # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
+      # clone's fcau-v2/ dir.
+      - ${FCAU_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/fcau-v2}:/app/artifacts:ro
+    environment:
+      # Every server setting lives in configs/agency/fcau/config.docker.yaml (see
+      # x-fcau-config-env); what follows is only what the file cannot hold.
+      <<: *fcau-config-env
+      # Same gate as the api service: insecure TLS is honored only in development.
+      APP_ENV: ${APP_ENV:-}
+      # FCAU -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_FCAU_TO_NSW_SECRET: ${M2M_FCAU_TO_NSW_SECRET:-1234}
+    depends_on:
+      fcau-init:
+        condition: service_completed_successfully
+      thunderid:
+        condition: service_started
+
+  fcau-portal:
+    build:
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: fcau-web
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
+      # OGA_PORTAL_APP_FCAU are both on 5175.
+      - "5175:8080"
+    volumes:
+      - ./configs/agency/fcau/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/fcau/branding.json:/usr/share/nginx/html/configs/branding.json:ro
