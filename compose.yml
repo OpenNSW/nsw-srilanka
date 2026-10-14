@@ -104,7 +104,7 @@ services:
   # -------------------------------------------------------------------
   # Stage A: Seed static database schemas from container image layer
   thunderid-db-init:
-    image: ghcr.io/thunder-id/thunderid:1.0.0-beta2
+    image: ghcr.io/thunder-id/thunderid:1.0.1
     container_name: thunderid-db-init
     # Seed only when the volume is empty. An unconditional copy would overwrite
     # configdb.db on every `up`, silently reverting the bootstrap and seed.
@@ -117,7 +117,7 @@ services:
   # the image's own, then every document in idp/bootstrap/ (admin-cli, the NSW
   # platform, the agencies and the sample data). See idp/README.md.
   thunderid-setup:
-    image: ghcr.io/thunder-id/thunderid:1.0.0-beta2
+    image: ghcr.io/thunder-id/thunderid:1.0.1
     container_name: thunderid-setup
     command: ./setup.sh
     networks:
@@ -138,7 +138,7 @@ services:
 
   # Stage C: Boot active server instances listening for authentication queries
   thunderid:
-    image: ghcr.io/thunder-id/thunderid:1.0.0-beta2
+    image: ghcr.io/thunder-id/thunderid:1.0.1
     container_name: thunderid
     networks:
       - nsw-network

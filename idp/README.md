@@ -11,7 +11,7 @@ on the project's resources, declared in [`bootstrap/`](bootstrap/).
 > binary, image, and install paths moved from `thunder` / `/opt/thunder` to
 > `thunderid` / `/opt/thunderid` (rename landed in v0.37.0).
 
-> **Pinned version: `1.0.0-beta2`** (`compose.yml`). Note the OCI tag has no `v`
+> **Pinned version: `1.0.1`** (`compose.yml`). Note the OCI tag has no `v`
 > prefix even though the upstream git tag does. 1.0.0 changed enough to be worth
 > knowing about if you are reading older notes:
 >
