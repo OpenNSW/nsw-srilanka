@@ -58,7 +58,8 @@ storage:
   # the tokens TNSW gives this agency): comma-separated kid:key pairs, newest
   # first, each key 32 random bytes in base64. This agency's own, never TNSW's.
   tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-  # How long an officer's file token lasts, in seconds. Optional: 3600 when unset.
+  # How long the file tokens an officer reads with last, in seconds. Optional:
+  # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
   tokenTTLSeconds: 3600
   proxy:
     service: "tnsw"
