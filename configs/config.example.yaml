@@ -256,7 +256,7 @@ artifactLoader:
 # What this deployment runs as: "tnsw" or "agency". Required.
 # The modes are exclusive. An agency serves inject and the officer case views in
 # place of TNSW's consignment, payment and webhook routes, and its catalog maps
-# the officer role instead of trader/CHA. See docs/agency.md.
+# the agency's own roles instead of trader/CHA. See docs/agency.md.
 mode: tnsw
 
 # Reference ID formats, in the schema of github.com/OpenNSW/core/refid (see its
