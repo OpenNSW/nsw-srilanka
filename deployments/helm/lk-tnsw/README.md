@@ -146,7 +146,7 @@ kubectl create secret generic nsw-secrets \
   --from-literal=m2m-fcau-secret=... \
   --from-literal=m2m-cda-secret=... \
   --from-literal=m2m-slpa-secret=... \
-  --from-literal=m2m-customs-secret=... \
+  --from-literal=m2m-efc-secret=... \
   --from-literal=m2m-sltb-secret=... \
   --from-literal=m2m-asycuda-secret=... \
   --from-literal=argus-api-key=... \
