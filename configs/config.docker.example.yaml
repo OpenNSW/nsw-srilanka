@@ -316,3 +316,43 @@ refid:
               sequence:
                 scopeKey: "{issuer}:{idType}:{exporterId}:{mainCategory}:{subCategory}"
                 padding: 4
+
+    - issuer: SLTB
+      formats:
+        # blend_sheet_no — a blend sheet's number, drawn for each blend sheet
+        # when the trader submits the application: the year, then a sequence
+        # that restarts every year. Produces: 2026/00001
+        - idType: blend_sheet_no
+          segments:
+            - type: date
+              layout: "2006"
+            - type: literal
+              value: "/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 5
+
+        # levy_payment_ref — the reference the trader pays the SLTB levy (Tea
+        # Board CESS) against. Produces: EXPH2000016863
+        - idType: levy_payment_ref
+          segments:
+            - type: literal
+              value: "EXPH"
+            - type: random
+              random:
+                scopeKey: "{issuer}:{idType}"
+                charset: numeric
+                length: 10
+
+        # lab_payment_ref — the reference the trader pays the lab test fee
+        # against. Produces: LAB3000016867
+        - idType: lab_payment_ref
+          segments:
+            - type: literal
+              value: "LAB"
+            - type: random
+              random:
+                scopeKey: "{issuer}:{idType}"
+                charset: numeric
+                length: 10

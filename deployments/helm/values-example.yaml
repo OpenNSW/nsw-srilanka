@@ -318,6 +318,30 @@ backend:
                 - {type: param, param: subCategory, pattern: "[0-9]{5}"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{exporterId}:{mainCategory}:{subCategory}", padding: 4}
+        - issuer: SLTB
+          formats:
+            # A blend sheet's number, drawn when the trader submits: the year,
+            # then a sequence that restarts every year. Produces: 2026/00001
+            - idType: blend_sheet_no
+              segments:
+                - {type: date, layout: "2006"}
+                - {type: literal, value: "/"}
+                - type: sequence
+                  sequence: {scopeKey: "{issuer}:{idType}:{yyyy}", padding: 5}
+            # The reference the trader pays the SLTB levy (Tea Board CESS)
+            # against. Produces: EXPH2000016863
+            - idType: levy_payment_ref
+              segments:
+                - {type: literal, value: "EXPH"}
+                - type: random
+                  random: {scopeKey: "{issuer}:{idType}", charset: numeric, length: 10}
+            # The reference the trader pays the lab test fee against.
+            # Produces: LAB3000016867
+            - idType: lab_payment_ref
+              segments:
+                - {type: literal, value: "LAB"}
+                - type: random
+                  random: {scopeKey: "{issuer}:{idType}", charset: numeric, length: 10}
 
   # Expose the backend API. Enable the one that matches your platform.
   #

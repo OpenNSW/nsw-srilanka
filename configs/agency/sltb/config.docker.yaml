@@ -115,6 +115,25 @@ artifactLoader:
   #   ref: feat/sltb-v2-agency
   #   basePath: sltb-v2
 
-# The sltb-v2 artifacts use no REFID_GENERATOR tasks.
+# The sltb-v2 sample tasks draw each sample's reference number here when they
+# open (REFID_GENERATOR). It restarts every year.
 refid:
-  issuers: []
+  issuers:
+    - issuer: SLTB
+      formats:
+        # sample_ref — the number of a registered sample: the year, the month,
+        # then a sequence counted per year. Produces: 2026/09/0001
+        - idType: sample_ref
+          segments:
+            - type: date
+              layout: "2006"
+            - type: literal
+              value: "/"
+            - type: date
+              layout: "01"
+            - type: literal
+              value: "/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
