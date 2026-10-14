@@ -1,0 +1,112 @@
+# FCAU (Food Control Administration Unit) agency deployment, for a native run
+# (`go run ./cmd/server` with fcau.env loaded). See configs/agency/fcau/README.md.
+# The Docker Compose fcau-api reads config.docker.yaml instead; the two differ
+# only in reaching the shared services by container hostname there rather than
+# localhost. Every key is documented in configs/config.example.yaml.
+#
+# Never write a secret into this file: use "{{env:NAME}}" or "{{file:/path}}".
+# The ones below are set by fcau.env.
+
+mode: agency
+
+# Its own database on the shared Postgres. ASSUMED name; create it before
+# running migrations (`docker compose run --rm fcau-init` does).
+db:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 55432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: fcau_db
+    sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
+
+server:
+  # 8082 is where TNSW's services.json already points its "fcau" service.
+  port: 8082
+  logLevel: debug
+  serviceURL: http://localhost:8082
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+  # services.json: "tnsw", where notify_decision posts the decision back.
+  servicesConfigPath: ./configs/agency/fcau/services.json
+  paymentMethodsConfigPath: ./configs/agency/fcau/payment_methods.json
+  catalogConfigPath: ./configs/agency/fcau/catalog.json
+
+# The FCAU portal (the trader-app in agency mode).
+cors:
+  allowedOrigins:
+    - http://localhost:5175
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+
+# FCAU keeps no files of its own: it serves TNSW's storage, calling TNSW as
+# FCAU_TO_NSW (services.json, service tnsw), so officers open the documents
+# traders uploaded there. TNSW applies its own upload limits.
+storage:
+  type: proxy
+  proxy:
+    service: "tnsw"
+    uploadPath: /api/v1/storage
+    downloadPath: /api/v1/storage/{key}
+    deletePath: /api/v1/storage/{key}
+
+# Officers sign in through the FCAU portal client, and NSW injects as NSW_TO_FCAU.
+# The audience is the FCAU API resource server in
+# idp/resources/shared/resource-servers.json.
+authn:
+  jwksURL: https://localhost:8090/oauth2/jwks
+  issuer: https://localhost:8090
+  audience: https://api.fcau.nsw-agency.local
+  clientIDs:
+    - OGA_PORTAL_APP_FCAU
+    - NSW_TO_FCAU
+  # Only honored when APP_ENV=development.
+  insecureSkipTLSVerify: true
+
+# Placeholder providers.
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: replace-with-actual-username
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: sidCode
+
+# Its own namespace, so TNSW and FCAU workers never pick up each other's
+# workflows. ASSUMED name; register it first (fcau-init does).
+temporal:
+  host: localhost
+  port: 7233
+  namespace: fcau
+
+# The fcau-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# to where the server runs (the repo root). Point root at another clone's
+# fcau-v2 dir to use that one.
+artifactLoader:
+  type: local
+  local:
+    root: ../one-trade-artifacts/fcau-v2
+  # Or straight from GitHub (branch feat/fcau-v2-agency
+  # until it merges), with type: github:
+  # github:
+  #   owner: OpenNSW
+  #   repo: one-trade-artifacts
+  #   ref: feat/fcau-v2-agency
+  #   basePath: fcau-v2
+
+# The fcau-v2 artifacts use no REFID_GENERATOR tasks.
+refid:
+  issuers: []
