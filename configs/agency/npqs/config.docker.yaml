@@ -165,11 +165,11 @@ refid:
                 charset: alphanumeric
                 length: 10
 
-        # Replacement certificate reference. Produces: PC-SL-4FKU5794MV
+        # Replacement certificate reference. Produces: PCTSL-4FKU5794MV
         - idType: replacement_certificate_ref
           segments:
             - type: literal
-              value: "PC-SL-"
+              value: "PCTSL-"
             - type: random
               random:
                 scopeKey: "{issuer}:{idType}"
