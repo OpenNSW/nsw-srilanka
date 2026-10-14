@@ -4,6 +4,7 @@ package bootstrap
 // in place of TNSW's consignment stack. See internal/agency and docs/agency.md.
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/OpenNSW/core/artifact"
@@ -19,7 +20,13 @@ import (
 // injected workflow in every role of the catalog. No role is required of the catalog:
 // it maps the roles the agency's tasks name in their authz and read rules. It returns
 // an error, always nil, so Build constructs it the way it does authzgate.NewMiddleware.
+// A catalog that maps no role starts, but no officer can open cases or own tasks, so it
+// logs a warning.
 func newAgencyTaskGate(db *gorm.DB, roles map[string]string) (*agency.OfficerGate, error) {
+	if len(roles) == 0 {
+		slog.Warn("agency catalog maps no roles: no officer can open cases or act on tasks; " +
+			"map the roles the agency's tasks name in the catalog's roles")
+	}
 	return agency.NewOfficerGate(agency.NewRepository(db), taskauthz.Catalog{Roles: roles}.RoleNames()), nil
 }
 

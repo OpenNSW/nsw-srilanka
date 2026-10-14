@@ -208,6 +208,11 @@ The case list and detail admit an officer holding the token role of any catalog 
 A role a task names that the catalog does not define matches nobody, so the task is
 closed to everyone.
 
+A catalog that maps no role (for example one with only `clients`) still starts, but no
+officer can open cases or act on tasks: the server logs a warning at start. And without
+`authz` and `read.roles` on a task there is no role-based access control on it, since
+every catalog role then owns it.
+
 ## Cases
 
 `cases` is the generic grouping of the workflows that work on one real-world matter.
