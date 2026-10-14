@@ -49,7 +49,7 @@ flowchart LR
   equals it (`internal/tasks/authzgate`, `internal/profile/handler.go`). If no company has
   that handle, the user can sign in but owns nothing.
 - **What a user may do comes from the groups.** `Traders` grants the `Trader` role and
-  `CHA` grants the `CHA` role (`idp/resources/private-sector/groups-roles.json`). Both carry
+  `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Both carry
   the `traderNsw` scope set. `configs/catalog.json` maps the role names the backend expects
   (`trader`, `cha`) to these IdP role names.
 - **Whether traders can pick a company as their CHA comes from `has_cha`.** The CHA picker
@@ -65,7 +65,7 @@ name their company as CHA.
 You need:
 
 - A **ThunderID admin**: console access at `https://<idp-host>/console`, or a management
-  token (see [idp/README.md, UAT / production](../../idp/README.md#by-hand--uat--production-via-an-admin-token)).
+  token (see [idp/README.md, UAT / production](../../idp/README.md#uat--production)).
 - **`kubectl` access** to the TNSW namespace, with permission to `exec` into the backend pod.
 - The **company details**:
 
@@ -96,9 +96,9 @@ Create a child OU under **Private Sector** (handle `private-sector`).
 | Name        | `ACME EXPORTS (PVT) LTD` |
 | Description | free text                |
 
-**API** (same calls `idp/sample-resources.sh` makes). Read the management token with a
-silent prompt so it stays out of shell history, and send it from a file descriptor so it
-never appears in `curl`'s arguments, which other users can see in the process list:
+**API.** Read the management token with a silent prompt so it stays out of shell history,
+and send it from a file descriptor so it never appears in `curl`'s arguments, which other
+users can see in the process list:
 
 ```sh
 IDP=https://idp.example.com
@@ -314,17 +314,12 @@ ThunderID.
 
 The same model, but driven from files in the repo:
 
-1. Add the OU to [`idp/resources/private-sector/ous.json`](../../idp/resources/private-sector/ous.json)
-   and the users (with their `groups`) to
-   [`users.json`](../../idp/resources/private-sector/users.json), following the `adam-pvt-ltd`
-   entries.
-2. Re-run the seed. It is idempotent:
-
-   ```sh
-   API_BASE=https://localhost:8090 AUTH_TOKEN="$TOKEN" ./idp/sample-resources.sh
-   ```
-
-   ([idp/README.md](../../idp/README.md#by-hand--local-dev-via-admin-cli) shows how to mint `$TOKEN`.)
+1. In [`idp/bootstrap/90-sample-data.yaml`](../../idp/bootstrap/90-sample-data.yaml), add
+   the OU and the users, and list the users under the `Traders` / `CHA` group documents,
+   following the `adam-pvt-ltd` entries. Give each new document its own `id`.
+2. Restart the stack with `docker compose up`. `thunderid-setup` re-imports the
+   bootstrap documents as an upsert, so additions apply on restart
+   (see [idp/README.md, Changing resources](../../idp/README.md#changing-resources)).
 
 3. Add the company to your local `configs/companies.json` (copied from
    `companies.example.json`) and apply it. The compose `seed-companies` service does this
@@ -336,4 +331,4 @@ The same model, but driven from files in the repo:
 
    For a native run, use `go run ./cmd/otc company apply -f configs/companies.json` from the repo root.
 
-The `idp/resources/` files describe sample data. Don't add real companies or users to them.
+`90-sample-data.yaml` holds sample data only. Don't add real companies or users to it.
