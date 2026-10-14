@@ -810,7 +810,8 @@ func initTask(
 		if tm == nil {
 			return nil, fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		return tm.StartTaskStep(context.Background(), payload)
+		res, err := tm.StartTaskStep(context.Background(), payload)
+		return res, keepNonRetryable(err)
 	}
 
 	microCompletionHandler := func(completion workflow.WorkflowCompletion) error {
