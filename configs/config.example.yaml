@@ -201,6 +201,9 @@ consignment:
   # flows:
   #   - templateId: <a workflow template in your artifacts>
   #     label: <the text of its button>
+  # e.g. the SLPA sundry (add-on) order and its payment:
+  #   - templateId: slpa-sundry-payment
+  #     label: SLPA sundry payment
 
 # Where artifacts (workflow definitions, templates, manifest.json) are fetched
 # from at startup: local | github | s3. Only the settings for the selected type
