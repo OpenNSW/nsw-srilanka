@@ -143,3 +143,15 @@ func TestCaseHandler(t *testing.T) {
 		}
 	})
 }
+
+// A catalog entry mapped to "" must not match a caller whose roles hold an empty string.
+func TestCaseHandlerEmptyTokenRole(t *testing.T) {
+	h := NewCaseHandler(fakeCaseRepo{}, fakeTasks{}, artifact.NewRegistry(testutil.MemLoader{}), map[string]string{"reviewer": ""})
+	for _, roles := range [][]string{{""}, {"Reviewer"}, nil} {
+		rec := httptest.NewRecorder()
+		h.HandleListCases(rec, requestBy(&authn.Principal{Kind: authn.KindUser, Roles: roles}, "/api/v1/cases", ""))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("roles %q: status = %d, want 403", roles, rec.Code)
+		}
+	}
+}

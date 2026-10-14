@@ -21,7 +21,7 @@ func (f fakeRepo) Exists(_ context.Context, taskID string) (bool, error) {
 
 // inputThrough runs gate for a request authenticated as p (unauthenticated when nil)
 // and returns the Input it attached.
-func inputThrough(t *testing.T, gate *OfficerGate, p *authn.Principal) (taskauthz.Input, bool) {
+func inputThrough(t *testing.T, gate *RoleGate, p *authn.Principal) (taskauthz.Input, bool) {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	if p != nil {
@@ -36,7 +36,7 @@ func inputThrough(t *testing.T, gate *OfficerGate, p *authn.Principal) (taskauth
 }
 
 // ownedBy returns what gate reports a user principal owns of caseID.
-func ownedBy(t *testing.T, gate *OfficerGate, caseID string) map[string]bool {
+func ownedBy(t *testing.T, gate *RoleGate, caseID string) map[string]bool {
 	t.Helper()
 	in, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindUser, Roles: []string{"Officer"}})
 	if !ok || in.Kind != taskauthz.KindUser || in.OwnedRoles == nil {
@@ -49,9 +49,9 @@ func ownedBy(t *testing.T, gate *OfficerGate, caseID string) map[string]bool {
 	return owned
 }
 
-func TestOfficerGateOwnership(t *testing.T) {
+func TestRoleGateOwnership(t *testing.T) {
 	repo := fakeRepo{injected: map[string]bool{"task-1": true}}
-	gate := NewOfficerGate(repo, []string{"officer", "reviewer"})
+	gate := NewRoleGate(repo, []string{"officer", "reviewer"})
 
 	t.Run("every catalog role owns injected workflows only", func(t *testing.T) {
 		for root, want := range map[string]bool{"task-1": true, "consignment-1": false} {
@@ -75,15 +75,15 @@ func TestOfficerGateOwnership(t *testing.T) {
 	})
 
 	t.Run("a catalog without officer owns its own roles", func(t *testing.T) {
-		owned := ownedBy(t, NewOfficerGate(repo, []string{"reviewer"}), "task-1")
+		owned := ownedBy(t, NewRoleGate(repo, []string{"reviewer"}), "task-1")
 		if _, ok := owned["officer"]; ok || !owned["reviewer"] {
 			t.Fatalf("owned = %v, want only reviewer", owned)
 		}
 	})
 }
 
-func TestOfficerGate(t *testing.T) {
-	gate := NewOfficerGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"})
+func TestRoleGate(t *testing.T) {
+	gate := NewRoleGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"})
 
 	t.Run("client carries its id and no ownership", func(t *testing.T) {
 		in, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"})
@@ -101,8 +101,8 @@ func TestOfficerGate(t *testing.T) {
 
 // A user may act as a catalog role only when they hold its token role: ownership of an
 // injected workflow is the same in every role, so the token decides.
-func TestOfficerGateEligibility(t *testing.T) {
-	gate := NewOfficerGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"})
+func TestRoleGateEligibility(t *testing.T) {
+	gate := NewRoleGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"})
 	cat := taskauthz.Catalog{Roles: map[string]string{"officer": "Officer", "reviewer": "Reviewer"}}
 
 	for name, tc := range map[string]struct {

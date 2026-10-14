@@ -9,27 +9,27 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
-// OfficerGate is Layer 1 of task authorization in agency mode, in place of TNSW's
+// RoleGate is Layer 1 of task authorization in agency mode, in place of TNSW's
 // authzgate. It attaches the same taskauthz.Input, but the only ownership it resolves
 // is that of injected workflows, in every role of the agency's catalog: an agency has
 // no consignments, so there is no trader or CHA company to look up, and which of those
 // roles may act on a task is up to the task's own authz and read rules. The read and
 // write evaluators then treat officers like any other owner, and agency tasks go
 // through the normal /api/v1/tasks/{id} routes.
-type OfficerGate struct {
+type RoleGate struct {
 	repo  Repository
 	roles []string // the catalog's logical role names
 }
 
-// NewOfficerGate creates an OfficerGate that reports ownership in each of roles, the
+// NewRoleGate creates an RoleGate that reports ownership in each of roles, the
 // logical role names of the agency's catalog.
-func NewOfficerGate(repo Repository, roles []string) *OfficerGate {
-	return &OfficerGate{repo: repo, roles: roles}
+func NewRoleGate(repo Repository, roles []string) *RoleGate {
+	return &RoleGate{repo: repo, roles: roles}
 }
 
 // Handler wraps next, attaching the caller's taskauthz.Input. An unauthenticated
 // request gets none, which the evaluators deny.
-func (g *OfficerGate) Handler(next http.Handler) http.Handler {
+func (g *RoleGate) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if in, ok := g.resolve(r.Context()); ok {
 			r = r.WithContext(taskauthz.WithInput(r.Context(), in))
@@ -38,7 +38,7 @@ func (g *OfficerGate) Handler(next http.Handler) http.Handler {
 	})
 }
 
-func (g *OfficerGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
+func (g *RoleGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	p, ok := authn.FromContext(ctx)
 	if !ok {
 		return taskauthz.Input{}, false
@@ -57,14 +57,14 @@ func (g *OfficerGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 // is an injected workflow, which is its own case (see Workflow). Token-role checks stay
 // in taskauthz.Eligible, which calls this only once the caller is known to hold a
 // relevant role.
-func (g *OfficerGate) ownedRoles(ctx context.Context, caseID string) (map[string]bool, error) {
+func (g *RoleGate) ownedRoles(ctx context.Context, caseID string) (map[string]bool, error) {
 	owned := make(map[string]bool, len(g.roles))
 	if caseID == "" {
 		return owned, nil
 	}
 	injected, err := g.repo.Exists(ctx, caseID)
 	if err != nil {
-		return nil, fmt.Errorf("agency: resolve officer ownership: %w", err)
+		return nil, fmt.Errorf("agency: resolve ownership: %w", err)
 	}
 	for _, name := range g.roles {
 		owned[name] = injected

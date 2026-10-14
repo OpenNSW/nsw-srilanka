@@ -22,12 +22,12 @@ import (
 // an error, always nil, so Build constructs it the way it does authzgate.NewMiddleware.
 // A catalog that maps no role starts, but no officer can open cases or own tasks, so it
 // logs a warning.
-func newAgencyTaskGate(db *gorm.DB, roles map[string]string) (*agency.OfficerGate, error) {
+func newAgencyTaskGate(db *gorm.DB, roles map[string]string) (*agency.RoleGate, error) {
 	if len(roles) == 0 {
 		slog.Warn("agency catalog maps no roles: no officer can open cases or act on tasks; " +
 			"map the roles the agency's tasks name in the catalog's roles")
 	}
-	return agency.NewOfficerGate(agency.NewRepository(db), taskauthz.Catalog{Roles: roles}.RoleNames()), nil
+	return agency.NewRoleGate(agency.NewRepository(db), taskauthz.Catalog{Roles: roles}.RoleNames()), nil
 }
 
 // mountAgency registers the agency's own routes: inject, gated by a scope only the

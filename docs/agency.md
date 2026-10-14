@@ -122,7 +122,7 @@ refused by the app however many catalog roles they hold; see
    for replies, a resubmission comes back as a reply on the agency's own token
    (below), not as a repeat inject.
 5. The workflow is started as its own case, so tasks spawned under it have
-   `CaseID == taskId`. The agency's task authz gate (`agency.OfficerGate`) reports
+   `CaseID == taskId`. The agency's task authz gate (`agency.RoleGate`) reports
    ownership in every catalog role for any case ID that is an `agency_workflow` row, so
    `readauthz` and the write extension treat officers like any other owner. Officers
    use the normal `/api/v1/tasks/{id}` routes.

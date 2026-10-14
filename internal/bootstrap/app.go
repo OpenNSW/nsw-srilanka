@@ -589,7 +589,7 @@ type parentTaskActivator interface {
 // a downstream domain when a parent workflow completes: *caseflow.Service in TNSW,
 // agency.CompletionHandler in an agency.
 // taskGate is Layer 1 of task authorization on the task routes: authzgate's
-// trader/CHA middleware in TNSW, agency.OfficerGate in an agency.
+// trader/CHA middleware in TNSW, agency.RoleGate in an agency.
 type taskGate interface {
 	Handler(next http.Handler) http.Handler
 }

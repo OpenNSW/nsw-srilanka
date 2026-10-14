@@ -46,7 +46,10 @@ type CaseHandler struct {
 func NewCaseHandler(repo CaseRepository, tasks TaskLister, registry *artifact.Registry, roles map[string]string) *CaseHandler {
 	tokenRoles := make(map[string]bool, len(roles))
 	for _, tokenRole := range roles {
-		tokenRoles[tokenRole] = true
+		// An empty token role would match a caller whose roles hold an empty string.
+		if tokenRole != "" {
+			tokenRoles[tokenRole] = true
+		}
 	}
 	return &CaseHandler{repo: repo, tasks: tasks, registry: registry, tokenRoles: tokenRoles}
 }
@@ -89,7 +92,7 @@ type WorkflowNodeTemplate struct {
 // catalog role they hold: a case has no owner the way a consignment has a trader
 // company.
 func (h *CaseHandler) HandleListCases(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOfficer(w, r) {
+	if !h.requireCatalogRole(w, r) {
 		return
 	}
 	offsetParam, limitParam, err := pagination.ParsePaginationParams(r)
@@ -114,7 +117,7 @@ func (h *CaseHandler) HandleListCases(w http.ResponseWriter, r *http.Request) {
 // HandleGetCase handles GET /api/v1/cases/{id}: the case plus the tasks of every
 // workflow grouped under it.
 func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOfficer(w, r) {
+	if !h.requireCatalogRole(w, r) {
 		return
 	}
 	ctx := r.Context()
@@ -160,10 +163,10 @@ func (h *CaseHandler) meta(r *http.Request, taskCode string) taskconfig.TaskMeta
 	return cfg.Meta
 }
 
-// requireOfficer writes the error response and returns false unless the caller is a
+// requireCatalogRole writes the error response and returns false unless the caller is a
 // user holding the token role of any catalog role. A machine client is authenticated
 // but never an officer, so it gets 403 rather than 401.
-func (h *CaseHandler) requireOfficer(w http.ResponseWriter, r *http.Request) bool {
+func (h *CaseHandler) requireCatalogRole(w http.ResponseWriter, r *http.Request) bool {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
