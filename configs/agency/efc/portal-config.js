@@ -1,6 +1,6 @@
 // Runtime config for the EFC officer portal: the trader-app in agency mode, served by
 // the efc-portal service in compose.yml. See configs/agency/efc/README.md.
-// The IdP side (resource server, EFC Officer role, this client) is idp/resources/government/efc.json.
+// The IdP side (resource server, EFC Officer role, this client) is idp/bootstrap/20-agency-efc.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8085',
   IDP_BASE_URL: 'https://localhost:8090',

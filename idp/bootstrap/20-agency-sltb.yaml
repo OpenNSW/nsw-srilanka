@@ -1,0 +1,353 @@
+# Agency: SLTB. Its OU, API resource server, officer role and group, officer portal,
+# and the two M2M clients with their roles (SLTB_TO_NSW calls TNSW; NSW_TO_SLTB injects
+# into the agency). Needs 10-nsw-platform.yaml.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: SLTB.yaml
+resource_type: organization_unit
+id: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+handle: sltb
+name: SLTB
+description: Sri Lanka Tea Board
+parent: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: SLTB_API.yaml
+resource_type: resource_server
+id: 01a13912-ceab-7150-a63e-8413aa996b77
+name: SLTB API
+description: SLTB API resource server
+identifier: https://api.sltb.nsw-agency.local
+type: API
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+delimiter: ":"
+resources:
+  - name: SLTB API
+    handle: nsw
+    description: SLTB API resource
+  - name: Workflow
+    handle: workflow
+    description: Workflow resource
+    parent: nsw
+    actions:
+      - name: Inject
+        handle: inject
+        description: Inject action
+  - name: Consignment
+    handle: consignment
+    description: Consignment resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Task
+    handle: task
+    description: Task resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Profile
+    handle: profile
+    description: Profile resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Storage
+    handle: storage
+    description: Storage resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+---
+# File: SLTB_Officer.yaml
+resource_type: role
+id: 01a13912-d6e3-7475-8cd8-fd3b5be5dc85
+name: SLTB Officer
+description: Role for SLTB officers working tasks in the SLTB deployment
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+permissions:
+  - resourceServerId: 01a13912-ceab-7150-a63e-8413aa996b77
+    permissions:
+      - nsw:consignment:read
+      - nsw:profile:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:read
+      - nsw:task:write
+assignments:
+  - id: 01a13912-d449-7b79-b0f7-e53a66a23138
+    type: group
+---
+# File: NswToSltbM2M.yaml
+resource_type: role
+id: 01a13912-d711-7739-b67e-458f15c9f057
+name: NswToSltbM2M
+description: Role for NSW injecting workflows into the SLTB deployment
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+permissions:
+  - resourceServerId: 01a13912-ceab-7150-a63e-8413aa996b77
+    permissions:
+      - nsw:workflow:inject
+assignments:
+  - id: 01a13912-e70a-7b09-af9f-2615a6869569
+    type: app
+---
+# File: SltbToNswM2M.yaml
+resource_type: role
+id: 6ceae21f-1ef0-4c87-a57e-f40c96b3268f
+name: SltbToNswM2M
+description: Role for SLTB machine-to-machine clients calling the NSW API
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:consignment:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:write
+assignments:
+  - id: 01a13912-e66f-7d35-b722-1dda19c2f501
+    type: app
+---
+# File: SLTB_Officers.yaml
+resource_type: group
+id: 01a13912-d449-7b79-b0f7-e53a66a23138
+name: SLTB Officers
+description: SLTB officers group
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+---
+# File: SLTBPortalApp.yaml
+resource_type: application
+id: 01a13912-e629-7197-bcef-0fe364998bf8
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+name: SLTBPortalApp
+description: Application for the SLTB officer portal (trader-app in agency mode)
+type: browser
+template: react
+logoUrl: https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+themeId: 01900000-0000-7000-8000-000000000073
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Government_User
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: OGA_PORTAL_APP_SLTB
+      redirectUris:
+        - http://localhost:5179
+        - https://localhost:5179
+      postLogoutRedirectUris:
+        - http://localhost:5179
+        - https://localhost:5179
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - phone_number
+              - family_name
+              - given_name
+              - groups
+              - roles
+              - ouHandle
+              - ouId
+              - ouName
+              - username
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - family_name
+            - given_name
+            - groups
+            - roles
+            - ouHandle
+            - ouId
+            - ouName
+            - username
+          responseType: JWT
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - openid
+        - profile
+        - email
+        - group
+        - role
+        - ou
+        - nsw:consignment:read
+        - nsw:task:read
+        - nsw:task:write
+        - nsw:profile:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - family_name
+          - given_name
+          - email
+      scopeClaims:
+        ou:
+          - ouId
+          - ouHandle
+        phone:
+          - phone_number
+        profile:
+          - given_name
+          - family_name
+        role:
+          - roles
+        email:
+          - email
+        group:
+          - groups
+---
+# File: SLTB_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e66f-7d35-b722-1dda19c2f501
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+name: SLTB_TO_NSW_M2M
+description: Machine-to-machine integration for SLTB to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: SLTB_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:task:write
+        - nsw:consignment:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+---
+# File: NSW_TO_SLTB_M2M.yaml
+resource_type: application
+id: 01a13912-e70a-7b09-af9f-2615a6869569
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+name: NSW_TO_SLTB_M2M
+description: Machine-to-machine integration for NSW to SLTB
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NSW_TO_SLTB
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:workflow:inject
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        address:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles

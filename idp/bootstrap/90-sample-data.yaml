@@ -1,0 +1,283 @@
+# Sample data: the sample companies' OUs, sample users (password from
+# SAMPLE_USER_PASSWORD), and their group memberships, set by re-declaring each group
+# with its members. Needs every other file in this directory.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: ADAM_PVT_LTD.yaml
+resource_type: organization_unit
+id: 01a13912-d2c7-7dc8-971a-0b45d38a56bc
+handle: adam-pvt-ltd
+name: ADAM PVT LTD
+description: Child organization unit for ADAM PVT LTD
+parent: 01a13912-d1d8-7926-b674-4acac460492f
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: EDWARD_PVT_LTD.yaml
+resource_type: organization_unit
+id: 01a13912-d2eb-7463-ac3b-1dd8e8a3c7c4
+handle: edward-pvt-ltd
+name: EDWARD PVT LTD
+description: Child organization unit for EDWARD PVT LTD
+parent: 01a13912-d1d8-7926-b674-4acac460492f
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: nswadmin.yaml
+resource_type: user
+id: 01a13912-d991-7ad2-8c81-cc6907d3865e
+type: Admin_User
+ouId: 01900000-0000-7000-8000-000000000001
+attributes:
+  email: "nswadmin@default.dev"
+  family_name: "Admin"
+  given_name: "NSW"
+  phone_number: "+94770000000"
+  username: "nswadmin"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: cda_officer.yaml
+resource_type: user
+id: 01a13912-da21-790f-aa3e-bffd81d41da0
+type: Government_User
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+attributes:
+  email: "cda_officer@government.dev"
+  family_name: "Officer"
+  given_name: "CDA"
+  phone_number: "+94771234563"
+  username: "cda_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: efc_officer.yaml
+resource_type: user
+id: 01a13912-dab4-74b1-866f-4d42655a558a
+type: Government_User
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+attributes:
+  family_name: "Officer"
+  given_name: "EFC"
+  phone_number: "+94771234565"
+  username: "efc_officer"
+  email: "efc_officer@government.dev"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: fcau_officer.yaml
+resource_type: user
+id: 01a13912-db40-78f9-b7fa-6a8d8f63fc84
+type: Government_User
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+attributes:
+  email: "fcau_officer@government.dev"
+  family_name: "Officer"
+  given_name: "FCAU"
+  phone_number: "+94771234561"
+  username: "fcau_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: npqs_officer.yaml
+resource_type: user
+id: 01a13912-dbcc-7f79-8bb0-a303fb2a561f
+type: Government_User
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+attributes:
+  email: "npqs_officer@government.dev"
+  family_name: "Officer"
+  given_name: "NPQS"
+  phone_number: "+94771234560"
+  username: "npqs_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: sltb_officer.yaml
+resource_type: user
+id: 01a13912-dc5b-7fa0-acd8-b4908ad52a15
+type: Government_User
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+attributes:
+  email: "sltb_officer@government.dev"
+  family_name: "Officer"
+  given_name: "SLTB"
+  phone_number: "+94771234566"
+  username: "sltb_officer"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: suresh.yaml
+resource_type: user
+id: 01a13912-dce7-7deb-8b38-0c61a9f93a29
+type: Private_User
+ouId: 01a13912-d2c7-7dc8-971a-0b45d38a56bc
+attributes:
+  given_name: "Suresh"
+  phone_number: "+94771234567"
+  username: "suresh"
+  email: "suresh@adam-pvt-ltd.private-sector.dev"
+  family_name: "Fernando"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: ramesh.yaml
+resource_type: user
+id: 01a13912-dd8a-70c2-b12b-a435ef7206b9
+type: Private_User
+ouId: 01a13912-d2c7-7dc8-971a-0b45d38a56bc
+attributes:
+  email: "ramesh@adam-pvt-ltd.private-sector.dev"
+  family_name: "Fernando"
+  given_name: "Ramesh"
+  phone_number: "+94771234568"
+  username: "ramesh"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: gomesh.yaml
+resource_type: user
+id: 01a13912-de0c-7dd2-bb47-08414502f009
+type: Private_User
+ouId: 01a13912-d2c7-7dc8-971a-0b45d38a56bc
+attributes:
+  email: "gomesh@adam-pvt-ltd.private-sector.dev"
+  family_name: "Fernando"
+  given_name: "Gomesh"
+  phone_number: "+94771234569"
+  username: "gomesh"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: naresh.yaml
+resource_type: user
+id: 01a13912-dea1-7ed3-8db6-aa0cac85e62e
+type: Private_User
+ouId: 01a13912-d2eb-7463-ac3b-1dd8e8a3c7c4
+attributes:
+  email: "naresh@edward-pvt-ltd.private-sector.dev"
+  family_name: "Fernando"
+  given_name: "Naresh"
+  phone_number: "+94771234570"
+  username: "naresh"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: slpa_officer.yaml
+resource_type: user
+id: 01a13912-df2f-7a94-8164-f7a6d448d9d7
+type: Government_User
+ouId: 01a13912-d30d-7e07-830d-b2d229c43a28
+attributes:
+  family_name: "Officer"
+  given_name: "SLPA"
+  phone_number: "+94771234564"
+  username: "slpa_officer"
+  email: "slpa_officer@government.dev"
+credentials:
+  password: "{{ .SAMPLE_USER_PASSWORD }}"
+---
+# File: CHA.yaml
+resource_type: group
+id: 01a13912-d495-7400-b5bc-541433e05751
+name: CHA
+description: CHA members group
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+members:
+  - id: 01a13912-dce7-7deb-8b38-0c61a9f93a29
+    type: user
+  - id: 01a13912-dd8a-70c2-b12b-a435ef7206b9
+    type: user
+  - id: 01a13912-dea1-7ed3-8db6-aa0cac85e62e
+    type: user
+---
+# File: NSW_Admins.yaml
+resource_type: group
+id: 01a13912-d377-73d1-a3e4-a5877421ca85
+name: NSW Admins
+description: NSW admin members group
+ouId: 01900000-0000-7000-8000-000000000001
+members:
+  - id: 01a13912-d991-7ad2-8c81-cc6907d3865e
+    type: user
+---
+# File: Traders.yaml
+resource_type: group
+id: 01a13912-d46e-79f5-b937-7532771bd7b7
+name: Traders
+description: Trader members group
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+members:
+  - id: 01a13912-dce7-7deb-8b38-0c61a9f93a29
+    type: user
+  - id: 01a13912-de0c-7dd2-bb47-08414502f009
+    type: user
+---
+# File: CDA_Officers.yaml
+resource_type: group
+id: 01a13912-d39b-7594-a4b4-58e791da6085
+name: CDA Officers
+description: CDA officers group
+ouId: 01a13912-d209-78da-9de0-dd544935e1ae
+members:
+  - id: 01a13912-da21-790f-aa3e-bffd81d41da0
+    type: user
+---
+# File: EFC_Officers.yaml
+resource_type: group
+id: 01a13912-d3b8-74ee-801c-da16adde68e9
+name: EFC Officers
+description: EFC officers group
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+members:
+  - id: 01a13912-dab4-74b1-866f-4d42655a558a
+    type: user
+---
+# File: FCAU_Officers.yaml
+resource_type: group
+id: 01a13912-d3e2-7e28-bf72-d545885fccc8
+name: FCAU Officers
+description: FCAU officers group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+members:
+  - id: 01a13912-db40-78f9-b7fa-6a8d8f63fc84
+    type: user
+---
+# File: NPQS_Officers.yaml
+resource_type: group
+id: 01a13912-d42a-7975-af84-363b4cf254bd
+name: NPQS Officers
+description: NPQS officers group
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+members:
+  - id: 01a13912-dbcc-7f79-8bb0-a303fb2a561f
+    type: user
+---
+# File: OGA_Reviewers.yaml
+resource_type: group
+id: 01a13912-d402-7101-b83a-be6bc8297d96
+name: OGA Reviewers
+description: Government agency reviewers group
+ouId: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+members:
+  - id: 01a13912-df2f-7a94-8164-f7a6d448d9d7
+    type: user
+---
+# File: SLTB_Officers.yaml
+resource_type: group
+id: 01a13912-d449-7b79-b0f7-e53a66a23138
+name: SLTB Officers
+description: SLTB officers group
+ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
+members:
+  - id: 01a13912-dc5b-7fa0-acd8-b4908ad52a15
+    type: user

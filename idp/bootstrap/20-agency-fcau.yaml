@@ -1,0 +1,353 @@
+# Agency: FCAU. Its OU, API resource server, officer role and group, officer portal,
+# and the two M2M clients with their roles (FCAU_TO_NSW calls TNSW; NSW_TO_FCAU injects
+# into the agency). Needs 10-nsw-platform.yaml.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: FCAU.yaml
+resource_type: organization_unit
+id: 01a13912-d251-7172-bd54-14a0e3c2f594
+handle: fcau
+name: FCAU
+description: Food Control Administration Unit
+parent: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: FCAU_API.yaml
+resource_type: resource_server
+id: 01a13912-d026-758a-a663-b319c8de3a44
+name: FCAU API
+description: FCAU API resource server
+identifier: https://api.fcau.nsw-agency.local
+type: API
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+delimiter: ":"
+resources:
+  - name: FCAU API
+    handle: nsw
+    description: FCAU API resource
+  - name: Workflow
+    handle: workflow
+    description: Workflow resource
+    parent: nsw
+    actions:
+      - name: Inject
+        handle: inject
+        description: Inject action
+  - name: Consignment
+    handle: consignment
+    description: Consignment resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Task
+    handle: task
+    description: Task resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Profile
+    handle: profile
+    description: Profile resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Storage
+    handle: storage
+    description: Storage resource
+    parent: nsw
+    actions:
+      - name: Write
+        handle: write
+        description: Write action
+      - name: Read
+        handle: read
+        description: Read action
+---
+# File: FCAU_Officer.yaml
+resource_type: role
+id: 01a13912-d5da-7cd7-8f7c-a05a25870df8
+name: FCAU Officer
+description: Role for FCAU officers working tasks in the FCAU deployment
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
+    permissions:
+      - nsw:consignment:read
+      - nsw:profile:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:read
+      - nsw:task:write
+assignments:
+  - id: 01a13912-d3e2-7e28-bf72-d545885fccc8
+    type: group
+---
+# File: NswToFcauM2M.yaml
+resource_type: role
+id: 01a13912-d606-72fe-829d-b254f6160955
+name: NswToFcauM2M
+description: Role for NSW injecting workflows into the FCAU deployment
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
+    permissions:
+      - nsw:workflow:inject
+assignments:
+  - id: 01a13912-e3d4-7c05-9503-a25ffb74f8b6
+    type: app
+---
+# File: FcauToNswM2M.yaml
+resource_type: role
+id: 50656b29-11c7-4f17-bda7-9a718daf6bfb
+name: FcauToNswM2M
+description: Role for FCAU machine-to-machine clients calling the NSW API
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:consignment:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:write
+assignments:
+  - id: 01a13912-e345-7d54-8bc2-d72a77458fda
+    type: app
+---
+# File: FCAU_Officers.yaml
+resource_type: group
+id: 01a13912-d3e2-7e28-bf72-d545885fccc8
+name: FCAU Officers
+description: FCAU officers group
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+---
+# File: FCAUPortalApp.yaml
+resource_type: application
+id: 01a13912-e300-7527-9d25-4b9affd20283
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+name: FCAUPortalApp
+description: Application for the FCAU officer portal (trader-app in agency mode)
+type: browser
+template: react
+logoUrl: https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+themeId: 01900000-0000-7000-8000-000000000073
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Government_User
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: OGA_PORTAL_APP_FCAU
+      redirectUris:
+        - http://localhost:5175
+        - https://localhost:5175
+      postLogoutRedirectUris:
+        - http://localhost:5175
+        - https://localhost:5175
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - phone_number
+              - family_name
+              - given_name
+              - groups
+              - roles
+              - ouHandle
+              - ouId
+              - ouName
+              - username
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - family_name
+            - given_name
+            - groups
+            - roles
+            - ouHandle
+            - ouId
+            - ouName
+            - username
+          responseType: JWT
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - openid
+        - profile
+        - email
+        - group
+        - role
+        - ou
+        - nsw:consignment:read
+        - nsw:task:read
+        - nsw:task:write
+        - nsw:profile:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - family_name
+          - given_name
+          - email
+      scopeClaims:
+        email:
+          - email
+        group:
+          - groups
+        ou:
+          - ouId
+          - ouHandle
+        phone:
+          - phone_number
+        profile:
+          - given_name
+          - family_name
+        role:
+          - roles
+---
+# File: FCAU_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e345-7d54-8bc2-d72a77458fda
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+name: FCAU_TO_NSW_M2M
+description: Machine-to-machine integration for FCAU to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: FCAU_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:task:write
+        - nsw:consignment:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+---
+# File: NSW_TO_FCAU_M2M.yaml
+resource_type: application
+id: 01a13912-e3d4-7c05-9503-a25ffb74f8b6
+ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
+name: NSW_TO_FCAU_M2M
+description: Machine-to-machine integration for NSW to FCAU
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NSW_TO_FCAU
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:workflow:inject
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
