@@ -10,7 +10,7 @@
 // deployment reads are unexported constants here, declared to core/authn in
 // config.go and flattened onto Principal, so no caller ever spells a claim
 // name. Those names must stay in sync with the ThunderID token configuration
-// under idp/resources/ — the same obligation internal/scopes carries for scope
+// in idp/bootstrap/ — the same obligation internal/scopes carries for scope
 // names.
 package authn
 

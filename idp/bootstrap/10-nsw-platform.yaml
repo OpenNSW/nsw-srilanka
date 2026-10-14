@@ -1,0 +1,501 @@
+# NSW platform: user types, the Government Organization and Private Sector OUs, the
+# NSW API resource server, the trader, CHA and NSW admin roles and groups, the trader
+# portal, the SLCE and GovPay webhook clients, and CORS. References nothing in the
+# agency or sample files.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: TraderApp.yaml
+resource_type: application
+id: 01a13912-e79b-7f19-999c-ae0911abc18f
+ouId: 01900000-0000-7000-8000-000000000001
+name: TraderApp
+description: Application for trader portal built with React
+type: browser
+template: react
+logoUrl: https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+themeId: 01900000-0000-7000-8000-000000000073
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Private_User
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: TRADER_PORTAL_APP
+      redirectUris:
+        - http://localhost:5173
+        - https://localhost:5173
+      postLogoutRedirectUris:
+        - http://localhost:5173
+        - https://localhost:5173
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - phone_number
+              - family_name
+              - given_name
+              - groups
+              - roles
+              - ouHandle
+              - ouId
+              - ouName
+              - username
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - family_name
+            - given_name
+            - groups
+            - roles
+            - ouHandle
+            - ouId
+            - ouName
+            - username
+          responseType: JWT
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - openid
+        - profile
+        - email
+        - group
+        - role
+        - ou
+        - nsw:consignment:read
+        - nsw:consignment:write
+        - nsw:task:read
+        - nsw:task:write
+        - nsw:hscode:read
+        - nsw:company:read
+        - nsw:cha:read
+        - nsw:profile:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - family_name
+          - given_name
+          - email
+      scopeClaims:
+        ou:
+          - ouId
+          - ouHandle
+        phone:
+          - phone_number
+        profile:
+          - given_name
+          - family_name
+        role:
+          - roles
+        email:
+          - email
+        group:
+          - groups
+---
+# File: SLCE_to_NSW.yaml
+resource_type: application
+id: 01a13912-e7d9-7dd6-a187-1e9c60456335
+ouId: 01900000-0000-7000-8000-000000000001
+name: SLCE to NSW
+description: Machine-to-machine client for SLC Edge (ASYCUDA) to call the NSW SLCE webhook endpoint
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: SLCE_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:slce-webhooks:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+---
+# File: GOVPAY_to_NSW.yaml
+resource_type: application
+id: 01a13912-e91b-75dc-a2f1-06ddd1668388
+ouId: 01900000-0000-7000-8000-000000000001
+name: GOVPAY to NSW
+description: Machine-to-machine client for GOVPAY to call the NSW payment webhook and validate endpoints
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: GOVPAY_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:payment-webhooks:validate
+        - nsw:payment-webhooks:process
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        address:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles
+---
+# File: CHA.yaml
+resource_type: group
+id: 01a13912-d495-7400-b5bc-541433e05751
+name: CHA
+description: CHA members group
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+---
+# File: NSW_Admins.yaml
+resource_type: group
+id: 01a13912-d377-73d1-a3e4-a5877421ca85
+name: NSW Admins
+description: NSW admin members group
+ouId: 01900000-0000-7000-8000-000000000001
+---
+# File: Traders.yaml
+resource_type: group
+id: 01a13912-d46e-79f5-b937-7532771bd7b7
+name: Traders
+description: Trader members group
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+---
+# File: Private_Sector.yaml
+resource_type: organization_unit
+id: 01a13912-d1d8-7926-b674-4acac460492f
+handle: private-sector
+name: Private Sector
+description: Organization unit for private sector entities
+parent: null
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: Government_Organization.yaml
+resource_type: organization_unit
+id: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+handle: government-organization
+name: Government Organization
+description: Root organization unit for government entities
+parent: null
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: NSW_API.yaml
+resource_type: resource_server
+id: 01a13912-c46b-7138-a782-8a597d51062f
+name: NSW API
+description: NSW API resource server
+identifier: https://api.nsw-srilanka.local
+type: API
+ouId: 01900000-0000-7000-8000-000000000001
+delimiter: ":"
+resources:
+  - name: NSW API
+    handle: nsw
+    description: NSW API resource
+  - name: CHA
+    handle: cha
+    description: CHA resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Profile
+    handle: profile
+    description: Profile resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Storage
+    handle: storage
+    description: Storage resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: SLCE Webhooks
+    handle: slce-webhooks
+    description: SLCE Webhooks resource
+    parent: nsw
+    actions:
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Payment Webhooks
+    handle: payment-webhooks
+    description: Payment Webhooks resource
+    parent: nsw
+    actions:
+      - name: Validate
+        handle: validate
+        description: Validate action
+      - name: Process
+        handle: process
+        description: Process action
+  - name: Consignment
+    handle: consignment
+    description: Consignment resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+      - name: Admin Read
+        handle: adminread
+        description: Admin Read action
+      - name: Admin Write
+        handle: adminwrite
+        description: Admin Write action
+  - name: Task
+    handle: task
+    description: Task resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: HS Code
+    handle: hscode
+    description: HS Code resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Company
+    handle: company
+    description: Company resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+---
+# File: SLCE_Webhook.yaml
+resource_type: role
+id: 01a13912-d7ca-706d-86fa-7864e2f48493
+name: SLCE Webhook
+description: Role for SLCE webhook clients
+ouId: 01900000-0000-7000-8000-000000000001
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:slce-webhooks:write
+assignments:
+  - id: 01a13912-e7d9-7dd6-a187-1e9c60456335
+    type: app
+---
+# File: Payment_Webhook.yaml
+resource_type: role
+id: 01a13912-d7fe-751e-84f8-7d6ba9fa59e7
+name: Payment Webhook
+description: Role for Payment webhook clients
+ouId: 01900000-0000-7000-8000-000000000001
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:payment-webhooks:process
+      - nsw:payment-webhooks:validate
+assignments:
+  - id: 01a13912-e91b-75dc-a2f1-06ddd1668388
+    type: app
+---
+# File: Trader.yaml
+resource_type: role
+id: 01a13912-d740-7109-9f73-3cb0db9d15b6
+name: Trader
+description: Role for trader operations
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:cha:read
+      - nsw:company:read
+      - nsw:consignment:read
+      - nsw:consignment:write
+      - nsw:hscode:read
+      - nsw:profile:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:read
+      - nsw:task:write
+assignments:
+  - id: 01a13912-d46e-79f5-b937-7532771bd7b7
+    type: group
+---
+# File: CHA.yaml
+resource_type: role
+id: 01a13912-d768-7a5f-91e0-a458987b2898
+name: CHA
+description: Role for CHA operations
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:cha:read
+      - nsw:company:read
+      - nsw:consignment:read
+      - nsw:consignment:write
+      - nsw:hscode:read
+      - nsw:profile:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:read
+      - nsw:task:write
+assignments:
+  - id: 01a13912-d495-7400-b5bc-541433e05751
+    type: group
+---
+# File: NSW_Admin.yaml
+resource_type: role
+id: 01a13912-d4ca-70cf-a8d3-1fc84c894ee8
+name: NSW Admin
+description: Role for NSW admin operations
+ouId: 01900000-0000-7000-8000-000000000001
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:consignment:adminread
+      - nsw:consignment:adminwrite
+assignments:
+  - id: 01a13912-d377-73d1-a3e4-a5877421ca85
+    type: group
+---
+# File: cors.yaml
+resource_type: server_config
+name: cors
+value: {"allowedOrigins":["http://localhost:5173","https://localhost:5173","http://localhost:5174","https://localhost:5174","http://localhost:5175","https://localhost:5175","http://localhost:5176","https://localhost:5176","http://localhost:5177","https://localhost:5177","http://localhost:5178","https://localhost:5178","http://localhost:5179","https://localhost:5179"]}
+---
+# File: Admin_User.yaml
+resource_type: user_type
+id: 01a13912-d329-7a97-a629-72ffbaaa94f7
+category: user
+name: Admin_User
+ouId: 01900000-0000-7000-8000-000000000001
+systemAttributes:
+  display: username
+schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^\\+?[1-9]\\d{1,14}$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}
+---
+# File: Government_User.yaml
+resource_type: user_type
+id: 01a13912-d340-7e0d-9694-8d9d65ec6d5d
+category: user
+name: Government_User
+ouId: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+systemAttributes:
+  display: username
+schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}
+---
+# File: Private_User.yaml
+resource_type: user_type
+id: 01a13912-d353-7f0b-bdca-cc8be6280948
+category: user
+name: Private_User
+ouId: 01a13912-d1d8-7926-b674-4acac460492f
+systemAttributes:
+  display: username
+schema: {"username":{"type":"string","required":true,"unique":true},"password":{"type":"string","required":false,"credential":true},"email":{"type":"string","required":true,"unique":true,"regex":"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"},"phone_number":{"type":"string","required":false,"regex":"^\\+?[1-9]\\d{1,14}$"},"given_name":{"type":"string","required":false},"family_name":{"type":"string","required":false}}

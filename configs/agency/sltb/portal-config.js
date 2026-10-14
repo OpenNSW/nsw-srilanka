@@ -1,6 +1,6 @@
 // Runtime config for the SLTB officer portal: the trader-app in agency mode, served by
 // the sltb-portal service in compose.yml. See configs/agency/sltb/README.md.
-// The IdP side (resource server, SLTB Officer role, this client) is idp/resources/government/sltb.json.
+// The IdP side (resource server, SLTB Officer role, this client) is idp/bootstrap/20-agency-sltb.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8086',
   IDP_BASE_URL: 'https://localhost:8090',

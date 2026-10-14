@@ -6,6 +6,136 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-14
+
+This release runs each consignment as a case with several flows, moves workflow steps onto core's guarded task steps, and generates payment references from `refid` formats. Work in flight at the upgrade does not carry over, systems that review TNSW's tasks call back on a new route, and the Customs agency becomes the Export Facilitation Center (EFC). It also adds flows that traders start on a consignment (the first being the SLPA sundry payment), OpenTelemetry metrics, and NPQS, SLTB and FCAU as agencies in local Docker Compose.
+
+### Upgrade notes
+
+#### Drain in-flight work first ([#584](https://github.com/OpenNSW/nsw-srilanka/pull/584), [#643](https://github.com/OpenNSW/nsw-srilanka/pull/643), [#644](https://github.com/OpenNSW/nsw-srilanka/pull/644))
+
+- Let open consignments, tasks and payments finish, or discard them, and stop running Temporal workflows before deploying. They are not migrated.
+  - Existing task rows have no active step, and running workflows were started by 0.2.0's workflow code.
+  - A top-level workflow started on 0.2.0 has no `case_flows` row, so its completion is rejected.
+  - A payment started on 0.2.0 has no callback token, which is how a settled payment now completes its workflow step.
+- Deploy `tnsw-api` and `tnsw-web` 0.3.0 together: the admin API's engine status and resolve routes moved, and only the 0.3.0 Trader Portal calls the new ones (see below).
+
+#### Migrations
+
+Six migrations run before the API starts; the Helm hook and Docker Compose run them. Use the 0.3.0 `tnsw-migrate` image.
+
+- `000019_task_records_guarded_steps` ([#584](https://github.com/OpenNSW/nsw-srilanka/pull/584)) adds `parent_step_id`, `active_step_id` and `seq` to `task_records_v2`, and drops `parent_run_id`, `parent_node_id`, `task_run_id` and `subtask_node_id`. Rolling back brings those four columns back empty.
+- `000020_agency_workflow_callback_token` ([#584](https://github.com/OpenNSW/nsw-srilanka/pull/584)) adds `agency_workflow.callback_token`.
+- `000021_payment_callback_token` ([#584](https://github.com/OpenNSW/nsw-srilanka/pull/584)) adds `payment_transactions.callback_token` and drops `payment_transactions.task_id` with its index. Rolling back brings `task_id` back empty; the task ID is kept in the checkout metadata (`gateway_metadata.task_id`).
+- `000022_create_case_flows` ([#642](https://github.com/OpenNSW/nsw-srilanka/pull/642)) creates `case_flows`.
+- `000023_consignments_on_cases` ([#643](https://github.com/OpenNSW/nsw-srilanka/pull/643)) copies each consignment's name and state to a new `cases` row, making `INITIALIZED` `IN_PROGRESS`, makes `consignments.id` a foreign key to `cases.id`, and drops `consignments.name` and `state`. Rolling back copies them back, but an `INITIALIZED` consignment returns as `IN_PROGRESS`.
+- `000024_task_records_case_id` ([#646](https://github.com/OpenNSW/nsw-srilanka/pull/646)) renames `task_records_v2.root_workflow_id` to `case_id`.
+
+#### Reviewers call back on a callback token ([#584](https://github.com/OpenNSW/nsw-srilanka/pull/584))
+
+Every system TNSW dispatches a task to (OGA portals, agencies) must change how it returns its decision:
+
+- Store the `callbackToken` from each dispatch, and call back on `POST {serviceUrl}/{callbackToken}` (`/api/v1/callbacks/{token}`) instead of `/api/v1/tasks/{taskId}`.
+- Take the new token on every re-dispatch, for example after an amendment.
+- The body (`{command, payload}`) and the scope (`nsw:task:write`) are unchanged.
+
+Agencies run from this repository do this from 0.3.0, so upgrade them together with TNSW.
+
+#### Admin API routes ([#644](https://github.com/OpenNSW/nsw-srilanka/pull/644))
+
+- `/api/v1/admin/consignments/{id}/engine-status` and `/api/v1/admin/consignments/{id}/steps/{stepId}/resolve` move to `/api/v1/admin/workflows/{id}/…`, addressed by the workflow ID, and the engine status's `consignment_id` becomes `workflow_id`. `GET /api/v1/admin/consignments/{id}` lists the consignment's `flows` with their workflow IDs. Update any client of the admin API other than the Trader Portal.
+
+#### Payment references come from `refid` ([#632](https://github.com/OpenNSW/nsw-srilanka/pull/632))
+
+- In `config.yaml` (Helm: `backend.config.refid`), define the `TNSW` issuer's `payment_ref` format and the `CDA` issuer's `fee_payment_ref` format. Copy both from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.3.0/configs/config.example.yaml) or [`deployments/helm/values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.3.0/deployments/helm/values-example.yaml). Without them every payment fails with `refid: unknown issuer`.
+- Set each CDA exporter's `data.agencies.cda.registration_number` to its 4-digit CDA Exporter Identification Number, such as `0002`. A CDA fee payment fails for an exporter without one, and for one still holding a value like `CDA-EXP-000002`.
+
+#### Storage delete route removed ([#622](https://github.com/OpenNSW/nsw-srilanka/pull/622))
+
+- `DELETE /api/v1/storage/{key}` now answers 405, and the `nsw:storage:delete` scope is gone.
+- Remove `nsw:storage:delete` from any config that requests it, such as a portal's `IDP_SCOPES` or an M2M client's `scopes` in `services.json`, and then from the IdP. A token request naming a scope the IdP doesn't know may be refused.
+
+#### Customs agency renamed to EFC ([#676](https://github.com/OpenNSW/nsw-srilanka/pull/676))
+
+Deploy with workflow artifacts that include [one-trade-artifacts#164](https://github.com/OpenNSW/one-trade-artifacts/pull/164) (see below). TNSW's boat-note approval step then hands work to the `efc` service, and the agency loads `efc-v2/`.
+
+1. **IdP:** create the EFC entities in place of the Customs ones, as declared in [`idp/bootstrap/20-agency-efc.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.3.0/idp/bootstrap/20-agency-efc.yaml), and give the `NSW_TO_EFC` and `EFC_TO_NSW` clients the old Customs clients' secrets or new ones. Then remove the Customs entities.
+2. **TNSW `services.json`:** rename the `customs` entry to `efc`, with `client_id: NSW_TO_EFC`, `client_secret: env:M2M_NSW_TO_EFC_SECRET` and `endpoint_params.resource: https://api.efc.nsw-agency.local`.
+3. **TNSW `config.yaml`:** in `authn.clientIDs`, replace `CUSTOMS_TO_NSW` with `EFC_TO_NSW`.
+4. **Secrets:** rename `M2M_NSW_TO_CUSTOMS_SECRET` to `M2M_NSW_TO_EFC_SECRET`, `M2M_CUSTOMS_TO_NSW_SECRET` to `M2M_EFC_TO_NSW_SECRET`, and `CUSTOMS_ARTIFACT_LOCAL_ROOT` to `EFC_ARTIFACT_LOCAL_ROOT`. With Helm, rename the `nsw-secrets` key `m2m-customs-secret` to `m2m-efc-secret`, as `values-example.yaml` now references it.
+5. **Agency deployment:** its config moves to `configs/agency/efc/`, with audience `https://api.efc.nsw-agency.local`, clients `OGA_PORTAL_APP_EFC` and `NSW_TO_EFC`, and artifacts `efc-v2`. The new database `efc_db` and Temporal namespace `efc` start empty, so boat-note reviews still open in `customs_db` are not carried over. Let them finish first, or point `db.name` and `temporal.namespace` at the old names.
+6. **Officer portal:** set `IDP_CLIENT_ID` to `OGA_PORTAL_APP_EFC`, with `resource=https://api.efc.nsw-agency.local`. Officers need the `EFC Officer` role.
+
+#### IdP provisioning ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681))
+
+- `idp/sample-resources.sh`, `sample-resources.down.sh` and `idp/resources/` are replaced by the declarative documents in [`idp/bootstrap/`](https://github.com/OpenNSW/nsw-srilanka/tree/v0.3.0/idp/bootstrap). They carry local-development values: never mount them in UAT or production.
+- There is no longer a script to provision a managed IdP. Create its resources in the ThunderID console or with `POST /import`, using the documents as the reference.
+- The shared `AgencyM2M` role is replaced by one role per agency client, `<Agency>ToNswM2M`, with the same scopes. Nothing in TNSW checks the role name, so an existing IdP may keep `AgencyM2M`.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`14e7d9e`](https://github.com/OpenNSW/one-trade-artifacts/commit/14e7d9e05c0b80fc0ef3811c65e3485d0765b20f) (14 October 2026). It holds every artifact change this release depends on:
+  - [one-trade-artifacts#138](https://github.com/OpenNSW/one-trade-artifacts/pull/138): CusDec supporting documents as scanned and metadata lists, which the API now reads ([#590](https://github.com/OpenNSW/nsw-srilanka/pull/590));
+  - [one-trade-artifacts#140](https://github.com/OpenNSW/one-trade-artifacts/pull/140): the CDA containerization date check ([#597](https://github.com/OpenNSW/nsw-srilanka/pull/597));
+  - [one-trade-artifacts#142](https://github.com/OpenNSW/one-trade-artifacts/pull/142): the `input_mapping` every `BATCH_SPLIT` must now declare ([#648](https://github.com/OpenNSW/nsw-srilanka/pull/648));
+  - [one-trade-artifacts#144](https://github.com/OpenNSW/one-trade-artifacts/pull/144): CDA application and certificate reference numbers ([#633](https://github.com/OpenNSW/nsw-srilanka/pull/633));
+  - [one-trade-artifacts#164](https://github.com/OpenNSW/one-trade-artifacts/pull/164): the EFC rename ([#676](https://github.com/OpenNSW/nsw-srilanka/pull/676));
+  - [one-trade-artifacts#163](https://github.com/OpenNSW/one-trade-artifacts/pull/163): the SLPA sundry payment flow ([#673](https://github.com/OpenNSW/nsw-srilanka/pull/673)).
+- Before the CDA agency loads the #144 artifacts, add the `refid` section of [`configs/agency/cda/config.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.3.0/configs/agency/cda/config.yaml) to its `config.yaml`, and run it on 0.3.0: its certificate formats use the new `param` segment ([#633](https://github.com/OpenNSW/nsw-srilanka/pull/633)).
+
+#### CusDec assessments need SLC Edge v1.9 ([#591](https://github.com/OpenNSW/nsw-srilanka/pull/591))
+
+- TNSW now reads the v1.9 `CUSDEC_INTEGRATED` assessment. A v1.7-shaped result (`taxes` / `amountToPay`) is still accepted, but its amount to pay reads as **0**. Upgrade only once Sri Lanka Customs' SLC Edge sends v1.9.
+
+#### Local Docker Compose
+
+- **Recreate the IdP volumes once** ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681)). An IdP seeded by `sample-resources.sh` holds the same entities under other IDs, so `thunderid-setup` fails and `thunderid` won't start. Run `docker compose down`, remove the `<project>_thunderid-db`, `<project>_thunderid-certs` and `<project>_thunderid-secrets` volumes, then `docker compose up`. This also moves the stack onto ThunderID 1.0.1 from a fresh database; `thunderid-db-init` seeds only an empty volume, so a kept 1.0.0-beta2 volume would be reused as is ([#684](https://github.com/OpenNSW/nsw-srilanka/pull/684)).
+- **`idp/.env`:** `CORS_ORIGINS_*`, `*_REDIRECT_URIS`, `API_BASE`, `AUTH_TOKEN`, `INSECURE` and the per-user and per-client secret overrides are no longer read. Every M2M client's secret is `M2M_CLIENT_SECRET`, and each backend's `M2M_*_SECRET` must match it ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681)).
+- **NPQS, SLTB and FCAU now run from this repository**, on ports 8081, 8086 and 8082. Stop nsw-agency's services on those ports. In your git-ignored `configs/services.json` and `services.docker.json`, give the `npqs`, `sltb` and `fcau` entries `"scopes": ["nsw:workflow:inject"]` and `"resource": "https://api.<agency>.nsw-agency.local"`, as in the examples, and rename `customs` to `efc` as above. Each agency reads `../one-trade-artifacts/<agency>-v2`; set `NPQS_ARTIFACT_LOCAL_ROOT`, `SLTB_ARTIFACT_LOCAL_ROOT` or `FCAU_ARTIFACT_LOCAL_ROOT` to use another clone ([#659](https://github.com/OpenNSW/nsw-srilanka/pull/659), [#663](https://github.com/OpenNSW/nsw-srilanka/pull/663), [#678](https://github.com/OpenNSW/nsw-srilanka/pull/678)).
+- **Local config files:** copy the `refid` section of `configs/config.example.yaml` into your `configs/config*.yaml`. `make setup` doesn't overwrite an existing `configs/companies.json`, so copy the example's new keys into it, including the 4-digit CDA registration numbers ([#632](https://github.com/OpenNSW/nsw-srilanka/pull/632), [#542](https://github.com/OpenNSW/nsw-srilanka/pull/542)).
+
+### Added
+
+- **Flows a trader starts on a consignment.** A consignment is now a case that can run several flows besides the export flow. List the ones traders and CHAs may start under `consignment.flows` in `config.yaml`; each `templateId` must be a workflow in the artifacts. With none listed (the default), none can be started. ([#642](https://github.com/OpenNSW/nsw-srilanka/pull/642), [#643](https://github.com/OpenNSW/nsw-srilanka/pull/643), [#645](https://github.com/OpenNSW/nsw-srilanka/pull/645))
+- **SLPA sundry payment.** Traders can raise a sundry order against a parent SLPA invoice, choosing from the sundry services SLPA offers. Offer it with `consignment.flows: [{templateId: slpa-sundry-payment, label: SLPA sundry payment}]`; it uses the existing `slpa` service and credentials. ([#673](https://github.com/OpenNSW/nsw-srilanka/pull/673), [#674](https://github.com/OpenNSW/nsw-srilanka/pull/674))
+- **Metrics.** The API records the duration of every HTTP request and pushes OpenTelemetry metrics over OTLP/HTTP when `metrics.endpoint` and `metrics.serviceName` are set in `config.yaml`, with optional `metrics.headers` for auth. `endpoint` is a full URL including the path, such as `http://otel-collector:4318/v1/metrics`; a bare host stops the API at startup. Without the section, nothing is exported. ([#640](https://github.com/OpenNSW/nsw-srilanka/pull/640))
+- The admin consignment view lists the consignment's flows, and the debugger opens each one. ([#644](https://github.com/OpenNSW/nsw-srilanka/pull/644))
+- A `refid` format can embed a value the caller supplies, with a `param` segment and an optional `pattern`. CDA application and certificate reference numbers use it. ([#631](https://github.com/OpenNSW/nsw-srilanka/pull/631), [#633](https://github.com/OpenNSW/nsw-srilanka/pull/633))
+- CusDec declarations send scanned supporting documents and metadata references separately, numbered as Sri Lanka Customs expects. Needs one-trade-artifacts#138. ([#590](https://github.com/OpenNSW/nsw-srilanka/pull/590))
+- Local Docker Compose runs NPQS, SLTB and FCAU as agencies, alongside CDA and EFC. ([#659](https://github.com/OpenNSW/nsw-srilanka/pull/659), [#663](https://github.com/OpenNSW/nsw-srilanka/pull/663), [#678](https://github.com/OpenNSW/nsw-srilanka/pull/678))
+
+### Changed
+
+- Payment references are generated from `refid` formats: `TNSW` followed by eight random characters, such as `TNSW7K2QQXAB`, and for a CDA fee the exporter's registration number, the fee's categories and a sequence, such as `000201000020001`. ([#632](https://github.com/OpenNSW/nsw-srilanka/pull/632))
+- A consignment's state is `IN_PROGRESS` or `FINISHED`; `INITIALIZED` is gone. A consignment finishes once all its flows have, and starting a new flow reopens it. ([#643](https://github.com/OpenNSW/nsw-srilanka/pull/643))
+- The Customs agency is now the Export Facilitation Center (EFC). ([#676](https://github.com/OpenNSW/nsw-srilanka/pull/676))
+- The local IdP is set up from declarative documents in `idp/bootstrap/` instead of a seed script. ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681))
+- Local Docker Compose runs ThunderID 1.0.1 instead of 1.0.0-beta2. ([#684](https://github.com/OpenNSW/nsw-srilanka/pull/684))
+
+### Fixed
+
+- The CDA application form checks that the containerization dates are in order. Needs one-trade-artifacts#140. ([#597](https://github.com/OpenNSW/nsw-srilanka/pull/597))
+- The amount to pay for a CusDec is read from SLC Edge's v1.9 assessment. See the upgrade notes. ([#591](https://github.com/OpenNSW/nsw-srilanka/pull/591))
+
+### Security
+
+- The unused storage delete route is removed, with the `nsw:storage:delete` scope. Every agency's M2M client held that scope, so any of them could delete a file whose key it had. ([#622](https://github.com/OpenNSW/nsw-srilanka/pull/622))
+- `golang.org/x/net` is raised to v0.60.0, through OpenNSW/core. ([#648](https://github.com/OpenNSW/nsw-srilanka/pull/648))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+
 ## [0.2.0] - 2026-10-07
 
 This release moves the settings of the API from environment variables into a `config.yaml` file, and the Trader Portal's settings into a mounted `config.js`. Neither image starts correctly with 0.1.0's settings, so change your deployment values, chart version and images in the same upgrade. It also adds agency mode, a reference ID generator for workflows, and end-to-end encryption for GovPay+ calls.
@@ -212,6 +342,7 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OpenNSW/nsw-srilanka/releases/tag/v0.1.0

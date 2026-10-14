@@ -1,6 +1,6 @@
 // Runtime config for the NPQS officer portal: the trader-app in agency mode, served by
 // the npqs-portal service in compose.yml. See configs/agency/npqs/README.md.
-// The IdP side (resource server, NPQS Officer role, this client) is idp/resources/government/npqs.json.
+// The IdP side (resource server, NPQS Officer role, this client) is idp/bootstrap/20-agency-npqs.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8081',
   IDP_BASE_URL: 'https://localhost:8090',

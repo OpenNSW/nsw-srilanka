@@ -2,12 +2,17 @@ package plugins
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"net/http"
+	"net/url"
 
 	"github.com/OpenNSW/core/remote"
 	coreplugins "github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/store"
+	"go.temporal.io/sdk/temporal"
 )
 
 // ExternalReviewPlugin is our custom replacement for the generic
@@ -25,14 +30,31 @@ func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string) *Ex
 
 type externalReviewConfig struct {
 	ServiceID string `json:"service_id"`
-	Path      string `json:"path"`
-	TaskCode  string `json:"task_code,omitempty"`
+	// Path is where a dispatch is POSTed. A reply ignores it: it always calls back
+	// on callbacksPath/{replyToken}.
+	Path     string `json:"path,omitempty"`
+	TaskCode string `json:"task_code,omitempty"`
+	// ReplyCommand is the command a reply carries, e.g. "submit" for a trader's
+	// resubmission or "needs_more_info" for an officer asking for one. Required
+	// only to reply.
+	ReplyCommand string `json:"reply_command,omitempty"`
 }
+
+// replyTokenInput is the reserved input that makes the step reply instead of
+// dispatch: the token the other side parked its own step on.
+const replyTokenInput = "replyToken"
 
 // Execute persists the reviewer form ID + QUEUED_EXTERNALLY status, then
 // POSTs the submission to the OGA portal so the officer's review queue is
 // populated. The body matches the SimpleFormExternalServiceRequest shape
 // used by the legacy FCAU/NPQS OGA services.
+//
+// Given a replyToken input, it replies instead: the other side parked a step
+// and handed over that token, so the step calls back on it (see replyRequest)
+// rather than dispatching a new review the other side would take for a retry.
+//
+// A failed call fails the step and the engine retries it. A 409 on a reply is the
+// exception (see isConflict).
 func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg externalReviewConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
@@ -41,11 +63,50 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	if cfg.ServiceID == "" {
 		return fmt.Errorf("external_review: service_id is required")
 	}
-	if cfg.Path == "" {
-		return fmt.Errorf("external_review: path is required")
+	replyToken, err := replyTokenFrom(ctx.Inputs)
+	if err != nil {
+		return err
+	}
+	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
+	if err != nil {
+		return fmt.Errorf("external_review: %w", err)
+	}
+
+	var (
+		path string
+		body map[string]any
+	)
+	if replyToken != "" {
+		path, body, err = replyRequest(cfg, ctx.Inputs, replyToken, callbackToken)
+	} else {
+		path, body, err = p.dispatchRequest(ctx, cfg, callbackToken)
+	}
+	if err != nil {
+		return err
 	}
 
 	ctx.Record.State = "QUEUED_EXTERNALLY"
+	slog.Info("taskv2 external_review: calling out",
+		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "reply", replyToken != "")
+
+	err = p.client.post(ctx.Context, cfg.ServiceID, path, body)
+	if replyToken != "" && isConflict(err) {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("external_review: %s rejected the reply: its step is no longer waiting", cfg.ServiceID),
+			"StaleReplyToken", err)
+	}
+	if err != nil {
+		return err
+	}
+	return ErrSuspended
+}
+
+// dispatchRequest is the first round: the review the other side starts, POSTed to
+// the configured path.
+func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalReviewConfig, callbackToken string) (string, map[string]any, error) {
+	if cfg.Path == "" {
+		return "", nil, fmt.Errorf("external_review: path is required")
+	}
 
 	// Convention: if input_mapping placed a value under the reserved key
 	// "submission", that value is the wire shape OGA sees — write any
@@ -57,19 +118,46 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	if submission, ok := ctx.Inputs["submission"]; ok {
 		data = submission
 	}
-	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
-	if err != nil {
-		return fmt.Errorf("external_review: %w", err)
-	}
-	body := buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL())
+	return cfg.Path, buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL()), nil
+}
 
-	slog.Info("taskv2 external_review: dispatching to OGA portal",
-		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "path", cfg.Path, "taskCode", cfg.TaskCode)
-
-	if err := p.client.post(ctx.Context, cfg.ServiceID, cfg.Path, body); err != nil {
-		return err
+// replyRequest is a callback on the other side's parked step: {command, payload} on
+// replyToken, the envelope every callback takes, with this step's own token as
+// payload.callbackToken for the other side to answer on. The payload is the step's
+// inputs as mapped, so the receiving step's output_mapping reads them by the names
+// this node gave them.
+func replyRequest(cfg externalReviewConfig, inputs map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
+	if cfg.ReplyCommand == "" {
+		return "", nil, fmt.Errorf("external_review: reply_command is required to reply")
 	}
-	return ErrSuspended
+	// inputs is non-nil here: it holds the non-empty replyToken.
+	payload := maps.Clone(inputs)
+	delete(payload, replyTokenInput)
+	payload["callbackToken"] = callbackToken
+	return callbacksPath + "/" + url.PathEscape(replyToken),
+		map[string]any{"command": cfg.ReplyCommand, "payload": payload}, nil
+}
+
+// isConflict reports whether err is a 409: the token's step is no longer waiting, so
+// no retry can succeed and parking here would wait for an answer that can never
+// come. The step fails for good, which parks it for an admin.
+func isConflict(err error) bool {
+	var re *remote.RemoteError
+	return errors.As(err, &re) && re.StatusCode == http.StatusConflict
+}
+
+// replyTokenFrom returns the replyToken input, or "" when there is none. An empty
+// value counts as none, so a workflow can clear the variable it maps from.
+func replyTokenFrom(inputs map[string]any) (string, error) {
+	v, ok := inputs[replyTokenInput]
+	if !ok || v == nil {
+		return "", nil
+	}
+	token, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("external_review: %s must be a string, got %T", replyTokenInput, v)
+	}
+	return token, nil
 }
 
 // buildSubmissionBody constructs the full envelope the OGA portal expects.

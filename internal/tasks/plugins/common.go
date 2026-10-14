@@ -28,15 +28,19 @@ func newDispatchHelper(manager *remote.Manager, backendBaseURL string) *dispatch
 	}
 }
 
+// callbacksPath is where a service accepts a callback on one of its parked steps:
+// POST {callbacksPath}/{token}.
+const callbacksPath = "/api/v1/callbacks"
+
 // callbacksURL is the base URL the receiving OGA portal calls back into, at
 // {callbacksURL}/{callbackToken}, to advance the workflow once the officer has
 // acted.
 func (h *dispatchHelper) callbacksURL() string {
-	joined, err := url.JoinPath(h.backendBaseURL, "/api/v1/callbacks")
+	joined, err := url.JoinPath(h.backendBaseURL, callbacksPath)
 	if err != nil {
 		slog.Error("taskv2 plugin: failed to build callback URL",
 			"backendBaseURL", h.backendBaseURL, "error", err)
-		return h.backendBaseURL + "/api/v1/callbacks"
+		return h.backendBaseURL + callbacksPath
 	}
 	return joined
 }

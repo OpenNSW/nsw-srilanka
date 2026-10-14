@@ -1,0 +1,353 @@
+# Agency: SLPA. Still on the legacy shared Agency API resource server, with the OGA
+# Reviewer role and group and the NswM2M role, which only SLPA uses now.
+# Needs 10-nsw-platform.yaml.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: SLPA.yaml
+resource_type: organization_unit
+id: 01a13912-d30d-7e07-830d-b2d229c43a28
+handle: slpa
+name: SLPA
+description: Sri Lanka Ports Authority
+parent: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: Agency_API.yaml
+resource_type: resource_server
+id: 01a13912-c6e8-719a-9bb3-46344b46e424
+name: Agency API
+description: Agency API resource server
+identifier: https://api.nsw-agency.local
+type: API
+ouId: 01900000-0000-7000-8000-000000000001
+delimiter: ":"
+resources:
+  - name: Agency API
+    handle: agency
+    description: Agency API resource
+  - name: Application
+    handle: application
+    description: Application resource
+    parent: agency
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Review
+        handle: review
+        description: Review action
+      - name: Feedback
+        handle: feedback
+        description: Feedback action
+      - name: Inject
+        handle: inject
+        description: Inject action
+  - name: Consignment
+    handle: consignment
+    description: Consignment resource
+    parent: agency
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Storage
+    handle: storage
+    description: Storage resource
+    parent: agency
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Profile
+    handle: profile
+    description: Profile resource
+    parent: agency
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+---
+# File: OGA_Reviewer.yaml
+resource_type: role
+id: 01a13912-d634-739a-b457-9e3770706ad3
+name: OGA Reviewer
+description: Role for government agency reviewers
+ouId: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+permissions:
+  - resourceServerId: 01a13912-c6e8-719a-9bb3-46344b46e424
+    permissions:
+      - agency:application:feedback
+      - agency:application:read
+      - agency:application:review
+      - agency:consignment:read
+      - agency:profile:read
+      - agency:storage:read
+      - agency:storage:write
+assignments:
+  - id: 01a13912-d402-7101-b83a-be6bc8297d96
+    type: group
+---
+# File: NswM2M.yaml
+resource_type: role
+id: 01a13912-d662-7265-ad8e-af017564ccab
+name: NswM2M
+description: Role for NSW machine-to-machine clients calling the Agency API
+ouId: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+permissions:
+  - resourceServerId: 01a13912-c6e8-719a-9bb3-46344b46e424
+    permissions:
+      - agency:application:inject
+assignments:
+  - id: 01a13912-eaed-75cc-8e5f-663d94cac5ae
+    type: app
+---
+# File: SlpaToNswM2M.yaml
+resource_type: role
+id: 886da169-109b-48b8-a801-40a1bf40a3fa
+name: SlpaToNswM2M
+description: Role for SLPA machine-to-machine clients calling the NSW API
+ouId: 01a13912-d30d-7e07-830d-b2d229c43a28
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:consignment:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:write
+assignments:
+  - id: 01a13912-ea44-788e-9741-5012fed8f19c
+    type: app
+---
+# File: OGA_Reviewers.yaml
+resource_type: group
+id: 01a13912-d402-7101-b83a-be6bc8297d96
+name: OGA Reviewers
+description: Government agency reviewers group
+ouId: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+---
+# File: SLPAPortalApp.yaml
+resource_type: application
+id: 01a13912-e9fb-77a3-8338-c68730f4a01f
+ouId: 01a13912-d30d-7e07-830d-b2d229c43a28
+name: SLPAPortalApp
+description: Application for SLPA portal built with React
+type: browser
+template: react
+logoUrl: https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+themeId: 01900000-0000-7000-8000-000000000073
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Government_User
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: OGA_PORTAL_APP_SLPA
+      redirectUris:
+        - http://localhost:5177
+        - https://localhost:5177
+      postLogoutRedirectUris:
+        - http://localhost:5177
+        - https://localhost:5177
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - phone_number
+              - family_name
+              - given_name
+              - groups
+              - roles
+              - ouHandle
+              - ouId
+              - ouName
+              - username
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - family_name
+            - given_name
+            - groups
+            - roles
+            - ouHandle
+            - ouId
+            - ouName
+            - username
+          responseType: JWT
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - openid
+        - profile
+        - email
+        - group
+        - role
+        - ou
+        - agency:application:read
+        - agency:application:review
+        - agency:application:feedback
+        - agency:consignment:read
+        - agency:storage:read
+        - agency:storage:write
+        - agency:profile:read
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - family_name
+          - given_name
+          - email
+      scopeClaims:
+        email:
+          - email
+        group:
+          - groups
+        ou:
+          - ouId
+          - ouHandle
+        phone:
+          - phone_number
+        profile:
+          - given_name
+          - family_name
+        role:
+          - roles
+---
+# File: SLPA_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-ea44-788e-9741-5012fed8f19c
+ouId: 01a13912-d30d-7e07-830d-b2d229c43a28
+name: SLPA_TO_NSW_M2M
+description: Machine-to-machine integration for SLPA to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: SLPA_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:task:write
+        - nsw:consignment:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+---
+# File: NSW_TO_SLPA_M2M.yaml
+resource_type: application
+id: 01a13912-eaed-75cc-8e5f-663d94cac5ae
+ouId: 01a13912-d30d-7e07-830d-b2d229c43a28
+name: NSW_TO_SLPA_M2M
+description: Machine-to-machine integration for NSW to SLPA
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NSW_TO_SLPA
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - agency:application:inject
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:

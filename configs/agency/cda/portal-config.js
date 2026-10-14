@@ -1,6 +1,6 @@
 // Runtime config for the CDA officer portal: the trader-app in agency mode, served by
 // the cda-portal service in compose.yml. See configs/agency/cda/README.md.
-// The IdP side (resource server, CDA Officer role, this client) is idp/resources/government/cda.json.
+// The IdP side (resource server, CDA Officer role, this client) is idp/bootstrap/20-agency-cda.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8083',
   IDP_BASE_URL: 'https://localhost:8090',
