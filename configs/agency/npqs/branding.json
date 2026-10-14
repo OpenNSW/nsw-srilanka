@@ -1,0 +1,14 @@
+{
+  "branding": {
+    "systemName": "NSW",
+    "appName": "National Plant Quarantine Service (NPQS)",
+    "portalName": "NPQS Officer Portal",
+    "description": "A unified digital platform enabling seamless regulatory workflows and approvals for government agencies and authorised officers.",
+    "footerLinks": [
+      { "key": "policy", "url": "https://example.gov.lk/policy" },
+      { "key": "accessibility", "url": "https://example.gov.lk/accessibility" },
+      { "key": "support", "url": "https://example.gov.lk/support" }
+    ],
+    "copyrightNotice": "© 2026 National Plant Quarantine Service (NPQS). All rights reserved."
+  }
+}

@@ -1,0 +1,111 @@
+# Export Facilitation Center (EFC) agency deployment, for a native run
+# (`go run ./cmd/server` with efc.env loaded). See configs/agency/efc/README.md.
+# The Docker Compose efc-api reads config.docker.yaml instead; the two differ
+# only in reaching the shared services by container hostname there rather than
+# localhost. Every key is documented in configs/config.example.yaml.
+#
+# Never write a secret into this file: use "{{env:NAME}}" or "{{file:/path}}".
+# The ones below are set by efc.env.
+
+mode: agency
+
+# Its own database on the shared Postgres. ASSUMED name; create it before
+# running migrations (`docker compose run --rm efc-init` does).
+db:
+  driver: postgres
+  postgres:
+    host: localhost
+    port: 55432
+    user: postgres
+    password: "{{env:DB_PASSWORD}}"
+    name: efc_db
+    sslMode: disable
+    pool:
+      maxIdleConns: 10
+      maxOpenConns: 100
+      maxConnLifetimeSeconds: 3600
+
+server:
+  # 8085 is where TNSW's services.json already points its "efc" service.
+  port: 8085
+  logLevel: debug
+  serviceURL: http://localhost:8085
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+  # services.json: "tnsw", where notify_decision posts the decision back.
+  servicesConfigPath: ./configs/agency/efc/services.json
+  paymentMethodsConfigPath: ./configs/agency/efc/payment_methods.json
+  catalogConfigPath: ./configs/agency/efc/catalog.json
+
+# The EFC portal (the trader-app in agency mode).
+cors:
+  allowedOrigins:
+    - http://localhost:5178
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+
+# EFC keeps no files of its own: it serves TNSW's storage, calling TNSW as
+# EFC_TO_NSW (services.json, service tnsw), so officers open the documents
+# traders uploaded there. TNSW applies its own upload limits.
+storage:
+  type: proxy
+  proxy:
+    service: "tnsw"
+    uploadPath: /api/v1/storage
+    downloadPath: /api/v1/storage/{key}
+    deletePath: /api/v1/storage/{key}
+
+# Officers sign in through the EFC portal client, and NSW injects and replies as NSW_TO_EFC.
+# The audience is the EFC API resource server in
+# idp/resources/shared/resource-servers.json.
+authn:
+  jwksURL: https://localhost:8090/oauth2/jwks
+  issuer: https://localhost:8090
+  audience: https://api.efc.nsw-agency.local
+  clientIDs:
+    - OGA_PORTAL_APP_EFC
+    - NSW_TO_EFC
+  # Only honored when APP_ENV=development.
+  insecureSkipTLSVerify: true
+
+# Placeholder providers.
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: replace-with-actual-username
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: sidCode
+
+# Its own namespace, so TNSW and EFC workers never pick up each other's
+# workflows. ASSUMED name; register it first (efc-init does).
+temporal:
+  host: localhost
+  port: 7233
+  namespace: efc
+
+# The efc-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# to where the server runs (the repo root). Point root at another clone's
+# efc-v2 dir to use that one.
+artifactLoader:
+  type: local
+  local:
+    root: ../one-trade-artifacts/efc-v2
+  # Or straight from GitHub, with type: github:
+  # github:
+  #   owner: OpenNSW
+  #   repo: one-trade-artifacts
+  #   ref: main
+  #   basePath: efc-v2
+
+# The efc-v2 artifacts use no REFID_GENERATOR tasks.
+refid:
+  issuers: []

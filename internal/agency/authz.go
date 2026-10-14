@@ -54,14 +54,14 @@ func (g *OfficerGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	}
 }
 
-// ownedRoles reports officer ownership of the task's root workflow: true when it is an
-// injected workflow. Token-role checks stay in taskauthz.Eligible, which calls this
+// ownedRoles reports officer ownership of the task's case: true when it is an injected
+// workflow, which is its own case (see Workflow). Token-role checks stay in taskauthz.Eligible, which calls this
 // only once the caller is known to hold a relevant role.
-func (g *OfficerGate) ownedRoles(ctx context.Context, rootWorkflowID string) (map[string]bool, error) {
-	if rootWorkflowID == "" {
+func (g *OfficerGate) ownedRoles(ctx context.Context, caseID string) (map[string]bool, error) {
+	if caseID == "" {
 		return map[string]bool{}, nil
 	}
-	injected, err := g.repo.Exists(ctx, rootWorkflowID)
+	injected, err := g.repo.Exists(ctx, caseID)
 	if err != nil {
 		return nil, fmt.Errorf("agency: resolve officer ownership: %w", err)
 	}

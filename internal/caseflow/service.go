@@ -2,8 +2,8 @@
 // long-lived row in cases (in TNSW, a consignment); every flow on it is a finite,
 // standalone workflow started through StartFlow and recorded in case_flows. Nothing
 // stays open in the engine, so a case can take new flows at any time. Every flow is
-// started with the case ID as its root workflow ID, so its tasks are grouped under the
-// case.
+// started with the case ID as its engine case (workflow.VarCaseID), so its tasks are
+// grouped under the case.
 //
 // The case state follows its flows: FINISHED once every flow has completed,
 // IN_PROGRESS again when a new one starts. It is a label, never a gate: nothing here
@@ -173,7 +173,7 @@ func (s *Service) start(ctx context.Context, f *Flow, def workflow.WorkflowDefin
 	}
 	// Every flow of a case shares the case ID as its root, so the engine files every
 	// task it spawns, at any depth, under the case.
-	vars[workflow.VarRootWorkflowID] = f.CaseID
+	vars[workflow.VarCaseID] = f.CaseID
 
 	if err := s.wm.StartWorkflow(ctx, f.WorkflowID, def, vars); err != nil {
 		return fmt.Errorf("caseflow: failed to start workflow %q: %w", f.WorkflowID, err)

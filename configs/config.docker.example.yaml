@@ -141,7 +141,7 @@ authn:
     - NPQS_TO_NSW
     - CDA_TO_NSW
     - SLPA_TO_NSW
-    - CUSTOMS_TO_NSW
+    - EFC_TO_NSW
     - SLTB_TO_NSW
     - SLCE_TO_NSW
     - GOVPAY_TO_NSW
@@ -174,7 +174,7 @@ audit:
 
 # Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section) leaves
 # metrics off. serviceName is required when endpoint is set so TNSW, CDA and
-# Customs can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
 # metrics:
 #   endpoint: http://otel-collector:4318/v1/metrics
 #   serviceName: tnsw-api
@@ -199,6 +199,9 @@ consignment:
   # flows:
   #   - templateId: <a workflow template in your artifacts>
   #     label: <the text of its button>
+  # e.g. the SLPA sundry (add-on) order and its payment:
+  #   - templateId: slpa-sundry-payment
+  #     label: SLPA sundry payment
 
 # Where artifacts (workflow definitions, templates, manifest.json) are fetched
 # from at startup: local | github | s3. Only the settings for the selected type

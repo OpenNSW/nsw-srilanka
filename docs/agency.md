@@ -117,9 +117,9 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
    and starts nothing. Nor is it a new review round: where the artifacts are wired
    for replies, a resubmission comes back as a reply on the agency's own token
    (below), not as a repeat inject.
-5. Tasks spawned under the workflow have `RootWorkflowID == taskId`. The agency's task
-   authz gate (`agency.OfficerGate`) reports `officer` ownership for any root that is
-   an `agency_workflow` row, so `readauthz` and the write extension treat officers
+5. The workflow is started as its own case, so tasks spawned under it have
+   `CaseID == taskId`. The agency's task authz gate (`agency.OfficerGate`) reports
+   `officer` ownership for any case ID that is an `agency_workflow` row, so `readauthz` and the write extension treat officers
    like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
 
 ## Asking for more information

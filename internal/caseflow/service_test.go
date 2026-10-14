@@ -123,8 +123,8 @@ func TestStartFlowBuildsWorkflowID(t *testing.T) {
 	if len(wm.starts) != 1 || wm.starts[0].id != f.WorkflowID {
 		t.Fatalf("starts = %+v, want one start of %q", wm.starts, f.WorkflowID)
 	}
-	if got := wm.starts[0].vars[workflow.VarRootWorkflowID]; got != "C1" {
-		t.Errorf("%s = %v, want the case ID", workflow.VarRootWorkflowID, got)
+	if got := wm.starts[0].vars[workflow.VarCaseID]; got != "C1" {
+		t.Errorf("%s = %v, want the case ID", workflow.VarCaseID, got)
 	}
 }
 

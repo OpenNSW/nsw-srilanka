@@ -387,7 +387,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
 	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(ownershipResolver{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
 	}
 	if err != nil {
 		_ = stopParentRunner()
@@ -605,7 +605,7 @@ func newAdminParkLogger(scope string) func(workflow.AdminParkPayload) error {
 		slog.Error(scope+" parked for admin intervention",
 			"workflow_id", payload.WorkflowID,
 			"run_id", payload.RunID,
-			"root_workflow_id", payload.RootWorkflowID,
+			"case_id", payload.CaseID,
 			"node_id", payload.NodeID,
 			"node_type", payload.NodeType,
 			"task_template_id", payload.TaskTemplateID,
@@ -669,18 +669,18 @@ type taskStack struct {
 	Assembler *zoneview.ZoneViewAssembler
 }
 
-// ownershipResolver adapts the consignment service to
-// authzgate.OwnershipResolver. A consignment that does not exist is reported as
+// caseOwnership adapts the consignment service to
+// authzgate.CaseOwnership. A consignment that does not exist is reported as
 // ("", "", nil) — the caller then owns neither side and is denied cleanly, the
 // same fail-closed convention companyIDResolver follows, rather than surfacing a
 // missing consignment as a 500.
 //
 // It wraps the same interface it produces: *consignment.Service already has the
 // right shape, so all this adds is the error translation.
-type ownershipResolver struct{ svc authzgate.OwnershipResolver }
+type caseOwnership struct{ svc authzgate.CaseOwnership }
 
-func (r ownershipResolver) GetOwnership(ctx context.Context, consignmentID string) (string, string, error) {
-	traderCompanyID, chaCompanyID, err := r.svc.GetOwnership(ctx, consignmentID)
+func (r caseOwnership) GetOwnership(ctx context.Context, caseID string) (string, string, error) {
+	traderCompanyID, chaCompanyID, err := r.svc.GetOwnership(ctx, caseID)
 	if err != nil {
 		if errors.Is(err, consignment.ErrConsignmentNotFound) {
 			return "", "", nil

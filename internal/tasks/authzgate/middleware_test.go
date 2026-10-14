@@ -41,7 +41,7 @@ var validCatalogRoles = map[string]string{roleTrader: "Trader", roleCHA: "CHA"}
 
 // mustNewMiddleware builds a Middleware with validCatalogRoles, failing the
 // test immediately if construction errors.
-func mustNewMiddleware(t *testing.T, ownership OwnershipResolver, company CompanyResolver) *Middleware {
+func mustNewMiddleware(t *testing.T, ownership CaseOwnership, company CompanyResolver) *Middleware {
 	t.Helper()
 	mw, err := NewMiddleware(ownership, company, validCatalogRoles)
 	if err != nil {
@@ -167,7 +167,7 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 		}
 	})
 
-	t.Run("empty root workflow id skips all lookups", func(t *testing.T) {
+	t.Run("empty case id skips all lookups", func(t *testing.T) {
 		own := &fakeOwnership{trader: "adam-pvt-ltd"}
 		comp := &fakeCompany{id: "adam-pvt-ltd"}
 		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))

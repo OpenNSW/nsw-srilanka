@@ -60,6 +60,13 @@ const (
 	// cargo type from the CUSDEC record itself.
 	TaskTypeSLPAServiceOrder = "SLPA_SERVICE_ORDER"
 
+	// TaskTypeSLPASundryOrder raises a sundry (add-on) order — a crane, a
+	// forklift, a weighing — on the same endpoint as the service order. It names
+	// the invoice of the order it adds to rather than a declaration, and the
+	// trader picks a sundry service per container. It runs in its own flow, which
+	// a trader starts from the consignment page once the main order is invoiced.
+	TaskTypeSLPASundryOrder = "SLPA_SUNDRY_ORDER"
+
 	// TaskTypeSLPAInvoiceGenerate asks the CMS to issue the official invoice for
 	// an approved service order. Asked for rather than waited on: the Single
 	// Window knows when the accountant approved the order, so a step that waited
@@ -148,6 +155,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
+		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},
 		{TaskTypeSLPAInvoiceGenerate, NewAPICallPluginWithInterpreter(mgr, invoice.NewGenerateInterpreter())},
 		{TaskTypeSLPAConsolidationFetch, NewAPICallPluginWithInterpreter(mgr, consolidation.NewFetchInterpreter())},
 		{TaskTypeSLPAConsolidationSave, NewAPICallPluginWithInterpreter(mgr, consolidation.NewSaveInterpreter())},

@@ -81,7 +81,7 @@ func newReviewService(t *testing.T, status int) (*remote.Manager, *reviewService
 func reviewContext(inputs map[string]any) plugins.PluginContext {
 	return plugins.PluginContext{
 		Context: context.Background(),
-		Record:  &store.TaskRecord{TaskID: reviewTaskID, ActiveStepID: reviewStepID, RootWorkflowID: "consignment-1"},
+		Record:  &store.TaskRecord{TaskID: reviewTaskID, ActiveStepID: reviewStepID, CaseID: "consignment-1"},
 		Inputs:  inputs,
 	}
 }
