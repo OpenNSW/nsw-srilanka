@@ -27,9 +27,9 @@ NPQS generates application, lab sample, ePhyto, and re-export certificate refere
 `npqs_db`. Application sequences are scoped to office and UTC year; lab sample
 sequences are scoped to UTC year. Visual inspection samples reuse the
 application reference. Replacement certificate references and ePhyto NPPO
-certificate numbers use the `PCTSL-` prefix and a random 10-character
-alphanumeric suffix. The ePhyto reference is sent as the NPPO certificate
-number; the Hub returns its own
+certificate numbers share the `phytosanitary_certificate_ref` format: a
+`PCTSL-` prefix and a random 10-character alphanumeric suffix. The ePhyto
+reference is sent as the NPPO certificate number; the Hub returns its own
 tracking number. TNSW generates
 NPQS payment references in `nsw_db` using a UTC monthly `NPQS-YYYY-MM-#####`
 sequence shared by certificate and treatment fees.

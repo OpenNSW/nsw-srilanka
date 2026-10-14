@@ -151,20 +151,10 @@ refid:
                 scopeKey: "{issuer}:{idType}:{yyyy}"
                 padding: 4
 
-        # ePhyto NPPO certificate number sent to the IPPC Hub. The Hub tracking
-        # number is a separate value returned by the Hub. Produces: PCTSL-4FKU5794MV
-        - idType: ephyto_certificate_ref
-          segments:
-            - type: literal
-              value: "PCTSL-"
-            - type: random
-              random:
-                scopeKey: "{issuer}:{idType}"
-                charset: alphanumeric
-                length: 10
-
-        # Replacement certificate reference. Produces: PCTSL-4FKU5794MV
-        - idType: replacement_certificate_ref
+        # Shared by the ePhyto NPPO certificate number sent to the IPPC Hub and
+        # the replacement certificate reference. The Hub tracking number is a
+        # separate value returned by the Hub. Produces: PCTSL-4FKU5794MV
+        - idType: phytosanitary_certificate_ref
           segments:
             - type: literal
               value: "PCTSL-"
