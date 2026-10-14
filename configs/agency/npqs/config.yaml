@@ -62,7 +62,7 @@ storage:
 
 # Officers sign in through the NPQS portal client, and NSW injects as NSW_TO_NPQS.
 # The audience is the NPQS API resource server in
-# idp/resources/shared/resource-servers.json.
+# idp/bootstrap/20-agency-npqs.yaml.
 authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090

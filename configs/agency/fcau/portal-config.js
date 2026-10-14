@@ -1,6 +1,6 @@
 // Runtime config for the FCAU officer portal: the trader-app in agency mode, served by
 // the fcau-portal service in compose.yml. See configs/agency/fcau/README.md.
-// The IdP side (resource server, FCAU Officer role, this client) is idp/resources/government/fcau.json.
+// The IdP side (resource server, FCAU Officer role, this client) is idp/bootstrap/20-agency-fcau.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8082',
   IDP_BASE_URL: 'https://localhost:8090',

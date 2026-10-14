@@ -53,7 +53,7 @@ clone next to this repo (`../one-trade-artifacts/npqs-v2`); set
 
 ## Run natively
 
-With the shared stack up (`docker compose up db thunderid thunderid-seed temporal`):
+With the shared stack up (`docker compose up db thunderid temporal`):
 
 ```sh
 # Once: the NPQS database and Temporal namespace
@@ -74,20 +74,19 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 ## IdP
 
-[`idp/resources/government/npqs.json`](../../../idp/resources/government/npqs.json)
-seeds NPQS for this deployment, on the `NPQS API` resource server
+[`idp/bootstrap/20-agency-npqs.yaml`](../../../idp/bootstrap/20-agency-npqs.yaml)
+creates NPQS for this deployment, on the `NPQS API` resource server
 (`https://api.npqs.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
 | TNSW injecting                     | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`                                                                           |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                            |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
 
 TNSW's `services.json` `npqs` entry requests `nsw:workflow:inject` with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/services*.example.json`).
-An IdP seeded before this change still has the old NPQS entities, and a re-seed skips
-anything that exists: `OGA_PORTAL_APP_NPQS` keeps its `agency:*` scopes,
-`NSW_TO_NPQS` keeps `NswM2M`, and `npqs_officer` stays in `OGA Reviewers`. Reset it
-once, by running `idp/sample-resources.down.sh` then the seed, or by recreating the IdP
-volumes (`docker compose down` and removing the `thunderid-*` volumes).
+An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
+IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
+down` and remove the `thunderid-*` volumes; see
+[idp/README.md](../../../idp/README.md#changing-resources)).

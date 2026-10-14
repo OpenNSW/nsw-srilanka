@@ -62,7 +62,7 @@ storage:
 
 # Officers sign in through the CDA portal client, and NSW injects as NSW_TO_CDA.
 # The audience is the CDA API resource server in
-# idp/resources/shared/resource-servers.json.
+# idp/bootstrap/20-agency-cda.yaml.
 authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090

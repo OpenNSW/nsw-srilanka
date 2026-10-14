@@ -5,7 +5,7 @@
 We use [ThunderID](https://thunderid.dev/) (`ghcr.io/thunder-id/thunderid`) as the
 Identity Provider for this project — a lightweight, developer-friendly identity and
 access management solution. This directory runs the stock ThunderID image and layers
-on the project's sample resources.
+on the project's resources, declared in [`bootstrap/`](bootstrap/).
 
 > ThunderID is the renamed successor of Asgardeo Thunder (`asgardeo/thunder`). The
 > binary, image, and install paths moved from `thunder` / `/opt/thunder` to
@@ -33,19 +33,18 @@ Start the IdP with default credentials (`admin` / `1234`):
 docker compose up
 ```
 
-A full `docker compose up` runs four IdP services in order:
+A full `docker compose up` runs three IdP services in order:
 
 1. **`thunderid-db-init`** — seeds the shared SQLite databases from the image.
 2. **`thunderid-setup`** — one-shot container that generates this deployment's key
    material (TLS cert, JWT signing keys, the AES key that encrypts stored client
    secrets, and the Direct Auth Secret), then runs the in-process bootstrap over the
    declarative documents in `/opt/thunderid/bootstrap/` — the image's own defaults
-   plus our [`bootstrap/03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml) —
-   and exits.
+   plus every document in [`bootstrap/`](bootstrap/) — and exits.
 3. **`thunderid`** — the long-running server (listens on `https://localhost:8090`).
-4. **`thunderid-seed`** — dev-only; once `thunderid` is healthy, mints an `ADMIN_CLI`
-   token and seeds the sample resources (see _Seeding sample resources_). A bare
-   `docker compose up thunderid` skips it.
+
+Everything the platform needs locally (OUs, user types, resource servers, roles,
+groups, portals, M2M clients, sample users) exists once `thunderid-setup` finishes.
 
 ### Custom Configuration (optional)
 
@@ -76,9 +75,8 @@ A full `docker compose up` runs four IdP services in order:
    - Substitution runs over the whole file including comments, so never write
      placeholder syntax in a comment unless that variable is genuinely set.
 
-   `CORS_ORIGINS_0..N` still drives the CORS allow-list, but it is applied by the seed
-   via [`resources/shared/cors.json`](resources/shared/cors.json) — not by
-   `deployment.yaml` and not by the bootstrap. Indices are read until the first gap.
+   The CORS allow-list is the `cors` server config in
+   [`bootstrap/10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml), not an env var.
 
 3. Start the IdP:
 
@@ -103,9 +101,9 @@ Once running, open the developer console at `https://localhost:8090/console`:
 `thunderid-setup` runs the server's **in-process bootstrap**, which reads every
 `.yaml` / `.yml` / `.json` file under `/opt/thunderid/bootstrap` recursively, in
 sorted filename order, and applies them as a single declarative import. The image
-ships `01-default-resources.yaml` and `02-server-configurations.yaml`; we mount one
-document, [`idp/bootstrap/03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml),
-into that directory via `compose.yml`.
+ships `01-default-resources.yaml` and `02-server-configurations.yaml`; `compose.yml`
+mounts our [`bootstrap/`](bootstrap/) directory beside them, as
+`/opt/thunderid/bootstrap/nsw/`.
 
 > **Changed in 1.0.0.** This used to be numbered _shell scripts_ sourcing the image's
 > `common.sh`. That mechanism is gone: a `.sh` file in this directory is now **skipped
@@ -119,242 +117,105 @@ into that directory via `compose.yml`.
   with handle `default-flow`, distinguished by `flowType`), the `Console` application,
   six themes, and i18n translations.
 - **`02-server-configurations.yaml`** (image default) — server-level flow defaults.
-- **`bootstrap/03-nsw-resources.yaml`** (project) — **local-dev only.** Three
-  documents:
-  1. the `admin-cli` machine client (`client_id` `ADMIN_CLI`, secret from
-     `ADMIN_CLI_SECRET`) in the `default` OU;
-  2. an `NSW Admin CLI` role granting it the `system` permission on the System
-     resource server, which is what makes a `client_credentials` call yield a
-     **management token** (see _Seeding_ below) — the programmatic alternative to
-     copying a token out of the console.
 
-  It is deliberately limited to those two: `admin-cli` is the only resource that must
-  exist before the seed can authenticate. Everything else — CORS included — is seeded by
-  `idp/sample-resources.sh`, so a bad value there cannot take the image's own default
-  resources down with it.
+Ours, all **local-dev only** (see _UAT / production_ below):
 
-  It grants management scope from a file-supplied secret, so do not mount it into a
-  shared or UAT/prod deployment — use an interactively-obtained admin token there.
+| File                                                             | Contents                                                                                                                                                         |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml)       | The `admin-cli` machine client (`ADMIN_CLI`, secret `ADMIN_CLI_SECRET`) and the `NSW Admin CLI` role granting it `system`, for a management token                |
+| [`10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml)         | User types, the Government Organization and Private Sector OUs, NSW API, `Trader`/`CHA`/`NSW Admin` roles and groups, `TraderApp`, SLCE and GovPay clients, CORS |
+| `20-agency-<handle>.yaml` (`cda`, `efc`, `fcau`, `npqs`, `sltb`) | One agency each: its OU and API resource server, `<A> Officer` role and `<A> Officers` group, portal app, `<A>_TO_NSW` and `NSW_TO_<A>` clients and roles        |
+| [`20-agency-slpa.yaml`](bootstrap/20-agency-slpa.yaml)           | SLPA, still on the legacy shared `Agency API` resource server with `OGA Reviewer(s)` and `NswM2M`                                                                |
+| [`90-sample-data.yaml`](bootstrap/90-sample-data.yaml)           | Sample company OUs (ADAM, EDWARD), the sample users, and their group memberships                                                                                 |
 
-  Note the role is a _new_ role rather than a re-declaration of the built-in
-  `Administrator`. That is deliberate: the importer's role upsert writes only the
-  fields present in the document, so partially re-declaring `Administrator` would drop
-  its `permissions` block and silently revoke the management scope console login needs.
+Each file names what it needs: the platform file references nothing of ours, each agency
+file needs only the platform, and the sample data needs everything. So a deployment can
+mount the platform with any subset of agencies.
 
-The project's sample resources are not created by the bootstrap container. They are seeded
-by `idp/sample-resources.sh` (see _Seeding sample resources_ below): **automatically** by
-the `thunderid-seed` service on a full `docker compose up` (after `thunderid` is healthy),
-or **by hand** against any deployment. A bare `docker compose up thunderid` does NOT seed.
-That script creates:
+`admin-cli` grants management scope from a file-supplied secret, so never mount
+`03-nsw-resources.yaml` into a shared or UAT/prod deployment. Its role is a _new_ role
+rather than a re-declaration of the built-in `Administrator` — see the rules below.
 
-- **Private Sector** OU with **ADAM PVT LTD** and **EDWARD PVT LTD** child OUs
-- **Government Organization** OU with **NPQS / FCAU / CDA / SLPA / EFC / SLTB** child OUs
-- **`Private_User`**, **`Government_User`**, and **`Admin_User`** user types
-- **`Traders`** and **`CHA`** groups; **`Trader`** and **`CHA`** roles (assigned to the
-  matching groups — role inheritance is group-based)
-- **`OGA Reviewers`** group + **`OGA Reviewer`** role (government reviewers); **`AgencyM2M`**
-  and **`NswM2M`** roles (machine clients) — see _API authorization_ below
-- **`NSW Admins`** group + **`NSW Admin`** role (`nsw:consignment:adminread`, `nsw:consignment:adminwrite`)
-- **`NSW_API`**, **`AGENCY_API`**, **`CDA API`**, **`EFC API`**, **`NPQS API`**, **`SLTB API`** and **`FCAU API`** OAuth2 resource servers (scopes + token audiences)
-- **`CDA Officers`** group + **`CDA Officer`** role, and the **`NswToCdaM2M`** role (see `cda.json`)
-- **`EFC Officers`** group + **`EFC Officer`** role, and the **`NswToEfcM2M`** role (see `efc.json`)
-- **`NPQS Officers`** group + **`NPQS Officer`** role, and the **`NswToNpqsM2M`** role (see `npqs.json`)
-- **`SLTB Officers`** group + **`SLTB Officer`** role, and the **`NswToSltbM2M`** role (see `sltb.json`)
-- **`FCAU Officers`** group + **`FCAU Officer`** role, and the **`NswToFcauM2M`** role (see `fcau.json`)
-- Sample users: `suresh`, `ramesh`, `gomesh` (ADAM), `naresh` (EDWARD), and
-  `npqs_officer` / `fcau_officer` / `cda_officer` / `slpa_officer` / `efc_officer` /
-  `sltb_officer` (government OUs) — plus `nswadmin`, a dedicated `Admin_User` in `NSW Admins`
-- **SPA applications** and **M2M applications** (see below)
+### Writing bootstrap documents
 
-## Seeding sample resources
+The format is ThunderID's declarative resource format: one document per resource,
+`---`-separated, each with a `resource_type`. What the 1.0.0-beta2 importer does, as
+tested against this image:
 
-The project sample resources (OUs, users, groups, roles, SPA + M2M apps) are a generic
-**engine** that reads declarative JSON config from [`idp/resources/`](resources/) (see
-_Resource configuration_ below). The script is **idempotent** (existing entities are
-detected via HTTP 409 and reused) and needs **`jq`** on `PATH`. The management API requires
-a bearer `AUTH_TOKEN` — **including on localhost** (the running server is not
-security-disabled, only the bootstrap container is).
+- **Placeholders.** `{{ .NAME }}` resolves from `idp/.env` (the `env_file` in `compose.yml`)
+  before the YAML is parsed, comments included, so never write placeholder syntax in a
+  comment. An unset variable fails the whole bootstrap, the image's own documents
+  included. A `{{- range .NAME}}` list reads `NAME_0`, `NAME_1`, … The documents use only
+  `M2M_CLIENT_SECRET` and `SAMPLE_USER_PASSWORD`.
+- **References are by ID.** A child OU's `parent`, a role's `resourceServerId`, role
+  `assignments` and group `members` all take IDs. Only the owning OU can be named by
+  handle (`ouHandle`), and auth flows by `*FlowHandle`. `parentHandle` is **ignored
+  without error**: the OU lands at the root.
+- **Resource order.** In a resource server, list a parent resource before its children,
+  or roles granting the children's permissions fail with `ROL-1012 Invalid permissions`.
+- **Re-declaring a resource** (same `id`, in a later file) is how sample data adds group
+  members without the platform file depending on it. Group `members` and role
+  `assignments` **merge**; but a role re-declared **without** `permissions` loses them.
+  Never re-declare a role without its full permissions — which is why `admin-cli` gets
+  its own `NSW Admin CLI` role instead of an assignment on `Administrator`.
+- **Users.** Set a password under `credentials`, as the image does for `admin`. In
+  `attributes` it works once, then fails the next run with `USR-1028 Credential update
+not allowed`, because `thunderid-setup` reruns the import on every `docker compose up`.
+  A `credentials` password does not satisfy a user type's `required` check, so our user
+  types declare `password` as `required: false` (still `credential: true`).
 
-### Automatically (local dev)
+### Changing resources
 
-A full `docker compose up` runs the **`thunderid-seed`** service once `thunderid` is
-healthy: it mints an `ADMIN_CLI` token and runs `sample-resources.sh` against the in-network
-IdP (`https://thunderid:8090`). A bare `docker compose up thunderid` brings up only the IdP
-(with the `admin-cli` client created) and does **not** seed.
+Edit the documents and recreate the IdP volumes, so the bootstrap runs on a fresh
+database:
 
-### By hand — local dev (via `admin-cli`)
-
-1. Mint a management token from the `admin-cli` client created during bootstrap:
-
-   ```bash
-   TOKEN=$(curl -k -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "grant_type=client_credentials" -d "scope=system" \
-     -d "resource=https://localhost:8090/mcp" \
-     https://localhost:8090/oauth2/token | jq -r .access_token)
-   ```
-
-   (`${ADMIN_CLI_SECRET:-1234}` uses your `idp/.env` value if exported, else the dev default.)
-
-   The `resource` parameter is **required** here: `system` is a permission scope, so the
-   token must bind to a resource server, and this is the identifier of the System
-   resource server the image bootstraps. Omit it and the request fails with
-   `invalid_target`, since this deployment configures no `defaultResourceServer` (see
-   _API authorization_ below).
-
-2. Run the seed with that token:
-
-   ```bash
-   API_BASE=https://localhost:8090 AUTH_TOKEN="$TOKEN" ./idp/sample-resources.sh
-   ```
-
-### By hand — UAT / production (via an admin token)
-
-`admin-cli` is a **local-dev convenience only** — it is created solely by the compose
-`thunderid-setup` service, from
-[`bootstrap/03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml), so the dev seed can
-mint a token non-interactively. **Do not mount that file in UAT/prod.**
-There, the privileged default-secret client is never provisioned; instead:
-
-1. Deploy a **stock ThunderID** with only the image's default resources (admin user, default
-   OU, etc.) — i.e. run the image's built-in bootstrap without mounting
-   `03-nsw-resources.yaml`. Set a **strong `ADMIN_PASSWORD`** — that admin is your
-   management entry point. (CORS is unaffected: the seed applies it, so it works the same
-   way here.)
-2. Obtain an admin management token **interactively** (e.g. log in to the console and copy a
-   `system`-scoped token, or use the admin credentials against the token endpoint).
-3. Run the seed with strong secrets set and that token:
-
-   ```bash
-   API_BASE=https://idp.example.com \
-   AUTH_TOKEN="$ADMIN_TOKEN" \
-   SAMPLE_USER_PASSWORD=... M2M_CLIENT_SECRET=... \
-   INSECURE=0 ./idp/sample-resources.sh
-   ```
-
-### Notes on secrets & options
-
-- **Fail-closed secrets.** Against a **non-localhost** target, an UNSET `SAMPLE_USER_PASSWORD`
-  or `M2M_CLIENT_SECRET` aborts the run (naming the missing variable) rather than defaulting
-  to `1234`. Localhost runs keep the `1234` dev default; set `ALLOW_DEFAULT_SECRETS=1` to allow
-  it on a non-localhost target (e.g. throwaway CI).
-- **`ADMIN_CLI_SECRET` must be set**, and its failure mode is blunt: the bootstrap
-  documents are templated before parsing, an unresolved placeholder is a hard error, and
-  the whole bundle is imported as one payload with `continueOnError=false`. So an unset
-  `ADMIN_CLI_SECRET` fails the _entire_ import — taking the admin user, `Console` app,
-  flows and themes down with it, not just `admin-cli`. There is no `1234` fallback on this
-  path (unlike the seed script's `ALLOW_DEFAULT_SECRETS` behaviour). This is why nothing
-  else is bootstrapped: a bad `CORS_ORIGINS_*` only fails the seed.
-- `API_BASE` defaults to `https://localhost:8090`; point it at a remote deployment as needed.
-- `INSECURE=0` enforces TLS certificate validation (default `1` skips it for self-signed
-  localhost certs).
-- Values in `idp/.env` are loaded automatically and **take precedence over the command
-  line** — so if `AUTH_TOKEN` / `API_BASE` are set in `idp/.env` they win; unset them there
-  to pass values on the CLI. (This is why `thunderid-seed` runs the script from a copy with
-  `.env` removed.)
-- `./idp/sample-resources.sh --help` prints the full usage.
-
-## Resource configuration (`idp/resources/`)
-
-**What gets seeded is data, not code.** All entities live as JSON under
-[`idp/resources/`](resources/), grouped by domain. Both `sample-resources.sh` (create) and
-`sample-resources.down.sh` (delete) read the **same** files via the shared
-[`idp/resources-lib.sh`](resources-lib.sh), so the two can never drift — adding an entity to
-config covers both seeding and teardown. **Adding an agency, company, user, resource server,
-role, group, or assignment is a config edit only — no script changes.**
-
-```text
-idp/resources/
-  _scopesets.json              named scope sets (reused by roles + apps)
-  shared/
-    resource-servers.json      NSW_API, AGENCY_API (+ nested resources -> actions)
-    m2m-roles.json             AgencyM2M
-  admin/
-    user-types.json            Admin_User
-    groups-roles.json          NSW Admins group + NSW Admin role
-    users.json                 nswadmin
-  private-sector/
-    ous.json  user-types.json  groups-roles.json  users.json  apps.json
-  government/
-    ous.json  user-types.json  groups-roles.json
-    agencies.json              the OGA agencies (shorthand, see below)
-    cda.json                   CDA, run by this backend in agency mode (explicit, see below)
-    efc.json                   EFC (Export Facilitation Center), run by this backend in agency mode (explicit, see below)
-    npqs.json                  NPQS, run by this backend in agency mode (explicit, see below)
-    sltb.json                  SLTB, run by this backend in agency mode (explicit, see below)
-    fcau.json                  FCAU, run by this backend in agency mode (explicit, see below)
+```bash
+docker compose down
+docker volume rm "$(basename "$PWD")_thunderid-db" "$(basename "$PWD")_thunderid-certs" "$(basename "$PWD")_thunderid-secrets"
+docker compose up
 ```
 
-CDA is not in the `agencies` shorthand. It runs as this same backend in agency mode
-(`configs/agency/cda/`, `docs/agency.md`), whose routes check `nsw:*` scopes, so
-`cda.json` declares it explicitly: the `CDA API` resource server's officer role
-(`CDA Officer`, via a `CDA Officers` group holding only `cda_officer`) and inject role
-(`NswToCdaM2M` on `NSW_TO_CDA`), the portal client requesting those scopes, and
-`CDA_TO_NSW` as for any agency. A CDA-only group keeps other agencies' officers, who
-are all in `OGA Reviewers`, out of CDA.
+An upsert updates what the documents still declare, so a plain `docker compose up`
+applies additions and edits; it never removes what a document no longer declares.
 
-EFC is declared the same way in `efc.json` (`configs/agency/efc/`): the
-`EFC API` resource server's `EFC Officer` role (via `EFC Officers`, holding
-only `efc_officer`) and `NswToEfcM2M` role (on `NSW_TO_EFC`), the
-`OGA_PORTAL_APP_EFC` portal client, and `EFC_TO_NSW`.
+A console export (`POST /export`) is in this same format and a useful starting point,
+but it also carries the image's own resources (IDs `01900000-…`), random IDs, and users
+without passwords; strip and fix those before committing.
 
-NPQS is declared the same way in `npqs.json` (`configs/agency/npqs/`): the `NPQS API`
-resource server's `NPQS Officer` role (via `NPQS Officers`, holding only `npqs_officer`)
-and `NswToNpqsM2M` role (on `NSW_TO_NPQS`), the `OGA_PORTAL_APP_NPQS` portal client, and
-`NPQS_TO_NSW`.
+To add an agency run by this backend in agency mode, copy one of the
+`20-agency-*.yaml` files, change the handle, names and port, and give every document a
+new `id` (and update the references to it). Then add its port to the `cors` server
+config, and its clients to the backends' `authn.clientIDs`, catalog and `services.json`.
 
-SLTB is declared the same way in `sltb.json` (`configs/agency/sltb/`): the `SLTB API`
-resource server's `SLTB Officer` role (via `SLTB Officers`, holding only `sltb_officer`)
-and `NswToSltbM2M` role (on `NSW_TO_SLTB`), the `OGA_PORTAL_APP_SLTB` portal client, and
-`SLTB_TO_NSW`.
+### Management token (local dev)
 
-FCAU is declared the same way in `fcau.json` (`configs/agency/fcau/`): the `FCAU API`
-resource server's `FCAU Officer` role (via `FCAU Officers`, holding only `fcau_officer`)
-and `NswToFcauM2M` role (on `NSW_TO_FCAU`), the `OGA_PORTAL_APP_FCAU` portal client, and
-`FCAU_TO_NSW`.
+The management API, the console's API, and `POST /import` need a `system`-scoped
+token. Locally, mint one from `admin-cli`:
 
-Each file's top-level keys are entity-type buckets (`scopeSets`, `resourceServers`,
-`organizationUnits`, `userTypes`, `groups`, `roles`, `roleAssignments`, `users`,
-`applications`, `agencies`); the engine merges every file by concatenating same-named
-arrays, so a domain file only carries its domain's entities and file placement is just for
-humans. (An `agencies` entry is expanded at runtime into the primitive buckets — its OU,
-officer `users`, portal/M2M `applications`, and the role→app assignments — so you never
-author those by hand.) Cross-references use **logical keys** (an OU's `parent`,
-a role's `resourceServer`, a user's `groups`, an assignment's `role`/`group`/`app`), which
-the engine resolves to the server-assigned IDs at provisioning time. The `default` OU and
-the Classic theme / default flows are image-provided and referenced (e.g. `"ou": "default"`)
-without being created.
-
-**Secrets never live in config.** Passwords / M2M secrets / redirect URIs are referenced by
-**env-var name** — e.g. `"passwordEnv": { "override": "SAMPLE_SURESH_PASSWORD", "default":
-"SAMPLE_USER_PASSWORD" }` resolves to `${SAMPLE_SURESH_PASSWORD:-${SAMPLE_USER_PASSWORD}}`
-from `idp/.env` / the environment. Override those variables in `idp/.env` (see
-`.env.example`); the JSON files stay committable.
-
-### Adding an agency (the common case)
-
-Append one block to [`idp/resources/government/agencies.json`](resources/government/agencies.json).
-It expands to a child OU, a `Government_User` officer (joined to _OGA Reviewers_), a portal
-SPA, the `<H>_TO_NSW` + `NSW_TO_<H>` M2M clients, and their role assignments:
-
-```json
-{
-  "handle": "newoga", "name": "NEWOGA", "description": "New OGA description",
-  "officer": { "username": "newoga_officer", "email": "newoga_officer@government.dev",
-               "givenName": "NEWOGA", "familyName": "Officer", "phoneNumber": "+9477...",
-               "passwordEnv": { "override": "SAMPLE_NEWOGA_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" } },
-  "portal": { "name": "NEWOGAPortalApp", "clientId": "OGA_PORTAL_APP_NEWOGA", "port": 5180,
-              "redirectUrisEnv": "NEWOGA_REDIRECT_URIS" },
-  "m2m": {
-    "toNsw": { "clientId": "NEWOGA_TO_NSW", "secretEnv": { "override": "M2M_NEWOGA_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" } },
-    "nswTo": { "clientId": "NSW_TO_NEWOGA", "secretEnv": { "override": "M2M_NSW_TO_NEWOGA_SECRET", "default": "M2M_CLIENT_SECRET" } }
-  }
-}
+```bash
+TOKEN=$(curl -k -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" -d "scope=system" \
+  -d "resource=https://localhost:8090/mcp" \
+  https://localhost:8090/oauth2/token | jq -r .access_token)
 ```
 
-(Remember to add the new port to `CORS_ORIGINS_*` in `idp/.env` — see
-[`resources/shared/cors.json`](resources/shared/cors.json) — and, for the agency to call
-the NSW backend, to the backend's `authn.clientIDs` in `configs/config*.yaml`.)
+The `resource` parameter is **required** here: `system` is a permission scope, so the
+token must bind to a resource server, and this is the identifier of the System
+resource server the image bootstraps. Omit it and the request fails with
+`invalid_target`, since this deployment configures no `defaultResourceServer` (see
+_API authorization_ below).
+
+### UAT / production
+
+The documents in `bootstrap/` are local-dev values: fixed client IDs, one shared client
+secret, sample users, and localhost URIs. Do not mount them into a shared deployment.
+
+Applying the NSW and agency resources to a UAT or production IdP is tracked in
+[#679](https://github.com/OpenNSW/nsw-srilanka/issues/679). Until then, deploy a stock
+ThunderID (the image's own bootstrap only, with a strong `ADMIN_PASSWORD`) and create the
+resources in the console, or with `POST /import` and an admin token, using these
+documents as the reference.
 
 ## Applications created
 
@@ -370,8 +231,9 @@ the NSW backend, to the backend's `authn.clientIDs` in `configs/config*.yaml`.)
 
 M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
-- **OGA → NSW** (`aud=NSW_API`, `AgencyM2M` role): `NPQS_TO_NSW`, `FCAU_TO_NSW`,
-  `CDA_TO_NSW`, `SLPA_TO_NSW`, `EFC_TO_NSW`, `SLTB_TO_NSW`.
+- **OGA → NSW** (`aud=NSW_API`, each with its own `<Agency>ToNswM2M` role, e.g.
+  `CdaToNswM2M`): `NPQS_TO_NSW`, `FCAU_TO_NSW`, `CDA_TO_NSW`, `SLPA_TO_NSW`,
+  `EFC_TO_NSW`, `SLTB_TO_NSW`.
 - **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_SLPA`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
 - **NSW → EFC** (`aud=https://api.efc.nsw-agency.local`, `NswToEfcM2M` role): `NSW_TO_EFC`.
@@ -397,8 +259,7 @@ becomes the access-token **audience** (`aud`):
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
 > requirement is not cosmetic: see _How a token gets its audience_ below. The identifier
-> is also how `idp/resources/**` names a resource server in `resourceServer:` references,
-> so changing one means changing those too.
+> is what callers send as `resource`, so changing one means changing them too.
 >
 > `authn.audience` in each backend's `config.yaml` must equal its own resource server's identifier:
 >
@@ -437,7 +298,7 @@ scopes via a role:
 | ---------------------- | ----------------------------------------------------------------------------------------------------- |
 | TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                  |
 | NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite` |
-| `*_TO_NSW` M2M clients | **`AgencyM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                     |
+| `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes              |
 | OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                 |
 | `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`             |
 | CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                        |
@@ -487,8 +348,7 @@ gets a hard `invalid_target` at the token endpoint, naming the problem.
 > configuration — and the resource-server list offers the same action. Accepting it flips
 > the failure mode above for **every** caller in the deployment, silently: requests that
 > should fail with `invalid_target` start returning HTTP 200 with a scopeless token
-> instead. Untick it. Seeding is unaffected — `sample-resources.sh` uses the API directly,
-> not the wizard.
+> instead. Untick it. The bootstrap is unaffected — it never sets a default.
 
 So every permission-bearing caller sends `resource`:
 
@@ -499,7 +359,7 @@ So every permission-bearing caller sends `resource`:
 | `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency            | `https://api.nsw-srilanka.local`    |
 | `NSW_TO_*` M2M               | AGENCY_API       | `endpoint_params` in `configs/services*.json`       | `https://api.nsw-agency.local`      |
 | `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                             | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | `compose.yml` (Stage D)                             | `https://localhost:8090/mcp`        |
+| `admin-cli` management token | System RS        | _Management token_ above                            | `https://localhost:8090/mcp`        |
 | `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the

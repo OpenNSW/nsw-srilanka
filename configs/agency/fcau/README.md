@@ -52,7 +52,7 @@ clone next to this repo (`../one-trade-artifacts/fcau-v2`); set
 
 ## Run natively
 
-With the shared stack up (`docker compose up db thunderid thunderid-seed temporal`):
+With the shared stack up (`docker compose up db thunderid temporal`):
 
 ```sh
 # Once: the FCAU database and Temporal namespace
@@ -73,20 +73,19 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 ## IdP
 
-[`idp/resources/government/fcau.json`](../../../idp/resources/government/fcau.json)
-seeds FCAU for this deployment, on the `FCAU API` resource server
+[`idp/bootstrap/20-agency-fcau.yaml`](../../../idp/bootstrap/20-agency-fcau.yaml)
+creates FCAU for this deployment, on the `FCAU API` resource server
 (`https://api.fcau.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
 | TNSW injecting                     | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`                                                                           |
-| FCAU decision callback and storage | `FCAU_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                            |
+| FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
 
 TNSW's `services.json` `fcau` entry requests `nsw:workflow:inject` with
 `resource=https://api.fcau.nsw-agency.local` (see `configs/services*.example.json`).
-An IdP seeded before this change still has the old FCAU entities, and a re-seed skips
-anything that exists: `OGA_PORTAL_APP_FCAU` keeps its `agency:*` scopes,
-`NSW_TO_FCAU` keeps `NswM2M`, and `fcau_officer` stays in `OGA Reviewers`. Reset it
-once, by running `idp/sample-resources.down.sh` then the seed, or by recreating the IdP
-volumes (`docker compose down` and removing the `thunderid-*` volumes).
+An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
+IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
+down` and remove the `thunderid-*` volumes; see
+[idp/README.md](../../../idp/README.md#changing-resources)).

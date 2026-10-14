@@ -48,7 +48,7 @@ clone next to this repo (`../one-trade-artifacts/sltb-v2`); set
 
 ## Run natively
 
-With the shared stack up (`docker compose up db thunderid thunderid-seed temporal`):
+With the shared stack up (`docker compose up db thunderid temporal`):
 
 ```sh
 # Once: the SLTB database and Temporal namespace
@@ -69,20 +69,19 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 ## IdP
 
-[`idp/resources/government/sltb.json`](../../../idp/resources/government/sltb.json)
-seeds SLTB for this deployment, on the `SLTB API` resource server
+[`idp/bootstrap/20-agency-sltb.yaml`](../../../idp/bootstrap/20-agency-sltb.yaml)
+creates SLTB for this deployment, on the `SLTB API` resource server
 (`https://api.sltb.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
 | TNSW injecting                     | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`                                                                           |
-| SLTB decision callback and storage | `SLTB_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                            |
+| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
 
 TNSW's `services.json` `sltb` entry requests `nsw:workflow:inject` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/services*.example.json`).
-An IdP seeded before this change still has the old SLTB entities, and a re-seed skips
-anything that exists: `OGA_PORTAL_APP_SLTB` keeps its `agency:*` scopes,
-`NSW_TO_SLTB` keeps `NswM2M`, and `sltb_officer` stays in `OGA Reviewers`. Reset it
-once, by running `idp/sample-resources.down.sh` then the seed, or by recreating the IdP
-volumes (`docker compose down` and removing the `thunderid-*` volumes).
+An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
+IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
+down` and remove the `thunderid-*` volumes; see
+[idp/README.md](../../../idp/README.md#changing-resources)).

@@ -63,21 +63,19 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 ## IdP
 
-[`idp/resources/government/efc.json`](../../../idp/resources/government/efc.json)
-seeds EFC for this deployment, on the `EFC API` resource server
+[`idp/bootstrap/20-agency-efc.yaml`](../../../idp/bootstrap/20-agency-efc.yaml)
+creates EFC for this deployment, on the `EFC API` resource server
 (`https://api.efc.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                              | Client               | Grant                                                                                                              |
-| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Officer `efc_officer`               | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                      | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`                                                                          |
-| EFC's decision callback and storage | `EFC_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                          |
+| Caller                            | Client               | Grant                                                                                                              |
+| --------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
+| TNSW injecting                    | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`                                                                          |
+| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                        |
 
 TNSW's `services.json` `efc` entry requests `nsw:workflow:inject` with
 `resource=https://api.efc.nsw-agency.local` (see `configs/services*.example.json`).
-An IdP seeded before this agency was renamed from Customs still holds the Customs entities
-(the `customs` OU, `customs_officer`, `OGA_PORTAL_APP_CUSTOMS`, `CUSTOMS_TO_NSW` and
-`NSW_TO_CUSTOMS`), and a re-seed adds the EFC ones beside them. `idp/sample-resources.down.sh`
-deletes only what the resource files declare, so remove the Customs entities with the
-script and resources from before the rename, then seed again. Or recreate the IdP volumes
-(`docker compose down` and removing the `thunderid-*` volumes).
+An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
+IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
+down` and remove the `thunderid-*` volumes; see
+[idp/README.md](../../../idp/README.md#changing-resources)).

@@ -62,7 +62,7 @@ storage:
 
 # Officers sign in through the FCAU portal client, and NSW injects as NSW_TO_FCAU.
 # The audience is the FCAU API resource server in
-# idp/resources/shared/resource-servers.json.
+# idp/bootstrap/20-agency-fcau.yaml.
 authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090

@@ -113,8 +113,9 @@ services:
       - thunderid-db:/data
     restart: "no"
 
-  # Stage B: generate key material, then import the declarative bootstrap resources.
-  # Project sample resources are seeded separately by Stage D. See idp/README.md.
+  # Stage B: generate key material, then import the declarative bootstrap resources:
+  # the image's own, then every document in idp/bootstrap/ (admin-cli, the NSW
+  # platform, the agencies and the sample data). See idp/README.md.
   thunderid-setup:
     image: ghcr.io/thunder-id/thunderid:1.0.0-beta2
     container_name: thunderid-setup
@@ -128,7 +129,8 @@ services:
       # Generated here, so must outlive this container.
       - thunderid-certs:/opt/thunderid/config/certs
       - thunderid-secrets:/opt/thunderid/config/secrets
-      - ./idp/bootstrap/03-nsw-resources.yaml:/opt/thunderid/bootstrap/03-nsw-resources.yaml
+      # A subdirectory, so the image's 01-/02- documents stay visible beside it.
+      - ./idp/bootstrap:/opt/thunderid/bootstrap/nsw:ro
     depends_on:
       thunderid-db-init:
         condition: service_completed_successfully
@@ -159,44 +161,6 @@ services:
     depends_on:
       thunderid-setup:
         condition: service_completed_successfully
-
-  # Stage D (dev only): once thunderid is healthy, mint an ADMIN_CLI management
-  # token and run the data-driven seed (idp/sample-resources.sh). This is NOT a
-  # dependency of the thunderid service, so `docker compose up thunderid` skips
-  # it, while a full `docker compose up` runs it. The seed is idempotent.
-  thunderid-seed:
-    image: alpine:3
-    container_name: thunderid-seed
-    networks:
-      - nsw-network
-    env_file:
-      - ./idp/.env
-    volumes:
-      - ./idp:/idp:ro
-    depends_on:
-      thunderid:
-        condition: service_healthy
-    entrypoint: ["sh", "-c"]
-    command:
-      - |
-        set -e
-        apk add --no-cache bash curl jq coreutils >/dev/null 2>&1
-        echo "Fetching ADMIN_CLI management token..."
-        # RFC 8707 resource indicator; required, and this is the System resource server.
-        TOKEN=$$(curl -k -s -u "ADMIN_CLI:$${ADMIN_CLI_SECRET:?ADMIN_CLI_SECRET must be set (see idp/.env / idp/.env.example)}" \
-          -H "Content-Type: application/x-www-form-urlencoded" \
-          -d "grant_type=client_credentials" -d "scope=system" \
-          -d "resource=$${IDP_SYSTEM_RESOURCE:-https://localhost:8090/mcp}" \
-          https://thunderid:8090/oauth2/token | jq -r '.access_token // empty')
-        if [ -z "$$TOKEN" ]; then echo "Failed to obtain ADMIN_CLI token"; exit 1; fi
-        # Copy the seed tree out of the read-only mount and drop .env so the
-        # script does NOT source it: idp/.env "wins" and would reset API_BASE to
-        # localhost (wrong inside this container) and use a stale AUTH_TOKEN.
-        # Secrets/redirect URIs still come from env_file; API_BASE + the fresh
-        # ADMIN_CLI token are passed explicitly below.
-        cp -r /idp /seed && rm -f /seed/.env
-        API_BASE=https://thunderid:8090 AUTH_TOKEN="$$TOKEN" INSECURE=1 bash /seed/sample-resources.sh
-    restart: "no"
 
   # -------------------------------------------------------------------
   # 3. Temporal Workflow Engine Infrastructure

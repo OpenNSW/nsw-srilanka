@@ -62,7 +62,7 @@ storage:
 
 # Officers sign in through the SLTB portal client, and NSW injects as NSW_TO_SLTB.
 # The audience is the SLTB API resource server in
-# idp/resources/shared/resource-servers.json.
+# idp/bootstrap/20-agency-sltb.yaml.
 authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090

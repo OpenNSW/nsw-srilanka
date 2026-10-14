@@ -1,0 +1,353 @@
+# Agency: EFC. Its OU, API resource server, officer role and group, officer portal,
+# and the two M2M clients with their roles (EFC_TO_NSW calls TNSW; NSW_TO_EFC injects
+# into the agency). Needs 10-nsw-platform.yaml.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: EFC.yaml
+resource_type: organization_unit
+id: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+handle: efc
+name: EFC
+description: Export Facilitation Center
+parent: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: EFC_API.yaml
+resource_type: resource_server
+id: 01a13912-cb36-74ad-aab0-b49b1c19fbf9
+name: EFC API
+description: EFC API resource server
+identifier: https://api.efc.nsw-agency.local
+type: API
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+delimiter: ":"
+resources:
+  - name: EFC API
+    handle: nsw
+    description: EFC API resource
+  - name: Workflow
+    handle: workflow
+    description: Workflow resource
+    parent: nsw
+    actions:
+      - name: Inject
+        handle: inject
+        description: Inject action
+  - name: Consignment
+    handle: consignment
+    description: Consignment resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Task
+    handle: task
+    description: Task resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Profile
+    handle: profile
+    description: Profile resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Storage
+    handle: storage
+    description: Storage resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+---
+# File: EFC_Officer.yaml
+resource_type: role
+id: 01a13912-d57b-7339-9f38-d89fb3190ff2
+name: EFC Officer
+description: Role for EFC officers working tasks in the EFC deployment
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+permissions:
+  - resourceServerId: 01a13912-cb36-74ad-aab0-b49b1c19fbf9
+    permissions:
+      - nsw:consignment:read
+      - nsw:profile:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:read
+      - nsw:task:write
+assignments:
+  - id: 01a13912-d3b8-74ee-801c-da16adde68e9
+    type: group
+---
+# File: NswToEfcM2M.yaml
+resource_type: role
+id: 01a13912-d5ad-7e23-9322-5d959dd43945
+name: NswToEfcM2M
+description: Role for NSW injecting workflows into the EFC deployment
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+permissions:
+  - resourceServerId: 01a13912-cb36-74ad-aab0-b49b1c19fbf9
+    permissions:
+      - nsw:workflow:inject
+assignments:
+  - id: 01a13912-e227-72b4-9ae2-56e1bd7fa0c0
+    type: app
+---
+# File: EfcToNswM2M.yaml
+resource_type: role
+id: 8b518f71-2158-40f6-926d-0821bb28c6b4
+name: EfcToNswM2M
+description: Role for EFC machine-to-machine clients calling the NSW API
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:consignment:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:write
+assignments:
+  - id: 01a13912-e193-75f7-b42d-bb146f782490
+    type: app
+---
+# File: EFC_Officers.yaml
+resource_type: group
+id: 01a13912-d3b8-74ee-801c-da16adde68e9
+name: EFC Officers
+description: EFC officers group
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+---
+# File: EfcPortalApp.yaml
+resource_type: application
+id: 01a13912-e14d-7900-a14b-094549a9f611
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+name: EfcPortalApp
+description: Application for the EFC officer portal (trader-app in agency mode)
+type: browser
+template: react
+logoUrl: https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+themeId: 01900000-0000-7000-8000-000000000073
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Government_User
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: OGA_PORTAL_APP_EFC
+      redirectUris:
+        - http://localhost:5178
+        - https://localhost:5178
+      postLogoutRedirectUris:
+        - http://localhost:5178
+        - https://localhost:5178
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - phone_number
+              - family_name
+              - given_name
+              - groups
+              - roles
+              - ouHandle
+              - ouId
+              - ouName
+              - username
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - family_name
+            - given_name
+            - groups
+            - roles
+            - ouHandle
+            - ouId
+            - ouName
+            - username
+          responseType: JWT
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - openid
+        - profile
+        - email
+        - group
+        - role
+        - ou
+        - nsw:consignment:read
+        - nsw:task:read
+        - nsw:task:write
+        - nsw:profile:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - family_name
+          - given_name
+          - email
+      scopeClaims:
+        ou:
+          - ouId
+          - ouHandle
+        phone:
+          - phone_number
+        profile:
+          - given_name
+          - family_name
+        role:
+          - roles
+        email:
+          - email
+        group:
+          - groups
+---
+# File: EFC_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e193-75f7-b42d-bb146f782490
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+name: EFC_TO_NSW_M2M
+description: Machine-to-machine integration for EFC to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: EFC_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:task:write
+        - nsw:consignment:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+---
+# File: NSW_TO_EFC_M2M.yaml
+resource_type: application
+id: 01a13912-e227-72b4-9ae2-56e1bd7fa0c0
+ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
+name: NSW_TO_EFC_M2M
+description: Machine-to-machine integration for NSW to EFC
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NSW_TO_EFC
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:workflow:inject
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        address:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles

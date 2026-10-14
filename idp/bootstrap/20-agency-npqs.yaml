@@ -1,0 +1,353 @@
+# Agency: NPQS. Its OU, API resource server, officer role and group, officer portal,
+# and the two M2M clients with their roles (NPQS_TO_NSW calls TNSW; NSW_TO_NPQS injects
+# into the agency). Needs 10-nsw-platform.yaml.
+#
+# LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
+# image's own documents as one upsert import (see idp/README.md). Client IDs and the
+# localhost URIs are the local-dev values; client secrets come from M2M_CLIENT_SECRET.
+# Placeholders resolve from idp/.env before parsing, comments included, so never
+# write placeholder syntax in a comment.
+
+# File: NPQS.yaml
+resource_type: organization_unit
+id: 01a13912-d27c-78d7-ab13-e260c82ce84f
+handle: npqs
+name: NPQS
+description: National Plant Quarantine Service
+parent: 01a13912-d1aa-7deb-8259-1f32e1f7983b
+isRegistrationFlowEnabled: false
+isRecoveryFlowEnabled: false
+createdAt:
+updatedAt:
+---
+# File: NPQS_API.yaml
+resource_type: resource_server
+id: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+name: NPQS API
+description: NPQS API resource server
+identifier: https://api.npqs.nsw-agency.local
+type: API
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+delimiter: ":"
+resources:
+  - name: NPQS API
+    handle: nsw
+    description: NPQS API resource
+  - name: Consignment
+    handle: consignment
+    description: Consignment resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Task
+    handle: task
+    description: Task resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Profile
+    handle: profile
+    description: Profile resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+  - name: Storage
+    handle: storage
+    description: Storage resource
+    parent: nsw
+    actions:
+      - name: Read
+        handle: read
+        description: Read action
+      - name: Write
+        handle: write
+        description: Write action
+  - name: Workflow
+    handle: workflow
+    description: Workflow resource
+    parent: nsw
+    actions:
+      - name: Inject
+        handle: inject
+        description: Inject action
+---
+# File: NPQS_Officer.yaml
+resource_type: role
+id: 01a13912-d68e-7f64-a51d-59b42c64ef99
+name: NPQS Officer
+description: Role for NPQS officers working tasks in the NPQS deployment
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+    permissions:
+      - nsw:consignment:read
+      - nsw:profile:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:read
+      - nsw:task:write
+assignments:
+  - id: 01a13912-d42a-7975-af84-363b4cf254bd
+    type: group
+---
+# File: NswToNpqsM2M.yaml
+resource_type: role
+id: 01a13912-d6b8-762a-8d49-21b26efa88e4
+name: NswToNpqsM2M
+description: Role for NSW injecting workflows into the NPQS deployment
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
+    permissions:
+      - nsw:workflow:inject
+assignments:
+  - id: 01a13912-e57d-73e9-bd04-42d289925452
+    type: app
+---
+# File: NpqsToNswM2M.yaml
+resource_type: role
+id: 32f53425-e00e-4cd7-857c-871a994f22ec
+name: NpqsToNswM2M
+description: Role for NPQS machine-to-machine clients calling the NSW API
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+permissions:
+  - resourceServerId: 01a13912-c46b-7138-a782-8a597d51062f
+    permissions:
+      - nsw:consignment:read
+      - nsw:storage:read
+      - nsw:storage:write
+      - nsw:task:write
+assignments:
+  - id: 01a13912-e499-78f1-9b2d-44e5c852cc46
+    type: app
+---
+# File: NPQS_Officers.yaml
+resource_type: group
+id: 01a13912-d42a-7975-af84-363b4cf254bd
+name: NPQS Officers
+description: NPQS officers group
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+---
+# File: NPQSPortalApp.yaml
+resource_type: application
+id: 01a13912-e45e-779b-8a34-42ee1e8d1031
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+name: NPQSPortalApp
+description: Application for the NPQS officer portal (trader-app in agency mode)
+type: browser
+template: react
+logoUrl: https://ssl.gstatic.com/docs/common/profile/kiwi_lg.png
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+themeId: 01900000-0000-7000-8000-000000000073
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - Government_User
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: OGA_PORTAL_APP_NPQS
+      redirectUris:
+        - http://localhost:5174
+        - https://localhost:5174
+      postLogoutRedirectUris:
+        - http://localhost:5174
+        - https://localhost:5174
+      grantTypes:
+        - authorization_code
+        - refresh_token
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - email
+              - phone_number
+              - family_name
+              - given_name
+              - groups
+              - roles
+              - ouHandle
+              - ouId
+              - ouName
+              - username
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - email
+            - family_name
+            - given_name
+            - groups
+            - roles
+            - ouHandle
+            - ouId
+            - ouName
+            - username
+          responseType: JWT
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - openid
+        - profile
+        - email
+        - group
+        - role
+        - ou
+        - nsw:consignment:read
+        - nsw:task:read
+        - nsw:task:write
+        - nsw:profile:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - family_name
+          - given_name
+          - email
+      scopeClaims:
+        role:
+          - roles
+        email:
+          - email
+        group:
+          - groups
+        ou:
+          - ouId
+          - ouHandle
+        phone:
+          - phone_number
+        profile:
+          - given_name
+          - family_name
+---
+# File: NPQS_TO_NSW_M2M.yaml
+resource_type: application
+id: 01a13912-e499-78f1-9b2d-44e5c852cc46
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+name: NPQS_TO_NSW_M2M
+description: Machine-to-machine integration for NPQS to NSW
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NPQS_TO_NSW
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:task:write
+        - nsw:consignment:read
+        - nsw:storage:read
+        - nsw:storage:write
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        profile:
+        roles:
+          - roles
+        address:
+        email:
+        phone:
+---
+# File: NSW_TO_NPQS_M2M.yaml
+resource_type: application
+id: 01a13912-e57d-73e9-bd04-42d289925452
+ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
+name: NSW_TO_NPQS_M2M
+description: Machine-to-machine integration for NSW to NPQS
+type: m2m
+authFlowId: 01900000-0000-7000-8000-000000000061
+registrationFlowId: 01900000-0000-7000-8000-000000000064
+isRegistrationFlowEnabled: false
+recoveryFlowId: 01900000-0000-7000-8000-000000000067
+isRecoveryFlowEnabled: false
+signOutFlowId: 01900000-0000-7000-8000-00000000006a
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: NSW_TO_NPQS
+      clientSecret: "{{ .M2M_CLIENT_SECRET }}"
+      grantTypes:
+        - client_credentials
+      tokenEndpointAuthMethod: client_secret_basic
+      pkceRequired: false
+      publicClient: false
+      requirePushedAuthorizationRequests: false
+      dpopBoundAccessTokens: false
+      includeActClaim: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+          clientConfig:
+            validityPeriod: 3600
+        idToken:
+          validityPeriod: 3600
+        refreshToken:
+          validityPeriod: 86400
+      scopes:
+        - nsw:workflow:inject
+      userInfo:
+        responseType: JSON
+      scopeClaims:
+        email:
+        phone:
+        profile:
+        roles:
+          - roles
+        address:

@@ -63,7 +63,7 @@ storage:
 
 # Officers sign in through the CDA portal client, and NSW injects as NSW_TO_CDA.
 # The audience is the CDA API resource server in
-# idp/resources/shared/resource-servers.json. The keys are fetched in-network;
+# idp/bootstrap/20-agency-cda.yaml. The keys are fetched in-network;
 # the issuer is the browser-facing host the tokens are minted for.
 authn:
   jwksURL: https://thunderid:8090/oauth2/jwks

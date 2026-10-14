@@ -62,20 +62,19 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 
 ## IdP
 
-[`idp/resources/government/cda.json`](../../../idp/resources/government/cda.json) seeds
+[`idp/bootstrap/20-agency-cda.yaml`](../../../idp/bootstrap/20-agency-cda.yaml) creates
 CDA for this deployment, on the `CDA API` resource server
 (`https://api.cda.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                              | Client               | Grant                                                                                                              |
-| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                      | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`                                                                          |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`  |
+| Caller                              | Client               | Grant                                                                                                               |
+| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`  |
+| TNSW injecting                      | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`                                                                           |
+| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write` |
 
 TNSW's `services.json` `cda` entry requests `nsw:workflow:inject` with
 `resource=https://api.cda.nsw-agency.local` (see `configs/services*.example.json`).
-An IdP seeded before this change still has the old CDA entities, and a re-seed skips
-anything that exists: `OGA_PORTAL_APP_CDA` keeps its `agency:*` scopes, `NSW_TO_CDA`
-keeps `NswM2M`, and `cda_officer` stays in `OGA Reviewers`. Reset it once, by running
-`idp/sample-resources.down.sh` then the seed, or by recreating the IdP volumes
-(`docker compose down` and removing the `thunderid-*` volumes).
+An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
+IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
+down` and remove the `thunderid-*` volumes; see
+[idp/README.md](../../../idp/README.md#changing-resources)).
