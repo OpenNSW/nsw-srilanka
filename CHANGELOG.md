@@ -89,7 +89,7 @@ Deploy with workflow artifacts that include [one-trade-artifacts#164](https://gi
 
 #### Local Docker Compose
 
-- **Recreate the IdP volumes once** ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681)). An IdP seeded by `sample-resources.sh` holds the same entities under other IDs, so `thunderid-setup` fails and `thunderid` won't start. Run `docker compose down`, remove the `<project>_thunderid-db`, `<project>_thunderid-certs` and `<project>_thunderid-secrets` volumes, then `docker compose up`.
+- **Recreate the IdP volumes once** ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681)). An IdP seeded by `sample-resources.sh` holds the same entities under other IDs, so `thunderid-setup` fails and `thunderid` won't start. Run `docker compose down`, remove the `<project>_thunderid-db`, `<project>_thunderid-certs` and `<project>_thunderid-secrets` volumes, then `docker compose up`. This also moves the stack onto ThunderID 1.0.1 from a fresh database; `thunderid-db-init` seeds only an empty volume, so a kept 1.0.0-beta2 volume would be reused as is ([#684](https://github.com/OpenNSW/nsw-srilanka/pull/684)).
 - **`idp/.env`:** `CORS_ORIGINS_*`, `*_REDIRECT_URIS`, `API_BASE`, `AUTH_TOKEN`, `INSECURE` and the per-user and per-client secret overrides are no longer read. Every M2M client's secret is `M2M_CLIENT_SECRET`, and each backend's `M2M_*_SECRET` must match it ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681)).
 - **NPQS, SLTB and FCAU now run from this repository**, on ports 8081, 8086 and 8082. Stop nsw-agency's services on those ports. In your git-ignored `configs/services.json` and `services.docker.json`, give the `npqs`, `sltb` and `fcau` entries `"scopes": ["nsw:workflow:inject"]` and `"resource": "https://api.<agency>.nsw-agency.local"`, as in the examples, and rename `customs` to `efc` as above. Each agency reads `../one-trade-artifacts/<agency>-v2`; set `NPQS_ARTIFACT_LOCAL_ROOT`, `SLTB_ARTIFACT_LOCAL_ROOT` or `FCAU_ARTIFACT_LOCAL_ROOT` to use another clone ([#659](https://github.com/OpenNSW/nsw-srilanka/pull/659), [#663](https://github.com/OpenNSW/nsw-srilanka/pull/663), [#678](https://github.com/OpenNSW/nsw-srilanka/pull/678)).
 - **Local config files:** copy the `refid` section of `configs/config.example.yaml` into your `configs/config*.yaml`. `make setup` doesn't overwrite an existing `configs/companies.json`, so copy the example's new keys into it, including the 4-digit CDA registration numbers ([#632](https://github.com/OpenNSW/nsw-srilanka/pull/632), [#542](https://github.com/OpenNSW/nsw-srilanka/pull/542)).
@@ -110,6 +110,7 @@ Deploy with workflow artifacts that include [one-trade-artifacts#164](https://gi
 - A consignment's state is `IN_PROGRESS` or `FINISHED`; `INITIALIZED` is gone. A consignment finishes once all its flows have, and starting a new flow reopens it. ([#643](https://github.com/OpenNSW/nsw-srilanka/pull/643))
 - The Customs agency is now the Export Facilitation Center (EFC). ([#676](https://github.com/OpenNSW/nsw-srilanka/pull/676))
 - The local IdP is set up from declarative documents in `idp/bootstrap/` instead of a seed script. ([#681](https://github.com/OpenNSW/nsw-srilanka/pull/681))
+- Local Docker Compose runs ThunderID 1.0.1 instead of 1.0.0-beta2. ([#684](https://github.com/OpenNSW/nsw-srilanka/pull/684))
 
 ### Fixed
 
@@ -131,7 +132,6 @@ Deploy with workflow artifacts that include [one-trade-artifacts#164](https://gi
 - The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
 - `/health` does not check Temporal.
 - The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
-- ThunderID 1.0.0-beta2 is a beta release.
 - The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
