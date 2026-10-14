@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 
@@ -30,7 +31,7 @@ func NewExternalReviewPlugin(manager *remote.Manager, backendBaseURL string) *Ex
 type externalReviewConfig struct {
 	ServiceID string `json:"service_id"`
 	// Path is where a dispatch is POSTed. A reply ignores it: it always calls back
-	// on /api/v1/callbacks/{replyToken}.
+	// on callbacksPath/{replyToken}.
 	Path     string `json:"path,omitempty"`
 	TaskCode string `json:"task_code,omitempty"`
 	// ReplyCommand is the command a reply carries, e.g. "submit" for a trader's
@@ -49,8 +50,11 @@ const replyTokenInput = "replyToken"
 // used by the legacy FCAU/NPQS OGA services.
 //
 // Given a replyToken input, it replies instead: the other side parked a step
-// and handed over that token, so the step calls back on it (see reply) rather
-// than dispatching a new review the other side would take for a retry.
+// and handed over that token, so the step calls back on it (see replyRequest)
+// rather than dispatching a new review the other side would take for a retry.
+//
+// A failed call fails the step and the engine retries it. A 409 on a reply is the
+// exception (see isConflict).
 func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg externalReviewConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
@@ -63,14 +67,46 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	if err != nil {
 		return err
 	}
-	if replyToken != "" {
-		return p.reply(ctx, cfg, replyToken)
+	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
+	if err != nil {
+		return fmt.Errorf("external_review: %w", err)
 	}
-	if cfg.Path == "" {
-		return fmt.Errorf("external_review: path is required")
+
+	var (
+		path string
+		body map[string]any
+	)
+	if replyToken != "" {
+		path, body, err = replyRequest(cfg, ctx.Inputs, replyToken, callbackToken)
+	} else {
+		path, body, err = p.dispatchRequest(ctx, cfg, callbackToken)
+	}
+	if err != nil {
+		return err
 	}
 
 	ctx.Record.State = "QUEUED_EXTERNALLY"
+	slog.Info("taskv2 external_review: calling out",
+		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "reply", replyToken != "")
+
+	err = p.client.post(ctx.Context, cfg.ServiceID, path, body)
+	if replyToken != "" && isConflict(err) {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("external_review: %s rejected the reply: its step is no longer waiting", cfg.ServiceID),
+			"StaleReplyToken", err)
+	}
+	if err != nil {
+		return err
+	}
+	return ErrSuspended
+}
+
+// dispatchRequest is the first round: the review the other side starts, POSTed to
+// the configured path.
+func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalReviewConfig, callbackToken string) (string, map[string]any, error) {
+	if cfg.Path == "" {
+		return "", nil, fmt.Errorf("external_review: path is required")
+	}
 
 	// Convention: if input_mapping placed a value under the reserved key
 	// "submission", that value is the wire shape OGA sees — write any
@@ -82,64 +118,32 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 	if submission, ok := ctx.Inputs["submission"]; ok {
 		data = submission
 	}
-	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
-	if err != nil {
-		return fmt.Errorf("external_review: %w", err)
-	}
-	body := buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL())
-
-	slog.Info("taskv2 external_review: dispatching to OGA portal",
-		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "path", cfg.Path, "taskCode", cfg.TaskCode)
-
-	if err := p.client.post(ctx.Context, cfg.ServiceID, cfg.Path, body); err != nil {
-		return err
-	}
-	return ErrSuspended
+	return cfg.Path, buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL()), nil
 }
 
-// reply completes the other side's parked step and parks this one in its place.
-// It POSTs {command, payload} to /api/v1/callbacks/{replyToken}, the envelope
-// every callback takes, with this step's own token as payload.callbackToken for
-// the other side to answer on. The payload is the step's inputs as mapped, so the
-// receiving step's output_mapping reads them by the names this node gave them.
-//
-// A failed reply fails the step like a failed dispatch does, and the engine
-// retries it. A 409 is the exception: the token's step is no longer waiting, so no
-// retry can succeed, and parking here would wait for an answer that can never
-// come. It fails the step for good instead, which parks it for an admin.
-func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig, replyToken string) error {
+// replyRequest is a callback on the other side's parked step: {command, payload} on
+// replyToken, the envelope every callback takes, with this step's own token as
+// payload.callbackToken for the other side to answer on. The payload is the step's
+// inputs as mapped, so the receiving step's output_mapping reads them by the names
+// this node gave them.
+func replyRequest(cfg externalReviewConfig, inputs map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
 	if cfg.ReplyCommand == "" {
-		return fmt.Errorf("external_review: reply_command is required to reply")
+		return "", nil, fmt.Errorf("external_review: reply_command is required to reply")
 	}
-
-	ctx.Record.State = "QUEUED_EXTERNALLY"
-
-	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
-	if err != nil {
-		return fmt.Errorf("external_review: %w", err)
-	}
-	payload := make(map[string]any, len(ctx.Inputs))
-	for k, v := range ctx.Inputs {
-		if k != replyTokenInput {
-			payload[k] = v
-		}
-	}
+	// inputs is non-nil here: it holds the non-empty replyToken.
+	payload := maps.Clone(inputs)
+	delete(payload, replyTokenInput)
 	payload["callbackToken"] = callbackToken
-	body := map[string]any{"command": cfg.ReplyCommand, "payload": payload}
+	return callbacksPath + "/" + url.PathEscape(replyToken),
+		map[string]any{"command": cfg.ReplyCommand, "payload": payload}, nil
+}
 
-	slog.Info("taskv2 external_review: replying on the other side's step",
-		"taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "command", cfg.ReplyCommand)
-
-	err = p.client.post(ctx.Context, cfg.ServiceID, "/api/v1/callbacks/"+url.PathEscape(replyToken), body)
-	if remoteErr := (*remote.RemoteError)(nil); errors.As(err, &remoteErr) && remoteErr.StatusCode == http.StatusConflict {
-		return temporal.NewNonRetryableApplicationError(
-			fmt.Sprintf("external_review: %s rejected the reply: its step is no longer waiting", cfg.ServiceID),
-			"StaleReplyToken", err)
-	}
-	if err != nil {
-		return err
-	}
-	return ErrSuspended
+// isConflict reports whether err is a 409: the token's step is no longer waiting, so
+// no retry can succeed and parking here would wait for an answer that can never
+// come. The step fails for good, which parks it for an admin.
+func isConflict(err error) bool {
+	var re *remote.RemoteError
+	return errors.As(err, &re) && re.StatusCode == http.StatusConflict
 }
 
 // replyTokenFrom returns the replyToken input, or "" when there is none. An empty
