@@ -76,10 +76,10 @@ seeds SLTB for this deployment, on the `SLTB API` resource server
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                     | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`                                                                           |
+| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps                     |
 | SLTB decision callback and storage | `SLTB_TO_NSW`         | `AgencyM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                            |
 
-TNSW's `services.json` `sltb` entry requests `nsw:workflow:inject` with
+TNSW's `services.json` `sltb` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/services*.example.json`).
 An IdP seeded before this change still has the old SLTB entities, and a re-seed skips
 anything that exists: `OGA_PORTAL_APP_SLTB` keeps its `agency:*` scopes,

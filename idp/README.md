@@ -447,7 +447,7 @@ scopes via a role:
 | NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                             |
 | SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                             |
 | `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the NPQS API |
-| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject` on the SLTB API                   |
+| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the SLTB API |
 | FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                             |
 | `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject` on the FCAU API                   |
 
