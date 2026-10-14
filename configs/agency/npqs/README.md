@@ -6,8 +6,8 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 | File                   | Purpose                                                                                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn                                                                  |
-| `config.docker.yaml`   | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname                                                              |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn, reference formats                                               |
+| `config.docker.yaml`   | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname, with the same reference formats                             |
 | `npqs.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                             |
 | `catalog.json`         | `officer` → the `NPQS Officer` role NPQS officers hold in the IdP                                                                                                              |
 | `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `NPQS_TO_NSW` |
@@ -22,6 +22,16 @@ TNSW as `NPQS_TO_NSW`. TNSW applies its own upload limits.
 
 The officer forms' searchable lists (importing countries, commodity names) are
 served from the `static_data` in `npqs-v2`, the same lists TNSW serves the trader.
+
+NPQS generates application, lab sample, ePhyto, and re-export certificate references in
+`npqs_db`. Application sequences are scoped to office and UTC year; lab sample
+sequences are scoped to UTC year. Visual inspection samples reuse the
+application reference. Replacement certificate references use the
+`PC-SL-` prefix and a random 10-character alphanumeric suffix. The ePhyto
+reference is sent as the NPPO certificate number; the Hub returns its own
+tracking number. TNSW generates
+NPQS payment references in `nsw_db` using a UTC monthly `NPQS-YYYY-MM-#####`
+sequence shared by certificate and treatment fees.
 
 Two things nsw-agency did for NPQS aren't here yet:
 

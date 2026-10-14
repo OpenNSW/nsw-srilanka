@@ -115,6 +115,77 @@ artifactLoader:
   #   ref: feat/npqs-v2-agency
   #   basePath: npqs-v2
 
-# The npqs-v2 artifacts use no REFID_GENERATOR tasks.
 refid:
-  issuers: []
+  issuers:
+    - issuer: NPQS
+      formats:
+        # Application reference: office-specific sequence, reset by UTC year.
+        # Produces: TNSW/NPQS/SEA-CMB/PC/2026/000001
+        - idType: phyto_request_ref
+          segments:
+            - type: literal
+              value: "TNSW/NPQS/"
+            - type: list
+              list: npqs_office_location
+              param: officeLocation
+            - type: literal
+              value: "/PC/"
+            - type: date
+              layout: "2006"
+            - type: literal
+              value: "/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{officeLocation}:{yyyy}"
+                padding: 6
+
+        # Lab sample reference, reset by UTC year. Produces: PQS/2026/0001
+        - idType: lab_sample_ref
+          segments:
+            - type: literal
+              value: "PQS/"
+            - type: date
+              layout: "2006"
+            - type: literal
+              value: "/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
+
+        # ePhyto NPPO certificate number sent to the IPPC Hub. The Hub tracking
+        # number is a separate value returned by the Hub. Produces: PCTSL-4FKU5794MV
+        - idType: ephyto_certificate_ref
+          segments:
+            - type: literal
+              value: "PCTSL-"
+            - type: random
+              random:
+                scopeKey: "{issuer}:{idType}"
+                charset: alphanumeric
+                length: 10
+
+        # Replacement certificate reference. Produces: PC-SL-4FKU5794MV
+        - idType: replacement_certificate_ref
+          segments:
+            - type: literal
+              value: "PC-SL-"
+            - type: random
+              random:
+                scopeKey: "{issuer}:{idType}"
+                charset: alphanumeric
+                length: 10
+  lists:
+    npqs_office_location:
+      - NPQS-KAT
+      - SEA-CMB
+      - AIR-BIA
+      - AIR-JAF
+      - AIR-CIAR
+      - AIR-MRIA
+      - SEA-HAM
+      - SEA-KKS
+      - PO-CME
+      - PO-GAL
+      - PO-KDY
+      - PO-JAF

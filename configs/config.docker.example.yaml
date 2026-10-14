@@ -356,3 +356,25 @@ refid:
                 scopeKey: "{issuer}:{idType}"
                 charset: numeric
                 length: 10
+
+    - issuer: NPQS
+      formats:
+        # NPQS payment reference shared by certificate and treatment fees.
+        # The UTC month and monthly sequence scope are shared across both fees. Produces:
+        # NPQS-2026-09-00001
+        - idType: npqs_payment_ref
+          segments:
+            - type: literal
+              value: "NPQS-"
+            - type: date
+              layout: "2006"
+            - type: literal
+              value: "-"
+            - type: date
+              layout: "01"
+            - type: literal
+              value: "-"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyyMM}"
+                padding: 5
