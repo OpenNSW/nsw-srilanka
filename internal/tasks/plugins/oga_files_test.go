@@ -74,8 +74,8 @@ func TestOGAFiles_TokenizeWholeInputs(t *testing.T) {
 
 // With no client to issue a token to, a file is not sent at all.
 func TestOGAFiles_TokenizeFailsClosedWithoutAClient(t *testing.T) {
-	_, err := tokenFor.tokenize(json.RawMessage(reviewRenderConfig), "submission", reviewInputs(t)["submission"], "customs")
-	assert.ErrorContains(t, err, `"customs"`)
+	_, err := tokenFor.tokenize(json.RawMessage(reviewRenderConfig), "submission", reviewInputs(t)["submission"], "efc")
+	assert.ErrorContains(t, err, `"efc"`)
 }
 
 func TestOGAFiles_TokenizeWithoutFilesToSend(t *testing.T) {
@@ -85,8 +85,8 @@ func TestOGAFiles_TokenizeWithoutFilesToSend(t *testing.T) {
 		"none in what is sent":     `{"files":["review.certificate"]}`,
 		"declared but not present": `{"files":["submission.missing"]}`,
 	} {
-		// "customs" has no client: nothing to issue means no client needed.
-		sent, err := tokenFor.tokenize(json.RawMessage(renderConfig), "submission", in["submission"], "customs")
+		// "efc" has no client: nothing to issue means no client needed.
+		sent, err := tokenFor.tokenize(json.RawMessage(renderConfig), "submission", in["submission"], "efc")
 		require.NoError(t, err, name)
 		assert.Equal(t, in["submission"], sent, name)
 	}
