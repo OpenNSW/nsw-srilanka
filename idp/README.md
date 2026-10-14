@@ -294,23 +294,23 @@ are the same backend; that is safe because every caller names its target with `r
 not from the app's requestable `scopes` list. So every caller is granted the relevant
 scopes via a role:
 
-| Caller                 | Grant                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- |
-| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                  |
-| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite` |
-| `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes              |
-| OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                 |
-| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`             |
-| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                        |
-| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject` on the CDA API             |
-| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                        |
-| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `nsw:workflow:inject` on the EFC API             |
-| NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                     |
-| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                     |
-| `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject` on the NPQS API           |
-| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject` on the SLTB API           |
-| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                     |
-| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject` on the FCAU API           |
+| Caller                 | Grant                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                          |
+| NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite`         |
+| `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                      |
+| OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                         |
+| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`                     |
+| CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                |
+| `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the CDA API   |
+| EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                |
+| `NSW_TO_EFC`           | **`NswToEfcM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the EFC API   |
+| NPQS portal users      | `NPQS Officer` role (via `NPQS Officers` group) → NPQS API scopes                                             |
+| SLTB portal users      | `SLTB Officer` role (via `SLTB Officers` group) → SLTB API scopes                                             |
+| `NSW_TO_NPQS`          | **`NswToNpqsM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the NPQS API |
+| `NSW_TO_SLTB`          | **`NswToSltbM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the SLTB API |
+| FCAU portal users      | `FCAU Officer` role (via `FCAU Officers` group) → FCAU API scopes                                             |
+| `NSW_TO_FCAU`          | **`NswToFcauM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the FCAU API |
 
 **How a token gets its audience — changed substantially in 1.0.0.** Pre-1.0.0 the
 server inferred the audience by reverse-mapping the granted permission scopes back to

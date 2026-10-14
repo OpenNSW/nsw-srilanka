@@ -1,6 +1,6 @@
 # Agency: NPQS. Its OU, API resource server, officer role and group, officer portal,
 # and the two M2M clients with their roles (NPQS_TO_NSW calls TNSW; NSW_TO_NPQS injects
-# into the agency). Needs 10-nsw-platform.yaml.
+# into the agency and replies on its parked steps). Needs 10-nsw-platform.yaml.
 #
 # LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
 # image's own documents as one upsert import (see idp/README.md). Client IDs and the
@@ -103,11 +103,12 @@ assignments:
 resource_type: role
 id: 01a13912-d6b8-762a-8d49-21b26efa88e4
 name: NswToNpqsM2M
-description: Role for NSW injecting workflows into the NPQS deployment
+description: Role for NSW injecting workflows into the NPQS deployment and replying on its parked steps
 ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
 permissions:
   - resourceServerId: 01a13912-cd09-7fe5-9b6f-e16c5523ca41
     permissions:
+      - nsw:task:write
       - nsw:workflow:inject
 assignments:
   - id: 01a13912-e57d-73e9-bd04-42d289925452
@@ -342,6 +343,7 @@ inboundAuthConfig:
           validityPeriod: 86400
       scopes:
         - nsw:workflow:inject
+        - nsw:task:write
       userInfo:
         responseType: JSON
       scopeClaims:

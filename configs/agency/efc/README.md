@@ -70,10 +70,10 @@ creates EFC for this deployment, on the `EFC API` resource server
 | Caller                            | Client               | Grant                                                                                                              |
 | --------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                    | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`                                                                          |
+| TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on EFC's parked steps                     |
 | EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                        |
 
-TNSW's `services.json` `efc` entry requests `nsw:workflow:inject` with
+TNSW's `services.json` `efc` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.efc.nsw-agency.local` (see `configs/services*.example.json`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose

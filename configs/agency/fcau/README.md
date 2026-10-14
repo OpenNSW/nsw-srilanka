@@ -80,10 +80,10 @@ creates FCAU for this deployment, on the `FCAU API` resource server
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                     | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`                                                                           |
+| TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on FCAU's parked steps                     |
 | FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
 
-TNSW's `services.json` `fcau` entry requests `nsw:workflow:inject` with
+TNSW's `services.json` `fcau` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.fcau.nsw-agency.local` (see `configs/services*.example.json`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose

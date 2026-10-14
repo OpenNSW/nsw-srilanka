@@ -1,6 +1,6 @@
 # Agency: SLTB. Its OU, API resource server, officer role and group, officer portal,
 # and the two M2M clients with their roles (SLTB_TO_NSW calls TNSW; NSW_TO_SLTB injects
-# into the agency). Needs 10-nsw-platform.yaml.
+# into the agency and replies on its parked steps). Needs 10-nsw-platform.yaml.
 #
 # LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
 # image's own documents as one upsert import (see idp/README.md). Client IDs and the
@@ -103,11 +103,12 @@ assignments:
 resource_type: role
 id: 01a13912-d711-7739-b67e-458f15c9f057
 name: NswToSltbM2M
-description: Role for NSW injecting workflows into the SLTB deployment
+description: Role for NSW injecting workflows into the SLTB deployment and replying on its parked steps
 ouId: 01a13912-d2a3-791d-ba4e-c3b57b69a408
 permissions:
   - resourceServerId: 01a13912-ceab-7150-a63e-8413aa996b77
     permissions:
+      - nsw:task:write
       - nsw:workflow:inject
 assignments:
   - id: 01a13912-e70a-7b09-af9f-2615a6869569
@@ -342,6 +343,7 @@ inboundAuthConfig:
           validityPeriod: 86400
       scopes:
         - nsw:workflow:inject
+        - nsw:task:write
       userInfo:
         responseType: JSON
       scopeClaims:

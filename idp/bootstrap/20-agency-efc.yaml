@@ -1,6 +1,6 @@
 # Agency: EFC. Its OU, API resource server, officer role and group, officer portal,
 # and the two M2M clients with their roles (EFC_TO_NSW calls TNSW; NSW_TO_EFC injects
-# into the agency). Needs 10-nsw-platform.yaml.
+# into the agency and replies on its parked steps). Needs 10-nsw-platform.yaml.
 #
 # LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
 # image's own documents as one upsert import (see idp/README.md). Client IDs and the
@@ -103,11 +103,12 @@ assignments:
 resource_type: role
 id: 01a13912-d5ad-7e23-9322-5d959dd43945
 name: NswToEfcM2M
-description: Role for NSW injecting workflows into the EFC deployment
+description: Role for NSW injecting workflows into the EFC deployment and replying on its parked steps
 ouId: 01a13912-d22e-7f09-a8cd-486cf6438e0f
 permissions:
   - resourceServerId: 01a13912-cb36-74ad-aab0-b49b1c19fbf9
     permissions:
+      - nsw:task:write
       - nsw:workflow:inject
 assignments:
   - id: 01a13912-e227-72b4-9ae2-56e1bd7fa0c0
@@ -342,6 +343,7 @@ inboundAuthConfig:
           validityPeriod: 86400
       scopes:
         - nsw:workflow:inject
+        - nsw:task:write
       userInfo:
         responseType: JSON
       scopeClaims:

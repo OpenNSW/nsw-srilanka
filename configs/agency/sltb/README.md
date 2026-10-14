@@ -76,10 +76,10 @@ creates SLTB for this deployment, on the `SLTB API` resource server
 | Caller                             | Client                | Grant                                                                                                                |
 | ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting                     | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`                                                                           |
+| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps                     |
 | SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
 
-TNSW's `services.json` `sltb` entry requests `nsw:workflow:inject` with
+TNSW's `services.json` `sltb` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/services*.example.json`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose

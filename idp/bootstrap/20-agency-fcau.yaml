@@ -1,6 +1,6 @@
 # Agency: FCAU. Its OU, API resource server, officer role and group, officer portal,
 # and the two M2M clients with their roles (FCAU_TO_NSW calls TNSW; NSW_TO_FCAU injects
-# into the agency). Needs 10-nsw-platform.yaml.
+# into the agency and replies on its parked steps). Needs 10-nsw-platform.yaml.
 #
 # LOCAL-DEV bootstrap, mounted by compose.yml's thunderid-setup and applied with the
 # image's own documents as one upsert import (see idp/README.md). Client IDs and the
@@ -103,11 +103,12 @@ assignments:
 resource_type: role
 id: 01a13912-d606-72fe-829d-b254f6160955
 name: NswToFcauM2M
-description: Role for NSW injecting workflows into the FCAU deployment
+description: Role for NSW injecting workflows into the FCAU deployment and replying on its parked steps
 ouId: 01a13912-d251-7172-bd54-14a0e3c2f594
 permissions:
   - resourceServerId: 01a13912-d026-758a-a663-b319c8de3a44
     permissions:
+      - nsw:task:write
       - nsw:workflow:inject
 assignments:
   - id: 01a13912-e3d4-7c05-9503-a25ffb74f8b6
@@ -342,6 +343,7 @@ inboundAuthConfig:
           validityPeriod: 86400
       scopes:
         - nsw:workflow:inject
+        - nsw:task:write
       userInfo:
         responseType: JSON
       scopeClaims:
