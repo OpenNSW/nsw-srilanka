@@ -52,7 +52,7 @@
     "cdaInject": [
       "nsw:workflow:inject"
     ],
-    "customsOfficer": [
+    "efcOfficer": [
       "nsw:consignment:read",
       "nsw:task:read",
       "nsw:task:write",
@@ -60,7 +60,40 @@
       "nsw:storage:read",
       "nsw:storage:write"
     ],
-    "customsInject": [
+    "efcInject": [
+      "nsw:workflow:inject"
+    ],
+    "npqsOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "npqsInject": [
+      "nsw:workflow:inject"
+    ],
+    "sltbOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "sltbInject": [
+      "nsw:workflow:inject"
+    ],
+    "fcauOfficer": [
+      "nsw:consignment:read",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:profile:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ],
+    "fcauInject": [
       "nsw:workflow:inject"
     ]
   }

@@ -1,0 +1,76 @@
+{
+  "organizationUnits": [
+    {
+      "key": "government-organization/fcau",
+      "handle": "fcau",
+      "name": "FCAU",
+      "description": "Food Control Administration Unit",
+      "parent": "government-organization",
+      "treePath": "government-organization/fcau"
+    }
+  ],
+  "groups": [
+    { "key": "FCAU Officers", "name": "FCAU Officers", "description": "FCAU officers group", "ou": "government-organization/fcau" }
+  ],
+  "roles": [
+    { "key": "FCAU Officer", "name": "FCAU Officer", "description": "Role for FCAU officers working tasks in the FCAU deployment",
+      "ou": "government-organization/fcau", "resourceServer": "https://api.fcau.nsw-agency.local", "scopeSet": "fcauOfficer" },
+    { "key": "NswToFcauM2M", "name": "NswToFcauM2M", "description": "Role for NSW injecting workflows into the FCAU deployment",
+      "ou": "government-organization/fcau", "resourceServer": "https://api.fcau.nsw-agency.local", "scopeSet": "fcauInject" }
+  ],
+  "roleAssignments": [
+    { "role": "FCAU Officer", "group": "FCAU Officers" }
+  ],
+  "users": [
+    {
+      "key": "fcau_officer",
+      "type": "Government_User",
+      "ou": "government-organization/fcau",
+      "username": "fcau_officer",
+      "email": "fcau_officer@government.dev",
+      "givenName": "FCAU",
+      "familyName": "Officer",
+      "phoneNumber": "+94771234561",
+      "passwordEnv": { "override": "SAMPLE_FCAU_OFFICER_PASSWORD", "default": "SAMPLE_USER_PASSWORD" },
+      "groups": ["FCAU Officers"]
+    }
+  ],
+  "applications": [
+    {
+      "key": "OGA_PORTAL_APP_FCAU",
+      "kind": "spa",
+      "name": "FCAUPortalApp",
+      "description": "Application for the FCAU officer portal (trader-app in agency mode)",
+      "clientId": "OGA_PORTAL_APP_FCAU",
+      "port": 5175,
+      "allowedUserType": "Government_User",
+      "ou": "government-organization/fcau",
+      "scopeSet": "fcauOfficer",
+      "redirectUrisEnv": "FCAU_REDIRECT_URIS"
+    },
+    {
+      "key": "FCAU_TO_NSW",
+      "kind": "m2m",
+      "name": "FCAU_TO_NSW_M2M",
+      "description": "Machine-to-machine integration for FCAU to NSW",
+      "clientId": "FCAU_TO_NSW",
+      "secretEnv": { "override": "M2M_FCAU_TO_NSW_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "default",
+      "scopeSet": "m2mNsw"
+    },
+    {
+      "key": "NSW_TO_FCAU",
+      "kind": "m2m",
+      "name": "NSW_TO_FCAU_M2M",
+      "description": "Machine-to-machine integration for NSW to FCAU",
+      "clientId": "NSW_TO_FCAU",
+      "secretEnv": { "override": "M2M_NSW_TO_FCAU_SECRET", "default": "M2M_CLIENT_SECRET" },
+      "ou": "government-organization",
+      "scopeSet": "fcauInject"
+    }
+  ],
+  "appRoleAssignments": [
+    { "role": "AgencyM2M", "app": "FCAU_TO_NSW" },
+    { "role": "NswToFcauM2M", "app": "NSW_TO_FCAU" }
+  ]
+}

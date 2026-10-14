@@ -84,14 +84,14 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 }
 
 // authorizeUser allows the call iff the caller may act as some allowed name —
-// they hold its token role and their company owns the task's root workflow in
+// they hold its token role and their company owns the task's case in
 // that role. Because a write is one yes/no decision, any single match suffices;
 // the read path, which selects content rather than deciding, instead resolves a
 // single acting role.
 func (e *Extension) authorizeUser(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, allowed []string) error {
 	// Eligible resolves ownership only if the caller holds one of the allowed
 	// roles, so the common denial below costs no database lookup.
-	eligible, err := e.catalog.Eligible(ctx, in, record.RootWorkflowID, allowed)
+	eligible, err := e.catalog.Eligible(ctx, in, record.CaseID, allowed)
 	if err != nil {
 		return fmt.Errorf("task authz: %w", err)
 	}

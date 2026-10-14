@@ -43,10 +43,34 @@ x-cda-config-env: &cda-config-env
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
-# The same for Customs' customs-init and customs-api, on
-# configs/agency/customs/config.docker.yaml.
-x-customs-config-env: &customs-config-env
-  CONFIG_PATH: configs/agency/customs/config.docker.yaml
+# The same for EFC's efc-init and efc-api, on
+# configs/agency/efc/config.docker.yaml.
+x-efc-config-env: &efc-config-env
+  CONFIG_PATH: configs/agency/efc/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+
+# The same for NPQS' npqs-init and npqs-api, on
+# configs/agency/npqs/config.docker.yaml.
+x-npqs-config-env: &npqs-config-env
+  CONFIG_PATH: configs/agency/npqs/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+
+# The same for SLTB's sltb-init and sltb-api, on
+# configs/agency/sltb/config.docker.yaml.
+x-sltb-config-env: &sltb-config-env
+  CONFIG_PATH: configs/agency/sltb/config.docker.yaml
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
+  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
+
+# The same for FCAU's fcau-init and fcau-api, on
+# configs/agency/fcau/config.docker.yaml.
+x-fcau-config-env: &fcau-config-env
+  CONFIG_PATH: configs/agency/fcau/config.docker.yaml
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -322,7 +346,7 @@ services:
       M2M_NSW_TO_FCAU_SECRET: ${M2M_NSW_TO_FCAU_SECRET:-1234}
       M2M_NSW_TO_CDA_SECRET: ${M2M_NSW_TO_CDA_SECRET:-1234}
       M2M_NSW_TO_SLPA_SECRET: ${M2M_NSW_TO_SLPA_SECRET:-1234}
-      M2M_NSW_TO_CUSTOMS_SECRET: ${M2M_NSW_TO_CUSTOMS_SECRET:-1234}
+      M2M_NSW_TO_EFC_SECRET: ${M2M_NSW_TO_EFC_SECRET:-1234}
       M2M_NSW_TO_SLTB_SECRET: ${M2M_NSW_TO_SLTB_SECRET:-1234}
       M2M_NSW_TO_ASYCUDA_SECRET: ${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
     depends_on:
@@ -510,17 +534,17 @@ services:
       - ./configs/agency/cda/branding.json:/usr/share/nginx/html/configs/branding.json:ro
 
   # -------------------------------------------------------------------
-  # 9. Customs Agency
+  # 9. EFC Agency
   # -------------------------------------------------------------------
-  # The same backend and trader-app run as Sri Lanka Customs (mode: agency, see
-  # docs/agency.md), next to TNSW, exactly as CDA does above: shared Postgres, Temporal
+  # The same backend and trader-app run as the Export Facilitation Center, EFC
+  # (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA does above: shared Postgres, Temporal
   # and IdP, but its own database and Temporal namespace. Config lives in
-  # configs/agency/customs/ (config.docker.yaml for these services). TNSW reaches it at
-  # host.docker.internal:8085, as its services.docker.json "customs" entry already expects.
+  # configs/agency/efc/ (config.docker.yaml for these services). TNSW reaches it at
+  # host.docker.internal:8085, as its services.docker.json "efc" entry already expects.
 
-  # One-shot: creates customs_db on the shared Postgres and the customs Temporal
-  # namespace if missing, then migrates customs_db. Same image as cda-init.
-  customs-init:
+  # One-shot: creates efc_db on the shared Postgres and the efc Temporal
+  # namespace if missing, then migrates efc_db. Same image as cda-init.
+  efc-init:
     build:
       context: .
       additional_contexts:
@@ -531,13 +555,13 @@ services:
         COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
         COPY --from=migrate /app/migrations /app/migrations
         WORKDIR /app
-    container_name: customs-init
+    container_name: efc-init
     networks:
       - nsw-network
     volumes:
       - ./configs:/app/configs:ro
     environment:
-      <<: *customs-config-env
+      <<: *efc-config-env
       PGHOST: db
       PGUSER: ${DB_USERNAME:-postgres}
       PGPASSWORD: ${DB_PASSWORD:-changeme}
@@ -545,10 +569,10 @@ services:
     command:
       - |
         set -e
-        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'customs_db'" | grep -q 1 \
-          || psql -d postgres -c 'CREATE DATABASE customs_db'
-        temporal operator namespace describe --namespace customs --address temporal:7233 >/dev/null 2>&1 \
-          || temporal operator namespace create --namespace customs --address temporal:7233
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'efc_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE efc_db'
+        temporal operator namespace describe --namespace efc --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace efc --address temporal:7233
         migrate up
     depends_on:
       db:
@@ -557,46 +581,325 @@ services:
         condition: service_healthy
     restart: "no"
 
-  customs-api:
+  efc-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: customs-api
+    container_name: efc-api
     networks:
       - nsw-network
     ports:
-      # Fixed: the Customs portal's config and TNSW's "customs" service entry both call 8085.
+      # Fixed: the EFC portal's config and TNSW's "efc" service entry both call 8085.
       - "8085:8080"
     volumes:
       - ./configs:/app/configs:ro
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
-      # clone's customs-v2/ dir.
-      - ${CUSTOMS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/customs-v2}:/app/artifacts:ro
+      # clone's efc-v2/ dir.
+      - ${EFC_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/efc-v2}:/app/artifacts:ro
     environment:
-      # Every server setting lives in configs/agency/customs/config.docker.yaml (see
-      # x-customs-config-env); what follows is only what the file cannot hold.
-      <<: *customs-config-env
+      # Every server setting lives in configs/agency/efc/config.docker.yaml (see
+      # x-efc-config-env); what follows is only what the file cannot hold.
+      <<: *efc-config-env
       # Same gate as the api service: insecure TLS is honored only in development.
       APP_ENV: ${APP_ENV:-}
-      # Customs -> NSW m2m client secret, referenced as env:... in services.docker.json.
-      M2M_CUSTOMS_TO_NSW_SECRET: ${M2M_CUSTOMS_TO_NSW_SECRET:-1234}
+      # EFC -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_EFC_TO_NSW_SECRET: ${M2M_EFC_TO_NSW_SECRET:-1234}
     depends_on:
-      customs-init:
+      efc-init:
         condition: service_completed_successfully
       thunderid:
         condition: service_started
 
-  customs-portal:
+  efc-portal:
     build:
       context: ./portals
       dockerfile: apps/trader-app/Dockerfile
-    container_name: customs-web
+    container_name: efc-web
     networks:
       - nsw-network
     ports:
       # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
-      # OGA_PORTAL_APP_CUSTOMS are both on 5178.
+      # OGA_PORTAL_APP_EFC are both on 5178.
       - "5178:8080"
     volumes:
-      - ./configs/agency/customs/portal-config.js:/usr/share/nginx/html/config.js:ro
-      - ./configs/agency/customs/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+      - ./configs/agency/efc/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/efc/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+
+  # -------------------------------------------------------------------
+  # 10. NPQS Agency
+  # -------------------------------------------------------------------
+  # The same backend and trader-app run as NPQS, the National Plant Quarantine Service
+  # (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA and EFC do
+  # above: shared Postgres, Temporal and IdP, but its own database and Temporal
+  # namespace. Config lives in configs/agency/npqs/ (config.docker.yaml for these
+  # services). TNSW reaches it at host.docker.internal:8081, as its
+  # services.docker.json "npqs" entry already expects.
+
+  # One-shot: creates npqs_db on the shared Postgres and the npqs Temporal
+  # namespace if missing, then migrates npqs_db. Same image as cda-init.
+  npqs-init:
+    build:
+      context: .
+      additional_contexts:
+        migrate: service:migrate
+      dockerfile_inline: |
+        FROM postgres:16-alpine
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+        COPY --from=migrate /app/migrations /app/migrations
+        WORKDIR /app
+    container_name: npqs-init
+    networks:
+      - nsw-network
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      <<: *npqs-config-env
+      PGHOST: db
+      PGUSER: ${DB_USERNAME:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'npqs_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE npqs_db'
+        temporal operator namespace describe --namespace npqs --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace npqs --address temporal:7233
+        migrate up
+    depends_on:
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: "no"
+
+  npqs-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: npqs-api
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: the NPQS portal's config and TNSW's "npqs" service entry both call 8081.
+      - "8081:8080"
+    volumes:
+      - ./configs:/app/configs:ro
+      # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
+      # clone's npqs-v2/ dir.
+      - ${NPQS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/npqs-v2}:/app/artifacts:ro
+    environment:
+      # Every server setting lives in configs/agency/npqs/config.docker.yaml (see
+      # x-npqs-config-env); what follows is only what the file cannot hold.
+      <<: *npqs-config-env
+      # Same gate as the api service: insecure TLS is honored only in development.
+      APP_ENV: ${APP_ENV:-}
+      # NPQS -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_NPQS_TO_NSW_SECRET: ${M2M_NPQS_TO_NSW_SECRET:-1234}
+    depends_on:
+      npqs-init:
+        condition: service_completed_successfully
+      thunderid:
+        condition: service_started
+
+  npqs-portal:
+    build:
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: npqs-web
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
+      # OGA_PORTAL_APP_NPQS are both on 5174.
+      - "5174:8080"
+    volumes:
+      - ./configs/agency/npqs/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/npqs/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+
+  # -------------------------------------------------------------------
+  # 11. SLTB Agency
+  # -------------------------------------------------------------------
+  # The same backend and trader-app run as SLTB, the Sri Lanka Tea Board
+  # (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA, EFC and
+  # NPQS do above: shared Postgres, Temporal and IdP, but its own database and
+  # Temporal namespace. Config lives in configs/agency/sltb/ (config.docker.yaml
+  # for these services). TNSW reaches it at host.docker.internal:8086, as its
+  # services.docker.json "sltb" entry already expects.
+
+  # One-shot: creates sltb_db on the shared Postgres and the sltb Temporal
+  # namespace if missing, then migrates sltb_db. Same image as cda-init.
+  sltb-init:
+    build:
+      context: .
+      additional_contexts:
+        migrate: service:migrate
+      dockerfile_inline: |
+        FROM postgres:16-alpine
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+        COPY --from=migrate /app/migrations /app/migrations
+        WORKDIR /app
+    container_name: sltb-init
+    networks:
+      - nsw-network
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      <<: *sltb-config-env
+      PGHOST: db
+      PGUSER: ${DB_USERNAME:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'sltb_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE sltb_db'
+        temporal operator namespace describe --namespace sltb --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace sltb --address temporal:7233
+        migrate up
+    depends_on:
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: "no"
+
+  sltb-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sltb-api
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: the SLTB portal's config and TNSW's "sltb" service entry both call 8086.
+      - "8086:8080"
+    volumes:
+      - ./configs:/app/configs:ro
+      # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
+      # clone's sltb-v2/ dir.
+      - ${SLTB_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/sltb-v2}:/app/artifacts:ro
+    environment:
+      # Every server setting lives in configs/agency/sltb/config.docker.yaml (see
+      # x-sltb-config-env); what follows is only what the file cannot hold.
+      <<: *sltb-config-env
+      # Same gate as the api service: insecure TLS is honored only in development.
+      APP_ENV: ${APP_ENV:-}
+      # SLTB -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_SLTB_TO_NSW_SECRET: ${M2M_SLTB_TO_NSW_SECRET:-1234}
+    depends_on:
+      sltb-init:
+        condition: service_completed_successfully
+      thunderid:
+        condition: service_started
+
+  sltb-portal:
+    build:
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: sltb-web
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
+      # OGA_PORTAL_APP_SLTB are both on 5179.
+      - "5179:8080"
+    volumes:
+      - ./configs/agency/sltb/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/sltb/branding.json:/usr/share/nginx/html/configs/branding.json:ro
+
+  # -------------------------------------------------------------------
+  # 12. FCAU Agency
+  # -------------------------------------------------------------------
+  # The same backend and trader-app run as FCAU, the Food Control Administration
+  # Unit (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA, EFC,
+  # NPQS and SLTB do above: shared Postgres, Temporal and IdP, but its own database
+  # and Temporal namespace. Config lives in configs/agency/fcau/ (config.docker.yaml
+  # for these services). TNSW reaches it at host.docker.internal:8082, as its
+  # services.docker.json "fcau" entry already expects.
+
+  # One-shot: creates fcau_db on the shared Postgres and the fcau Temporal
+  # namespace if missing, then migrates fcau_db. Same image as cda-init.
+  fcau-init:
+    build:
+      context: .
+      additional_contexts:
+        migrate: service:migrate
+      dockerfile_inline: |
+        FROM postgres:16-alpine
+        COPY --from=temporalio/auto-setup:1.28.3 /usr/local/bin/temporal /usr/local/bin/temporal
+        COPY --from=migrate /usr/local/bin/migrate /usr/local/bin/migrate
+        COPY --from=migrate /app/migrations /app/migrations
+        WORKDIR /app
+    container_name: fcau-init
+    networks:
+      - nsw-network
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      <<: *fcau-config-env
+      PGHOST: db
+      PGUSER: ${DB_USERNAME:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:-changeme}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'fcau_db'" | grep -q 1 \
+          || psql -d postgres -c 'CREATE DATABASE fcau_db'
+        temporal operator namespace describe --namespace fcau --address temporal:7233 >/dev/null 2>&1 \
+          || temporal operator namespace create --namespace fcau --address temporal:7233
+        migrate up
+    depends_on:
+      db:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    restart: "no"
+
+  fcau-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fcau-api
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: the FCAU portal's config and TNSW's "fcau" service entry both call 8082.
+      - "8082:8080"
+    volumes:
+      - ./configs:/app/configs:ro
+      # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
+      # clone's fcau-v2/ dir.
+      - ${FCAU_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/fcau-v2}:/app/artifacts:ro
+    environment:
+      # Every server setting lives in configs/agency/fcau/config.docker.yaml (see
+      # x-fcau-config-env); what follows is only what the file cannot hold.
+      <<: *fcau-config-env
+      # Same gate as the api service: insecure TLS is honored only in development.
+      APP_ENV: ${APP_ENV:-}
+      # FCAU -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      M2M_FCAU_TO_NSW_SECRET: ${M2M_FCAU_TO_NSW_SECRET:-1234}
+    depends_on:
+      fcau-init:
+        condition: service_completed_successfully
+      thunderid:
+        condition: service_started
+
+  fcau-portal:
+    build:
+      context: ./portals
+      dockerfile: apps/trader-app/Dockerfile
+    container_name: fcau-web
+    networks:
+      - nsw-network
+    ports:
+      # Fixed: portal-config.js's APP_URL and the IdP's redirect URI for
+      # OGA_PORTAL_APP_FCAU are both on 5175.
+      - "5175:8080"
+    volumes:
+      - ./configs/agency/fcau/portal-config.js:/usr/share/nginx/html/config.js:ro
+      - ./configs/agency/fcau/branding.json:/usr/share/nginx/html/configs/branding.json:ro

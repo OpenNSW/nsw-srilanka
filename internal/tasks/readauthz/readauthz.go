@@ -68,8 +68,8 @@ type ReadPolicy struct {
 	Roles []string `json:"roles"`
 }
 
-// Resolve decides whether the caller may read the task rooted at rootWorkflowID,
-// which is the id of the consignment the task belongs to, and if so returns the
+// Resolve decides whether the caller may read a task of case caseID, which is the
+// id of the consignment the task belongs to, and if so returns the
 // claims that shape their view of it. It returns ErrDenied when they may not; any
 // other error is a real failure, not a denial, and must not be answered as one.
 //
@@ -82,7 +82,7 @@ type ReadPolicy struct {
 // answer, and it cannot arise in the wiring anyway: the read route is served
 // through the authz gate, whose construction already requires the catalog to
 // define both owner roles.
-func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, renderConfig json.RawMessage, rootWorkflowID string) (map[string]bool, error) {
+func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, renderConfig json.RawMessage, caseID string) (map[string]bool, error) {
 	allowed, declared, err := allowedRoles(ctx, cat, renderConfig)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func Resolve(ctx context.Context, cat taskauthz.Catalog, in taskauthz.Input, ren
 	// Only the admitted roles can ever yield a true claim, so eligibility is
 	// resolved for those alone: a caller holding none of them is denied without a
 	// database lookup.
-	eligible, err := cat.Eligible(ctx, in, rootWorkflowID, allowed)
+	eligible, err := cat.Eligible(ctx, in, caseID, allowed)
 	if err != nil {
 		return nil, err
 	}

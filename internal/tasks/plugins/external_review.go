@@ -89,7 +89,7 @@ func buildSubmissionBody(record *store.TaskRecord, data any, taskCode *string, c
 		"taskCode":      taskCode,
 		"taskId":        record.TaskID,
 		"callbackToken": callbackToken,
-		"consignmentId": record.RootWorkflowID,
+		"consignmentId": record.CaseID,
 		"serviceUrl":    callbackURL,
 		"data":          data,
 	}

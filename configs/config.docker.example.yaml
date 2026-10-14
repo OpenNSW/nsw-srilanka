@@ -141,7 +141,7 @@ authn:
     - NPQS_TO_NSW
     - CDA_TO_NSW
     - SLPA_TO_NSW
-    - CUSTOMS_TO_NSW
+    - EFC_TO_NSW
     - SLTB_TO_NSW
     - SLCE_TO_NSW
     - GOVPAY_TO_NSW
@@ -174,7 +174,7 @@ audit:
 
 # Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section) leaves
 # metrics off. serviceName is required when endpoint is set so TNSW, CDA and
-# Customs can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
 # metrics:
 #   endpoint: http://otel-collector:4318/v1/metrics
 #   serviceName: tnsw-api

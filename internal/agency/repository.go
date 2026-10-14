@@ -32,8 +32,9 @@ const (
 )
 
 // Workflow is one row per injected taskId. TaskID doubles as the workflow instance ID
-// passed to the engine, so it is also the RootWorkflowID of every task spawned under it.
-// CaseID groups it with the other workflows working on the same case.
+// passed to the engine, which starts it as its own case, so it is also the engine's case ID
+// (store.TaskRecord.CaseID) of every task spawned under it. CaseID groups it with the other
+// workflows working on the same case in cases.
 type Workflow struct {
 	TaskID   string `gorm:"column:task_id" json:"taskId"`
 	TaskCode string `gorm:"column:task_code" json:"taskCode"`
