@@ -11,7 +11,7 @@ window.__APP_CONFIG__ = {
     'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read',
   IDP_ROLE_CLAIM_NAME: 'roles',
   // Officers sign in as the app's "Trader" role; agency mode hides the role switcher
-  // and the backend checks the real officer role (see docs/agency.md).
+  // and the backend checks the real catalog roles (see docs/agency.md).
   IDP_TRADER_ROLE_NAME: 'FCAU Officer',
   IDP_CHA_ROLE_NAME: 'CHA',
   IDP_NSW_ADMIN_ROLE_NAME: 'NSW Admin',
