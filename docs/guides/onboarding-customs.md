@@ -101,11 +101,11 @@ helm upgrade lk-tnsw ./deployments/helm/lk-tnsw -n tnsw -f <your-values>.yaml
 Give Customs, through a secure channel for the secret:
 
 - The webhook URL: `https://<TNSW API host>/webhooks/slce`.
-- ThunderID's token URL, `https://<IdP host>/oauth2/token`, and the client ID and secret
-  from Step 1.
-- How to request the token: `grant_type=client_credentials`,
-  `scope=nsw:slce-webhooks:write`, and `resource=https://api.nsw-srilanka.local`, the NSW
-  API identifier. Without `resource`, the request fails with `invalid_target`.
+- The token URL, with the NSW API identifier as its `resource`:
+  `https://<IdP host>/oauth2/token?resource=https://api.nsw-srilanka.local`. Without
+  `resource`, the token request fails with `invalid_target`.
+- The client ID and secret from Step 1, and how to request the token:
+  `grant_type=client_credentials` and `scope=nsw:slce-webhooks:write`.
 - The webhook contract, [`api/webhooks.slce.openapi.yaml`](../../api/webhooks.slce.openapi.yaml).
 
 ## Step 4: Verify
@@ -114,16 +114,18 @@ Give Customs, through a secure channel for the secret:
 
    ```sh
    read -rs -p 'Customs client secret: ' SECRET; echo
-   curl -s -u "<Customs' client ID>:$SECRET" \
+   curl -s -K <(printf 'user = "%s:%s"\n' "<Customs' client ID>" "$SECRET") \
      --data-urlencode grant_type=client_credentials \
      --data-urlencode scope=nsw:slce-webhooks:write \
-     --data-urlencode resource=https://api.nsw-srilanka.local \
-     https://idp.example.com/oauth2/token \
+     'https://idp.example.com/oauth2/token?resource=https://api.nsw-srilanka.local' \
      | jq -r .access_token \
      | jq -R 'split(".")[1] | gsub("-";"+") | gsub("_";"/")
               | . + ("=" * ((4 - length % 4) % 4)) | @base64d | fromjson'
    unset SECRET
    ```
+
+   The credentials reach `curl` as a config on a file descriptor, so the secret never
+   appears in its process arguments.
 
    Check `aud` is `https://api.nsw-srilanka.local` and `scope` is
    `nsw:slce-webhooks:write`.
@@ -132,8 +134,7 @@ Give Customs, through a secure channel for the secret:
    officer review, or returns it to the trader with SLC Edge's errors. Either way, SLC Edge
    answered.
 3. **SLC Edge reaches TNSW.** After Customs processes the declaration, the consignment
-   moves past the step waiting on Customs. With `logLevel: debug`, the backend also logs
-   each delivery as `slce: webhook received`.
+   moves past the step waiting on Customs.
 
 ## Common changes
 
@@ -145,13 +146,20 @@ Give Customs, through a secure channel for the secret:
 
 ## Troubleshooting
 
-| Symptom                                                | Likely cause                                                                                               |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| CusDec submission fails with a token error in the logs | Wrong `token_url`, `client_id` or `M2M_NSW_TO_ASYCUDA_SECRET`                                              |
-| Customs' token request fails with `invalid_target`     | It doesn't send `resource=https://api.nsw-srilanka.local`                                                  |
-| Webhook `401`                                          | Customs' client ID not in `authn.clientIDs`, or its token's `aud` isn't the NSW API identifier             |
-| Webhook `403` `insufficient scope`                     | The client lacks its role (Step 1), or the token request didn't ask for `nsw:slce-webhooks:write`          |
-| Webhook `2xx`, but the consignment doesn't move        | The event names a declaration or note TNSW doesn't know. Set `logLevel: debug` to log each delivery's body |
+| Symptom                                                | Likely cause                                                                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| CusDec submission fails with a token error in the logs | Wrong `token_url`, `client_id` or `M2M_NSW_TO_ASYCUDA_SECRET`                                                                |
+| Customs' token request fails with `invalid_target`     | Its token URL lacks `?resource=https://api.nsw-srilanka.local`                                                               |
+| Webhook `401`                                          | Customs' client ID not in `authn.clientIDs`, or its token's `aud` isn't the NSW API identifier                               |
+| Webhook `403` `insufficient scope`                     | The client lacks its role (Step 1), or the token request didn't ask for `nsw:slce-webhooks:write`                            |
+| Webhook `2xx`, but the consignment doesn't move        | The event names a declaration or note TNSW doesn't know. See [Diagnosing webhook deliveries](#diagnosing-webhook-deliveries) |
+
+### Diagnosing webhook deliveries
+
+With `logLevel: debug`, the backend logs each delivery's full body as
+`slce: webhook received`. The bodies hold declaration references, amounts, bank
+references and vessel details, so turn debug on only while diagnosing a problem, and set
+`logLevel` back to `info` straight after.
 
 ## Local development
 
