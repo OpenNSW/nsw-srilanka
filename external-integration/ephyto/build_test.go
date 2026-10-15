@@ -228,6 +228,43 @@ func TestBuildCertXML_EmitsTheTransportMovement(t *testing.T) {
 	}
 }
 
+// The apply form's dropdowns store { value, label }. The certificate carries
+// the code, as it did when they stored the bare code.
+func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
+	uf := sampleUserform()
+	uf["nppo_office_location"] = map[string]any{"value": "SEA-CMB", "label": "Plant Quarantine Station - Seaport, Colombo"}
+	uf["transport_mode"] = map[string]any{"value": "1", "label": "Air transport"}
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "packages_count")
+	com["commodity_plant_part"] = map[string]any{"value": "18", "label": "Leaves"}
+	com["commodity_condition"] = map[string]any{"value": "13", "label": "Fresh"}
+	com["commodity_intended_use"] = map[string]any{"value": "3", "label": "Decoration"}
+	com["quantity_net_weight_unit"] = map[string]any{"value": "t", "label": "tonne (t)"}
+	com["quantity_gross_weight_unit"] = map[string]any{"value": "g", "label": "gram (g)"}
+	com["packages_description"] = map[string]any{"value": "CT", "label": "Carton"}
+	com["origin_country"] = map[string]any{"value": "IN", "label": "India"}
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1", "hub_destination": "LK2"})
+
+	c := in.Certificate
+	tl := c.Consignment.Items[0].TradeLines[0]
+	for field, got := range map[string][2]string{
+		"place of issue":    {c.PlaceOfIssue, "SEA-CMB"},
+		"transport mode":    {c.Consignment.MeansOfConveyance[0].ModeCode, "1"},
+		"vegetable part":    {tl.VegetablePart, "18"},
+		"condition":         {tl.Condition, "13"},
+		"intended use":      {tl.IntendedUse, "3"},
+		"package":           {tl.PackageDescription, "CT"},
+		"origin":            {tl.OriginCountries[0], "IN"},
+		"net weight unit":   {tl.NetWeight.Unit, "TNE"},
+		"gross weight unit": {tl.GrossWeight.Unit, "GRM"},
+	} {
+		if got[0] != got[1] {
+			t.Errorf("%s = %q, want %q", field, got[0], got[1])
+		}
+	}
+}
+
 func TestBuildInput_ReExportSelectsType657(t *testing.T) {
 	uf := sampleUserform()
 	uf["certificate_type"] = "re-export"

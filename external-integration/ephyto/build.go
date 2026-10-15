@@ -59,7 +59,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			StatusCode:             strconv.Itoa(certStatusIssued),
 			IssueDateTime:          nowFunc().Format(time.RFC3339),
 			AuthorizedOfficer:      asString(uf["applicant_name"]),
-			PlaceOfIssue:           officeName(asString(uf["nppo_office_location"])),
+			PlaceOfIssue:           officeName(answerCode(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
 			DocDeclarations:        buildDocDeclarations(uf),
 			Attachments:            buildAttachments(uf, inputs),
@@ -362,7 +362,7 @@ func buildConsignment(uf map[string]any, importISO string, certificateItems any)
 	// for nothing else about the carriage; a vessel or voyage would go on the same
 	// element (see spscert.Conveyance) if it ever did.
 	c.MeansOfConveyance = []spscert.Conveyance{
-		{ModeCode: transportModeCode(asString(uf["transport_mode"]))},
+		{ModeCode: transportModeCode(answerCode(uf["transport_mode"]))},
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])
@@ -394,10 +394,10 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 		DescriptionLang: "en",
 		LanguageID:      "en",
 		ScientificName:  asString(com["commodity_botanical_name"]),
-		OriginCountries: []string{originISO(asString(com["origin_country"]))},
-		VegetablePart:   asString(com["commodity_plant_part"]),
-		Condition:       asString(com["commodity_condition"]),
-		IntendedUse:     asString(com["commodity_intended_use"]),
+		OriginCountries: []string{originISO(answerCode(com["origin_country"]))},
+		VegetablePart:   answerCode(com["commodity_plant_part"]),
+		Condition:       answerCode(com["commodity_condition"]),
+		IntendedUse:     answerCode(com["commodity_intended_use"]),
 	}
 	if cn := asString(com["commodity_common_name"]); cn != "" {
 		tl.CommonNames = []string{cn}
@@ -414,15 +414,15 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 			TypeCode:  "PK", // generic package; the form has no IPPC package code
 			Quantity:  count,
 		}}
-	} else if pd := asString(com["packages_description"]); pd != "" {
+	} else if pd := answerCode(com["packages_description"]); pd != "" {
 		tl.PackageDescription = pd
 	}
 
 	if v := numStr(com["quantity_net_weight"]); v != "" {
-		tl.NetWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(asString(com["quantity_net_weight_unit"]))}
+		tl.NetWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(answerCode(com["quantity_net_weight_unit"]))}
 	}
 	if v := numStr(com["quantity_gross_weight"]); v != "" {
-		tl.GrossWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(asString(com["quantity_gross_weight_unit"]))}
+		tl.GrossWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(answerCode(com["quantity_gross_weight_unit"]))}
 	}
 
 	if treatment != "" {
@@ -558,6 +558,16 @@ func asString(v any) string {
 	default:
 		return ""
 	}
+}
+
+// answerCode reads a dropdown answer as the code it stands for. A dropdown
+// stores { value, label }, the code and the title the trader saw; an
+// application saved before its dropdowns did holds the bare code.
+func answerCode(v any) string {
+	if m, ok := v.(map[string]any); ok {
+		return asString(m["value"])
+	}
+	return asString(v)
 }
 
 func asBool(v any) bool {
