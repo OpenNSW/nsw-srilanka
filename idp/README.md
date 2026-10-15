@@ -215,7 +215,9 @@ Applying the NSW and agency resources to a UAT or production IdP is tracked in
 [#679](https://github.com/OpenNSW/nsw-srilanka/issues/679). Until then, deploy a stock
 ThunderID (the image's own bootstrap only, with a strong `ADMIN_PASSWORD`) and create the
 resources in the console, or with `POST /import` and an admin token, using these
-documents as the reference.
+documents as the reference. For an agency-mode agency,
+[the agency onboarding guide](../docs/guides/onboarding-agency-mode-agencies.md#step-2-set-up-the-agency-in-thunderid)
+walks through creating its resources in the console.
 
 ## Applications created
 
