@@ -159,6 +159,52 @@ func TestVerifyInterpreter_SendsTheDeclarationAsJSON(t *testing.T) {
 	assert.False(t, isMultipart, "verify must not go out as multipart")
 }
 
+// Supporting documents are not verified, so none are sent: not the files, and
+// not their supportingDocuments entries either. An entry without its file is
+// rejected by Customs (codes 638, 640, 645) even when the declaration is fine.
+func TestVerifyInterpreter_SendsNoSupportingDocuments(t *testing.T) {
+	form := sampleForm()
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{
+			map[string]any{"fileBase64": "storage/customs/invoice.pdf", "documentCode": "INV"},
+		},
+		"metaDocuments": []any{
+			map[string]any{"itemSequence": "017", "documentCode": "INV", "documentId": "INV-1092", "dateAsString": "2026-09-15"},
+		},
+	}
+
+	body := VerifyInterpreter{}.BuildRequest(map[string]any{"payload": form})
+
+	jsonBody, ok := body.(remote.JSONBody)
+	require.True(t, ok)
+	encoded, err := json.Marshal(jsonBody.V)
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(encoded), "supportingDocuments")
+	assert.Contains(t, string(encoded), `"goodsShipments"`)
+	assert.Contains(t, form, "supportingDocuments",
+		"the trader's form is what they submit afterwards, so it is left as it was")
+}
+
+// A document entry the submission would refuse does not cost the trader the
+// verification of everything else.
+func TestVerifyInterpreter_AnIncompleteDocumentDoesNotEmptyTheDeclaration(t *testing.T) {
+	form := sampleForm()
+	form["supportingDocuments"] = map[string]any{
+		"metaDocuments": []any{map[string]any{"documentCode": "INV"}},
+	}
+
+	body := VerifyInterpreter{}.BuildRequest(map[string]any{"payload": form})
+
+	jsonBody, ok := body.(remote.JSONBody)
+	require.True(t, ok)
+	encoded, err := json.Marshal(jsonBody.V)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(encoded), `"marksAndNumbers":"test"`,
+		"the declaration is still mapped and sent")
+}
+
 // A form the mapper cannot read is still sent as a declaration, so Customs
 // answers with the fields it is missing. Sending the plugin's own input
 // envelope instead -- which this once did -- puts a shape Customs cannot parse

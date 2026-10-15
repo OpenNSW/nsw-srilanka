@@ -3,6 +3,7 @@ package cusdec
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strconv"
@@ -23,6 +24,8 @@ import (
 //   - the body is raw JSON, not multipart. This deliberately does not
 //     implement BuildParts, which is what keeps the plugin on the JSON path;
 //     attachments are not verified and the endpoint does not accept them.
+//     The supportingDocuments entries are left out too: an entry whose file
+//     is not attached is itself a fault Customs reports.
 //   - nothing here advances the declaration. The call records what came back
 //     and the workflow returns to the form, so a trader can verify as often as
 //     they like before submitting.
@@ -46,9 +49,28 @@ func NewVerifyInterpreter() VerifyInterpreter { return VerifyInterpreter{} }
 // plugin's own envelope, not a declaration, so Customs could not parse them at
 // all -- no field-level validation, just a rejected request that reached the
 // trader as "unavailable".
+//
+// Supporting documents are removed before mapping, so none reach the endpoint
+// and one the submission would refuse cannot empty the declaration either.
 func (VerifyInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	payload, _, _ := buildFromInputs(inputs)
+	payload, _, _ := buildFromInputs(withoutSupportingDocuments(inputs))
 	return remote.JSONBody{V: payload}
+}
+
+// withoutSupportingDocuments returns inputs with the form's supporting
+// documents removed. The maps are copied rather than changed, because the same
+// form is what the trader submits afterwards.
+func withoutSupportingDocuments(inputs map[string]any) map[string]any {
+	form, ok := inputs["payload"].(map[string]any)
+	if !ok {
+		return inputs
+	}
+	form = maps.Clone(form)
+	delete(form, "supportingDocuments")
+
+	out := maps.Clone(inputs)
+	out["payload"] = form
+	return out
 }
 
 // Interpret turns the verify response into the summary the trader reads.
