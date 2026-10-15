@@ -56,7 +56,7 @@ type HTTPHandler struct {
 	AuthzCatalog taskauthz.Catalog
 	// Users names a task's claim holder in the task view. When nil, the holder is
 	// shown by id only.
-	Users           HolderNames
+	Users           UserService
 	Audit           *nswaudit.Recorder
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
@@ -70,7 +70,7 @@ func NewHTTPHandler(
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
-	users HolderNames,
+	users UserService,
 	audit *nswaudit.Recorder,
 	maxRequestBytes int64,
 ) *HTTPHandler {

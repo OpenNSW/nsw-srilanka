@@ -296,13 +296,13 @@ func TestSubmitStep_NoLookupWhenNoClaimIsRequired(t *testing.T) {
 
 // --- the claim on the task view ------------------------------------------------
 
-// fakeNames names users from a map, or fails with err.
-type fakeNames struct {
+// fakeUserService names users from a map, or fails with err.
+type fakeUserService struct {
 	names map[string]string
 	err   error
 }
 
-func (f fakeNames) HolderName(_ context.Context, userID string) (string, error) {
+func (f fakeUserService) GetDisplayName(_ context.Context, userID string) (string, error) {
 	return f.names[userID], f.err
 }
 
@@ -318,7 +318,7 @@ func viewTask(t *testing.T, h *HTTPHandler, in *taskauthz.Input) taskResponse {
 
 func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 	at := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
-	names := fakeNames{names: map[string]string{testUserID: "me@example.com", "user-2": "other@example.com"}}
+	names := fakeUserService{names: map[string]string{testUserID: "me@example.com", "user-2": "other@example.com"}}
 
 	tests := []struct {
 		name         string
@@ -360,8 +360,8 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 // The view is still served when the holder's name cannot be found, or there is no
 // way to look it up: it says who holds the claim by id.
 func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
-	for name, users := range map[string]HolderNames{
-		"lookup fails": fakeNames{err: errors.New("db down")},
+	for name, users := range map[string]UserService{
+		"lookup fails": fakeUserService{err: errors.New("db down")},
 		"no lookup":    nil,
 	} {
 		t.Run(name, func(t *testing.T) {
