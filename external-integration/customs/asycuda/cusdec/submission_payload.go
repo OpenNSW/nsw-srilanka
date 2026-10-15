@@ -281,7 +281,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 			DeferredPayment:                str(financial, "deferredPayment"),
 		},
 		GoodsShipments:      items,
-		Remittances:         buildRemittances(financial, str(nested(valuation, "invoiceAmount"), "currencyCode")),
+		Remittances:         buildRemittances(financial),
 		SupportingDocuments: docs,
 	}
 
@@ -294,6 +294,8 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 
 // buildDeclarationValuation maps the header valuation onto
 // generalSegment.totalCustomsValuation. Each cost is amount + currencyCode.
+// chargeAmount (Box 22, Currency & Total Amount Invoiced) comes from its own
+// field, totalAmountInvoiced; it is not the remittance's invoiceAmount.
 func buildDeclarationValuation(v map[string]any) Valuation {
 	section := func(key string) Amount {
 		s := nested(v, key)
@@ -303,7 +305,7 @@ func buildDeclarationValuation(v map[string]any) Valuation {
 		}
 		return Amount{Value: val, CurrencyID: str(s, "currencyCode")}
 	}
-	invoice := nested(v, "invoiceAmount")
+	invoice := nested(v, "totalAmountInvoiced")
 	return Valuation{
 		ChargeAmount:    Amount{Value: number(invoice, "amount"), CurrencyID: str(invoice, "currencyCode")},
 		ExternalFreight: section("externalFreight"),
@@ -388,15 +390,17 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 // labels them in kilograms and offers no unit selector.
 const massUnit = "KG"
 
-func buildRemittances(financial map[string]any, currency string) []Remittance {
+func buildRemittances(financial map[string]any) []Remittance {
 	amount := number(financial, "remittanceAmount")
+	currency := str(financial, "remittanceCurrencyCode")
 	r := Remittance{
 		BankCode:       str(financial, "bankCode"),
 		Reference:      str(financial, "bankReference"),
 		TermsOfPayment: str(financial, "paymentTermsCode"),
 	}
-	// AmountType pairs the value with its currency (§4.3). The form declares
-	// the invoice currency on valuation.invoiceAmount.
+	// AmountType pairs the value with its currency (§4.3). The remittance has
+	// its own currency, financial.remittanceCurrencyCode; it is not the Box 22
+	// invoice currency.
 	if amount != 0 {
 		r.RemittanceValue = Amount{Value: amount, CurrencyID: currency}
 	}
