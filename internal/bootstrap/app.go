@@ -389,7 +389,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, holderNames{svc: userProfileService}, recorder, cfg.Server.MaxRequestBytes)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, userDisplayNames{svc: userProfileService}, recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -711,14 +711,11 @@ func taskCatalog(c *catalog.Catalog) taskauthz.Catalog {
 	return taskauthz.Catalog{Roles: c.Roles, Clients: c.Clients}
 }
 
-// companyIDResolver adapts the company service to authzgate.CompanyResolver. A
-// missing company profile is reported as ("", nil) so it denies cleanly rather
-// than surfacing as a 500.
-// holderNames names a task's claim holder by the email on their user record, the
-// only name a user record holds. A holder without a record has no name ("").
-type holderNames struct{ svc user.Service }
+// userDisplayNames names a user by the email on their user record, the only name
+// the record holds. A user without a record has no name ("").
+type userDisplayNames struct{ svc user.Service }
 
-func (n holderNames) HolderName(ctx context.Context, userID string) (string, error) {
+func (n userDisplayNames) GetDisplayName(ctx context.Context, userID string) (string, error) {
 	rec, err := n.svc.GetUser(ctx, userID)
 	if err != nil {
 		if errors.Is(err, user.ErrUserNotFound) {
@@ -729,6 +726,9 @@ func (n holderNames) HolderName(ctx context.Context, userID string) (string, err
 	return rec.Email, nil
 }
 
+// companyIDResolver adapts the company service to authzgate.CompanyResolver. A
+// missing company profile is reported as ("", nil) so it denies cleanly rather
+// than surfacing as a 500.
 type companyIDResolver struct{ svc company.Service }
 
 func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle string) (string, error) {

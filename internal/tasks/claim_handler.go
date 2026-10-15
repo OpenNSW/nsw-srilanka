@@ -33,10 +33,10 @@ const (
 	ClaimFactNone  = "claim:none"  // nobody holds it
 )
 
-// HolderNames resolves a claim holder's user id to the name shown for them.
-type HolderNames interface {
-	// HolderName returns the name to show for userID, or "" when there is none.
-	HolderName(ctx context.Context, userID string) (string, error)
+// UserService resolves a user's id to the name shown for them, such as a claim holder's.
+type UserService interface {
+	// GetDisplayName returns the name to show for userID, or "" when there is none.
+	GetDisplayName(ctx context.Context, userID string) (string, error)
 }
 
 // taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
@@ -80,7 +80,7 @@ func (h *HTTPHandler) claimOf(ctx context.Context, in taskauthz.Input, record st
 	if h.Users != nil {
 		// A missing name is not worth failing the read over: the view still says the
 		// task is claimed, and by whom.
-		name, err := h.Users.HolderName(ctx, record.ClaimedBy)
+		name, err := h.Users.GetDisplayName(ctx, record.ClaimedBy)
 		if err != nil {
 			slog.WarnContext(ctx, "tasks: failed to resolve claim holder's name", "taskId", record.TaskID, "error", err)
 		}
