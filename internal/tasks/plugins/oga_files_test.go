@@ -214,3 +214,12 @@ func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {
 	assert.NotErrorIs(t, err, ErrSuspended)
 	assert.Empty(t, *pushed)
 }
+
+// An agency doesn't own its files: its stored values are TNSW's tokens, which
+// it sends back to TNSW as they are, with no client of its own to issue for.
+func TestOGAFiles_ZeroSendsStoredValues(t *testing.T) {
+	in := reviewInputs(t)
+	sent, err := OGAFiles{}.tokenize(json.RawMessage(reviewRenderConfig), "submission", in["submission"], "tnsw")
+	require.NoError(t, err)
+	assert.Equal(t, reviewInputs(t)["submission"], sent)
+}

@@ -146,8 +146,8 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	if paymentService == nil {
 		return fmt.Errorf("plugins: payment service is nil")
 	}
-	if ogaFiles.ClientFor == nil || ogaFiles.IssueForClient == nil {
-		return fmt.Errorf("plugins: OGA file tokens are not configured")
+	if (ogaFiles.ClientFor == nil) != (ogaFiles.IssueForClient == nil) {
+		return fmt.Errorf("plugins: OGA file tokens need both a client lookup and an issuer, or neither")
 	}
 
 	entries := []struct {
