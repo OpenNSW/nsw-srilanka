@@ -174,3 +174,43 @@ func TestExternalReview_DoesNotPushFilesWithoutAClient(t *testing.T) {
 	assert.NotErrorIs(t, err, ErrSuspended)
 	assert.Empty(t, *pushed)
 }
+
+// A reply sends the step's inputs back to the OGA, so its declared files go as
+// tokens for the OGA's client too, and the task keeps its stored values.
+func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
+	m, pushed := newOGA(t)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	in := reviewInputs(t)
+	in["replyToken"] = "tok_x"
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	require.Len(t, *pushed, 1)
+	payload := (*pushed)[0]["payload"].(map[string]any)
+	submission := payload["submission"].(map[string]any)
+	assert.Equal(t, "CDA_TO_NSW/k-invoice", submission["invoice"])
+	assert.Equal(t, "CDA_TO_NSW/k-doc", submission["documents"].([]any)[0].(map[string]any)["file"])
+	assert.NotContains(t, payload, "replyToken")
+	assert.Equal(t, "k-invoice", in["submission"].(map[string]any)["invoice"], "the task keeps its stored values")
+}
+
+// A reply that would send a file to a service with no client fails rather than
+// send it.
+func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {
+	m, pushed := newOGA(t)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", OGAFiles{
+		ClientFor:      func(string) (string, bool) { return "", false },
+		IssueForClient: tokenFor.IssueForClient,
+	})
+	in := reviewInputs(t)
+	in["replyToken"] = "tok_x"
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrSuspended)
+	assert.Empty(t, *pushed)
+}
