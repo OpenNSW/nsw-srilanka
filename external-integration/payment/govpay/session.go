@@ -71,5 +71,8 @@ func (g *GovPayGateway) decryptRequest(ctx context.Context, raw []byte) (govPayR
 	if err := decryptParams(req.Data, key); err != nil {
 		return govPayRequest{}, nil, err
 	}
+	if err := validateGovPayData(req.Data); err != nil {
+		return govPayRequest{}, nil, err
+	}
 	return req, key, nil
 }

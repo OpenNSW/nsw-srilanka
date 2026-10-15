@@ -43,9 +43,9 @@ func TestMapGovPayStatus(t *testing.T) {
 // as named data[] items.
 func updateBody(refNo, status, amount, currency string) []byte {
 	return []byte(`{
-		"transactionID":"gw-tx-1",
-		"subinstId":"s1",
-		"serviceid":"sv1",
+		"transactionID":"gwtx1",
+		"subinstId":"002",
+		"serviceid":"001",
 		"serviceName":"App Fee",
 		"data":[
 			{"seq":"1","paramName":"refNo","value":"` + refNo + `"},
@@ -66,7 +66,7 @@ func TestGovPay_ParseWebhook_NormalizesStatus(t *testing.T) {
 	assert.Equal(t, corepayment.WebhookStatusSuccess, p.Status)
 	assert.Equal(t, "CC", p.PaymentMethod)
 	assert.Equal(t, "LKR", p.Currency)
-	assert.Equal(t, "gw-tx-1", p.GatewayTransactionID)
+	assert.Equal(t, "gwtx1", p.GatewayTransactionID)
 	assert.True(t, p.Amount.Equal(decimal.RequireFromString("1500.00")))
 }
 
@@ -78,7 +78,7 @@ func TestGovPay_ParseWebhook_UnknownStatus(t *testing.T) {
 
 func TestGovPay_ParseWebhook_MissingRefNo(t *testing.T) {
 	g := newTestGateway()
-	body := []byte(`{"transactionID":"gw-tx-1","data":[{"paramName":"status","value":"paid"}]}`)
+	body := []byte(`{"transactionID":"gwtx1","subinstId":"002","serviceid":"001","serviceName":"App Fee","data":[{"seq":"1","paramName":"status","value":"paid"}]}`)
 	_, _, err := g.parseWebhookEnc(t, body, nil)
 	require.Error(t, err)
 }
@@ -100,21 +100,21 @@ func TestGovPay_ParseWebhook_Acknowledgement(t *testing.T) {
 
 	var out UpdateResponse
 	require.NoError(t, json.Unmarshal(resp.Payload, &out))
-	assert.Equal(t, "gw-tx-1", out.TransactionID)
-	assert.Equal(t, "sv1", out.ServiceID)
+	assert.Equal(t, "gwtx1", out.TransactionID)
+	assert.Equal(t, "001", out.ServiceID)
 	assert.Equal(t, "Success", out.Message)
 	// Echoed data[] (5 items) + receipt number + status.
 	require.Len(t, out.PaymentData, 7)
 	assert.Equal(t, "Receipt Number", decryptAsGovPay(t, out.PaymentData[5].Placeholder))
-	assert.Equal(t, "REC-gw-tx-1", decryptAsGovPay(t, out.PaymentData[5].InitialValue))
+	assert.Equal(t, "REC-gwtx1", decryptAsGovPay(t, out.PaymentData[5].InitialValue))
 	assert.Equal(t, "Status", decryptAsGovPay(t, out.PaymentData[6].Placeholder))
 }
 
 func presentmentBody(refNo string) []byte {
 	return []byte(`{
 		"transactionID":"abc",
-		"subinstId":"s1",
-		"serviceid":"sv1",
+		"subinstId":"002",
+		"serviceid":"001",
 		"serviceName":"App Fee",
 		"data":[{"seq":"1","paramName":"refNo","value":"` + refNo + `"}]
 	}`)
@@ -139,7 +139,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 		require.NoError(t, json.Unmarshal(resp.Payload, &out))
 		assert.Equal(t, "Success", out.Message)
 		assert.Equal(t, "abc", out.TransactionID)
-		assert.Equal(t, "sv1", out.ServiceID)
+		assert.Equal(t, "001", out.ServiceID)
 		require.NotEmpty(t, out.PresentmentData)
 		// presentmentData is encrypted on the wire, so assert on the plaintext
 		// GovPay+ would recover with the same transaction key.
@@ -181,7 +181,11 @@ func TestGovPay_ExtractReferenceNumber(t *testing.T) {
 	_, err = g.extractRefEnc(t, []byte(`{"transactionID":"abc"}`))
 	require.Error(t, err)
 
-	_, err = g.extractRefEnc(t, presentmentBody("TN SW!"))
+	ref, err = g.extractRefEnc(t, presentmentBody("NPQS-2026-10-00001"))
+	require.NoError(t, err)
+	assert.Equal(t, "NPQS-2026-10-00001", ref)
+
+	_, err = g.extractRefEnc(t, presentmentBody("TN\nSW1"))
 	require.Error(t, err)
 }
 
@@ -214,4 +218,30 @@ func TestGovPay_HandleValidateReference_InvalidJSON(t *testing.T) {
 	g := newTestGateway()
 	_, err := g.validateEnc(t, nil, true, []byte(`not json`))
 	require.Error(t, err)
+}
+
+func TestParseGovPayRequest_IdentifierFields(t *testing.T) {
+	body := func(txID, subInst, service string) json.RawMessage {
+		return json.RawMessage(`{"transactionID":"` + txID + `","subinstId":"` + subInst +
+			`","serviceid":"` + service + `","serviceName":"App Fee"}`)
+	}
+
+	req, err := parseGovPayRequest(body("gwtx1", "002", "001"))
+	require.NoError(t, err)
+	assert.Equal(t, "002", req.SubInstID)
+	assert.Equal(t, "001", req.ServiceID)
+
+	for name, raw := range map[string]json.RawMessage{
+		"transactionID with space":  body("gw tx1", "002", "001"),
+		"transactionID punctuation": body("gw-tx1", "002", "001"),
+		"subinstId letters":         body("gwtx1", "s01", "001"),
+		"serviceid letters":         body("gwtx1", "002", "sv1"),
+		"subinstId over max length": body("gwtx1", "1234", "001"),
+		"serviceid over max length": body("gwtx1", "002", "1234"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := parseGovPayRequest(raw)
+			require.Error(t, err)
+		})
+	}
 }

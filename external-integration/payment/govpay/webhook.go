@@ -25,9 +25,10 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 	}
 	params := indexParams(req.Data)
 
-	refNo := strings.TrimSpace(stringParam(params, "refno"))
-	if refNo == "" {
-		return nil, nil, fmt.Errorf("refNo is required in webhook payload")
+	refNoValue, _ := params["refno"].Value.(string)
+	refNo, err := validateRefNoValue(refNoValue)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid refNo in webhook payload: %w", err)
 	}
 
 	// Confirm the notification is for the service this reference was registered

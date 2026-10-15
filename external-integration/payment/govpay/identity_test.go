@@ -14,11 +14,11 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
-// The shared bodies in govpay_test.go post subinstId "s1" and serviceid "sv1".
+// The shared bodies in govpay_test.go post subinstId "002" and serviceid "001".
 
 const (
-	wantSubInst = "s1"
-	wantService = "sv1"
+	wantSubInst = "002"
+	wantService = "001"
 )
 
 func payableTx(metadata map[string]string) *corepayment.ValidationTransaction {
@@ -56,11 +56,11 @@ func configuredGateway() *GovPayGateway {
 
 func TestGovPay_RequiresIdentityFieldsOnTheWire(t *testing.T) {
 	bodies := map[string]string{
-		"both missing":     `{"transactionID":"gw-1","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
-		"subinstId absent": `{"transactionID":"gw-1","serviceid":"sv1","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
-		"serviceid absent": `{"transactionID":"gw-1","subinstId":"s1","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
-		"subinstId blank":  `{"transactionID":"gw-1","subinstId":"  ","serviceid":"sv1","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
-		"serviceid blank":  `{"transactionID":"gw-1","subinstId":"s1","serviceid":"","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"both missing":     `{"transactionID":"gw1","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"subinstId absent": `{"transactionID":"gw1","serviceid":"001","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"serviceid absent": `{"transactionID":"gw1","subinstId":"002","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"subinstId blank":  `{"transactionID":"gw1","subinstId":"  ","serviceid":"001","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
+		"serviceid blank":  `{"transactionID":"gw1","subinstId":"002","serviceid":"","serviceName":"Fee","data":[{"seq":"1","paramName":"refNo","value":"TNSW1"}]}`,
 	}
 
 	for name, body := range bodies {
@@ -98,9 +98,9 @@ func TestGovPay_HandleValidateReference_IdentityMatching(t *testing.T) {
 		},
 		{
 			// The ids are onboarding-time constants typed into configuration by
-			// hand, so casing and stray spaces must not reject a valid call.
-			name:       "match ignores case and surrounding space",
-			metadata:   configured("  S1 ", "SV1"),
+			// hand, so stray surrounding spaces must not reject a valid call.
+			name:       "match trims surrounding configuration whitespace",
+			metadata:   configured(" 002 ", " 001 "),
 			wantStatus: 200,
 		},
 		{

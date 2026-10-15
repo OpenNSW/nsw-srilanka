@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	corepayment "github.com/OpenNSW/core/payment"
 	"github.com/shopspring/decimal"
 )
 
-// refNoMaxLength is the maximum allowed length of the presentment refNo. Per the
-// GovPay+ spec a data[].value is alphanumeric with a hard ceiling of 50; 20 is
-// the value configured for this service at onboarding.
+// refNoMaxLength is the maximum length configured for refNo at this GovPay+
+// service. The protocol allows data[].value up to 50 characters; this service
+// uses the stricter 20-character limit.
 const refNoMaxLength = 20
 
 // parseGovPayRequest decodes the common GovPay+ request envelope, tolerating the
@@ -24,12 +25,33 @@ func parseGovPayRequest(raw json.RawMessage) (govPayRequest, error) {
 		return govPayRequest{}, fmt.Errorf("invalid json: %w", err)
 	}
 
+	request, err := parseGovPayRequestHeaders(payload)
+	if err != nil {
+		return govPayRequest{}, err
+	}
+
+	if rawData, found := payload["data"]; found {
+		// UseNumber preserves unexpected numeric values exactly; decryptParams
+		// will reject them because GovPay+ sends each encrypted field as a string.
+		dec := json.NewDecoder(bytes.NewReader(rawData))
+		dec.UseNumber()
+		if err := dec.Decode(&request.Data); err != nil {
+			return govPayRequest{}, fmt.Errorf("invalid data array: %w", err)
+		}
+	}
+	return request, nil
+}
+
+func parseGovPayRequestHeaders(payload map[string]json.RawMessage) (govPayRequest, error) {
 	transactionID, ok, err := getStringField(payload, "transactionID", "transactionId")
 	if err != nil {
 		return govPayRequest{}, err
 	}
 	if !ok {
 		return govPayRequest{}, fmt.Errorf("transactionID is missing in request")
+	}
+	if err := validateANField("transactionID", transactionID, 20); err != nil {
+		return govPayRequest{}, err
 	}
 
 	// Both identity fields are mandatory on the presentment and update calls
@@ -41,31 +63,31 @@ func parseGovPayRequest(raw json.RawMessage) (govPayRequest, error) {
 	if err != nil {
 		return govPayRequest{}, err
 	}
-	if !ok || strings.TrimSpace(subInstID) == "" {
+	if !ok {
 		return govPayRequest{}, fmt.Errorf("subinstId is missing in request")
+	}
+	if err := validateNumericField("subinstId", subInstID, 3); err != nil {
+		return govPayRequest{}, err
 	}
 	serviceID, ok, err := getStringField(payload, "serviceid", "serviceId", "serviced")
 	if err != nil {
 		return govPayRequest{}, err
 	}
-	if !ok || strings.TrimSpace(serviceID) == "" {
+	if !ok {
 		return govPayRequest{}, fmt.Errorf("serviceid is missing in request")
 	}
-	serviceName, _, err := getStringField(payload, "serviceName")
+	if err := validateNumericField("serviceid", serviceID, 3); err != nil {
+		return govPayRequest{}, err
+	}
+	serviceName, ok, err := getStringField(payload, "serviceName")
 	if err != nil {
 		return govPayRequest{}, err
 	}
-
-	var data []govPayParam
-	if rawData, found := payload["data"]; found {
-		// Decode with UseNumber so numeric data[].value items land as
-		// json.Number rather than float64; this preserves exact precision for
-		// payment amounts (a float64 cannot represent every int64/decimal).
-		dec := json.NewDecoder(bytes.NewReader(rawData))
-		dec.UseNumber()
-		if err := dec.Decode(&data); err != nil {
-			return govPayRequest{}, fmt.Errorf("invalid data array: %w", err)
-		}
+	if !ok {
+		return govPayRequest{}, fmt.Errorf("serviceName is missing in request")
+	}
+	if err := validateANSField("serviceName", serviceName, 50); err != nil {
+		return govPayRequest{}, err
 	}
 
 	return govPayRequest{
@@ -73,13 +95,36 @@ func parseGovPayRequest(raw json.RawMessage) (govPayRequest, error) {
 		SubInstID:     subInstID,
 		ServiceID:     serviceID,
 		ServiceName:   serviceName,
-		Data:          data,
 	}, nil
 }
 
+// validateGovPayData checks the plaintext data[] fields after decryption. GovPay+
+// encrypts seq, paramName, and value separately on the wire, so their contract
+// types and lengths cannot be checked while decoding the JSON envelope.
+func validateGovPayData(params []govPayParam) error {
+	for i, param := range params {
+		prefix := fmt.Sprintf("data[%d]", i)
+		if err := validateNumericField(prefix+".seq", param.Seq, 2); err != nil {
+			return err
+		}
+		if err := validateANSField(prefix+".paramName", param.ParamName, 50); err != nil {
+			return err
+		}
+		value, ok := param.Value.(string)
+		if !ok {
+			return fmt.Errorf("%s.value must be a string", prefix)
+		}
+		if err := validateANSField(prefix+".value", value, 50); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateRefNoOnly enforces that the request carries exactly one data item,
-// named "refNo", whose value is a non-empty alphanumeric string no longer than
-// refNoMaxLength. It returns the trimmed refNo on success.
+// named "refNo", whose value is non-empty, printable, and no longer than
+// refNoMaxLength. GovPay+ defines data[].value as ans, which permits spaces and
+// special characters. It returns the exact refNo value unchanged on success.
 func validateRefNoOnly(params []govPayParam) (string, error) {
 	if len(params) != 1 {
 		return "", fmt.Errorf("data must contain exactly one item: refNo")
@@ -88,26 +133,76 @@ func validateRefNoOnly(params []govPayParam) (string, error) {
 	if strings.TrimSpace(param.ParamName) != "refNo" {
 		return "", fmt.Errorf("data must contain only refNo")
 	}
-	refNo := paramValueString(param.Value)
+	refNo, ok := param.Value.(string)
+	if !ok {
+		return "", fmt.Errorf("refNo must be a string")
+	}
+	return validateRefNoValue(refNo)
+}
+
+func validateRefNoValue(refNo string) (string, error) {
 	if refNo == "" {
 		return "", fmt.Errorf("refNo is required")
 	}
-	if len(refNo) > refNoMaxLength {
+	if utf8.RuneCountInString(refNo) > refNoMaxLength {
 		return "", fmt.Errorf("refNo must not exceed %d characters", refNoMaxLength)
 	}
-	if !isAlphaNumeric(refNo) {
-		return "", fmt.Errorf("refNo must be alphanumeric")
+	if !isANS(refNo) {
+		return "", fmt.Errorf("refNo must contain printable characters")
 	}
 	return refNo, nil
 }
 
-func isAlphaNumeric(s string) bool {
+func isANS(s string) bool {
 	for _, r := range s {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+		if r < ' ' || r > '~' {
 			return false
 		}
 	}
 	return s != ""
+}
+
+func validateANField(name, value string, maxLength int) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s is required", name)
+	}
+	if utf8.RuneCountInString(value) > maxLength {
+		return fmt.Errorf("%s must not exceed %d characters", name, maxLength)
+	}
+	for _, r := range value {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return fmt.Errorf("%s must contain only letters and numbers", name)
+		}
+	}
+	return nil
+}
+
+func validateNumericField(name, value string, maxLength int) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", name)
+	}
+	if utf8.RuneCountInString(value) > maxLength {
+		return fmt.Errorf("%s must not exceed %d digits", name, maxLength)
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return fmt.Errorf("%s must contain only digits", name)
+		}
+	}
+	return nil
+}
+
+func validateANSField(name, value string, maxLength int) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s is required", name)
+	}
+	if utf8.RuneCountInString(value) > maxLength {
+		return fmt.Errorf("%s must not exceed %d characters", name, maxLength)
+	}
+	if !isANS(value) {
+		return fmt.Errorf("%s must contain printable characters", name)
+	}
+	return nil
 }
 
 // indexParams keys the data[] items by their lower-cased, trimmed paramName for
