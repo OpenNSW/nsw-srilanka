@@ -54,6 +54,23 @@ export type AuditEntry = {
   details?: string
 }
 
+// ClaimHolder is the user holding a task's claim. name is their display name, their
+// email until a login has stored one, or empty if it could not be found.
+export type ClaimHolder = {
+  id: string
+  name: string
+}
+
+// TaskClaim is who holds the task's claim, as the caller sees it. mine is decided
+// by the server: never compare ids or emails here. When required_to_submit is
+// true and mine is false, the backend refuses submissions (403).
+export type TaskClaim = {
+  holder?: ClaimHolder
+  claimed_at?: string
+  mine: boolean
+  required_to_submit: boolean
+}
+
 // ZoneView is the wire shape served by GET /api/v1/tasks/{id}. There is
 // no separate top-level actions list — operations ship inside their claiming
 // zone's handles (joined to state legality by the backend assembler).
@@ -66,6 +83,8 @@ export type ZoneView = {
   step_id?: string
   alert?: Alert
   audit?: AuditEntry[]
+  // claim is absent from backends without task claims.
+  claim?: TaskClaim
   view: ZoneComponent[]
   created_at: string
   updated_at: string

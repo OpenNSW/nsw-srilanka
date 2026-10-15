@@ -22,7 +22,7 @@ func (s *stubUserService) GetUser(ctx context.Context, id string) (*user.Record,
 	}
 	return nil, nil
 }
-func (s *stubUserService) GetOrCreateUser(_ context.Context, _, _, _, _, _ string) (string, error) {
+func (s *stubUserService) GetOrCreateUser(_ context.Context, _, _, _, _, _, _ string) (string, error) {
 	return "", nil
 }
 func (s *stubUserService) UpdateUserData(_ context.Context, _ string, _ []byte) error { return nil }

@@ -103,7 +103,7 @@ func TestService_GetUser_Success(t *testing.T) {
 
 func TestService_GetOrCreateUser_InvalidID(t *testing.T) {
 	svc := NewService(nil)
-	if _, err := svc.GetOrCreateUser(context.Background(), "", "user@example.com", "+61400111222", "OU-001", "ou-001"); !errors.Is(err, ErrInvalidUserID) {
+	if _, err := svc.GetOrCreateUser(context.Background(), "", "user@example.com", "+61400111222", "OU-001", "ou-001", ""); !errors.Is(err, ErrInvalidUserID) {
 		t.Fatalf("expected ErrInvalidUserID, got %v", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestService_GetOrCreateUser_AlreadyExists(t *testing.T) {
 		WithArgs("idp-123", 1).
 		WillReturnRows(rows)
 
-	userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001")
+	userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -138,7 +138,7 @@ func TestService_GetOrCreateUser_ExistsCheckDBError(t *testing.T) {
 		WithArgs("idp-123", 1).
 		WillReturnError(errors.New("query failed"))
 
-	_, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001")
+	_, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "")
 	if err == nil || !strings.Contains(err.Error(), "database query failed") {
 		t.Fatalf("expected wrapped DB error, got %v", err)
 	}
@@ -156,6 +156,7 @@ func TestService_GetOrCreateUser_Success(t *testing.T) {
 	phone := "+61400111222"
 	ouID := "OU-001"
 	ouHandle := "ou-001"
+	displayName := "Kamal Perera"
 
 	mock.ExpectQuery(`SELECT .* FROM "user_records" WHERE idp_user_id = \$1`).
 		WithArgs(idpUserID, 1).
@@ -163,11 +164,11 @@ func TestService_GetOrCreateUser_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO "user_records"`).
-		WithArgs(sqlmock.AnyArg(), idpUserID, email, phone, ouID, ouHandle, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), idpUserID, email, phone, ouID, ouHandle, displayName, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	userID, err := svc.GetOrCreateUser(context.Background(), idpUserID, email, phone, ouID, ouHandle)
+	userID, err := svc.GetOrCreateUser(context.Background(), idpUserID, email, phone, ouID, ouHandle, displayName)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -189,11 +190,11 @@ func TestService_GetOrCreateUser_DBError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO "user_records"`).
-		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnError(errors.New("insert failed"))
 	mock.ExpectRollback()
 
-	if _, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001"); err == nil {
+	if _, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", ""); err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -211,7 +212,7 @@ func TestService_GetOrCreateUser_DuplicateInsertReturnsExisting(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO "user_records"`).
-		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 0))
 	mock.ExpectCommit()
 
@@ -221,12 +222,87 @@ func TestService_GetOrCreateUser_DuplicateInsertReturnsExisting(t *testing.T) {
 		WithArgs("idp-123", 1).
 		WillReturnRows(rows)
 
-	userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001")
+	userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if userID != "user-123" {
 		t.Fatalf("expected existing user id, got %v", userID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// existingUserRows is the user record GetOrCreateUser finds for "idp-123", with
+// displayName stored.
+func existingUserRows(displayName string) *sqlmock.Rows {
+	return sqlmock.NewRows([]string{"id", "idp_user_id", "email", "phone_number", "ou_id", "ou_handle", "display_name", "data", "created_at", "updated_at"}).
+		AddRow("user-123", "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", displayName, []byte(`{}`), now, now)
+}
+
+// A display name that changed at the IdP replaces the stored one on the next login.
+func TestService_GetOrCreateUser_RefreshesAChangedDisplayName(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectQuery(`SELECT .* FROM "user_records" WHERE idp_user_id = \$1`).
+		WithArgs("idp-123", 1).
+		WillReturnRows(existingUserRows("Kamal Perera"))
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "user_records" SET "display_name"=\$1,"updated_at"=\$2 WHERE id = \$3`).
+		WithArgs("Kamal Silva", sqlmock.AnyArg(), "user-123").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "Kamal Silva")
+	if err != nil || userID != "user-123" {
+		t.Fatalf("GetOrCreateUser() = %q, %v; want user-123, nil", userID, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// Nothing is written when the name is unchanged, or when the token carries none:
+// a token without the name claims must not wipe the stored name.
+func TestService_GetOrCreateUser_KeepsTheStoredDisplayName(t *testing.T) {
+	for name, fromToken := range map[string]string{"unchanged": "Kamal Perera", "absent from the token": ""} {
+		t.Run(name, func(t *testing.T) {
+			db, mock := setupTestDB(t)
+			svc := NewService(db)
+
+			mock.ExpectQuery(`SELECT .* FROM "user_records" WHERE idp_user_id = \$1`).
+				WithArgs("idp-123", 1).
+				WillReturnRows(existingUserRows("Kamal Perera"))
+
+			userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", fromToken)
+			if err != nil || userID != "user-123" {
+				t.Fatalf("GetOrCreateUser() = %q, %v; want user-123, nil", userID, err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("unexpected write or unmet expectations: %v", err)
+			}
+		})
+	}
+}
+
+// Failing to store a changed name does not fail the login.
+func TestService_GetOrCreateUser_DisplayNameUpdateFailureIsNotFatal(t *testing.T) {
+	db, mock := setupTestDB(t)
+	svc := NewService(db)
+
+	mock.ExpectQuery(`SELECT .* FROM "user_records" WHERE idp_user_id = \$1`).
+		WithArgs("idp-123", 1).
+		WillReturnRows(existingUserRows(""))
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE "user_records" SET "display_name"`).
+		WillReturnError(errors.New("update failed"))
+	mock.ExpectRollback()
+
+	userID, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "Kamal Perera")
+	if err != nil || userID != "user-123" {
+		t.Fatalf("GetOrCreateUser() = %q, %v; want user-123, nil", userID, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
@@ -357,7 +433,7 @@ func TestService_GetOrCreateUser_InsertSkippedAndLookupFails(t *testing.T) {
 	// INSERT: 0 rows affected (race with another writer)
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO "user_records"`).
-		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 0))
 	mock.ExpectCommit()
 
@@ -366,7 +442,7 @@ func TestService_GetOrCreateUser_InsertSkippedAndLookupFails(t *testing.T) {
 		WithArgs("idp-123", 1).
 		WillReturnError(gorm.ErrRecordNotFound)
 
-	_, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001")
+	_, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "")
 	if err == nil || !strings.Contains(err.Error(), "insert skipped") {
 		t.Fatalf("expected insert-skipped sentinel error, got %v", err)
 	}
@@ -387,7 +463,7 @@ func TestService_GetOrCreateUser_InsertSkippedAndLookupDBError(t *testing.T) {
 	// INSERT: 0 rows affected (race with another writer)
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO "user_records"`).
-		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 0))
 	mock.ExpectCommit()
 
@@ -396,7 +472,7 @@ func TestService_GetOrCreateUser_InsertSkippedAndLookupDBError(t *testing.T) {
 		WithArgs("idp-123", 1).
 		WillReturnError(errors.New("connection reset"))
 
-	_, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001")
+	_, err := svc.GetOrCreateUser(context.Background(), "idp-123", "user@example.com", "+61400111222", "OU-001", "ou-001", "")
 	if err == nil || !strings.Contains(err.Error(), "database query failed") {
 		t.Fatalf("expected wrapped DB error, got %v", err)
 	}

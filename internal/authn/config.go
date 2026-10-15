@@ -24,7 +24,8 @@ type Config struct {
 // email, ouId and ouHandle are Required: a token missing one is rejected
 // outright (ouHandle in particular backs the user_records.ou_handle NOT NULL
 // constraint and the task-ownership gate, so a missing value must fail at the
-// token boundary rather than deeper in a request). phone_number is best-effort.
+// token boundary rather than deeper in a request). phone_number, given_name and
+// family_name are best-effort.
 func (c Config) coreConfig() coreauthn.Config {
 	return coreauthn.Config{
 		JWKSURL:               c.JWKSURL,
@@ -34,7 +35,7 @@ func (c Config) coreConfig() coreauthn.Config {
 		InsecureSkipTLSVerify: c.InsecureSkipTLSVerify,
 		UserClaims: coreauthn.ClaimSpec{
 			Required: []string{claimEmail, claimOUID, claimOUHandle},
-			Optional: []string{claimPhoneNumber},
+			Optional: []string{claimPhoneNumber, claimGivenName, claimFamilyName},
 		},
 	}
 }

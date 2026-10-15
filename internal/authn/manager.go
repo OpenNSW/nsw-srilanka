@@ -2,6 +2,7 @@ package authn
 
 import (
 	"net/http"
+	"strings"
 
 	coreauthn "github.com/OpenNSW/core/authn"
 )
@@ -76,6 +77,7 @@ func principalFromAuthContext(ac *coreauthn.AuthContext) *Principal {
 			PhoneNumber: u.ExtraClaims.String(claimPhoneNumber),
 			OUID:        u.ExtraClaims.String(claimOUID),
 			OUHandle:    u.ExtraClaims.String(claimOUHandle),
+			DisplayName: displayNameFrom(u.ExtraClaims),
 		}
 	case ac.Client != nil:
 		c := ac.Client
@@ -88,6 +90,12 @@ func principalFromAuthContext(ac *coreauthn.AuthContext) *Principal {
 	default:
 		return nil
 	}
+}
+
+// displayNameFrom joins the given and family name claims into the name to show
+// for a user. The IdP carries no single name claim, and either part may be absent.
+func displayNameFrom(c coreauthn.ExtraClaims) string {
+	return strings.TrimSpace(c.String(claimGivenName) + " " + c.String(claimFamilyName))
 }
 
 // Health reports whether the authentication subsystem is usable.

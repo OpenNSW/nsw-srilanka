@@ -3,9 +3,14 @@ info:
   title: NSW Sri Lanka / Tasks API
   description: |
     OpenAPI 3.0 specification for the task-orchestrator HTTP surface: reading
-    a single task's rendered "zone view" and advancing it by submitting a
-    step. A task is one node of a consignment's workflow; access is derived
-    from the caller's role-tied ownership of the task's consignment.
+    a single task's rendered "zone view", advancing it by submitting a step,
+    and claiming it. A task is one node of a consignment's workflow; access is
+    derived from the caller's role-tied ownership of the task's consignment.
+
+    A claim records which user is working a task. Any user who can read a
+    task can claim it. Whether a claim is needed to submit a step is the
+    deployment's policy: an agency requires it, TNSW does not. The task view's
+    `claim.required_to_submit` says which applies to the caller.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -33,6 +38,10 @@ paths:
         the deployment's `storage.tokenTTLSeconds`; refetch the task for
         fresh ones.
 
+        The response says who holds the task's claim (`claim`). Sections of
+        the view can depend on it: the render config can gate a section on
+        the facts `claim:mine`, `claim:other` and `claim:none`.
+
         Requires scope `nsw:task:read`.
       operationId: getTask
       parameters:
@@ -43,7 +52,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ZoneView'
+                $ref: '#/components/schemas/TaskResponse'
         '400':
           description: Missing task ID.
           content:
@@ -135,15 +144,20 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The caller may not perform this action on this task, or a
-            declared file field holds a file reference issued to someone
-            else.
+            The caller may not perform this action on this task, a declared
+            file field holds a file reference issued to someone else, or,
+            where the deployment requires a claim to submit, the caller does
+            not hold the task's claim: "claim this task before acting on it"
+            when nobody holds it, "this task is claimed by another user" when
+            someone else does.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: No such task.
+          description: |
+            No such task. Only returned where the deployment requires a claim
+            to submit, since the task is then read to check the claim.
           content:
             application/json:
               schema:
@@ -198,6 +212,10 @@ paths:
         hold a file reference issued to the caller's client, such as one the
         dispatch carried or an upload returned.
 
+        A client caller never needs a claim. A user calling this route is held
+        to the deployment's claim policy as on the portal's route, since the
+        token is not signed.
+
         Requires scope `nsw:task:write`.
       operationId: completeTaskStepByCallbackToken
       parameters:
@@ -234,15 +252,18 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The caller may not perform this action on this task, or a
-            declared file field holds a file reference issued to someone
-            else.
+            The caller may not perform this action on this task, a declared
+            file field holds a file reference issued to someone else, or the
+            caller is a user who does not hold the task's claim where the
+            deployment requires one.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: No such task.
+          description: |
+            No such task. Only returned to a user where the deployment requires
+            a claim to submit.
           content:
             application/json:
               schema:
@@ -274,6 +295,119 @@ paths:
             Internal error resolving the submission's file references (a
             render config whose `files` does not parse included) or
             completing the step.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tasks/{id}/claim:
+    post:
+      summary: Claim a task
+      description: |
+        Claims the task for the calling user, so others can see who is working
+        on it. Claiming a task you already hold succeeds and keeps the original
+        claim time. Only a user who can read the task may claim it; anyone else
+        gets the same 404 as for a missing task. The claim lasts until its
+        holder releases it, including after the task completes.
+
+        The task view changes with the claim, so refetch the task afterwards.
+
+        Requires scope `nsw:task:write`.
+      operationId: claimTask
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '204':
+          description: No Content. The caller holds the claim.
+        '400':
+          description: Missing task ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            The bearer token lacks scope `nsw:task:write`, or the caller is a
+            client: only users can claim tasks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            No such task, or the caller may not read it (indistinguishable
+            from "not found" by design).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            Another user holds the claim (refetch the task to see who), or the
+            task is completed and can no longer be claimed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error claiming the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/tasks/{id}/release:
+    post:
+      summary: Release a task
+      description: |
+        Releases the calling user's claim on the task. Releasing a task nobody
+        holds succeeds, so a repeated release is harmless. A completed task's
+        claim can still be released. Only a user who can read the task may
+        release it.
+
+        Requires scope `nsw:task:write`.
+      operationId: releaseTask
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+      responses:
+        '204':
+          description: No Content. Nobody holds the claim.
+        '400':
+          description: Missing task ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            Another user holds the claim, the bearer token lacks scope
+            `nsw:task:write`, or the caller is a client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            No such task, or the caller may not read it (indistinguishable
+            from "not found" by design).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error releasing the task.
           content:
             application/json:
               schema:
@@ -405,6 +539,16 @@ components:
           type: integer
           format: int64
           description: Increases every time the task moves on. Read-only.
+        claimed_by:
+          type: string
+          description: |
+            The internal user ID of the claim's holder; omitted when the task
+            is unclaimed. Use `claim` on the task response instead, which also
+            names the holder and says whether it is the caller.
+        claimed_at:
+          type: string
+          format: date-time
+          description: When the holder claimed the task; omitted when unclaimed.
         view:
           type: array
           description: Sections in render order.
@@ -416,3 +560,59 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    TaskResponse:
+      description: The task's zone view plus its claim, as the caller sees it.
+      allOf:
+        - $ref: '#/components/schemas/ZoneView'
+        - type: object
+          required:
+            - claim
+          properties:
+            claim:
+              $ref: '#/components/schemas/TaskClaim'
+
+    TaskClaim:
+      type: object
+      description: |
+        Who holds the task's claim, as the caller sees it. Always present, so
+        a client can tell whether it must claim the task before acting on it.
+      required:
+        - mine
+        - required_to_submit
+      properties:
+        holder:
+          $ref: '#/components/schemas/ClaimHolder'
+        claimed_at:
+          type: string
+          format: date-time
+          description: When the holder claimed the task; omitted when unclaimed.
+        mine:
+          type: boolean
+          description: |
+            Whether the caller holds the claim. Decided by the server from the
+            caller's identity; clients should not compare IDs or emails.
+        required_to_submit:
+          type: boolean
+          description: |
+            Whether this deployment requires the caller to hold the claim to
+            submit a step. When true and `mine` is false, submissions are
+            refused with 403.
+
+    ClaimHolder:
+      type: object
+      description: The user holding a task's claim. Omitted when the task is unclaimed.
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: The holder's internal user ID.
+        name:
+          type: string
+          description: |
+            The name to show for the holder: their display name (given and
+            family names from their login token), or their email until a
+            login has stored one. Empty when it could not be found.
+          example: "CDA Officer"
