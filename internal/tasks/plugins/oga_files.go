@@ -12,6 +12,10 @@ import (
 // OGAFiles hands an OGA the files in what it is sent as file tokens issued to
 // it, which it redeems on this deployment's storage route. A stored value
 // never leaves for an OGA as it is.
+//
+// Only the deployment that owns the files can issue them. An agency, whose
+// storage proxies to TNSW, stores TNSW's tokens and sends them back as they
+// are: it uses the zero OGAFiles.
 type OGAFiles struct {
 	// ClientFor returns the machine client the outbound service serviceID
 	// calls back as.
@@ -27,6 +31,9 @@ type OGAFiles struct {
 // declares holds a token for serviceID's client. data itself is not changed.
 // A file to send with no client to issue it to is an error, not sent as it is.
 func (f OGAFiles) tokenize(renderConfig json.RawMessage, root string, data any, serviceID string) (any, error) {
+	if f.IssueForClient == nil {
+		return data, nil
+	}
 	paths, err := filefields.Parse(renderConfig)
 	if err != nil {
 		return nil, err
