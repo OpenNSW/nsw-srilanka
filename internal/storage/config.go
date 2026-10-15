@@ -20,8 +20,8 @@ const TypeProxy = "proxy"
 // DownloadPath and DeletePath.
 const KeyPlaceholder = "{key}"
 
-// DefaultTokenTTLSeconds is how long a user's file token lasts when
-// storage.tokenTTLSeconds is unset: one hour.
+// DefaultTokenTTLSeconds is how long a file token a user reads with lasts
+// when storage.tokenTTLSeconds is unset: one hour.
 const DefaultTokenTTLSeconds = 3600
 
 // Default ProxyConfig endpoint paths: the storage routes this application
@@ -54,9 +54,10 @@ type Config struct {
 	// different for every deployment. Keep a key for as long as the tokens it
 	// sealed must open; those given to OGAs never expire.
 	TokenKeyset string `yaml:"tokenKeyset"`
-	// TokenTTLSeconds is how long a user's file token lasts, in seconds.
-	// Optional: DefaultTokenTTLSeconds when unset. Machine clients' tokens
-	// never expire.
+	// TokenTTLSeconds is how long a file token a user reads with lasts, in
+	// seconds: the tokens a task's view gives out. Optional:
+	// DefaultTokenTTLSeconds when unset. A user's upload tokens, which can only
+	// be submitted, and machine clients' tokens never expire.
 	TokenTTLSeconds int `yaml:"tokenTTLSeconds"`
 }
 
@@ -65,7 +66,7 @@ func (c Config) IsProxy() bool {
 	return strings.TrimSpace(c.Type) == TypeProxy
 }
 
-// TokenTTL returns how long a user's file token lasts.
+// TokenTTL returns how long a file token a user reads with lasts.
 func (c Config) TokenTTL() time.Duration {
 	if c.TokenTTLSeconds == 0 {
 		return DefaultTokenTTLSeconds * time.Second
