@@ -12,8 +12,11 @@ info:
     task's zone view (see the Tasks API) and pass back here or in a task
     submission:
 
-    - A user's reference works only for that user, and expires after the
-      deployment's `storage.tokenTTLSeconds` (an hour by default).
+    - A user's reference works only for that user. One from a task's view
+      opens the file and expires after the deployment's
+      `storage.tokenTTLSeconds` (an hour by default). One from an upload can
+      only be submitted, as the value of a form's file field, and never
+      expires.
     - A machine client's (an OGA's) works only for that client, and never
       expires.
 
@@ -143,8 +146,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The bearer token lacks scope `nsw:storage:read`, or `{key}` is a
-            file reference issued to someone else.
+            The bearer token lacks scope `nsw:storage:read`, `{key}` is a
+            file reference issued to someone else, or it is a user's upload
+            reference, which can only be submitted: refetch the task once the
+            form is saved for one that opens the file.
           content:
             application/json:
               schema:
@@ -226,7 +231,9 @@ components:
           type: string
           description: |
             A file reference to the reserved file, issued to the caller. Opaque:
-            store and send it as it is.
+            store and send it as it is. A user's can only be submitted (as the
+            value of a form's file field) and never expires; a machine
+            client's opens the file too.
         name:
           type: string
           description: The file name, as sent.

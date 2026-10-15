@@ -109,7 +109,8 @@ storage:
   # while their tokens must still open, which for tokens given to agencies is
   # for good.
   tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-  # How long a user's file token lasts, in seconds. Optional: 3600 when unset.
+  # How long the file tokens a user reads with last, in seconds. Optional:
+  # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
   tokenTTLSeconds: 3600
   # Only read when type is local.
   local:

@@ -257,14 +257,21 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	if err := json.NewDecoder(uploaded.Body).Decode(&meta); err != nil {
 		t.Fatal(err)
 	}
-	stored, err := agencyAccess.Resolve(officer, meta.Key, fileaccess.ScopeRead)
+	stored, err := agencyAccess.Resolve(officer, meta.Key, fileaccess.ScopeSubmit)
 	if err != nil {
 		t.Fatalf("the officer's upload reference: %v", err)
 	}
 	if _, err := tnswAccess.Resolve(&authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}, stored, fileaccess.ScopeRead); err != nil {
 		t.Fatalf("what the agency stores is not TNSW's token for it: %v", err)
 	}
-	assertDownloadURL(t, download(agencyFiles, meta.Key, officer))
+	// The upload reference itself can only be submitted. Once the form is
+	// saved, the officer reads the file with the reference the task gives.
+	assertStatus(t, download(agencyFiles, meta.Key, officer), http.StatusForbidden)
+	read, err := agencyAccess.Issue(officer, stored, fileaccess.ScopeRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDownloadURL(t, download(agencyFiles, read, officer))
 }
 
 // upload calls h.Upload with body as p (no principal when p is nil).
@@ -299,15 +306,26 @@ func TestFileHandler_UploadReturnsAReference(t *testing.T) {
 		t.Errorf("response %v, want the name and an upload_url", body)
 	}
 	ref, _ := body["key"].(string)
-	stored, err := access.Resolve(user("alice"), ref, fileaccess.ScopeRead)
+	stored, err := access.Resolve(user("alice"), ref, fileaccess.ScopeSubmit)
 	if err != nil {
 		t.Fatalf("key %q is not a reference for the uploader: %v", ref, err)
 	}
 	if !strings.Contains(body["upload_url"].(string), stored) {
 		t.Errorf("upload_url %v does not name the stored file %q", body["upload_url"], stored)
 	}
-	assertDownloadURL(t, download(h, ref, user("alice")))
+	// It can only be submitted: opening the file takes the reference a task
+	// gives its reader.
+	rec = download(h, ref, user("alice"))
+	assertStatus(t, rec, http.StatusForbidden)
+	if !strings.Contains(rec.Body.String(), "save the form to view it") {
+		t.Errorf("body %s, want it to say to save the form to view the file", rec.Body.String())
+	}
 	assertStatus(t, download(h, ref, user("bob")), http.StatusForbidden)
+	read, err := access.Issue(user("alice"), stored, fileaccess.ScopeRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDownloadURL(t, download(h, read, user("alice")))
 }
 
 func TestFileHandler_UploadRejects(t *testing.T) {

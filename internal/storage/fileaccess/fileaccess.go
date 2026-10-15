@@ -79,6 +79,18 @@ func New(codec *filetoken.Codec, userTTL time.Duration) (*Access, error) {
 	return &Access{codec: codec, userTTL: userTTL}, nil
 }
 
+// UploadScopes returns the scopes of the token p is given for a file they
+// upload. A user's can only be submitted, as the value of a form's file field:
+// they open the file with the token the task's view gives once the form is
+// saved, so it never expires. A machine client, such as an agency proxying its
+// officer's upload, keeps the token and opens the file with it too.
+func UploadScopes(p *authn.Principal) []Scope {
+	if p != nil && p.Kind == authn.KindUser {
+		return []Scope{ScopeSubmit}
+	}
+	return []Scope{ScopeRead, ScopeSubmit}
+}
+
 // Issue returns a token that lets p, the caller, do what scopes allow with
 // resource.
 func (a *Access) Issue(p *authn.Principal, resource string, scopes ...Scope) (string, error) {

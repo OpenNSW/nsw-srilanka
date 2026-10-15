@@ -51,8 +51,9 @@ type uploadResponse struct {
 }
 
 // Upload reserves a stored file and returns a reference to it for the caller,
-// with the URL to upload the file to. A user's reference expires; a machine
-// client's, such as an agency proxying its own upload, does not.
+// with the URL to upload the file to. A user's reference can only be submitted,
+// as the value of a form's file field, so it never expires; a machine
+// client's, such as an agency proxying its own upload, opens the file too.
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
@@ -83,7 +84,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		h.writeServiceError(w, r, err, "failed to prepare upload")
 		return
 	}
-	ref, err := h.refs.Issue(p, meta.Key, fileaccess.ScopeRead, fileaccess.ScopeSubmit)
+	ref, err := h.refs.Issue(p, meta.Key, fileaccess.UploadScopes(p)...)
 	if err != nil {
 		httputil.InternalServerError(w, r, "storage: failed to issue a file reference", err)
 		return
