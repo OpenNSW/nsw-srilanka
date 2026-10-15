@@ -521,7 +521,10 @@ IdP's JWKS.
      --data-urlencode grant_type=client_credentials \
      --data-urlencode 'scope=nsw:workflow:inject nsw:task:write' \
      --data-urlencode resource=https://api.dea.nsw-agency.local \
-     https://idp.example.com/oauth2/token | jq -r .access_token | cut -d. -f2 | base64 -d 2>/dev/null | jq .
+     https://idp.example.com/oauth2/token \
+     | jq -r .access_token \
+     | jq -R 'split(".")[1] | gsub("-";"+") | gsub("_";"/")
+              | . + ("=" * ((4 - length % 4) % 4)) | @base64d | fromjson'
    unset SECRET
    ```
 
