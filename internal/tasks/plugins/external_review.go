@@ -79,7 +79,7 @@ func (p *ExternalReviewPlugin) Execute(ctx pluginContext, configRaw json.RawMess
 		body map[string]any
 	)
 	if replyToken != "" {
-		path, body, err = replyRequest(cfg, ctx.Inputs, replyToken, callbackToken)
+		path, body, err = p.reply(ctx, cfg, replyToken, callbackToken)
 	} else {
 		path, body, err = p.dispatchRequest(ctx, cfg, callbackToken)
 	}
@@ -128,6 +128,18 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
 	return cfg.Path, buildSubmissionBody(ctx.Record, data, &cfg.TaskCode, callbackToken, p.client.callbacksURL()), nil
+}
+
+// reply is replyRequest for the step's inputs with their declared files sent as
+// tokens for the other side's client, as a dispatch sends them. The inputs are
+// the task's data, so the declared paths apply as they are.
+func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig, replyToken, callbackToken string) (string, map[string]any, error) {
+	sent, err := p.files.tokenize(ctx.Record.RenderConfig, "", ctx.Inputs, cfg.ServiceID)
+	if err != nil {
+		return "", nil, fmt.Errorf("external_review: %w", err)
+	}
+	inputs, _ := sent.(map[string]any)
+	return replyRequest(cfg, inputs, replyToken, callbackToken)
 }
 
 // replyRequest is a callback on the other side's parked step: {command, payload} on
