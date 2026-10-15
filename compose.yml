@@ -32,6 +32,7 @@ x-config-env: &config-env
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
   STORAGE_LOCAL_PUT_SECRET: ${STORAGE_LOCAL_PUT_SECRET:-local-dev-put-secret}
+  STORAGE_TOKEN_KEYSET: ${STORAGE_TOKEN_KEYSET:-dev:dG5zdy1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   # For a private artifacts repo: reference it as {{env:ARTIFACT_GITHUB_TOKEN}}
   # under artifactLoader.github.token.
   ARTIFACT_GITHUB_TOKEN: ${ARTIFACT_GITHUB_TOKEN:-}
@@ -40,6 +41,8 @@ x-config-env: &config-env
 x-cda-config-env: &cda-config-env
   CONFIG_PATH: configs/agency/cda/config.docker.yaml
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  # Each deployment seals its own file tokens, so not TNSW's keyset.
+  STORAGE_TOKEN_KEYSET: ${CDA_STORAGE_TOKEN_KEYSET:-dev:Y2RhLWxvY2FsLWRldi1maWxlLXRva2VuLWtleS0wMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
@@ -48,6 +51,7 @@ x-cda-config-env: &cda-config-env
 x-efc-config-env: &efc-config-env
   CONFIG_PATH: configs/agency/efc/config.docker.yaml
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_TOKEN_KEYSET: ${EFC_STORAGE_TOKEN_KEYSET:-dev:ZWZjLWxvY2FsLWRldi1maWxlLXRva2VuLWtleS0wMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
@@ -56,6 +60,7 @@ x-efc-config-env: &efc-config-env
 x-npqs-config-env: &npqs-config-env
   CONFIG_PATH: configs/agency/npqs/config.docker.yaml
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_TOKEN_KEYSET: ${NPQS_STORAGE_TOKEN_KEYSET:-dev:bnBxcy1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
@@ -64,6 +69,7 @@ x-npqs-config-env: &npqs-config-env
 x-sltb-config-env: &sltb-config-env
   CONFIG_PATH: configs/agency/sltb/config.docker.yaml
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_TOKEN_KEYSET: ${SLTB_STORAGE_TOKEN_KEYSET:-dev:c2x0Yi1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
@@ -72,6 +78,7 @@ x-sltb-config-env: &sltb-config-env
 x-fcau-config-env: &fcau-config-env
   CONFIG_PATH: configs/agency/fcau/config.docker.yaml
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_TOKEN_KEYSET: ${FCAU_STORAGE_TOKEN_KEYSET:-dev:ZmNhdS1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 

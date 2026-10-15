@@ -83,10 +83,10 @@ func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, 
 		return nil, remoteFailure("upload", err, resp.Error)
 	}
 	if resp.Key == "" || resp.UploadURL == "" {
-		return nil, fmt.Errorf("storage proxy: upload response missing key or upload_url")
+		return nil, wrapUpstreamFailure("upload", errors.New("response missing key or upload_url"))
 	}
 	if err := requireAbsoluteURL(resp.UploadURL); err != nil {
-		return nil, err
+		return nil, wrapUpstreamFailure("validate upload URL", err)
 	}
 	meta := resp.FileMetadata
 	return &meta, nil
@@ -153,15 +153,17 @@ func (s *ProxyService) DownloadURL(ctx context.Context, key string) (string, int
 		return "", 0, remoteFailure("get download URL", err, resp.Error)
 	}
 	if resp.DownloadURL == "" {
-		return "", 0, fmt.Errorf("storage proxy: download response missing download_url")
+		return "", 0, wrapUpstreamFailure("get download URL", errors.New("response missing download_url"))
 	}
 	if err := requireAbsoluteURL(resp.DownloadURL); err != nil {
-		return "", 0, err
+		return "", 0, wrapUpstreamFailure("validate download URL", err)
 	}
 	return resp.DownloadURL, resp.ExpiresAt, nil
 }
 
 // Download streams the file from the owning service via its download URL.
+// Every failure is the owning service's (its URL, the route to it, or its
+// answer), so each is an upstream failure.
 func (s *ProxyService) Download(ctx context.Context, key string) (io.ReadCloser, string, error) {
 	downloadURL, err := s.GetDownloadURL(ctx, key)
 	if err != nil {
@@ -170,16 +172,16 @@ func (s *ProxyService) Download(ctx context.Context, key string) (io.ReadCloser,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("storage proxy: build download request: %w", err)
+		return nil, "", wrapUpstreamFailure("build download request", err)
 	}
 	resp, err := s.fetchClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("storage proxy: download %s: %w", key, err)
+		return nil, "", wrapUpstreamFailure("download "+key, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer func() { _ = resp.Body.Close() }()
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxProxyErrorBody))
-		return nil, "", fmt.Errorf("storage proxy: download %s: owning service returned %d: %s", key, resp.StatusCode, strings.TrimSpace(string(msg)))
+		return nil, "", wrapUpstreamFailure("download "+key, fmt.Errorf("owning service returned %d: %s", resp.StatusCode, strings.TrimSpace(string(msg))))
 	}
 
 	contentType := resp.Header.Get("Content-Type")
@@ -215,6 +217,17 @@ type RemoteRejection struct {
 	err     error
 }
 
+// upstreamFailure marks an error caused by the owning service or the route to
+// it. HTTP handlers answer it as a gateway failure; a RemoteRejection wraps
+// one when the owner returned a client error that should instead be relayed.
+type upstreamFailure struct {
+	err error
+}
+
+func (e *upstreamFailure) Error() string { return e.err.Error() }
+
+func (e *upstreamFailure) Unwrap() error { return e.err }
+
 func (e *RemoteRejection) Error() string {
 	return e.err.Error()
 }
@@ -227,7 +240,7 @@ func (e *RemoteRejection) Unwrap() error {
 // 4xx rejection of the request as a *RemoteRejection. remote reads the error
 // body into the response before failing, which is where message comes from.
 func remoteFailure(op string, err error, message string) error {
-	wrapped := fmt.Errorf("storage proxy: %s: %w", op, err)
+	wrapped := wrapUpstreamFailure(op, err)
 
 	var re *remote.RemoteError
 	if !errors.As(err, &re) || re.StatusCode < 400 || re.StatusCode > 499 {
@@ -239,6 +252,10 @@ func remoteFailure(op string, err error, message string) error {
 		return wrapped
 	}
 	return &RemoteRejection{StatusCode: re.StatusCode, Message: message, err: wrapped}
+}
+
+func wrapUpstreamFailure(op string, err error) *upstreamFailure {
+	return &upstreamFailure{err: fmt.Errorf("storage proxy: %s: %w", op, err)}
 }
 
 // keyPath substitutes the escaped key for every {key} in a path template.

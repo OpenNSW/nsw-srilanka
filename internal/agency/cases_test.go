@@ -82,9 +82,9 @@ func TestCaseHandler(t *testing.T) {
 		"a.json": []byte(`{"schemaVersion":2,"taskCode":"code-a","workflow":"wf-a","meta":{"title":"Verify","description":"Officer verifies"}}`),
 	})
 	reg.RegisterArtifact("code-a", "task_config", "", "a.json")
-	h := NewCaseHandler(repo, tasks, reg, "Officer")
+	h := NewCaseHandler(repo, tasks, reg, map[string]string{"officer": "Officer", "reviewer": "Reviewer"})
 
-	t.Run("requires the officer role", func(t *testing.T) {
+	t.Run("requires a catalog role", func(t *testing.T) {
 		for name, tc := range map[string]struct {
 			p    *authn.Principal
 			want int
@@ -92,12 +92,20 @@ func TestCaseHandler(t *testing.T) {
 			"unauthenticated": {nil, http.StatusUnauthorized},
 			"trader":          {&authn.Principal{Kind: authn.KindUser, Roles: []string{"Trader"}}, http.StatusForbidden},
 			// Only a user can be an officer, whatever roles a client token carries.
-			"client": {&authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA", Roles: []string{"Officer"}}, http.StatusForbidden},
+			"client":        {&authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA", Roles: []string{"Officer"}}, http.StatusForbidden},
+			"officer":       {&authn.Principal{Kind: authn.KindUser, Roles: []string{"Officer"}}, http.StatusOK},
+			"reviewer only": {&authn.Principal{Kind: authn.KindUser, Roles: []string{"Reviewer"}}, http.StatusOK},
+			"mixed roles":   {&authn.Principal{Kind: authn.KindUser, Roles: []string{"Trader", "Reviewer"}}, http.StatusOK},
 		} {
 			rec := httptest.NewRecorder()
 			h.HandleListCases(rec, requestBy(tc.p, "/api/v1/cases", ""))
 			if rec.Code != tc.want {
-				t.Errorf("%s: status = %d, want %d", name, rec.Code, tc.want)
+				t.Errorf("list as %s: status = %d, want %d", name, rec.Code, tc.want)
+			}
+			rec = httptest.NewRecorder()
+			h.HandleGetCase(rec, requestBy(tc.p, "/api/v1/cases/C1", "C1"))
+			if rec.Code != tc.want {
+				t.Errorf("detail as %s: status = %d, want %d", name, rec.Code, tc.want)
 			}
 		}
 	})
@@ -134,4 +142,16 @@ func TestCaseHandler(t *testing.T) {
 			t.Fatalf("status = %d, want 404", rec.Code)
 		}
 	})
+}
+
+// A catalog entry mapped to "" must not match a caller whose roles hold an empty string.
+func TestCaseHandlerEmptyTokenRole(t *testing.T) {
+	h := NewCaseHandler(fakeCaseRepo{}, fakeTasks{}, artifact.NewRegistry(testutil.MemLoader{}), map[string]string{"reviewer": ""})
+	for _, roles := range [][]string{{""}, {"Reviewer"}, nil} {
+		rec := httptest.NewRecorder()
+		h.HandleListCases(rec, requestBy(&authn.Principal{Kind: authn.KindUser, Roles: roles}, "/api/v1/cases", ""))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("roles %q: status = %d, want 403", roles, rec.Code)
+		}
+	}
 }

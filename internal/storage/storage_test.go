@@ -3,11 +3,13 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
@@ -16,6 +18,10 @@ import (
 // testUploadTypes and testMaxUploadBytes are the upload limits the test
 // configurations set.
 var testUploadTypes = []string{"application/pdf", "image/png"}
+
+// testTokenKeyset is a valid storage.tokenKeyset, built rather than written
+// out so no key literal sits in the source.
+var testTokenKeyset = "test:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 
 const testMaxUploadBytes = 1 << 20
 
@@ -35,6 +41,7 @@ func localConfig(t *testing.T, publicURL string) Config {
 		},
 		AllowedUploadTypes: testUploadTypes,
 		MaxUploadBytes:     testMaxUploadBytes,
+		TokenKeyset:        testTokenKeyset,
 	}
 }
 
@@ -176,9 +183,51 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 				DownloadPath: DefaultProxyDownloadPath,
 				DeletePath:   DefaultProxyDeletePath,
 			},
+			TokenKeyset: testTokenKeyset,
 		}
 		if err := cfg.Validate(); err != nil {
 			t.Errorf("Validate() = %v, want nil", err)
 		}
 	})
+}
+
+// Every mode issues file tokens, so every mode needs the token settings.
+func TestConfigValidate_FileTokens(t *testing.T) {
+	proxy := Config{Config: corestorage.Config{Type: TypeProxy}, Proxy: defaultProxyConfig()}
+	backend := localConfig(t, "http://localhost:8080")
+
+	tests := []struct {
+		name    string
+		keyset  string
+		ttl     int
+		wantErr string
+		wantTTL time.Duration
+	}{
+		{name: "no keyset", keyset: "", wantErr: "storage.tokenKeyset is required"},
+		{name: "malformed keyset", keyset: "test:not-base64!", wantErr: "storage.tokenKeyset"},
+		{name: "short key", keyset: "test:" + base64.StdEncoding.EncodeToString([]byte("short")), wantErr: "storage.tokenKeyset"},
+		{name: "negative TTL", keyset: testTokenKeyset, ttl: -1, wantErr: "storage.tokenTTLSeconds"},
+		{name: "default TTL", keyset: testTokenKeyset, wantTTL: time.Hour},
+		{name: "set TTL", keyset: testTokenKeyset, ttl: 600, wantTTL: 10 * time.Minute},
+	}
+	for _, tt := range tests {
+		for mode, cfg := range map[string]Config{"proxy": proxy, "backend": backend} {
+			t.Run(tt.name+" in "+mode+" mode", func(t *testing.T) {
+				cfg.TokenKeyset, cfg.TokenTTLSeconds = tt.keyset, tt.ttl
+				err := cfg.Validate()
+				if tt.wantErr != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+						t.Errorf("Validate() = %v, want an error containing %q", err, tt.wantErr)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("Validate() = %v, want nil", err)
+				}
+				if got := cfg.TokenTTL(); got != tt.wantTTL {
+					t.Errorf("TokenTTL() = %v, want %v", got, tt.wantTTL)
+				}
+			})
+		}
+	}
 }

@@ -5,14 +5,14 @@ in `config.yaml`. The modes are exclusive: a deployment is one or the other, nev
 both. Both share the task engine, Temporal, renderers, plugins, storage and
 `/api/v1/tasks/{id}`. They differ at the edges:
 
-|                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                  |
-| -------------------- | ------------------------------------------------------- | ---------------------------------------- |
-| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)  |
-| Task ownership       | trader/CHA company owns the consignment                 | `officer` role, on any injected workflow |
-| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`          |
-| Catalog must map     | `trader`, `cha`                                         | `officer`                                |
-| Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`            |
-| Artifacts            | TNSW artifact root                                      | the agency's artifacts                   |
+|                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                    |
+| -------------------- | ------------------------------------------------------- | ------------------------------------------ |
+| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
+| Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
+| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
+| Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
+| Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
+| Artifacts            | TNSW artifact root                                      | the agency's artifacts                     |
 
 A missing or unknown `mode` stops the server at startup.
 
@@ -50,7 +50,7 @@ Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then
 point it at the agency's own catalog and artifacts, and accept the injecting client:
 
 ```sh
-cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the officer token role
+cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles
 ```
 
 ```yaml
@@ -69,8 +69,9 @@ authn:
 The injecting client's token needs the `nsw:workflow:inject` scope, and `nsw:task:write`
 to reply on the agency's parked steps (see [Asking for more information](#asking-for-more-information)).
 
-Officers need the `officer` token role (mapped in the agency catalog) and the
-`nsw:consignment:read` and task scopes the portal token already carries.
+Officers need the token role of at least one role in the agency catalog (see
+[Roles per task](#roles-per-task)) and the `nsw:consignment:read` and task scopes the
+portal token already carries.
 
 ### UI
 
@@ -92,8 +93,11 @@ consignment's `workflowNodes` shape. Opening a task uses the normal
 The app only admits users whose IDP group maps to one of its roles, and it has no
 officer role. Mapping the officer role through `IDP_TRADER_ROLE_NAME` admits officers
 as the app's "Trader" role. That is internal only: agency mode hides the role
-switcher, the backend checks the real officer token role, and agency mode shows none
+switcher, the backend checks the real catalog roles, and agency mode shows none
 of the trader-only screens. Add a proper `officer` UI role when the agency UI grows.
+`IDP_TRADER_ROLE_NAME` is a single IDP role, so an officer who holds none of it is
+refused by the app however many catalog roles they hold; see
+[Known simplifications](#known-simplifications).
 
 ## Flow
 
@@ -118,9 +122,10 @@ of the trader-only screens. Add a proper `officer` UI role when the agency UI gr
    for replies, a resubmission comes back as a reply on the agency's own token
    (below), not as a repeat inject.
 5. The workflow is started as its own case, so tasks spawned under it have
-   `CaseID == taskId`. The agency's task authz gate (`agency.OfficerGate`) reports
-   `officer` ownership for any case ID that is an `agency_workflow` row, so `readauthz` and the write extension treat officers
-   like any other owner. Officers use the normal `/api/v1/tasks/{id}` routes.
+   `CaseID == taskId`. The agency's task authz gate (`agency.RoleGate`) reports
+   ownership in every catalog role for any case ID that is an `agency_workflow` row, so
+   `readauthz` and the write extension treat officers like any other owner. Officers
+   use the normal `/api/v1/tasks/{id}` routes.
 
 ## Asking for more information
 
@@ -175,6 +180,39 @@ Code: `internal/agency/taskconfig` and its `taskconfigart` artifact adapter.
 
 TNSW has no task configs: it picks its workflow server-side at consignment creation.
 
+## Roles per task
+
+An agency has no per-case owner, so every injected workflow is owned in **every role of
+the agency's catalog**. What each role may do is decided by the task's own rules, which
+the agency's artifacts therefore declare for every task:
+
+- the step's `authz` extension says which roles may run each command, e.g.
+  `"PENDING_USER": { "submit": ["officer"] }`;
+- the render config's `read.roles` says which roles may open the task, e.g.
+  `["officer"]`.
+
+A step without an `authz` block is not checked on writes, and a render config without
+a `read` block is readable by every catalog role, so a task that should be open to one
+role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
+(read authorization) and the
+[authz extension](../internal/tasks/extensions/authz/README.md).
+
+No role is required of the catalog; it maps the roles the agency's tasks name. To add one:
+
+1. Create the role in the IdP (`idp/resources/government/<agency>.json`).
+2. Map its logical name to that token role in the agency's `catalog.json`, e.g.
+   `"reviewer": "CDA Reviewer"`.
+3. Name it in the `authz` and `read.roles` of the tasks it may act on.
+
+The case list and detail admit an officer holding the token role of any catalog role.
+A role a task names that the catalog does not define matches nobody, so the task is
+closed to everyone.
+
+A catalog that maps no role (for example one with only `clients`) still starts, but no
+officer can open cases or act on tasks: the server logs a warning at start. And without
+`authz` and `read.roles` on a task there is no role-based access control on it, since
+every catalog role then owns it.
+
 ## Cases
 
 `cases` is the generic grouping of the workflows that work on one real-world matter.
@@ -206,3 +244,9 @@ because callers and artifacts speak trade. Internally it is the case id.
 - **No "next task" button for officers.** On completion `TaskDetailScreen` looks up
   the next task via `/api/v1/consignments/{id}`, which 404s for a case, so the button
   never appears. The detail header also shows an empty trade-flow badge.
+
+- **The portal admits one IDP role.** The trader-app maps a single IDP role
+  (`IDP_TRADER_ROLE_NAME`) to its "Trader" role, and shows the unauthorized screen to a
+  user who holds none of it. An officer whose only roles are other catalog roles is
+  refused by the app, though the backend would admit them. Give such officers the
+  mapped role as well until the app accepts a list.

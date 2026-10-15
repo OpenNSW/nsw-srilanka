@@ -54,6 +54,12 @@ cors:
 # traders uploaded there. TNSW applies its own upload limits.
 storage:
   type: proxy
+  # Seals the file tokens officers hold in place of stored file keys (here,
+  # the tokens TNSW gives this agency): comma-separated kid:key pairs, newest
+  # first, each key 32 random bytes in base64. This agency's own, never TNSW's.
+  tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
+  # How long an officer's file token lasts, in seconds. Optional: 3600 when unset.
+  tokenTTLSeconds: 3600
   proxy:
     service: "tnsw"
     uploadPath: /api/v1/storage

@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	errUnauthorized     = "unauthorized"
-	errForbiddenOfficer = "officer role required"
-	errCaseNotFound     = "case not found"
-	errInvalidPaging    = "invalid pagination parameters"
+	errUnauthorized  = "unauthorized"
+	errForbiddenRole = "catalog role required"
+	errCaseNotFound  = "case not found"
+	errInvalidPaging = "invalid pagination parameters"
 )
 
 // TaskLister is the narrow surface CaseHandler needs from the task store.
@@ -35,15 +35,23 @@ type TaskLister interface {
 // JSON field names of the consignment list/detail, so trader-app's existing
 // ConsignmentDetailScreen renders a case without changes.
 type CaseHandler struct {
-	repo        CaseRepository
-	tasks       TaskLister
-	registry    *artifact.Registry // resolves each workflow's task_config for display
-	officerRole string             // the token role the catalog maps RoleOfficer to
+	repo       CaseRepository
+	tasks      TaskLister
+	registry   *artifact.Registry // resolves each workflow's task_config for display
+	tokenRoles map[string]bool    // the token roles the catalog maps its roles to
 }
 
-// NewCaseHandler creates a CaseHandler. officerRole is the token role an officer holds.
-func NewCaseHandler(repo CaseRepository, tasks TaskLister, registry *artifact.Registry, officerRole string) *CaseHandler {
-	return &CaseHandler{repo: repo, tasks: tasks, registry: registry, officerRole: officerRole}
+// NewCaseHandler creates a CaseHandler. roles is the agency catalog's Roles map: an
+// officer holding the token role of any of its entries may use the case views.
+func NewCaseHandler(repo CaseRepository, tasks TaskLister, registry *artifact.Registry, roles map[string]string) *CaseHandler {
+	tokenRoles := make(map[string]bool, len(roles))
+	for _, tokenRole := range roles {
+		// An empty token role would match a caller whose roles hold an empty string.
+		if tokenRole != "" {
+			tokenRoles[tokenRole] = true
+		}
+	}
+	return &CaseHandler{repo: repo, tasks: tasks, registry: registry, tokenRoles: tokenRoles}
 }
 
 // CaseSummary is one row of GET /api/v1/cases.
@@ -80,10 +88,11 @@ type WorkflowNodeTemplate struct {
 	Type        string `json:"type"`
 }
 
-// HandleListCases handles GET /api/v1/cases. Officers see every case: a case has no
-// owner the way a consignment has a trader company.
+// HandleListCases handles GET /api/v1/cases. Officers see every case, whichever
+// catalog role they hold: a case has no owner the way a consignment has a trader
+// company.
 func (h *CaseHandler) HandleListCases(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOfficer(w, r) {
+	if !h.requireCatalogRole(w, r) {
 		return
 	}
 	offsetParam, limitParam, err := pagination.ParsePaginationParams(r)
@@ -108,7 +117,7 @@ func (h *CaseHandler) HandleListCases(w http.ResponseWriter, r *http.Request) {
 // HandleGetCase handles GET /api/v1/cases/{id}: the case plus the tasks of every
 // workflow grouped under it.
 func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOfficer(w, r) {
+	if !h.requireCatalogRole(w, r) {
 		return
 	}
 	ctx := r.Context()
@@ -154,18 +163,18 @@ func (h *CaseHandler) meta(r *http.Request, taskCode string) taskconfig.TaskMeta
 	return cfg.Meta
 }
 
-// requireOfficer writes the error response and returns false unless the caller is a
-// user holding the officer token role. A machine client is authenticated but never an
-// officer, so it gets 403 rather than 401.
-func (h *CaseHandler) requireOfficer(w http.ResponseWriter, r *http.Request) bool {
+// requireCatalogRole writes the error response and returns false unless the caller is a
+// user holding the token role of any catalog role. A machine client is authenticated
+// but never an officer, so it gets 403 rather than 401.
+func (h *CaseHandler) requireCatalogRole(w http.ResponseWriter, r *http.Request) bool {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return false
 	}
-	if p.Kind != authn.KindUser || !slices.Contains(p.Roles, h.officerRole) {
-		slog.WarnContext(r.Context(), "agency: case access denied, officer role missing")
-		httputil.Error(w, r, http.StatusForbidden, errForbiddenOfficer)
+	if p.Kind != authn.KindUser || !slices.ContainsFunc(p.Roles, func(role string) bool { return h.tokenRoles[role] }) {
+		slog.WarnContext(r.Context(), "agency: case access denied, no catalog role held")
+		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return false
 	}
 	return true

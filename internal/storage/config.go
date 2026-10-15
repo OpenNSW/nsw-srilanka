@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"mime"
 	"strings"
+	"time"
 
 	corestorage "github.com/OpenNSW/core/storage"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
 )
 
 // TypeProxy is the storage type (storage.type) that serves storage from
@@ -16,6 +19,10 @@ const TypeProxy = "proxy"
 // KeyPlaceholder marks where the storage key goes in ProxyConfig's
 // DownloadPath and DeletePath.
 const KeyPlaceholder = "{key}"
+
+// DefaultTokenTTLSeconds is how long a user's file token lasts when
+// storage.tokenTTLSeconds is unset: one hour.
+const DefaultTokenTTLSeconds = 3600
 
 // Default ProxyConfig endpoint paths: the storage routes this application
 // itself mounts, so a proxy onto another deployment of it needs none set.
@@ -41,6 +48,16 @@ type Config struct {
 	// Proxy is used when Type is TypeProxy: files are served from another
 	// service that owns them.
 	Proxy ProxyConfig `yaml:"proxy"`
+	// TokenKeyset holds the keys the file tokens callers hold in place of
+	// stored values are sealed with: comma-separated "kid:key" pairs, newest
+	// first, each key 32 random bytes in base64. Required in every mode, and
+	// different for every deployment. Keep a key for as long as the tokens it
+	// sealed must open; those given to OGAs never expire.
+	TokenKeyset string `yaml:"tokenKeyset"`
+	// TokenTTLSeconds is how long a user's file token lasts, in seconds.
+	// Optional: DefaultTokenTTLSeconds when unset. Machine clients' tokens
+	// never expire.
+	TokenTTLSeconds int `yaml:"tokenTTLSeconds"`
 }
 
 // IsProxy reports whether Type selects proxy mode.
@@ -48,12 +65,24 @@ func (c Config) IsProxy() bool {
 	return strings.TrimSpace(c.Type) == TypeProxy
 }
 
-// Validate checks the configuration Type selects: the proxy settings in proxy
-// mode, otherwise the core/storage backend's — which would reject "proxy" as
-// an unknown backend type. The local content routes always sit under
-// RoutePrefix, so a storage.local.routePrefix that says otherwise is an error
-// rather than silently ignored.
+// TokenTTL returns how long a user's file token lasts.
+func (c Config) TokenTTL() time.Duration {
+	if c.TokenTTLSeconds == 0 {
+		return DefaultTokenTTLSeconds * time.Second
+	}
+	return time.Duration(c.TokenTTLSeconds) * time.Second
+}
+
+// Validate checks the file token settings, which every mode needs, and then
+// the configuration Type selects: the proxy settings in proxy mode, otherwise
+// the core/storage backend's — which would reject "proxy" as an unknown
+// backend type. The local content routes always sit under RoutePrefix, so a
+// storage.local.routePrefix that says otherwise is an error rather than
+// silently ignored.
 func (c Config) Validate() error {
+	if err := c.validateTokens(); err != nil {
+		return err
+	}
 	if c.IsProxy() {
 		return c.Proxy.Validate()
 	}
@@ -61,6 +90,19 @@ func (c Config) Validate() error {
 		return err
 	}
 	return c.Config.Validate()
+}
+
+func (c Config) validateTokens() error {
+	if strings.TrimSpace(c.TokenKeyset) == "" {
+		return fmt.Errorf("storage.tokenKeyset is required: comma-separated kid:key pairs, each key 32 random bytes in base64")
+	}
+	if _, err := filetoken.ParseKeyset(c.TokenKeyset); err != nil {
+		return fmt.Errorf("storage.tokenKeyset: %w", err)
+	}
+	if c.TokenTTLSeconds < 0 {
+		return fmt.Errorf("storage.tokenTTLSeconds must be greater than zero, or unset for %d, got %d", DefaultTokenTTLSeconds, c.TokenTTLSeconds)
+	}
+	return nil
 }
 
 // validateBackend checks what this application adds to a core/storage
