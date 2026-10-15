@@ -13,6 +13,7 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
+	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
@@ -26,6 +27,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
+	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 	"github.com/OpenNSW/core/temporal"
 	"github.com/OpenNSW/core/trace"
@@ -389,7 +391,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, recorder, cfg.Server.MaxRequestBytes)
+	canAct := stepCanAct(func(ctx context.Context, id string) (types.StepTemplate, error) {
+		return steptemplate.Load(ctx, artifactRegistry, id)
+	}, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -752,6 +757,32 @@ func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
 			return "", err
 		}
 		return template.OutputNamespace, nil
+	}
+}
+
+// stepCanAct decides whether a caller may act on a task's active step by the
+// rules its submission is checked against: the step template's PRE_RESUME
+// authz extensions, all of which must allow it, as core runs them all. A step
+// with none doesn't check who submits, so whoever may read the task may act on
+// it. A task with no active step template has nothing to act on.
+func stepCanAct(load func(ctx context.Context, stepTemplateID string) (types.StepTemplate, error), ext *taskauthzext.Extension) tasks.CanAct {
+	return func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
+		if record.ActiveTaskTemplateID == "" {
+			return false, nil
+		}
+		template, err := load(ctx, record.ActiveTaskTemplateID)
+		if err != nil {
+			return false, fmt.Errorf("step template %q: %w", record.ActiveTaskTemplateID, err)
+		}
+		for _, e := range template.Extensions {
+			if e.ID != taskauthzext.ExtAuthz || e.Phase != types.PhasePreResume {
+				continue
+			}
+			if ok, err := ext.MayAct(ctx, &record, in, e.Properties); err != nil || !ok {
+				return false, err
+			}
+		}
+		return true, nil
 	}
 }
 

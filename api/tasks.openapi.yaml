@@ -28,8 +28,9 @@ paths:
 
         Each value the task's render config declares under `files` is
         replaced by a **file reference** issued to the caller: an opaque
-        string to pass to `GET /api/v1/storage/{key}`, or back in a
-        submission, never the stored file's key. A reference expires after
+        string to pass to `GET /api/v1/storage/{key}`, never the stored
+        file's key. When the caller may act on the task's active step, it
+        can also be sent back in a submission. A reference expires after
         the deployment's `storage.tokenTTLSeconds`; refetch the task for
         fresh ones.
 

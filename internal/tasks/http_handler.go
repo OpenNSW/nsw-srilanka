@@ -59,6 +59,9 @@ type HTTPHandler struct {
 	// Files swaps the task's declared file fields: stored values out as
 	// references for a reader, references in as stored values on a submission.
 	Files *FileBinding
+	// CanAct decides whether a reader's file references can be submitted.
+	// Without it, they can only be opened.
+	CanAct CanAct
 }
 
 func NewHTTPHandler(
@@ -67,6 +70,7 @@ func NewHTTPHandler(
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
+	canAct CanAct,
 	audit *nswaudit.Recorder,
 	maxRequestBytes int64,
 ) *HTTPHandler {
@@ -76,6 +80,7 @@ func NewHTTPHandler(
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
 		Files:           files,
+		CanAct:          canAct,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
@@ -134,9 +139,10 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The reader gets references to the task's files, never their stored values.
+	// The reader gets references to the task's files, never their stored
+	// values, and can submit them back only on a step they may act on.
 	p, _ := authn.FromContext(ctx)
-	view, err := h.Files.ForReader(record, p)
+	view, err := h.Files.ForReader(record, p, h.canAct(ctx, record, in))
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to issue file references", err, "taskId", taskID)
 		return
@@ -149,6 +155,21 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.JSON(w, http.StatusOK, zv)
+}
+
+// canAct reports whether in may act on record's active step. A failure to
+// decide is logged and taken as no: the reader can still open the task's
+// files, and refetches the task to submit them.
+func (h *HTTPHandler) canAct(ctx context.Context, record store.TaskRecord, in taskauthz.Input) bool {
+	if h.CanAct == nil {
+		return false
+	}
+	ok, err := h.CanAct(ctx, record, in)
+	if err != nil {
+		slog.ErrorContext(ctx, "tasks: failed to decide whether the reader can act; their file references can only be opened", "taskId", record.TaskID, "error", err)
+		return false
+	}
+	return ok
 }
 
 // HandleCompleteTaskStep advances a task by completing one of its steps. It is the
