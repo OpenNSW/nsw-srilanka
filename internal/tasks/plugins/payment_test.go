@@ -228,6 +228,18 @@ func TestPaymentPlugin_Execute_PassesFeeReferenceFormat(t *testing.T) {
 	assert.Equal(t, "000201000020001", ctx.Record.Data["payment"].(map[string]any)["reference_number"])
 }
 
+// A reference format that expects no params needs neither params nor values:
+// the generator draws from the fee's issuer and id_type alone.
+func TestPaymentPlugin_Execute_ReferenceFormatWithoutParams(t *testing.T) {
+	svc := &fakePaymentService{resp: checkoutResponse()}
+
+	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil),
+		[]byte(`{"task_code":"CODE1","currency":"LKR","amount":12500,"reference":{"issuer":"ACME","id_type":"invoice_ref"}}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Equal(t, refIDCall{issuer: "ACME", idType: "invoice_ref", params: map[string]string{}}, generatedFrom(t, svc.lastReq))
+}
+
 // A fee without a reference format takes the default format.
 func TestPaymentPlugin_Execute_DefaultReferenceFormat(t *testing.T) {
 	svc := &fakePaymentService{resp: checkoutResponse()}
