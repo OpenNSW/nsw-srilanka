@@ -84,10 +84,11 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 		// trader or CHA company that owns the consignment. Users can still claim
 		// tasks, to show the rest of their company who is working on one.
 		return taskauthz.Input{
-			Kind:       taskauthz.KindUser,
-			Roles:      p.Roles,
-			OwnedRoles: m.ownedRolesFor(p.OUHandle),
-			UserID:     p.UserID,
+			Kind:                 taskauthz.KindUser,
+			Roles:                p.Roles,
+			OwnedRoles:           m.ownedRolesFor(p.OUHandle),
+			UserID:               p.UserID,
+			RequireClaimToSubmit: false,
 		}, true
 	default:
 		return taskauthz.Input{}, false
