@@ -95,9 +95,10 @@ paths:
         instead.
 
         Each `payload` field the task's render config declares under `files`
-        must hold a file reference issued to the caller, from an upload or
-        the task's zone view; the stored value it stands for is what gets
-        stored. For now, a value that is not a reference is stored as sent.
+        must hold a file reference issued to the caller that can be
+        submitted, from an upload or the task's zone view; the stored value
+        it stands for is what gets stored. For now, a value that is not a
+        reference is stored as sent.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
@@ -137,7 +138,7 @@ paths:
           description: |
             The caller may not perform this action on this task, or a
             declared file field holds a file reference issued to someone
-            else.
+            else, or one that can't be submitted.
           content:
             application/json:
               schema:
@@ -195,8 +196,9 @@ paths:
         The body is the same envelope as the portal's
         `POST /api/v1/tasks/{id}/steps/{stepId}`, and must contain exactly one
         JSON value. Its declared file fields follow the same rule: each must
-        hold a file reference issued to the caller's client, such as one the
-        dispatch carried or an upload returned.
+        hold a file reference issued to the caller's client that can be
+        submitted, such as one an upload returned. A reference the dispatch
+        carried can only be opened, so it can't be sent back.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStepByCallbackToken
@@ -236,7 +238,7 @@ paths:
           description: |
             The caller may not perform this action on this task, or a
             declared file field holds a file reference issued to someone
-            else.
+            else, or one that can't be submitted.
           content:
             application/json:
               schema:

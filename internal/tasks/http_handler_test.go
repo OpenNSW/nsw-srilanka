@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/core/uiprojector"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -626,7 +627,7 @@ func TestHandleGetTask_GivesFileReferences(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), `"invoice":"ref1"`)
 	assert.NotContains(t, recorder.Body.String(), "stored-invoice-key")
-	value, err := refs.Resolve(userPrincipal("alice"), "ref1")
+	value, err := refs.Resolve(userPrincipal("alice"), "ref1", fileaccess.ScopeRead)
 	require.NoError(t, err)
 	assert.Equal(t, "stored-invoice-key", value)
 	assert.Equal(t, "stored-invoice-key", fetcher.record.Data["form"].(map[string]any)["invoice"], "the stored record must not change")
@@ -664,9 +665,10 @@ func submitStep(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, step
 
 func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 	refs := newFakeFileRefs()
-	alicesRef, _ := refs.IssueFor(userPrincipal("alice"), "k")
-	expiredRef, _ := refs.IssueFor(userPrincipal("bob"), "k")
+	alicesRef, _ := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
+	expiredRef, _ := refs.Issue(userPrincipal("bob"), "k", readSubmit...)
 	refs.expired[expiredRef] = true
+	readOnlyRef, _ := refs.Issue(userPrincipal("bob"), "k", fileaccess.ScopeRead)
 
 	tests := []struct {
 		name       string
@@ -679,6 +681,7 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 		{"step no longer active", pendingFileTask(), "step-0", map[string]any{"invoice": alicesRef}, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", map[string]any{"invoice": alicesRef}, http.StatusForbidden},
 		{"expired file", pendingFileTask(), "step-1", map[string]any{"invoice": expiredRef}, http.StatusGone},
+		{"a file that can't be submitted", pendingFileTask(), "step-1", map[string]any{"invoice": readOnlyRef}, http.StatusForbidden},
 		{"a list where one file is declared", pendingFileTask(), "step-1", map[string]any{"invoice": []any{alicesRef, expiredRef}}, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
@@ -691,7 +694,7 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 
 func TestResolveFiles_StoresTheValues(t *testing.T) {
 	refs := newFakeFileRefs()
-	ref, _ := refs.IssueFor(userPrincipal("alice"), "stored-invoice-key")
+	ref, _ := refs.Issue(userPrincipal("alice"), "stored-invoice-key", readSubmit...)
 	var calls int
 	h := &HTTPHandler{Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))}
 	req := httptest.NewRequest(http.MethodPost, "/", nil)

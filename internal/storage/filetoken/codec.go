@@ -1,6 +1,8 @@
-// Package filetoken seals a resource, and the holder allowed to use it, into
-// an opaque token, and opens such tokens again. A resource is an opaque string
-// to this package: callers decide what it is, such as a stored file's key.
+// Package filetoken seals a grant into an opaque token, and opens such tokens
+// again. A grant names a resource, the holder allowed to use it, and the
+// scopes saying what the holder may do with it. All are opaque strings to
+// this package: callers decide what they are, such as a stored file's key or
+// "read".
 //
 // A token is a compact JWE ("dir" + A256GCM). Its claims are encrypted, and
 // the GCM tag makes any change to them or to the header detectable, so only
@@ -13,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -35,12 +38,22 @@ var (
 	ErrExpired = errors.New("filetoken: token expired")
 )
 
-// Claims is what a token carries.
-type Claims struct {
+// Grant is what a token grants.
+type Grant struct {
 	// Resource is what the token grants access to.
 	Resource string
 	// Holder names who may use the token, in whatever form the caller chose.
 	Holder string
+	// Scopes say what the holder may do with the resource, in whatever form
+	// the caller chose. Seal requires at least one. A token sealed before
+	// tokens carried scopes opens with none, so it should allow nothing.
+	Scopes []string
+}
+
+// Claims is what a token carries: its grant, and when it was sealed and
+// stops being usable.
+type Claims struct {
+	Grant
 	// IssuedAt is when the token was sealed.
 	IssuedAt time.Time
 	// Expires is when the token stops being usable. It is zero for a token
@@ -50,10 +63,11 @@ type Claims struct {
 
 // payload is the encrypted JSON form of Claims. Times are Unix seconds.
 type payload struct {
-	Resource string `json:"res"`
-	Holder   string `json:"h"`
-	IssuedAt int64  `json:"iat"`
-	Expires  int64  `json:"exp,omitempty"`
+	Resource string   `json:"res"`
+	Holder   string   `json:"h"`
+	Scopes   []string `json:"scope"`
+	IssuedAt int64    `json:"iat"`
+	Expires  int64    `json:"exp,omitempty"`
 }
 
 // Codec seals and opens tokens with one keyset.
@@ -74,17 +88,20 @@ func NewCodec(keys *Keyset, now func() time.Time) (*Codec, error) {
 	return &Codec{keys: keys, now: now}, nil
 }
 
-// Seal returns a token carrying resource and holder. lifetime is how long the
-// token is usable for; zero means it never expires.
-func (c *Codec) Seal(resource, holder string, lifetime time.Duration) (string, error) {
-	if resource == "" || holder == "" {
+// Seal returns a token carrying g. lifetime is how long the token is usable
+// for; zero means it never expires.
+func (c *Codec) Seal(g Grant, lifetime time.Duration) (string, error) {
+	if g.Resource == "" || g.Holder == "" {
 		return "", errors.New("filetoken: resource and holder are required")
+	}
+	if !validScopes(g.Scopes) {
+		return "", errors.New("filetoken: a grant needs at least one scope, and no empty scope")
 	}
 	if lifetime < 0 {
 		return "", errors.New("filetoken: lifetime must not be negative")
 	}
 	now := c.now()
-	p := payload{Resource: resource, Holder: holder, IssuedAt: now.Unix()}
+	p := payload{Resource: g.Resource, Holder: g.Holder, Scopes: g.Scopes, IssuedAt: now.Unix()}
 	if lifetime > 0 {
 		p.Expires = now.Add(lifetime).Unix()
 	}
@@ -132,10 +149,10 @@ func (c *Codec) Open(token string) (Claims, error) {
 		return Claims{}, ErrInvalid
 	}
 	var p payload
-	if err := json.Unmarshal(plaintext, &p); err != nil || p.Resource == "" || p.Holder == "" {
+	if err := json.Unmarshal(plaintext, &p); err != nil || p.Resource == "" || p.Holder == "" || slices.Contains(p.Scopes, "") {
 		return Claims{}, ErrInvalid
 	}
-	claims := Claims{Resource: p.Resource, Holder: p.Holder, IssuedAt: time.Unix(p.IssuedAt, 0)}
+	claims := Claims{Grant: Grant{Resource: p.Resource, Holder: p.Holder, Scopes: p.Scopes}, IssuedAt: time.Unix(p.IssuedAt, 0)}
 	if p.Expires != 0 {
 		claims.Expires = time.Unix(p.Expires, 0)
 		if !c.now().Before(claims.Expires) {
@@ -143,4 +160,9 @@ func (c *Codec) Open(token string) (Claims, error) {
 		}
 	}
 	return claims, nil
+}
+
+// validScopes reports whether scopes has at least one scope and none empty.
+func validScopes(scopes []string) bool {
+	return len(scopes) > 0 && !slices.Contains(scopes, "")
 }

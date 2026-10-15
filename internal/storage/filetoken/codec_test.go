@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func newCodec(t *testing.T, keyset string, c *clock) *filetoken.Codec {
 
 func seal(t *testing.T, codec *filetoken.Codec, value, holder string, lifetime time.Duration) string {
 	t.Helper()
-	token, err := codec.Seal(value, holder, lifetime)
+	token, err := codec.Seal(filetoken.Grant{Resource: value, Holder: holder, Scopes: []string{"read"}}, lifetime)
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -66,14 +67,30 @@ func TestSealOpenRoundTrip(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	want := filetoken.Claims{
-		Resource: "traders/invoice.pdf",
-		Holder:   "u:alice",
+		Grant:    filetoken.Grant{Resource: "traders/invoice.pdf", Holder: "u:alice", Scopes: []string{"read"}},
 		IssuedAt: c.t,
 		Expires:  c.t.Add(time.Hour),
 	}
 	if !got.IssuedAt.Equal(want.IssuedAt) || !got.Expires.Equal(want.Expires) ||
-		got.Resource != want.Resource || got.Holder != want.Holder {
+		got.Resource != want.Resource || got.Holder != want.Holder || !slices.Equal(got.Scopes, want.Scopes) {
 		t.Errorf("Open = %+v, want %+v", got, want)
+	}
+}
+
+// Scopes are sealed and opened like the rest of the grant, and opaque to the
+// codec.
+func TestSealOpenScopes(t *testing.T) {
+	codec := newCodec(t, entry("k1", 1), newClock())
+	token, err := codec.Seal(filetoken.Grant{Resource: "v", Holder: "u:alice", Scopes: []string{"read", "submit"}}, 0)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	if strings.Contains(token, "submit") {
+		t.Fatalf("token %q exposes its scopes", token)
+	}
+	got, err := codec.Open(token)
+	if err != nil || !slices.Equal(got.Scopes, []string{"read", "submit"}) {
+		t.Fatalf("Open = %+v, %v; want scopes [read submit]", got, err)
 	}
 }
 
@@ -188,7 +205,7 @@ func encrypt(t *testing.T, enc jose.ContentEncryption, rcpt jose.Recipient, opts
 func TestOpenRejectsOtherJWEs(t *testing.T) {
 	c := newClock()
 	codec := newCodec(t, entry("k1", 1), c)
-	claims := `{"res":"v","h":"h","iat":1}`
+	claims := `{"res":"v","h":"h","scope":["read"],"iat":1}`
 	typed := (&jose.EncrypterOptions{}).WithType("nsw-file+jwe")
 
 	cases := map[string]string{
@@ -202,9 +219,11 @@ func TestOpenRejectsOtherJWEs(t *testing.T) {
 		"another content encryption": encrypt(t, jose.A128GCM,
 			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1)[:16], KeyID: "k1"}, typed, claims),
 		"no holder": encrypt(t, jose.A256GCM,
-			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"res":"v","iat":1}`),
+			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"res":"v","scope":["read"],"iat":1}`),
 		"no resource": encrypt(t, jose.A256GCM,
-			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"h":"h","iat":1}`),
+			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"h":"h","scope":["read"],"iat":1}`),
+		"an empty scope": encrypt(t, jose.A256GCM,
+			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, `{"res":"v","h":"h","scope":[""],"iat":1}`),
 		"not JSON": encrypt(t, jose.A256GCM,
 			jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, "v"),
 		"unknown kid": encrypt(t, jose.A256GCM,
@@ -220,6 +239,26 @@ func TestOpenRejectsOtherJWEs(t *testing.T) {
 	ok := encrypt(t, jose.A256GCM, jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, claims)
 	if _, err := codec.Open(ok); err != nil {
 		t.Errorf("a well-formed token: %v", err)
+	}
+}
+
+// A token sealed before tokens carried scopes still opens, with none, so the
+// caller can refuse it as allowing nothing rather than as no token at all.
+func TestOpenTokenWithoutScopes(t *testing.T) {
+	codec := newCodec(t, entry("k1", 1), newClock())
+	typed := (&jose.EncrypterOptions{}).WithType("nsw-file+jwe")
+	for name, claims := range map[string]string{
+		"no scope":         `{"res":"v","h":"h","iat":1}`,
+		"empty scope list": `{"res":"v","h":"h","scope":[],"iat":1}`,
+	} {
+		token := encrypt(t, jose.A256GCM, jose.Recipient{Algorithm: jose.DIRECT, Key: rawKey(1), KeyID: "k1"}, typed, claims)
+		got, err := codec.Open(token)
+		if err != nil {
+			t.Fatalf("%s: Open: %v", name, err)
+		}
+		if got.Resource != "v" || got.Holder != "h" || len(got.Scopes) != 0 {
+			t.Errorf("%s: Open = %+v, want the grant with no scopes", name, got)
+		}
 	}
 }
 
@@ -240,18 +279,21 @@ func TestOpenRejectsNonTokens(t *testing.T) {
 
 func TestSealRejects(t *testing.T) {
 	codec := newCodec(t, entry("k1", 1), newClock())
+	read := []string{"read"}
 	cases := []struct {
-		name          string
-		value, holder string
-		lifetime      time.Duration
+		name     string
+		grant    filetoken.Grant
+		lifetime time.Duration
 	}{
-		{"no resource", "", "h", 0},
-		{"no holder", "v", "", 0},
-		{"negative lifetime", "v", "h", -time.Second},
-		{"a resource too long to open", strings.Repeat("v", 2000), "h", 0},
+		{"no resource", filetoken.Grant{Holder: "h", Scopes: read}, 0},
+		{"no holder", filetoken.Grant{Resource: "v", Scopes: read}, 0},
+		{"no scope", filetoken.Grant{Resource: "v", Holder: "h"}, 0},
+		{"an empty scope", filetoken.Grant{Resource: "v", Holder: "h", Scopes: []string{"read", ""}}, 0},
+		{"negative lifetime", filetoken.Grant{Resource: "v", Holder: "h", Scopes: read}, -time.Second},
+		{"a resource too long to open", filetoken.Grant{Resource: strings.Repeat("v", 2000), Holder: "h", Scopes: read}, 0},
 	}
 	for _, tc := range cases {
-		if _, err := codec.Seal(tc.value, tc.holder, tc.lifetime); err == nil {
+		if _, err := codec.Seal(tc.grant, tc.lifetime); err == nil {
 			t.Errorf("%s: Seal succeeded", tc.name)
 		}
 	}
