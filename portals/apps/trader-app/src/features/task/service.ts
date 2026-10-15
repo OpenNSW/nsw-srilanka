@@ -25,22 +25,22 @@ export async function submitTaskStep(
   })
 }
 
-// claimTask claims the task for the signed-in user (204). A 409 means another user
-// holds it or the task is completed; refetch the task either way.
+// claimTask claims the task for the signed-in user: POST /claim (204). A 409 means
+// another user holds it or the task is completed; refetch the task either way.
 export async function claimTask(taskId: string): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/claim`,
-    method: 'PUT',
+    method: 'POST',
     attachToken: true,
   })
 }
 
-// releaseTask releases the signed-in user's claim (204). A 403 means another user
-// holds it.
+// releaseTask releases the signed-in user's claim: POST /release (204). A 403 means
+// another user holds it.
 export async function releaseTask(taskId: string): Promise<void> {
   await http.request({
-    url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/claim`,
-    method: 'DELETE',
+    url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/release`,
+    method: 'POST',
     attachToken: true,
   })
 }
