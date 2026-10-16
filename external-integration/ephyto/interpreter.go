@@ -29,6 +29,10 @@ import (
 //	    ephyto.retryable when the Hub never answered.
 //	{ "operation": "poll" }   — query GetEnvelopeTrackingInfo for the tracking
 //	    number once and set ephyto.delivered / ephyto.tracking_info.
+//	{ "operation": "withdraw" } — send the certificate submit sent again with
+//	    the Hub's Withdrawn status (40) instead of Issued (70), so the
+//	    importing NPPO is told it no longer stands, and record ephyto.withdrawn
+//	    / ephyto.tracking_number / ephyto.error.
 //
 // It is an auto plugin (the generic plugin returns nil to advance
 // immediately). The workflow's gateways branch on the flags recorded here.
@@ -39,8 +43,9 @@ import (
 
 // Hub operations selected via plugin_properties.operation.
 const (
-	OpSubmit = "submit"
-	OpPoll   = "poll"
+	OpSubmit   = "submit"
+	OpPoll     = "poll"
+	OpWithdraw = "withdraw"
 )
 
 // buildError marks a failure to construct the envelope (an incomplete
@@ -86,6 +91,20 @@ func (i HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (
 			return "", &buildError{err.Error()}
 		}
 		return BuildDeliverSOAP(in, certXML), nil
+	case OpWithdraw:
+		if !anyItemIncluded(inputs["certificate_items"]) {
+			return "", &buildError{"The certificate to withdraw names no items: it must be sent with the items it was issued with."}
+		}
+		in := BuildInput(inputs)
+		if in.SOAP.To == "" {
+			return "", &buildError{"No IPPC Hub connection is recorded for the certificate, so it cannot be withdrawn."}
+		}
+		withdrawn(&in)
+		certXML, err := BuildCertXML(in)
+		if err != nil {
+			return "", &buildError{err.Error()}
+		}
+		return BuildDeliverSOAP(in, certXML), nil
 	case OpPoll:
 		tracking, _ := inputs["tracking_number"].(string)
 		if tracking == "" {
@@ -93,15 +112,19 @@ func (i HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (
 		}
 		return hub.BuildGetTrackingSOAP(tracking), nil
 	default:
-		return "", &buildError{fmt.Sprintf("Unknown ePhyto Hub operation %q (want %q or %q).", operation, OpSubmit, OpPoll)}
+		return "", &buildError{fmt.Sprintf("Unknown ePhyto Hub operation %q (want %q, %q or %q).", operation, OpSubmit, OpPoll, OpWithdraw)}
 	}
 }
 
 func (i HubInterpreter) Interpret(operation string, callErr error, resp *remote.RawResponse) (string, map[string]any) {
-	if operation == OpPoll {
+	switch operation {
+	case OpPoll:
 		return i.interpretPoll(callErr, resp)
+	case OpWithdraw:
+		return i.interpretWithdraw(callErr, resp)
+	default:
+		return i.interpretSubmit(callErr, resp)
 	}
-	return i.interpretSubmit(callErr, resp)
 }
 
 // interpretSubmit records the ValidateAndDeliverEnvelope outcome. A build
@@ -140,6 +163,37 @@ func (HubInterpreter) interpretSubmit(callErr error, resp *remote.RawResponse) (
 		out["retryable"] = hubResp == nil && callErr != nil
 	}
 	return "EPHYTO_SUBMITTED", out
+}
+
+// interpretWithdraw records whether the Hub accepted the withdrawal. As with a
+// submission, a build failure keeps the record state unchanged; an attempted
+// call moves it to EPHYTO_WITHDRAWAL_SUBMITTED, and ephyto.withdrawn drives the
+// gateway.
+func (HubInterpreter) interpretWithdraw(callErr error, resp *remote.RawResponse) (string, map[string]any) {
+	const intro = "The phytosanitary certificate could not be withdrawn on the IPPC ePhyto Hub:"
+	out := map[string]any{"withdrawn": false, "error": ""}
+
+	var be *buildError
+	if errors.As(callErr, &be) {
+		out["error"] = intro + "\n\n- " + be.msg
+		return "", out
+	}
+
+	hubResp, callErr := parseHubResponse(callErr, resp)
+	accepted := callErr == nil && hubResp != nil && hubResp.Delivered()
+	out["withdrawn"] = accepted
+	if hubResp != nil {
+		if hubResp.HubDeliveryNumber != "" {
+			out["tracking_number"] = hubResp.HubDeliveryNumber
+		}
+		if hubResp.HUBTrackingInfo != "" {
+			out["tracking_info"] = hubResp.HUBTrackingInfo
+		}
+	}
+	if !accepted {
+		out["error"] = DescribeFailure(intro, callErr, hubResp)
+	}
+	return "EPHYTO_WITHDRAWAL_SUBMITTED", out
 }
 
 // interpretPoll records whether a previously submitted envelope has been

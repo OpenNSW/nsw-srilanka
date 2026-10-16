@@ -68,6 +68,17 @@ func BuildInput(inputs map[string]any) spscert.Input {
 	}
 }
 
+// withdrawn turns the certificate in into the one that withdraws it: the same
+// certificate, number and content, carrying the Withdrawn status in both the
+// envelope header and the certificate. Its documents are not sent again: the
+// importing NPPO already has them, and a withdrawal states only that the
+// certificate no longer stands.
+func withdrawn(in *spscert.Input) {
+	in.SOAP.CertificateStatus = certStatusWithdrawn
+	in.Certificate.StatusCode = strconv.Itoa(certStatusWithdrawn)
+	in.Certificate.Attachments = nil
+}
+
 // BuildCertXML renders the SPSCertificate XML body for the given input. It also
 // serves as the local validation gate: BuildCertificate rejects an incomplete
 // document (missing certificate number, no items, a trade line without a
@@ -158,7 +169,11 @@ const (
 	// connection code the trader selects on the form, not this value.
 	exportNPPOCode   = "LK"
 	certStatusIssued = 70 // Hub CertificateStatus for an issued certificate
-	issuingNPPO      = "National Plant Quarantine Service of Sri Lanka"
+	// certStatusWithdrawn is the Hub CertificateStatus for a withdrawn
+	// certificate ("40 Withdrawn" in the Hub's allowed documents, HUB Web
+	// Service API).
+	certStatusWithdrawn = 40
+	issuingNPPO         = "National Plant Quarantine Service of Sri Lanka"
 )
 
 // isoFromHubConnection derives the ISO 3166-1 alpha-2 country code from a Hub
