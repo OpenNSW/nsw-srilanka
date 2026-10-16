@@ -6,6 +6,89 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-16
+
+This release gives every deployment a file-token key set, delivers a trader's resubmission to the agency step that is waiting for it, and lets an agency catalog map roles besides `officer`. It also adds HTML document generation for workflows and reference formats for SLTB and NPQS, and stops checking a client ID allow list when it validates tokens. Every deployment needs one new secret, and TNSW's client for each agency needs one more scope.
+
+### Upgrade notes
+
+#### Set a file-token key set on every deployment ([#625](https://github.com/OpenNSW/nsw-srilanka/pull/625))
+
+- Add `storage.tokenKeyset` to the `config.yaml` of TNSW and of each agency (CDA, EFC, FCAU, NPQS and SLTB). The server refuses to start without it, whatever `storage.type` is.
+- The value is a comma-separated list of `kid:key` pairs, each key 32 random bytes in base64. Reference it as `"{{env:STORAGE_TOKEN_KEYSET}}"` and set `STORAGE_TOKEN_KEYSET=<kid>:$(openssl rand -base64 32)` from a Secret.
+- Give every deployment a key set of its own. Never share one between deployments, and never use the development value in `.env.example`.
+- With Helm, add a `storage-token-keyset` key to `nsw-secrets`, a `STORAGE_TOKEN_KEYSET` entry in `backend.env` that reads it, and `tokenKeyset` under `backend.config.storage`, as [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/deployments/helm/values-example.yaml) does.
+- To rotate, put the new pair first and keep the old ones. Tokens given to agencies never expire, so dropping a key breaks the files they hold.
+- `storage.tokenTTLSeconds` is optional. It sets how long a user's file token lasts, and defaults to 3600 (one hour).
+- Local: add `STORAGE_TOKEN_KEYSET` to your `.env`, and copy `tokenKeyset` from the examples into your git-ignored `configs/config.yaml` and `configs/config.docker.yaml`. The committed agency configs and Compose already carry development keys.
+
+#### Let TNSW reply to agencies ([#635](https://github.com/OpenNSW/nsw-srilanka/pull/635))
+
+- In the IdP, give each client TNSW uses to call an agency (`NSW_TO_CDA`, `NSW_TO_EFC`, `NSW_TO_FCAU`, `NSW_TO_NPQS` and `NSW_TO_SLTB`) the `nsw:task:write` scope on that agency's own API, as well as `nsw:workflow:inject`. On a managed IdP, add it by hand to each client and its `NswTo<Agency>M2M` role. The local bootstrap in `idp/bootstrap/` grants it, and applies it on the next `docker compose up`.
+- In TNSW's `services.json`, set each agency entry's `scopes` to `["nsw:workflow:inject", "nsw:task:write"]`, as `configs/services*.example.json` now do. That includes your git-ignored local copies.
+- Deploy this release and the IdP change before the artifacts that use replies. Without the scope, an agency refuses TNSW's reply, and the step is retried until it is granted.
+
+#### Token validation no longer checks client IDs ([#704](https://github.com/OpenNSW/nsw-srilanka/pull/704))
+
+- `authn.clientIDs` is no longer read. Remove it from `config.yaml` (Helm: `backend.config.authn`) for TNSW and every agency. A key left in is ignored and does not stop the server.
+- A token's audience alone now binds it to the service, so the API accepts a token from any client the IdP issues one to for the deployment's audience, not only the listed ones. In ThunderID, check that only the intended applications are granted access to the NSW API and to each agency API.
+
+#### Agency catalogs ([#677](https://github.com/OpenNSW/nsw-srilanka/pull/677))
+
+- In agency mode, every role in the agency's catalog now owns an injected workflow, not only `officer`, and `officer` is no longer required in the catalog. What a role may do comes from each task's own rules: a step with no `authz` block is not checked on writes, and a render config with no `read.roles` can be read by every catalog role.
+- If your agency catalog maps roles besides `officer`, make sure each agency task declares who may act, as the agency folders of one-trade-artifacts do from [one-trade-artifacts#169](https://github.com/OpenNSW/one-trade-artifacts/pull/169). See "Roles per task" in [`docs/agency.md`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/docs/agency.md).
+
+#### Reference formats for SLTB and NPQS ([#688](https://github.com/OpenNSW/nsw-srilanka/pull/688), [#687](https://github.com/OpenNSW/nsw-srilanka/pull/687))
+
+Add these before you publish the SLTB and NPQS artifacts that use them. No migration is needed: they use the existing reference ID tables.
+
+- **TNSW:** add the `SLTB` issuer (`blend_sheet_no`, `levy_payment_ref` and `lab_payment_ref`) and the `NPQS` issuer (`npqs_payment_ref`) to `refid` in `config.yaml` (Helm: `backend.config.refid`). Copy them from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/configs/config.example.yaml) or [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/deployments/helm/values-example.yaml).
+- **SLTB agency:** add the `refid` section of [`configs/agency/sltb/config.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/configs/agency/sltb/config.yaml). Its sample tasks draw each sample's reference from it, such as `2026/09/0001`.
+- **NPQS agency:** add the `refid` section of [`configs/agency/npqs/config.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/configs/agency/npqs/config.yaml), which generates the application, lab sample, ePhyto and re-export certificate references. Deploy the NPQS agency and TNSW configurations together.
+- **Local:** copy the new issuers into your git-ignored `configs/config*.yaml`.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`5d62d77`](https://github.com/OpenNSW/one-trade-artifacts/commit/5d62d77929fc343adeb08d1ae62d0591648fcc8b) (16 October 2026). It holds every artifact change this release depends on:
+  - [one-trade-artifacts#146](https://github.com/OpenNSW/one-trade-artifacts/pull/146): the agency reviews that receive a trader's resubmission by reply token ([#635](https://github.com/OpenNSW/nsw-srilanka/pull/635));
+  - [one-trade-artifacts#169](https://github.com/OpenNSW/one-trade-artifacts/pull/169): who may act on every agency task ([#677](https://github.com/OpenNSW/nsw-srilanka/pull/677));
+  - [one-trade-artifacts#172](https://github.com/OpenNSW/one-trade-artifacts/pull/172) and [one-trade-artifacts#174](https://github.com/OpenNSW/one-trade-artifacts/pull/174): the NPQS and SLTB reference numbers ([#687](https://github.com/OpenNSW/nsw-srilanka/pull/687), [#688](https://github.com/OpenNSW/nsw-srilanka/pull/688));
+  - [one-trade-artifacts#141](https://github.com/OpenNSW/one-trade-artifacts/pull/141): the boat note's printable document ([#581](https://github.com/OpenNSW/nsw-srilanka/pull/581)).
+
+### Added
+
+- **File tokens.** For tasks whose render config declares file fields, `GET /api/v1/tasks/{id}` returns a token in place of each stored file key. A token works only for the caller it was issued to (403 for anyone else) and only within `storage.tokenTTLSeconds` (410 after). `GET /api/v1/storage/{key}` and both task submit routes (`POST /api/v1/tasks/{id}/steps/{stepId}` and `POST /api/v1/callbacks/{token}`) take it back. The submit routes now read the task first, so a missing task is 404 and a step that is no longer active is 409. A value that isn't a token is still served and stored as a raw key, so nothing changes until the artifacts declare their files. ([#625](https://github.com/OpenNSW/nsw-srilanka/pull/625))
+- **A trader's resubmission reaches the agency.** After an officer asks for more information, the resubmission used to be dropped, leaving TNSW waiting. Now only the first round goes through inject, and each side calls back on the other's waiting step by the token that step handed over. A reply to a step that is no longer waiting gets a 409 and is not retried: the step parks for an admin. Needs the IdP scope above and one-trade-artifacts#146. ([#635](https://github.com/OpenNSW/nsw-srilanka/pull/635))
+- **Agency catalog roles.** An agency catalog may map extra roles: add the IdP role and a catalog entry. See the upgrade notes. ([#677](https://github.com/OpenNSW/nsw-srilanka/pull/677))
+- **HTML documents.** A workflow can generate a print-ready document from an HTML template with the `HTML_DOCUMENT_GENERATOR` task plugin, such as the boat note. No config change: add an `html_template` and a subtask template that uses the plugin to the artifacts. ([#581](https://github.com/OpenNSW/nsw-srilanka/pull/581))
+- **Reference numbers for SLTB and NPQS.** SLTB blend sheet numbers, sample references and payment references, and NPQS application, lab sample, certificate and payment references, are generated from `refid` formats. See the upgrade notes. ([#688](https://github.com/OpenNSW/nsw-srilanka/pull/688), [#687](https://github.com/OpenNSW/nsw-srilanka/pull/687))
+- An onboarding guide for agencies that run in agency mode: [`docs/guides/onboarding-agency-mode-agencies.md`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.4.0/docs/guides/onboarding-agency-mode-agencies.md). ([#691](https://github.com/OpenNSW/nsw-srilanka/pull/691))
+
+### Changed
+
+- Token validation no longer checks a client ID allow list: the audience alone binds a token to the service. This is `core/authn` v0.4.0. See the upgrade notes. ([#704](https://github.com/OpenNSW/nsw-srilanka/pull/704))
+- The Trader Portal's forms use `@opennsw/jsonforms-renderers` 0.13. Layout rules are now applied, so the SLTB final-decision officer form's Certificate Issuance group stays hidden until `approve` is chosen. Time pickers store `HH:MM:SS` instead of `HH:MM`, so check anything that parses `proposed_inspection_time` in the NPQS forms. Fields that are required only through a condition, and the rows of required arrays, show the required marker. Number inputs with a minimum block `-`, `+` and `e`. A file field's `x-file.fileName` is now used as the file's name. ([#702](https://github.com/OpenNSW/nsw-srilanka/pull/702))
+
+### Fixed
+
+- GovPay+ requests and webhooks are validated against the GovPay+ contract's field types and lengths. A reference number (`refNo`) may contain printable punctuation such as hyphens, up to 20 characters, and is kept exactly as sent, so the hyphenated NPQS payment references pass. A request that breaks the contract is now rejected: `transactionID` must be letters and digits (up to 20), `subinstId` and `serviceid` digits only (up to 3), and `serviceName` is required (up to 50 printable characters). ([#686](https://github.com/OpenNSW/nsw-srilanka/pull/686))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- File tokens are not enforced yet. The storage route and the task submit routes still accept a raw storage key, so a file can still be fetched by its key, not only by a token issued to the caller.
+- On the CDA application form, an `.xls` upload to the DC bags field is named `DC BAGS DETAILS _1.xlsx.xls`, because the artifact's `x-file.fileName` ends in `.xlsx` while the field also accepts `.xls`. Only the displayed and downloaded name is affected. The fix is in the artifact, not in TNSW.
+
 ## [0.3.0] - 2026-10-14
 
 This release runs each consignment as a case with several flows, moves workflow steps onto core's guarded task steps, and generates payment references from `refid` formats. Work in flight at the upgrade does not carry over, systems that review TNSW's tasks call back on a new route, and the Customs agency becomes the Export Facilitation Center (EFC). It also adds flows that traders start on a consignment (the first being the SLPA sundry payment), OpenTelemetry metrics, and NPQS, SLTB and FCAU as agencies in local Docker Compose.
@@ -342,7 +425,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OpenNSW/nsw-srilanka/releases/tag/v0.1.0
