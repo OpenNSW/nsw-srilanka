@@ -130,7 +130,6 @@ func sampleForm() map[string]any {
 		},
 		"valuation": map[string]any{
 			"totalAmountInvoiced": map[string]any{"amount": float64(1500), "currencyCode": "USD"},
-			"invoiceAmount":       map[string]any{"amount": float64(1500), "currencyCode": "USD"},
 			"externalFreight":     map[string]any{"amount": float64(100), "currencyCode": "USD"},
 			"internalFreight":     map[string]any{"amount": float64(0), "currencyCode": "USD"},
 			"insurance":           map[string]any{"amount": float64(0), "currencyCode": "USD"},
@@ -210,13 +209,11 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 	assert.Equal(t, "USD", value["currencyID"], "the remittance carries its own currency")
 }
 
-// chargeAmount (Box 22) is read from totalAmountInvoiced. invoiceAmount is a
-// different field with different values here, so a mix-up would show.
+// chargeAmount (Box 22) is read from totalAmountInvoiced.
 func TestBuildPayload_HeaderValuationMapsTotalCustomsValuation(t *testing.T) {
 	form := minimalForm()
 	form["valuation"] = map[string]any{
 		"totalAmountInvoiced": map[string]any{"amount": float64(2400), "currencyCode": "USD"},
-		"invoiceAmount":       map[string]any{"amount": float64(999), "currencyCode": "EUR"},
 		"externalFreight":     map[string]any{"amount": float64(100), "currencyCode": "USD"},
 		"internalFreight":     map[string]any{"amount": float64(0), "currencyCode": "USD"},
 		"insurance":           map[string]any{"amount": float64(0), "currencyCode": "USD"},

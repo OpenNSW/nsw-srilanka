@@ -295,7 +295,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 // buildDeclarationValuation maps the header valuation onto
 // generalSegment.totalCustomsValuation. Each cost is amount + currencyCode.
 // chargeAmount (Box 22, Currency & Total Amount Invoiced) comes from its own
-// field, totalAmountInvoiced; it is not the remittance's invoiceAmount.
+// field, totalAmountInvoiced.
 func buildDeclarationValuation(v map[string]any) Valuation {
 	section := func(key string) Amount {
 		s := nested(v, key)
