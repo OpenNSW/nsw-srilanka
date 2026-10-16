@@ -80,6 +80,24 @@ func TestMiddleware_Client(t *testing.T) {
 	if own.calls != 0 || comp.calls != 0 {
 		t.Errorf("client must not trigger lookups: ownership=%d company=%d", own.calls, comp.calls)
 	}
+	if in.UserID != "" || in.RequireClaimToSubmit {
+		t.Errorf("client input = %+v, want no user id and no claim requirement", in)
+	}
+}
+
+// TNSW users carry their user id, so they can claim tasks, but need no claim to
+// submit: a step is already limited to the company that owns the consignment.
+func TestMiddleware_UserCarriesUserIDWithoutClaimRequirement(t *testing.T) {
+	p := userCtx("adam-pvt-ltd", "Trader")
+	p.UserID = "user-1"
+	in, ok := attachedInput(mustNewMiddleware(t, &fakeOwnership{}, &fakeCompany{}), p)
+
+	if !ok || in.UserID != "user-1" {
+		t.Fatalf("got %+v ok=%v, want UserID user-1", in, ok)
+	}
+	if in.RequireClaimToSubmit {
+		t.Error("TNSW must not require a claim to submit")
+	}
 }
 
 func TestMiddleware_Unauthenticated(t *testing.T) {

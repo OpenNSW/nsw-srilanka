@@ -132,3 +132,20 @@ func TestRoleGateEligibility(t *testing.T) {
 		})
 	}
 }
+
+// Every user holding a catalog role owns every injected workflow, so the claim is what
+// keeps two of them off one task: a user must hold it to submit. A client completes
+// steps by callback token and cannot hold a claim.
+func TestRoleGate_ClaimPolicy(t *testing.T) {
+	gate := NewRoleGate(fakeRepo{}, []string{"officer"})
+
+	user, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindUser, UserID: "user-1", Roles: []string{"Officer"}})
+	if !ok || user.UserID != "user-1" || !user.RequireClaimToSubmit {
+		t.Errorf("user input = %+v, ok = %v; want UserID user-1 and RequireClaimToSubmit", user, ok)
+	}
+
+	client, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"})
+	if !ok || client.UserID != "" || client.RequireClaimToSubmit {
+		t.Errorf("client input = %+v, ok = %v; want no user id and no claim requirement", client, ok)
+	}
+}
