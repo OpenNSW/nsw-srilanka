@@ -299,4 +299,6 @@ The mock agency waits until the app sends the inject for that task id, then post
 
 **`pay` times out** — the payment record hasn't been created. Increase `timeout` or check the payment method submit step succeeded.
 
-**401/403 on agency callback** — the mock posts with a real agency bearer. Ensure the agency's token carries the NSW API identifier as `aud`, the `authn.audience` in `configs/config.example.yaml`.
+**401 on agency callback** — the mock posts with a real agency bearer. Ensure the agency's token carries the NSW API identifier as `aud`, the `authn.audience` in `configs/config.example.yaml`.
+
+**403 on agency callback** — the token lacks `nsw:task:write`, or its client ID isn't the one `catalog.json` maps, under `clients`, to the agency the task names.

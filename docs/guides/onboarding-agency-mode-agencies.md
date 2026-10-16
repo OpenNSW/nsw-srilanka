@@ -487,13 +487,19 @@ frontend:
     copyrightNotice: "© 2026 Department of Export Agriculture. All rights reserved."
 ```
 
-Three values must agree, or officers and TNSW get `401`:
+These values must agree, or officers and TNSW get `401`:
 
-| This                                                    | must equal                                                      |
-| ------------------------------------------------------- | --------------------------------------------------------------- |
-| `backend.config.authn.audience`                         | the API identifier (Step 2b)                                    |
-| `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier                                             |
-| `IDP_TRADER_ROLE_NAME` and the `catalog.json` role      | the officer role's name (Step 2f)                               |
+| This                                                    | must equal                   |
+| ------------------------------------------------------- | ---------------------------- |
+| `backend.config.authn.audience`                         | the API identifier (Step 2b) |
+| `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
+
+And these, or officers are signed in but can't act: the portal says they have no role, or
+their calls get `403`:
+
+| This                                               | must equal                        |
+| -------------------------------------------------- | --------------------------------- |
+| `IDP_TRADER_ROLE_NAME` and the `catalog.json` role | the officer role's name (Step 2f) |
 
 ### 4d. Install
 
