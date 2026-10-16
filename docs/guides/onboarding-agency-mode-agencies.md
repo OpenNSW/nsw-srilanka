@@ -438,7 +438,6 @@ backend:
       jwksURL: "https://idp.example.com/oauth2/jwks"
       issuer: "https://idp.example.com"
       audience: "https://api.dea.nsw-agency.local"
-      clientIDs: ["<portal client ID>", "<TNSW-to-agency client ID>"]
       insecureSkipTLSVerify: false
     temporal:
       host: temporal
@@ -488,14 +487,13 @@ frontend:
     copyrightNotice: "© 2026 Department of Export Agriculture. All rights reserved."
 ```
 
-Four values must agree, or officers and TNSW get `401`:
+Three values must agree, or officers and TNSW get `401`:
 
 | This                                                    | must equal                                                      |
 | ------------------------------------------------------- | --------------------------------------------------------------- |
 | `backend.config.authn.audience`                         | the API identifier (Step 2b)                                    |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier                                             |
 | `IDP_TRADER_ROLE_NAME` and the `catalog.json` role      | the officer role's name (Step 2f)                               |
-| `backend.config.authn.clientIDs`                        | the portal's and the TNSW-to-agency client's IDs (Steps 2d, 2e) |
 
 ### 4d. Install
 
@@ -588,7 +586,7 @@ that artifacts naming the handle match its callbacks:
 { "clients": { "dea": "<agency-to-TNSW client ID>" } }
 ```
 
-Add the agency-to-TNSW client ID to TNSW's `backend.config.authn.clientIDs`. Then roll out:
+Then roll out:
 
 ```sh
 helm upgrade lk-tnsw ./deployments/helm/lk-tnsw -n tnsw -f <your-values>.yaml
@@ -653,14 +651,14 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                       |
 | Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                            |
 | Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                   |
-| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends, or the portal's client ID not in `authn.clientIDs`                                                                        |
+| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                            |
 | Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the `catalog.json` name doesn't match the token's `roles`, or the officer isn't in the group |
-| Inject `401`                                            | The TNSW-to-agency client ID not in the agency's `authn.clientIDs`, or TNSW's `services.json` asks for a different `resource`                                                  |
+| Inject `401`                                            | TNSW's `services.json` asks for a `resource` other than the agency's `authn.audience`                                                                                          |
 | Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `services.json` entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                    |
 | Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                   |
 | Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                           |
 | Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                        |
-| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` or `403` means TNSW's `authn.clientIDs` or `catalog.json` (6b)                              |
+| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` or `403` means TNSW's `catalog.json` (6b)                                                   |
 
 ## Local development
 

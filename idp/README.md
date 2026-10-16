@@ -185,7 +185,7 @@ without passwords; strip and fix those before committing.
 To add an agency run by this backend in agency mode, copy one of the
 `20-agency-*.yaml` files, change the handle, names and port, and give every document a
 new `id` (and update the references to it). Then add its port to the `cors` server
-config, and its clients to the backends' `authn.clientIDs`, catalog and `services.json`.
+config, and its clients to the backends' catalog and `services.json`.
 
 ### Management token (local dev)
 

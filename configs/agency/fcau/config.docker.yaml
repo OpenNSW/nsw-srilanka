@@ -75,9 +75,6 @@ authn:
   jwksURL: https://thunderid:8090/oauth2/jwks
   issuer: https://localhost:8090
   audience: https://api.fcau.nsw-agency.local
-  clientIDs:
-    - OGA_PORTAL_APP_FCAU
-    - NSW_TO_FCAU
   # Only honored when APP_ENV=development.
   insecureSkipTLSVerify: true
 

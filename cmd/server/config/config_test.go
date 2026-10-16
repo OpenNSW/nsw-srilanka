@@ -74,7 +74,6 @@ authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090
   audience: https://api.nsw-srilanka.local
-  clientIDs: [TRADER_PORTAL_APP]
 temporal:
   host: localhost
   port: 7233
@@ -204,10 +203,9 @@ func validConfig() *Config {
 			SLPAWebhookSecret: "a-secret-shared-with-slpa",
 		},
 		Authn: authn.Config{
-			JWKSURL:   "https://example.com/jwks",
-			Issuer:    "https://example.com",
-			Audience:  "myapp",
-			ClientIDs: []string{"client1"},
+			JWKSURL:  "https://example.com/jwks",
+			Issuer:   "https://example.com",
+			Audience: "myapp",
 		},
 		Notification: NotificationConfig{
 			Providers: NotificationProviders{
@@ -367,7 +365,6 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"authn.jwksURL",
 		"authn.issuer",
 		"authn.audience",
-		"authn.clientIDs",
 		"temporal.host",
 		"temporal.port",
 		"temporal.namespace",

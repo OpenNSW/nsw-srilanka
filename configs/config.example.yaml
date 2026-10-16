@@ -146,16 +146,6 @@ authn:
   jwksURL: https://localhost:8090/oauth2/jwks
   issuer: https://localhost:8090
   audience: https://api.nsw-srilanka.local
-  clientIDs:
-    - TRADER_PORTAL_APP
-    - FCAU_TO_NSW
-    - NPQS_TO_NSW
-    - CDA_TO_NSW
-    - SLPA_TO_NSW
-    - EFC_TO_NSW
-    - SLTB_TO_NSW
-    - SLCE_TO_NSW
-    - GOVPAY_TO_NSW
   # Local development with self-signed certs may need to skip TLS verification
   # for the JWKS endpoint. Only honored when APP_ENV=development (see above).
   insecureSkipTLSVerify: true

@@ -47,7 +47,8 @@ next free slot; if main adds its own `000018`, renumber this one after the merge
 ## Running as an agency
 
 Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then
-point it at the agency's own catalog and artifacts, and accept the injecting client:
+point it at the agency's own catalog and artifacts, and give it the agency API's identifier
+as its audience:
 
 ```sh
 cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles
@@ -61,7 +62,7 @@ artifactLoader:
   local:
     root: configs/agency/artifacts
 authn:
-  clientIDs: [TRADER_PORTAL_APP, ..., NSW_TO_CDA]
+  audience: https://api.cda.nsw-agency.local
 ```
 
 `configs/agency/cda/` is a complete example.

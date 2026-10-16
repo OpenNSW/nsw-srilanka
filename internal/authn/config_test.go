@@ -7,10 +7,9 @@ import (
 
 func validConfig() Config {
 	return Config{
-		JWKSURL:   "https://idp.example.com/oauth2/jwks",
-		Issuer:    "https://idp.example.com",
-		Audience:  "https://api.nsw-srilanka.local",
-		ClientIDs: []string{"TRADER_PORTAL_APP"},
+		JWKSURL:  "https://idp.example.com/oauth2/jwks",
+		Issuer:   "https://idp.example.com",
+		Audience: "https://api.nsw-srilanka.local",
 	}
 }
 
@@ -53,7 +52,6 @@ func TestConfig_Validate(t *testing.T) {
 		{"missing jwks url", func(c *Config) { c.JWKSURL = "" }},
 		{"missing issuer", func(c *Config) { c.Issuer = "" }},
 		{"missing audience", func(c *Config) { c.Audience = "" }},
-		{"missing client ids", func(c *Config) { c.ClientIDs = nil }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

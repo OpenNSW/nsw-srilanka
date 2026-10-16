@@ -9,11 +9,10 @@ import coreauthn "github.com/OpenNSW/core/authn"
 // extract is this package's own business, not a per-deployment setting, so
 // coreConfig declares them from the claim constants in principal.go.
 type Config struct {
-	JWKSURL               string   `yaml:"jwksURL"`
-	Issuer                string   `yaml:"issuer"`
-	Audience              string   `yaml:"audience"`
-	ClientIDs             []string `yaml:"clientIDs"`
-	InsecureSkipTLSVerify bool     `yaml:"insecureSkipTLSVerify"`
+	JWKSURL               string `yaml:"jwksURL"`
+	Issuer                string `yaml:"issuer"`
+	Audience              string `yaml:"audience"`
+	InsecureSkipTLSVerify bool   `yaml:"insecureSkipTLSVerify"`
 }
 
 // coreConfig maps Config onto core/authn's Config and declares the extra claims
@@ -30,7 +29,6 @@ func (c Config) coreConfig() coreauthn.Config {
 		JWKSURL:               c.JWKSURL,
 		Issuer:                c.Issuer,
 		Audience:              c.Audience,
-		ClientIDs:             c.ClientIDs,
 		InsecureSkipTLSVerify: c.InsecureSkipTLSVerify,
 		UserClaims: coreauthn.ClaimSpec{
 			Required: []string{claimEmail, claimOUID, claimOUHandle},
