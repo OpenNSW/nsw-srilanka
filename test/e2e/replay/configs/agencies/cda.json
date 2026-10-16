@@ -12,10 +12,11 @@
   },
   "inbound": {
     "endpoint": "POST /api/v1/inject",
-    "taskIDField": "taskId"
+    "taskIDField": "taskId",
+    "callbackTokenField": "callbackToken"
   },
   "outbound": {
-    "callbackPath": "/api/v1/tasks/{taskId}",
+    "callbackPath": "/api/v1/callbacks/{callbackToken}",
     "commandField": "command",
     "payloadField": "payload"
   }
