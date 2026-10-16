@@ -31,8 +31,8 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(oidc-client-ts@3.5.0)
       '@opennsw/jsonforms-renderers':
-        specifier: ^0.11.0
-        version: 0.11.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^0.13.0
+        version: 0.13.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-icons':
         specifier: ^1.3.2
         version: 1.3.2(react@19.3.0)
@@ -327,8 +327,8 @@ packages:
     peerDependencies:
       oidc-client-ts: ^3.0.0
 
-  '@opennsw/jsonforms-renderers@0.11.0':
-    resolution: {integrity: sha512-5krFI+T7UwYLRXwNbSS5lOUMuxh5Zu1fk9CyjZeKFqhZJ5xrGrLrMZZJXqBGPKzWAPGQyZ+qFFIxPwjjCEjLvA==}
+  '@opennsw/jsonforms-renderers@0.13.0':
+    resolution: {integrity: sha512-6Va8l3i/3jgYzetUEF3Sw6WGjmmmCvpzn0ueTyykgrN4Ag+Wgm4WgrpHUglKyL0+olH1RbX3PcQDtSWxUlMcIA==}
     peerDependencies:
       '@jsonforms/core': ^3.2.1
       '@jsonforms/react': ^3.2.1
@@ -2686,7 +2686,7 @@ snapshots:
     dependencies:
       oidc-client-ts: 3.5.0
 
-  '@opennsw/jsonforms-renderers@0.11.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@opennsw/jsonforms-renderers@0.13.0(@jsonforms/core@3.8.0)(@jsonforms/react@3.8.0(@jsonforms/core@3.8.0)(react@19.3.0))(@radix-ui/react-icons@1.3.2(react@19.3.0))(@radix-ui/themes@3.3.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@e965/xlsx': 0.20.3
       '@formulajs/formulajs': 4.6.1
