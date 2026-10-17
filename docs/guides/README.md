@@ -2,7 +2,8 @@
 
 Step-by-step procedures for operating a TNSW deployment.
 
-| Guide                                                                  | Use it to                                                                                                         |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| [Onboarding a trader or CHA company](onboarding-traders-and-chas.md)   | Add a private-sector company and its users, in ThunderID and in the TNSW database (`otc`)                         |
-| [Onboarding an agency-mode agency](onboarding-agency-mode-agencies.md) | Stand up an agency on this codebase (`mode: agency`): ThunderID, database, Temporal, Helm release, officer portal |
+| Guide                                                                  | Use it to                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [Onboarding a trader or CHA company](onboarding-traders-and-chas.md)   | Add a private-sector company and its users, in ThunderID and in the TNSW database (`otc`)                                |
+| [Onboarding an agency-mode agency](onboarding-agency-mode-agencies.md) | Stand up an agency on this codebase (`mode: agency`): ThunderID, database, Temporal, Helm release, officer portal        |
+| [Connecting Sri Lanka Customs](onboarding-customs.md)                  | Connect TNSW and SLC Edge (ASYCUDA) in both directions: TNSW's client from Customs, Customs' webhook client in ThunderID |
