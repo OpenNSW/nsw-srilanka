@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -418,6 +419,81 @@ cors:
 	}
 	if !containsString(err.Error(), "allowedOrigins cannot contain the wildcard '*' when allowCredentials is true") {
 		t.Errorf("expected error mentioning wildcard credentials constraint, got: %v", err)
+	}
+}
+
+// A deployment declares its own token attributes in the authn section; both
+// sections are optional, and each decodes into its own principal kind.
+func TestLoad_AuthnExtraClaims(t *testing.T) {
+	cfg, err := loadYAML(t, configYAML(t, `
+authn:
+  extraUserClaims:
+    required: [tenant]
+    optional: [department, officerGrade]
+  extraClientClaims:
+    optional: [agency]
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		got, want []string
+	}{
+		{"extraUserClaims.required", cfg.Authn.ExtraUserClaims.Required, []string{"tenant"}},
+		{"extraUserClaims.optional", cfg.Authn.ExtraUserClaims.Optional, []string{"department", "officerGrade"}},
+		{"extraClientClaims.required", cfg.Authn.ExtraClientClaims.Required, nil},
+		{"extraClientClaims.optional", cfg.Authn.ExtraClientClaims.Optional, []string{"agency"}},
+	} {
+		if !slices.Equal(tc.got, tc.want) {
+			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+
+	base, err := loadYAML(t, baseYAML)
+	if err != nil {
+		t.Fatalf("Load() without extra claims error: %v", err)
+	}
+	if got := base.Authn; len(got.ExtraUserClaims.Required)+len(got.ExtraUserClaims.Optional)+
+		len(got.ExtraClientClaims.Required)+len(got.ExtraClientClaims.Optional) != 0 {
+		t.Errorf("expected no extra claims by default, got %+v", got)
+	}
+}
+
+// A claim that already has a dedicated field would be read twice under two
+// meanings, so Load refuses to start.
+func TestLoad_AuthnReservedExtraClaimFails(t *testing.T) {
+	for _, tc := range []struct {
+		name, override string
+		want           []string
+	}{
+		{"built-in user claim", `
+authn:
+  extraUserClaims:
+    optional: [ouHandle]
+`, []string{"invalid authn configuration", "authn.extraUserClaims.optional", "ouHandle"}},
+		{"fixed-schema user claim", `
+authn:
+  extraUserClaims:
+    required: [scope]
+`, []string{"invalid authn configuration", "UserClaims.Required", "scope"}},
+		{"fixed-schema client claim", `
+authn:
+  extraClientClaims:
+    optional: [sub]
+`, []string{"invalid authn configuration", "ClientClaims.Optional", "sub"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := loadYAML(t, configYAML(t, tc.override))
+			if err == nil {
+				t.Fatal("expected Load to fail")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q should mention %q", err, want)
+				}
+			}
+		})
 	}
 }
 

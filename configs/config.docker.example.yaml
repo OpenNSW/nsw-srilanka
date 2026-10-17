@@ -352,6 +352,20 @@ authn:
   jwksURL: http://thunderid:8090/oauth2/jwks
   issuer: http://localhost:8090
   audience: https://api.nsw-srilanka.local
+  # Further token claims this deployment reads, for attribute-based rules that
+  # differ per deployment. email, phone_number, ouId and ouHandle are always read
+  # and can't be listed here, nor can the names the token library binds (sub,
+  # scope, roles, client_id and the other registered claims); startup fails if
+  # one is. The IdP must also release a claim into the access token, or it never
+  # arrives. Top-level claim names only.
+  #
+  # "required" rejects (401) every token without the claim, so prefer "optional"
+  # and have rules deny when the attribute is missing.
+  # extraUserClaims:      # tokens issued to people (authorization_code)
+  #   required: []
+  #   optional: [department]
+  # extraClientClaims:    # tokens issued to machine clients (client_credentials)
+  #   optional: [agency]
 
 # One settings block per channel, in the schema of
 # github.com/OpenNSW/core/notification. At least one is required.
