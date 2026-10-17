@@ -27,7 +27,11 @@ export async function submitTaskStep(
 
 // saveTaskStepDraft stores payload as a draft of the step without completing it.
 // The task's state, step and version stay as they are.
-export async function saveTaskStepDraft(taskId: string, stepId: string, payload: Record<string, unknown>): Promise<void> {
+export async function saveTaskStepDraft(
+  taskId: string,
+  stepId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}/draft`,
     method: 'PUT',
