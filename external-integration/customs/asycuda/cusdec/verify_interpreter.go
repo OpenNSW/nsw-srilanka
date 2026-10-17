@@ -22,7 +22,10 @@ import (
 //
 //   - the body is raw JSON, not multipart. This deliberately does not
 //     implement BuildParts, which is what keeps the plugin on the JSON path;
-//     attachments are not verified and the endpoint does not accept them.
+//     no files are attached and the endpoint does not accept them. The
+//     supportingDocuments entries are still sent, without file data: ASYCUDA
+//     only checks that each declared document code is valid and that the
+//     documents the declaration requires are present (§6.6).
 //   - nothing here advances the declaration. The call records what came back
 //     and the workflow returns to the form, so a trader can verify as often as
 //     they like before submitting.
@@ -46,8 +49,14 @@ func NewVerifyInterpreter() VerifyInterpreter { return VerifyInterpreter{} }
 // plugin's own envelope, not a declaration, so Customs could not parse them at
 // all -- no field-level validation, just a rejected request that reached the
 // trader as "unavailable".
+//
+// Supporting documents are mapped for verify (see buildSupportDocs): each entry
+// is sent without its file, and one the submission would refuse is sent anyway,
+// so it cannot empty the declaration either.
 func (VerifyInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	payload, _, _ := buildFromInputs(inputs)
+	form, _ := inputs["payload"].(map[string]any)
+	previousEdgeID, _ := inputs[PreviousEdgeIDKey].(string)
+	payload, _, _ := buildDeclaration(form, previousEdgeID, true)
 	return remote.JSONBody{V: payload}
 }
 

@@ -159,6 +159,91 @@ func TestVerifyInterpreter_SendsTheDeclarationAsJSON(t *testing.T) {
 	assert.False(t, isMultipart, "verify must not go out as multipart")
 }
 
+// Verify sends the supportingDocuments entries but no files (§6.6): ASYCUDA
+// checks that each document code is valid and that the required documents are
+// present, and does not use fileName. A scanned document therefore goes out as
+// its code alone, with no fileBase64 or fileName.
+func TestVerifyInterpreter_SendsSupportingDocumentEntriesWithoutFiles(t *testing.T) {
+	form := sampleForm()
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{
+			map[string]any{"fileBase64": "storage/customs/invoice.pdf", "documentCode": "INV"},
+		},
+		"metaDocuments": []any{
+			map[string]any{"itemSequence": "8", "documentCode": "LC", "documentId": "LC-1092", "dateAsString": "2026-09-15"},
+		},
+	}
+
+	body := VerifyInterpreter{}.BuildRequest(map[string]any{"payload": form})
+
+	jsonBody, ok := body.(remote.JSONBody)
+	require.True(t, ok)
+	encoded, err := json.Marshal(jsonBody.V)
+	require.NoError(t, err)
+	var sent struct {
+		SupportingDocuments []map[string]any `json:"supportingDocuments"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &sent))
+
+	require.Len(t, sent.SupportingDocuments, 2)
+	assert.Equal(t, map[string]any{"sequenceNumber": float64(0), "documentCode": "INV"}, sent.SupportingDocuments[0],
+		"a scanned document is sent as its code, without its file")
+	assert.Equal(t, map[string]any{
+		"sequenceNumber": float64(1), "documentCode": "LC", "itemSequence": "8",
+		"documentId": "LC-1092", "dateAsString": "15/09/2026",
+	}, sent.SupportingDocuments[1])
+	assert.NotContains(t, string(encoded), "storage/customs/invoice.pdf")
+	assert.NotContains(t, string(encoded), "fileName")
+	assert.NotContains(t, string(encoded), "fileBase64")
+
+	scanned := form["supportingDocuments"].(map[string]any)["scannedDocuments"].([]any)[0].(map[string]any)
+	assert.Equal(t, "storage/customs/invoice.pdf", scanned["fileBase64"],
+		"the trader's form is what they submit afterwards, so it is left as it was")
+}
+
+// A document entry the submission would refuse does not cost the trader the
+// verification of everything else: the declaration is still mapped, and the
+// entry is sent as it is so Customs can say what is wrong with it.
+func TestVerifyInterpreter_AnIncompleteDocumentDoesNotEmptyTheDeclaration(t *testing.T) {
+	form := sampleForm()
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{map[string]any{"documentCode": "INV"}},
+		"metaDocuments":    []any{map[string]any{"documentCode": "LC"}},
+	}
+
+	body := VerifyInterpreter{}.BuildRequest(map[string]any{"payload": form})
+
+	jsonBody, ok := body.(remote.JSONBody)
+	require.True(t, ok)
+	encoded, err := json.Marshal(jsonBody.V)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(encoded), `"marksAndNumbers":"test"`,
+		"the declaration is still mapped and sent")
+	assert.Contains(t, string(encoded), `"documentCode":"INV"`)
+	assert.Contains(t, string(encoded), `"documentCode":"LC"`)
+}
+
+// The submission is unchanged: a scanned document still needs its file, and it
+// still carries the file name Customs matches against the attached part.
+func TestSubmission_StillRequiresTheScannedDocumentFile(t *testing.T) {
+	form := sampleForm()
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{map[string]any{"documentCode": "INV"}},
+	}
+	_, _, err := BuildPayload(form, "")
+	require.Error(t, err)
+
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{map[string]any{"fileBase64": "storage/customs/invoice.pdf", "documentCode": "INV"}},
+	}
+	sub, docs, err := BuildPayload(form, "")
+	require.NoError(t, err)
+	require.Len(t, docs, 1)
+	assert.True(t, docs[0].HasFile())
+	assert.Equal(t, "storage/customs/invoice.pdf", sub.SupportingDocuments[0].FileName)
+}
+
 // A form the mapper cannot read is still sent as a declaration, so Customs
 // answers with the fields it is missing. Sending the plugin's own input
 // envelope instead -- which this once did -- puts a shape Customs cannot parse
