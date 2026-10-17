@@ -280,3 +280,21 @@ func TestTokenWithoutScopes(t *testing.T) {
 	}
 	assertRefused(t, a, user("bob"), token, fileaccess.ErrNotYours)
 }
+
+// A user's upload token can only be submitted, and never expires; a machine
+// client's opens the file too.
+func TestUploadScopes(t *testing.T) {
+	a, c := newAccess(t, 1)
+	fromUser := issue(t, a, user("alice"), "v", fileaccess.UploadScopes(user("alice"))...)
+	fromClient := issue(t, a, client("CDA_TO_NSW"), "v", fileaccess.UploadScopes(client("CDA_TO_NSW"))...)
+
+	c.t = c.t.AddDate(10, 0, 0)
+	if got, err := a.Resolve(user("alice"), fromUser, fileaccess.ScopeSubmit); err != nil || got != "v" {
+		t.Errorf("user's upload token, submit: Resolve = %q, %v; want the resource", got, err)
+	}
+	assertRefused(t, a, user("alice"), fromUser, fileaccess.ErrScope)
+	assertResolves(t, a, client("CDA_TO_NSW"), fromClient, "v")
+	if got, err := a.Resolve(client("CDA_TO_NSW"), fromClient, fileaccess.ScopeSubmit); err != nil || got != "v" {
+		t.Errorf("client's upload token, submit: Resolve = %q, %v; want the resource", got, err)
+	}
+}
