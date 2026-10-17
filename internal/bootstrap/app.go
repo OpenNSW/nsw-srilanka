@@ -476,6 +476,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// reads it. Public routes (local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleGetTask)))))
 	mux.Handle("POST /api/v1/tasks/{id}/steps/{stepId}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
+	mux.Handle("PUT /api/v1/tasks/{id}/steps/{stepId}/draft", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleSaveDraft)))))
 	mux.Handle("POST /api/v1/callbacks/{token}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStepByToken)))))
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))

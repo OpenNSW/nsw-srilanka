@@ -1,9 +1,9 @@
-import type { ZoneComponent } from '@/features/zone/types'
+import type { ZoneAction, ZoneComponent } from '@/features/zone/types'
 import { renderZoneComponent } from './renderers'
 
 type Props = {
   component: ZoneComponent
-  onAction?: (command: string, data: Record<string, unknown>) => Promise<void>
+  onAction?: ZoneAction
 }
 
 // Zone is the chrome around every rendered zone: section header (the zone's
