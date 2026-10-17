@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
@@ -702,4 +704,63 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 
 	require.True(t, ok)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
+}
+
+// --- HandleSaveDraft -------------------------------------------------------
+
+// saveDraft puts body to the draft route as p. The handler has no task manager,
+// so a request that got past the checks before it would panic.
+func saveDraft(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, stepID string, p *authn.Principal, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var calls int
+	h := &HTTPHandler{
+		Store:           fetcher,
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/"+stepID+"/draft", strings.NewReader(body))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", stepID)
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), p))
+	recorder := httptest.NewRecorder()
+	h.HandleSaveDraft(recorder, req)
+	return recorder
+}
+
+func TestHandleSaveDraft_RejectsBadRequests(t *testing.T) {
+	refs := newFakeFileRefs()
+	alicesRef, _ := refs.IssueFor(userPrincipal("alice"), "k")
+
+	tests := []struct {
+		name       string
+		fetcher    *fakeTaskFetcher
+		stepID     string
+		body       string
+		wantStatus int
+	}{
+		{"no step id", pendingFileTask(), "", `{"payload":{}}`, http.StatusBadRequest},
+		{"a command: the step's template decides it", pendingFileTask(), "step-1", `{"command":"submit","payload":{}}`, http.StatusBadRequest},
+		{"the reserved command key", pendingFileTask(), "step-1", `{"payload":{"__command":"submit"}}`, http.StatusBadRequest},
+		{"trailing data", pendingFileTask(), "step-1", `{"payload":{}}{"payload":{}}`, http.StatusBadRequest},
+		{"oversized", pendingFileTask(), "step-1", `{"payload":{"x":"` + strings.Repeat("a", 2048) + `"}}`, http.StatusRequestEntityTooLarge},
+		{"missing task", &fakeTaskFetcher{}, "step-1", `{"payload":{}}`, http.StatusNotFound},
+		{"step no longer active", pendingFileTask(), "step-0", `{"payload":{}}`, http.StatusConflict},
+		{"someone else's file", pendingFileTask(), "step-1", `{"payload":{"invoice":"` + alicesRef + `"}}`, http.StatusForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := saveDraft(t, tt.fetcher, refs, tt.stepID, userPrincipal("bob"), tt.body)
+			assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
+		})
+	}
+}
+
+func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/", nil)
+
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrDraftNotEnabled, "x"))
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errDraftNotEnabled)
 }
