@@ -115,12 +115,10 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	value, err := h.refs.Resolve(p, ref, fileaccess.ScopeRead)
 	switch {
 	case err == nil:
-	case errors.Is(err, fileaccess.ErrInvalid):
-		// Until every caller holds file tokens, a reference that is not one
-		// is taken to be the stored value itself.
-		value = ref
-	case errors.Is(err, fileaccess.ErrNotYours):
-		httputil.Error(w, r, http.StatusForbidden, "this file reference was issued to someone else")
+	case errors.Is(err, fileaccess.ErrInvalid), errors.Is(err, fileaccess.ErrNotYours):
+		// One answer for both, so the route says nothing about a value it
+		// will not serve. A raw storage key is one: it grants nothing.
+		httputil.Error(w, r, http.StatusForbidden, "this is not a file reference issued to you")
 		return
 	case errors.Is(err, fileaccess.ErrScope):
 		httputil.Error(w, r, http.StatusForbidden, "this file reference can't be used to open the file; save the form to view it")
