@@ -2,6 +2,7 @@ package authn
 
 import (
 	"net/http"
+	"slices"
 
 	coreauthn "github.com/OpenNSW/core/authn"
 )
@@ -76,18 +77,38 @@ func principalFromAuthContext(ac *coreauthn.AuthContext) *Principal {
 			PhoneNumber: u.ExtraClaims.String(claimPhoneNumber),
 			OUID:        u.ExtraClaims.String(claimOUID),
 			OUHandle:    u.ExtraClaims.String(claimOUHandle),
+			ExtraClaims: extraClaims(u.ExtraClaims, builtinUserClaims),
 		}
 	case ac.Client != nil:
 		c := ac.Client
 		return &Principal{
-			Kind:     KindClient,
-			ClientID: c.ClientID,
-			Roles:    c.Roles,
-			Scopes:   c.Scopes,
+			Kind:        KindClient,
+			ClientID:    c.ClientID,
+			Roles:       c.Roles,
+			Scopes:      c.Scopes,
+			ExtraClaims: extraClaims(c.ExtraClaims, nil),
 		}
 	default:
 		return nil
 	}
+}
+
+// extraClaims copies the claims core/authn extracted, minus the built-in names
+// already flattened onto Principal fields. It copies because core shares its map
+// with the profile-service shim and the rest of the request, so handing it on
+// would let a caller change what they read. Returns nil when nothing is left.
+func extraClaims(src coreauthn.ExtraClaims, builtin []string) Claims {
+	var out Claims
+	for name, value := range src {
+		if slices.Contains(builtin, name) {
+			continue
+		}
+		if out == nil {
+			out = make(Claims, len(src))
+		}
+		out[name] = value
+	}
+	return out
 }
 
 // Health reports whether the authentication subsystem is usable.

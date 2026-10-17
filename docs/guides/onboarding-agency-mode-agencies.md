@@ -232,6 +232,9 @@ as the sign-in approach. Then, in its tabs:
 - **Token**, under **Token Attributes & Response**: add `email`, `phone_number`,
   `given_name`, `family_name`, `username`, `groups`, `roles`, `ouId`, `ouHandle` and
   `ouName` to the access token, and the same except `phone_number` to the ID token.
+- If the agency's access rules use further user attributes, add each to the access token here
+  too, and list it under `authn.extraUserClaims` in the backend config (Step 4). The config only
+  reads a claim; it never makes the IdP release it.
 
 The portal is a public client with PKCE and no secret. Note its client ID from
 **Credentials**: it is the `<portal client ID>` of Step 4.
