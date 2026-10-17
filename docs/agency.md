@@ -9,6 +9,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
 | Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
+| Claim to submit      | not required                                            | required                                   |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
 | Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
@@ -153,6 +154,60 @@ for an admin, since no retry can succeed. Artifacts that are not wired for repli
 keep injecting: their resubmission is still a repeat inject, which the agency takes
 for a retry and does not deliver. How a step replies is in
 [`docs/WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md#task-types-configuration-traderinputjson--officerinputjson).
+
+## Claiming tasks
+
+Every user holding a catalog role owns every injected workflow, so ownership alone
+cannot stop two of them from working on the same task. An officer claims a task
+before acting on it, and the task shows everyone who holds it:
+
+- `POST /api/v1/tasks/{id}/claim` claims the task for the caller. Claiming a task you
+  already hold succeeds. Another officer's claim is a 409.
+- `POST /api/v1/tasks/{id}/release` releases it. Only the holder can release (403
+  otherwise); releasing a task nobody holds succeeds.
+- Submitting a step, `POST /api/v1/tasks/{id}/steps/{stepId}`, needs the claim. Without
+  it the submission is a 403 ("claim this task before acting on it"). Every officer
+  can still open the task.
+- `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `id` and `name`
+  (their email for now), `claimed_at`, `mine` and `required_to_submit`. Use `mine`
+  rather than comparing IDs or emails in the portal.
+
+Claim and release need the `nsw:task:write` scope, and are open to anyone who can
+read the task. They are recorded in the audit trail as task updates. The full contract
+is in `api/tasks.openapi.yaml`.
+
+Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
+`claimed_at`, added by migration `000025`). The claim lasts until its holder releases
+it: across every step of the task, and after the task completes, as a record of who
+worked on it. There is no expiry and no forced release yet, so an officer who leaves
+keeps their claims.
+
+The rule is set by the task authz gate, not by core. `agency.RoleGate` sets
+`RequireClaimToSubmit` for every user, whichever catalog role they act in. TNSW's gate does not, so a TNSW user can claim a
+task to show their company who is on it, but needs no claim to submit. Clients
+complete steps by callback token and never need a claim. A user who calls the
+callback route is held to the claim like on the portal's route, because the token is
+not signed.
+
+### Claims in render configs
+
+The renderer gets three claim facts with the caller's role facts: `claim:mine`,
+`claim:other` and `claim:none`, exactly one of them true. A section can depend on
+them, for example to show the officer's form actions only to the holder:
+
+```json
+"visibleWhen": { "states": ["PENDING_USER"], "requireClaim": "claim:mine" }
+```
+
+The server refuses a submission without the claim either way; hiding the actions
+just keeps the screen honest.
+
+### Needs more information
+
+A claim belongs to one task. To keep it across a "needs more information" round,
+model the round as a loop inside the task's own workflow (the `review_workflow.json`
+of the task), so the same task waits for the resubmission. A loop in the parent
+workflow starts a new task, and a new task starts unclaimed.
 
 ## Task configs
 

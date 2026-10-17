@@ -24,7 +24,7 @@ import (
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, v)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
