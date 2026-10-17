@@ -209,7 +209,23 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.CompleteActivation(context.Background(), parentWorkflowID, "", parentStepID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	// OGAs are sent file tokens issued to the machine client each calls back
+	// as. An agency doesn't own its files: what it stores are TNSW's tokens,
+	// which it sends back to TNSW as they are.
+	var ogaFiles taskplugins.OGAFiles
+	if !cfg.Storage.IsProxy() {
+		ogaFiles = taskplugins.OGAFiles{
+			ClientFor: func(serviceID string) (string, bool) {
+				clientID, ok := globalCatalog.Clients[serviceID]
+				return clientID, ok
+			},
+			// An OGA opens a file it is sent; it never submits one back.
+			IssueForClient: func(clientID, value string) (string, error) {
+				return fileAccess.IssueForClient(clientID, value, fileaccess.ScopeRead)
+			},
+		}
+	}
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -856,6 +872,7 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
+	ogaFiles taskplugins.OGAFiles,
 	artifactRegistry *artifact.Registry,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -863,7 +880,7 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{reg: artifactRegistry}, storageService); err != nil {
