@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Spinner, Text } from '@radix-ui/themes'
 import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { getZoneView, submitTaskStep } from './service'
+import { getZoneView, saveTaskStepDraft, submitTaskStep } from './service'
 import { HttpError } from '@/services/http'
 import { getConsignment } from '@/features/consignment/service.ts'
 import type { WorkflowNode } from '@/features/consignment/types'
@@ -239,9 +239,29 @@ export function TaskDetailScreen() {
         onSubmitForm={
           hasSubmitted
             ? undefined
-            : async (command, data) => {
+            : async (command, data, options) => {
                 if (!taskId || !zoneView.step_id) return
                 setSubmitError(null)
+                if (options?.draft) {
+                  try {
+                    // The step stays where it is, so the form stays mounted with
+                    // what the user typed: the server now holds the same values.
+                    // The form shows "Draft saved" next to its buttons.
+                    await saveTaskStepDraft(taskId, zoneView.step_id, data)
+                  } catch (err) {
+                    if (err instanceof HttpError && err.status === 409) {
+                      setSubmitError(t('tasks.error.staleStep'))
+                      await fetchTask()
+                      setFormEpoch((n) => n + 1)
+                    } else {
+                      setSubmitError(t('tasks.error.draftFailed'))
+                    }
+                    console.error('TaskDetailScreen: failed to save draft:', err)
+                    // Reject, so the form does not say the draft was saved.
+                    throw err
+                  }
+                  return
+                }
                 try {
                   await submitTaskStep(taskId, zoneView.step_id, command, data)
                   // Latch the action off during the transition window so the step

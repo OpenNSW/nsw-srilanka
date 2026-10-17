@@ -1,4 +1,4 @@
-import type { Alert, AlertVariant, AuditEntry, ZoneView } from '@/features/zone/types'
+import type { Alert, AlertVariant, AuditEntry, ZoneAction, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
@@ -7,7 +7,7 @@ import { Zone } from './Zone'
 
 type Props = {
   task: ZoneView
-  onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
+  onSubmitForm?: ZoneAction
   // Changes once an action's refetch has landed. Part of each zone's key, so a
   // step returning to the same form remounts it against the refreshed data
   // rather than leaving the values it mounted with on screen.

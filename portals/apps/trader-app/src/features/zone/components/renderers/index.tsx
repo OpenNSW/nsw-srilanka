@@ -1,4 +1,4 @@
-import type { ZoneComponent } from '@/features/zone/types'
+import type { ZoneAction, ZoneComponent } from '@/features/zone/types'
 import { FormRenderer } from './FormRenderer'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { RedirectRenderer } from './RedirectRenderer'
@@ -11,7 +11,7 @@ import { UnknownRenderer } from './UnknownRenderer'
 // REDIRECT) ignore the options uniformly; no type-specific branching lives
 // in the caller.
 export type RenderOptions = {
-  onAction?: (command: string, data: Record<string, unknown>) => Promise<void>
+  onAction?: ZoneAction
 }
 
 export function renderZoneComponent(component: ZoneComponent, options: RenderOptions = {}) {

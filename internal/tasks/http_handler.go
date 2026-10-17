@@ -39,6 +39,7 @@ const (
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
 	errFileScope            = "a file in the submission can't be submitted; refetch the task"
 	errFileShape            = "a file field in the submission does not have the shape the task declares"
+	errDraftNotEnabled      = "this step does not accept drafts"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -214,11 +215,83 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "command", command)
 }
 
+// HandleSaveDraft stores a draft of a step without completing it. It is the
+// portal's route for a form's "save as draft" action.
+//
+//	PUT /api/v1/tasks/{id}/steps/{stepId}/draft
+//
+// The body is {"payload": {...}}, the same form object a submission carries. It
+// takes no command: core authorizes the draft as the command the step's template
+// declares for drafts. Core stores the payload under the step's own namespace, and
+// the step, its id and the task's version stay as they are, so the view the caller
+// holds stays current. 204 when the draft is stored; 400 when the step does not
+// accept drafts; 409 when the step has been submitted or the task moved on.
+func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
+	taskID := r.PathValue("id")
+	if taskID == "" {
+		slog.ErrorContext(r.Context(), "tasks: missing task id in request")
+		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
+		return
+	}
+	stepID := r.PathValue("stepId")
+	if stepID == "" {
+		slog.ErrorContext(r.Context(), "tasks: missing step id in request", "taskId", taskID)
+		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
+		return
+	}
+
+	req, ok := h.decodeEnvelope(w, r, "taskId", taskID, "stepId", stepID)
+	if !ok {
+		return
+	}
+	if req.Command != "" {
+		slog.ErrorContext(r.Context(), "tasks: draft request names a command", "taskId", taskID, "stepId", stepID, "command", req.Command)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+	payload := req.Payload
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+	if !h.resolveFiles(w, r, taskID, stepID, payload) {
+		return
+	}
+	err := h.Manager.SaveDraft(r.Context(), taskID, stepID, payload)
+	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "draft", true)
+}
+
 // decodeSubmission reads the {command, payload} envelope both completion routes take
 // and returns the payload with the command set under the reserved "__command" key.
 // On a bad request it writes the error response and returns false. logAttrs name
 // the step in the log lines.
 func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, logAttrs ...any) (map[string]any, bool) {
+	req, ok := h.decodeEnvelope(w, r, logAttrs...)
+	if !ok {
+		return nil, false
+	}
+
+	if req.Command == "" {
+		slog.ErrorContext(r.Context(), "tasks: failed to parse request", append(logAttrs, "error", errors.New("invalid request body: must contain 'command' (string)"))...)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return nil, false
+	}
+
+	payload := req.Payload
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+
+	payload[orchestrator.CommandVar] = req.Command
+
+	slog.InfoContext(r.Context(), "tasks: processing complete step command", append(logAttrs, "command", req.Command)...)
+	return payload, true
+}
+
+// decodeEnvelope reads the {command, payload} envelope the completion and draft
+// routes take: one JSON value within the size limit, whose payload does not set
+// the reserved "__command" key. On a bad request it writes the error response and
+// returns false. logAttrs name the step in the log lines.
+func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, logAttrs ...any) (completeTaskStepRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxRequestBytes)
 
 	fail := func(status int, message string, err error) {
@@ -235,14 +308,14 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return nil, false
+			return completeTaskStepRequest{}, false
 		}
 
-		// An empty body is tolerated here and caught by the command-required check below;
-		// only fail on genuinely malformed JSON.
+		// An empty body is tolerated here; a route that needs a command checks for one.
+		// Only fail on genuinely malformed JSON.
 		if !errors.Is(err, io.EOF) && !errors.Is(err, http.ErrBodyReadAfterClose) {
 			fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: malformed JSON"))
-			return nil, false
+			return completeTaskStepRequest{}, false
 		}
 
 		// If unexpected data follows the first JSON value, reject the request.
@@ -250,35 +323,18 @@ func (h *HTTPHandler) decodeSubmission(w http.ResponseWriter, r *http.Request, l
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			fail(http.StatusRequestEntityTooLarge, errRequestBodyTooLarge, err)
-			return nil, false
+			return completeTaskStepRequest{}, false
 		}
 		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: unexpected data after JSON value"))
-		return nil, false
+		return completeTaskStepRequest{}, false
 	}
-
-	if req.Command == "" {
-		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request body: must contain 'command' (string)"))
-		return nil, false
-	}
-
-	payload := req.Payload
 
 	// Validate system metadata collision
-	if payload != nil {
-		if _, exists := payload["__command"]; exists {
-			fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request payload: '__command' is a reserved system key"))
-			return nil, false
-		}
+	if _, exists := req.Payload[orchestrator.CommandVar]; exists {
+		fail(http.StatusBadRequest, errInvalidRequestBody, errors.New("invalid request payload: '__command' is a reserved system key"))
+		return completeTaskStepRequest{}, false
 	}
-
-	if payload == nil {
-		payload = make(map[string]any)
-	}
-
-	payload["__command"] = req.Command
-
-	slog.InfoContext(r.Context(), "tasks: processing complete step command", append(logAttrs, "command", req.Command)...)
-	return payload, true
+	return req, true
 }
 
 // resolveFiles replaces the file references in a submission for step stepID
@@ -322,7 +378,7 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 	return false
 }
 
-// writeCompletion answers a completion attempt: 204 when the workflow accepted the
+// writeCompletion answers a completion attempt or a draft save: 204 when the workflow accepted the
 // step, otherwise the error mapped to its status. logAttrs name the step.
 func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, err error, logAttrs ...any) {
 	switch {
@@ -336,13 +392,16 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 	case errors.Is(err, taskauthzext.ErrForbidden):
 		slog.WarnContext(r.Context(), "tasks: authorization denied", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
+	case errors.Is(err, orchestrator.ErrDraftNotEnabled):
+		slog.WarnContext(r.Context(), "tasks: draft for a step that takes none", append(logAttrs, "error", err)...)
+		httputil.Error(w, r, http.StatusBadRequest, errDraftNotEnabled)
 	default:
 		httputil.InternalServerError(w, r, "tasks: failed to complete task step", err, logAttrs...)
 	}
 }
 
-// completeTaskStepRequest is the JSON envelope both completion routes accept:
-// {"command": "...", "payload": {...}}. Payload stays map[string]any because its
+// completeTaskStepRequest is the JSON envelope the completion routes accept:
+// {"command": "...", "payload": {...}}. The draft route takes it without the command. Payload stays map[string]any because its
 // contents are genuinely dynamic per task type; only the envelope around it has
 // a fixed shape.
 type completeTaskStepRequest struct {

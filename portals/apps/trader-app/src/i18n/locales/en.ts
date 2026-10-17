@@ -143,6 +143,8 @@ const en = {
       goBack: 'Go Back',
       refresh: 'Refresh',
       submitSuccess: 'Application submitted successfully',
+      draftSaved: 'Draft saved',
+      savingDraft: 'Saving…',
       validation: {
         requiredFields: 'Please fill in all required fields.',
       },
@@ -151,6 +153,7 @@ const en = {
         fetchFailed: 'Failed to fetch task details.',
         notFound: 'Task not found.',
         submitFailed: 'Failed to submit task. Please try again.',
+        draftFailed: 'Failed to save the draft. Please try again.',
         staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
       },
     },

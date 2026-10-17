@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema } from '@jsonforms/core'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
-import { Button, Callout } from '@radix-ui/themes'
-import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { Button, Callout, Text } from '@radix-ui/themes'
+import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { Handle, ZoneRendererProps } from '@/features/zone/types'
+import type { Handle, ZoneAction, ZoneRendererProps } from '@/features/zone/types'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
 import { createFormErrorTranslator, formAjv } from './formAjv'
@@ -42,6 +42,9 @@ function seedWithDefaults(
 // non-empty (see its own comment, further down).
 const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
 
+// How long the "Draft saved" note stays next to the buttons.
+const DRAFT_SAVED_NOTE_MS = 3000
+
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
 // exact string to "<label> is required".
@@ -63,16 +66,18 @@ type Props = ZoneRendererProps<'FORM'> & {
   // gating is internal — disabled handles cannot fire. The form is
   // editable iff both handles and onAction are provided; otherwise it
   // renders read-only.
-  onAction?: (command: string, data: Record<string, unknown>) => Promise<void>
+  onAction?: ZoneAction
 }
 
 // FORM_ELEMENT_CATALOG is this renderer's published list of interactive
 // element identifiers and their visual treatment. Handles reference these by
 // name via Handle.element; unknown identifiers fall back to a plain solid
-// button so the action still dispatches.
+// button so the action still dispatches. draft_action saves the form as a
+// draft of the step, partial or not, without completing it.
 const FORM_ELEMENT_CATALOG: Record<string, { variant: 'solid' | 'outline'; color?: 'red' }> = {
   primary_action: { variant: 'solid' },
   secondary_action: { variant: 'outline' },
+  draft_action: { variant: 'outline' },
   danger_action: { variant: 'solid', color: 'red' },
 }
 
@@ -82,8 +87,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // consumed only as the initial seed: TraderZoneLayout keys Zone by task
   // state, so a state transition unmounts this component and the next mount
   // re-seeds from the fresh payload. Same-state background polls intentionally
-  // do *not* clobber in-flight edits — there is no server-side draft to merge
-  // back in, so re-syncing payload.data would silently destroy user input.
+  // do *not* clobber in-flight edits — re-syncing payload.data would silently
+  // destroy input the user has not saved (as a draft or a submission) yet.
   const [data, setData] = useState<Record<string, unknown>>(() => seedWithDefaults(payload.schema, payload.data))
   // What actually gets handed to <JsonForms data={...}> — NOT the same as
   // `data` above, and not updated on every onChange either (see the
@@ -99,6 +104,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [dataSeed, setDataSeed] = useState<Record<string, unknown>>(data)
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
+  // The command of the handle in flight, so only its button says so.
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null)
+  // When the last draft save succeeded; null hides the "Draft saved" note.
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
   const [showErrors, setShowErrors] = useState(false)
 
   const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
@@ -187,9 +196,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
-    // secondary_action handles (e.g. drafts) accept a partial form.
+    // draft_action and secondary_action handles accept a partial form.
     // primary_action and danger_action handles require valid data.
-    const skipRequired = h.element === 'secondary_action'
+    const draft = h.element === 'draft_action'
+    const skipRequired = draft || h.element === 'secondary_action'
     if (!skipRequired && !isValid) {
       // Flipping showErrors changes validationMode, a dependency of
       // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above) —
@@ -200,8 +210,24 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       return
     }
     setSubmitting(true)
-    void onAction(h.command, data).finally(() => setSubmitting(false))
+    setPendingCommand(h.command)
+    setDraftSavedAt(null)
+    void onAction(h.command, data, { draft })
+      // A failed draft rejects; the caller has already shown why.
+      .then(() => draft && setDraftSavedAt(Date.now()))
+      .catch(() => {})
+      .finally(() => {
+        setSubmitting(false)
+        setPendingCommand(null)
+      })
   }
+
+  // The "Draft saved" note next to the buttons fades after a few seconds.
+  useEffect(() => {
+    if (draftSavedAt === null) return
+    const timer = setTimeout(() => setDraftSavedAt(null), DRAFT_SAVED_NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [draftSavedAt])
 
   return (
     <>
@@ -239,6 +265,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           onAction={handleAction}
           onAutoFill={showAutoFill ? handleAutoFill : undefined}
           submitting={submitting}
+          pendingCommand={pendingCommand}
+          draftSaved={draftSavedAt !== null}
         />
       )}
     </>
@@ -250,12 +278,17 @@ function FormActionBar({
   onAction,
   onAutoFill,
   submitting,
+  pendingCommand,
+  draftSaved,
 }: {
   handles: Handle[]
   onAction: (h: Handle) => void
   onAutoFill?: () => void
   submitting: boolean
+  pendingCommand: string | null
+  draftSaved: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-[0_-8px_20px_-8px_rgba(0,0,0,0.08)]">
       <div className="px-6 py-4 flex items-center gap-3">
@@ -265,8 +298,20 @@ function FormActionBar({
           </Button>
         )}
         <div className="flex-1" />
+        {draftSaved && (
+          <Text size="2" color="green" role="status" className="inline-flex items-center gap-1">
+            <CheckIcon />
+            {t('tasks.draftSaved')}
+          </Text>
+        )}
         {handles.map((h) => (
-          <HandleButton key={h.command} handle={h} onClick={onAction} submitting={submitting} />
+          <HandleButton
+            key={h.command}
+            handle={h}
+            onClick={onAction}
+            submitting={submitting}
+            pending={pendingCommand === h.command}
+          />
         ))}
       </div>
     </div>
@@ -277,16 +322,23 @@ function HandleButton({
   handle,
   onClick,
   submitting,
+  pending,
 }: {
   handle: Handle
   onClick: (h: Handle) => void
   submitting: boolean
+  // pending is set on the button whose action is in flight; the others are
+  // only disabled.
+  pending: boolean
 }) {
+  const { t } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
   const disabled = submitting
+  let label = handle.label
+  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : 'Submitting...'
   return (
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
-      {submitting ? 'Submitting...' : handle.label}
+      {label}
     </Button>
   )
 }

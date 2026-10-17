@@ -181,6 +181,93 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/tasks/{id}/steps/{stepId}/draft:
+    put:
+      summary: Save a draft of the task's active step
+      description: |
+        Stores `payload` as a draft of the step, without completing it. The
+        draft is stored where a submission would be, so the next read of the
+        task shows it, but the step, its `step_id` and the task's `version`
+        do not change, and other open views stay current. Drafts may be
+        partial. Only a step whose template declares drafts accepts one;
+        the server authorizes it as the command the template names for
+        drafts, so the body carries no `command`.
+
+        Declared file fields follow the same rule as a submission.
+
+        Requires scope `nsw:task:write`.
+      operationId: saveTaskStepDraft
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/StepID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTaskStepDraftRequest'
+      responses:
+        '204':
+          description: No Content. The draft is stored.
+        '400':
+          description: |
+            Missing task or step ID, malformed JSON, unexpected trailing data,
+            a `command` in the body, a `payload` that sets the reserved
+            `__command` key, a declared file field whose value does not have
+            the declared shape, or a step that does not accept drafts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            The caller may not save a draft of this step, or a declared file
+            field holds a file reference issued to someone else.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            `{stepId}` is not the task's active step, or it has already been
+            submitted. Refetch the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: |
+            A declared file field holds a file reference that has expired.
+            Refetch the task, or upload the file again, and save again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured maximum size.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error resolving file references or storing the draft.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/callbacks/{token}:
     post:
       summary: Complete the step an external reviewer was dispatched for
@@ -331,6 +418,22 @@ components:
           description: |
             Command-specific data. Genuinely dynamic per task type; must not
             set the reserved `__command` key, which the server adds itself.
+          additionalProperties: true
+          not:
+            required:
+              - __command
+
+    SaveTaskStepDraftRequest:
+      type: object
+      not:
+        required:
+          - command
+      properties:
+        payload:
+          type: object
+          description: |
+            The form data so far, as a submission would carry it. Must not set
+            the reserved `__command` key.
           additionalProperties: true
           not:
             required:
