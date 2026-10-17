@@ -10,6 +10,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // FileRefs issues the file references a caller sees in place of the stored
@@ -19,6 +20,10 @@ type FileRefs interface {
 	Issue(p *authn.Principal, value string, scopes ...fileaccess.Scope) (string, error)
 	Resolve(p *authn.Principal, ref string, need fileaccess.Scope) (string, error)
 }
+
+// CanAct reports whether in, the caller, may run some command on record's
+// active step in its current state.
+type CanAct func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error)
 
 // NamespaceOf returns the output namespace of the step template with the
 // given ID: the top-level key of task data its submissions are stored under.
@@ -38,16 +43,20 @@ func NewFileBinding(refs FileRefs, namespaceOf NamespaceOf) *FileBinding {
 }
 
 // ForReader returns a copy of record in which each declared file value is a
-// reference for p, which p can open and submit back. record itself is not
-// changed.
-func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal) (store.TaskRecord, error) {
+// reference for p. p can open each one and, when canAct says p may act on
+// record's active step, submit it back. record itself is not changed.
+func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal, canAct bool) (store.TaskRecord, error) {
 	paths, err := filefields.Parse(record.RenderConfig)
 	if err != nil || len(paths) == 0 {
 		return record, err
 	}
+	scopes := []fileaccess.Scope{fileaccess.ScopeRead}
+	if canAct {
+		scopes = append(scopes, fileaccess.ScopeSubmit)
+	}
 	view := record.DeepCopy()
 	err = filefields.Replace(view.Data, paths, func(value string) (string, error) {
-		return b.refs.Issue(p, value, fileaccess.ScopeRead, fileaccess.ScopeSubmit)
+		return b.refs.Issue(p, value, scopes...)
 	})
 	if err != nil {
 		return store.TaskRecord{}, err

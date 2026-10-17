@@ -53,3 +53,12 @@ The composition root loads the file once (`internal/catalog`) and injects the
   layer, tied to the required role — holding the role is not enough).
 - **Client (M2M)** — allowed iff an allowed name maps to the caller's client id.
 - Otherwise `403`; no principal ⇒ `401`.
+
+## Who may act
+
+`MayAct` asks the same rules whether the caller may run **any** command on the
+task in its current state, without running one. `GET /api/v1/tasks/{id}` uses it
+to decide whether the reader's file references can be submitted back: a reader the
+step's `authz` rules admit gets `read` and `submit`, anyone else `read` only. A
+step with no `authz` extension doesn't check who submits, so every reader gets
+both.
