@@ -95,7 +95,7 @@ func TestFileHandler_Download(t *testing.T) {
 	access, now := testFileAccess(t)
 	h := NewFileHandler(stack.Service, access)
 	key := uploadKey(t, stack.Service)
-	token, err := access.IssueFor(user("alice"), key)
+	token, err := access.Issue(user("alice"), key, fileaccess.ScopeRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,6 +105,13 @@ func TestFileHandler_Download(t *testing.T) {
 	})
 	t.Run("someone else's token", func(t *testing.T) {
 		assertStatus(t, download(h, token, user("bob")), http.StatusForbidden)
+	})
+	t.Run("a token that can't be opened", func(t *testing.T) {
+		submitOnly, err := access.Issue(user("alice"), key, fileaccess.ScopeSubmit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertStatus(t, download(h, submitOnly, user("alice")), http.StatusForbidden)
 	})
 	// Until every caller holds file tokens.
 	t.Run("a stored value", func(t *testing.T) {
@@ -124,7 +131,7 @@ func TestFileHandler_Download(t *testing.T) {
 
 type failingRefs struct{}
 
-func (failingRefs) Resolve(*authn.Principal, string) (string, error) {
+func (failingRefs) Resolve(*authn.Principal, string, fileaccess.Scope) (string, error) {
 	return "", errors.New("keyset unavailable")
 }
 
@@ -144,7 +151,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 	t.Run("the holder's token", func(t *testing.T) {
 		stack := newProxyStack(t, ownerToken)
 		h := NewFileHandler(stack.Service, access)
-		token, err := access.IssueFor(user("alice"), uploadKey(t, stack.Service))
+		token, err := access.Issue(user("alice"), uploadKey(t, stack.Service), fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +159,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 	})
 	t.Run("the owner's rejection is relayed", func(t *testing.T) {
 		h := NewFileHandler(newProxyStack(t, ownerToken).Service, access)
-		token, err := access.IssueFor(user("alice"), "not-a-key")
+		token, err := access.Issue(user("alice"), "not-a-key", fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +167,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 	})
 	t.Run("the owner refusing credentials is a gateway failure", func(t *testing.T) {
 		h := NewFileHandler(newProxyStack(t, "wrong-token").Service, access)
-		token, err := access.IssueFor(user("alice"), "any-key")
+		token, err := access.Issue(user("alice"), "any-key", fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -210,7 +217,7 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
 
 	key := uploadKey(t, tnswService)
-	pushed, err := tnswAccess.IssueForClient(agencyClient, key)
+	pushed, err := tnswAccess.IssueForClient(agencyClient, key, fileaccess.ScopeRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +229,7 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	}
 	agencyFiles := NewFileHandler(agencyService, agencyAccess)
 	officer := user("cda-officer")
-	officerToken, err := agencyAccess.IssueFor(officer, pushed)
+	officerToken, err := agencyAccess.Issue(officer, pushed, fileaccess.ScopeRead)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +257,7 @@ func TestFileHandler_DownloadOwnerBadResponseIsBadGateway(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			token, err := access.IssueFor(user("alice"), "any-key")
+			token, err := access.Issue(user("alice"), "any-key", fileaccess.ScopeRead)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -263,7 +270,7 @@ func TestFileHandler_DownloadOwnerBadResponseIsBadGateway(t *testing.T) {
 // not a gateway's.
 func TestFileHandler_DownloadBackendFailureIsInternal(t *testing.T) {
 	access, _ := testFileAccess(t)
-	token, err := access.IssueFor(user("alice"), "any-key.pdf")
+	token, err := access.Issue(user("alice"), "any-key.pdf", fileaccess.ScopeRead)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,7 +15,7 @@ import (
 // they stand for. *fileaccess.Access satisfies it, and its errors are the
 // ones FileHandler maps.
 type FileRefs interface {
-	Resolve(p *authn.Principal, ref string) (string, error)
+	Resolve(p *authn.Principal, ref string, need fileaccess.Scope) (string, error)
 }
 
 // FileHandler serves the storage routes that take a file reference, in either
@@ -49,7 +49,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	value, err := h.refs.Resolve(p, ref)
+	value, err := h.refs.Resolve(p, ref, fileaccess.ScopeRead)
 	switch {
 	case err == nil:
 	case errors.Is(err, fileaccess.ErrInvalid):
@@ -58,6 +58,9 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		value = ref
 	case errors.Is(err, fileaccess.ErrNotYours):
 		httputil.Error(w, r, http.StatusForbidden, "this file reference was issued to someone else")
+		return
+	case errors.Is(err, fileaccess.ErrScope):
+		httputil.Error(w, r, http.StatusForbidden, "this file reference can't be used to open the file; save the form to view it")
 		return
 	case errors.Is(err, fileaccess.ErrExpired):
 		httputil.Error(w, r, http.StatusGone, "this file reference has expired; reload to get a new one")

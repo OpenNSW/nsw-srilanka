@@ -37,6 +37,7 @@ const (
 	errRequestBodyTooLarge  = "request body too large"
 	errFileNotYours         = "a file in the submission was issued to someone else"
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
+	errFileScope            = "a file in the submission can't be submitted; refetch the task"
 	errFileShape            = "a file field in the submission does not have the shape the task declares"
 )
 
@@ -307,6 +308,9 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 	case errors.Is(err, fileaccess.ErrNotYours):
 		slog.WarnContext(ctx, "tasks: submission carries a file issued to someone else", "taskId", taskID, "stepId", stepID, "error", err)
 		httputil.Error(w, r, http.StatusForbidden, errFileNotYours)
+	case errors.Is(err, fileaccess.ErrScope):
+		slog.WarnContext(ctx, "tasks: submission carries a file that can't be submitted", "taskId", taskID, "stepId", stepID, "error", err)
+		httputil.Error(w, r, http.StatusForbidden, errFileScope)
 	case errors.Is(err, fileaccess.ErrExpired):
 		httputil.Error(w, r, http.StatusGone, errFileExpired)
 	case errors.Is(err, filefields.ErrShape):

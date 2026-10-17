@@ -16,8 +16,8 @@ import (
 // file values in task data, and resolves the ones a caller sends back.
 // *fileaccess.Access satisfies it, and its errors are the ones returned.
 type FileRefs interface {
-	IssueFor(p *authn.Principal, value string) (string, error)
-	Resolve(p *authn.Principal, ref string) (string, error)
+	Issue(p *authn.Principal, value string, scopes ...fileaccess.Scope) (string, error)
+	Resolve(p *authn.Principal, ref string, need fileaccess.Scope) (string, error)
 }
 
 // NamespaceOf returns the output namespace of the step template with the
@@ -38,7 +38,8 @@ func NewFileBinding(refs FileRefs, namespaceOf NamespaceOf) *FileBinding {
 }
 
 // ForReader returns a copy of record in which each declared file value is a
-// reference for p. record itself is not changed.
+// reference for p, which p can open and submit back. record itself is not
+// changed.
 func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal) (store.TaskRecord, error) {
 	paths, err := filefields.Parse(record.RenderConfig)
 	if err != nil || len(paths) == 0 {
@@ -46,7 +47,7 @@ func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal) (st
 	}
 	view := record.DeepCopy()
 	err = filefields.Replace(view.Data, paths, func(value string) (string, error) {
-		return b.refs.IssueFor(p, value)
+		return b.refs.Issue(p, value, fileaccess.ScopeRead, fileaccess.ScopeSubmit)
 	})
 	if err != nil {
 		return store.TaskRecord{}, err
@@ -56,8 +57,9 @@ func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal) (st
 
 // FromCaller replaces, in place, each declared file reference in payload, a
 // submission for record's active step, with the stored value it stands for.
-// Each must be a reference issued to p: the error is fileaccess.ErrNotYours
-// or fileaccess.ErrExpired otherwise.
+// Each must be a reference issued to p that can be submitted: the error is
+// fileaccess.ErrNotYours, fileaccess.ErrScope or fileaccess.ErrExpired
+// otherwise.
 func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, payload map[string]any, p *authn.Principal) error {
 	paths, err := filefields.Parse(record.RenderConfig)
 	if err != nil || len(paths) == 0 {
@@ -80,7 +82,7 @@ func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, p
 		}
 	}
 	return filefields.Replace(payload, inPayload, func(ref string) (string, error) {
-		value, err := b.refs.Resolve(p, ref)
+		value, err := b.refs.Resolve(p, ref, fileaccess.ScopeSubmit)
 		if errors.Is(err, fileaccess.ErrInvalid) {
 			// Until every caller sends file tokens, a value that is not one
 			// is stored as sent.
