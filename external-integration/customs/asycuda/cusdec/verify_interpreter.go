@@ -3,7 +3,6 @@ package cusdec
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"sort"
 	"strconv"
@@ -23,9 +22,10 @@ import (
 //
 //   - the body is raw JSON, not multipart. This deliberately does not
 //     implement BuildParts, which is what keeps the plugin on the JSON path;
-//     attachments are not verified and the endpoint does not accept them.
-//     The supportingDocuments entries are left out too: an entry whose file
-//     is not attached is itself a fault Customs reports.
+//     no files are attached and the endpoint does not accept them. The
+//     supportingDocuments entries are still sent, without file data: ASYCUDA
+//     only checks that each declared document code is valid and that the
+//     documents the declaration requires are present (§6.6).
 //   - nothing here advances the declaration. The call records what came back
 //     and the workflow returns to the form, so a trader can verify as often as
 //     they like before submitting.
@@ -50,27 +50,14 @@ func NewVerifyInterpreter() VerifyInterpreter { return VerifyInterpreter{} }
 // all -- no field-level validation, just a rejected request that reached the
 // trader as "unavailable".
 //
-// Supporting documents are removed before mapping, so none reach the endpoint
-// and one the submission would refuse cannot empty the declaration either.
+// Supporting documents are mapped for verify (see buildSupportDocs): each entry
+// is sent without its file, and one the submission would refuse is sent anyway,
+// so it cannot empty the declaration either.
 func (VerifyInterpreter) BuildRequest(inputs map[string]any) remote.Body {
-	payload, _, _ := buildFromInputs(withoutSupportingDocuments(inputs))
+	form, _ := inputs["payload"].(map[string]any)
+	previousEdgeID, _ := inputs[PreviousEdgeIDKey].(string)
+	payload, _, _ := buildDeclaration(form, previousEdgeID, true)
 	return remote.JSONBody{V: payload}
-}
-
-// withoutSupportingDocuments returns inputs with the form's supporting
-// documents removed. The maps are copied rather than changed, because the same
-// form is what the trader submits afterwards.
-func withoutSupportingDocuments(inputs map[string]any) map[string]any {
-	form, ok := inputs["payload"].(map[string]any)
-	if !ok {
-		return inputs
-	}
-	form = maps.Clone(form)
-	delete(form, "supportingDocuments")
-
-	out := maps.Clone(inputs)
-	out["payload"] = form
-	return out
 }
 
 // Interpret turns the verify response into the summary the trader reads.
