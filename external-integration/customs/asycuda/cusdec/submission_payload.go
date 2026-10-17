@@ -206,6 +206,14 @@ const (
 // problems through the errors object, which produces a far better trader
 // message than a local guess at what Customs will accept.
 func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []SupportDoc, error) {
+	return buildDeclaration(form, previousEdgeID, false)
+}
+
+// buildDeclaration is BuildPayload with the supporting-document rules chosen by
+// the caller. A submission maps documents strictly and attaches their files; a
+// verify (forVerify) sends the entries without any file data and does not
+// refuse one that is incomplete. See buildSupportDocs.
+func buildDeclaration(form map[string]any, previousEdgeID string, forVerify bool) (Submission, []SupportDoc, error) {
 	if len(form) == 0 {
 		return Submission{}, nil, fmt.Errorf("customs: empty declaration form")
 	}
@@ -227,7 +235,7 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, []Sup
 		return Submission{}, nil, err
 	}
 
-	docs, err := buildSupportDocs(form)
+	docs, err := buildSupportDocs(form, forVerify)
 	if err != nil {
 		return Submission{}, nil, err
 	}
@@ -428,73 +436,113 @@ func buildRemittances(financial map[string]any) []Remittance {
 // original name would make that match ambiguous. Keys are unique by
 // construction and keep the uploaded extension, so they satisfy both that rule
 // and §8's PDF requirement.
-func buildSupportDocs(form map[string]any) ([]SupportDoc, error) {
+//
+// forVerify maps them for the verify call (§6.6), which sends no files:
+// ASYCUDA only checks that each declared document code is valid and that the
+// documents the declaration requires are present, and does not use fileName.
+// So a scanned document is sent as its code alone, with no fileBase64 or
+// fileName, and an entry that is incomplete or malformed is passed through, or
+// skipped when it is not an object, instead of failing the mapping. A refusal
+// here would send Customs an empty declaration; sending the entry lets it
+// answer with the field-level reason a verify exists to get.
+func buildSupportDocs(form map[string]any, forVerify bool) ([]SupportDoc, error) {
 	group := nested(form, "supportingDocuments")
 	if len(group) == 0 {
 		return nil, nil
 	}
 
 	scanned, err := supportDocList(group, "scannedDocuments")
-	if err != nil {
+	if err != nil && !forVerify {
 		return nil, err
 	}
 	meta, err := supportDocList(group, "metaDocuments")
-	if err != nil {
+	if err != nil && !forVerify {
 		return nil, err
 	}
 
 	docs := make([]SupportDoc, 0, len(scanned)+len(meta))
 
-	// Scanned documents: sequenceNumber is always 0 (§8).
 	for i, entry := range scanned {
-		m, ok := entry.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("customs: scanned document %d is not an object", i+1)
+		doc, ok, err := buildScannedDoc(entry, i, forVerify)
+		if err != nil {
+			return nil, err
 		}
-
-		key := strings.TrimSpace(str(m, "fileBase64"))
-		code := str(m, "documentCode")
-		if key == "" || code == "" {
-			return nil, fmt.Errorf(
-				"customs: scanned document %d is missing its file or document code", i+1)
+		if ok {
+			docs = append(docs, doc)
 		}
-
-		docs = append(docs, SupportDoc{
-			SequenceNumber: 0,
-			DocumentCode:   code,
-			FileBase64:     key,
-			FileName:       key,
-			storageKey:     key,
-		})
 	}
 
-	// Metadata documents: sequenceNumber runs from 1 upward.
 	for i, entry := range meta {
-		m, ok := entry.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("customs: meta document %d is not an object", i+1)
+		doc, ok, err := buildMetaDoc(entry, i, forVerify)
+		if err != nil {
+			return nil, err
 		}
-
-		doc := SupportDoc{
-			SequenceNumber: i + 1,
-			DocumentCode:   str(m, "documentCode"),
-			ItemSequence:   str(m, "itemSequence"),
-			DocumentID:     strings.TrimSpace(str(m, "documentId")),
-			DateAsString:   formatDMY(str(m, "dateAsString")),
+		if ok {
+			docs = append(docs, doc)
 		}
-
-		// A metadata document stands in for bytes held elsewhere, so it must
-		// carry the reference fields that identify the document; without them
-		// the endpoint rejects it (400).
-		if doc.DocumentCode == "" || doc.ItemSequence == "" || doc.DocumentID == "" || doc.DateAsString == "" {
-			return nil, fmt.Errorf(
-				"customs: meta document %d is missing the item number, document code, reference or date it needs", i+1)
-		}
-
-		docs = append(docs, doc)
 	}
 
 	return docs, nil
+}
+
+// buildScannedDoc maps one scanned document: sequenceNumber is always 0 (§8).
+// ok is false when the entry is to be skipped, which only happens for verify.
+func buildScannedDoc(entry any, i int, forVerify bool) (doc SupportDoc, ok bool, err error) {
+	m, isObject := entry.(map[string]any)
+	if !isObject {
+		if forVerify {
+			return SupportDoc{}, false, nil
+		}
+		return SupportDoc{}, false, fmt.Errorf("customs: scanned document %d is not an object", i+1)
+	}
+
+	key := strings.TrimSpace(str(m, "fileBase64"))
+	code := str(m, "documentCode")
+	if forVerify {
+		return SupportDoc{SequenceNumber: 0, DocumentCode: code}, true, nil
+	}
+	if key == "" || code == "" {
+		return SupportDoc{}, false, fmt.Errorf(
+			"customs: scanned document %d is missing its file or document code", i+1)
+	}
+
+	return SupportDoc{
+		SequenceNumber: 0,
+		DocumentCode:   code,
+		FileBase64:     key,
+		FileName:       key,
+		storageKey:     key,
+	}, true, nil
+}
+
+// buildMetaDoc maps one metadata document: sequenceNumber runs from 1 upward.
+// ok is false when the entry is to be skipped, which only happens for verify.
+func buildMetaDoc(entry any, i int, forVerify bool) (doc SupportDoc, ok bool, err error) {
+	m, isObject := entry.(map[string]any)
+	if !isObject {
+		if forVerify {
+			return SupportDoc{}, false, nil
+		}
+		return SupportDoc{}, false, fmt.Errorf("customs: meta document %d is not an object", i+1)
+	}
+
+	doc = SupportDoc{
+		SequenceNumber: i + 1,
+		DocumentCode:   str(m, "documentCode"),
+		ItemSequence:   str(m, "itemSequence"),
+		DocumentID:     strings.TrimSpace(str(m, "documentId")),
+		DateAsString:   formatDMY(str(m, "dateAsString")),
+	}
+
+	// A metadata document stands in for bytes held elsewhere, so it must carry
+	// the reference fields that identify the document; without them the
+	// endpoint rejects it (400).
+	if !forVerify && (doc.DocumentCode == "" || doc.ItemSequence == "" || doc.DocumentID == "" || doc.DateAsString == "") {
+		return SupportDoc{}, false, fmt.Errorf(
+			"customs: meta document %d is missing the item number, document code, reference or date it needs", i+1)
+	}
+
+	return doc, true, nil
 }
 
 // supportDocList reads one supporting-document collection. A missing field is
