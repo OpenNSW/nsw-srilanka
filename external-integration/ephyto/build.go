@@ -64,7 +64,44 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			DocDeclarations:        buildDocDeclarations(uf, inputs),
 			Attachments:            buildAttachments(uf, inputs),
 			Consignment:            buildConsignment(uf, importISO, inputs["certificate_items"]),
+			Replacement:            buildReplacement(inputs),
 		},
+	}
+}
+
+// ReplacementInput is the input naming the certificate a submission replaces:
+//
+//	"replacement": {
+//	  "replaced_number":     "…", // the replaced certificate's number (required)
+//	  "reason":              "…", // why it is replaced, as the trader put it
+//	  "replaced_issue_date": "…"  // when the replaced certificate was issued (optional)
+//	}
+//
+// Absent, the submission is an ordinary certificate.
+const ReplacementInput = "replacement"
+
+// replacementStatementCode is the ADRP statement a replacement certificate
+// carries, as in the IPPC sandbox's replacement sample: the certificate
+// replaces the one ADRPN names, for the reason ADRPR gives.
+const replacementStatementCode = "4"
+
+// buildReplacement fills in the replacement notes (ADRP, ADRPN, ADRPR, ADRD)
+// of a certificate that replaces an earlier one. A replacement is a new
+// certificate, issued as any other (status 70) under its own number; the notes
+// tell the importing NPPO which certificate it supersedes and why. Nothing is
+// returned when the input names no replaced certificate.
+func buildReplacement(inputs map[string]any) *spscert.Replacement {
+	r := asMap(inputs[ReplacementInput])
+	replaced := strings.TrimSpace(asString(r["replaced_number"]))
+	if replaced == "" {
+		return nil
+	}
+	return &spscert.Replacement{
+		StatementCode:     replacementStatementCode,
+		ReplacedNumber:    replaced,
+		Reason:            strings.TrimSpace(asString(r["reason"])),
+		ReplacedIssueDate: strings.TrimSpace(asString(r["replaced_issue_date"])),
+		LanguageID:        "en",
 	}
 }
 
