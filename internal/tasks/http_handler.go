@@ -397,9 +397,9 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 }
 
 // completeTaskStepRequest is the JSON envelope the completion routes accept:
-// {"command": "...", "payload": {...}}. The draft route takes it without the command. Payload stays map[string]any because its
-// contents are genuinely dynamic per task type; only the envelope around it has
-// a fixed shape.
+// {"command": "...", "payload": {...}}. The draft route takes it without the
+// command. Payload stays map[string]any because its contents are genuinely
+// dynamic per task type; only the envelope around it has a fixed shape.
 type completeTaskStepRequest struct {
 	Command string         `json:"command"`
 	Payload map[string]any `json:"payload"`
