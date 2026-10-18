@@ -46,17 +46,19 @@ type CompanyResolver interface {
 type Middleware struct {
 	ownership CaseOwnership
 	company   CompanyResolver
+	claims    taskauthz.ClaimPolicy
 }
 
 // NewMiddleware builds the middleware. ownership and company are required;
 // roles is the global catalog's Roles map, validated here so a catalog missing
 // a role ownedRolesFor depends on fails construction instead of silently
-// denying every request in that role.
-func NewMiddleware(ownership CaseOwnership, company CompanyResolver, roles map[string]string) (*Middleware, error) {
+// denying every request in that role. claims is the deployment's claim policy,
+// given to every user.
+func NewMiddleware(ownership CaseOwnership, company CompanyResolver, roles map[string]string, claims taskauthz.ClaimPolicy) (*Middleware, error) {
 	if err := catalog.RequireRoles(roles, roleTrader, roleCHA); err != nil {
 		return nil, err
 	}
-	return &Middleware{ownership: ownership, company: company}, nil
+	return &Middleware{ownership: ownership, company: company, claims: claims}, nil
 }
 
 // Handler wraps next (the task-write handler), attaching the authz Input.
@@ -80,15 +82,12 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	case authn.KindClient:
 		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
 	case authn.KindUser:
-		// TNSW does not require a claim to submit: a step is already limited to the
-		// trader or CHA company that owns the consignment. Users can still claim
-		// tasks, to show the rest of their company who is working on one.
 		return taskauthz.Input{
-			Kind:                 taskauthz.KindUser,
-			Roles:                p.Roles,
-			OwnedRoles:           m.ownedRolesFor(p.OUHandle),
-			UserID:               p.UserID,
-			RequireClaimToSubmit: false,
+			Kind:       taskauthz.KindUser,
+			Roles:      p.Roles,
+			OwnedRoles: m.ownedRolesFor(p.OUHandle),
+			UserID:     p.UserID,
+			Claims:     m.claims,
 		}, true
 	default:
 		return taskauthz.Input{}, false

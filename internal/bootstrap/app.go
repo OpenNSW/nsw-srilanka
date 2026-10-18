@@ -399,7 +399,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
 	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+		// TNSW does not use task claims: a step is already limited to the trader or CHA
+		// company that owns the consignment.
+		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles, taskauthz.ClaimsOff)
 	}
 	if err != nil {
 		_ = stopParentRunner()

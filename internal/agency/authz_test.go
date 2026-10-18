@@ -51,7 +51,7 @@ func ownedBy(t *testing.T, gate *RoleGate, caseID string) map[string]bool {
 
 func TestRoleGateOwnership(t *testing.T) {
 	repo := fakeRepo{injected: map[string]bool{"task-1": true}}
-	gate := NewRoleGate(repo, []string{"officer", "reviewer"})
+	gate := NewRoleGate(repo, []string{"officer", "reviewer"}, taskauthz.ClaimsRequired)
 
 	t.Run("every catalog role owns injected workflows only", func(t *testing.T) {
 		for root, want := range map[string]bool{"task-1": true, "consignment-1": false} {
@@ -75,7 +75,7 @@ func TestRoleGateOwnership(t *testing.T) {
 	})
 
 	t.Run("a catalog without officer owns its own roles", func(t *testing.T) {
-		owned := ownedBy(t, NewRoleGate(repo, []string{"reviewer"}), "task-1")
+		owned := ownedBy(t, NewRoleGate(repo, []string{"reviewer"}, taskauthz.ClaimsRequired), "task-1")
 		if _, ok := owned["officer"]; ok || !owned["reviewer"] {
 			t.Fatalf("owned = %v, want only reviewer", owned)
 		}
@@ -83,7 +83,7 @@ func TestRoleGateOwnership(t *testing.T) {
 }
 
 func TestRoleGate(t *testing.T) {
-	gate := NewRoleGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"})
+	gate := NewRoleGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"}, taskauthz.ClaimsRequired)
 
 	t.Run("client carries its id and no ownership", func(t *testing.T) {
 		in, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"})
@@ -102,7 +102,7 @@ func TestRoleGate(t *testing.T) {
 // A user may act as a catalog role only when they hold its token role: ownership of an
 // injected workflow is the same in every role, so the token decides.
 func TestRoleGateEligibility(t *testing.T) {
-	gate := NewRoleGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"})
+	gate := NewRoleGate(fakeRepo{injected: map[string]bool{"task-1": true}}, []string{"officer", "reviewer"}, taskauthz.ClaimsRequired)
 	cat := taskauthz.Catalog{Roles: map[string]string{"officer": "Officer", "reviewer": "Reviewer"}}
 
 	for name, tc := range map[string]struct {
@@ -133,19 +133,18 @@ func TestRoleGateEligibility(t *testing.T) {
 	}
 }
 
-// Every user holding a catalog role owns every injected workflow, so the claim is what
-// keeps two of them off one task: a user must hold it to submit. A client completes
-// steps by callback token and cannot hold a claim.
+// A user carries the gate's claim policy. A client completes steps by callback token
+// and cannot hold a claim, so claims are off for it whatever the policy.
 func TestRoleGate_ClaimPolicy(t *testing.T) {
-	gate := NewRoleGate(fakeRepo{}, []string{"officer"})
+	gate := NewRoleGate(fakeRepo{}, []string{"officer"}, taskauthz.ClaimsRequired)
 
 	user, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindUser, UserID: "user-1", Roles: []string{"Officer"}})
-	if !ok || user.UserID != "user-1" || !user.RequireClaimToSubmit {
-		t.Errorf("user input = %+v, ok = %v; want UserID user-1 and RequireClaimToSubmit", user, ok)
+	if !ok || user.UserID != "user-1" || user.Claims != taskauthz.ClaimsRequired {
+		t.Errorf("user input = %+v, ok = %v; want UserID user-1 and ClaimsRequired", user, ok)
 	}
 
 	client, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"})
-	if !ok || client.UserID != "" || client.RequireClaimToSubmit {
-		t.Errorf("client input = %+v, ok = %v; want no user id and no claim requirement", client, ok)
+	if !ok || client.UserID != "" || client.Claims != taskauthz.ClaimsOff {
+		t.Errorf("client input = %+v, ok = %v; want no user id and claims off", client, ok)
 	}
 }

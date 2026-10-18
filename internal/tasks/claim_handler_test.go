@@ -53,10 +53,12 @@ func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, 
 	return h
 }
 
-// chaUser is a CHA user who owns the HS-code task's consignment, and so can read it.
+// chaUser is a CHA user who owns the HS-code task's consignment, and so can read it,
+// in a deployment where claims are optional.
 func chaUser() *taskauthz.Input {
 	in := ownerInput("CHA", "cha")
 	in.UserID = testUserID
+	in.Claims = taskauthz.ClaimsOptional
 	return &in
 }
 
@@ -108,8 +110,10 @@ func TestHandleReleaseTask_ReleasesForTheCaller(t *testing.T) {
 func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 	client := &taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "FCAU_TO_NSW"}
 	noUserID := ownerInput("CHA", "cha")
+	noUserID.Claims = taskauthz.ClaimsOptional
 	notOwner := ownerInput("CHA", "trader") // a CHA token, but the company owns the consignment only as trader
 	notOwner.UserID = testUserID
+	notOwner.Claims = taskauthz.ClaimsOptional
 	// The trader-only read policy admits no CHA, so a CHA owner cannot read the task.
 	deniedByPolicy := chaUser()
 
@@ -141,6 +145,27 @@ func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 	}
 }
 
+// Where the deployment does not use claims, claim and release are not found, and are
+// answered before the task is read: they cannot be used to probe task ids, and nothing
+// is claimed or audited.
+func TestHandleClaimTask_OffWhereTheDeploymentDoesNotUseClaims(t *testing.T) {
+	for _, op := range []string{opClaim, opRelease} {
+		t.Run(op, func(t *testing.T) {
+			in := chaUser()
+			in.Claims = taskauthz.ClaimsOff
+			fetcher, claimer, auditor := pendingHSCodeTask(), &fakeClaimer{}, &mockAuditor{}
+
+			recorder := sendClaim(claimHandler(t, fetcher, claimer, auditor), op, in)
+
+			assert.Equal(t, http.StatusNotFound, recorder.Code, recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), errClaimsOff)
+			assert.Zero(t, fetcher.calls, "the task must not be read")
+			assert.Empty(t, claimer.calls, "the task manager must not be reached")
+			assert.Empty(t, auditor.events)
+		})
+	}
+}
+
 // traderOnlyTask is the pending HS-code task with a read policy admitting traders only.
 func traderOnlyTask() *fakeTaskFetcher {
 	f := pendingHSCodeTask()
@@ -152,6 +177,7 @@ func traderOnlyTask() *fakeTaskFetcher {
 func TestHandleClaimTask_ReadDenialIsAudited(t *testing.T) {
 	notOwner := ownerInput("CHA", "trader")
 	notOwner.UserID = testUserID
+	notOwner.Claims = taskauthz.ClaimsOptional
 	auditor := &mockAuditor{}
 
 	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, auditor), opClaim, &notOwner)
@@ -237,12 +263,12 @@ func submitForClaimPolicy(t *testing.T, h *HTTPHandler, in *taskauthz.Input, byT
 // agencyUser is a user in a deployment that requires a claim to submit.
 func agencyUser() *taskauthz.Input {
 	in := chaUser()
-	in.RequireClaimToSubmit = true
+	in.Claims = taskauthz.ClaimsRequired
 	return in
 }
 
 func TestSubmitStep_ClaimPolicy(t *testing.T) {
-	client := &taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "NSW_TO_CDA", RequireClaimToSubmit: true}
+	client := &taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "NSW_TO_CDA", Claims: taskauthz.ClaimsRequired}
 
 	tests := []struct {
 		name       string
@@ -288,10 +314,14 @@ func TestSubmitStep_UserWithoutUserIDNeverHoldsTheClaim(t *testing.T) {
 // Where no claim is required the task is not even read: the policy check costs
 // nothing in TNSW.
 func TestSubmitStep_NoLookupWhenNoClaimIsRequired(t *testing.T) {
-	fetcher := claimedHSCodeTask("")
-	submitForClaimPolicy(t, getTaskHandler(t, fetcher, &stubTemplates{}), chaUser(), false)
+	for _, policy := range []taskauthz.ClaimPolicy{taskauthz.ClaimsOff, taskauthz.ClaimsOptional} {
+		in := chaUser()
+		in.Claims = policy
+		fetcher := claimedHSCodeTask("")
+		submitForClaimPolicy(t, getTaskHandler(t, fetcher, &stubTemplates{}), in, false)
 
-	assert.Zero(t, fetcher.calls)
+		assert.Zero(t, fetcher.calls, "policy %v", policy)
+	}
 }
 
 // --- the claim on the task view ------------------------------------------------

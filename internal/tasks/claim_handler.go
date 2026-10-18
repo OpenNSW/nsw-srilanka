@@ -22,6 +22,7 @@ const (
 	errClaimTaskComplete = "this task is completed and can no longer be claimed"
 	errNotClaimHolder    = "this task is claimed by another user"
 	errClaimRequired     = "claim this task before acting on it"
+	errClaimsOff         = "task claims are not used in this deployment"
 )
 
 // Claim facts passed to the renderer with the caller's role claims, so a render
@@ -56,7 +57,7 @@ type taskClaim struct {
 	// caller's internal user id, so clients never compare ids or emails themselves.
 	Mine bool `json:"mine"`
 	// RequiredToSubmit reports whether this deployment requires the caller to hold
-	// the claim to submit a step (see taskauthz.Input.RequireClaimToSubmit).
+	// the claim to submit a step (see taskauthz.Input.Claims).
 	RequiredToSubmit bool `json:"required_to_submit"`
 }
 
@@ -71,7 +72,7 @@ func (h *HTTPHandler) claimOf(ctx context.Context, in taskauthz.Input, record st
 	c := taskClaim{
 		ClaimedAt:        record.ClaimedAt,
 		Mine:             isClaimHolder(in, record),
-		RequiredToSubmit: in.Kind == taskauthz.KindUser && in.RequireClaimToSubmit,
+		RequiredToSubmit: in.Kind == taskauthz.KindUser && in.Claims == taskauthz.ClaimsRequired,
 	}
 	if record.ClaimedBy == "" {
 		return c
@@ -117,14 +118,15 @@ type TaskClaimer interface {
 }
 
 // HandleClaimTask claims a task for the calling user, so others can see who is
-// working on it. Claiming a task you already hold succeeds. Whether a claim is needed
-// to act on the task is the deployment's policy (taskauthz.Input.RequireClaimToSubmit);
-// any user who can read a task may claim it.
+// working on it. Claiming a task you already hold succeeds. Whether claims are used,
+// and whether one is needed to act on the task, is the deployment's policy
+// (taskauthz.Input.Claims); any user who can read a task may claim it.
 //
 //	POST /api/v1/tasks/{id}/claim
 //
 // 204 on success: the task view changes with the claim, so the caller refetches it.
-// 409 when another user holds the claim or the task is completed.
+// 404 where the deployment does not use claims. 409 when another user holds the claim
+// or the task is completed.
 func (h *HTTPHandler) HandleClaimTask(w http.ResponseWriter, r *http.Request) {
 	h.handleClaim(w, r, "claim", h.Claims.ClaimTask)
 }
@@ -134,7 +136,8 @@ func (h *HTTPHandler) HandleClaimTask(w http.ResponseWriter, r *http.Request) {
 //
 //	POST /api/v1/tasks/{id}/release
 //
-// 204 on success. 403 when another user holds the claim.
+// 204 on success. 403 when another user holds the claim. 404 where the deployment
+// does not use claims.
 func (h *HTTPHandler) HandleReleaseTask(w http.ResponseWriter, r *http.Request) {
 	h.handleClaim(w, r, "release", h.Claims.ReleaseTask)
 }
@@ -158,6 +161,11 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 	// callback token and has no use for one.
 	if in.Kind != taskauthz.KindUser {
 		httputil.Error(w, r, http.StatusForbidden, errClaimUsersOnly)
+		return
+	}
+	// Answered before the task is read, so it cannot be used to probe task ids.
+	if in.Claims == taskauthz.ClaimsOff {
+		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
 		return
 	}
 	if in.UserID == "" {
@@ -210,7 +218,7 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 
 // requireClaim enforces the deployment's claim policy on a step submission. When
 // the caller is a user and the deployment requires a claim to submit
-// (taskauthz.Input.RequireClaimToSubmit), they must hold the task's claim; otherwise
+// (taskauthz.ClaimsRequired), they must hold the task's claim; otherwise
 // it answers 403 (404 for a missing task) and returns false. It returns true when
 // the submission may go ahead.
 //
@@ -228,7 +236,7 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 func (h *HTTPHandler) requireClaim(w http.ResponseWriter, r *http.Request, taskID string, logAttrs ...any) bool {
 	ctx := r.Context()
 	in, ok := taskauthz.InputFromContext(ctx)
-	if !ok || in.Kind != taskauthz.KindUser || !in.RequireClaimToSubmit {
+	if !ok || in.Kind != taskauthz.KindUser || in.Claims != taskauthz.ClaimsRequired {
 		return true
 	}
 

@@ -8,9 +8,11 @@ info:
     derived from the caller's role-tied ownership of the task's consignment.
 
     A claim records which user is working a task. Any user who can read a
-    task can claim it. Whether a claim is needed to submit a step is the
-    deployment's policy: an agency requires it, TNSW does not. The task view's
-    `claim.required_to_submit` says which applies to the caller.
+    task can claim it. Whether claims are used, and whether one is needed to
+    submit a step, is the deployment's policy: an agency requires a claim to
+    submit, and TNSW does not use claims, so claim and release answer 404
+    there. The task view's `claim.required_to_submit` says which applies to
+    the caller.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -341,8 +343,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: |
-            No such task, or the caller may not read it (indistinguishable
-            from "not found" by design).
+            No such task, the caller may not read it (indistinguishable from
+            "not found" by design), or this deployment does not use task
+            claims.
           content:
             application/json:
               schema:
@@ -400,8 +403,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: |
-            No such task, or the caller may not read it (indistinguishable
-            from "not found" by design).
+            No such task, the caller may not read it (indistinguishable from
+            "not found" by design), or this deployment does not use task
+            claims.
           content:
             application/json:
               schema:

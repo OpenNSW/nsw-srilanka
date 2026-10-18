@@ -51,12 +51,24 @@ type Input struct {
 	// task claim is recorded under, so a user's claims follow them across logins and
 	// IdP changes. Empty for client principals.
 	UserID string
-	// RequireClaimToSubmit is the deployment's claim policy: when true, a user must
-	// hold a task's claim to complete one of its steps. Each gate sets it for the
+	// Claims is how the deployment uses task claims. Each gate sets it for the
 	// deployment it serves. It never applies to clients, which complete steps by
 	// callback token and cannot hold a claim.
-	RequireClaimToSubmit bool
+	Claims ClaimPolicy
 }
+
+// ClaimPolicy is how a deployment uses task claims. The zero value is off, so an
+// Input a gate does not set (a client, a test, a future gate) never enables them.
+type ClaimPolicy int
+
+const (
+	// ClaimsOff makes claim and release unavailable.
+	ClaimsOff ClaimPolicy = iota
+	// ClaimsOptional lets a user claim a task; a submission needs no claim.
+	ClaimsOptional
+	// ClaimsRequired makes a user's submission need the task's claim.
+	ClaimsRequired
+)
 
 type ctxKey struct{}
 

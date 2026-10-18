@@ -9,7 +9,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
 | Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
-| Claim to submit      | not required                                            | required                                   |
+| Task claims          | not used                                                | required to submit                         |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
 | Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
@@ -182,10 +182,15 @@ it: across every step of the task, and after the task completes, as a record of 
 worked on it. There is no expiry and no forced release yet, so an officer who leaves
 keeps their claims.
 
-The rule is set by the task authz gate, not by core. `agency.RoleGate` sets
-`RequireClaimToSubmit` for every user, whichever catalog role they act in. TNSW's gate does not, so a TNSW user can claim a
-task to show their company who is on it, but needs no claim to submit. Clients
-complete steps by callback token and never need a claim. A user who calls the
+The policy is set by the task authz gate, not by core, as `taskauthz.Input.Claims`
+(a `taskauthz.ClaimPolicy`). `agency.RoleGate` gives every user `ClaimsRequired`,
+whichever catalog role they act in. TNSW's gate gives `ClaimsOff`, and so does any
+gate that sets nothing: claim and release answer 404 there, and the task view reports
+`required_to_submit: false` and no holder. `ClaimsOptional` lets users claim without
+needing a claim to submit, for a deployment that wants to show who is on a task, or
+to roll claims out before requiring them. Each gate takes its policy when it is built
+(see `internal/bootstrap`). Clients complete steps by callback token and never need a
+claim. A user who calls the
 callback route is held to the claim like on the portal's route, because the token is
 not signed.
 

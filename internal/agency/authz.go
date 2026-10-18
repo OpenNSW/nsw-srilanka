@@ -18,17 +18,20 @@ import (
 // through the normal /api/v1/tasks/{id} routes.
 //
 // Every user holding a catalog role owns every injected workflow, so ownership alone
-// cannot keep two of them off the same task. A user must therefore claim a task before
-// submitting any of its steps; everyone who can read the task can still view it.
+// cannot keep two of them off the same task. That is what the claim policy is for:
+// with taskauthz.ClaimsRequired, a user must claim a task before submitting any of
+// its steps, and everyone who can read the task can still view it.
 type RoleGate struct {
-	repo  Repository
-	roles []string // the catalog's logical role names
+	repo   Repository
+	roles  []string // the catalog's logical role names
+	claims taskauthz.ClaimPolicy
 }
 
 // NewRoleGate creates an RoleGate that reports ownership in each of roles, the
-// logical role names of the agency's catalog.
-func NewRoleGate(repo Repository, roles []string) *RoleGate {
-	return &RoleGate{repo: repo, roles: roles}
+// logical role names of the agency's catalog, and gives every user the claim policy
+// claims.
+func NewRoleGate(repo Repository, roles []string, claims taskauthz.ClaimPolicy) *RoleGate {
+	return &RoleGate{repo: repo, roles: roles, claims: claims}
 }
 
 // Handler wraps next, attaching the caller's taskauthz.Input. An unauthenticated
@@ -52,11 +55,11 @@ func (g *RoleGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
 	case authn.KindUser:
 		return taskauthz.Input{
-			Kind:                 taskauthz.KindUser,
-			Roles:                p.Roles,
-			OwnedRoles:           g.ownedRoles,
-			UserID:               p.UserID,
-			RequireClaimToSubmit: true,
+			Kind:       taskauthz.KindUser,
+			Roles:      p.Roles,
+			OwnedRoles: g.ownedRoles,
+			UserID:     p.UserID,
+			Claims:     g.claims,
 		}, true
 	default:
 		return taskauthz.Input{}, false

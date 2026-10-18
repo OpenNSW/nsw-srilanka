@@ -43,7 +43,7 @@ var validCatalogRoles = map[string]string{roleTrader: "Trader", roleCHA: "CHA"}
 // test immediately if construction errors.
 func mustNewMiddleware(t *testing.T, ownership CaseOwnership, company CompanyResolver) *Middleware {
 	t.Helper()
-	mw, err := NewMiddleware(ownership, company, validCatalogRoles)
+	mw, err := NewMiddleware(ownership, company, validCatalogRoles, taskauthz.ClaimsOff)
 	if err != nil {
 		t.Fatalf("NewMiddleware: %v", err)
 	}
@@ -80,23 +80,30 @@ func TestMiddleware_Client(t *testing.T) {
 	if own.calls != 0 || comp.calls != 0 {
 		t.Errorf("client must not trigger lookups: ownership=%d company=%d", own.calls, comp.calls)
 	}
-	if in.UserID != "" || in.RequireClaimToSubmit {
-		t.Errorf("client input = %+v, want no user id and no claim requirement", in)
+	if in.UserID != "" || in.Claims != taskauthz.ClaimsOff {
+		t.Errorf("client input = %+v, want no user id and claims off", in)
 	}
 }
 
-// TNSW users carry their user id, so they can claim tasks, but need no claim to
-// submit: a step is already limited to the company that owns the consignment.
-func TestMiddleware_UserCarriesUserIDWithoutClaimRequirement(t *testing.T) {
-	p := userCtx("adam-pvt-ltd", "Trader")
-	p.UserID = "user-1"
-	in, ok := attachedInput(mustNewMiddleware(t, &fakeOwnership{}, &fakeCompany{}), p)
+// A user carries their user id and the claim policy the middleware was built with. A
+// client never gets one, whatever the policy.
+func TestMiddleware_UserCarriesUserIDAndClaimPolicy(t *testing.T) {
+	for _, policy := range []taskauthz.ClaimPolicy{taskauthz.ClaimsOff, taskauthz.ClaimsOptional, taskauthz.ClaimsRequired} {
+		mw, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, validCatalogRoles, policy)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := userCtx("adam-pvt-ltd", "Trader")
+		p.UserID = "user-1"
 
-	if !ok || in.UserID != "user-1" {
-		t.Fatalf("got %+v ok=%v, want UserID user-1", in, ok)
-	}
-	if in.RequireClaimToSubmit {
-		t.Error("TNSW must not require a claim to submit")
+		in, ok := attachedInput(mw, p)
+		if !ok || in.UserID != "user-1" || in.Claims != policy {
+			t.Errorf("policy %v: user input = %+v, ok = %v; want UserID user-1 and that policy", policy, in, ok)
+		}
+		client, _ := attachedInput(mw, &authn.Principal{Kind: authn.KindClient, ClientID: "FCAU_TO_NSW"})
+		if client.Claims != taskauthz.ClaimsOff {
+			t.Errorf("policy %v: client claims = %v, want off", policy, client.Claims)
+		}
 	}
 }
 
@@ -232,7 +239,7 @@ func TestNewMiddleware_RejectsIncompleteCatalog(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, tc.roles)
+			_, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, tc.roles, taskauthz.ClaimsOff)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("NewMiddleware(%v) = %v, want nil", tc.roles, err)
@@ -256,7 +263,7 @@ func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
-	if _, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, c.Roles); err != nil {
+	if _, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, c.Roles, taskauthz.ClaimsOff); err != nil {
 		t.Error(err)
 	}
 }
