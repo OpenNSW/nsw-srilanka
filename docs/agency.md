@@ -172,8 +172,12 @@ before acting on it, and the task shows everyone who holds it:
   (their email for now), `claimed_at`, `mine` and `required_to_submit`. Use `mine`
   rather than comparing IDs or emails in the portal.
 
-Claim and release need the `nsw:task:write` scope, and are open to anyone who can
-read the task. They are recorded in the audit trail as task updates. The full contract
+Claim and release need the `nsw:task:claim` and `nsw:task:release` scopes, which
+only the agency's officer role and portal app hold (`idp/bootstrap/20-agency-*.yaml`).
+They are kept apart from `nsw:task:write`, which the machine clients hold to answer on
+callback tokens. Grant the two together: only the holder can release a claim, so a
+user with `claim` but not `release` could create a claim nobody can release. Claim
+and release are open to anyone with the scope who can read the task. They are recorded in the audit trail as task updates. The full contract
 is in `api/tasks.openapi.yaml`.
 
 Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
