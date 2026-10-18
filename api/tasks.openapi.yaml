@@ -549,16 +549,6 @@ components:
           type: integer
           format: int64
           description: Increases every time the task moves on. Read-only.
-        claimed_by:
-          type: string
-          description: |
-            The internal user ID of the claim's holder; omitted when the task
-            is unclaimed. Use `claim` on the task response instead, which also
-            names the holder and says whether it is the caller.
-        claimed_at:
-          type: string
-          format: date-time
-          description: When the holder claimed the task; omitted when unclaimed.
         view:
           type: array
           description: Sections in render order.
@@ -613,12 +603,8 @@ components:
       type: object
       description: The user holding a task's claim. Omitted when the task is unclaimed.
       required:
-        - id
         - name
       properties:
-        id:
-          type: string
-          description: The holder's internal user ID.
         name:
           type: string
           description: |

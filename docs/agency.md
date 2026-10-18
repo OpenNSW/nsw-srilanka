@@ -171,9 +171,9 @@ before acting on it, and the task shows everyone who holds it:
 - Submitting a step, `POST /api/v1/tasks/{id}/steps/{stepId}`, needs the claim. Without
   it the submission is a 403 ("claim this task before acting on it"). Every officer
   can still open the task.
-- `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `id` and `name`
-  (their email for now), `claimed_at`, `mine` and `required_to_submit`. Use `mine`
-  rather than comparing IDs or emails in the portal.
+- `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `name` (their email
+  for now), `claimed_at`, `mine` and `required_to_submit`. It carries no user ID: use
+  `mine` to tell whether the caller holds the claim.
 
 Claim and release need the `nsw:task:claim` and `nsw:task:release` scopes, which only
 the agency's officer role and portal app hold (`idp/bootstrap/20-agency-*.yaml`). They

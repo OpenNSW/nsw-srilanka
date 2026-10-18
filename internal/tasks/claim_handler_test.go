@@ -515,8 +515,8 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 		wantRequired bool
 	}{
 		{"unclaimed", "", chaUser(), nil, false, false},
-		{"claimed by the caller", testUserID, chaUser(), &claimHolder{ID: testUserID, Name: "me@example.com"}, true, false},
-		{"claimed by another user", "user-2", chaUser(), &claimHolder{ID: "user-2", Name: "other@example.com"}, false, false},
+		{"claimed by the caller", testUserID, chaUser(), &claimHolder{Name: "me@example.com"}, true, false},
+		{"claimed by another user", "user-2", chaUser(), &claimHolder{Name: "other@example.com"}, false, false},
 		{"claim required to submit", "", agencyUser(), nil, false, true},
 	}
 	for _, tt := range tests {
@@ -543,8 +543,28 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 	}
 }
 
+// The view reports its claim once, under `claim`, and never the holder's user id: not
+// in core's top-level claimed_by and claimed_at, nor on the holder.
+func TestHandleGetTask_ClaimIsReportedOnlyUnderClaim(t *testing.T) {
+	at := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
+	fetcher := claimedHSCodeTask("user-secret-2")
+	fetcher.record.ClaimedAt = &at
+	h := getTaskHandler(t, fetcher, &stubTemplates{})
+	h.Users = fakeUserService{names: map[string]string{"user-secret-2": "other@example.com"}}
+
+	recorder := getTask(t, h, chaUser())
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var body map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	assert.Contains(t, body, "claim")
+	assert.NotContains(t, body, "claimed_by")
+	assert.NotContains(t, body, "claimed_at")
+	assert.NotContains(t, recorder.Body.String(), "user-secret-2")
+}
+
 // The view is still served when the holder's name cannot be found, or there is no
-// way to look it up: it says who holds the claim by id.
+// way to look it up: it says the task is claimed, by a holder with no name.
 func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
 	for name, users := range map[string]UserService{
 		"lookup fails": fakeUserService{err: errors.New("db down")},
@@ -556,7 +576,7 @@ func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
 
 			got := viewTask(t, h, chaUser()).Claim
 
-			assert.Equal(t, &claimHolder{ID: "user-2"}, got.Holder)
+			assert.Equal(t, &claimHolder{}, got.Holder)
 		})
 	}
 }

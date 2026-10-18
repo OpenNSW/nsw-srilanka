@@ -54,8 +54,8 @@ type HTTPHandler struct {
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
 	AuthzCatalog taskauthz.Catalog
-	// Users names a task's claim holder in the task view. When nil, the holder is
-	// shown by id only.
+	// Users names a task's claim holder in the task view. When nil, the holder has
+	// no name.
 	Users UserService
 	// StepActors says who may act on a task's active step, and so who may claim the
 	// task. When nil, anyone who can read a task may claim it.
@@ -159,6 +159,9 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
 	}
+	// `claim` is the one place the view reports its claim. Core's own claimed_by and
+	// claimed_at would repeat it, and show the holder's internal user id.
+	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
 	httputil.JSON(w, http.StatusOK, taskResponse{ZoneView: zv, Claim: h.claimOf(ctx, in, record)})
 }

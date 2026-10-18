@@ -48,8 +48,8 @@ type UserService interface {
 type StepActors func(ctx context.Context, stepTemplateID string) (names []string, declared bool, err error)
 
 // ClaimDeps are what the claim routes and the task view need beyond the task manager.
-// Either may be nil: without Users a holder is shown by id only, and without Actors
-// the read check alone decides who may claim.
+// Either may be nil: without Users a holder has no name, and without Actors the read
+// check alone decides who may claim.
 type ClaimDeps struct {
 	Users  UserService
 	Actors StepActors
@@ -76,8 +76,9 @@ type taskClaim struct {
 	RequiredToSubmit bool `json:"required_to_submit"`
 }
 
+// claimHolder is who holds a task's claim. It carries no user id: the server decides
+// whether the caller is the holder (taskClaim.Mine), so clients never need one.
 type claimHolder struct {
-	ID string `json:"id"`
 	// Name is the holder's name, or "" if it could not be found.
 	Name string `json:"name"`
 }
@@ -92,10 +93,10 @@ func (h *HTTPHandler) claimOf(ctx context.Context, in taskauthz.Input, record st
 	if record.ClaimedBy == "" {
 		return c
 	}
-	c.Holder = &claimHolder{ID: record.ClaimedBy}
+	c.Holder = &claimHolder{}
 	if h.Users != nil {
 		// A missing name is not worth failing the read over: the view still says the
-		// task is claimed, and by whom.
+		// task is claimed.
 		name, err := h.Users.GetDisplayName(ctx, record.ClaimedBy)
 		if err != nil {
 			slog.WarnContext(ctx, "tasks: failed to resolve claim holder's name", "taskId", record.TaskID, "error", err)
