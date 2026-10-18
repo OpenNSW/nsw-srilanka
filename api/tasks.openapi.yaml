@@ -309,8 +309,10 @@ paths:
         Claims the task for the calling user, so others can see who is working
         on it. Claiming a task you already hold succeeds and keeps the original
         claim time. Only a user who can read the task may claim it; anyone else
-        gets the same 404 as for a missing task. The claim lasts until its
-        holder releases it, including after the task completes.
+        gets the same 404 as for a missing task. A reader who may not act on
+        the task, by the rule that governs submitting its active step, gets
+        403. The claim lasts until its holder releases it, including after the
+        task completes.
 
         The task view changes with the claim, so refetch the task afterwards.
 
@@ -335,8 +337,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The bearer token lacks scope `nsw:task:claim`, or the caller is a
-            client: only users can claim tasks.
+            The bearer token lacks scope `nsw:task:claim`, the caller is a
+            client (only users can claim tasks), or the caller can read the
+            task but may not act on it.
           content:
             application/json:
               schema:
@@ -372,7 +375,7 @@ paths:
         Releases the calling user's claim on the task. Releasing a task nobody
         holds succeeds, so a repeated release is harmless. A completed task's
         claim can still be released. Only a user who can read the task may
-        release it.
+        release it, whether or not they may still act on it.
 
         Requires scope `nsw:task:release`.
       operationId: releaseTask

@@ -162,9 +162,12 @@ cannot stop two of them from working on the same task. An officer claims a task
 before acting on it, and the task shows everyone who holds it:
 
 - `POST /api/v1/tasks/{id}/claim` claims the task for the caller. Claiming a task you
-  already hold succeeds. Another officer's claim is a 409.
+  already hold succeeds. Another officer's claim is a 409. An officer who can open the
+  task but may not act on it, because the active step's `authz` rule names no role they
+  hold, gets a 403.
 - `POST /api/v1/tasks/{id}/release` releases it. Only the holder can release (403
-  otherwise); releasing a task nobody holds succeeds.
+  otherwise), whether or not they can still act on the task; releasing a task nobody
+  holds succeeds.
 - Submitting a step, `POST /api/v1/tasks/{id}/steps/{stepId}`, needs the claim. Without
   it the submission is a 403 ("claim this task before acting on it"). Every officer
   can still open the task.
@@ -172,13 +175,19 @@ before acting on it, and the task shows everyone who holds it:
   (their email for now), `claimed_at`, `mine` and `required_to_submit`. Use `mine`
   rather than comparing IDs or emails in the portal.
 
-Claim and release need the `nsw:task:claim` and `nsw:task:release` scopes, which
-only the agency's officer role and portal app hold (`idp/bootstrap/20-agency-*.yaml`).
-They are kept apart from `nsw:task:write`, which the machine clients hold to answer on
-callback tokens. Grant the two together: only the holder can release a claim, so a
-user with `claim` but not `release` could create a claim nobody can release. Claim
-and release are open to anyone with the scope who can read the task. They are recorded in the audit trail as task updates. The full contract
-is in `api/tasks.openapi.yaml`.
+Claim and release need the `nsw:task:claim` and `nsw:task:release` scopes, which only
+the agency's officer role and portal app hold (`idp/bootstrap/20-agency-*.yaml`). They
+are kept apart from `nsw:task:write`, which the machine clients hold to answer on
+callback tokens. Grant the two together: only the holder can release a claim, so a user
+with `claim` but not `release` could create a claim nobody can release. Claims and
+releases, and their refusals, are recorded in the audit trail as task updates. The full
+contract is in `api/tasks.openapi.yaml`.
+
+Who may claim follows who may act. The active step's `authz` rule (see
+[Roles per task](#roles-per-task)) names the roles that may run its commands, in any
+state, and an officer may claim the task when they hold and own one of them. A step
+that declares no rule is not role-restricted on writes either, so there, and before
+the task has an active step, the read check is all there is.
 
 Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
 `claimed_at`, added by migration `000025`). The claim lasts until its holder releases
@@ -186,17 +195,23 @@ it: across every step of the task, and after the task completes, as a record of 
 worked on it. There is no expiry and no forced release yet, so an officer who leaves
 keeps their claims.
 
-The policy is set by the task authz gate, not by core, as `taskauthz.Input.Claims`
-(a `taskauthz.ClaimPolicy`). `agency.RoleGate` gives every user `ClaimsRequired`,
-whichever catalog role they act in. TNSW's gate gives `ClaimsOff`, and so does any
-gate that sets nothing: claim and release answer 404 there, and the task view reports
+Because a claim covers every step, **a task that requires a claim should let one role
+act on all of its steps.** If step 1 names `officer` and step 2 names `reviewer`, an
+officer's claim stays on the task at step 2: the reviewer cannot submit without the
+claim, the officer cannot act on step 2, and only the officer can release. Hand work
+between roles by ending the task and starting another, or have the holder release the
+claim once their step is done.
+
+The policy is set by the task authz gate, not by core, as `taskauthz.Input.Claims` (a
+`taskauthz.ClaimPolicy`). `agency.RoleGate` gives every user `ClaimsRequired`,
+whichever catalog role they act in. TNSW's gate gives `ClaimsOff`, and so does any gate
+that sets nothing: claim and release answer 404 there, and the task view reports
 `required_to_submit: false` and no holder. `ClaimsOptional` lets users claim without
-needing a claim to submit, for a deployment that wants to show who is on a task, or
-to roll claims out before requiring them. Each gate takes its policy when it is built
-(see `internal/bootstrap`). Clients complete steps by callback token and never need a
-claim. A user who calls the
-callback route is held to the claim like on the portal's route, because the token is
-not signed.
+needing a claim to submit, for a deployment that wants to show who is on a task, or to
+roll claims out before requiring them. Each gate takes its policy when it is built (see
+`internal/bootstrap`). Clients complete steps by callback token and never need a claim.
+A user who calls the callback route is held to the claim like on the portal's route,
+because the token is not signed.
 
 ### Claims in render configs
 

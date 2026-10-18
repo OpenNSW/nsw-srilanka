@@ -23,6 +23,7 @@ const (
 	errNotClaimHolder    = "this task is claimed by another user"
 	errClaimRequired     = "claim this task before acting on it"
 	errClaimsOff         = "task claims are not used in this deployment"
+	errClaimNotPermitted = "you may not act on this task, so you cannot claim it"
 )
 
 // Claim facts passed to the renderer with the caller's role claims, so a render
@@ -38,6 +39,20 @@ const (
 type UserService interface {
 	// GetDisplayName returns the name to show for userID, or "" when there is none.
 	GetDisplayName(ctx context.Context, userID string) (string, error)
+}
+
+// StepActors returns the logical names that may act on the step template
+// stepTemplateID, from the authz rule it declares, and whether it declares one. A step
+// that declares none is not role-restricted on writes. Claiming a task follows the
+// same rule as submitting a step.
+type StepActors func(ctx context.Context, stepTemplateID string) (names []string, declared bool, err error)
+
+// ClaimDeps are what the claim routes and the task view need beyond the task manager.
+// Either may be nil: without Users a holder is shown by id only, and without Actors
+// the read check alone decides who may claim.
+type ClaimDeps struct {
+	Users  UserService
+	Actors StepActors
 }
 
 // taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
@@ -120,75 +135,68 @@ type TaskClaimer interface {
 // HandleClaimTask claims a task for the calling user, so others can see who is
 // working on it. Claiming a task you already hold succeeds. Whether claims are used,
 // and whether one is needed to act on the task, is the deployment's policy
-// (taskauthz.Input.Claims); any user who can read a task may claim it.
+// (taskauthz.Input.Claims). A user may claim a task they can read and may act on, by
+// the rule that governs submitting its active step (see mayClaim).
 //
 //	POST /api/v1/tasks/{id}/claim
 //
 // 204 on success: the task view changes with the claim, so the caller refetches it.
-// 404 where the deployment does not use claims. 409 when another user holds the claim
-// or the task is completed.
+// 403 when the caller can read the task but may not act on it. 404 where the
+// deployment does not use claims. 409 when another user holds the claim or the task
+// is completed.
 func (h *HTTPHandler) HandleClaimTask(w http.ResponseWriter, r *http.Request) {
-	h.handleClaim(w, r, "claim", h.Claims.ClaimTask)
+	h.handleClaim(w, r, "claim", h.Claims.ClaimTask, h.mayClaim)
 }
 
 // HandleReleaseTask releases the calling user's claim on a task. Releasing a task
-// nobody holds succeeds.
+// nobody holds succeeds. It is not gated on the right to act, so a holder who has
+// since lost it can still let go of their claim.
 //
 //	POST /api/v1/tasks/{id}/release
 //
 // 204 on success. 403 when another user holds the claim. 404 where the deployment
 // does not use claims.
 func (h *HTTPHandler) HandleReleaseTask(w http.ResponseWriter, r *http.Request) {
-	h.handleClaim(w, r, "release", h.Claims.ReleaseTask)
+	h.handleClaim(w, r, "release", h.Claims.ReleaseTask, nil)
 }
 
-// handleClaim runs a claim or release (op names it in logs and the audit trail)
-// for the calling user, once they are known to be allowed to read the task.
-func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op string, apply func(ctx context.Context, taskID, holder string) error) {
+// claimGate decides whether a user who may read a task may also claim or release it.
+type claimGate func(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error)
+
+// mayClaim reports whether in may claim record: they must be able to act on the
+// task's active step, by the same rule that governs a submission (the step's authz
+// extension). A step that declares no rule is not role-restricted on writes, so the
+// read check that came before is all there is.
+func (h *HTTPHandler) mayClaim(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error) {
+	if h.StepActors == nil || record.ActiveTaskTemplateID == "" {
+		return true, nil
+	}
+	names, declared, err := h.StepActors(ctx, record.ActiveTaskTemplateID)
+	if err != nil {
+		return false, err
+	}
+	if !declared {
+		return true, nil
+	}
+	eligible, err := h.AuthzCatalog.Eligible(ctx, in, record.CaseID, names)
+	if err != nil {
+		return false, err
+	}
+	return eligible.Any(names), nil
+}
+
+// handleClaim runs a claim or release (op names it in logs and the audit trail) for
+// the calling user, once they are known to be allowed to read the task and gate, if
+// set, admits them.
+func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op string, apply func(ctx context.Context, taskID, holder string) error, gate claimGate) {
 	ctx := r.Context()
 	taskID := r.PathValue("id")
 	if taskID == "" {
 		httputil.Error(w, r, http.StatusBadRequest, errTaskIDRequired)
 		return
 	}
-
-	in, ok := taskauthz.InputFromContext(ctx)
-	if !ok {
-		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
-		return
-	}
-	// A claim says which person is working a task. A client completes steps by
-	// callback token and has no use for one.
-	if in.Kind != taskauthz.KindUser {
-		httputil.Error(w, r, http.StatusForbidden, errClaimUsersOnly)
-		return
-	}
-	// Answered before the task is read, so it cannot be used to probe task ids.
-	if in.Claims == taskauthz.ClaimsOff {
-		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
-		return
-	}
-	if in.UserID == "" {
-		slog.ErrorContext(ctx, "tasks: user principal without an internal user id", "taskId", taskID)
-		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
-		return
-	}
-
-	record, ok := h.Store.GetTask(ctx, taskID)
-	if !ok {
-		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
-		return
-	}
-	// Only someone who can read the task may claim or release it. A denial is answered
-	// as not found, as HandleGetTask does, so it cannot be used to probe task ids.
-	if _, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.CaseID); err != nil {
-		if !errors.Is(err, readauthz.ErrDenied) {
-			httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
-			return
-		}
-		slog.WarnContext(ctx, "tasks: "+op+" denied: no read access", "taskId", taskID)
-		h.auditClaim(ctx, taskID, op, "task read access denied")
-		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+	in, ok := h.claimant(w, r, taskID)
+	if !ok || !h.admitClaimant(w, r, op, taskID, in, gate) {
 		return
 	}
 
@@ -213,6 +221,89 @@ func (h *HTTPHandler) handleClaim(w http.ResponseWriter, r *http.Request, op str
 		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
 	default:
 		httputil.InternalServerError(w, r, "tasks: failed to "+op+" task", err, "taskId", taskID)
+	}
+}
+
+// claimant returns the calling user, or answers and reports false when the caller
+// cannot claim or release a task at all: not authenticated, not a user, or in a
+// deployment that does not use claims.
+func (h *HTTPHandler) claimant(w http.ResponseWriter, r *http.Request, taskID string) (taskauthz.Input, bool) {
+	ctx := r.Context()
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok {
+		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+		return in, false
+	}
+	// A claim says which person is working a task. A client completes steps by
+	// callback token and has no use for one.
+	if in.Kind != taskauthz.KindUser {
+		httputil.Error(w, r, http.StatusForbidden, errClaimUsersOnly)
+		return in, false
+	}
+	// Answered before the task is read, so it cannot be used to probe task ids.
+	if in.Claims == taskauthz.ClaimsOff {
+		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
+		return in, false
+	}
+	if in.UserID == "" {
+		slog.ErrorContext(ctx, "tasks: user principal without an internal user id", "taskId", taskID)
+		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
+		return in, false
+	}
+	return in, true
+}
+
+// admitClaimant reports whether in may claim or release the task, answering when
+// not: they must be able to read it, and gate, if set, must admit them too.
+func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, taskID string, in taskauthz.Input, gate claimGate) bool {
+	ctx := r.Context()
+	record, ok := h.Store.GetTask(ctx, taskID)
+	if !ok {
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return false
+	}
+	// A read denial is answered as not found, as HandleGetTask does, so it cannot be
+	// used to probe task ids.
+	canRead, err := h.readable(ctx, in, record)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, "taskId", taskID)
+		return false
+	}
+	if !canRead {
+		slog.WarnContext(ctx, "tasks: "+op+" denied: no read access", "taskId", taskID)
+		h.auditClaim(ctx, taskID, op, "task read access denied")
+		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
+		return false
+	}
+	if gate == nil {
+		return true
+	}
+	// A reader who may not act on the task is told so (403, not 404): they can see it.
+	admitted, err := gate(ctx, in, record)
+	if err != nil {
+		httputil.InternalServerError(w, r, "tasks: failed to resolve who may act on the task", err, "taskId", taskID)
+		return false
+	}
+	if !admitted {
+		slog.WarnContext(ctx, "tasks: "+op+" denied: caller may not act on the task", "taskId", taskID)
+		h.auditClaim(ctx, taskID, op, "caller may not act on the task")
+		httputil.Error(w, r, http.StatusForbidden, errClaimNotPermitted)
+		return false
+	}
+	return true
+}
+
+// readable reports whether in may read record. A denial is (false, nil); any other
+// failure is an error, not a denial.
+func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error) {
+	_, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.CaseID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, readauthz.ErrDenied):
+		return false, nil
+	default:
+		return false, err
 	}
 }
 

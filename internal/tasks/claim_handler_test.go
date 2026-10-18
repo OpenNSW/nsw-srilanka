@@ -188,6 +188,112 @@ func TestHandleClaimTask_ReadDenialIsAudited(t *testing.T) {
 	assert.Equal(t, "task read access denied", auditor.events[0].Metadata["error"])
 }
 
+// --- who may claim: the right to act -----------------------------------------
+
+const testStepTemplateID = "step-tmpl"
+
+// fixedActors is a StepActors that answers names, declared and err for any step, and
+// counts its lookups.
+func fixedActors(names []string, declared bool, err error, lookups *int) StepActors {
+	return func(context.Context, string) ([]string, bool, error) {
+		if lookups != nil {
+			*lookups++
+		}
+		return names, declared, err
+	}
+}
+
+// activeHSCodeTask is the pending HS-code task at a step running testStepTemplateID.
+func activeHSCodeTask() *fakeTaskFetcher {
+	f := pendingHSCodeTask()
+	f.record.ActiveTaskTemplateID = testStepTemplateID
+	return f
+}
+
+// Claiming follows the rule that governs submitting the task's active step: a reader
+// it leaves out is refused (403, since they can see the task), a step without a rule
+// is not role-restricted, and a failed lookup is an error, never a pass.
+func TestHandleClaimTask_RequiresTheRightToAct(t *testing.T) {
+	tests := []struct {
+		name       string
+		fetcher    *fakeTaskFetcher
+		actors     StepActors
+		wantStatus int
+		wantBody   string
+	}{
+		{"the rule names the caller's role", activeHSCodeTask(), fixedActors([]string{"cha", "fcau"}, true, nil, nil), http.StatusNoContent, ""},
+		{"the rule names another role", activeHSCodeTask(), fixedActors([]string{"trader"}, true, nil, nil), http.StatusForbidden, errClaimNotPermitted},
+		{"the rule names nobody", activeHSCodeTask(), fixedActors(nil, true, nil, nil), http.StatusForbidden, errClaimNotPermitted},
+		{"the step declares no rule", activeHSCodeTask(), fixedActors(nil, false, nil, nil), http.StatusNoContent, ""},
+		{"no way to look up the rule", activeHSCodeTask(), nil, http.StatusNoContent, ""},
+		{"no active step", pendingHSCodeTask(), fixedActors([]string{"trader"}, true, nil, nil), http.StatusNoContent, ""},
+		{"the lookup fails", activeHSCodeTask(), fixedActors(nil, false, errors.New("registry down"), nil), http.StatusInternalServerError, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			claimer := &fakeClaimer{}
+			h := claimHandler(t, tt.fetcher, claimer, &mockAuditor{})
+			h.StepActors = tt.actors
+
+			recorder := sendClaim(h, opClaim, chaUser())
+
+			assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), tt.wantBody)
+			if tt.wantStatus == http.StatusNoContent {
+				assert.Equal(t, []string{"claim:" + testTaskID + ":" + testUserID}, claimer.calls)
+			} else {
+				assert.Empty(t, claimer.calls, "the task manager must not be reached")
+			}
+		})
+	}
+}
+
+// The rule is looked up only for someone who can read the task: a non-reader is
+// refused first, as not found.
+func TestHandleClaimTask_RightToActCheckedAfterRead(t *testing.T) {
+	notOwner := ownerInput("CHA", "trader")
+	notOwner.UserID = testUserID
+	notOwner.Claims = taskauthz.ClaimsOptional
+	lookups := 0
+	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, &mockAuditor{})
+	h.StepActors = fixedActors([]string{"cha"}, true, nil, &lookups)
+
+	recorder := sendClaim(h, opClaim, &notOwner)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Zero(t, lookups)
+}
+
+// A reader refused for not being able to act is audited as a refused claim.
+func TestHandleClaimTask_RefusalForNotActingIsAudited(t *testing.T) {
+	auditor := &mockAuditor{}
+	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, auditor)
+	h.StepActors = fixedActors([]string{"trader"}, true, nil, nil)
+
+	recorder := sendClaim(h, opClaim, chaUser())
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Len(t, auditor.events, 1)
+	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
+	assert.Equal(t, "claim", auditor.events[0].Metadata["operation"])
+	assert.Equal(t, "caller may not act on the task", auditor.events[0].Metadata["error"])
+}
+
+// Release is not gated on the right to act, so a holder who has lost it can still let
+// go of their claim.
+func TestHandleReleaseTask_IsNotGatedOnTheRightToAct(t *testing.T) {
+	lookups := 0
+	claimer := &fakeClaimer{}
+	h := claimHandler(t, activeHSCodeTask(), claimer, &mockAuditor{})
+	h.StepActors = fixedActors([]string{"trader"}, true, nil, &lookups)
+
+	recorder := sendClaim(h, opRelease, chaUser())
+
+	assert.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
+	assert.Equal(t, []string{"release:" + testTaskID + ":" + testUserID}, claimer.calls)
+	assert.Zero(t, lookups)
+}
+
 // Each error the task manager returns is answered with its status, and the refusals
 // (another user's claim, a completed task) are audited as failures.
 func TestHandleClaimTask_MapsManagerErrors(t *testing.T) {
