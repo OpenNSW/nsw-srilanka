@@ -3,8 +3,13 @@ package bootstrap
 import (
 	"bytes"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // An agency's catalog requires no particular role: the gate owns whichever roles the
@@ -42,5 +47,24 @@ func TestNewAgencyTaskGateWarnsWithoutRoles(t *testing.T) {
 	}
 	if logs.Len() != 0 {
 		t.Errorf("logs = %q, want none for a catalog with a role", logs.String())
+	}
+}
+
+// An agency requires a claim to submit: every officer owns every injected workflow, so
+// the claim is what keeps two of them off the same task.
+func TestNewAgencyTaskGateRequiresClaims(t *testing.T) {
+	gate, err := newAgencyTaskGate(nil, map[string]string{"officer": "Officer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r = r.WithContext(authn.ContextWithPrincipal(r.Context(), &authn.Principal{Kind: authn.KindUser, UserID: "user-1"}))
+	var in taskauthz.Input
+	gate.Handler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		in, _ = taskauthz.InputFromContext(r.Context())
+	})).ServeHTTP(httptest.NewRecorder(), r)
+
+	if in.Claims != taskauthz.ClaimsRequired {
+		t.Errorf("claims = %v, want ClaimsRequired", in.Claims)
 	}
 }

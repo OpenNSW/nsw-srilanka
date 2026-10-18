@@ -153,6 +153,25 @@ const en = {
         submitFailed: 'Failed to submit task. Please try again.',
         staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
       },
+      claim: {
+        unclaimed: 'Unclaimed',
+        claimedByYou: 'Claimed by you',
+        claimedBy: 'Claimed by {{name}}',
+        anotherUser: 'another user',
+        claimToAct: 'Claim this task to work on it.',
+        claimedByOther: 'This task is currently claimed by {{name}}. Only they can act on it.',
+        claim: 'Claim',
+        release: 'Release',
+        error: {
+          held: 'Another user has claimed this task. It now shows who holds it.',
+          completed: 'This task is completed and can no longer be claimed.',
+          notHolder: 'This task is claimed by another user, so you cannot release it.',
+          notPermitted: 'You are not allowed to work on this task, so you cannot claim it.',
+          unavailable: 'Claiming is not available for this task.',
+          required: 'You need to claim this task before acting on it. It now shows who holds it.',
+          failed: 'Could not update the claim. Please try again.',
+        },
+      },
     },
 
     workflow: {
