@@ -7,8 +7,9 @@ info:
     and claiming it. A task is one node of a consignment's workflow; access is
     derived from the caller's role-tied ownership of the task's consignment.
 
-    A claim records which user is working a task. Any user who can read a
-    task can claim it. Whether claims are used, and whether one is needed to
+    A claim records which user is working a task. A user may claim a task
+    they can read and may act on, by the rule that governs submitting its
+    active step. Whether claims are used, and whether one is needed to
     submit a step, is the deployment's policy: an agency requires a claim to
     submit, and TNSW does not use claims, so claim and release answer 404
     there. The task view's `claim.required_to_submit` says which applies to
