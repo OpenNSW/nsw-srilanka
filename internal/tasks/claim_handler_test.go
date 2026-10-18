@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -403,6 +404,55 @@ func TestSubmitStep_ClaimPolicy(t *testing.T) {
 				assert.Contains(t, recorder.Body.String(), tt.wantBody)
 			})
 		}
+	}
+}
+
+// Who holds the claim is told only to someone who could open the task. A user the
+// task's read policy excludes gets the authz extension's denial, with no word about
+// the claim, on both routes.
+func TestSubmitStep_ClaimStateIsNotToldToANonReader(t *testing.T) {
+	for _, holder := range []string{"", "user-2"} {
+		for _, byToken := range []bool{false, true} {
+			t.Run(fmt.Sprintf("holder %q, by token %v", holder, byToken), func(t *testing.T) {
+				fetcher := traderOnlyTask() // admits no CHA, so agencyUser cannot read it
+				fetcher.record.ClaimedBy = holder
+
+				recorder := submitForClaimPolicy(t, getTaskHandler(t, fetcher, &stubTemplates{}), agencyUser(), byToken)
+
+				assert.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+				assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
+				assert.NotContains(t, strings.ToLower(recorder.Body.String()), "claim")
+			})
+		}
+	}
+}
+
+// A submission refused for want of the claim is audited, with the reason.
+func TestSubmitStep_ClaimRefusalIsAudited(t *testing.T) {
+	tests := []struct {
+		name    string
+		fetcher *fakeTaskFetcher
+		reason  string
+	}{
+		{"unclaimed", claimedHSCodeTask(""), "task is not claimed"},
+		{"claimed by another user", claimedHSCodeTask("user-2"), "task is claimed by another user"},
+		{"cannot read the task", traderOnlyTask(), "task read access denied"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auditor := &mockAuditor{}
+			h := getTaskHandler(t, tt.fetcher, &stubTemplates{})
+			h.Audit = nswaudit.NewRecorder(auditor)
+
+			recorder := submitForClaimPolicy(t, h, agencyUser(), false)
+
+			require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+			require.Len(t, auditor.events, 1)
+			e := auditor.events[0]
+			assert.Equal(t, argus.StatusFailure, e.Status)
+			assert.Equal(t, "submit", e.Metadata["operation"])
+			assert.Equal(t, tt.reason, e.Metadata["error"])
+		})
 	}
 }
 

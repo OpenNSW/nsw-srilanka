@@ -151,7 +151,9 @@ paths:
             where the deployment requires a claim to submit, the caller does
             not hold the task's claim: "claim this task before acting on it"
             when nobody holds it, "this task is claimed by another user" when
-            someone else does.
+            someone else does. The claim is mentioned only to a caller who can
+            read the task; anyone else gets "you may not perform this action
+            on this task".
           content:
             application/json:
               schema:
@@ -257,7 +259,8 @@ paths:
             The caller may not perform this action on this task, a declared
             file field holds a file reference issued to someone else, or the
             caller is a user who does not hold the task's claim where the
-            deployment requires one.
+            deployment requires one. The claim is mentioned only to a caller
+            who can read the task.
           content:
             application/json:
               schema:
