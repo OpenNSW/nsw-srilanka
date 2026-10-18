@@ -161,8 +161,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: |
-            No such task. Only returned where the deployment requires a claim
-            to submit, since the task is then read to check the claim.
+            No such task, under every claim policy. Where the deployment
+            requires a claim to submit, it comes before the request body is
+            validated, since the task is then read first to check the claim.
           content:
             application/json:
               schema:
@@ -268,8 +269,10 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: |
-            No such task. Only returned to a user where the deployment requires
-            a claim to submit.
+            No such task, for any caller and under every claim policy. For a
+            user where the deployment requires a claim to submit, it comes
+            before the request body is validated, since the task is then read
+            first to check the claim.
           content:
             application/json:
               schema:
