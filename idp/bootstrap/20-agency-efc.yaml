@@ -60,6 +60,12 @@ resources:
       - name: Write
         handle: write
         description: Write action
+      - name: Claim
+        handle: claim
+        description: Claim action
+      - name: Release
+        handle: release
+        description: Release action
   - name: Profile
     handle: profile
     description: Profile resource
@@ -93,7 +99,9 @@ permissions:
       - nsw:profile:read
       - nsw:storage:read
       - nsw:storage:write
+      - nsw:task:claim
       - nsw:task:read
+      - nsw:task:release
       - nsw:task:write
 assignments:
   - id: 01a13912-d3b8-74ee-801c-da16adde68e9
@@ -221,6 +229,8 @@ inboundAuthConfig:
         - nsw:consignment:read
         - nsw:task:read
         - nsw:task:write
+        - nsw:task:claim
+        - nsw:task:release
         - nsw:profile:read
         - nsw:storage:read
         - nsw:storage:write

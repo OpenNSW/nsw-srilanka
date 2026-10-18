@@ -39,13 +39,36 @@ type OwnedRolesFunc func(ctx context.Context, caseID string) (map[string]bool, e
 
 // Input is the authorization context Layer 1 resolves and attaches for a Layer-2
 // evaluator to judge. It carries no domain detail — only the caller's kind, token
-// roles, client id, and a lazy ownership resolver.
+// roles, client or user id, a lazy ownership resolver, and the deployment's claim
+// policy.
 type Input struct {
 	Kind       PrincipalKind
 	Roles      []string
 	ClientID   string
 	OwnedRoles OwnedRolesFunc
+
+	// UserID is the caller's internal user id (user_records.id). It is the holder a
+	// task claim is recorded under, so a user's claims follow them across logins and
+	// IdP changes. Empty for client principals.
+	UserID string
+	// Claims is how the deployment uses task claims. Each gate sets it for the
+	// deployment it serves. It never applies to clients, which complete steps by
+	// callback token and cannot hold a claim.
+	Claims ClaimPolicy
 }
+
+// ClaimPolicy is how a deployment uses task claims. The zero value is off, so an
+// Input a gate does not set (a client, a test, a future gate) never enables them.
+type ClaimPolicy int
+
+const (
+	// ClaimsOff makes claim and release unavailable.
+	ClaimsOff ClaimPolicy = iota
+	// ClaimsOptional lets a user claim a task; a submission needs no claim.
+	ClaimsOptional
+	// ClaimsRequired makes a user's submission need the task's claim.
+	ClaimsRequired
+)
 
 type ctxKey struct{}
 

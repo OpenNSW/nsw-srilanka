@@ -37,6 +37,16 @@ func TestReplay_ConsignmentFlows(t *testing.T) {
 	runFlow(t, h, "consignment_flows.json")
 }
 
+// TestReplay_TaskClaims guards task claims in TNSW, which does not use them: claim and
+// release are refused at the scope check for a token without the claim scopes, answer
+// 404 for a member token that holds them by mistake, and are refused to an agency's
+// machine client. The task view still carries the claim.
+func TestReplay_TaskClaims(t *testing.T) {
+	skipUnlessE2E(t)
+	h := newHarness(t)
+	runFlow(t, h, "task_claims.json")
+}
+
 // runFlow loads a flow file from flows/ and executes it against the harness.
 func runFlow(t *testing.T, h *harness, file string) {
 	t.Helper()

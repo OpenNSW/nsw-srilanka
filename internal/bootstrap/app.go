@@ -389,7 +389,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, recorder, cfg.Server.MaxRequestBytes)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles,
+		tasks.ClaimDeps{Users: userDisplayNames{svc: userProfileService}, Actors: stepActors(artifactRegistry)},
+		recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -399,7 +401,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
 	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+		// TNSW does not use task claims: a step is already limited to the trader or CHA
+		// company that owns the consignment.
+		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles, taskauthz.ClaimsOff)
 	}
 	if err != nil {
 		_ = stopParentRunner()
@@ -477,6 +481,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleGetTask)))))
 	mux.Handle("POST /api/v1/tasks/{id}/steps/{stepId}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 	mux.Handle("POST /api/v1/callbacks/{token}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStepByToken)))))
+	mux.Handle("POST /api/v1/tasks/{id}/claim", withAuth(withScope(scopes.TaskClaim)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleClaimTask)))))
+	mux.Handle("POST /api/v1/tasks/{id}/release", withAuth(withScope(scopes.TaskRelease)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleReleaseTask)))))
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))
 
@@ -709,6 +715,21 @@ func taskCatalog(c *catalog.Catalog) taskauthz.Catalog {
 	return taskauthz.Catalog{Roles: c.Roles, Clients: c.Clients}
 }
 
+// userDisplayNames names a user by the email on their user record, the only name
+// the record holds. A user without a record has no name ("").
+type userDisplayNames struct{ svc user.Service }
+
+func (n userDisplayNames) GetDisplayName(ctx context.Context, userID string) (string, error) {
+	rec, err := n.svc.GetUser(ctx, userID)
+	if err != nil {
+		if errors.Is(err, user.ErrUserNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return rec.Email, nil
+}
+
 // companyIDResolver adapts the company service to authzgate.CompanyResolver. A
 // missing company profile is reported as ("", nil) so it denies cleanly rather
 // than surfacing as a 500.
@@ -751,6 +772,18 @@ func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
 			return "", err
 		}
 		return template.OutputNamespace, nil
+	}
+}
+
+// stepActors looks up who may act on a step template: the names its authz extension
+// allows, and whether it declares one. Claiming a task follows that rule.
+func stepActors(reg *artifact.Registry) tasks.StepActors {
+	return func(ctx context.Context, stepTemplateID string) ([]string, bool, error) {
+		template, err := steptemplate.Load(ctx, reg, stepTemplateID)
+		if err != nil {
+			return nil, false, err
+		}
+		return taskauthzext.ActingNames(template.Extensions)
 	}
 }
 

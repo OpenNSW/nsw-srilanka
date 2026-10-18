@@ -1,0 +1,20 @@
+{
+  "id": "trader_claims",
+  "ouHandle": "adam-pvt-ltd",
+  "identity": {
+    "clientID": "TRADER_PORTAL_APP",
+    "roles": ["Trader"],
+    "scopes": [
+      "nsw:consignment:read",
+      "nsw:consignment:write",
+      "nsw:task:read",
+      "nsw:task:write",
+      "nsw:task:claim",
+      "nsw:task:release",
+      "nsw:company:read",
+      "nsw:cha:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ]
+  }
+}

@@ -46,12 +46,20 @@ type TaskFetcher interface {
 }
 
 type HTTPHandler struct {
-	Manager   *orchestrator.TaskManager
+	Manager *orchestrator.TaskManager
+	// Claims claims and releases tasks. NewHTTPHandler sets it to Manager.
+	Claims    TaskClaimer
 	Store     TaskFetcher
 	Assembler *zoneview.ZoneViewAssembler
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
-	AuthzCatalog    taskauthz.Catalog
+	AuthzCatalog taskauthz.Catalog
+	// Users names a task's claim holder in the task view. When nil, the holder has
+	// no name.
+	Users UserService
+	// StepActors says who may act on a task's active step, and so who may claim the
+	// task. When nil, anyone who can read a task may claim it.
+	StepActors      StepActors
 	Audit           *nswaudit.Recorder
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
@@ -65,15 +73,19 @@ func NewHTTPHandler(
 	assembler *zoneview.ZoneViewAssembler,
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
+	claims ClaimDeps,
 	audit *nswaudit.Recorder,
 	maxRequestBytes int64,
 ) *HTTPHandler {
 	return &HTTPHandler{
 		Manager:         manager,
+		Claims:          manager,
 		Store:           store,
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
 		Files:           files,
+		Users:           claims.Users,
+		StepActors:      claims.Actors,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
@@ -82,7 +94,8 @@ func NewHTTPHandler(
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
 // caller: they must own the task's consignment in a role the task's render
 // config admits, and the claims resolved for them decide which sections of the
-// view they see.
+// view they see. The response also says who holds the task's claim, and the claim
+// facts (ClaimFactMine etc.) are passed to the renderer with the role claims.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -140,13 +153,17 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	zv, err := h.Assembler.Assemble(ctx, view, claims)
+	// The claim comes from the stored record: the view only swaps file values.
+	zv, err := h.Assembler.Assemble(ctx, view, withClaimFacts(claims, in, record))
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
 	}
+	// `claim` is the one place the view reports its claim. Core's own claimed_by and
+	// claimed_at would repeat it, and show the holder's internal user id.
+	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
-	httputil.JSON(w, http.StatusOK, zv)
+	httputil.JSON(w, http.StatusOK, taskResponse{ZoneView: zv, Claim: h.claimOf(ctx, in, record)})
 }
 
 // HandleCompleteTaskStep advances a task by completing one of its steps. It is the
@@ -156,7 +173,8 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 //
 // {stepId} is the step being completed: the step_id the task view reported. Core
 // completes only that step, so a submission for a step the task has since left is
-// rejected (409) instead of applied to a later one.
+// rejected (409) instead of applied to a later one. Where the deployment requires a
+// claim to submit, a user who does not hold the task's claim is refused (403).
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
 	// TODO: retrieve the authenticated context and validate it against the
 	// task's ownership bounds before completing the step.
@@ -170,6 +188,9 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	if stepID == "" {
 		slog.ErrorContext(r.Context(), "tasks: missing step id in request", "taskId", taskID)
 		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
+		return
+	}
+	if !h.requireClaim(w, r, taskID, "taskId", taskID, "stepId", stepID) {
 		return
 	}
 
@@ -200,6 +221,10 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	if err != nil {
 		slog.WarnContext(r.Context(), "tasks: invalid callback token", "error", err)
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidCallbackToken)
+		return
+	}
+	// Meant for clients, which need no claim, but a user can call it too.
+	if !h.requireClaim(w, r, taskID, "taskId", taskID, "stepId", stepID) {
 		return
 	}
 

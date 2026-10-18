@@ -198,13 +198,13 @@ In **APIs**, use **Add resource server**:
 Then, under **Resources**, add a resource with handle `nsw`, and under it these
 sub-resources (**Add sub-resource**) and actions (**Add Action**):
 
-| Sub-resource  | Actions         |
-| ------------- | --------------- |
-| `consignment` | `read`          |
-| `task`        | `read`, `write` |
-| `profile`     | `read`          |
-| `storage`     | `read`, `write` |
-| `workflow`    | `inject`        |
+| Sub-resource  | Actions                             |
+| ------------- | ----------------------------------- |
+| `consignment` | `read`                              |
+| `task`        | `read`, `write`, `claim`, `release` |
+| `profile`     | `read`                              |
+| `storage`     | `read`, `write`                     |
+| `workflow`    | `inject`                            |
 
 Unlike the names, these handles are fixed: they make the permissions `nsw:task:write`,
 `nsw:workflow:inject` and so on, which the backend checks in both modes.
@@ -226,8 +226,8 @@ as the sign-in approach. Then, in its tabs:
   (`Government_User` in the platform setup). Registration off.
 - **Token**, under **Scopes & User Attribute Mappings**: activate `openid`, `profile`,
   `email`, `group`, `role` and `ou`, and add the custom scopes `nsw:consignment:read`,
-  `nsw:task:read`, `nsw:task:write`, `nsw:profile:read`, `nsw:storage:read` and
-  `nsw:storage:write`. Map `group` to `groups`, `role` to `roles`, and `ou` to `ouId` and
+  `nsw:task:read`, `nsw:task:write`, `nsw:task:claim`, `nsw:task:release`,
+  `nsw:profile:read`, `nsw:storage:read` and `nsw:storage:write`. Map `group` to `groups`, `role` to `roles`, and `ou` to `ouId` and
   `ouHandle`.
 - **Token**, under **Token Attributes & Response**: add `email`, `phone_number`,
   `given_name`, `family_name`, `username`, `groups`, `roles`, `ouId`, `ouHandle` and
@@ -261,11 +261,11 @@ The scopes an application asks for are granted only through a role. In **Roles**
 **Permissions** step, then add the assignee on the role's **Assignments** tab (**Add
 Assignment**):
 
-| Role                         | Example name  | Permissions                                                                                                                               | Assigned to               |
-| ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:read`, `nsw:task:write` | The officers' group       |
-| TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:write`                                         | The agency-to-TNSW client |
+| Role                         | Example name  | Permissions                                                                                                                                                                     | Assigned to               |
+| ---------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:claim`, `nsw:task:read`, `nsw:task:release`, `nsw:task:write` | The officers' group       |
+| TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                                                      | The TNSW-to-agency client |
+| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:write`                                                                               | The agency-to-TNSW client |
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -472,7 +472,7 @@ frontend:
     IDP_BASE_URL: "https://idp.example.com"
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
-    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read"
+    IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:task:claim,nsw:task:release,nsw:storage:read,nsw:storage:write,nsw:profile:read"
     IDP_ROLE_CLAIM_NAME: "roles"
     # The officer role's name. Officers sign in as the app's "Trader" role; see docs/agency.md, UI.
     IDP_TRADER_ROLE_NAME: "DEA Officer"
