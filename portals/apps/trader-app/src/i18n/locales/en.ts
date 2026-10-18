@@ -166,6 +166,8 @@ const en = {
           held: 'Another user has claimed this task. It now shows who holds it.',
           completed: 'This task is completed and can no longer be claimed.',
           notHolder: 'This task is claimed by another user, so you cannot release it.',
+          notPermitted: 'You are not allowed to work on this task, so you cannot claim it.',
+          unavailable: 'Claiming is not available for this task.',
           required: 'You need to claim this task before acting on it. It now shows who holds it.',
           failed: 'Could not update the claim. Please try again.',
         },

@@ -40,7 +40,14 @@ function claimErrorMessage(err: unknown, op: ClaimOp, refreshed: ZoneView | unde
     if (err.status === 409) {
       return refreshed?.state === 'COMPLETED' ? t('tasks.claim.error.completed') : t('tasks.claim.error.held')
     }
-    if (err.status === 403 && op === 'release') return t('tasks.claim.error.notHolder')
+    if (err.status === 403) {
+      // A refused release means another user holds the claim. A refused claim means
+      // the user may not act on the task's current step, or their sign-in lacks the
+      // claim scope.
+      return op === 'release' ? t('tasks.claim.error.notHolder') : t('tasks.claim.error.notPermitted')
+    }
+    // The deployment does not use claims, or the task is gone.
+    if (err.status === 404) return t('tasks.claim.error.unavailable')
   }
   return t('tasks.claim.error.failed')
 }

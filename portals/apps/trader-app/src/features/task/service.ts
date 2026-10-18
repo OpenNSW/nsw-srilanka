@@ -26,7 +26,8 @@ export async function submitTaskStep(
 }
 
 // claimTask claims the task for the signed-in user: POST /claim (204). A 409 means
-// another user holds it or the task is completed; refetch the task either way.
+// another user holds it or the task is completed; a 403, that the user may not act on
+// the task; a 404, that the deployment does not use claims. Refetch the task either way.
 export async function claimTask(taskId: string): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/claim`,

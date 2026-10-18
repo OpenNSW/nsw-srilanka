@@ -55,9 +55,8 @@ export type AuditEntry = {
 }
 
 // ClaimHolder is the user holding a task's claim. name is their email for now, and
-// empty if it could not be found.
+// empty if it could not be found. It carries no user id: use TaskClaim.mine.
 export type ClaimHolder = {
-  id: string
   name: string
 }
 
