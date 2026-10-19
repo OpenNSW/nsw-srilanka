@@ -41,9 +41,9 @@ func sampleUserform() map[string]any {
 				"commodity_condition":        "fresh",
 				"commodity_intended_use":     "decorative",
 				"quantity_net_weight":        float64(500),
-				"quantity_net_weight_unit":   "kg",
+				"quantity_net_weight_unit":   "KGM",
 				"quantity_gross_weight":      float64(550),
-				"quantity_gross_weight_unit": "kg",
+				"quantity_gross_weight_unit": "KGM",
 				"packages_count":             float64(25),
 				"packages_description":       "Cardboard boxes",
 				"origin_country":             "Sri Lanka",
@@ -130,7 +130,7 @@ func twoItemUserform() map[string]any {
 		"commodity_common_name":    "Cinnamon Quills",
 		"commodity_botanical_name": "Cinnamomum verum",
 		"quantity_net_weight":      float64(100),
-		"quantity_net_weight_unit": "kg",
+		"quantity_net_weight_unit": "KGM",
 		"packages_count":           float64(10),
 		"origin_country":           "Sri Lanka",
 	})
@@ -239,8 +239,8 @@ func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
 	com["commodity_plant_part"] = map[string]any{"value": "18", "label": "Leaves"}
 	com["commodity_condition"] = map[string]any{"value": "13", "label": "Fresh"}
 	com["commodity_intended_use"] = map[string]any{"value": "3", "label": "Decoration"}
-	com["quantity_net_weight_unit"] = map[string]any{"value": "t", "label": "tonne (t)"}
-	com["quantity_gross_weight_unit"] = map[string]any{"value": "g", "label": "gram (g)"}
+	com["quantity_net_weight_unit"] = map[string]any{"value": "TNE", "label": "ton (t)"}
+	com["quantity_gross_weight_unit"] = map[string]any{"value": "MTQ", "label": "cubic metre (m³)"}
 	com["packages_description"] = map[string]any{"value": "CT", "label": "Carton"}
 	com["origin_country"] = map[string]any{"value": "IN", "label": "India"}
 
@@ -257,7 +257,7 @@ func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
 		"package":           {tl.PackageDescription, "CT"},
 		"origin":            {tl.OriginCountries[0], "IN"},
 		"net weight unit":   {tl.NetWeight.Unit, "TNE"},
-		"gross weight unit": {tl.GrossWeight.Unit, "GRM"},
+		"gross weight unit": {tl.GrossWeight.Unit, "MTQ"},
 	} {
 		if got[0] != got[1] {
 			t.Errorf("%s = %q, want %q", field, got[0], got[1])

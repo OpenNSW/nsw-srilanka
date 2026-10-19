@@ -258,15 +258,13 @@ func transportModeCode(mode string) string {
 	}
 }
 
+// weightUnit passes on the UN/ECE code the form stores (KGM, TNE, MTQ, ...).
+// A weight entered with no unit is in kilograms, the form's default.
 func weightUnit(unit string) string {
-	switch unit {
-	case "g":
-		return "GRM"
-	case "t":
-		return "TNE"
-	default:
+	if unit == "" {
 		return "KGM"
 	}
+	return unit
 }
 
 // ---------------------------------------------------------------------------
