@@ -18,6 +18,12 @@ const NEXT_TASK_MAX_ATTEMPTS = 5
 const NEXT_TASK_RETRY_MS = 1000
 const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
 
+/** SLTB Review Pickup Schedule: officer chose "Propose a Different Date & Time". */
+function isProposedPickupDateSubmit(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false
+  return (data as Record<string, unknown>).schedule_outcome === 'propose_alternative'
+}
+
 function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
   const actionable = nodes.filter((node) => {
     if (node.id === currentTaskId) return false
@@ -56,6 +62,9 @@ export function TaskDetailScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const [showSubmitSuccess, setShowSubmitSuccess] = useState(false)
+  const [submitSuccessKey, setSubmitSuccessKey] = useState<'submitSuccess' | 'submitSuccessProposedPickupDate'>(
+    'submitSuccess',
+  )
   // Bumped once an action's refetch has landed, and mixed into the zone keys so
   // the form remounts against what came back. A form seeds its data on mount
   // and deliberately ignores later polls, which is what stops a background
@@ -69,6 +78,7 @@ export function TaskDetailScreen() {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
     setShowSubmitSuccess(false)
+    setSubmitSuccessKey('submitSuccess')
     setNextTaskId(null)
   }
 
@@ -222,7 +232,7 @@ export function TaskDetailScreen() {
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
           <div className="rounded-xl bg-success-subtle px-4 py-3 shadow-sm">
             <Text size="2" weight="medium" className="text-success-strong">
-              {t('tasks.submitSuccess')}
+              {t(`tasks.${submitSuccessKey}`)}
             </Text>
           </div>
         </div>
@@ -281,6 +291,11 @@ export function TaskDetailScreen() {
                   // Show the success banner only when the task moved out of PENDING_USER.
                   // A draft save leaves it there, a real submission advances it.
                   if (zv && zv.state !== 'PENDING_USER' && !hasRejection(zv)) {
+                    setSubmitSuccessKey(
+                      isProposedPickupDateSubmit(data)
+                        ? 'submitSuccessProposedPickupDate'
+                        : 'submitSuccess',
+                    )
                     setShowSubmitSuccess(true)
                     setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
                   }
