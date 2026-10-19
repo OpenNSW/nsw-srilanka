@@ -9,6 +9,7 @@ import { createConsignment, getAllConsignments } from '@/features/consignment/se
 import { useRole } from '@/services/useRole'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
+import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import { CONTENT_TOP_PX } from '@/components/Layout'
 
 export function ConsignmentScreen() {
@@ -202,26 +203,24 @@ export function ConsignmentScreen() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {consignments.map((consignment) => (
-                    <tr
-                      key={consignment.id}
-                      onClick={() => void navigate(`/consignments/${consignment.id}`)}
-                      className="hover:bg-primary-subtle cursor-pointer transition-colors"
-                    >
+                    <LinkRow key={consignment.id} to={`/consignments/${consignment.id}`}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {consignment.name ? (
-                          <div className="flex flex-col">
-                            <Text size="2" weight="bold" className="text-info-strong">
-                              {consignment.name}
-                            </Text>
-                            <Text size="1" color="gray" className="font-mono mt-0.5">
+                        <RowLink to={`/consignments/${consignment.id}`}>
+                          {consignment.name ? (
+                            <div className="flex flex-col">
+                              <Text size="2" weight="bold" className="text-info-strong">
+                                {consignment.name}
+                              </Text>
+                              <Text size="1" color="gray" className="font-mono mt-0.5">
+                                {consignment.id}
+                              </Text>
+                            </div>
+                          ) : (
+                            <Text size="2" weight="medium" className="text-info-strong font-mono">
                               {consignment.id}
                             </Text>
-                          </div>
-                        ) : (
-                          <Text size="2" weight="medium" className="text-info-strong font-mono">
-                            {consignment.id}
-                          </Text>
-                        )}
+                          )}
+                        </RowLink>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
@@ -238,7 +237,7 @@ export function ConsignmentScreen() {
                           {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
                         </Text>
                       </td>
-                    </tr>
+                    </LinkRow>
                   ))}
                 </tbody>
               </table>
