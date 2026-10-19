@@ -64,4 +64,6 @@ every reader may act on it.
 
 `GET /api/v1/tasks/{id}` uses `MayActOnStep` to decide whether the reader's file
 references can be submitted back: a reader who may act gets `read` and `submit`,
-anyone else `read` only.
+anyone else `read` only. A draft counts as acting: core authorizes it as the
+command its step template names for drafts, so a reader who may save a draft
+gets `submit` too.
