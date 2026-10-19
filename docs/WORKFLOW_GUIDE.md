@@ -452,26 +452,39 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 
 ### Payments (`PAYMENT`)
 
-Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise.
+Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The step names its fee by task code, and nothing else:
 
 ```json
 {
   "plugin_properties": {
-    "task_code": "cda_app_fee_payment_v1",
-    "amount": "2000.00",
-    "currency": "LKR",
-    "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
-    "reference": {
-      "issuer": "CDA",
-      "id_type": "fee_payment_ref",
-      "params": { "exporterId": "/exporter_id" },
-      "values": { "mainCategory": "01", "subCategory": "00002" }
-    }
+    "task_code": "cda_app_fee_payment_v1"
   }
 }
 ```
 
-In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
+The fee itself is the deployment's, in the `fees` list of `configs/payment_methods.json`, beside the gateway methods:
+
+```json
+{
+  "task_code": "cda_app_fee_payment_v1",
+  "service_name": "CDA Application Fee",
+  "amount": "2000.00",
+  "currency": "LKR",
+  "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
+  "reference": {
+    "issuer": "CDA",
+    "id_type": "fee_payment_ref",
+    "params": { "exporterId": "/exporter_id" },
+    "values": { "mainCategory": "01", "subCategory": "00002" }
+  }
+}
+```
+
+- **Amount:** charged unless the step is given an `amount` input, which takes precedence. A fee whose steps always give one may leave it out.
+- **Gateway metadata:** passed to the selected gateway and stored with the transaction; GovPay needs `govpay_subinst_id` and `govpay_service_id`.
+- **Reference:** the payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise. In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
+
+The server checks the fees at startup, including that each reference format is defined in `refid`. A step whose task code has no fee fails.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 

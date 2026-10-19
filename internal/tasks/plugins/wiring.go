@@ -19,6 +19,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/gatepass"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/invoice"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/serviceorder"
+	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 )
 
 // Task type keys. These must match the SubTaskTemplate.Type values declared
@@ -133,9 +134,9 @@ type FileFetcher interface {
 // EXTERNAL_REVIEW uses our local plugin (ExternalReviewPlugin) that resolves
 // targets via remote.Manager and posts the OGA submission envelope. Payment
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
-// payments.PaymentService. NOTIFICATION uses NotificationPlugin which
-// dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string) error {
+// payments.PaymentService for the fees in fees. NOTIFICATION uses
+// NotificationPlugin which dispatches SMS/email through notifications.Manager.
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, fees nswpayment.Fees, files FileFetcher, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -152,7 +153,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
 		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL)},
-		{TaskTypePayment, NewPaymentPlugin(paymentService)},
+		{TaskTypePayment, NewPaymentPlugin(paymentService, fees)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},

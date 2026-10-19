@@ -19,53 +19,28 @@ import (
 // the task record state to PENDING_PAYMENT.
 type PaymentPlugin struct {
 	paymentService payment.PaymentService
+	fees           nswpayment.Fees
 }
 
-// NewPaymentPlugin creates a new PaymentPlugin.
-func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
+// NewPaymentPlugin creates a new PaymentPlugin that charges the fees in fees
+// (the "fees" list of payment_methods.json).
+func NewPaymentPlugin(paymentService payment.PaymentService, fees nswpayment.Fees) *PaymentPlugin {
 	return &PaymentPlugin{
 		paymentService: paymentService,
+		fees:           fees,
 	}
 }
 
-type paymentConfig struct {
-	TaskCode    string          `json:"task_code"`
-	ServiceName string          `json:"service_name"`
-	Amount      decimal.Decimal `json:"amount"`
-	Currency    string          `json:"currency"`
-
-	// Per-fee values the selected gateway needs, passed through opaquely and
-	// stored on the transaction so the gateway can recover them at callback
-	// time — by then the artifact that declared them is out of reach.
-	//
-	// This plugin attaches no meaning to the keys; each gateway defines its
-	// own, and each gateway enforces its own requirements via
-	// corepayment.PaymentGateway.ValidateMetadata — which the payment service
-	// calls before it persists anything, so a fee that omitted a required key
-	// fails on this Execute rather than at callback time.
-	GatewayMetadata map[string]string `json:"gateway_metadata"`
-
-	// Reference names the refid format of the fee's payment reference, the
-	// reference the payer pays against. A fee without one takes the default
-	// format; see nswpayment.RefGenerator.
-	Reference *paymentReferenceConfig `json:"reference,omitempty"`
-}
-
-// paymentReferenceConfig names the refid format of a fee's payment reference
-// and supplies the params it expects. Params maps a param to an absolute JSON
-// Pointer into the step's inputs, as in REFID_GENERATOR, for values that vary
-// per payment. Values gives a param its value as is, for codes fixed per fee.
-// A param may be named in only one of the two.
-type paymentReferenceConfig struct {
-	Issuer string            `json:"issuer"`
-	IDType string            `json:"id_type"`
-	Params map[string]string `json:"params,omitempty"`
-	Values map[string]string `json:"values,omitempty"`
+// paymentProperties is a PAYMENT step's plugin_properties: the task code of
+// the fee it charges. Everything else about the fee is in payment_methods.json,
+// so any other property an artifact still carries is ignored.
+type paymentProperties struct {
+	TaskCode string `json:"task_code"`
 }
 
 // reservedMetadataKeys are written by this plugin and may not be overridden by
-// an artifact's gateway_metadata, which would otherwise let a fee rewrite the
-// task it belongs to.
+// a fee's gateway_metadata, which would otherwise let a fee rewrite the task it
+// belongs to.
 var reservedMetadataKeys = map[string]struct{}{
 	"task_id":   {},
 	"task_code": {},
@@ -80,13 +55,16 @@ func isReservedMetadataKey(key string) bool {
 }
 
 func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
-	var cfg paymentConfig
-	if err := json.Unmarshal(configRaw, &cfg); err != nil {
+	var props paymentProperties
+	if err := json.Unmarshal(configRaw, &props); err != nil {
 		return fmt.Errorf("payment: failed to parse generic_payment config: %w", err)
 	}
-
-	if cfg.Currency == "" {
-		return fmt.Errorf("payment: plugin_properties.currency is required")
+	if strings.TrimSpace(props.TaskCode) == "" {
+		return fmt.Errorf("payment: plugin_properties.task_code is required")
+	}
+	cfg, ok := p.fees.Lookup(props.TaskCode)
+	if !ok {
+		return fmt.Errorf("payment: no fee for task_code %q in payment_methods.json fees", props.TaskCode)
 	}
 
 	// 1. Determine selected payment gateway
@@ -100,7 +78,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	}
 
 	// 2. Resolve the amount to charge. If a workflow input is available, it takes
-	// precedence over the artifact's static amount. This is the last
+	// precedence over the fee's configured amount. This is the last
 	// checkpoint before it becomes an actual charge so the logical validation is done to
 	// make sure the payment amount is acceptable.
 	amount, err := resolvePaymentAmount(ctx.Inputs["amount"], cfg.Amount)
@@ -127,7 +105,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// gateway surfaces here as an error, as does a fee whose gateway_metadata
 	// omits something the selected gateway requires — the service asks the
 	// gateway to vet the metadata before it persists anything, so the task_code
-	// wrapped in below still names the artifact that has to be fixed.
+	// wrapped in below still names the fee that has to be fixed.
 	// The settlement completes exactly this step: the payment service hands the
 	// token back to the task manager when the webhook arrives.
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
@@ -183,12 +161,11 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 // buildPaymentMetadata assembles the gateway metadata persisted with the
 // transaction: this plugin's own bookkeeping, the fee's reference format
 // (referenceMetadata, from paymentReferenceMetadata), plus whatever the
-// artifact declared for the gateway, passed through untouched apart from
-// trimming.
+// fee declares for the gateway, passed through untouched apart from trimming.
 //
-// The artifact's values are applied first so the reserved keys below always
+// The fee's values are applied first so the reserved keys below always
 // win; a fee cannot rewrite the task it belongs to.
-func buildPaymentMetadata(taskID string, cfg paymentConfig, selectedMethod string, referenceMetadata map[string]string) map[string]string {
+func buildPaymentMetadata(taskID string, cfg nswpayment.Fee, selectedMethod string, referenceMetadata map[string]string) map[string]string {
 	metadata := make(map[string]string, len(cfg.GatewayMetadata)+len(reservedMetadataKeys))
 
 	for key, value := range cfg.GatewayMetadata {
@@ -218,30 +195,30 @@ func buildPaymentMetadata(taskID string, cfg paymentConfig, selectedMethod strin
 // metadata nswpayment.RefGenerator reads: its issuer and id_type, its params read
 // through their pointers into inputs, and its fixed values. A fee without a
 // format adds no keys, so its checkout takes the default format.
-func paymentReferenceMetadata(inputs map[string]any, cfg *paymentReferenceConfig) (map[string]string, error) {
+func paymentReferenceMetadata(inputs map[string]any, cfg *nswpayment.FeeReference) (map[string]string, error) {
 	if cfg == nil {
 		return nil, nil
 	}
 	if strings.TrimSpace(cfg.Issuer) == "" || strings.TrimSpace(cfg.IDType) == "" {
-		return nil, errors.New("plugin_properties.reference needs an issuer and an id_type")
+		return nil, errors.New("reference needs an issuer and an id_type")
 	}
 	pointers := make(map[string]refIDPointer, len(cfg.Params))
 	for name, raw := range cfg.Params {
 		if strings.TrimSpace(name) == "" {
-			return nil, errors.New("plugin_properties.reference.params has an empty name")
+			return nil, errors.New("reference.params has an empty name")
 		}
 		ptr, err := parseRefIDPointer(raw, false)
 		if err != nil {
-			return nil, fmt.Errorf("plugin_properties.reference.params.%s: %w", name, err)
+			return nil, fmt.Errorf("reference.params.%s: %w", name, err)
 		}
 		pointers[name] = ptr
 	}
 	for name := range cfg.Values {
 		if strings.TrimSpace(name) == "" {
-			return nil, errors.New("plugin_properties.reference.values has an empty name")
+			return nil, errors.New("reference.values has an empty name")
 		}
 		if _, both := pointers[name]; both {
-			return nil, fmt.Errorf("plugin_properties.reference names %q in both params and values", name)
+			return nil, fmt.Errorf("reference names %q in both params and values", name)
 		}
 	}
 	params, err := readRefIDParams(inputs, nil, pointers)
@@ -255,13 +232,13 @@ func paymentReferenceMetadata(inputs map[string]any, cfg *paymentReferenceConfig
 }
 
 // Decides the amount to charge for a task. If the workflow input "amount" is
-// supplied, it takes precedence over the artifact's configured amount. If no
+// supplied, it takes precedence over the fee's configured amount. If no
 // input is supplied, the configured amount will be taken. Both are validated to be
 // valid as a payment amount.
 func resolvePaymentAmount(input any, configured decimal.Decimal) (decimal.Decimal, error) {
 	if input == nil {
 		if !configured.IsPositive() {
-			return decimal.Decimal{}, errors.New(`plugin_properties.amount is required and must be positive when no "amount" input is supplied`)
+			return decimal.Decimal{}, errors.New(`the fee's amount is required and must be positive when no "amount" input is supplied`)
 		}
 		return configured, nil
 	}

@@ -14,5 +14,115 @@
         "private_key": "file:/certs/govpay/go_private.pem"
       }
     }
+  ],
+  "fees": [
+    {
+      "task_code": "fcau_app_fee_payment_v1",
+      "service_name": "Application Fee",
+      "amount": "1500.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "001",
+        "govpay_service_id": "001"
+      }
+    },
+    {
+      "task_code": "npqs_certificate_fee_payment",
+      "service_name": "Phytosanitary Certificate Fee",
+      "amount": "2000.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "002",
+        "govpay_service_id": "001"
+      },
+      "reference": {
+        "issuer": "NPQS",
+        "id_type": "npqs_payment_ref"
+      }
+    },
+    {
+      "task_code": "npqs_treatment_payment",
+      "service_name": "Treatment Service Fee",
+      "amount": "4500.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "002",
+        "govpay_service_id": "003"
+      },
+      "reference": {
+        "issuer": "NPQS",
+        "id_type": "npqs_payment_ref"
+      }
+    },
+    {
+      "task_code": "cda_app_fee_payment_v1",
+      "service_name": "CDA Application Fee",
+      "amount": "2000.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "004",
+        "govpay_service_id": "001"
+      },
+      "reference": {
+        "issuer": "CDA",
+        "id_type": "fee_payment_ref",
+        "params": {
+          "exporterId": "/exporter_id"
+        },
+        "values": {
+          "mainCategory": "01",
+          "subCategory": "00002"
+        }
+      }
+    },
+    {
+      "task_code": "cda_kcfn_payment_v1",
+      "service_name": "CDA Recommendation Report Fee",
+      "amount": "1500.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "004",
+        "govpay_service_id": "002"
+      },
+      "reference": {
+        "issuer": "CDA",
+        "id_type": "fee_payment_ref",
+        "params": {
+          "exporterId": "/exporter_id",
+          "subCategory": "/sub_category"
+        },
+        "values": {
+          "mainCategory": "02"
+        }
+      }
+    },
+    {
+      "task_code": "sltb_levy_payment_v1",
+      "service_name": "SLTB Levy Payment",
+      "amount": "12500.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "003",
+        "govpay_service_id": "001"
+      },
+      "reference": {
+        "issuer": "SLTB",
+        "id_type": "levy_payment_ref"
+      }
+    },
+    {
+      "task_code": "sltb_lab_payment_v1",
+      "service_name": "SLTB Lab Test Fee Payment",
+      "amount": "5000.00",
+      "currency": "LKR",
+      "gateway_metadata": {
+        "govpay_subinst_id": "003",
+        "govpay_service_id": "002"
+      },
+      "reference": {
+        "issuer": "SLTB",
+        "id_type": "lab_payment_ref"
+      }
+    }
   ]
 }

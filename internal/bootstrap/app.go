@@ -849,9 +849,16 @@ func initTask(
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
 ) (*taskStack, func() error, error) {
+	// The fees PAYMENT steps charge sit beside the gateways in the payment
+	// methods file, checked against the refid formats their references name.
+	paymentFees, err := nswpayment.LoadFees(cfg.Server.PaymentMethodsConfigPath, cfg.RefID)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, paymentFees, storageService, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{reg: artifactRegistry}, storageService); err != nil {
