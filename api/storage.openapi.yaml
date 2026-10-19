@@ -111,8 +111,8 @@ paths:
         Returns a time-limited URL to download the file `{key}` stands for,
         and when the URL expires.
 
-        `{key}` is a file reference issued to the caller. For now, a value
-        that is not a reference is taken to be a storage key.
+        `{key}` must be a file reference issued to the caller. A storage key
+        grants nothing on its own.
 
         Requires scope `nsw:storage:read`.
       operationId: getDownloadURL
@@ -131,9 +131,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DownloadResponse'
         '400':
-          description: |
-            Missing `{key}`, or a value that is neither a file reference nor
-            a valid storage key.
+          description: Missing `{key}`.
           content:
             application/json:
               schema:
@@ -146,10 +144,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The bearer token lacks scope `nsw:storage:read`, `{key}` is a
-            file reference issued to someone else, or it is a user's upload
-            reference, which can only be submitted: refetch the task once the
-            form is submitted or saved as a draft, for one that opens the file.
+            The bearer token lacks scope `nsw:storage:read`; `{key}` is not
+            a file reference issued to the caller (someone else's reference,
+            a raw storage key or any other value get the same answer); or it
+            is a user's upload reference, which can only be submitted:
+            refetch the task once the form is submitted or saved as a draft,
+            for one that opens the file.
           content:
             application/json:
               schema:

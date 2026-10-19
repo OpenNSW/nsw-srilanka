@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/OpenNSW/core/taskflow/store"
@@ -67,8 +66,8 @@ func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal, can
 // FromCaller replaces, in place, each declared file reference in payload, a
 // submission for record's active step, with the stored value it stands for.
 // Each must be a reference issued to p that can be submitted: the error is
-// fileaccess.ErrNotYours, fileaccess.ErrScope or fileaccess.ErrExpired
-// otherwise.
+// fileaccess.ErrInvalid, fileaccess.ErrNotYours, fileaccess.ErrScope or
+// fileaccess.ErrExpired otherwise.
 func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, payload map[string]any, p *authn.Principal) error {
 	paths, err := filefields.Parse(record.RenderConfig)
 	if err != nil || len(paths) == 0 {
@@ -91,12 +90,6 @@ func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, p
 		}
 	}
 	return filefields.Replace(payload, inPayload, func(ref string) (string, error) {
-		value, err := b.refs.Resolve(p, ref, fileaccess.ScopeSubmit)
-		if errors.Is(err, fileaccess.ErrInvalid) {
-			// Until every caller sends file tokens, a value that is not one
-			// is stored as sent.
-			return ref, nil
-		}
-		return value, err
+		return b.refs.Resolve(p, ref, fileaccess.ScopeSubmit)
 	})
 }

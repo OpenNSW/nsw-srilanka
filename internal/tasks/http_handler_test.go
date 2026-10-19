@@ -713,6 +713,7 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 		{"missing task", &fakeTaskFetcher{}, "step-1", map[string]any{}, http.StatusNotFound},
 		{"step no longer active", pendingFileTask(), "step-0", map[string]any{"invoice": alicesRef}, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", map[string]any{"invoice": alicesRef}, http.StatusForbidden},
+		{"a raw storage key", pendingFileTask(), "step-1", map[string]any{"invoice": "stored-invoice-key"}, http.StatusBadRequest},
 		{"expired file", pendingFileTask(), "step-1", map[string]any{"invoice": expiredRef}, http.StatusGone},
 		{"a file that can't be submitted", pendingFileTask(), "step-1", map[string]any{"invoice": readOnlyRef}, http.StatusForbidden},
 		{"a list where one file is declared", pendingFileTask(), "step-1", map[string]any{"invoice": []any{alicesRef, expiredRef}}, http.StatusBadRequest},
@@ -780,6 +781,7 @@ func TestHandleSaveDraft_RejectsBadRequests(t *testing.T) {
 		{"missing task", &fakeTaskFetcher{}, "step-1", `{"payload":{}}`, http.StatusNotFound},
 		{"step no longer active", pendingFileTask(), "step-0", `{"payload":{}}`, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", `{"payload":{"invoice":"` + alicesRef + `"}}`, http.StatusForbidden},
+		{"a raw storage key", pendingFileTask(), "step-1", `{"payload":{"invoice":"stored-invoice-key"}}`, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
