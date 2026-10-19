@@ -251,8 +251,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '410':
           description: |
-            A declared file field holds a file reference that has expired.
-            Refetch the task, or upload the file again, and save again.
+            A declared file field holds a file reference from the task's view
+            that has expired. Refetch the task and save again.
           content:
             application/json:
               schema:
