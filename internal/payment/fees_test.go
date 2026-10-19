@@ -5,15 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/OpenNSW/core/refid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// npqsFormats defines the one reference format the test fees name.
-var npqsFormats = refid.Config{Issuers: []refid.IssuerConfig{
-	{Issuer: "NPQS", Formats: []refid.FormatConfig{{IDType: "npqs_payment_ref"}}},
-}}
 
 func writeMethodsFile(t *testing.T, body string) string {
 	t.Helper()
@@ -23,7 +17,7 @@ func writeMethodsFile(t *testing.T, body string) string {
 }
 
 // Each method's fees sit in its config, beside the settings its gateway
-// reads; a method without a fees list collects none.
+// reads; a method without a fees list has none.
 func TestLoadFees(t *testing.T) {
 	path := writeMethodsFile(t, `{
 		"version": "1.0",
@@ -31,45 +25,29 @@ func TestLoadFees(t *testing.T) {
 			{"id": "govpay", "is_active": true, "config": {
 				"webhook_client_id": "GOVPAY_TO_NSW",
 				"fees": [{
-					"task_code": "npqs_certificate_fee_payment",
-					"service_name": "Phytosanitary Certificate Fee",
-					"amount": "2000.00",
-					"currency": "LKR",
-					"gateway_metadata": {"govpay_subinst_id": "002", "govpay_service_id": "001"},
-					"reference": {"issuer": "NPQS", "id_type": "npqs_payment_ref"}
+					"task_code": "example_fee_payment_v1",
+					"gateway_metadata": {"govpay_subinst_id": "002", "govpay_service_id": "001"}
 				}]
 			}},
 			{"id": "other", "is_active": true}
 		]
 	}`)
 
-	fees, err := LoadFees(path, npqsFormats)
+	fees, err := LoadFees(path)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"govpay"}, keys(fees))
-	fee, ok := fees.Lookup("govpay", "npqs_certificate_fee_payment")
+	metadata, ok := fees.GatewayMetadata("govpay", "example_fee_payment_v1")
 	require.True(t, ok)
-	assert.Equal(t, "Phytosanitary Certificate Fee", fee.ServiceName)
-	assert.Equal(t, "2000", fee.Amount.String())
-	assert.Equal(t, "002", fee.GatewayMetadata["govpay_subinst_id"])
-	assert.Equal(t, &FeeReference{Issuer: "NPQS", IDType: "npqs_payment_ref"}, fee.Reference)
-	_, ok = fees.Lookup("govpay", "other")
+	assert.Equal(t, map[string]string{"govpay_subinst_id": "002", "govpay_service_id": "001"}, metadata)
+	_, ok = fees.GatewayMetadata("govpay", "other")
 	assert.False(t, ok)
-	_, ok = fees.Lookup("other", "npqs_certificate_fee_payment")
+	_, ok = fees.GatewayMetadata("other", "example_fee_payment_v1")
 	assert.False(t, ok, "a fee belongs to the method that lists it")
-}
-
-func keys(fees Fees) []string {
-	out := make([]string, 0, len(fees))
-	for method := range fees {
-		out = append(out, method)
-	}
-	return out
 }
 
 // An agency's payment methods file has no fees.
 func TestLoadFees_NoFees(t *testing.T) {
-	fees, err := LoadFees(writeMethodsFile(t, `{"version": "1.0", "methods": []}`), refid.Config{})
+	fees, err := LoadFees(writeMethodsFile(t, `{"version": "1.0", "methods": []}`))
 
 	require.NoError(t, err)
 	assert.Empty(t, fees)
@@ -80,22 +58,11 @@ func TestLoadFees_Rejects(t *testing.T) {
 		fees string
 		want string
 	}{
-		"no task code":    {fees: `[{"service_name": "Fee", "currency": "LKR"}]`, want: `method "govpay": fees[0].task_code is required`},
-		"duplicate":       {fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR"}, {"task_code": "A", "service_name": "Fee", "currency": "LKR"}]`, want: `method "govpay": task_code "A" is declared more than once`},
-		"no service name": {fees: `[{"task_code": "A", "currency": "LKR"}]`, want: `method "govpay": fee "A": service_name is required`},
-		"no currency":     {fees: `[{"task_code": "A", "service_name": "Fee"}]`, want: `method "govpay": fee "A": currency is required`},
-		"negative amount": {fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR", "amount": "-1"}]`, want: "amount must be positive"},
-		"reference without id_type": {
-			fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR", "reference": {"issuer": "NPQS"}}]`,
-			want: "reference needs an issuer and an id_type",
-		},
-		"undefined reference format": {
-			fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR", "reference": {"issuer": "NOPE", "id_type": "ref"}}]`,
-			want: "reference format NOPE/ref is not defined in config.yaml refid",
-		},
+		"no task code": {fees: `[{"gateway_metadata": {"k": "v"}}]`, want: `method "govpay": fees[0].task_code is required`},
+		"duplicate":    {fees: `[{"task_code": "A"}, {"task_code": "A"}]`, want: `method "govpay": task_code "A" is declared more than once`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := LoadFees(writeMethodsFile(t, `{"methods": [{"id": "govpay", "config": {"fees": `+tc.fees+`}}]}`), npqsFormats)
+			_, err := LoadFees(writeMethodsFile(t, `{"methods": [{"id": "govpay", "config": {"fees": `+tc.fees+`}}]}`))
 
 			require.ErrorContains(t, err, tc.want)
 		})
@@ -103,7 +70,7 @@ func TestLoadFees_Rejects(t *testing.T) {
 }
 
 func TestLoadFees_MissingFile(t *testing.T) {
-	_, err := LoadFees(filepath.Join(t.TempDir(), "missing.json"), refid.Config{})
+	_, err := LoadFees(filepath.Join(t.TempDir(), "missing.json"))
 
 	require.Error(t, err)
 }

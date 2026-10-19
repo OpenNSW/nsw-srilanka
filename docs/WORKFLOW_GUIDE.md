@@ -276,8 +276,10 @@ The backend never hands a declared value to a caller as it is stored:
 
 Each reference names who it was issued to and lists its **scopes**, what it allows: `read` (open the file on `GET /api/v1/storage/{ref}`) and `submit` (send it back in a submission or a draft).
 
-- `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state, or it has none. It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default): anyone else's is refused with a `403` and an expired one with a `410`.
-- A submission, or a draft (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`), must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
+- An upload (`POST /api/v1/storage`) returns a file reference issued to the uploader as its `key`, which is what a form's file field holds. A user's has `submit` only: it can't open the file (`403`), so it never expires, and once the form is submitted or saved as a draft, the task's view gives a reference that opens it. A machine client's, such as an agency proxying its officer's upload, has `read` and `submit`, since the agency opens the file with it.
+- `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state, or it has none. It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default). Anything else is refused with a `403`, a raw storage key included, and an expired reference with a `410`.
+- A submission, or a draft (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`), must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`, and a value that is not a reference at all, such as a raw storage key, with a `400`.
+- An `EXTERNAL_REVIEW` step, whether it dispatches a review or replies on the OGA's parked step, sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 
@@ -452,39 +454,35 @@ Renders a permit, licence, certificate or receipt as print-ready HTML with [`htm
 
 ### Payments (`PAYMENT`)
 
-Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The step names its fee by task code, and nothing else:
+Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway reports the payment settled. The payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise.
 
 ```json
 {
   "plugin_properties": {
-    "task_code": "cda_app_fee_payment_v1"
+    "task_code": "cda_app_fee_payment_v1",
+    "amount": "2000.00",
+    "currency": "LKR",
+    "reference": {
+      "issuer": "CDA",
+      "id_type": "fee_payment_ref",
+      "params": { "exporterId": "/exporter_id" },
+      "values": { "mainCategory": "01", "subCategory": "00002" }
+    }
   }
 }
 ```
 
-The fee itself is the deployment's, in the `fees` list of the payment method's `config` in `configs/payment_methods.json`, since what a fee needs is that gateway's. The step charges the fee of the method selected for it (`selected_method`, or `govpay` when its form offers no choice):
+In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
+
+What the gateway needs to collect the fee, such as GovPay's `govpay_subinst_id` and `govpay_service_id`, differs per environment, so it is not in the artifact. Each payment method lists it by task code in the `fees` of its `config` in `configs/payment_methods.json`, and the step sends the selected method's:
 
 ```json
-{
-  "task_code": "cda_app_fee_payment_v1",
-  "service_name": "CDA Application Fee",
-  "amount": "2000.00",
-  "currency": "LKR",
-  "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
-  "reference": {
-    "issuer": "CDA",
-    "id_type": "fee_payment_ref",
-    "params": { "exporterId": "/exporter_id" },
-    "values": { "mainCategory": "01", "subCategory": "00002" }
-  }
-}
+"fees": [
+  { "task_code": "cda_app_fee_payment_v1", "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" } }
+]
 ```
 
-- **Amount:** charged unless the step is given an `amount` input, which takes precedence. A fee whose steps always give one may leave it out.
-- **Gateway metadata:** passed to the selected gateway and stored with the transaction; GovPay needs `govpay_subinst_id` and `govpay_service_id`.
-- **Reference:** the payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise. In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
-
-The server checks the fees at startup, including that each reference format is defined in `refid`. A step whose task code has no fee in the selected method's config fails.
+A method that lists no entry for the fee sends no metadata, and GovPay then refuses the checkout.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 

@@ -849,9 +849,9 @@ func initTask(
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
 ) (*taskStack, func() error, error) {
-	// The fees PAYMENT steps charge sit beside the gateways in the payment
-	// methods file, checked against the refid formats their references name.
-	paymentFees, err := nswpayment.LoadFees(cfg.Server.PaymentMethodsConfigPath, cfg.RefID)
+	// The gateway metadata each payment method collects a fee with sits in
+	// that method's config in the payment methods file.
+	paymentFees, err := nswpayment.LoadFees(cfg.Server.PaymentMethodsConfigPath)
 	if err != nil {
 		return nil, nil, err
 	}
