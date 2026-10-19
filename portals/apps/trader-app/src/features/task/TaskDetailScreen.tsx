@@ -292,9 +292,7 @@ export function TaskDetailScreen() {
                   // A draft save leaves it there, a real submission advances it.
                   if (zv && zv.state !== 'PENDING_USER' && !hasRejection(zv)) {
                     setSubmitSuccessKey(
-                      isProposedPickupDateSubmit(data)
-                        ? 'submitSuccessProposedPickupDate'
-                        : 'submitSuccess',
+                      isProposedPickupDateSubmit(data) ? 'submitSuccessProposedPickupDate' : 'submitSuccess',
                     )
                     setShowSubmitSuccess(true)
                     setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
