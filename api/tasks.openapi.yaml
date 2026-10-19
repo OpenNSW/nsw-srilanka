@@ -28,10 +28,11 @@ paths:
 
         Each value the task's render config declares under `files` is
         replaced by a **file reference** issued to the caller: an opaque
-        string to pass to `GET /api/v1/storage/{key}`, or back in a
-        submission, never the stored file's key. A reference expires after
-        the deployment's `storage.tokenTTLSeconds`; refetch the task for
-        fresh ones.
+        string to pass to `GET /api/v1/storage/{key}`, never the stored
+        file's key. When the caller may act on the task's active step, it
+        can also be sent back in a submission or a draft. A reference
+        expires after the deployment's `storage.tokenTTLSeconds`; refetch
+        the task for fresh ones.
 
         Requires scope `nsw:task:read`.
       operationId: getTask
@@ -228,7 +229,8 @@ paths:
         '403':
           description: |
             The caller may not save a draft of this step, or a declared file
-            field holds a file reference issued to someone else.
+            field holds a file reference issued to someone else, or one that
+            can't be submitted.
           content:
             application/json:
               schema:

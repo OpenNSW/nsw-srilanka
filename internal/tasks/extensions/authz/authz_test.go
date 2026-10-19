@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
@@ -197,4 +198,109 @@ func TestExtension_EmptyProperties(t *testing.T) {
 			t.Fatalf("properties %q: want ErrForbidden, got %v", string(props), err)
 		}
 	}
+}
+
+func TestExtension_MayAct(t *testing.T) {
+	props := map[string]map[string][]string{
+		"PENDING_USER":   {"submit": {"trader"}, "save_draft": {"cha"}},
+		"PENDING_REVIEW": {"approve": {"fcau"}},
+		"COMPLETED":      {},
+	}
+	trader := func(owned map[string]bool, err error) taskauthz.Input {
+		return taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(owned, err, new(int))}
+	}
+	cha := taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"CHA"}, OwnedRoles: ownedFn(map[string]bool{"cha": true}, nil, new(int))}
+	fcau := taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "FCAU_TO_NSW"}
+
+	tests := []struct {
+		name  string
+		state string
+		in    taskauthz.Input
+		props json.RawMessage
+		want  bool
+	}{
+		{"user with a role and ownership one command allows", "PENDING_USER", trader(map[string]bool{"trader": true}, nil), mustProps(t, props), true},
+		{"another command's name in the same state", "PENDING_USER", cha, mustProps(t, props), true},
+		{"user who doesn't own the case", "PENDING_USER", trader(map[string]bool{"cha": true}, nil), mustProps(t, props), false},
+		{"user with no allowed role", "PENDING_REVIEW", trader(map[string]bool{"trader": true}, nil), mustProps(t, props), false},
+		{"user without an ownership resolver", "PENDING_USER", taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}}, mustProps(t, props), false},
+		{"client the catalog maps", "PENDING_REVIEW", fcau, mustProps(t, props), true},
+		{"client in a state it has no rule in", "PENDING_USER", fcau, mustProps(t, props), false},
+		{"another client", "PENDING_REVIEW", taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "CDA_TO_NSW"}, mustProps(t, props), false},
+		{"a state with no commands", "COMPLETED", trader(map[string]bool{"trader": true}, nil), mustProps(t, props), false},
+		{"a state with no rules", "ADVANCING", trader(map[string]bool{"trader": true}, nil), mustProps(t, props), false},
+		{"no rules at all", "PENDING_USER", trader(map[string]bool{"trader": true}, nil), nil, false},
+		{"no principal kind", "PENDING_USER", taskauthz.Input{}, mustProps(t, props), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: tc.state}
+			got, err := NewExtension(testCatalog()).MayAct(context.Background(), record, tc.in, tc.props)
+			if err != nil {
+				t.Fatalf("MayAct: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("MayAct = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A denial is an answer; a failure to decide is an error.
+func TestExtension_MayActErrors(t *testing.T) {
+	record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
+	in := taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(nil, context.DeadlineExceeded, new(int))}
+	props := mustProps(t, map[string]map[string][]string{"PENDING_USER": {"submit": {"trader"}}})
+
+	if _, err := NewExtension(testCatalog()).MayAct(context.Background(), record, in, props); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("failed ownership lookup: err = %v, want it returned", err)
+	}
+	if _, err := NewExtension(testCatalog()).MayAct(context.Background(), record, in, json.RawMessage(`{not json`)); err == nil {
+		t.Error("malformed properties: MayAct succeeded")
+	}
+}
+
+func TestExtension_MayActOnStep(t *testing.T) {
+	traderRule := mustProps(t, map[string]map[string][]string{"PENDING_USER": {"submit": {"trader"}}})
+	chaRule := mustProps(t, map[string]map[string][]string{"PENDING_USER": {"submit": {"cha"}}})
+	authz := func(phase types.ExecutionPhase, props json.RawMessage) types.ExtensionConfig {
+		return types.ExtensionConfig{ID: ExtAuthz, Phase: phase, Properties: props}
+	}
+	trader := taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(map[string]bool{"trader": true}, nil, new(int))}
+
+	tests := []struct {
+		name       string
+		extensions []types.ExtensionConfig
+		want       bool
+	}{
+		{"an authz extension that allows the caller", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}, true},
+		// Core runs them all, so every one must allow the caller.
+		{"one of two authz extensions refuses", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule), authz(types.PhasePreResume, chaRule)}, false},
+		{"one that refuses", []types.ExtensionConfig{authz(types.PhasePreResume, chaRule)}, false},
+		// None of these checks who submits.
+		{"an authz extension after the step resumes", []types.ExtensionConfig{authz(types.PhasePostResume, chaRule)}, true},
+		{"another extension", []types.ExtensionConfig{{ID: "audit", Phase: types.PhasePreResume, Properties: chaRule}}, true},
+		{"no extensions", nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
+			got, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, trader, types.StepTemplate{Extensions: tc.extensions})
+			if err != nil {
+				t.Fatalf("MayActOnStep: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("MayActOnStep = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("a failure to decide", func(t *testing.T) {
+		record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
+		failing := taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(nil, context.DeadlineExceeded, new(int))}
+		step := types.StepTemplate{Extensions: []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}}
+		if _, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, failing, step); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("err = %v, want the ownership lookup's", err)
+		}
+	})
 }

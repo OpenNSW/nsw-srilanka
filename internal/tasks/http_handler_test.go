@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,7 @@ import (
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, v)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
@@ -612,27 +613,57 @@ func pendingFileTask() *fakeTaskFetcher {
 }
 
 // A reader gets a reference to each declared file, never its stored value.
+// It can be submitted back only when the reader can act on the step.
 func TestHandleGetTask_GivesFileReferences(t *testing.T) {
-	refs := newFakeFileRefs()
-	fetcher := pendingFileTask()
-	h := getTaskHandler(t, fetcher, &stubTemplates{})
-	h.Files = NewFileBinding(refs, nil)
+	readOnly := []fileaccess.Scope{fileaccess.ScopeRead}
+	tests := []struct {
+		name       string
+		canAct     CanAct
+		wantScopes []fileaccess.Scope
+	}{
+		{"reader who can act", func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) { return true, nil }, readSubmit},
+		{"reader who can't act", func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) { return false, nil }, readOnly},
+		{"failure to decide", func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) {
+			return true, errors.New("registry down")
+		}, readOnly},
+		{"no CanAct", nil, readOnly},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			refs := newFakeFileRefs()
+			fetcher := pendingFileTask()
+			h := getTaskHandler(t, fetcher, &stubTemplates{})
+			h.Files = NewFileBinding(refs, nil)
+			var asked taskauthz.Input
+			if tt.canAct != nil {
+				h.CanAct = func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
+					assert.Equal(t, testTaskID, record.TaskID)
+					asked = in
+					return tt.canAct(ctx, record, in)
+				}
+			}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
-	req.SetPathValue("id", testTaskID)
-	in := ownerInput("Trader", "trader")
-	ctx := taskauthz.WithInput(req.Context(), in)
-	req = req.WithContext(authn.ContextWithPrincipal(ctx, userPrincipal("alice")))
-	recorder := httptest.NewRecorder()
-	h.HandleGetTask(recorder, req)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
+			req.SetPathValue("id", testTaskID)
+			in := ownerInput("Trader", "trader")
+			ctx := taskauthz.WithInput(req.Context(), in)
+			req = req.WithContext(authn.ContextWithPrincipal(ctx, userPrincipal("alice")))
+			recorder := httptest.NewRecorder()
+			h.HandleGetTask(recorder, req)
 
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
-	assert.Contains(t, recorder.Body.String(), `"invoice":"ref1"`)
-	assert.NotContains(t, recorder.Body.String(), "stored-invoice-key")
-	value, err := refs.Resolve(userPrincipal("alice"), "ref1", fileaccess.ScopeRead)
-	require.NoError(t, err)
-	assert.Equal(t, "stored-invoice-key", value)
-	assert.Equal(t, "stored-invoice-key", fetcher.record.Data["form"].(map[string]any)["invoice"], "the stored record must not change")
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), `"invoice":"ref1"`)
+			assert.NotContains(t, recorder.Body.String(), "stored-invoice-key")
+			value, err := refs.Resolve(userPrincipal("alice"), "ref1", fileaccess.ScopeRead)
+			require.NoError(t, err)
+			assert.Equal(t, "stored-invoice-key", value)
+			assert.Equal(t, tt.wantScopes, refs.issued["ref1"].scopes)
+			if tt.canAct != nil {
+				assert.Equal(t, in.Roles, asked.Roles, "CanAct must be asked about the reader")
+			}
+			assert.Equal(t, "stored-invoice-key", fetcher.record.Data["form"].(map[string]any)["invoice"], "the stored record must not change")
+		})
+	}
 }
 
 func TestHandleGetTask_BadFileDeclarationIsAnError(t *testing.T) {

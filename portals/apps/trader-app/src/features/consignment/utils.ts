@@ -7,13 +7,15 @@ import { humanizeStatus } from '@/utils/formatStatus'
  *
  * Returns Radix UI semantic color names (consumed by Radix <Badge color={...}>).
  * Radix is aligned to the brand tokens in main.tsx (<Theme>), so these map to:
- *   orange → warning, green → success, gray → secondary.
+ *   blue → info, green → success, gray → secondary.
+ * In progress is blue to match an in-progress task (ActionCard), so the same
+ * label never shows in two colors on one page.
  * See the token block in index.css.
  */
-export function getStateColor(state: ConsignmentState): 'gray' | 'orange' | 'green' {
+export function getStateColor(state: ConsignmentState): 'gray' | 'blue' | 'green' {
   switch (state) {
     case 'IN_PROGRESS':
-      return 'orange'
+      return 'blue'
     case 'FINISHED':
       return 'green'
     default:

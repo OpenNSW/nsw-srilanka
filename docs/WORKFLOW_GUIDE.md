@@ -274,10 +274,10 @@ Like the rest of `render.json`, `files` is snapshotted when the task starts, so 
 
 The backend never hands a declared value to a caller as it is stored:
 
-Each reference names who it was issued to and lists its **scopes**, what it allows: `read` (open the file on `GET /api/v1/storage/{ref}`) and `submit` (send it back in a submission).
+Each reference names who it was issued to and lists its **scopes**, what it allows: `read` (open the file on `GET /api/v1/storage/{ref}`) and `submit` (send it back in a submission or a draft).
 
-- `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read` and `submit`. It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default): anyone else's is refused with a `403` and an expired one with a `410`.
-- A submission must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
+- `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state, or it has none. It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default): anyone else's is refused with a `403` and an expired one with a `410`.
+- A submission, or a draft (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`), must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 

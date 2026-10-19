@@ -26,6 +26,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
+	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 	"github.com/OpenNSW/core/temporal"
 	"github.com/OpenNSW/core/trace"
@@ -389,7 +390,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, recorder, cfg.Server.MaxRequestBytes)
+	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -752,6 +754,22 @@ func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
 			return "", err
 		}
 		return template.OutputNamespace, nil
+	}
+}
+
+// stepCanAct decides whether a caller may act on a task's active step, by the
+// authz rules on its step template in the artifact registry. A task with no
+// active step template has nothing to act on.
+func stepCanAct(reg *artifact.Registry, ext *taskauthzext.Extension) tasks.CanAct {
+	return func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
+		if record.ActiveTaskTemplateID == "" {
+			return false, nil
+		}
+		template, err := steptemplate.Load(ctx, reg, record.ActiveTaskTemplateID)
+		if err != nil {
+			return false, fmt.Errorf("step template %q: %w", record.ActiveTaskTemplateID, err)
+		}
+		return ext.MayActOnStep(ctx, &record, in, template)
 	}
 }
 

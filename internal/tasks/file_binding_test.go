@@ -110,7 +110,7 @@ func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 	}
 	stored := record.DeepCopy()
 
-	view, err := b.ForReader(record, userPrincipal("alice"))
+	view, err := b.ForReader(record, userPrincipal("alice"), true)
 	require.NoError(t, err)
 
 	assert.Equal(t, decodeMap(t, `{
@@ -127,11 +127,23 @@ func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 	assert.ErrorIs(t, err, fileaccess.ErrNotYours)
 }
 
+// A reader who can't act on the step can open the task's files but not
+// submit them.
+func TestFileBinding_ForReaderWhoCannotAct(t *testing.T) {
+	refs := newFakeFileRefs()
+	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), Data: decodeMap(t, `{"form": {"invoice": "k-invoice"}}`)}
+
+	view, err := NewFileBinding(refs, nil).ForReader(record, userPrincipal("alice"), false)
+	require.NoError(t, err)
+	assert.Equal(t, decodeMap(t, `{"form": {"invoice": "ref1"}}`), view.Data)
+	assert.Equal(t, []fileaccess.Scope{fileaccess.ScopeRead}, refs.issued["ref1"].scopes)
+}
+
 func TestFileBinding_ForReaderWithoutFiles(t *testing.T) {
 	b := NewFileBinding(newFakeFileRefs(), nil)
 	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"id":"x:render"}`), Data: decodeMap(t, `{"form":{"invoice":"k"}}`)}
 
-	view, err := b.ForReader(record, userPrincipal("alice"))
+	view, err := b.ForReader(record, userPrincipal("alice"), false)
 	require.NoError(t, err)
 	assert.Equal(t, record, view)
 }
@@ -140,7 +152,7 @@ func TestFileBinding_ForReaderRejectsABadDeclaration(t *testing.T) {
 	b := NewFileBinding(newFakeFileRefs(), nil)
 	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"files":["form.docs[0]"]}`), Data: decodeMap(t, `{}`)}
 
-	_, err := b.ForReader(record, userPrincipal("alice"))
+	_, err := b.ForReader(record, userPrincipal("alice"), false)
 	assert.Error(t, err)
 }
 

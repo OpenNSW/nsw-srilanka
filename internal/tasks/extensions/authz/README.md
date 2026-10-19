@@ -53,3 +53,17 @@ The composition root loads the file once (`internal/catalog`) and injects the
   layer, tied to the required role — holding the role is not enough).
 - **Client (M2M)** — allowed iff an allowed name maps to the caller's client id.
 - Otherwise `403`; no principal ⇒ `401`.
+
+## Who may act
+
+`MayAct` asks the same rules whether the caller may run **any** command on the
+task in its current state, without running one. `MayActOnStep` asks it of every
+`PRE_RESUME` `authz` extension on the active step's template, all of which must
+allow it, as core runs them all. A step with none doesn't check who submits, so
+every reader may act on it.
+
+`GET /api/v1/tasks/{id}` uses `MayActOnStep` to decide whether the reader's file
+references can be submitted back: a reader who may act gets `read` and `submit`,
+anyone else `read` only. A draft counts as acting: core authorizes it as the
+command its step template names for drafts, so a reader who may save a draft
+gets `submit` too.
