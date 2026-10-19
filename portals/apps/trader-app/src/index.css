@@ -341,6 +341,12 @@ body {
   cursor: default;
 }
 
+/* A stepper form's step list sticks, and a new step scrolls, this far below
+ * the top of the viewport: clear of the fixed TopBar (top-3 + h-16 = 76px). */
+:root {
+  --form-steps-offset: 88px;
+}
+
 .rt-TextFieldRoot.rt-r-size-2 {
   --text-field-height: 2.75rem !important;
   --text-field-border-radius: var(--radius-lg) !important;
