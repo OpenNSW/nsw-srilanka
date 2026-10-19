@@ -57,8 +57,11 @@ The composition root loads the file once (`internal/catalog`) and injects the
 ## Who may act
 
 `MayAct` asks the same rules whether the caller may run **any** command on the
-task in its current state, without running one. `GET /api/v1/tasks/{id}` uses it
-to decide whether the reader's file references can be submitted back: a reader the
-step's `authz` rules admit gets `read` and `submit`, anyone else `read` only. A
-step with no `authz` extension doesn't check who submits, so every reader gets
-both.
+task in its current state, without running one. `MayActOnStep` asks it of every
+`PRE_RESUME` `authz` extension on the active step's template, all of which must
+allow it, as core runs them all. A step with none doesn't check who submits, so
+every reader may act on it.
+
+`GET /api/v1/tasks/{id}` uses `MayActOnStep` to decide whether the reader's file
+references can be submitted back: a reader who may act gets `read` and `submit`,
+anyone else `read` only.

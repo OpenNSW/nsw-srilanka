@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
@@ -104,6 +105,23 @@ func (e *Extension) MayAct(ctx context.Context, record *store.TaskRecord, in tas
 	default:
 		return false, err
 	}
+}
+
+// MayActOnStep reports whether in, the caller, may act on record's active step,
+// whose template is step: whether every PRE_RESUME authz extension on it lets
+// the caller run some command in the task's current state, as core runs them
+// all before a submission. A step with none checks no one's submission, so
+// anyone who may read the task may act on it.
+func (e *Extension) MayActOnStep(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, step types.StepTemplate) (bool, error) {
+	for _, ext := range step.Extensions {
+		if ext.ID != ExtAuthz || ext.Phase != types.PhasePreResume {
+			continue
+		}
+		if ok, err := e.MayAct(ctx, record, in, ext.Properties); err != nil || !ok {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func parseRules(record *store.TaskRecord, properties json.RawMessage) (rules, error) {

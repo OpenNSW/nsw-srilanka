@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
@@ -257,4 +258,49 @@ func TestExtension_MayActErrors(t *testing.T) {
 	if _, err := NewExtension(testCatalog()).MayAct(context.Background(), record, in, json.RawMessage(`{not json`)); err == nil {
 		t.Error("malformed properties: MayAct succeeded")
 	}
+}
+
+func TestExtension_MayActOnStep(t *testing.T) {
+	traderRule := mustProps(t, map[string]map[string][]string{"PENDING_USER": {"submit": {"trader"}}})
+	chaRule := mustProps(t, map[string]map[string][]string{"PENDING_USER": {"submit": {"cha"}}})
+	authz := func(phase types.ExecutionPhase, props json.RawMessage) types.ExtensionConfig {
+		return types.ExtensionConfig{ID: ExtAuthz, Phase: phase, Properties: props}
+	}
+	trader := taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(map[string]bool{"trader": true}, nil, new(int))}
+
+	tests := []struct {
+		name       string
+		extensions []types.ExtensionConfig
+		want       bool
+	}{
+		{"an authz extension that allows the caller", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}, true},
+		// Core runs them all, so every one must allow the caller.
+		{"one of two authz extensions refuses", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule), authz(types.PhasePreResume, chaRule)}, false},
+		{"one that refuses", []types.ExtensionConfig{authz(types.PhasePreResume, chaRule)}, false},
+		// None of these checks who submits.
+		{"an authz extension after the step resumes", []types.ExtensionConfig{authz(types.PhasePostResume, chaRule)}, true},
+		{"another extension", []types.ExtensionConfig{{ID: "audit", Phase: types.PhasePreResume, Properties: chaRule}}, true},
+		{"no extensions", nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
+			got, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, trader, types.StepTemplate{Extensions: tc.extensions})
+			if err != nil {
+				t.Fatalf("MayActOnStep: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("MayActOnStep = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("a failure to decide", func(t *testing.T) {
+		record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
+		failing := taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(nil, context.DeadlineExceeded, new(int))}
+		step := types.StepTemplate{Extensions: []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}}
+		if _, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, failing, step); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("err = %v, want the ownership lookup's", err)
+		}
+	})
 }
