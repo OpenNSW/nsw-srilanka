@@ -177,6 +177,29 @@ func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 	assert.Contains(t, ctx.Inputs, "submission")
 }
 
+func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	// tokenFor has no client for "agency": tokenizing the submission's invoice
+	// would fail the reply, though the reply does not send it.
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{"feedback": "attach the invoice"},
+		"submission": map[string]any{"invoice": "k-invoice"},
+	})
+	ctx.Record.RenderConfig = json.RawMessage(reviewRenderConfig)
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "needs_more_info"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{
+		"feedback":      "attach the invoice",
+		"callbackToken": ownToken(t),
+	}, calls[0].body["payload"])
+}
+
 func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusConflict)
 	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)

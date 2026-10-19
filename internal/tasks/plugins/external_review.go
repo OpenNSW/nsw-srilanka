@@ -137,11 +137,21 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 // tokens for the other side's client, as a dispatch sends them. The inputs are
 // the task's data, so the declared paths apply as they are.
 func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig, replyToken, callbackToken string) (string, map[string]any, error) {
-	sent, err := p.files.tokenize(ctx.Record.RenderConfig, "", ctx.Inputs, cfg.ServiceID)
+	// Only what the reply sends gets tokens, as a dispatch tokenizes only its
+	// submission: the payload input when there is one, else all the inputs.
+	root, data := "", any(ctx.Inputs)
+	if payload, ok := ctx.Inputs[replyPayloadInput]; ok {
+		root, data = replyPayloadInput, payload
+	}
+	sent, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
 	inputs, _ := sent.(map[string]any)
+	if root != "" {
+		inputs = maps.Clone(ctx.Inputs)
+		inputs[replyPayloadInput] = sent
+	}
 	return replyRequest(cfg, inputs, replyToken, callbackToken)
 }
 
