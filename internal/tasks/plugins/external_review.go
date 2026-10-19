@@ -46,6 +46,9 @@ type externalReviewConfig struct {
 // dispatch: the token the other side parked its own step on.
 const replyTokenInput = "replyToken"
 
+// replyPayloadInput is the reserved input that, when present, is all a reply sends.
+const replyPayloadInput = "payload"
+
 // Execute persists the reviewer form ID + QUEUED_EXTERNALLY status, then
 // POSTs the submission to the OGA portal so the officer's review queue is
 // populated. The body matches the SimpleFormExternalServiceRequest shape
@@ -145,15 +148,26 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 // replyRequest is a callback on the other side's parked step: {command, payload} on
 // replyToken, the envelope every callback takes, with this step's own token as
 // payload.callbackToken for the other side to answer on. The payload is the step's
-// inputs as mapped, so the receiving step's output_mapping reads them by the names
-// this node gave them.
+// "payload" input if it has one,  so the step's other
+// inputs are only for its own page to show. Otherwise it is all of the step's inputs.
+// Either way the receiving step's output_mapping reads them by the names this node
+// gave them.
 func replyRequest(cfg externalReviewConfig, inputs map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
 	if cfg.ReplyCommand == "" {
 		return "", nil, fmt.Errorf("external_review: reply_command is required to reply")
 	}
-	// inputs is non-nil here: it holds the non-empty replyToken.
-	payload := maps.Clone(inputs)
-	delete(payload, replyTokenInput)
+	var payload map[string]any
+	if v, ok := inputs[replyPayloadInput]; ok {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return "", nil, fmt.Errorf("external_review: %s must be an object, got %T", replyPayloadInput, v)
+		}
+		payload = maps.Clone(m)
+	} else {
+		// inputs is non-nil here: it holds the non-empty replyToken.
+		payload = maps.Clone(inputs)
+		delete(payload, replyTokenInput)
+	}
 	payload["callbackToken"] = callbackToken
 	return callbacksPath + "/" + url.PathEscape(replyToken),
 		map[string]any{"command": cfg.ReplyCommand, "payload": payload}, nil
