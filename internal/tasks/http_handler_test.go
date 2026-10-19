@@ -732,7 +732,7 @@ func saveDraft(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, stepI
 
 func TestHandleSaveDraft_RejectsBadRequests(t *testing.T) {
 	refs := newFakeFileRefs()
-	alicesRef, _ := refs.IssueFor(userPrincipal("alice"), "k")
+	alicesRef, _ := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
 
 	tests := []struct {
 		name       string
