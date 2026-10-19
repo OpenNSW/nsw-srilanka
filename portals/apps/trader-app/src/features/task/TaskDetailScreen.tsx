@@ -294,6 +294,8 @@ export function TaskDetailScreen() {
                     setSubmitError(t('tasks.error.submitFailed'))
                   }
                   console.error('TaskDetailScreen: failed to submit task step:', err)
+                  // Reject, so the form keeps treating its input as unsaved.
+                  throw err
                 } finally {
                   // Re-arm the action once the task has settled. Looping steps (e.g.
                   // the ePhyto "Check Status" poll) re-enter the same state, so the
