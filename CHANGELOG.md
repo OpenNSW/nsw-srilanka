@@ -39,7 +39,7 @@ This release lets a trader save an application as a draft: the form is saved wit
   - [one-trade-artifacts#184](https://github.com/OpenNSW/one-trade-artifacts/pull/184): the NPQS certificate withdrawal ([#701](https://github.com/OpenNSW/nsw-srilanka/pull/701));
   - [one-trade-artifacts#183](https://github.com/OpenNSW/one-trade-artifacts/pull/183): the CusDec form ([#700](https://github.com/OpenNSW/nsw-srilanka/pull/700));
   - [one-trade-artifacts#204](https://github.com/OpenNSW/one-trade-artifacts/pull/204): the SLTB draft CusDec XML upload ([#811](https://github.com/OpenNSW/nsw-srilanka/pull/811)).
-- Deploy this release before moving the pin: the artifacts call routes and operations it adds.
+- Change the image version and `artifactLoader.github.ref` in the same deployment. A deployment that follows a moving ref such as `main` must deploy this release first, because the artifacts call routes and operations it adds.
 
 ### Added
 
