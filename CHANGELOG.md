@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.5.0] - 2026-10-19
 
-This release enforces file tokens: a raw storage key no longer opens or submits a file, uploads return a token, and OGAs are sent tokens issued to their client instead of keys. It also adds drafts for workflow steps, certificate withdrawal on the IPPC ePhyto Hub, and file links in Markdown, and corrects the CusDec valuation and remittance mapping. Deploy it with the pinned artifacts below: they declare every task's file fields, which the token enforcement depends on.
+This release lets a trader save an application as a draft: the form is saved without being submitted, and picked up again later with its values and files in place, so a long application no longer has to be finished in one sitting. It also enforces file tokens: a raw storage key no longer opens or submits a file, uploads return a token, and OGAs are sent tokens issued to their client instead of keys. Alongside these come certificate withdrawal on the IPPC ePhyto Hub, file links in Markdown, and a corrected CusDec valuation and remittance mapping. Deploy it with the pinned artifacts below: they add the Save as Draft buttons and declare every task's file fields, which the token enforcement depends on.
 
 ### Upgrade notes
 
@@ -43,7 +43,7 @@ This release enforces file tokens: a raw storage key no longer opens or submits 
 
 ### Added
 
-- **Drafts.** A step can be saved without completing it, on `PUT /api/v1/tasks/{id}/steps/{stepId}/draft`. Its file fields are resolved as a submission's are, and the step and the task's version stay as they are. ([#707](https://github.com/OpenNSW/nsw-srilanka/pull/707))
+- **Drafts.** A trader can save an application with Save as Draft and come back to it later; nothing is submitted until they submit. Any step can be saved this way on `PUT /api/v1/tasks/{id}/steps/{stepId}/draft`: its file fields are resolved as a submission's are, and the step and the task's version stay as they are. The pinned artifacts add the button to the application forms ([one-trade-artifacts#193](https://github.com/OpenNSW/one-trade-artifacts/pull/193)). ([#707](https://github.com/OpenNSW/nsw-srilanka/pull/707))
 - **Certificate withdrawal on the IPPC ePhyto Hub.** The NPQS ePhyto step can withdraw a certificate it delivered, through a new `withdraw` operation. ([#701](https://github.com/OpenNSW/nsw-srilanka/pull/701))
 - **File links in Markdown.** A Markdown template can link to one of the task's files as `[label](files:{{.namespace.field}})`, and the Trader Portal opens it through the storage route. ([#629](https://github.com/OpenNSW/nsw-srilanka/pull/629))
 
