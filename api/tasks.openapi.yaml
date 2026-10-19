@@ -214,8 +214,9 @@ paths:
           description: |
             Missing task or step ID, malformed JSON, unexpected trailing data,
             a `command` in the body, a `payload` that sets the reserved
-            `__command` key, a declared file field whose value does not have
-            the declared shape, or a step that does not accept drafts.
+            `__command` key, a declared file field that does not have the
+            declared shape or holds a value that is not a file reference, or
+            a step that does not accept drafts.
           content:
             application/json:
               schema:

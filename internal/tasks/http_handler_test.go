@@ -781,6 +781,7 @@ func TestHandleSaveDraft_RejectsBadRequests(t *testing.T) {
 		{"missing task", &fakeTaskFetcher{}, "step-1", `{"payload":{}}`, http.StatusNotFound},
 		{"step no longer active", pendingFileTask(), "step-0", `{"payload":{}}`, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", `{"payload":{"invoice":"` + alicesRef + `"}}`, http.StatusForbidden},
+		{"a raw storage key", pendingFileTask(), "step-1", `{"payload":{"invoice":"stored-invoice-key"}}`, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
