@@ -138,7 +138,10 @@ over:
 1. TNSW's `EXTERNAL_REVIEW` step injects with its token `tok_b` and parks.
 2. The officer asks for more information. The review workflow's own `EXTERNAL_REVIEW`
    step replies on `tok_b` with `needs_more_info` and its own token `tok_x` as
-   `payload.callbackToken`, then parks.
+   `payload.callbackToken`, then parks. The step maps what it sends under its
+   `payload` input, and is also given the submission and the officer's review form,
+   which the reply leaves out, so the officer still sees what they reviewed and
+   decided while they wait.
 3. TNSW keeps `tok_x` and sends the task back to the trader. On resubmit, the same
    `EXTERNAL_REVIEW` step replies on `tok_x` with the new data and its own token
    `tok_c`, then parks.
