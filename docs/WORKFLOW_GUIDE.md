@@ -462,7 +462,7 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
 }
 ```
 
-The fee itself is the deployment's, in the `fees` list of `configs/payment_methods.json`, beside the gateway methods:
+The fee itself is the deployment's, in the `fees` list of the payment method's `config` in `configs/payment_methods.json`, since what a fee needs is that gateway's. The step charges the fee of the method selected for it (`selected_method`, or `govpay` when its form offers no choice):
 
 ```json
 {
@@ -484,7 +484,7 @@ The fee itself is the deployment's, in the `fees` list of `configs/payment_metho
 - **Gateway metadata:** passed to the selected gateway and stored with the transaction; GovPay needs `govpay_subinst_id` and `govpay_service_id`.
 - **Reference:** the payer pays against `reference_number`, generated from a format in the `refid` section of `configs/config.yaml`: the fee's own, named in `reference`, or `TNSW`/`payment_ref` otherwise. In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
 
-The server checks the fees at startup, including that each reference format is defined in `refid`. A step whose task code has no fee fails.
+The server checks the fees at startup, including that each reference format is defined in `refid`. A step whose task code has no fee in the selected method's config fails.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 

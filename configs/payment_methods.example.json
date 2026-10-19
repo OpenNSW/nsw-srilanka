@@ -11,23 +11,23 @@
       },
       "config": {
         "webhook_client_id": "GOVPAY_TO_NSW",
-        "private_key": "file:/certs/govpay/go_private.pem"
-      }
-    }
-  ],
-  "fees": [
-    {
-      "task_code": "example_fee_payment_v1",
-      "service_name": "Example Fee",
-      "amount": "1000.00",
-      "currency": "LKR",
-      "gateway_metadata": {
-        "govpay_subinst_id": "000",
-        "govpay_service_id": "000"
-      },
-      "reference": {
-        "issuer": "TNSW",
-        "id_type": "payment_ref"
+        "private_key": "file:/certs/govpay/go_private.pem",
+        "fees": [
+          {
+            "task_code": "example_fee_payment_v1",
+            "service_name": "Example Fee",
+            "amount": "1000.00",
+            "currency": "LKR",
+            "gateway_metadata": {
+              "govpay_subinst_id": "000",
+              "govpay_service_id": "000"
+            },
+            "reference": {
+              "issuer": "TNSW",
+              "id_type": "payment_ref"
+            }
+          }
+        ]
       }
     }
   ]

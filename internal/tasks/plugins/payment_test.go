@@ -156,9 +156,10 @@ func feeReference() *nswpayment.FeeReference {
 	}
 }
 
-// paymentPlugin builds the plugin with fee as its only fee.
+// paymentPlugin builds the plugin with fee as the only fee, collected by
+// govpay, the method a step without a selected_method falls back to.
 func paymentPlugin(svc payment.PaymentService, fee nswpayment.Fee) *PaymentPlugin {
-	return NewPaymentPlugin(svc, nswpayment.Fees{Fees: []nswpayment.Fee{fee}})
+	return NewPaymentPlugin(svc, nswpayment.Fees{"govpay": {fee}})
 }
 
 func TestPaymentPlugin_Execute_UsesWorkflowAmountOverConfigured(t *testing.T) {
@@ -374,7 +375,7 @@ func TestPaymentPlugin_Execute_ChargesTheNamedFee(t *testing.T) {
 	ctx := paymentPluginCtx(nil)
 	ctx.OutputNamespace = "payment"
 
-	err := NewPaymentPlugin(svc, nswpayment.Fees{Fees: []nswpayment.Fee{other, fee}}).Execute(ctx,
+	err := NewPaymentPlugin(svc, nswpayment.Fees{"govpay": {other, fee}}).Execute(ctx,
 		[]byte(`{"task_code":"npqs_certificate_fee_payment","amount":"1.00","currency":"USD"}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
@@ -394,7 +395,7 @@ func TestPaymentPlugin_Execute_RejectsUnknownOrMissingTaskCode(t *testing.T) {
 		want  string
 	}{
 		"no task_code":      {props: `{}`, want: "plugin_properties.task_code is required"},
-		"unknown task_code": {props: `{"task_code":"NOPE"}`, want: `no fee for task_code "NOPE"`},
+		"unknown task_code": {props: `{"task_code":"NOPE"}`, want: `no fee for task_code "NOPE" in the "govpay" method's config`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc := &fakePaymentService{resp: checkoutResponse()}
@@ -407,4 +408,24 @@ func TestPaymentPlugin_Execute_RejectsUnknownOrMissingTaskCode(t *testing.T) {
 			assert.NotEqual(t, "PENDING_PAYMENT", ctx.Record.State)
 		})
 	}
+}
+
+// A step charges the fee of the method selected for it, as that method's config
+// lists it; another method's fee of the same task code is not used.
+func TestPaymentPlugin_Execute_ChargesTheSelectedMethodsFee(t *testing.T) {
+	govpayFee := testFee()
+	otherFee := testFee()
+	otherFee.Amount = decimal.NewFromInt(300)
+	fees := nswpayment.Fees{"govpay": {govpayFee}, "other": {otherFee}}
+
+	svc := &fakePaymentService{resp: checkoutResponse()}
+	err := NewPaymentPlugin(svc, fees).Execute(paymentPluginCtx(map[string]any{"selected_method": "other"}), []byte(paymentProps))
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Equal(t, "other", svc.lastReq.GatewayID)
+	assert.True(t, svc.lastReq.Amount.Equal(decimal.NewFromInt(300)), "charged %s", svc.lastReq.Amount)
+
+	svc = &fakePaymentService{resp: checkoutResponse()}
+	err = NewPaymentPlugin(svc, nswpayment.Fees{"other": {otherFee}}).Execute(paymentPluginCtx(nil), []byte(paymentProps))
+	require.ErrorContains(t, err, `in the "govpay" method's config`)
+	assert.False(t, svc.called)
 }

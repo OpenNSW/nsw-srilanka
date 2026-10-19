@@ -23,7 +23,7 @@ type PaymentPlugin struct {
 }
 
 // NewPaymentPlugin creates a new PaymentPlugin that charges the fees in fees
-// (the "fees" list of payment_methods.json).
+// (each method's "fees" list in payment_methods.json).
 func NewPaymentPlugin(paymentService payment.PaymentService, fees nswpayment.Fees) *PaymentPlugin {
 	return &PaymentPlugin{
 		paymentService: paymentService,
@@ -62,11 +62,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	if strings.TrimSpace(props.TaskCode) == "" {
 		return fmt.Errorf("payment: plugin_properties.task_code is required")
 	}
-	cfg, ok := p.fees.Lookup(props.TaskCode)
-	if !ok {
-		return fmt.Errorf("payment: no fee for task_code %q in payment_methods.json fees", props.TaskCode)
-	}
-
 	// 1. Determine selected payment gateway
 	selectedMethod, _ := ctx.Inputs["selected_method"].(string)
 	if selectedMethod == "" {
@@ -75,6 +70,13 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		// does not exist; kept as a literal so this package stays unaware of any
 		// particular gateway's package.
 		selectedMethod = "govpay"
+	}
+
+	// The fee is the selected method's: each method lists the fees it collects
+	// in its own config, with the metadata its gateway needs.
+	cfg, ok := p.fees.Lookup(selectedMethod, props.TaskCode)
+	if !ok {
+		return fmt.Errorf("payment: no fee for task_code %q in the %q method's config in payment_methods.json", props.TaskCode, selectedMethod)
 	}
 
 	// 2. Resolve the amount to charge. If a workflow input is available, it takes

@@ -22,33 +22,49 @@ func writeMethodsFile(t *testing.T, body string) string {
 	return path
 }
 
-// The fees sit beside the gateway methods, which LoadFees leaves to
-// core/payment.
+// Each method's fees sit in its config, beside the settings its gateway
+// reads; a method without a fees list collects none.
 func TestLoadFees(t *testing.T) {
 	path := writeMethodsFile(t, `{
 		"version": "1.0",
-		"methods": [{"id": "govpay", "is_active": true}],
-		"fees": [{
-			"task_code": "npqs_certificate_fee_payment",
-			"service_name": "Phytosanitary Certificate Fee",
-			"amount": "2000.00",
-			"currency": "LKR",
-			"gateway_metadata": {"govpay_subinst_id": "002", "govpay_service_id": "001"},
-			"reference": {"issuer": "NPQS", "id_type": "npqs_payment_ref"}
-		}]
+		"methods": [
+			{"id": "govpay", "is_active": true, "config": {
+				"webhook_client_id": "GOVPAY_TO_NSW",
+				"fees": [{
+					"task_code": "npqs_certificate_fee_payment",
+					"service_name": "Phytosanitary Certificate Fee",
+					"amount": "2000.00",
+					"currency": "LKR",
+					"gateway_metadata": {"govpay_subinst_id": "002", "govpay_service_id": "001"},
+					"reference": {"issuer": "NPQS", "id_type": "npqs_payment_ref"}
+				}]
+			}},
+			{"id": "other", "is_active": true}
+		]
 	}`)
 
 	fees, err := LoadFees(path, npqsFormats)
 
 	require.NoError(t, err)
-	fee, ok := fees.Lookup("npqs_certificate_fee_payment")
+	assert.Equal(t, []string{"govpay"}, keys(fees))
+	fee, ok := fees.Lookup("govpay", "npqs_certificate_fee_payment")
 	require.True(t, ok)
 	assert.Equal(t, "Phytosanitary Certificate Fee", fee.ServiceName)
 	assert.Equal(t, "2000", fee.Amount.String())
 	assert.Equal(t, "002", fee.GatewayMetadata["govpay_subinst_id"])
 	assert.Equal(t, &FeeReference{Issuer: "NPQS", IDType: "npqs_payment_ref"}, fee.Reference)
-	_, ok = fees.Lookup("other")
+	_, ok = fees.Lookup("govpay", "other")
 	assert.False(t, ok)
+	_, ok = fees.Lookup("other", "npqs_certificate_fee_payment")
+	assert.False(t, ok, "a fee belongs to the method that lists it")
+}
+
+func keys(fees Fees) []string {
+	out := make([]string, 0, len(fees))
+	for method := range fees {
+		out = append(out, method)
+	}
+	return out
 }
 
 // An agency's payment methods file has no fees.
@@ -56,7 +72,7 @@ func TestLoadFees_NoFees(t *testing.T) {
 	fees, err := LoadFees(writeMethodsFile(t, `{"version": "1.0", "methods": []}`), refid.Config{})
 
 	require.NoError(t, err)
-	assert.Empty(t, fees.Fees)
+	assert.Empty(t, fees)
 }
 
 func TestLoadFees_Rejects(t *testing.T) {
@@ -64,10 +80,10 @@ func TestLoadFees_Rejects(t *testing.T) {
 		fees string
 		want string
 	}{
-		"no task code":    {fees: `[{"service_name": "Fee", "currency": "LKR"}]`, want: "fees[0].task_code is required"},
-		"duplicate":       {fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR"}, {"task_code": "A", "service_name": "Fee", "currency": "LKR"}]`, want: `task_code "A" is declared more than once`},
-		"no service name": {fees: `[{"task_code": "A", "currency": "LKR"}]`, want: `fee "A": service_name is required`},
-		"no currency":     {fees: `[{"task_code": "A", "service_name": "Fee"}]`, want: `fee "A": currency is required`},
+		"no task code":    {fees: `[{"service_name": "Fee", "currency": "LKR"}]`, want: `method "govpay": fees[0].task_code is required`},
+		"duplicate":       {fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR"}, {"task_code": "A", "service_name": "Fee", "currency": "LKR"}]`, want: `method "govpay": task_code "A" is declared more than once`},
+		"no service name": {fees: `[{"task_code": "A", "currency": "LKR"}]`, want: `method "govpay": fee "A": service_name is required`},
+		"no currency":     {fees: `[{"task_code": "A", "service_name": "Fee"}]`, want: `method "govpay": fee "A": currency is required`},
 		"negative amount": {fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR", "amount": "-1"}]`, want: "amount must be positive"},
 		"reference without id_type": {
 			fees: `[{"task_code": "A", "service_name": "Fee", "currency": "LKR", "reference": {"issuer": "NPQS"}}]`,
@@ -79,7 +95,7 @@ func TestLoadFees_Rejects(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := LoadFees(writeMethodsFile(t, `{"methods": [], "fees": `+tc.fees+`}`), npqsFormats)
+			_, err := LoadFees(writeMethodsFile(t, `{"methods": [{"id": "govpay", "config": {"fees": `+tc.fees+`}}]}`), npqsFormats)
 
 			require.ErrorContains(t, err, tc.want)
 		})

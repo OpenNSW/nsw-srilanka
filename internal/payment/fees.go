@@ -11,13 +11,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Fees are the fees PAYMENT steps charge, read from the "fees" list of
-// payment_methods.json. A step's artifact names its fee by task code; what it
-// charges, and how the gateway and the payment reference are set up for it,
-// are this deployment's to decide.
-type Fees struct {
-	Fees []Fee `json:"fees"`
-}
+// Fees are the fees PAYMENT steps charge, by the id of the payment method that
+// collects them. Each method lists its own in a "fees" list in its config in
+// payment_methods.json, since what a fee needs (gateway_metadata) is that
+// gateway's. A step's artifact names its fee by task code; what it charges,
+// and how the gateway and the payment reference are set up for it, are this
+// deployment's to decide.
+type Fees map[string][]Fee
 
 // Fee is one fee a PAYMENT step charges.
 type Fee struct {
@@ -58,29 +58,47 @@ type FeeReference struct {
 	Values map[string]string `json:"values,omitempty"`
 }
 
-// LoadFees reads the fees from the payment methods file at path and checks
-// them against the reference formats in formats. The file's gateway methods
-// are core/payment's to read; a file without a "fees" list has no fees.
+// methodsFile is the slice of payment_methods.json LoadFees reads: each
+// method's id and the fees in its config. The rest of a method's config is its
+// gateway's to read.
+type methodsFile struct {
+	Methods []struct {
+		ID     string `json:"id"`
+		Config struct {
+			Fees []Fee `json:"fees"`
+		} `json:"config"`
+	} `json:"methods"`
+}
+
+// LoadFees reads each payment method's fees from the payment methods file at
+// path and checks them against the reference formats in formats. A method
+// without a "fees" list in its config collects none.
 func LoadFees(path string, formats refid.Config) (Fees, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Fees{}, fmt.Errorf("payment fees: read %s: %w", path, err)
+		return nil, fmt.Errorf("payment fees: read %s: %w", path, err)
 	}
-	var fees Fees
-	if err := json.Unmarshal(data, &fees); err != nil {
-		return Fees{}, fmt.Errorf("payment fees: parse %s: %w", path, err)
+	var file methodsFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		return nil, fmt.Errorf("payment fees: parse %s: %w", path, err)
+	}
+	fees := make(Fees, len(file.Methods))
+	for _, method := range file.Methods {
+		if len(method.Config.Fees) > 0 {
+			fees[method.ID] = method.Config.Fees
+		}
 	}
 	if err := fees.Validate(formats); err != nil {
-		return Fees{}, fmt.Errorf("payment fees: %s: %w", path, err)
+		return nil, fmt.Errorf("payment fees: %s: %w", path, err)
 	}
 	return fees, nil
 }
 
-// Validate checks every fee is complete and named once, and that each
-// reference format a fee names is defined in formats, so a fee pointing at a
-// missing format fails at startup rather than on the first checkout. It cannot
-// check a reference's params against the step inputs they point into; a step
-// fails on those when it runs.
+// Validate checks every fee is complete and named once in its method, and
+// that each reference format a fee names is defined in formats, so a fee
+// pointing at a missing format fails at startup rather than on the first
+// checkout. It cannot check a reference's params against the step inputs they
+// point into; a step fails on those when it runs.
 func (f Fees) Validate(formats refid.Config) error {
 	defined := make(map[[2]string]struct{})
 	for _, issuer := range formats.Issuers {
@@ -88,18 +106,20 @@ func (f Fees) Validate(formats refid.Config) error {
 			defined[[2]string{issuer.Issuer, format.IDType}] = struct{}{}
 		}
 	}
-	seen := make(map[string]struct{}, len(f.Fees))
-	for i, fee := range f.Fees {
-		code := strings.TrimSpace(fee.TaskCode)
-		if code == "" {
-			return fmt.Errorf("fees[%d].task_code is required", i)
-		}
-		if _, dup := seen[code]; dup {
-			return fmt.Errorf("fees: task_code %q is declared more than once", code)
-		}
-		seen[code] = struct{}{}
-		if err := fee.validate(defined); err != nil {
-			return fmt.Errorf("fee %q: %w", code, err)
+	for method, fees := range f {
+		seen := make(map[string]struct{}, len(fees))
+		for i, fee := range fees {
+			code := strings.TrimSpace(fee.TaskCode)
+			if code == "" {
+				return fmt.Errorf("method %q: fees[%d].task_code is required", method, i)
+			}
+			if _, dup := seen[code]; dup {
+				return fmt.Errorf("method %q: task_code %q is declared more than once", method, code)
+			}
+			seen[code] = struct{}{}
+			if err := fee.validate(defined); err != nil {
+				return fmt.Errorf("method %q: fee %q: %w", method, code, err)
+			}
 		}
 	}
 	return nil
@@ -128,10 +148,11 @@ func (f Fee) validate(formats map[[2]string]struct{}) error {
 	return nil
 }
 
-// Lookup returns the fee named taskCode.
-func (f Fees) Lookup(taskCode string) (Fee, bool) {
+// Lookup returns the fee named taskCode that the method with id method
+// collects.
+func (f Fees) Lookup(method, taskCode string) (Fee, bool) {
 	taskCode = strings.TrimSpace(taskCode)
-	for _, fee := range f.Fees {
+	for _, fee := range f[method] {
 		if strings.TrimSpace(fee.TaskCode) == taskCode {
 			return fee, true
 		}
