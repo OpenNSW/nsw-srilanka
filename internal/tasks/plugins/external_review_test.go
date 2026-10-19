@@ -153,7 +153,7 @@ func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 
 func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example")
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"feedback": "attach the invoice"},
