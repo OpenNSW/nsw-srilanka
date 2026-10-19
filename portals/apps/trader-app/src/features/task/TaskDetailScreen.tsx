@@ -10,6 +10,7 @@ import type { WorkflowNode } from '@/features/consignment/types'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
+import { zoneWidthClass } from '@/features/zone/width'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const SUBMIT_SUCCESS_DISMISS_MS = 5000
@@ -188,9 +189,11 @@ export function TaskDetailScreen() {
     )
   }
 
+  const width = zoneWidthClass(zoneView)
+
   return (
     <div className="min-h-full">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between">
+      <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between`}>
         <div className="flex items-center gap-6">
           <Button variant="ghost" color="gray" onClick={goToTasks} className="cursor-pointer">
             <ArrowLeftIcon />
@@ -216,7 +219,7 @@ export function TaskDetailScreen() {
         </Button>
       </div>
       {showSubmitSuccess && (
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
           <div className="rounded-xl bg-success-subtle px-4 py-3 shadow-sm">
             <Text size="2" weight="medium" className="text-success-strong">
               {t('tasks.submitSuccess')}
@@ -225,7 +228,7 @@ export function TaskDetailScreen() {
         </div>
       )}
       {submitError && (
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
           <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
             <Text size="2" weight="medium" className="text-error-strong">
               {submitError}

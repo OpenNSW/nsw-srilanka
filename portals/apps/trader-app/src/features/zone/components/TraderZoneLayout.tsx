@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
+import { zoneWidthClass } from '@/features/zone/width'
 
 type Props = {
   task: ZoneView
@@ -16,7 +17,7 @@ type Props = {
 
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <div className={`${zoneWidthClass(task)} mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8`}>
       <Header task={task} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {task.view.map((component) => (
