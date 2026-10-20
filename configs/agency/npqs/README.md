@@ -9,7 +9,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `config.yaml`          | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn, reference formats                                               |
 | `config.docker.yaml`   | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname, with the same reference formats                             |
 | `npqs.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                             |
-| `catalog.json`         | `officer` → the `NPQS Officer` role NPQS officers hold in the IdP                                                                                                              |
+| `catalog.json`         | `officer` → the `NPQS Officer` role NPQS officers hold in the IdP; `tnsw` → `NSW_TO_NPQS`, the client TNSW replies as, so the steps that wait on its reply can name it         |
 | `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `NPQS_TO_NSW` |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                          |
 | `services.docker.json` | `services.json` for the `npqs-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
@@ -89,11 +89,11 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates NPQS for this deployment, on the `NPQS API` resource server
 (`https://api.npqs.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                |
-| ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps                     |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
+| Caller                             | Client                | Grant                                                                                                                                 |
+| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
+| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps, which `catalog.json` maps `tnsw` to |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                          |
 
 TNSW's `services.json` `npqs` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/services*.example.json`).

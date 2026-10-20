@@ -134,6 +134,43 @@ func TestExtension_Execute(t *testing.T) {
 			kind: taskauthz.KindClient, clientID: "NPQS_TO_NSW",
 			wantErr: ErrForbidden,
 		},
+		{
+			name:  "system allowed: the rule names it",
+			props: map[string]map[string][]string{"QUEUED_EXTERNALLY": {"submit": {taskauthz.SystemPrincipal}}},
+			state: "QUEUED_EXTERNALLY", command: "submit",
+			kind:    taskauthz.KindSystem,
+			wantErr: nil,
+		},
+		{
+			name:  "system denied: the rule names only users",
+			props: map[string]map[string][]string{"PENDING_USER": {"submit": {"trader", "cha"}}},
+			state: "PENDING_USER", command: "submit",
+			kind:    taskauthz.KindSystem,
+			wantErr: ErrForbidden,
+		},
+		{
+			name:  "system denied: the rule names only a client",
+			props: map[string]map[string][]string{"QUEUED_EXTERNALLY": {"approve": {"fcau"}}},
+			state: "QUEUED_EXTERNALLY", command: "approve",
+			kind:    taskauthz.KindSystem,
+			wantErr: ErrForbidden,
+		},
+		{
+			// Security case: a system-only step (a payment, a webhook wait) must
+			// refuse a user however many roles they hold and own.
+			name:  "user denied on a system-only rule",
+			props: map[string]map[string][]string{"PENDING_PAYMENT": {"submit": {taskauthz.SystemPrincipal}}},
+			state: "PENDING_PAYMENT", command: "submit",
+			kind: taskauthz.KindUser, roles: []string{"Trader", "CHA"}, owned: map[string]bool{"trader": true, "cha": true},
+			wantErr: ErrForbidden, wantResolves: 0,
+		},
+		{
+			name:  "client denied on a system-only rule",
+			props: map[string]map[string][]string{"QUEUED_EXTERNALLY": {"submit": {taskauthz.SystemPrincipal}}},
+			state: "QUEUED_EXTERNALLY", command: "submit",
+			kind: taskauthz.KindClient, clientID: "FCAU_TO_NSW",
+			wantErr: ErrForbidden,
+		},
 	}
 
 	for _, tc := range tests {
@@ -202,9 +239,10 @@ func TestExtension_EmptyProperties(t *testing.T) {
 
 func TestExtension_MayAct(t *testing.T) {
 	props := map[string]map[string][]string{
-		"PENDING_USER":   {"submit": {"trader"}, "save_draft": {"cha"}},
-		"PENDING_REVIEW": {"approve": {"fcau"}},
-		"COMPLETED":      {},
+		"PENDING_USER":      {"submit": {"trader"}, "save_draft": {"cha"}},
+		"PENDING_REVIEW":    {"approve": {"fcau"}},
+		"QUEUED_EXTERNALLY": {"submit": {taskauthz.SystemPrincipal}},
+		"COMPLETED":         {},
 	}
 	trader := func(owned map[string]bool, err error) taskauthz.Input {
 		return taskauthz.Input{Kind: taskauthz.KindUser, Roles: []string{"Trader"}, OwnedRoles: ownedFn(owned, err, new(int))}
@@ -231,6 +269,12 @@ func TestExtension_MayAct(t *testing.T) {
 		{"a state with no rules", "ADVANCING", trader(map[string]bool{"trader": true}, nil), mustProps(t, props), false},
 		{"no rules at all", "PENDING_USER", trader(map[string]bool{"trader": true}, nil), nil, false},
 		{"no principal kind", "PENDING_USER", taskauthz.Input{}, mustProps(t, props), false},
+		// A reader may act on a system-only step only if they are the system, which
+		// no reader is: they get read-only file references there.
+		{"user on a system-only step", "QUEUED_EXTERNALLY", trader(map[string]bool{"trader": true}, nil), mustProps(t, props), false},
+		{"client on a system-only step", "QUEUED_EXTERNALLY", fcau, mustProps(t, props), false},
+		{"system on a system-only step", "QUEUED_EXTERNALLY", taskauthz.Input{Kind: taskauthz.KindSystem}, mustProps(t, props), true},
+		{"system on a step for users", "PENDING_USER", taskauthz.Input{Kind: taskauthz.KindSystem}, mustProps(t, props), false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

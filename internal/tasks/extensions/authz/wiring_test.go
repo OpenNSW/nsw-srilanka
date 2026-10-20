@@ -19,6 +19,10 @@ func TestRegister(t *testing.T) {
 		{name: "roles only", catalog: taskauthz.Catalog{Roles: map[string]string{"trader": "Trader"}}, wantErr: false},
 		{name: "clients only", catalog: taskauthz.Catalog{Clients: map[string]string{"fcau": "FCAU_TO_NSW"}}, wantErr: false},
 		{name: "valid full", catalog: testCatalog(), wantErr: false},
+		// The system principal is reserved: a catalog that maps it would let a
+		// request satisfy a rule meant for in-process callers only.
+		{name: "system as a role", catalog: taskauthz.Catalog{Roles: map[string]string{"trader": "Trader", taskauthz.SystemPrincipal: "Trader"}}, wantErr: true},
+		{name: "system as a client", catalog: taskauthz.Catalog{Clients: map[string]string{taskauthz.SystemPrincipal: "FCAU_TO_NSW"}}, wantErr: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
