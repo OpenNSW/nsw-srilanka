@@ -16,6 +16,7 @@ type WebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error
 	ProcessEvent(ctx context.Context, req CusdecEventRequest) error
 	ProcessAmendment(ctx context.Context, req CusdecAmendedRequest) error
+	ProcessCancellation(ctx context.Context, req CusdecCancelledRequest) error
 }
 
 // TaskCompleter defines the task completion interface needed from the workflow
@@ -23,8 +24,11 @@ type WebhookService interface {
 //
 // stepID is the parked task's active_step_id, read with the task itself, so a
 // callback only ever completes the step it was matched to.
+//
+// CancelTask ends a task whose workflow a cancellation (§6.5.5) has ended.
 type TaskCompleter interface {
 	CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error
+	CancelTask(ctx context.Context, taskID, reason string) error
 }
 
 type webhookService struct {
@@ -32,18 +36,21 @@ type webhookService struct {
 	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
 	flows       CaseFlows
+	workflows   Workflows
 }
 
 // NewWebhookService creates a new WebhookService. tasks is core's task store:
 // a callback resumes the task the declaration's workflow parked, found by the
 // case and workflow the declaration recorded when it was dispatched. flows opens
-// the amendment flow (§6.5.4) on that case.
-func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows) WebhookService {
+// the amendment flow (§6.5.4) on that case. workflows ends the flow a cancelled
+// declaration (§6.5.5) was dispatched from.
+func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows, workflows Workflows) WebhookService {
 	return &webhookService{
 		repo:        repo,
 		tasks:       tasks,
 		taskManager: taskManager,
 		flows:       flows,
+		workflows:   workflows,
 	}
 }
 
@@ -252,6 +259,14 @@ func (s *webhookService) ProcessEvent(ctx context.Context, req CusdecEventReques
 		}
 	default:
 		return fmt.Errorf("unsupported CusDec event type: %s", req.Event)
+	}
+
+	// A cancelled declaration's flow has ended (§6.5.5): nothing is left to
+	// advance, and its status must stay cancelled.
+	if decl.Status == CusdecStatusCancelled {
+		slog.InfoContext(ctx, "event for a cancelled declaration, acknowledging without action",
+			"cusdec_ref", ref, "event", req.Event)
+		return ErrDuplicateEvent
 	}
 
 	// §6.5 events are correlated by cusdecRef and, per §2, retried up to four

@@ -59,10 +59,14 @@ func (r CusdecAmendedRequest) Validate() error {
 	return nil
 }
 
-// CaseFlows starts a flow on a case. Starting again with the same workflowID is
-// a no-op, so a redelivered notification opens nothing twice.
+// CaseFlows starts and ends the flows of a case. Starting again with the same
+// workflowID is a no-op, so a redelivered notification opens nothing twice;
+// ending a flow that has ended is a no-op too.
 type CaseFlows interface {
 	StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error
+	// EndFlow records a flow that was ended before it finished as ended, so
+	// its case can finish once its other flows have.
+	EndFlow(ctx context.Context, workflowID string) error
 }
 
 // ProcessAmendment opens the amendment flow on the declaration's case, seeded
