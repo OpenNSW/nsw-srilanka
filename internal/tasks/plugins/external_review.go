@@ -142,7 +142,10 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 	root, data := "", any(ctx.Inputs)
 	if payload, ok := ctx.Inputs[replyPayloadInput]; ok {
 		if _, ok := payload.(map[string]any); !ok {
-			return "", nil, fmt.Errorf("external_review: %s must be an object, got %T", replyPayloadInput, payload)
+			// The inputs are the same on every retry, so none can succeed.
+			return "", nil, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("external_review: %s must be an object, got %T", replyPayloadInput, payload),
+				"InvalidReplyPayload", nil)
 		}
 		root, data = replyPayloadInput, payload
 	}

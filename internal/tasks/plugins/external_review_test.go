@@ -215,6 +215,20 @@ func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	assert.Equal(t, "StaleReplyToken", appErr.Type())
 }
 
+func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
+	mgr, _ := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+
+	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "payload": "x"}),
+		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
+
+	err = fmt.Errorf("plugin execution failed: %w", err)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	assert.True(t, appErr.NonRetryable())
+	assert.Equal(t, "InvalidReplyPayload", appErr.Type())
+}
+
 func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusServiceUnavailable)
 	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
