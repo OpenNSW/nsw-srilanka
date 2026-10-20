@@ -196,6 +196,28 @@ func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
 	assert.Equal(t, "k-invoice", in["submission"].(map[string]any)["invoice"], "the task keeps its stored values")
 }
 
+// A reply with a payload input sends only that, so its declared files are the
+// ones under "payload", and they go as tokens for the OGA's client too.
+func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
+	m, pushed := newOGA(t)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	in := map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{"invoice": "k-invoice", "feedback": "attach the invoice"},
+	}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(),
+		RenderConfig: json.RawMessage(`{"files": ["payload.invoice"]}`)}
+
+	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	require.Len(t, *pushed, 1)
+	payload := (*pushed)[0]["payload"].(map[string]any)
+	assert.Equal(t, "CDA_TO_NSW/k-invoice", payload["invoice"])
+	assert.Equal(t, "attach the invoice", payload["feedback"])
+	assert.Equal(t, "k-invoice", in["payload"].(map[string]any)["invoice"], "the task keeps its stored values")
+}
+
 // A reply that would send a file to a service with no client fails rather than
 // send it.
 func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {

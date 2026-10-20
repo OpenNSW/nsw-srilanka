@@ -177,6 +177,24 @@ func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
 	assert.Contains(t, ctx.Inputs, "submission")
 }
 
+func TestExternalReview_ReplyWithEmptyPayloadSendsOnlyCallbackToken(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{},
+		"submission": map[string]any{"field": "v1"},
+	})
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "needs_more_info"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{"callbackToken": ownToken(t)}, calls[0].body["payload"])
+	assert.Equal(t, map[string]any{}, ctx.Inputs["payload"], "callbackToken is not written into the step's own input")
+}
+
 func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	// tokenFor has no client for "agency": tokenizing the submission's invoice
