@@ -141,6 +141,9 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 	// submission: the payload input when there is one, else all the inputs.
 	root, data := "", any(ctx.Inputs)
 	if payload, ok := ctx.Inputs[replyPayloadInput]; ok {
+		if _, ok := payload.(map[string]any); !ok {
+			return "", nil, fmt.Errorf("external_review: %s must be an object, got %T", replyPayloadInput, payload)
+		}
 		root, data = replyPayloadInput, payload
 	}
 	sent, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
