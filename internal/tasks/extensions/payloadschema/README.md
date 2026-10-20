@@ -50,7 +50,8 @@ use, so an edited form applies at once.
 
 - **Matches:** the step goes ahead.
 - **Doesn't match:** `400` with the fixed message `submission does not match the form`.
-  The failing fields (JSON pointer and message) are logged at warn level, not returned:
+  The failing fields (JSON pointer and the rule that failed, never the submitted value)
+  are logged at warn level, not returned:
   the browser checks the same schema first, so this is either a form the browser and the
   server disagree on, or a call that skipped the browser.
 - **Misconfigured** (no `user_jsonforms_id`, an unknown form, a form without a `schema`,

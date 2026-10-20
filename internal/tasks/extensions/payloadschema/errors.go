@@ -3,7 +3,9 @@ package payloadschema
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -19,7 +21,9 @@ var ErrInvalidPayload = errors.New("payload schema: invalid payload")
 
 // Violation is one way a submission fails its form: Path is a JSON Pointer
 // into the submitted payload, "" for the payload as a whole. Violations are
-// logged, not returned to the caller.
+// logged, not returned to the caller, and Message names the failing rule
+// without echoing the submitted value, so what a trader typed stays out of
+// the logs.
 type Violation struct {
 	Path    string
 	Message string
@@ -65,7 +69,7 @@ func violations(err *jsonschema.ValidationError) []Violation {
 			return
 		}
 		if len(e.Causes) == 0 {
-			out = append(out, Violation{Path: pointer(e.InstanceLocation), Message: e.ErrorKind.LocalizedString(printer)})
+			out = append(out, Violation{Path: pointer(e.InstanceLocation), Message: ruleMessage(e.ErrorKind)})
 			return
 		}
 		for _, cause := range e.Causes {
@@ -92,6 +96,45 @@ func alternativesMessage(e *jsonschema.ValidationError) string {
 		return e.ErrorKind.LocalizedString(printer)
 	}
 	return "value must be one of " + strings.Join(allowed, ", ")
+}
+
+// ruleMessage describes a failed rule without the submitted value. It keeps
+// the library's message only for the rules known not to echo the value,
+// describes the ones known to echo it from the schema side, and names any
+// other rule by its keyword alone, so a rule this list doesn't know, or a
+// library change to a message, can't put a submitted value in the log.
+func ruleMessage(k jsonschema.ErrorKind) string {
+	switch k := k.(type) {
+	case *kind.Type, *kind.Const, *kind.Enum,
+		*kind.MinLength, *kind.MaxLength,
+		*kind.MinItems, *kind.MaxItems,
+		*kind.MinProperties, *kind.MaxProperties,
+		*kind.Dependency, *kind.DependentRequired,
+		*kind.UniqueItems, *kind.Contains,
+		*kind.Not, *kind.AllOf, *kind.FalseSchema:
+		return k.LocalizedString(printer)
+	case *kind.Format:
+		return "not a valid " + k.Want
+	case *kind.Pattern:
+		return "does not match pattern " + strconv.Quote(k.Want)
+	case *kind.Minimum:
+		return "must be >= " + number(k.Want)
+	case *kind.Maximum:
+		return "must be <= " + number(k.Want)
+	case *kind.ExclusiveMinimum:
+		return "must be > " + number(k.Want)
+	case *kind.ExclusiveMaximum:
+		return "must be < " + number(k.Want)
+	case *kind.MultipleOf:
+		return "must be a multiple of " + number(k.Want)
+	}
+	return "'" + strings.Join(k.KeywordPath(), "/") + "' failed"
+}
+
+// number formats a schema limit as a plain decimal.
+func number(r *big.Rat) string {
+	f, _ := r.Float64()
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // pointer returns the JSON Pointer (RFC 6901) for location.

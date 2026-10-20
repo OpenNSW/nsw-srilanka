@@ -3,6 +3,7 @@ package payloadschema
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -102,5 +103,62 @@ func TestInvalidPayloadError(t *testing.T) {
 	const want = "payload schema: invalid payload: /outcome: missing property; /weight: must be > 0"
 	if got := err.Error(); got != want {
 		t.Errorf("Error() = %q; want %q", got, want)
+	}
+}
+
+// TestViolations_KeepSubmittedValuesOut checks that no message echoes the
+// submitted value: the rules whose library message does are described from the
+// schema side, and a rule not known to be safe is named by its keyword alone.
+func TestViolations_KeepSubmittedValuesOut(t *testing.T) {
+	const schema = `{
+		"type": "object",
+		"properties": {
+			"email": {"type": "string", "format": "email"},
+			"nic": {"type": "string", "pattern": "^[0-9]{9}[VX]$"},
+			"weight": {"type": "number", "minimum": 0},
+			"count": {"type": "number", "maximum": 10},
+			"value": {"type": "number", "exclusiveMinimum": 0.5},
+			"ceiling": {"type": "number", "exclusiveMaximum": 100},
+			"step": {"type": "number", "multipleOf": 5},
+			"extras": {"type": "object", "additionalProperties": false}
+		}
+	}`
+	const payload = `{
+		"email": "secret-mail@localhost",
+		"nic": "SECRET-NIC",
+		"weight": -7777,
+		"count": 8888,
+		"value": 0.25,
+		"ceiling": 9999,
+		"step": 7,
+		"extras": {"SECRET-EXTRA": "x"}
+	}`
+	want := map[string]string{
+		"/email":   "not a valid email",
+		"/nic":     `does not match pattern "^[0-9]{9}[VX]$"`,
+		"/weight":  "must be >= 0",
+		"/count":   "must be <= 10",
+		"/value":   "must be > 0.5",
+		"/ceiling": "must be < 100",
+		"/step":    "must be a multiple of 5",
+		// Not on the list of rules known to be safe: named by its keyword alone.
+		"/extras": "'additionalProperties' failed",
+	}
+
+	got := map[string]string{}
+	for _, v := range violationsOf(t, schema, payload) {
+		for _, secret := range []string{"secret-mail", "SECRET-NIC", "7777", "8888", "0.25", "9999", "SECRET-EXTRA"} {
+			if strings.Contains(v.Message, secret) {
+				t.Errorf("%s: message %q echoes the submitted value %q", v.Path, v.Message, secret)
+			}
+		}
+		if _, dup := got[v.Path]; !dup {
+			got[v.Path] = v.Message
+		}
+	}
+	for path, msg := range want {
+		if got[path] != msg {
+			t.Errorf("%s: message = %q; want %q", path, got[path], msg)
+		}
 	}
 }
