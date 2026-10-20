@@ -382,7 +382,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if !agencyMode {
 		// ASYCUDA webhook stack.
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
-		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
 		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
@@ -777,7 +777,7 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 }
 
 // caseFlowStarter opens flows on a case for the SLC Edge webhooks, which name
-// the flow themselves (a §6.5.4 amendment opens one per amendment).
+// the flow themselves (a §6.5.4 or §7.6 amendment opens one per amendment).
 type caseFlowStarter struct{ flows *caseflow.Service }
 
 func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error {

@@ -12,7 +12,7 @@ paths:
     post:
       summary: Central SLCE Webhook Callback Handler
       description: |
-        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, and CDN acknowledgments).
+        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, CDN acknowledgments, and CDN amendments).
       operationId: processSLCEWebhook
       security:
         - BearerAuth: []
@@ -28,6 +28,7 @@ paths:
                 - $ref: '#/components/schemas/CusdecExportReleaseRequest'
                 - $ref: '#/components/schemas/CDNIntegrationResultRequest'
                 - $ref: '#/components/schemas/CDNAcknowledgmentRequest'
+                - $ref: '#/components/schemas/CDNAmendedRequest'
               discriminator:
                 propertyName: eventType
                 mapping:
@@ -37,6 +38,7 @@ paths:
                   EXPORT_RELEASED: '#/components/schemas/CusdecExportReleaseRequest'
                   CDN_INTEGRATED: '#/components/schemas/CDNIntegrationResultRequest'
                   CDN_ACKNOWLEDGED: '#/components/schemas/CDNAcknowledgmentRequest'
+                  CDN_AMENDED: '#/components/schemas/CDNAmendedRequest'
             examples:
               cusdecIntegrated:
                 summary: CUSDEC Integration Result — success (§6.2)
@@ -153,13 +155,38 @@ paths:
                       year: "2026"
                       serial: "C"
                       number: 28237
+              cdnAmended:
+                summary: CDN Amended (§7.6)
+                value:
+                  eventType: "CDN_AMENDED"
+                  processedAt: "2026-04-27T14:30:10Z"
+                  payload:
+                    cdnRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "C"
+                      number: 28237
+                    cdn:
+                      properties:
+                        submitter: ""
+                        nswId: ""
+                      officeCode: "CBEX1"
+                      containerNumber: "MSCU1234567"
+                      cusDecRefs:
+                        - office: "CBEX1"
+                          year: "2026"
+                          serial: "E"
+                          number: 1047
+                    operationTime: "2026-10-14T05:07:38Z"
       responses:
         '200':
           description: |
             OK. Either the callback was validated and processed successfully, or
             (for the (6.5) CusdecEventRequest / CDNAcknowledgmentRequest event
             types only) it repeats an event already applied to the declaration
-            or dispatch note — acknowledged as a no-op rather than re-run.
+            or dispatch note — acknowledged as a no-op rather than re-run. A
+            repeated CDN_AMENDED names the flow its first delivery opened, which
+            is not opened again.
         '202':
           description: |
             Accepted. CUSDEC_INTEGRATED only: this edgeId's integration result was
@@ -196,8 +223,9 @@ paths:
         '404':
           description: |
             Not Found. The declaration or dispatch note the callback's `edgeId`
-            names has no workflow recorded (CUSDEC_INTEGRATED, CDN_INTEGRATED).
-            Permanent — SLC Edge should not retry.
+            names has no workflow recorded (CUSDEC_INTEGRATED, CDN_INTEGRATED),
+            or the dispatch note an amendment names (CDN_AMENDED) has no case
+            recorded. Permanent — SLC Edge should not retry.
           content:
             application/json:
               schema:
@@ -215,7 +243,7 @@ paths:
             TNSW records it as soon as SLC Edge accepts the submission, so the
             result arrived early. Or the declaration named by `cusDecRef`
             (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
-            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED) does not exist yet
+            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED) does not exist yet
             — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
             callback for the same document. Transient: SLC Edge should retry.
           content:
@@ -650,3 +678,42 @@ components:
           properties:
             cdnRef:
               $ref: '#/components/schemas/DocumentReference'
+
+    CDNAmendedRequest:
+      type: object
+      description: |
+        §7.6 CDN Amended. Opens a flow on the dispatch note's consignment showing
+        the note as amended, for the trader to acknowledge. The note's own
+        workflow is not changed.
+      required:
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        eventType:
+          type: string
+          enum: [CDN_AMENDED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-04-27T14:30:10Z"
+        payload:
+          type: object
+          required:
+            - cdnRef
+            - cdn
+            - operationTime
+          properties:
+            cdnRef:
+              $ref: '#/components/schemas/DocumentReference'
+            cdn:
+              type: object
+              description: |
+                The full dispatch note after the amendment, with its linked
+                declarations, as Annex B. `properties.submitter` and
+                `properties.nswId` are empty strings.
+              additionalProperties: true
+            operationTime:
+              type: string
+              description: When the amendment was made in ASYCUDA World.
+              example: "2026-10-14T05:07:38Z"

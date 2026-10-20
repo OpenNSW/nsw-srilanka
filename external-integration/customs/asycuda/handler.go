@@ -25,6 +25,7 @@ const (
 	errDispatchNoteNotFound      = "dispatch note not found"
 	errDispatchNoteNotFoundRetry = "dispatch note not found, retry later"
 	errTaskNotParkedRetry        = "task not waiting yet, retry later"
+	errNoteCaseNotRecorded       = "dispatch note has no case recorded"
 )
 
 // Handler handles central inbound HTTP webhook requests from SLCE / ASYCUDA
@@ -99,6 +100,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	case "CDN_ACKNOWLEDGED":
 		h.handleCDNAcknowledgment(w, r, body)
+
+	case cdn.EventCDNAmended:
+		h.handleCDNAmendment(w, r, body)
 
 	default:
 		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType)
@@ -300,6 +304,43 @@ func (h *Handler) handleCDNAcknowledgment(w http.ResponseWriter, r *http.Request
 			return
 		}
 		httputil.InternalServerError(w, r, "slce: failed to process CDN acknowledgment", err, "cdn_ref", req.Payload.CDNRef)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleCDNAmendment opens the amendment flow (§7.6) on the amended dispatch
+// note's case. A redelivery names the same flow, which is not opened twice, so
+// it is answered like the first delivery.
+func (h *Handler) handleCDNAmendment(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req cdn.CDNAmendedRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		slog.WarnContext(r.Context(), "slce: failed to decode CDN amendment payload", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		slog.WarnContext(r.Context(), "slce: CDN amendment validation failed", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+
+	if err := h.cdnService.ProcessAmendment(r.Context(), req); err != nil {
+		ref := req.Payload.CDNRef
+		switch {
+		case errors.Is(err, cdn.ErrDispatchNoteNotFoundByCDNRef):
+			// As for the acknowledgment: the integration result that records the
+			// reference may still be in flight, so SLC Edge is asked to retry.
+			slog.WarnContext(r.Context(), "slce: dispatch note not found for amendment (may be transient)",
+				"cdn_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errDispatchNoteNotFoundRetry)
+		case errors.Is(err, cdn.ErrCaseNotRecorded):
+			slog.WarnContext(r.Context(), "slce: amended dispatch note has no case", "cdn_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusNotFound, errNoteCaseNotRecorded)
+		default:
+			httputil.InternalServerError(w, r, "slce: failed to process CDN amendment", err, "cdn_ref", ref)
+		}
 		return
 	}
 
