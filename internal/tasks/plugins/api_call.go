@@ -28,6 +28,16 @@ type Interpreter interface {
 	Interpret(callErr error, resp map[string]any) (accepted bool, captured map[string]any)
 }
 
+// DispatchRecorder is implemented by interpreters whose service answers an
+// accepted call later, by a callback, so the task that made the call has to be
+// found again when the answer arrives. RecordDispatch runs once Interpret has
+// accepted the call, with the task's ID, case and parent workflow and the
+// fields Interpret captured. An error fails the step: a dispatch nothing can
+// find would leave the task waiting for an answer that never reaches it.
+type DispatchRecorder interface {
+	RecordDispatch(ctx context.Context, taskID, caseID, workflowID string, captured map[string]any) error
+}
+
 // MultipartInterpreter is implemented by interpreters whose service expects a
 // multipart/form-data body — a JSON document alongside file uploads — rather
 // than a JSON body. The plugin routes such an interpreter through the
@@ -263,6 +273,11 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	}
 
 	if accepted {
+		if rec, ok := p.interpreter.(DispatchRecorder); ok {
+			if err := rec.RecordDispatch(ctx.Context, ctx.Record.TaskID, ctx.Record.CaseID, ctx.Record.ParentWorkflowID, out); err != nil {
+				return fmt.Errorf("api_call: record the accepted call: %w", err)
+			}
+		}
 		slog.Info("api_call: request accepted", "taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID)
 	} else {
 		slog.Warn("api_call: request not accepted", "taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "callErr", callErr, "result", out)

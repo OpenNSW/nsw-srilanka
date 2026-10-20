@@ -6,7 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 )
 
 // CDNWebhookService defines the use-case layer for processing asynchronous
@@ -27,16 +28,16 @@ type TaskCompleter interface {
 
 type cdnWebhookService struct {
 	repo        DispatchNoteRepository
-	db          *gorm.DB
+	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
 }
 
-// NewCDNWebhookService creates a new CDNWebhookService. db and taskManager carry
-// the workflow side: the callbacks resume the task parked against the dispatch
-// note. Both may be nil, in which case callbacks are recorded but no workflow is
-// advanced.
-func NewCDNWebhookService(repo DispatchNoteRepository, db *gorm.DB, taskManager TaskCompleter) CDNWebhookService {
-	return &cdnWebhookService{repo: repo, db: db, taskManager: taskManager}
+// NewCDNWebhookService creates a new CDNWebhookService. tasks (core's task
+// store) and taskManager carry the workflow side: the callbacks resume the task
+// parked by the workflow the dispatch note recorded. Both may be nil, in which
+// case callbacks are recorded but no workflow is advanced.
+func NewCDNWebhookService(repo DispatchNoteRepository, tasks parkedtask.Tasks, taskManager TaskCompleter) CDNWebhookService {
+	return &cdnWebhookService{repo: repo, tasks: tasks, taskManager: taskManager}
 }
 
 func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error {
@@ -73,7 +74,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
 		slog.InfoContext(ctx, "dispatch note already recorded; releasing any task still parked on it",
 			"edge_id", req.Payload.EdgeID, "status", note.Status)
-		return s.resumeIntegrationWait(ctx, storedResult(req, note), true)
+		return s.resumeIntegrationWait(ctx, note, storedResult(req, note), true)
 	}
 
 	save := s.repo.Update
@@ -99,7 +100,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	} else {
 		if note.Status == DispatchNoteStatusFailed {
 			slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edge_id", req.Payload.EdgeID)
-			return s.resumeIntegrationWait(ctx, req, true)
+			return s.resumeIntegrationWait(ctx, note, req, true)
 		}
 
 		note.Status = DispatchNoteStatusFailed
@@ -116,7 +117,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 
 	// The trader's CDN task is parked on the integration wait; releasing it
 	// completes the dispatch note step and opens the acknowledgment wait.
-	return s.resumeIntegrationWait(ctx, req, false)
+	return s.resumeIntegrationWait(ctx, note, req, false)
 }
 
 // storedResult re-points an already-recorded result at the reference actually on
