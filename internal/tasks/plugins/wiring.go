@@ -128,6 +128,14 @@ type FileFetcher interface {
 	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 }
 
+// CustomsSubmissions are where the SLC Edge dispatch steps record what they
+// sent, so the callbacks that answer a declaration or a dispatch note can find
+// the workflow that is waiting for them. The repositories satisfy them.
+type CustomsSubmissions struct {
+	Declarations  cusdec.Submissions
+	DispatchNotes cdn.Submissions
+}
+
 // Register installs the taskv2 plugins on reg.
 //
 // EXTERNAL_REVIEW uses our local plugin (ExternalReviewPlugin) that resolves
@@ -136,7 +144,7 @@ type FileFetcher interface {
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager. ogaFiles issues the file
 // tokens EXTERNAL_REVIEW sends OGAs.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, ogaFiles OGAFiles, backendBaseURL string) error {
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -159,9 +167,9 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
-		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
+		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files, customs.Declarations))},
 		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
-		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
+		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},

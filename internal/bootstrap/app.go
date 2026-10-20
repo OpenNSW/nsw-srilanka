@@ -371,10 +371,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if !agencyMode {
 		// ASYCUDA webhook stack.
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
-		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, systemTasks)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, task.Store, systemTasks)
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, systemTasks)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, task.Store, systemTasks)
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
@@ -873,7 +873,10 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, cfg.Server.ServiceURL); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
+		Declarations:  cusdec.NewDeclarationRepository(db),
+		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{reg: artifactRegistry}, storageService); err != nil {
