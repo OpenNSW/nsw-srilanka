@@ -19,6 +19,7 @@ const (
 	errInvalidRequestPayload     = "invalid request payload"
 	errUnknownEventType          = "unknown or unsupported event type"
 	errWorkflowNotFound          = "workflow not found"
+	errCaseNotRecorded           = "declaration has no case recorded"
 	errDeclarationNotFoundRetry  = "declaration not found, retry later"
 	errDispatchNoteNotFound      = "dispatch note not found"
 	errDispatchNoteNotFoundRetry = "dispatch note not found, retry later"
@@ -80,6 +81,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	case "EXPORT_RELEASED":
 		h.handleCusdecEvent(w, r, body, "EXPORT_RELEASED")
+
+	case cusdec.EventCusdecAmended:
+		h.handleCusdecAmendment(w, r, body)
 
 	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
@@ -176,6 +180,43 @@ func (h *Handler) handleCusdecEvent(w http.ResponseWriter, r *http.Request, body
 			return
 		}
 		httputil.InternalServerError(w, r, "slce: failed to process CusDec event", err, "cusdec_ref", req.Payload.CusdecRef)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleCusdecAmendment opens the amendment flow (§6.5.4) on the amended
+// declaration's case. A redelivery names the same flow, which is not opened
+// twice, so it is answered like the first delivery.
+func (h *Handler) handleCusdecAmendment(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req cusdec.CusdecAmendedRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		slog.WarnContext(r.Context(), "slce: failed to decode CusDec amendment payload", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		slog.WarnContext(r.Context(), "slce: CusDec amendment validation failed", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+
+	if err := h.cusdecService.ProcessAmendment(r.Context(), req); err != nil {
+		ref := req.Payload.CusdecRef
+		switch {
+		case errors.Is(err, cusdec.ErrCusdecNotFoundByRef):
+			// As for the other §6.5 events: the integration result that records
+			// the reference may still be in flight, so SLC Edge is asked to retry.
+			slog.WarnContext(r.Context(), "slce: CusDec declaration not found for amendment (may be transient)",
+				"cusdec_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errDeclarationNotFoundRetry)
+		case errors.Is(err, cusdec.ErrCaseNotRecorded):
+			slog.WarnContext(r.Context(), "slce: amended CusDec declaration has no case", "cusdec_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusNotFound, errCaseNotRecorded)
+		default:
+			httputil.InternalServerError(w, r, "slce: failed to process CusDec amendment", err, "cusdec_ref", ref)
+		}
 		return
 	}
 

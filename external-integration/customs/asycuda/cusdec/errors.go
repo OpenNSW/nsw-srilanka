@@ -31,3 +31,8 @@ var ErrDuplicateIntegrationResult = errors.New("integration result already proce
 // is expected under the §2 retry schedule, and is acknowledged without
 // modifying the declaration or advancing its workflow.
 var ErrDuplicateEvent = errors.New("event notification already applied for cusdecRef")
+
+// ErrCaseNotRecorded indicates the declaration a notification names was never
+// linked to the case it was dispatched from, so nothing can be opened or
+// resumed on that case for it. Permanent: a retry finds the same row.
+var ErrCaseNotRecorded = errors.New("customs declaration has no case recorded")

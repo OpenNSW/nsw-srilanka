@@ -385,7 +385,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks)
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
@@ -765,6 +765,15 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 		return "", nil
 	}
 	return rec.ID, nil
+}
+
+// caseFlowStarter opens flows on a case for the SLC Edge webhooks, which name
+// the flow themselves (a §6.5.4 amendment opens one per amendment).
+type caseFlowStarter struct{ flows *caseflow.Service }
+
+func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error {
+	_, err := c.flows.StartFlow(ctx, caseflow.StartRequest{CaseID: caseID, TemplateID: templateID, WorkflowID: workflowID, Vars: vars})
+	return err
 }
 
 // newFileAccess builds the file tokens this deployment issues from its storage
