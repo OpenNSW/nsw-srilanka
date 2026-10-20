@@ -21,6 +21,7 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -799,4 +800,19 @@ func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errDraftNotEnabled)
+}
+
+func TestWriteCompletion_InvalidPayloadIsABadRequest(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	invalid := &payloadschema.InvalidPayloadError{Violations: []payloadschema.Violation{
+		{Path: "/outcome", Message: "missing property"},
+	}}
+
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", invalid))
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errInvalidPayload)
+	// The failing fields are logged, not sent to the caller.
+	assert.NotContains(t, recorder.Body.String(), "/outcome")
 }

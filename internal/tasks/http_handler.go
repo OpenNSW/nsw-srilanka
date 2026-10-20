@@ -20,6 +20,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/readauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
@@ -41,6 +42,7 @@ const (
 	errFileScope            = "a file in the submission can't be submitted; refetch the task"
 	errFileShape            = "a file field in the submission does not have the shape the task declares"
 	errDraftNotEnabled      = "this step does not accept drafts"
+	errInvalidPayload       = "submission does not match the form"
 )
 
 // TaskFetcher is the narrow surface HandleGetTask needs from the task store.
@@ -278,7 +280,9 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if !h.resolveFiles(w, r, taskID, stepID, payload) {
 		return
 	}
-	err := h.Manager.SaveDraft(r.Context(), taskID, stepID, payload)
+	// Marked as a draft save so the payload schema extension knows a draft by the
+	// route it came through, not by the command core sets for it.
+	err := h.Manager.SaveDraft(payloadschema.WithDraft(r.Context()), taskID, stepID, payload)
 	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "draft", true)
 }
 
@@ -417,6 +421,12 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 	case errors.Is(err, taskauthzext.ErrForbidden):
 		slog.WarnContext(r.Context(), "tasks: authorization denied", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
+	case errors.Is(err, payloadschema.ErrInvalidPayload):
+		// The browser checks the same schema first, so this is a form the browser and
+		// server disagree on, or a call that skipped the browser. The failing fields
+		// go to the log only.
+		slog.WarnContext(r.Context(), "tasks: submission does not match its form", append(logAttrs, "error", err)...)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidPayload)
 	case errors.Is(err, orchestrator.ErrDraftNotEnabled):
 		slog.WarnContext(r.Context(), "tasks: draft for a step that takes none", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, http.StatusBadRequest, errDraftNotEnabled)

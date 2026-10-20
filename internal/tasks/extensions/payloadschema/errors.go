@@ -18,10 +18,11 @@ import (
 var ErrInvalidPayload = errors.New("payload schema: invalid payload")
 
 // Violation is one way a submission fails its form: Path is a JSON Pointer
-// into the submitted payload, "" for the payload as a whole.
+// into the submitted payload, "" for the payload as a whole. Violations are
+// logged, not returned to the caller.
 type Violation struct {
-	Path    string `json:"path"`
-	Message string `json:"message"`
+	Path    string
+	Message string
 }
 
 // InvalidPayloadError reports a submission that doesn't match its form. It
