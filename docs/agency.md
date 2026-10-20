@@ -212,12 +212,6 @@ The case list and detail admit an officer holding the token role of any catalog 
 A role a task names that the catalog does not define matches nobody, so the task is
 closed to everyone.
 
-A step that waits for TNSW's reply, such as a review's `*--request-info` step parked
-until the trader resubmits, is completed by TNSW's machine client rather than an
-officer. Each agency's `catalog.json` maps it under `clients` as `tnsw` (for example
-`"tnsw": "NSW_TO_CDA"`, the client TNSW injects and replies as), so such a step's
-`authz` can name it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`.
-
 A catalog that maps no role (for example one with only `clients`) still starts, but no
 officer can open cases or act on tasks: the server logs a warning at start. And without
 `authz` and `read.roles` on a task there is no role-based access control on it, since

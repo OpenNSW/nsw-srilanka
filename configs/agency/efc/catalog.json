@@ -1,8 +1,5 @@
 {
   "roles": {
     "officer": "EFC Officer"
-  },
-  "clients": {
-    "tnsw": "NSW_TO_EFC"
   }
 }

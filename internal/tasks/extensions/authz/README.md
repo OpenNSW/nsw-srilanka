@@ -54,13 +54,12 @@ catalog that defines it as a role or a client.
 Some steps are completed by this service itself, on the authority of an event it was
 told about rather than a request: the payment service settling a payment, and the
 customs and SLPA webhook handlers resuming the step a callback answers. They reach
-the task manager through the bootstrap's `systemCompleter`, which attaches the
-**system** principal (`taskauthz.WithSystem`) and, when the payload names no command,
-runs it as `submit`. A rule names them as `system`:
+the task manager through `internal/tasks/systemcaller`, which attaches the **system**
+principal (`taskauthz.WithSystem`). A rule names them as `system`, under the command
+each one sends:
 
 ```json
 "properties": {
-  "PENDING_PAYMENT":   { "submit": ["system"] },
   "QUEUED_EXTERNALLY": { "submit": ["system"] }
 }
 ```

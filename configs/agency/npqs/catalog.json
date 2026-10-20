@@ -1,8 +1,5 @@
 {
   "roles": {
     "officer": "NPQS Officer"
-  },
-  "clients": {
-    "tnsw": "NSW_TO_NPQS"
   }
 }

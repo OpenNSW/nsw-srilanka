@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"maps"
 	"net/http"
 	"time"
 
@@ -63,6 +62,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/systemcaller"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
@@ -234,7 +234,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	tm := task.Manager
 	// The payment service and the webhook handlers below complete steps on their
 	// own authority, so they reach the task manager as the system principal.
-	systemTasks := systemCompleter{tm: tm}
+	systemTasks := systemcaller.New(tm)
 	paymentService.SetTaskCompleter(systemTasks)
 
 	// -------------------------------------------------------------------
@@ -722,47 +722,6 @@ func (r caseOwnership) GetOwnership(ctx context.Context, caseID string) (string,
 		return "", "", err
 	}
 	return traderCompanyID, chaCompanyID, nil
-}
-
-// stepCompleter is the part of the task manager that completes a parked step, by
-// its ids or by the callback token its dispatch carried.
-type stepCompleter interface {
-	CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error
-	CompleteTaskStepByToken(ctx context.Context, token string, payload map[string]any) error
-}
-
-var _ stepCompleter = (*orchestrator.TaskManager)(nil)
-
-// systemCompleter is the task manager as this service's own in-process callers use
-// it: the payment service and the webhook handlers, which complete a step on the
-// authority of the external event they were told about, not of a request a user
-// made. It attaches the system principal, so a step's authz rule can name
-// taskauthz.SystemPrincipal to admit them and no one else. A completion that names
-// no command runs as systemCommand: the payment service never sets one, and an
-// authz rule is keyed by command.
-type systemCompleter struct{ tm stepCompleter }
-
-// systemCommand is the command an in-process completion runs as when it names none.
-const systemCommand = "submit"
-
-func (s systemCompleter) CompleteTaskStep(ctx context.Context, taskID, stepID string, payload map[string]any) error {
-	return s.tm.CompleteTaskStep(taskauthz.WithSystem(ctx), taskID, stepID, withCommand(payload))
-}
-
-func (s systemCompleter) CompleteTaskStepByToken(ctx context.Context, token string, payload map[string]any) error {
-	return s.tm.CompleteTaskStepByToken(taskauthz.WithSystem(ctx), token, withCommand(payload))
-}
-
-// withCommand returns payload with systemCommand as its command when it names
-// none. It copies rather than writing to payload, which belongs to the caller.
-func withCommand(payload map[string]any) map[string]any {
-	if command, _ := payload[orchestrator.CommandVar].(string); command != "" {
-		return payload
-	}
-	out := make(map[string]any, len(payload)+1)
-	maps.Copy(out, payload)
-	out[orchestrator.CommandVar] = systemCommand
-	return out
 }
 
 // taskCatalog narrows the global catalog to the slice task authorization needs.
