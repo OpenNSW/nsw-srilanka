@@ -6,6 +6,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-20
+
+This release lets an agency's review show the officer what they reviewed while it waits for a trader's resubmission, and has the Trader Portal warn before a form with unsaved answers is left. Deploy it on TNSW and on every agency before, or together with, moving the artifacts pin.
+
+### Upgrade notes
+
+#### Reply steps send only a `payload` input ([#804](https://github.com/OpenNSW/nsw-srilanka/pull/804))
+
+- Deploy 0.6.0 on TNSW and on each agency (CDA, EFC, FCAU, NPQS and SLTB) before, or together with, the artifacts that use it. With an older build, a "needs more info" reply reaches TNSW with its fields nested under `payload`, and TNSW's step parks for an admin.
+- No config, migration or IdP change.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`9beaf5f`](https://github.com/OpenNSW/one-trade-artifacts/commit/9beaf5f471a6c7bfefac4a018a0294ecc0c0eb21) (20 October 2026). It holds the artifact change this release depends on, [one-trade-artifacts#202](https://github.com/OpenNSW/one-trade-artifacts/pull/202): the agency reviews that map their reply as a `payload` input ([#804](https://github.com/OpenNSW/nsw-srilanka/pull/804)).
+
+### Added
+
+- **Reply payload.** A reply step (an `EXTERNAL_REVIEW` step with a `replyToken`) that has a `payload` input now sends only that input, plus its `callbackToken`, as `AUTH_API_CALL` sends its `payload` input. A `payload` that is not an object fails the step. Without a `payload` input, a reply sends all its inputs except `replyToken`, as before, and dispatches are unchanged. The pinned artifacts use it in the CDA, EFC, FCAU, NPQS and SLTB reviews that wait for a resubmission, so the officer sees the submission they reviewed and their own review form, read-only, next to the waiting status. ([#804](https://github.com/OpenNSW/nsw-srilanka/pull/804))
+
+### Fixed
+
+- The Trader Portal asks "Leave without saving?" before a form with unsaved answers is left, whether by in-app navigation, reload or closing the tab. Forms with a Save as Draft button also save a draft every 30 seconds while answers are unsaved. Forms without one get the warning but are not saved automatically. ([#801](https://github.com/OpenNSW/nsw-srilanka/pull/801))
+- Keyboard and screen reader users can open a consignment from the Consignments list: the name and ID cell is now a link. ([#789](https://github.com/OpenNSW/nsw-srilanka/pull/789))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- On the CDA application form, an `.xls` upload to the DC bags field is named `DC BAGS DETAILS _1.xlsx.xls`, because the artifact's `x-file.fileName` ends in `.xlsx` while the field also accepts `.xls`. Only the displayed and downloaded name is affected. The fix is in the artifact, not in TNSW.
+
 ## [0.5.0] - 2026-10-19
 
 This release lets a trader save an application as a draft: the form is saved without being submitted, and picked up again later with its values and files in place, so a long application no longer has to be finished in one sitting. It also enforces file tokens: a raw storage key no longer opens or submits a file, uploads return a token, and OGAs are sent tokens issued to their client instead of keys. Alongside these come certificate withdrawal on the IPPC ePhyto Hub, file links in Markdown, and a corrected CusDec valuation and remittance mapping. Deploy it with the pinned artifacts below: they add the Save as Draft buttons and declare every task's file fields, which the token enforcement depends on.
@@ -497,7 +537,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.2.0...v0.3.0
