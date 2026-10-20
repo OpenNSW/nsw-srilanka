@@ -15,6 +15,7 @@ import (
 type WebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error
 	ProcessEvent(ctx context.Context, req CusdecEventRequest) error
+	ProcessAmendment(ctx context.Context, req CusdecAmendedRequest) error
 }
 
 // TaskCompleter defines the task completion interface needed from the workflow
@@ -30,16 +31,19 @@ type webhookService struct {
 	repo        DeclarationRepository
 	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
+	flows       CaseFlows
 }
 
 // NewWebhookService creates a new WebhookService. tasks is core's task store:
 // a callback resumes the task the declaration's workflow parked, found by the
-// case and workflow the declaration recorded when it was dispatched.
-func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter) WebhookService {
+// case and workflow the declaration recorded when it was dispatched. flows opens
+// the amendment flow (§6.5.4) on that case.
+func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows) WebhookService {
 	return &webhookService{
 		repo:        repo,
 		tasks:       tasks,
 		taskManager: taskManager,
+		flows:       flows,
 	}
 }
 
@@ -153,12 +157,7 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 
 	var payload map[string]any
 	if req.Integrated {
-		formattedRef := fmt.Sprintf("%s/%s/%s/%d",
-			req.Payload.CusdecRef.Office,
-			req.Payload.CusdecRef.Year,
-			req.Payload.CusdecRef.Serial,
-			req.Payload.CusdecRef.Number,
-		)
+		formattedRef := formatCusdecRef(req.Payload.CusdecRef)
 		payload = map[string]any{
 			"__command":      "submit",
 			"review_outcome": "approve",
