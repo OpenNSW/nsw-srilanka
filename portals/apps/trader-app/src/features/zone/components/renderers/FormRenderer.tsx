@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema } from '@jsonforms/core'
 import { radixRenderers } from '@opennsw/jsonforms-renderers'
@@ -6,6 +6,7 @@ import { Button, Callout, Text } from '@radix-ui/themes'
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { Handle, ZoneAction, ZoneRendererProps } from '@/features/zone/types'
+import { useReportUnsaved } from '@/features/zone/unsavedChanges'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
 import { createFormErrorTranslator, formAjv } from './formAjv'
@@ -44,6 +45,10 @@ const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
 
 // How long the "Draft saved" note stays next to the buttons.
 const DRAFT_SAVED_NOTE_MS = 3000
+
+// How long a form with a draft_action handle holds unsaved input before it
+// saves a draft by itself.
+const AUTOSAVE_DRAFT_MS = 30_000
 
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
@@ -109,6 +114,12 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // When the last draft save succeeded; null hides the "Draft saved" note.
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
   const [showErrors, setShowErrors] = useState(false)
+  // formDataKey of the data as last saved (a draft or a submission), or as
+  // JsonForms first reported it on mount: it emits once on mount, after
+  // applying its own defaults, so that settled first emit, not the raw seed,
+  // is what counts as "nothing typed yet". null until then.
+  const [savedKey, setSavedKey] = useState<string | null>(null)
+  const dataKey = useMemo(() => formDataKey(data), [data])
 
   const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
   // JsonForms merges additionalErrors with native AJV errors. Absent keys
@@ -185,6 +196,10 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const isValid = errors.length === 0 && requiredErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('SHOW_AUTOFILL_BUTTON', false)
+  const draftHandle = interactive ? handles?.find((h) => h.element === 'draft_action') : undefined
+  const unsaved = interactive && savedKey !== null && dataKey !== savedKey
+  // The screen asks before the user leaves with unsaved input.
+  useReportUnsaved(unsaved)
 
   const handleAutoFill = () => {
     const next = autoFillForm(payload.schema, data) as Record<string, unknown>
@@ -212,15 +227,35 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     setSubmitting(true)
     setPendingCommand(h.command)
     setDraftSavedAt(null)
+    // What was sent, not what is on screen once it lands: input typed while
+    // the request was in flight is still unsaved.
+    const sentKey = dataKey
     void onAction(h.command, data, { draft })
-      // A failed draft rejects; the caller has already shown why.
-      .then(() => draft && setDraftSavedAt(Date.now()))
+      // A failed action rejects; the caller has already shown why.
+      .then(() => {
+        setSavedKey(sentKey)
+        if (draft) setDraftSavedAt(Date.now())
+      })
       .catch(() => {})
       .finally(() => {
         setSubmitting(false)
         setPendingCommand(null)
       })
   }
+
+  // Autosave: a form that can save a draft does so once its input has stayed
+  // unsaved for AUTOSAVE_DRAFT_MS. A save (manual or not) clears the timer, as
+  // does any action in flight; one that fails leaves the input unsaved, so the
+  // timer starts again.
+  const autosaveDraft = useEffectEvent(() => {
+    if (draftHandle) handleAction(draftHandle)
+  })
+  const canAutosave = draftHandle !== undefined
+  useEffect(() => {
+    if (!unsaved || submitting || !canAutosave) return
+    const timer = setTimeout(autosaveDraft, AUTOSAVE_DRAFT_MS)
+    return () => clearTimeout(timer)
+  }, [unsaved, submitting, canAutosave])
 
   // The "Draft saved" note next to the buttons fades after a few seconds.
   useEffect(() => {
@@ -255,6 +290,7 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           onChange={({ data, errors }) => {
             const next = (data ?? {}) as Record<string, unknown>
             setData(next)
+            setSavedKey((prev) => prev ?? formDataKey(next))
             setErrors(errors ?? [])
           }}
         />
@@ -340,6 +376,18 @@ function HandleButton({
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
       {label}
     </Button>
+  )
+}
+
+// A content key for form data, to tell whether it changed since it was last
+// saved. Object keys are sorted, so the order JsonForms happens to write
+// fields in does not count as a change; undefined values drop out, the same
+// as a cleared field that was never set.
+function formDataKey(data: unknown): string {
+  return JSON.stringify(data, (_key, value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : value,
   )
 }
 
