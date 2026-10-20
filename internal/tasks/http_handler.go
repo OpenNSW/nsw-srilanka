@@ -35,6 +35,7 @@ const (
 	errInvalidRequestBody   = "invalid request body"
 	errStaleStep            = "this step is no longer active; refetch the task"
 	errRequestBodyTooLarge  = "request body too large"
+	errFileNotReference     = "a file in the submission is not a file reference; upload it again"
 	errFileNotYours         = "a file in the submission was issued to someone else"
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
 	errFileScope            = "a file in the submission can't be submitted; refetch the task"
@@ -382,6 +383,9 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 	switch {
 	case err == nil:
 		return true
+	case errors.Is(err, fileaccess.ErrInvalid):
+		slog.WarnContext(ctx, "tasks: submission carries a file value that is not a file reference", "taskId", taskID, "stepId", stepID)
+		httputil.Error(w, r, http.StatusBadRequest, errFileNotReference)
 	case errors.Is(err, fileaccess.ErrNotYours):
 		slog.WarnContext(ctx, "tasks: submission carries a file issued to someone else", "taskId", taskID, "stepId", stepID, "error", err)
 		httputil.Error(w, r, http.StatusForbidden, errFileNotYours)
