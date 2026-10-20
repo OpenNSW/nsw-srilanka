@@ -26,7 +26,7 @@ func NewDispatchNoteRepository(db *gorm.DB) DispatchNoteRepository {
 
 func (r *dispatchNoteRepository) GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error) {
 	var note DispatchNote
-	if err := r.db.WithContext(ctx).Where("edge_id = ?", edgeID).First(&note).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(`"edgeId" = ?`, edgeID).First(&note).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}

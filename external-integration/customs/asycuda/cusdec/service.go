@@ -43,7 +43,7 @@ func NewWebhookService(repo DeclarationRepository, db *gorm.DB, taskManager Task
 
 func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error {
 	slog.InfoContext(ctx, "processing CusDec integration result",
-		"edge_id", req.EdgeID,
+		"edgeId", req.EdgeID,
 		"integrated", req.Integrated,
 		"event", req.Event,
 	)
@@ -60,7 +60,7 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 	}
 	if existing != nil && (existing.Status == CusdecStatusIntegrated || existing.Status == CusdecStatusFailed) {
 		slog.InfoContext(ctx, "integration result already processed, acknowledging without action",
-			"edge_id", req.EdgeID, "status", existing.Status)
+			"edgeId", req.EdgeID, "status", existing.Status)
 		return ErrDuplicateIntegrationResult
 	}
 
@@ -74,7 +74,7 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 	}
 
 	slog.InfoContext(ctx, "successfully completed external review task step and advanced workflow",
-		"edge_id", req.EdgeID,
+		"edgeId", req.EdgeID,
 		"integrated", req.Integrated,
 	)
 	return nil
@@ -130,19 +130,19 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
-		Where("data->'cig'->>'edgeId' = ? OR data->'cig'->>'edge_id' = ?", req.EdgeID, req.EdgeID).
+		Where("data->'cig'->>'edgeId' = ?", req.EdgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if originalStatus != CusdecStatusSubmitted {
-				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
+				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edgeId", req.EdgeID, "status", originalStatus)
 				return nil
 			}
 			return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
 		}
-		slog.ErrorContext(ctx, "failed to locate task workflow by edgeId", "edge_id", req.EdgeID, "error", err)
+		slog.ErrorContext(ctx, "failed to locate task workflow by edgeId", "edgeId", req.EdgeID, "error", err)
 		return fmt.Errorf("failed to locate task workflow by edgeId %s: %w", req.EdgeID, err)
 	}
 
@@ -160,7 +160,7 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if originalStatus != CusdecStatusSubmitted {
-				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
+				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edgeId", req.EdgeID, "status", originalStatus)
 				return nil
 			}
 		}
@@ -299,17 +299,17 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
-		Where("data->'cig'->>'edgeId' = ? OR data->'cig'->>'edge_id' = ?", decl.EdgeID, decl.EdgeID).
+		Where("data->'cig'->>'edgeId' = ?", decl.EdgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if decl.Status == targetStatus {
-				slog.InfoContext(ctx, "workflow record not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
+				slog.InfoContext(ctx, "workflow record not found but CusDec status already updated", "edgeId", decl.EdgeID, "event", req.Event)
 				return nil
 			}
-			slog.WarnContext(ctx, "workflow record not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
+			slog.WarnContext(ctx, "workflow record not found, recovering status update", "edgeId", decl.EdgeID, "event", req.Event)
 			decl.Status = targetStatus
 			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
 				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
@@ -333,10 +333,10 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if decl.Status == targetStatus {
-				slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
+				slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edgeId", decl.EdgeID, "event", req.Event)
 				return nil
 			}
-			slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
+			slog.WarnContext(ctx, "event task not found, recovering status update", "edgeId", decl.EdgeID, "event", req.Event)
 			decl.Status = targetStatus
 			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
 				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
@@ -356,6 +356,6 @@ func (s *webhookService) completeEventTaskAndMetadata(
 		return fmt.Errorf("failed to update CusDec declaration status to %s: %w", targetStatus, err)
 	}
 
-	slog.InfoContext(ctx, "successfully processed CusDec event notification", "edge_id", decl.EdgeID, "status", targetStatus)
+	slog.InfoContext(ctx, "successfully processed CusDec event notification", "edgeId", decl.EdgeID, "status", targetStatus)
 	return nil
 }

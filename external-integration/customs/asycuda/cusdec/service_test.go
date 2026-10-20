@@ -98,7 +98,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	}
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", "edge-123", 1).
+		WithArgs("edge-123", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
@@ -154,7 +154,7 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 	}`), &req.Payload.Duties))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-v19", "edge-v19", 1).
+		WithArgs("edge-v19", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-v19"))
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("parent-wf-v19", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
@@ -222,7 +222,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	}
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", "edge-123", 1).
+		WithArgs("edge-123", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
@@ -328,7 +328,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 	}
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", "edge-123", 1).
+		WithArgs("edge-123", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
@@ -388,7 +388,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 	}
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", "edge-123", 1).
+		WithArgs("edge-123", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).

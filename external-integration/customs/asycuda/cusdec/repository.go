@@ -26,7 +26,7 @@ func NewDeclarationRepository(db *gorm.DB) DeclarationRepository {
 
 func (r *declarationRepository) GetByEdgeID(ctx context.Context, edgeID string) (*CusdecDeclaration, error) {
 	var decl CusdecDeclaration
-	if err := r.db.WithContext(ctx).Where("edge_id = ?", edgeID).First(&decl).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(`"edgeId" = ?`, edgeID).First(&decl).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}

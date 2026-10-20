@@ -72,7 +72,7 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 	if s.db == nil || s.taskManager == nil {
 		// A deployment without the workflow wiring still records the callback;
 		// it simply has no task to advance.
-		slog.DebugContext(ctx, "cdn: no workflow wiring, skipping task resume", "edge_id", look.edgeID)
+		slog.DebugContext(ctx, "cdn: no workflow wiring, skipping task resume", "edgeId", look.edgeID)
 		return nil
 	}
 
@@ -81,16 +81,16 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
-		// The dispatch step records the id under whichever key its output mapping
-		// used; both spellings are in play across deployments.
-		Where("data->'cig_cdn'->>'edge_id' = ? OR data->'cig_cdn'->>'edgeId' = ?", look.edgeID, look.edgeID).
+		// The dispatch step records the id as edgeId, the interface
+		// specification's name for it (§7.2).
+		Where("data->'cig_cdn'->>'edgeId' = ?", look.edgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if alreadyProcessed {
 				slog.InfoContext(ctx, "cdn: no workflow for edgeId but callback already processed, ignoring redelivery",
-					"edge_id", look.edgeID)
+					"edgeId", look.edgeID)
 				return nil
 			}
 			return fmt.Errorf("edgeId %s: %w", look.edgeID, ErrDispatchNoteNotFoundByEdgeID)
@@ -111,7 +111,7 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			slog.InfoContext(ctx, "cdn: no parked task to resume",
-				"edge_id", look.edgeID, "template", look.templateID, "workflow_id", record.ParentWorkflowID)
+				"edgeId", look.edgeID, "template", look.templateID, "workflow_id", record.ParentWorkflowID)
 			return nil
 		}
 		return fmt.Errorf("failed to locate parked CDN task for workflow %s: %w", record.ParentWorkflowID, err)
@@ -122,6 +122,6 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 	}
 
 	slog.InfoContext(ctx, "cdn: resumed parked task",
-		"task_id", task.TaskID, "template", look.templateID, "edge_id", look.edgeID)
+		"task_id", task.TaskID, "template", look.templateID, "edgeId", look.edgeID)
 	return nil
 }

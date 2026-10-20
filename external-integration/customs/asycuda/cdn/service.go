@@ -41,7 +41,7 @@ func NewCDNWebhookService(repo DispatchNoteRepository, db *gorm.DB, taskManager 
 
 func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error {
 	slog.InfoContext(ctx, "processing CDN integration result",
-		"edge_id", req.Payload.EdgeID,
+		"edgeId", req.Payload.EdgeID,
 		"integrated", req.Payload.Integrated,
 		"event", req.Event,
 	)
@@ -72,7 +72,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	// trader waiting on a note Customs has already answered.
 	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
 		slog.InfoContext(ctx, "dispatch note already recorded; releasing any task still parked on it",
-			"edge_id", req.Payload.EdgeID, "status", note.Status)
+			"edgeId", req.Payload.EdgeID, "status", note.Status)
 		return s.resumeIntegrationWait(ctx, storedResult(req, note), true)
 	}
 
@@ -93,12 +93,12 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		}
 
 		slog.InfoContext(ctx, "dispatch note integrated successfully",
-			"edge_id", req.Payload.EdgeID,
+			"edgeId", req.Payload.EdgeID,
 			"cdn_ref", req.Payload.CDNRef,
 		)
 	} else {
 		if note.Status == DispatchNoteStatusFailed {
-			slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edge_id", req.Payload.EdgeID)
+			slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edgeId", req.Payload.EdgeID)
 			return s.resumeIntegrationWait(ctx, req, true)
 		}
 
@@ -109,7 +109,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		}
 
 		slog.WarnContext(ctx, "dispatch note integration failed",
-			"edge_id", req.Payload.EdgeID,
+			"edgeId", req.Payload.EdgeID,
 			"errors", string(req.Payload.Errors),
 		)
 	}
