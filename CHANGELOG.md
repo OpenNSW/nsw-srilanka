@@ -6,15 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Upgrade notes
-
-- `system` is now a reserved name in the task authorization catalog. The API refuses to start if `catalog.json` defines `system` under `roles` or `clients`.
-- Each agency's `catalog.json` gains a `clients` entry, `"tnsw": "NSW_TO_<AGENCY>"`, for the client TNSW injects and replies as (`configs/agency/catalog.example.json` shows it). Add it to every agency's deployed catalog before pinning artifacts whose rules name `tnsw`. A rule naming a client the catalog does not define matches nobody.
-
-### Added
-
-- **System principal for in-process callers.** The payment service and the customs (CusDec, CDN) and SLPA webhook handlers now complete steps as the `system` principal, and a completion that names no command runs as `submit`. A step's `authz` rule can name `system` to admit them, for example `"PENDING_PAYMENT": { "submit": ["system"] }`. No request can act as `system`. Steps whose rules don't name it are unchanged.
-
 ## [0.6.0] - 2026-10-20
 
 This release lets an agency's review show the officer what they reviewed while it waits for a trader's resubmission, and has the Trader Portal warn before a form with unsaved answers is left. Deploy it on TNSW and on every agency before, or together with, moving the artifacts pin.
