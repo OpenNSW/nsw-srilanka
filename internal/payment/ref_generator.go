@@ -1,7 +1,10 @@
-// Package payment issues the references payers pay against, from the refid
-// formats in config.yaml. RefGenerator implements core/payment's
-// ReferenceGenerator: a checkout takes the fee's own format when its metadata
-// names one (ReferenceMetadata), and the default format otherwise.
+// Package payment adapts core/payment to this deployment.
+//
+// It issues the references payers pay against, from the refid formats in
+// config.yaml. RefGenerator implements core/payment's ReferenceGenerator: a
+// checkout takes the fee's own format when its metadata names one
+// (ReferenceMetadata), and the default format otherwise. TaskCompleter is the
+// task completer the payment service settles a payment step through.
 package payment
 
 import (

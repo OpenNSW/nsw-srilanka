@@ -231,7 +231,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, err
 	}
 	tm := task.Manager
-	paymentService.SetTaskCompleter(tm)
+	paymentService.SetTaskCompleter(nswpayment.NewTaskCompleter(tm))
 
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
