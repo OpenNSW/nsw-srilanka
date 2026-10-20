@@ -6,7 +6,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 | File                   | Purpose                                                                                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8082, own database, Temporal namespace, artifacts, authn                                                                  |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8082, own database, Temporal namespace, artifacts, authn, reference ID formats                                            |
 | `config.docker.yaml`   | `config.yaml` for the `fcau-init` and `fcau-api` containers: Postgres, Temporal and the IdP by container hostname                                                              |
 | `fcau.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                             |
 | `catalog.json`         | `officer` → the `FCAU Officer` role FCAU officers hold in the IdP                                                                                                              |

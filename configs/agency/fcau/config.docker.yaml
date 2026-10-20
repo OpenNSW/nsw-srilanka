@@ -113,6 +113,56 @@ artifactLoader:
   #   ref: feat/fcau-v2-agency
   #   basePath: fcau-v2
 
-# The fcau-v2 artifacts use no REFID_GENERATOR tasks.
+# The fcau-v2 tasks draw their reference numbers here (REFID_GENERATOR). Every
+# sequence restarts each year.
 refid:
-  issuers: []
+  issuers:
+    - issuer: FCAU
+      formats:
+        # application_ref — the health certificate request form reference,
+        # drawn when the application review opens. Produces: PB/034/0001
+        - idType: application_ref
+          segments:
+            - type: literal
+              value: "PB/034/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
+
+        # health_certificate_no — the health certificate number, drawn when the
+        # issue task opens. Produces: 0001/2026
+        - idType: health_certificate_no
+          segments:
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
+            - type: literal
+              value: "/"
+            - type: date
+              layout: "2006"
+
+        # sample_ref — a sample's reference number, drawn for each item when the
+        # officer registers the samples. labCode is the lab that tests them
+        # (fcau_lab_code); one sequence counts across both labs.
+        # Produces: FCAU/Exp/BR/0001/2026
+        - idType: sample_ref
+          segments:
+            - type: literal
+              value: "FCAU/Exp/"
+            - type: list
+              list: fcau_lab_code
+              param: labCode
+            - type: literal
+              value: "/"
+            - type: sequence
+              sequence:
+                scopeKey: "{issuer}:{idType}:{yyyy}"
+                padding: 4
+            - type: literal
+              value: "/"
+            - type: date
+              layout: "2006"
+  lists:
+    fcau_lab_code: [BR, SGS]
