@@ -150,36 +150,24 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
-	inputs, _ := sent.(map[string]any)
-	if root != "" {
-		inputs = maps.Clone(ctx.Inputs)
-		inputs[replyPayloadInput] = sent
+	// tokenize can return data itself, which is the step's own, so the reply
+	// gets a copy. All the inputs are non-nil here: they hold the replyToken.
+	payload := maps.Clone(sent.(map[string]any))
+	if root == "" {
+		delete(payload, replyTokenInput)
 	}
-	return replyRequest(cfg, inputs, replyToken, callbackToken)
+	return replyRequest(cfg, payload, replyToken, callbackToken)
 }
 
 // replyRequest is a callback on the other side's parked step: {command, payload} on
-// replyToken, the envelope every callback takes, with this step's own token as
-// payload.callbackToken for the other side to answer on. The payload is the step's
-// "payload" input if it has one,  so the step's other
-// inputs are only for its own page to show. Otherwise it is all of the step's inputs.
-// Either way the receiving step's output_mapping reads them by the names this node
-// gave them.
-func replyRequest(cfg externalReviewConfig, inputs map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
+// replyToken, the envelope every callback takes, with this step's own token added to
+// payload as callbackToken for the other side to answer on. The payload is the
+// step's "payload" input when it has one, so that its other inputs are only for its
+// own page to show, and all of its inputs but replyToken otherwise. The receiving
+// step's output_mapping reads them by the names this node gave them.
+func replyRequest(cfg externalReviewConfig, payload map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
 	if cfg.ReplyCommand == "" {
 		return "", nil, fmt.Errorf("external_review: reply_command is required to reply")
-	}
-	var payload map[string]any
-	if v, ok := inputs[replyPayloadInput]; ok {
-		m, ok := v.(map[string]any)
-		if !ok {
-			return "", nil, fmt.Errorf("external_review: %s must be an object, got %T", replyPayloadInput, v)
-		}
-		payload = maps.Clone(m)
-	} else {
-		// inputs is non-nil here: it holds the non-empty replyToken.
-		payload = maps.Clone(inputs)
-		delete(payload, replyTokenInput)
 	}
 	payload["callbackToken"] = callbackToken
 	return callbacksPath + "/" + url.PathEscape(replyToken),
