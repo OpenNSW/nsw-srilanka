@@ -98,8 +98,8 @@ paths:
         Each `payload` field the task's render config declares under `files`
         must hold a file reference issued to the caller that can be
         submitted, from an upload or the task's zone view; the stored value
-        it stands for is what gets stored. For now, a value that is not a
-        reference is stored as sent.
+        it stands for is what gets stored. A value that is not a reference,
+        such as a raw storage key, is refused with 400.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
@@ -122,9 +122,9 @@ paths:
           description: |
             Missing task or step ID, malformed JSON, unexpected trailing data,
             a missing/empty `command`, a `payload` that sets the reserved
-            `__command` key, or a declared file field whose value does not
-            have the declared shape (such as a list where one file is
-            declared).
+            `__command` key, or a declared file field that does not have the
+            declared shape (such as a list where one file is declared) or
+            holds a value that is not a file reference.
           content:
             application/json:
               schema:
@@ -214,8 +214,9 @@ paths:
           description: |
             Missing task or step ID, malformed JSON, unexpected trailing data,
             a `command` in the body, a `payload` that sets the reserved
-            `__command` key, a declared file field whose value does not have
-            the declared shape, or a step that does not accept drafts.
+            `__command` key, a declared file field that does not have the
+            declared shape or holds a value that is not a file reference, or
+            a step that does not accept drafts.
           content:
             application/json:
               schema:
@@ -311,8 +312,8 @@ paths:
           description: |
             A malformed token, malformed JSON, unexpected trailing data, a
             missing/empty `command`, a `payload` that sets the reserved
-            `__command` key, or a declared file field whose value does not
-            have the declared shape.
+            `__command` key, or a declared file field that does not have the
+            declared shape or holds a value that is not a file reference.
           content:
             application/json:
               schema:

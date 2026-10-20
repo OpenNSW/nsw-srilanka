@@ -104,6 +104,11 @@ storage:
     # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
     # a known malware vector.
     - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    # XML is accepted as data to download, not to display: served from S3 it
+    # would render in the browser, and XHTML or an XSLT stylesheet inside it
+    # can run script.
+    - text/xml
+    - application/xml
   # Largest upload, in bytes (32 MiB). Not read when type is proxy.
   maxUploadBytes: 33554432
   # Seals the file tokens clients hold in place of stored file keys:
