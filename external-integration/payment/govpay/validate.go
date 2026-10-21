@@ -31,7 +31,11 @@ func (g *GovPayGateway) HandleValidateReference(ctx context.Context, tx *corepay
 
 	// The reference exists, but check it belongs to the service this call
 	// claims to be for before saying anything else about it.
-	if err := identityFromMetadata(tx.Metadata).verify(req.SubInstID, req.ServiceID); err != nil {
+	expected, err := identityFromMapping(tx.PayeeMapping)
+	if err == nil {
+		err = expected.verify(req.SubInstID, req.ServiceID)
+	}
+	if err != nil {
 		// A fee that never declared its ids is our own misconfiguration, not a
 		// bad request. Saying so plainly — and loudly — keeps it from being
 		// chased as a mystery "unknown reference".

@@ -78,15 +78,6 @@ func TestRefGenerator_PartialFormatRejected(t *testing.T) {
 	}
 }
 
-func TestIsReferenceMetadataKey(t *testing.T) {
-	for key := range ReferenceMetadata("CDA", "fee_payment_ref", map[string]string{"exporterId": "0002"}) {
-		assert.True(t, IsReferenceMetadataKey(key), key)
-	}
-	for _, key := range []string{"task_id", "govpay_service_id", "reference", "reference_number"} {
-		assert.False(t, IsReferenceMetadataKey(key), key)
-	}
-}
-
 func TestNewRefGenerator_NilRegistryPanics(t *testing.T) {
 	assert.Panics(t, func() { NewRefGenerator(nil) })
 }

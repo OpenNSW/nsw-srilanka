@@ -49,8 +49,8 @@ var ErrIdentityMismatch = errors.New("govpay identity mismatch")
 // about the caller, so it must never be reported as a verification failure.
 var ErrWebhookClientNotConfigured = errors.New("govpay webhook client not configured")
 
-// ErrIdentityNotConfigured reports a GovPay+ fee whose artifact did not declare
-// both ids. They are mandatory for GovPay+, so a transaction missing them
+// ErrIdentityNotConfigured reports a GovPay+ fee whose payee mapping does not
+// declare both ids. They are mandatory for GovPay+, so a transaction missing them
 // cannot be settled — a callback would have nothing trustworthy to be checked
 // against.
 var ErrIdentityNotConfigured = errors.New("govpay identity not configured")

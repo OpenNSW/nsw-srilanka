@@ -44,12 +44,6 @@ func ReferenceMetadata(issuer, idType string, params map[string]string) map[stri
 	return metadata
 }
 
-// IsReferenceMetadataKey reports whether key is one ReferenceMetadata writes.
-func IsReferenceMetadataKey(key string) bool {
-	return key == metadataKeyIssuer || key == metadataKeyIDType ||
-		strings.HasPrefix(key, metadataKeyParamPrefix)
-}
-
 // RefGenerator issues payment references from the refid registry: in the format
 // a checkout's metadata names (ReferenceMetadata), and in the default format
 // (DefaultReferenceIssuer, DefaultReferenceIDType) for a checkout that names

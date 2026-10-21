@@ -30,7 +30,7 @@ func updateBody(refNo, status, amount, currency string) []byte {
 }
 
 func TestGovPay_ParseWebhook_ReadsTheReturnedParameters(t *testing.T) {
-	g := configuredGateway()
+	g := newTestGateway()
 
 	p, _, err := g.parseWebhookEnc(t, updateBody("TNSW1", "paid", "1500.00", "LKR"), nil)
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestGovPay_ParseWebhook_ReadsTheReturnedParameters(t *testing.T) {
 // GovPay+ returns only the parameters the presentment response asked for, which
 // include no status: the update call itself means the payer has paid.
 func TestGovPay_ParseWebhook_WithoutStatusIsSuccess(t *testing.T) {
-	g := configuredGateway()
+	g := newTestGateway()
 	body := []byte(`{
 		"transactionID":"gwtx1",
 		"subinstId":"002",
@@ -82,7 +82,7 @@ func TestGovPay_ParseWebhook_InvalidJSON(t *testing.T) {
 }
 
 func TestGovPay_ParseWebhook_Acknowledgement(t *testing.T) {
-	g := configuredGateway()
+	g := newTestGateway()
 	body := updateBody("TNSW1", "paid", "1500.00", "LKR")
 
 	_, resp, err := g.parseWebhookEnc(t, body, nil)
@@ -121,7 +121,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 			ReferenceNumber: "TNSW1",
 			Amount:          decimal.RequireFromString("1500.00"),
 			Currency:        "LKR",
-			Metadata:        configured(wantSubInst, wantService),
+			PayeeMapping:    configured(wantSubInst, wantService),
 		}
 		resp, err := g.validateEnc(t, tx, true, reqData)
 		require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestGovPay_HandleValidateReference(t *testing.T) {
 	})
 
 	t.Run("not payable", func(t *testing.T) {
-		resp, err := g.validateEnc(t, &corepayment.ValidationTransaction{ReferenceNumber: "TNSW1", Metadata: configured(wantSubInst, wantService)}, false, reqData)
+		resp, err := g.validateEnc(t, &corepayment.ValidationTransaction{ReferenceNumber: "TNSW1", PayeeMapping: configured(wantSubInst, wantService)}, false, reqData)
 		require.NoError(t, err)
 		assert.Equal(t, 409, resp.HTTPStatus)
 
