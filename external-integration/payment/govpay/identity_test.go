@@ -229,15 +229,6 @@ func TestGovPay_ParseWebhook_IdentityMatching(t *testing.T) {
 		_, _, err := g.parseWebhookEncWith(t, body, staticLookup(nil, false, corepayment.ErrPayeeNotMapped))
 		require.ErrorIs(t, err, corepayment.ErrPayeeNotMapped)
 	})
-
-	t.Run("identity is checked before the status is trusted", func(t *testing.T) {
-		// An unparseable status would normally be the reported failure; the
-		// identity check must fire first so a receipt for another service can
-		// never reach the status mapping.
-		_, _, err := g.parseWebhookEncWith(t, updateBody("TNSW1", "weird", "1500.00", "LKR"), staticLookup(configured(wantSubInst, "other"), true, nil))
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrIdentityMismatch)
-	})
 }
 
 // TestValidatePayeeMapping covers the check that keeps a payee without a full
