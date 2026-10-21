@@ -105,10 +105,11 @@ paths:
       summary: GovPay+ update — notify a completed payment
       description: |
         Called by GovPay+ once a payer has completed payment against a
-        reference. `data[]` carries named items this integration reads:
-        `refno`/`refNo` (required), `status`/`paymentstatus` (required —
-        normalized to SUCCESS/FAILED/PENDING), `amount`, `currency`,
-        `paymentmethod`, `gatewaytransactionid`, `timestamp`.
+        reference. `data[]` carries back the parameters the presentment
+        response marked as returned: `refno`/`refNo` (required), `amount` and
+        `currency`. `paymentmethod`, `gatewaytransactionid` and `timestamp` are
+        read when present. The call itself records the payment as successful;
+        its `amount` and `currency` must match the recorded ones.
 
         Requires scope `nsw:payment-webhooks:process`.
       operationId: govpayWebhook
@@ -130,12 +131,9 @@ paths:
                   paramName: "refNo"
                   value: "NSW20260001"
                 - seq: "2"
-                  paramName: "status"
-                  value: "SUCCESS"
-                - seq: "3"
                   paramName: "amount"
-                  value: 15000.00
-                - seq: "4"
+                  value: "15000.00"
+                - seq: "3"
                   paramName: "currency"
                   value: "LKR"
       responses:
@@ -147,13 +145,12 @@ paths:
                 $ref: '#/components/schemas/UpdateResponse'
         '400':
           description: |
-            Malformed request envelope, or a `status` value that does not
-            map to a known outcome.
+            The request body is missing, too large or unreadable.
           content:
             text/plain:
               schema:
                 type: string
-                example: "unsupported payment status"
+                example: "request body too large or unreadable"
         '401':
           description: |
             Missing/invalid bearer token, or the caller's authenticated
@@ -312,15 +309,6 @@ components:
                       paramName:
                         enum: [refno, refNo]
                     required: [paramName]
-        - properties:
-            data:
-              not:
-                items:
-                  not:
-                    properties:
-                      paramName:
-                        enum: [status, paymentstatus]
-                    required: [paramName]
       properties:
         transactionID:
           type: string
@@ -349,8 +337,8 @@ components:
           type: string
         data:
           type: array
-          minItems: 2
-          description: Must include one item named `refno`/`refNo` and one named `status`/`paymentstatus`.
+          minItems: 1
+          description: Must include one item named `refno`/`refNo`.
           items:
             $ref: '#/components/schemas/GovPayParam'
 
