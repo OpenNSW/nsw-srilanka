@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { useMatch } from 'react-router-dom'
 import { appConfig } from '@/config'
 import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 
@@ -11,8 +12,13 @@ import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 // Every screen (Layout.tsx, LoginScreen.tsx, UnauthorizedScreen.tsx,
 // ZonePreviewScreen.tsx) must reserve space for it with `pb-16 sm:pb-8` so
 // the reserve stays in sync with this component.
+//
+// Except on a task page: there the form's action bar sticks to the bottom of
+// the screen, and a fixed footer would cover its buttons. The footer sits at
+// the end of the page instead, below the reserve.
 export function Footer() {
   const { t } = useTranslation()
+  const onTaskPage = useMatch('/consignments/:consignmentId/tasks/:taskId') !== null
   const footerLinks = appConfig.branding.footerLinks ?? []
   const version = (import.meta.env.VITE_APP_VERSION as string | undefined) || 'dev'
   const copyrightNotice = appConfig.branding.copyrightNotice
@@ -35,7 +41,9 @@ export function Footer() {
   }
 
   return (
-    <footer className="fixed inset-x-0 bottom-0 z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0">
+    <footer
+      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0`}
+    >
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
         {footerLinks.map((link) => {
           const label = footerLinkLabel(link.key)
