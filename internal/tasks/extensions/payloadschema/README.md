@@ -53,26 +53,54 @@ it:
 The schema is compiled on every call, as the other artifact templates are parsed on every
 use, so an edited form applies at once.
 
+### Read-only values
+
+A value the form's schema marks `readOnly` is one the server put there, shown greyed out
+(a UI schema `readonly` option is display only and is not read). The submission must
+send it back as the step stores it: under the step template's `output_namespace` in the
+task data, which core fills when the step starts and replaces with a draft or a
+submission.
+
+- **A single value:** one the step stores comes back unchanged; one it doesn't is left
+  out, or sent as its schema `default`, which the trader app fills in by itself. A list
+  or object marked `readOnly` as a whole comes back exactly as stored.
+- **A list whose rows hold read-only values:** rows pair with the stored rows by those
+  values, in any order, taking a missing one as its default on both sides; paired rows
+  are then checked value by value. A row pairing with none is a new row only if it
+  carries no read-only values. Rows are added or removed only as the list's UI schema
+  control allows (`addable`, `removable`, both on unless set to `false`; a list no
+  control shows allows neither). Lists inside rows follow the same rule.
+
+The schema is followed through `properties`, `allOf`, `$ref`, `additionalProperties`,
+`patternProperties` and list `items`. A `readOnly` under a part whose application depends
+on the data or a row's position (`if`/`then`/`else`, `oneOf`, `anyOf`, `not`,
+`dependencies`, `dependentSchemas`, `contains`, `propertyNames`, tuple `items`,
+`prefixItems`, `additionalItems`, `unevaluated*`, `$dynamicRef`, `$recursiveRef`), or, in a
+form with read-only values, a `readOnly` or `default` beside a draft-07 `$ref`, which the
+library drops, makes the form misconfigured.
+
 ## Outcome
 
 - **Matches:** the step goes ahead.
 - **Doesn't match:** `400` with the fixed message `submission does not match the form`.
-  The failing fields (JSON pointer and the rule that failed, never the submitted value)
-  are logged at warn level, not returned:
+  The failing fields of both checks (JSON pointer and the rule that failed, never a
+  value) are logged together at warn level, not returned:
   the browser checks the same schema first, so this is either a form the browser and the
   server disagree on, or a call that skipped the browser.
 - **Misconfigured** (no `form` in the extension's properties, an unknown form, a form
-  without a `schema`, or a schema that doesn't compile): `500`. The extension fails closed; it never lets a
-  submission through unchecked.
+  without a `schema`, a schema that doesn't compile, a `readOnly` where the check doesn't
+  follow it, or read-only values on a step without an `output_namespace`): `500`. The
+  extension fails closed; it never lets a submission through unchecked.
 
 ## Drafts
 
-A draft may be incomplete, so draft saves are not checked against the form. The draft
-route marks its request context (`WithDraft`), and the extension knows a draft by that
-mark, never by the command: a submission that names the step's draft command is
-validated in full.
+A draft may be incomplete, so draft saves are not held to the form's schema. They are
+held to the read-only rules, since a draft replaces the stored values those compare
+against. The draft route marks its request context (`WithDraft`), and the extension knows
+a draft by that mark, never by the command: a submission that names the step's draft
+command is validated in full.
 
 ## Not covered yet
 
-- Read-only fields and fields the form doesn't declare
+- Fields the form doesn't declare
 - Ajv-only keywords, external reviewer callbacks, and schemas built at render time

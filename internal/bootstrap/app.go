@@ -941,7 +941,7 @@ func initTask(
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
-	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{reg: artifactRegistry}.GetTemplate); err != nil {
+	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{reg: artifactRegistry}.GetTemplate, payloadschema.NamespaceOf(stepNamespace(artifactRegistry))); err != nil {
 		return nil, nil, fmt.Errorf("register payload schema extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)

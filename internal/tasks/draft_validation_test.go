@@ -94,9 +94,9 @@ func (w *resumedWorkflow) CompleteActivation(context.Context, string, string, st
 }
 
 // draftValidationFixture is a task on a step whose template enables drafts and
-// the payload schema extension, over a form that requires "name". The handler
-// runs core's task manager with the extension registered as the app registers
-// it.
+// the payload schema extension, over a form that requires "name" and shows
+// "reference" read-only. The step holds the reference R-1. The handler runs
+// core's task manager with the extension registered as the app registers it.
 func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumedWorkflow) {
 	t.Helper()
 	reg := artifact.NewRegistry(testutil.MemLoader{
@@ -109,7 +109,10 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 		}`),
 		"form.json": []byte(`{"schema": {
 			"type": "object",
-			"properties": {"name": {"type": "string", "minLength": 1}},
+			"properties": {
+				"name": {"type": "string", "minLength": 1},
+				"reference": {"type": "string", "readOnly": true}
+			},
 			"required": ["name"]
 		}}`),
 	})
@@ -121,11 +124,15 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 		raw, err := generictemplate.Load(ctx, reg, id)
 		return []byte(raw), err
 	}
-	require.NoError(t, payloadschema.Register(extReg, formOf))
+	namespaceOf := func(ctx context.Context, id string) (string, error) {
+		step, err := steptemplate.Load(ctx, reg, id)
+		return step.OutputNamespace, err
+	}
+	require.NoError(t, payloadschema.Register(extReg, formOf, namespaceOf))
 
 	db := &memTaskStore{record: store.TaskRecord{
 		TaskID: testTaskID, TaskWorkflowID: "task-wf", ActiveStepID: "step-1", ActiveTaskTemplateID: "form-step",
-		Seq: 4, State: "PENDING_USER", Data: map[string]any{"form": map[string]any{}},
+		Seq: 4, State: "PENDING_USER", Data: map[string]any{"form": map[string]any{"reference": "R-1"}},
 	}}
 	wf := &resumedWorkflow{}
 	h := &HTTPHandler{
@@ -153,10 +160,10 @@ func callStep(method, path, body string, serve http.HandlerFunc) *httptest.Respo
 func TestHandleSaveDraft_SavesAnIncompleteDraft(t *testing.T) {
 	h, db, wf := draftValidationFixture(t)
 
-	recorder := callStep(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft", `{"payload":{"note":"half done"}}`, h.HandleSaveDraft)
+	recorder := callStep(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft", `{"payload":{"reference":"R-1","note":"half done"}}`, h.HandleSaveDraft)
 
 	require.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
-	assert.Equal(t, map[string]any{"note": "half done"}, db.record.Data["form"])
+	assert.Equal(t, map[string]any{"reference": "R-1", "note": "half done"}, db.record.Data["form"])
 	assert.Zero(t, wf.completed, "a draft must not complete the step")
 }
 
@@ -165,11 +172,11 @@ func TestHandleSaveDraft_SavesAnIncompleteDraft(t *testing.T) {
 func TestHandleCompleteTaskStep_ValidatesASubmissionNamingTheDraftCommand(t *testing.T) {
 	h, db, wf := draftValidationFixture(t)
 
-	recorder := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", `{"command":"save_as_draft","payload":{"note":"half done"}}`, h.HandleCompleteTaskStep)
+	recorder := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", `{"command":"save_as_draft","payload":{"reference":"R-1","note":"half done"}}`, h.HandleCompleteTaskStep)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), errInvalidPayload)
-	assert.Equal(t, map[string]any{}, db.record.Data["form"], "a rejected submission must not be stored")
+	assert.Equal(t, map[string]any{"reference": "R-1"}, db.record.Data["form"], "a rejected submission must not be stored")
 	assert.Zero(t, wf.completed, "a rejected submission must not complete the step")
 }
 
@@ -178,9 +185,34 @@ func TestHandleCompleteTaskStep_ValidatesASubmissionNamingTheDraftCommand(t *tes
 func TestHandleCompleteTaskStep_AcceptsASubmissionMatchingTheForm(t *testing.T) {
 	h, db, wf := draftValidationFixture(t)
 
-	recorder := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", `{"command":"submit","payload":{"name":"Alice"}}`, h.HandleCompleteTaskStep)
+	recorder := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", `{"command":"submit","payload":{"reference":"R-1","name":"Alice"}}`, h.HandleCompleteTaskStep)
 
 	require.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
-	assert.Equal(t, map[string]any{"name": "Alice"}, db.record.Data["form"])
+	assert.Equal(t, map[string]any{"reference": "R-1", "name": "Alice"}, db.record.Data["form"])
 	assert.Equal(t, 1, wf.completed)
+}
+
+// A draft is held to the read-only rule: it overwrites the stored values, so a
+// draft changing one is refused and the stored value kept (#795).
+func TestHandleSaveDraft_RefusesADraftChangingAReadOnlyValue(t *testing.T) {
+	h, db, wf := draftValidationFixture(t)
+
+	recorder := callStep(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-1/draft", `{"payload":{"reference":"R-2","note":"half done"}}`, h.HandleSaveDraft)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), errInvalidPayload)
+	assert.Equal(t, map[string]any{"reference": "R-1"}, db.record.Data["form"], "a refused draft must not be stored")
+	assert.Zero(t, wf.completed)
+}
+
+// A submission changing a read-only value is refused, even when it matches
+// the form's schema (#795).
+func TestHandleCompleteTaskStep_RefusesAChangedReadOnlyValue(t *testing.T) {
+	h, db, wf := draftValidationFixture(t)
+
+	recorder := callStep(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", `{"command":"submit","payload":{"reference":"R-2","name":"Alice"}}`, h.HandleCompleteTaskStep)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+	assert.Equal(t, map[string]any{"reference": "R-1"}, db.record.Data["form"])
+	assert.Zero(t, wf.completed)
 }
