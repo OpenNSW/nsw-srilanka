@@ -3,6 +3,26 @@ import { createAjv, defaultErrorTranslator, type ErrorTranslator, type JsonSchem
 // $data: true — needed for formatMaximum: { $data: "1/<sibling>" } date-order rules in schemas.
 export const formAjv = createAjv({ useDefaults: true, $data: true })
 
+function localISODate(now = new Date()): string {
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+// notBefore: "today" rejects a date before the trader's local calendar day.
+// Today is allowed. Unknown schema values are ignored so a typo does not fail every date.
+formAjv.addKeyword({
+  keyword: 'notBefore',
+  type: 'string',
+  schemaType: 'string',
+  validate: (schemaVal: string, data: unknown) => {
+    if (schemaVal !== 'today') return true
+    if (typeof data !== 'string' || data.length < 10) return true
+    return data.slice(0, 10) >= localISODate()
+  },
+})
+
 function parentObjectSchema(root: JsonSchema, instancePath: string): JsonSchema | undefined {
   const segments = instancePath.split('/').filter(Boolean)
   if (segments.length <= 1) return root
@@ -33,6 +53,15 @@ function siblingTitleFromDataRef(
 
 export function createFormErrorTranslator(rootSchema: JsonSchema | undefined): ErrorTranslator {
   return (error, translate, uischema) => {
+    if (error.keyword === 'notBefore') {
+      const title =
+        error.parentSchema &&
+        typeof error.parentSchema === 'object' &&
+        typeof (error.parentSchema as JsonSchema).title === 'string'
+          ? (error.parentSchema as JsonSchema).title
+          : 'This date'
+      return `${title} cannot be before today`
+    }
     if (error.keyword === 'formatMaximum' && error.parentSchema && typeof error.parentSchema === 'object') {
       const selfTitle =
         typeof (error.parentSchema as JsonSchema).title === 'string'
