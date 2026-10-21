@@ -72,10 +72,12 @@ This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.
 > [!IMPORTANT]
 > **Upgrading an existing clone to the plain-HTTP IdP.** Because `make setup` keeps
 > your existing files, change the IdP URLs (`localhost:8090`, `thunderid:8090`) from
-> `https://` to `http://` yourself in `idp/.env` (`PUBLIC_URL`),
-> `configs/{config,config.docker}.yaml`, `configs/{services,services.docker}.json` and
-> `portals/apps/trader-app/public/config.js`. Then recreate the `thunderid` container
-> and sign in again: the token issuer is now `http://localhost:8090`.
+> `https://` to `http://` yourself in `configs/{config,config.docker}.yaml`,
+> `configs/{services,services.docker}.json` and
+> `portals/apps/trader-app/public/config.js`. `PUBLIC_URL`, `PORT` and `HOSTNAME` in
+> `idp/.env` are no longer read and can go. Then run `docker compose up` so
+> `thunderid-setup` re-imports the Console with `http://` redirect URIs, and sign in
+> again: the token issuer is now `http://localhost:8090`.
 
 > [!NOTE]
 > `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.

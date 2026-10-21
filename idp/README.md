@@ -61,8 +61,6 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    ```bash
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=your-secure-password
-   PUBLIC_URL=http://localhost:8090
-   PORT=8090
    ```
 
    `ADMIN_PASSWORD` is load-bearing, not cosmetic: the bootstrap has no default for
@@ -70,7 +68,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    with `docker compose logs thunderid-setup`.
 
    Both `deployment.yaml` and the declarative documents under `bootstrap/` are
-   templated from these vars — `{{.PUBLIC_URL}}` ← `PUBLIC_URL`. Two things to watch:
+   templated from these vars — `{{.SMTP_HOST}}` ← `SMTP_HOST`. Two things to watch:
 
    - An unset variable is a **hard error**, so every placeholder needs a value.
    - Substitution runs over the whole file including comments, so never write
@@ -78,6 +76,11 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
 
    The CORS allow-list is the `cors` server config in
    [`bootstrap/10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml), not an env var.
+
+   The server address (`server.public_url`, `port`, `http_only`) is not an env var
+   either: it is written literally in [`deployment.yaml`](deployment.yaml). `setup.sh`
+   reads that block with grep, which does not resolve placeholders, to build the
+   Console's redirect URIs.
 
 3. Start the IdP:
 
@@ -197,7 +200,7 @@ token. Locally, mint one from `admin-cli`:
 TOKEN=$(curl -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials" -d "scope=system" \
-  -d "resource=http://localhost:8090/mcp" \
+  -d "resource=https://localhost:8090/mcp" \
   http://localhost:8090/oauth2/token | jq -r .access_token)
 ```
 
@@ -362,7 +365,7 @@ So every permission-bearing caller sends `resource`:
 | `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency            | `https://api.nsw-srilanka.local`    |
 | `NSW_TO_*` M2M               | AGENCY_API       | `endpoint_params` in `configs/services*.json`       | `https://api.nsw-agency.local`      |
 | `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                             | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | _Management token_ above                            | `http://localhost:8090/mcp`         |
+| `admin-cli` management token | System RS        | _Management token_ above                            | `https://localhost:8090/mcp`        |
 | `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the

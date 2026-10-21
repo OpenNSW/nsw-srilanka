@@ -138,6 +138,9 @@ services:
       - thunderid-secrets:/opt/thunderid/config/secrets
       # A subdirectory, so the image's 01-/02- documents stay visible beside it.
       - ./idp/bootstrap:/opt/thunderid/bootstrap/nsw:ro
+      # setup.sh derives the public URL from it, which the Console's redirect URIs
+      # use. Without it, it reads the image's https:// default.
+      - ./idp/deployment.yaml:/opt/thunderid/deployment.yaml:ro
     depends_on:
       thunderid-db-init:
         condition: service_completed_successfully
@@ -152,7 +155,7 @@ services:
     ports:
       # Loopback only: the IdP serves plain HTTP (server.http_only in
       # idp/deployment.yaml). Containers reach it over nsw-network.
-      - "127.0.0.1:${IDP_PORT:-8090}:${IDP_PORT:-8090}"
+      - "127.0.0.1:${IDP_PORT:-8090}:8090"
     env_file:
       - ./idp/.env
     volumes:
