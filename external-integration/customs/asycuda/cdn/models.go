@@ -154,7 +154,7 @@ func (r CDNAcknowledgmentRequest) Validate() error {
 // DispatchNote is the domain entity representing a Cargo Dispatch Note.
 type DispatchNote struct {
 	ID        string             `json:"id" gorm:"type:text;not null;primaryKey"`
-	EdgeID    string             `json:"edgeId" gorm:"column:edgeId;type:text;not null;uniqueIndex"`
+	EdgeID    string             `json:"edge_id" gorm:"column:edgeId;type:text;not null;uniqueIndex"`
 	Status    DispatchNoteStatus `json:"status" gorm:"type:text;not null;index"`
 	CDNYear   string             `json:"cdn_year" gorm:"column:cdn_year;index:idx_cdn_ref"`
 	CDNOffice string             `json:"cdn_office" gorm:"column:cdn_office;index:idx_cdn_ref"`

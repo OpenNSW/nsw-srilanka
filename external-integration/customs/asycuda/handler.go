@@ -112,17 +112,17 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 		// staying distinguishable from the 200 that means work was done.
 		if errors.Is(err, cusdec.ErrDuplicateIntegrationResult) {
 			slog.InfoContext(r.Context(), "slce: duplicate CusDec integration result acknowledged",
-				"edgeId", req.EdgeID)
+				"edge_id", req.EdgeID)
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: workflow not found for CusDec integration result",
-				"edgeId", req.EdgeID, "error", err)
+				"edge_id", req.EdgeID, "error", err)
 			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
 			return
 		}
-		httputil.InternalServerError(w, r, "slce: failed to process CusDec integration result", err, "edgeId", req.EdgeID)
+		httputil.InternalServerError(w, r, "slce: failed to process CusDec integration result", err, "edge_id", req.EdgeID)
 		return
 	}
 
@@ -192,11 +192,11 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for integration result",
-				"edgeId", req.Payload.EdgeID, "error", err)
+				"edge_id", req.Payload.EdgeID, "error", err)
 			httputil.Error(w, r, http.StatusNotFound, errDispatchNoteNotFound)
 			return
 		}
-		httputil.InternalServerError(w, r, "slce: failed to process CDN integration result", err, "edgeId", req.Payload.EdgeID)
+		httputil.InternalServerError(w, r, "slce: failed to process CDN integration result", err, "edge_id", req.Payload.EdgeID)
 		return
 	}
 

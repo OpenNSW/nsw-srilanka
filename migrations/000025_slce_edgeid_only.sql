@@ -3,8 +3,9 @@
 -- inside @UP or @DOWN -- see docs/migrations.md.
 
 -- @UP
--- SLC Edge's correlation id is edgeId in the interface specification, and is
--- now called that everywhere TNSW keeps it.
+-- SLC Edge's correlation id is edgeId in the interface specification. The
+-- callbacks now match it under that name only, and the tables that store it
+-- name the column after it.
 --
 -- Callbacks locate the waiting task by the edgeId its dispatch step recorded.
 -- The customs workflows used to copy it to cig.edge_id / cig_cdn.edge_id

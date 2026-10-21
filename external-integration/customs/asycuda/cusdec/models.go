@@ -257,7 +257,7 @@ func (r CusdecEventRequest) Validate() error {
 // CusdecDeclaration is the domain entity representing a Customs Declaration.
 type CusdecDeclaration struct {
 	ID           string          `json:"id" gorm:"type:text;not null;primaryKey"`
-	EdgeID       string          `json:"edgeId" gorm:"column:edgeId;type:text;not null;uniqueIndex"`
+	EdgeID       string          `json:"edge_id" gorm:"column:edgeId;type:text;not null;uniqueIndex"`
 	Status       CusdecStatus    `json:"status" gorm:"type:text;not null;index"`
 	CusdecYear   string          `json:"cusdec_year" gorm:"column:cusdec_year;index:idx_cusdec_ref"`
 	CusdecOffice string          `json:"cusdec_office" gorm:"column:cusdec_office;index:idx_cusdec_ref"`

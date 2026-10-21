@@ -167,7 +167,7 @@ func (c CusdecInterpreter) fetch(ctx context.Context, doc SupportDoc) ([]byte, s
 // PreviousEdgeIDKey is the task input carrying the edgeId of this task's last
 // dispatch attempt, which the workflow maps back in from the output namespace.
 // Absent on a first attempt.
-const PreviousEdgeIDKey = "previousEdgeId"
+const PreviousEdgeIDKey = "previous_edge_id"
 
 type buildError struct{ msg string }
 
