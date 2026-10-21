@@ -110,6 +110,18 @@ func (n *roNode) property(key string) *roNode {
 	return n.form.node(sameValue(schemas...), n.path+"/"+escapeToken(key))
 }
 
+// namedKeys returns, as the keys of a map, the properties the value's schemas
+// name, so a read-only value a submission leaves out is still visited.
+func (n *roNode) namedKeys() map[string]any {
+	keys := make(map[string]any)
+	for _, s := range n.schemas {
+		for k := range s.Properties {
+			keys[k] = nil
+		}
+	}
+	return keys
+}
+
 // row returns the node for each row of the value as a list, or nil when
 // nothing in a row is read-only.
 func (n *roNode) row() *roNode {
