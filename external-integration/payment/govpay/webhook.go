@@ -14,10 +14,11 @@ import (
 // ParseWebhook decodes a GovPay+ update (payment-completion) notification into a
 // domain-neutral WebhookPayload plus the GovPay+ UpdateResponse acknowledgement
 // (the paymentData receipt) to relay back once the notification is accepted. The
-// reference, status, amount and currency travel as named data[] items so the
-// service layer can verify them before marking the transaction paid; the
-// acknowledgement echoes the request's protocol fields and submitted data[] and
-// is independent of the settlement outcome.
+// reference, amount and currency travel as named data[] items — the parameters
+// the presentment response asked GovPay+ to return — so the service layer can
+// verify them before marking the transaction paid; the acknowledgement echoes
+// the request's protocol fields and submitted data[] and is independent of the
+// settlement outcome.
 func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers map[string][]string) (*corepayment.WebhookPayload, *corepayment.WebhookResponse, error) {
 	req, aesKey, err := g.decryptRequest(ctx, body)
 	if err != nil {
@@ -39,11 +40,16 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 		return nil, nil, err
 	}
 
-	// Status is required and is normalized against GovPay's vocabulary; an
-	// absent or unknown status is rejected rather than assumed successful.
-	status, err := mapGovPayStatus(stringParam(params, "status", "paymentstatus"))
-	if err != nil {
-		return nil, nil, err
+	// GovPay+ sends the update call once the payer has paid, carrying back the
+	// parameters the presentment response marked as returned. The presentment
+	// asks for no status, so the call itself is the payment's success. A status
+	// GovPay+ does send is still honoured, so an explicit failure is never
+	// recorded as paid, and an unknown one is rejected.
+	status := corepayment.WebhookStatusSuccess
+	if raw := stringParam(params, "status", "paymentstatus"); raw != "" {
+		if status, err = mapGovPayStatus(raw); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	payload := &corepayment.WebhookPayload{

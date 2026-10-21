@@ -76,6 +76,41 @@ func TestGovPay_ParseWebhook_UnknownStatus(t *testing.T) {
 	require.ErrorIs(t, err, corepayment.ErrUnsupportedWebhookStatus)
 }
 
+// GovPay+ returns only the parameters the presentment response asked for, which
+// include no status: the update call itself means the payer has paid.
+func TestGovPay_ParseWebhook_WithoutStatusIsSuccess(t *testing.T) {
+	g := configuredGateway()
+	body := []byte(`{
+		"transactionID":"gwtx1",
+		"subinstId":"002",
+		"serviceid":"001",
+		"serviceName":"App Fee",
+		"data":[
+			{"seq":"1","paramName":"refNo","value":"TNSW1"},
+			{"seq":"2","paramName":"amount","value":"1500.00"},
+			{"seq":"3","paramName":"currency","value":"LKR"}
+		]
+	}`)
+
+	p, resp, err := g.parseWebhookEnc(t, body, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "TNSW1", p.ReferenceNumber)
+	assert.Equal(t, corepayment.WebhookStatusSuccess, p.Status)
+	assert.True(t, p.Amount.Equal(decimal.RequireFromString("1500.00")))
+	assert.Equal(t, "LKR", p.Currency)
+	require.NotNil(t, resp)
+	assert.Equal(t, 200, resp.HTTPStatus)
+}
+
+// A status GovPay+ does send still decides the outcome: a failure is not
+// recorded as paid.
+func TestGovPay_ParseWebhook_ExplicitFailureIsHonoured(t *testing.T) {
+	g := configuredGateway()
+	p, _, err := g.parseWebhookEnc(t, updateBody("TNSW1", "declined", "1500.00", "LKR"), nil)
+	require.NoError(t, err)
+	assert.Equal(t, corepayment.WebhookStatusFailed, p.Status)
+}
+
 func TestGovPay_ParseWebhook_MissingRefNo(t *testing.T) {
 	g := newTestGateway()
 	body := []byte(`{"transactionID":"gwtx1","subinstId":"002","serviceid":"001","serviceName":"App Fee","data":[{"seq":"1","paramName":"status","value":"paid"}]}`)
