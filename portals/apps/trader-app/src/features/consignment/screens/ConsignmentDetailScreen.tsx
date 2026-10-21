@@ -281,7 +281,7 @@ export function ConsignmentDetailScreen({
   const workflowNodes = consignment.workflowNodes || []
 
   return (
-    <div style={{ height: `calc(100vh - ${CONTENT_TOP_PX}px)` }} className="p-4 md:p-6 w-full flex flex-col">
+    <div style={{ height: `calc(100vh - ${CONTENT_TOP_PX}px)` }} className="p-6 w-full flex flex-col">
       <div className="mb-3 flex items-center justify-between">
         <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)} aria-label={backLabel}>
           <ArrowLeftIcon />

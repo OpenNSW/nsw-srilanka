@@ -17,7 +17,7 @@ type Props = {
 
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
   return (
-    <div className="px-4 md:px-6 py-10 space-y-8">
+    <div className="px-6 py-10 space-y-8">
       <Header task={task} />
       {/* Left-aligned under the title, at the width its form reads best. */}
       <div className={`${zoneWidthClass(task)} space-y-8`}>
