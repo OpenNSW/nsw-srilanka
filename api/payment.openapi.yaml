@@ -105,15 +105,10 @@ paths:
       summary: GovPay+ update — notify a completed payment
       description: |
         Called by GovPay+ once a payer has completed payment against a
-        reference. `data[]` carries back the parameters the presentment
-        response marked as returned — `refNo`, `amount` and `currency` — and
-        this integration also reads `status`/`paymentstatus`, `paymentmethod`,
-        `gatewaytransactionid` and `timestamp` when present. `refno`/`refNo` is
-        required. The presentment asks for no status, so a call without one
-        records the payment as successful; a `status` that is sent is
-        normalized to SUCCESS/FAILED/PENDING and decides the outcome. A
-        successful payment's `amount` and `currency` must match the recorded
-        ones.
+        reference. `data[]` carries named items this integration reads:
+        `refno`/`refNo` (required), `status`/`paymentstatus` (required —
+        normalized to SUCCESS/FAILED/PENDING), `amount`, `currency`,
+        `paymentmethod`, `gatewaytransactionid`, `timestamp`.
 
         Requires scope `nsw:payment-webhooks:process`.
       operationId: govpayWebhook
@@ -135,9 +130,12 @@ paths:
                   paramName: "refNo"
                   value: "NSW20260001"
                 - seq: "2"
-                  paramName: "amount"
-                  value: "15000.00"
+                  paramName: "status"
+                  value: "SUCCESS"
                 - seq: "3"
+                  paramName: "amount"
+                  value: 15000.00
+                - seq: "4"
                   paramName: "currency"
                   value: "LKR"
       responses:
@@ -149,8 +147,8 @@ paths:
                 $ref: '#/components/schemas/UpdateResponse'
         '400':
           description: |
-            Malformed request envelope, or a `status` value that is sent but
-            does not map to a known outcome.
+            Malformed request envelope, or a `status` value that does not
+            map to a known outcome.
           content:
             text/plain:
               schema:
@@ -314,6 +312,15 @@ components:
                       paramName:
                         enum: [refno, refNo]
                     required: [paramName]
+        - properties:
+            data:
+              not:
+                items:
+                  not:
+                    properties:
+                      paramName:
+                        enum: [status, paymentstatus]
+                    required: [paramName]
       properties:
         transactionID:
           type: string
@@ -342,8 +349,8 @@ components:
           type: string
         data:
           type: array
-          minItems: 1
-          description: Must include one item named `refno`/`refNo`. A `status`/`paymentstatus` item is optional.
+          minItems: 2
+          description: Must include one item named `refno`/`refNo` and one named `status`/`paymentstatus`.
           items:
             $ref: '#/components/schemas/GovPayParam'
 

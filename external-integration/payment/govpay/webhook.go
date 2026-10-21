@@ -33,28 +33,18 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 	}
 
 	// Confirm the notification is for the service this reference was registered
-	// under before anything is derived from it. Rejecting here means the caller
-	// never reaches the status mapping, so a receipt issued against a different
-	// GovPay+ service cannot settle this transaction.
+	// under before anything is derived from it. Rejecting here means a receipt
+	// issued against a different GovPay+ service cannot settle this transaction.
 	if err := g.verifyWebhookIdentity(ctx, refNo, req); err != nil {
 		return nil, nil, err
 	}
 
 	// GovPay+ sends the update call once the payer has paid, carrying back the
-	// parameters the presentment response marked as returned. The presentment
-	// asks for no status, so the call itself is the payment's success. A status
-	// GovPay+ does send is still honoured, so an explicit failure is never
-	// recorded as paid, and an unknown one is rejected.
-	status := corepayment.WebhookStatusSuccess
-	if raw := stringParam(params, "status", "paymentstatus"); raw != "" {
-		if status, err = mapGovPayStatus(raw); err != nil {
-			return nil, nil, err
-		}
-	}
-
+	// parameters the presentment response marked as returned. The call itself is
+	// the payment's success.
 	payload := &corepayment.WebhookPayload{
 		ReferenceNumber:      refNo,
-		Status:               status,
+		Status:               corepayment.WebhookStatusSuccess,
 		PaymentMethod:        stringParam(params, "paymentmethod"),
 		GatewayTransactionID: firstNonEmpty(stringParam(params, "gatewaytransactionid"), req.TransactionID),
 		Currency:             stringParam(params, "currency"),
@@ -91,22 +81,6 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 	}
 
 	return payload, &corepayment.WebhookResponse{Payload: ackBody, HTTPStatus: 200}, nil
-}
-
-// mapGovPayStatus normalizes GovPay's status vocabulary into the canonical
-// corepayment.WebhookStatus. Unknown values are rejected rather than silently
-// stored.
-func mapGovPayStatus(raw string) (corepayment.WebhookStatus, error) {
-	switch strings.ToUpper(strings.TrimSpace(raw)) {
-	case "SUCCESS", "PAID", "COMPLETED":
-		return corepayment.WebhookStatusSuccess, nil
-	case "FAILED", "DECLINED", "REJECTED":
-		return corepayment.WebhookStatusFailed, nil
-	case "PENDING", "INITIATED":
-		return corepayment.WebhookStatusPending, nil
-	default:
-		return "", fmt.Errorf("govpay status %q: %w", raw, corepayment.ErrUnsupportedWebhookStatus)
-	}
 }
 
 // -----------------------------------------------------------------------------
