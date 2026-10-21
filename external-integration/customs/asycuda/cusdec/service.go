@@ -130,7 +130,7 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
-		Where("data->'cig'->>'edgeId' = ?", req.EdgeID).
+		Where("data->'cig'->>'edge_id' = ?", req.EdgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 
@@ -299,7 +299,7 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
-		Where("data->'cig'->>'edgeId' = ?", decl.EdgeID).
+		Where("data->'cig'->>'edge_id' = ?", decl.EdgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 

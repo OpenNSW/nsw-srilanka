@@ -81,9 +81,9 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
-		// The dispatch step records the id as edgeId, the interface
-		// specification's name for it (§7.2).
-		Where("data->'cig_cdn'->>'edgeId' = ?", look.edgeID).
+		// The customs workflow records the id the dispatch step returned as
+		// cig_cdn.edge_id.
+		Where("data->'cig_cdn'->>'edge_id' = ?", look.edgeID).
 		Select("parent_workflow_id").
 		First(&record).Error
 	if err != nil {

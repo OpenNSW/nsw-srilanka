@@ -3,32 +3,28 @@
 -- inside @UP or @DOWN -- see docs/migrations.md.
 
 -- @UP
--- SLC Edge's correlation id is edgeId in the interface specification, and the
--- callbacks now match it under that name only.
---
--- Callbacks locate the waiting task by the edgeId its dispatch step recorded.
--- The customs workflows used to copy it to cig.edge_id / cig_cdn.edge_id
--- (one-trade-artifacts#208 keeps it as edgeId), and the lookups no longer
--- accept that spelling. Give every task that holds only edge_id the edgeId it
--- stands for, so a callback for a declaration or dispatch note already waiting
--- still finds it.
+-- Callbacks locate the waiting task by the id its dispatch step returned, which
+-- the customs workflows record as cig.edge_id / cig_cdn.edge_id. The lookups
+-- used to accept edgeId as well and now match edge_id only. Give every task that
+-- holds only edgeId the edge_id it stands for, so a callback for a declaration
+-- or dispatch note already waiting still finds it.
 UPDATE task_records_v2
-SET data = jsonb_set(data, '{cig,edgeId}', data->'cig'->'edge_id')
+SET data = jsonb_set(data, '{cig,edge_id}', data->'cig'->'edgeId')
 WHERE jsonb_typeof(data->'cig') = 'object'
-  AND data->'cig' ? 'edge_id'
-  AND NOT data->'cig' ? 'edgeId';
+  AND data->'cig' ? 'edgeId'
+  AND NOT data->'cig' ? 'edge_id';
 
 UPDATE task_records_v2
-SET data = jsonb_set(data, '{cig_cdn,edgeId}', data->'cig_cdn'->'edge_id')
+SET data = jsonb_set(data, '{cig_cdn,edge_id}', data->'cig_cdn'->'edgeId')
 WHERE jsonb_typeof(data->'cig_cdn') = 'object'
-  AND data->'cig_cdn' ? 'edge_id'
-  AND NOT data->'cig_cdn' ? 'edgeId';
+  AND data->'cig_cdn' ? 'edgeId'
+  AND NOT data->'cig_cdn' ? 'edge_id';
 
--- These indexes served only the edge_id lookups.
-DROP INDEX IF EXISTS idx_task_records_v2_edge_id_snake;
-DROP INDEX IF EXISTS idx_task_records_v2_cdn_edge_id_snake;
+-- These indexes served only the edgeId lookups.
+DROP INDEX IF EXISTS idx_task_records_v2_edge_id;
+DROP INDEX IF EXISTS idx_task_records_v2_cdn_edge_id;
 
 -- @DOWN
--- The copied edgeId values in task data are left in place.
-CREATE INDEX IF NOT EXISTS idx_task_records_v2_edge_id_snake ON task_records_v2 ((data->'cig'->>'edge_id'));
-CREATE INDEX IF NOT EXISTS idx_task_records_v2_cdn_edge_id_snake ON task_records_v2 ((data->'cig_cdn'->>'edge_id'));
+-- The copied edge_id values in task data are left in place.
+CREATE INDEX IF NOT EXISTS idx_task_records_v2_edge_id ON task_records_v2 ((data->'cig'->>'edgeId'));
+CREATE INDEX IF NOT EXISTS idx_task_records_v2_cdn_edge_id ON task_records_v2 ((data->'cig_cdn'->>'edgeId'));
