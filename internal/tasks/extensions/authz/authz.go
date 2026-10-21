@@ -34,7 +34,8 @@ var (
 
 // Extension is the PRE_RESUME task extension enforcing, per task state and
 // command, which principals may advance a task: users by token role + resolved
-// ownership, M2M clients by client id. It is deny-by-default.
+// ownership, M2M clients by client id, and this service's own in-process callers
+// by the reserved name taskauthz.SystemPrincipal. It is deny-by-default.
 type Extension struct {
 	catalog taskauthz.Catalog
 }
@@ -139,9 +140,23 @@ func (e *Extension) authorize(ctx context.Context, record *store.TaskRecord, in 
 		return e.authorizeUser(ctx, record, in, allowed)
 	case taskauthz.KindClient:
 		return e.authorizeClient(in, allowed)
+	case taskauthz.KindSystem:
+		return authorizeSystem(allowed)
 	default:
 		return ErrUnauthenticated
 	}
+}
+
+// authorizeSystem allows an in-process caller iff the rule names the reserved
+// system principal. Nothing else lets it through: it holds no role and is no
+// client, so a rule naming only users or clients refuses it like anyone else.
+func authorizeSystem(allowed []string) error {
+	for _, name := range allowed {
+		if name == taskauthz.SystemPrincipal {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: the rule does not allow %q", ErrForbidden, taskauthz.SystemPrincipal)
 }
 
 // authorizeUser allows the call iff the caller may act as some allowed name —

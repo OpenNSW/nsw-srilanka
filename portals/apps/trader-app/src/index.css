@@ -328,6 +328,25 @@ body {
   cursor: not-allowed;
 }
 
+/* A stepper form's review step, or a submitted stepper form, marks itself
+ * data-form-review. Nothing in it is editable, so there is nothing to tell
+ * apart from an editable field: its values read as plain answers. */
+[data-form-review] :is(.rt-TextFieldInput, .rt-TextAreaInput):is(:disabled, :read-only),
+[data-form-review] .rt-SelectTrigger:disabled,
+[data-form-review] .rt-RadioGroupItem + .rt-Text {
+  color: var(--color-foreground) !important;
+  cursor: default;
+}
+[data-form-review] :is(.rt-TextFieldRoot, .rt-TextAreaRoot, .rt-SelectTrigger) {
+  cursor: default;
+}
+
+/* A stepper form's step list sticks, and a new step scrolls, this far below
+ * the top of the viewport: clear of the fixed TopBar (top-3 + h-16 = 76px). */
+:root {
+  --form-steps-offset: 88px;
+}
+
 .rt-TextFieldRoot.rt-r-size-2 {
   --text-field-height: 2.75rem !important;
   --text-field-border-radius: var(--radius-lg) !important;

@@ -41,7 +41,8 @@ A full `docker compose up` runs three IdP services in order:
    secrets, and the Direct Auth Secret), then runs the in-process bootstrap over the
    declarative documents in `/opt/thunderid/bootstrap/` — the image's own defaults
    plus every document in [`bootstrap/`](bootstrap/) — and exits.
-3. **`thunderid`** — the long-running server (listens on `https://localhost:8090`).
+3. **`thunderid`** — the long-running server (listens on `http://localhost:8090`:
+   plain HTTP, set by `server.http_only` in [`deployment.yaml`](deployment.yaml)).
 
 Everything the platform needs locally (OUs, user types, resource servers, roles,
 groups, portals, M2M clients, sample users) exists once `thunderid-setup` finishes.
@@ -60,8 +61,6 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    ```bash
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=your-secure-password
-   PUBLIC_URL=https://localhost:8090
-   PORT=8090
    ```
 
    `ADMIN_PASSWORD` is load-bearing, not cosmetic: the bootstrap has no default for
@@ -69,7 +68,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    with `docker compose logs thunderid-setup`.
 
    Both `deployment.yaml` and the declarative documents under `bootstrap/` are
-   templated from these vars — `{{.PUBLIC_URL}}` ← `PUBLIC_URL`. Two things to watch:
+   templated from these vars — `{{.SMTP_HOST}}` ← `SMTP_HOST`. Two things to watch:
 
    - An unset variable is a **hard error**, so every placeholder needs a value.
    - Substitution runs over the whole file including comments, so never write
@@ -77,6 +76,11 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
 
    The CORS allow-list is the `cors` server config in
    [`bootstrap/10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml), not an env var.
+
+   The server address (`server.public_url`, `port`, `http_only`) is not an env var
+   either: it is written literally in [`deployment.yaml`](deployment.yaml). `setup.sh`
+   reads that block with grep, which does not resolve placeholders, to build the
+   Console's redirect URIs.
 
 3. Start the IdP:
 
@@ -86,7 +90,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
 
 ### Developer Console Access
 
-Once running, open the developer console at `https://localhost:8090/console`:
+Once running, open the developer console at `http://localhost:8090/console`:
 
 - **Credentials**: the `ADMIN_USERNAME` / `ADMIN_PASSWORD` values from your `.env`
   (`idp/.env.example` ships `admin` / `1234` for local dev)
@@ -193,11 +197,11 @@ The management API, the console's API, and `POST /import` need a `system`-scoped
 token. Locally, mint one from `admin-cli`:
 
 ```bash
-TOKEN=$(curl -k -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
+TOKEN=$(curl -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials" -d "scope=system" \
   -d "resource=https://localhost:8090/mcp" \
-  https://localhost:8090/oauth2/token | jq -r .access_token)
+  http://localhost:8090/oauth2/token | jq -r .access_token)
 ```
 
 The `resource` parameter is **required** here: `system` is a permission scope, so the
@@ -375,7 +379,7 @@ passes to `clientcredentials.Config.EndpointParams`. Both take the same query-st
 as the SPA variable, so one syntax covers every caller:
 
 ```json
-"token_url": "https://thunderid:8090/oauth2/token",
+"token_url": "http://thunderid:8090/oauth2/token",
 "endpoint_params": { "resource": "https://api.nsw-agency.local" }
 ```
 

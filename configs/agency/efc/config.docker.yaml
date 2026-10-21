@@ -73,11 +73,9 @@ storage:
 # idp/bootstrap/20-agency-efc.yaml. The keys are fetched in-network;
 # the issuer is the browser-facing host the tokens are minted for.
 authn:
-  jwksURL: https://thunderid:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://thunderid:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.efc.nsw-agency.local
-  # Only honored when APP_ENV=development.
-  insecureSkipTLSVerify: true
 
 # Placeholder providers.
 notification:

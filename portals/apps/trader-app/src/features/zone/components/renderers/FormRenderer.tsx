@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema } from '@jsonforms/core'
-import { radixRenderers } from '@opennsw/jsonforms-renderers'
+import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Callout, Text } from '@radix-ui/themes'
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
@@ -196,6 +196,13 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const isValid = errors.length === 0 && requiredErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('SHOW_AUTOFILL_BUTTON', false)
+  // A stepper form (a Categorization with options.variant "stepper") offers
+  // the handles that need a complete form only on its last step, the review
+  // step; the renderer reports the step through FormStepsProvider. Any other
+  // form is on its last step from the start.
+  const stepper = isStepperUiSchema(payload.uiSchema)
+  const [onLastStep, setOnLastStep] = useState(() => !stepper)
+  const shownHandles = (handles ?? []).filter((h) => onLastStep || acceptsPartialForm(h))
   const draftHandle = interactive ? handles?.find((h) => h.element === 'draft_action') : undefined
   const unsaved = interactive && savedKey !== null && dataKey !== savedKey
   // The screen asks before the user leaves with unsaved input.
@@ -211,11 +218,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
-    // draft_action and secondary_action handles accept a partial form.
-    // primary_action and danger_action handles require valid data.
     const draft = h.element === 'draft_action'
-    const skipRequired = draft || h.element === 'secondary_action'
-    if (!skipRequired && !isValid) {
+    if (!acceptsPartialForm(h) && !isValid) {
       // Flipping showErrors changes validationMode, a dependency of
       // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above) —
       // but the lastFed check above already catches dataSeed up to data on
@@ -264,9 +268,23 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
     return () => clearTimeout(timer)
   }, [draftSavedAt])
 
+  const actions = interactive ? (
+    <FormActions
+      handles={shownHandles}
+      onAction={handleAction}
+      onAutoFill={showAutoFill ? handleAutoFill : undefined}
+      submitting={submitting}
+      pendingCommand={pendingCommand}
+      draftSaved={draftSavedAt !== null}
+      inBar={!stepper}
+    />
+  ) : undefined
+
   return (
     <>
-      {interactive && showErrors && requiredErrors.length > 0 && (
+      {/* A stepper lists what is missing on each step itself; the form-wide
+          note would stay on screen on steps that are already complete. */}
+      {interactive && showErrors && requiredErrors.length > 0 && onLastStep && (
         <div className="px-6 pt-6">
           <Callout.Root color="red">
             <Callout.Icon>
@@ -276,46 +294,55 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           </Callout.Root>
         </div>
       )}
-      <div className="p-6">
-        <JsonForms
-          schema={payload.schema}
-          uischema={payload.uiSchema}
-          data={dataSeed}
-          ajv={ajv}
-          renderers={radixRenderers}
-          readonly={!interactive}
-          additionalErrors={stableAdditionalErrors}
-          validationMode={validationMode}
-          i18n={formI18n}
-          onChange={({ data, errors }) => {
-            const next = (data ?? {}) as Record<string, unknown>
-            setData(next)
-            setSavedKey((prev) => prev ?? formDataKey(next))
-            setErrors(errors ?? [])
-          }}
-        />
+      {/* A stepper draws its own cards, and shows these actions in its footer
+          next to Back and Continue instead of in a bar of their own. Continue
+          refused on a step shows the field errors, as a refused submit does
+          on a single-page form. */}
+      <div className={stepper ? '' : 'p-6'}>
+        <FormStepsProvider
+          onStepChange={({ last }) => setOnLastStep(last)}
+          onInvalidStep={() => setShowErrors(true)}
+          actions={stepper ? actions : undefined}
+        >
+          <JsonForms
+            schema={payload.schema}
+            uischema={payload.uiSchema}
+            data={dataSeed}
+            ajv={ajv}
+            renderers={radixRenderers}
+            readonly={!interactive}
+            additionalErrors={stableAdditionalErrors}
+            validationMode={validationMode}
+            i18n={formI18n}
+            onChange={({ data, errors }) => {
+              const next = (data ?? {}) as Record<string, unknown>
+              setData(next)
+              setSavedKey((prev) => prev ?? formDataKey(next))
+              setErrors(errors ?? [])
+            }}
+          />
+        </FormStepsProvider>
       </div>
-      {interactive && (
-        <FormActionBar
-          handles={handles ?? []}
-          onAction={handleAction}
-          onAutoFill={showAutoFill ? handleAutoFill : undefined}
-          submitting={submitting}
-          pendingCommand={pendingCommand}
-          draftSaved={draftSavedAt !== null}
-        />
+      {actions && !stepper && (
+        <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-[0_-8px_20px_-8px_rgba(0,0,0,0.08)]">
+          <div className="px-6 py-4 flex items-center gap-3">{actions}</div>
+        </div>
       )}
     </>
   )
 }
 
-function FormActionBar({
+// The form's buttons: the demo auto-fill, then the handles. In a bar of their
+// own, a spacer pushes the handles to the right; a stepper's footer already
+// has one, after Back.
+function FormActions({
   handles,
   onAction,
   onAutoFill,
   submitting,
   pendingCommand,
   draftSaved,
+  inBar,
 }: {
   handles: Handle[]
   onAction: (h: Handle) => void
@@ -323,34 +350,33 @@ function FormActionBar({
   submitting: boolean
   pendingCommand: string | null
   draftSaved: boolean
+  inBar: boolean
 }) {
   const { t } = useTranslation()
   return (
-    <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-[0_-8px_20px_-8px_rgba(0,0,0,0.08)]">
-      <div className="px-6 py-4 flex items-center gap-3">
-        {onAutoFill && (
-          <Button type="button" variant="soft" color="purple" size="3" onClick={onAutoFill} disabled={submitting}>
-            Demo - Auto Fill
-          </Button>
-        )}
-        <div className="flex-1" />
-        {draftSaved && (
-          <Text size="2" color="green" role="status" className="inline-flex items-center gap-1">
-            <CheckIcon />
-            {t('tasks.draftSaved')}
-          </Text>
-        )}
-        {handles.map((h) => (
-          <HandleButton
-            key={h.command}
-            handle={h}
-            onClick={onAction}
-            submitting={submitting}
-            pending={pendingCommand === h.command}
-          />
-        ))}
-      </div>
-    </div>
+    <>
+      {onAutoFill && (
+        <Button type="button" variant="soft" color="purple" size="3" onClick={onAutoFill} disabled={submitting}>
+          Demo - Auto Fill
+        </Button>
+      )}
+      {inBar && <div className="flex-1" />}
+      {draftSaved && (
+        <Text size="2" color="green" role="status" className="inline-flex items-center gap-1">
+          <CheckIcon />
+          {t('tasks.draftSaved')}
+        </Text>
+      )}
+      {handles.map((h) => (
+        <HandleButton
+          key={h.command}
+          handle={h}
+          onClick={onAction}
+          submitting={submitting}
+          pending={pendingCommand === h.command}
+        />
+      ))}
+    </>
   )
 }
 
@@ -467,4 +493,10 @@ function isEmpty(value: unknown): boolean {
   if (typeof value === 'string' && value.trim() === '') return true
   if (Array.isArray(value) && value.length === 0) return true
   return false
+}
+
+// draft_action and secondary_action handles accept a partial form;
+// primary_action, danger_action and unknown elements require valid data.
+function acceptsPartialForm(h: Handle): boolean {
+  return h.element === 'draft_action' || h.element === 'secondary_action'
 }

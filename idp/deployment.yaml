@@ -3,10 +3,16 @@
 #
 # Placeholders resolve from ./.env before parsing. An unset variable is a hard error,
 # and resolution covers comments too — never write placeholder syntax in a comment.
+#
+# Mounted into thunderid-setup too, where setup.sh reads the server block with grep
+# (the image has no yq) to build the Console's URLs. That parse does not resolve
+# placeholders, so the server block holds literal values.
 server:
-  hostname: {{.HOSTNAME}}
-  public_url: {{.PUBLIC_URL}}
-  port: {{.PORT}}
+  hostname: "0.0.0.0"
+  public_url: "http://localhost:8090"
+  port: 8090
+  # Plain HTTP for local dev, so no client needs to trust the self-signed cert.
+  http_only: true
   security:
     # Gates the Direct API endpoints, which we do not use. setup.sh generates the
     # value; an empty secret blocks those endpoints rather than failing boot.
@@ -24,5 +30,5 @@ email:
 
 passkey:
   allowed_origins:
-    - {{.PUBLIC_URL}}
+    - "http://localhost:8090"
 

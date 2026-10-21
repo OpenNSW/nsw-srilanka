@@ -54,13 +54,12 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ## How to Run Locally
 
 > [!NOTE]
-> ⚠️ **This quickstart is for local development only.** The example configs enable
-> insecure TLS (`authn.insecureSkipTLSVerify: true`, `insecure_skip_tls_verify`
-> in `services.json`) for the self-signed local IdP. The backend only honors these
-> when `APP_ENV=development` — which `make dev`/`make preview` inject and nothing
-> else does — so a raw `docker compose up` or any real deployment **refuses to
-> start** on them. For non-local environments, trust the IdP/agency certificate
-> chain, keep those flags off, and never set `APP_ENV=development`.
+> ⚠️ **This quickstart is for local development only.** The local IdP serves plain
+> HTTP (`server.http_only: true` in `idp/deployment.yaml`), so the example configs
+> reach it over `http://` with no TLS settings. For non-local environments, serve the
+> IdP over HTTPS with a trusted certificate chain. The insecure-TLS escape hatches
+> (`authn.insecureSkipTLSVerify`, `insecure_skip_tls_verify` in `services.json`) are
+> honored only when `APP_ENV=development`; never set that outside local dev.
 
 ### 1. First-time setup
 
@@ -69,6 +68,16 @@ make setup
 ```
 
 This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/{services,services.docker,payment_methods,catalog,companies}.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
+
+> [!IMPORTANT]
+> **Upgrading an existing clone to the plain-HTTP IdP.** Because `make setup` keeps
+> your existing files, change the IdP URLs (`localhost:8090`, `thunderid:8090`) from
+> `https://` to `http://` yourself in `configs/{config,config.docker}.yaml`,
+> `configs/{services,services.docker}.json` and
+> `portals/apps/trader-app/public/config.js`. `PUBLIC_URL`, `PORT` and `HOSTNAME` in
+> `idp/.env` are no longer read and can go. Then run `docker compose up` so
+> `thunderid-setup` re-imports the Console with `http://` redirect URIs, and sign in
+> again: the token issuer is now `http://localhost:8090`.
 
 > [!NOTE]
 > `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.

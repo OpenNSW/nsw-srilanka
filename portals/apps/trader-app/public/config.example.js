@@ -7,7 +7,7 @@
 // nsw:* API scopes, or the backend rejects the resulting token.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8080',
-  IDP_BASE_URL: 'https://localhost:8090',
+  IDP_BASE_URL: 'http://localhost:8090',
   IDP_CLIENT_ID: 'TRADER_PORTAL_APP',
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.nsw-srilanka.local',
   APP_URL: 'http://localhost:5173',

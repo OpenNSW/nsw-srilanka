@@ -22,6 +22,28 @@ func TestInputRoundTripsThroughContext(t *testing.T) {
 	}
 }
 
+// WithSystem carries the system principal and nothing else: no roles or client id
+// a rule could mistake for a user's or a client's.
+func TestWithSystem(t *testing.T) {
+	got, ok := InputFromContext(WithSystem(context.Background()))
+	if !ok || got.Kind != KindSystem || got.Roles != nil || got.ClientID != "" || got.OwnedRoles != nil {
+		t.Errorf("WithSystem: got %+v, %v; want only Kind %q", got, ok, KindSystem)
+	}
+}
+
+// The system principal is never eligible for a catalog role, even one that names
+// it: roles are for users, and the reservation keeps the name out of the catalog.
+func TestSystemIsEligibleForNoRole(t *testing.T) {
+	cat := Catalog{Roles: map[string]string{"trader": "Trader", SystemPrincipal: "Trader"}}
+	e, err := cat.Eligible(context.Background(), Input{Kind: KindSystem}, "c1", []string{"trader", SystemPrincipal})
+	if err != nil {
+		t.Fatalf("Eligible: %v", err)
+	}
+	if e.HoldsAny([]string{"trader", SystemPrincipal}) || e.Any([]string{"trader", SystemPrincipal}) {
+		t.Error("the system principal is eligible for a role")
+	}
+}
+
 // A request that never passed through Layer 1 must be distinguishable from one
 // carrying a principal, rather than yielding a usable zero value.
 func TestInputAbsentFromBareContext(t *testing.T) {

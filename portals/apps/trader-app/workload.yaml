@@ -16,7 +16,7 @@ configurations:
     - name: VITE_API_BASE_URL
       value: http://localhost:8080
     - name: VITE_IDP_BASE_URL
-      value: https://localhost:8090
+      value: http://localhost:8090
     - name: VITE_IDP_CLIENT_ID
       value: TRADER_PORTAL_APP
     - name: VITE_APP_URL

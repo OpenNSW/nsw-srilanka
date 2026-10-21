@@ -147,12 +147,9 @@ storage:
 authn:
   # The keys are fetched in-network; the issuer is the browser-facing host the
   # tokens are minted for.
-  jwksURL: https://thunderid:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://thunderid:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.nsw-srilanka.local
-  # Local development with self-signed certs may need to skip TLS verification
-  # for the JWKS endpoint. Only honored when APP_ENV=development (see above).
-  insecureSkipTLSVerify: true
 
 # One settings block per channel, in the schema of
 # github.com/OpenNSW/core/notification. At least one is required.

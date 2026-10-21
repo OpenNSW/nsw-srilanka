@@ -138,6 +138,9 @@ services:
       - thunderid-secrets:/opt/thunderid/config/secrets
       # A subdirectory, so the image's 01-/02- documents stay visible beside it.
       - ./idp/bootstrap:/opt/thunderid/bootstrap/nsw:ro
+      # setup.sh derives the public URL from it, which the Console's redirect URIs
+      # use. Without it, it reads the image's https:// default.
+      - ./idp/deployment.yaml:/opt/thunderid/deployment.yaml:ro
     depends_on:
       thunderid-db-init:
         condition: service_completed_successfully
@@ -150,7 +153,9 @@ services:
     networks:
       - nsw-network
     ports:
-      - "${IDP_PORT:-8090}:${IDP_PORT:-8090}"
+      # Loopback only: the IdP serves plain HTTP (server.http_only in
+      # idp/deployment.yaml). Containers reach it over nsw-network.
+      - "127.0.0.1:${IDP_PORT:-8090}:8090"
     env_file:
       - ./idp/.env
     volumes:
@@ -160,7 +165,7 @@ services:
       - thunderid-secrets:/opt/thunderid/config/secrets:ro
       - ./idp/deployment.yaml:/opt/thunderid/deployment.yaml
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsk -o /dev/null https://localhost:8090/health/readiness || exit 1"]
+      test: ["CMD-SHELL", "curl -fs -o /dev/null http://localhost:8090/health/readiness || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 30

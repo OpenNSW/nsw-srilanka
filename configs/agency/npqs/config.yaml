@@ -71,11 +71,9 @@ storage:
 # The audience is the NPQS API resource server in
 # idp/bootstrap/20-agency-npqs.yaml.
 authn:
-  jwksURL: https://localhost:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://localhost:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.npqs.nsw-agency.local
-  # Only honored when APP_ENV=development.
-  insecureSkipTLSVerify: true
 
 # Placeholder providers.
 notification:

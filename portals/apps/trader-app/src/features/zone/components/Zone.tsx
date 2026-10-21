@@ -1,4 +1,5 @@
 import type { ZoneAction, ZoneComponent } from '@/features/zone/types'
+import { isStepperUiSchema } from '@opennsw/jsonforms-renderers'
 import { renderZoneComponent } from './renderers'
 
 type Props = {
@@ -16,7 +17,12 @@ export function Zone({ component, onAction }: Props) {
   return (
     <section className="space-y-2">
       {component.title && <h2 className="text-xs font-semibold text-foreground-subtle">{component.title}</h2>}
-      <div className="bg-app-surface rounded-2xl shadow-md">{renderZoneComponent(component, { onAction })}</div>
+      {/* A stepper form draws its own cards: the step list and the step. */}
+      {component.type === 'FORM' && isStepperUiSchema(component.payload.uiSchema) ? (
+        renderZoneComponent(component, { onAction })
+      ) : (
+        <div className="bg-app-surface rounded-2xl shadow-md">{renderZoneComponent(component, { onAction })}</div>
+      )}
     </section>
   )
 }
