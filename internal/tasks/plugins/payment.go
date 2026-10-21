@@ -34,11 +34,10 @@ type paymentConfig struct {
 	// method maps a payee to its own account ids under "payees" in
 	// payment_methods.json, so a fee never carries a gateway's ids, and only
 	// the methods that map the payee can collect it.
-	OrgID       string          `json:"org_id"`
-	ServiceID   string          `json:"service_id"`
-	ServiceName string          `json:"service_name"`
-	Amount      decimal.Decimal `json:"amount"`
-	Currency    string          `json:"currency"`
+	OrgID     string          `json:"org_id"`
+	ServiceID string          `json:"service_id"`
+	Amount    decimal.Decimal `json:"amount"`
+	Currency  string          `json:"currency"`
 
 	// Reference names the refid format of the fee's payment reference, the
 	// reference the payer pays against. A fee without one takes the default
@@ -140,11 +139,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			ctx.Record.Data = make(map[string]any)
 		}
 
-		serviceName := cfg.ServiceName
-		if serviceName == "" {
-			serviceName = "Payment"
-		}
-
 		pData := map[string]any{
 			"session_id":       resp.SessionID,
 			"reference_number": resp.ReferenceNumber,
@@ -154,7 +148,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			"checkout_url":     resp.CheckoutURL,
 			"instructions":     resp.Instructions,
 			"flow_type":        string(resp.Type),
-			"service_name":     serviceName,
 			"org_id":           payee.OrgID,
 			"service_id":       payee.ServiceID,
 		}

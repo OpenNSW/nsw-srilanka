@@ -304,6 +304,7 @@ func TestPaymentPlugin_Execute_OpensCheckoutForThePayee(t *testing.T) {
 	assert.Equal(t, "cda", out["org_id"])
 	assert.Equal(t, "app_fee", out["service_id"])
 	assert.NotContains(t, out, "service_type")
+	assert.NotContains(t, out, "service_name")
 }
 
 func TestPaymentPlugin_Execute_RequiresThePayee(t *testing.T) {

@@ -461,7 +461,6 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
   "plugin_properties": {
     "org_id": "cda",
     "service_id": "app_fee",
-    "service_name": "Application Fee",
     "amount": "2000.00",
     "currency": "LKR",
     "reference": {

@@ -5,12 +5,29 @@
 -- @UP
 -- core/payment v0.4.0 records the payee a transaction pays, as org_id and
 -- service_id, and resolves the gateway's ids for it from payment_methods.json
--- on every callback. Fill them in for existing transactions from the fee's task
--- code, which the payment plugin stored in gateway_metadata.task_code, so a
--- payment still pending can be presented and settled. A transaction whose task
--- code is not listed keeps empty ids and can no longer be presented or settled.
+-- on every callback. Fill them in for existing transactions, so a payment still
+-- pending can be presented and settled: from the GovPay+ ids the payment plugin
+-- stored in gateway_metadata (govpay_subinst_id, govpay_service_id), which name
+-- exactly one fee each, or else from the fee's task code (task_code), which
+-- older artifacts declared. A transaction matching neither keeps empty ids and
+-- can no longer be presented or settled.
 ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS service_id TEXT NOT NULL DEFAULT '';
+
+UPDATE payment_transactions AS t
+SET org_id = p.org_id, service_id = p.service_id
+FROM (VALUES
+	('001', '001', 'fcau', 'app_fee'),
+	('002', '001', 'npqs', 'certificate_fee'),
+	('002', '003', 'npqs', 'treatment_fee'),
+	('003', '001', 'sltb', 'levy_fee'),
+	('003', '002', 'sltb', 'lab_fee'),
+	('004', '001', 'cda', 'app_fee'),
+	('004', '002', 'cda', 'kcfn_fee')
+) AS p(subinst_id, govpay_service_id, org_id, service_id)
+WHERE t.gateway_metadata->>'govpay_subinst_id' = p.subinst_id
+  AND t.gateway_metadata->>'govpay_service_id' = p.govpay_service_id
+  AND t.org_id = '';
 
 UPDATE payment_transactions AS t
 SET org_id = p.org_id, service_id = p.service_id
