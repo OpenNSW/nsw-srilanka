@@ -68,10 +68,17 @@ func newTestGateway() *GovPayGateway {
 // method under test.
 // -----------------------------------------------------------------------------
 
+// parseWebhookEnc parses an update as the payment service would for a reference
+// registered under the identity the shared test bodies are posted under.
 func (g *GovPayGateway) parseWebhookEnc(t *testing.T, body []byte, headers map[string][]string) (*corepayment.WebhookPayload, *corepayment.WebhookResponse, error) {
 	t.Helper()
+	return g.parseWebhookEncWith(t, body, staticLookup(configured(wantSubInst, wantService), true, nil))
+}
+
+func (g *GovPayGateway) parseWebhookEncWith(t *testing.T, body []byte, payees corepayment.PayeeLookup) (*corepayment.WebhookPayload, *corepayment.WebhookResponse, error) {
+	t.Helper()
 	ctx, enc := encryptAsGovPay(t, body)
-	return g.ParseWebhook(ctx, enc, headers)
+	return g.ParseWebhook(ctx, enc, nil, payees)
 }
 
 func (g *GovPayGateway) validateEnc(t *testing.T, tx *corepayment.ValidationTransaction, isPayable bool, body []byte) (*corepayment.ValidationResponse, error) {

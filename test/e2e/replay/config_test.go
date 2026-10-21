@@ -64,8 +64,8 @@ type PaymentConfig struct {
 	// prove which of its own sub-accounts/services the payment was registered
 	// under — separate from the M2M bearer in Identity, which only proves the
 	// caller is the gateway. Each entry maps a webhook wire field name to the
-	// key on the transaction's gateway metadata holding the expected value;
-	// the mock looks each one up and echoes it back. This harness has no
+	// key in the gateway's payee mapping (payment_methods.json "payees")
+	// holding the expected value; the mock looks each one up and echoes it back. This harness has no
 	// built-in knowledge of any gateway's identity scheme, so a new gateway
 	// needs only its own configs/payments/<id>.json entry, no Go changes.
 	IdentityFields map[string]string `json:"identityFields,omitempty"`

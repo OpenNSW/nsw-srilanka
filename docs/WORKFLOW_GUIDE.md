@@ -459,10 +459,10 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
 ```json
 {
   "plugin_properties": {
-    "task_code": "cda_app_fee_payment_v1",
+    "org_id": "cda",
+    "service_id": "app_fee",
     "amount": "2000.00",
     "currency": "LKR",
-    "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
     "reference": {
       "issuer": "CDA",
       "id_type": "fee_payment_ref",
@@ -474,6 +474,21 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
 ```
 
 In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
+
+`org_id` and `service_id` name the payee: who the fee is paid to and for what. They are the same in every environment. What a gateway needs to collect the fee, such as GovPay's sub-institution and service ids, differs per environment, so each payment method maps payees to its own ids under `payees` in `configs/payment_methods.json`:
+
+```json
+"payees": {
+  "cda": {
+    "defaults": { "subinst_id": "004" },
+    "services": { "app_fee": { "service_id": "001" } }
+  }
+}
+```
+
+A service's entry is merged over its org's `defaults`. The GovPay method needs both `subinst_id` and `service_id`, and the backend refuses to start if a mapping lacks either. For where the ids come from and a checklist for adding a fee, see the [GovPay+ gateway README](../external-integration/payment/govpay/README.md).
+
+The payment method is the step's `selected_method` input. It must be a method that maps the payee; with no selection, the only such method is used, and with several the step fails asking for one. A payee no method maps fails the step, naming the payee to add.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 

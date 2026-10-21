@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -102,15 +103,35 @@ func TestResolvePaymentAmount(t *testing.T) {
 }
 
 // fakePaymentService records the request it was called with. Embedding the
-// interface leaves every method but CreateCheckoutSession unimplemented,
-// which is fine as long as Execute never reaches them.
+// interface leaves every method but ListAvailableMethods and
+// CreateCheckoutSession unimplemented, which is fine as long as Execute never
+// reaches them.
 type fakePaymentService struct {
 	payment.PaymentService
+
+	// methods are the ids of the methods that can pay any payee; nil means
+	// just govpay.
+	methods   []string
+	listErr   error
+	listedFor []payment.Payee
 
 	lastReq payment.CreateCheckoutRequest
 	called  bool
 	resp    *payment.CreateCheckoutResponse
 	err     error
+}
+
+func (f *fakePaymentService) ListAvailableMethods(_ context.Context, payee payment.Payee) ([]payment.GatewayInfo, error) {
+	f.listedFor = append(f.listedFor, payee)
+	ids := f.methods
+	if ids == nil {
+		ids = []string{"govpay"}
+	}
+	infos := make([]payment.GatewayInfo, 0, len(ids))
+	for _, id := range ids {
+		infos = append(infos, payment.GatewayInfo{ID: id, IsActive: true})
+	}
+	return infos, f.listErr
 }
 
 func (f *fakePaymentService) CreateCheckoutSession(_ context.Context, req payment.CreateCheckoutRequest) (*payment.CreateCheckoutResponse, error) {
@@ -137,7 +158,7 @@ func paymentPluginCtx(inputs map[string]any) plugins.PluginContext {
 	}
 }
 
-const paymentConfigJSON = `{"task_code":"CODE1","currency":"LKR","amount":12500}`
+const paymentConfigJSON = `{"org_id":"cda","service_id":"app_fee","currency":"LKR","amount":12500}`
 
 func TestPaymentPlugin_Execute_UsesWorkflowAmountOverConfigured(t *testing.T) {
 	svc := &fakePaymentService{resp: &payment.CreateCheckoutResponse{SessionID: "session-1", ReferenceNumber: "TNSW-1", Type: payment.FlowTypeRedirect}}
@@ -191,7 +212,7 @@ func TestPaymentPlugin_Execute_RejectsInvalidAmountWithoutCallingGateway(t *test
 		"the task must not be marked PENDING_PAYMENT when the amount is rejected")
 }
 
-const feeReferenceConfigJSON = `{"task_code":"CODE1","currency":"LKR","amount":12500,
+const feeReferenceConfigJSON = `{"org_id":"cda","service_id":"app_fee","currency":"LKR","amount":12500,
 	"reference":{"issuer":"CDA","id_type":"fee_payment_ref","params":{"exporterId":"/exporter_id"},
 		"values":{"mainCategory":"01","subCategory":"00002"}}}`
 
@@ -234,7 +255,7 @@ func TestPaymentPlugin_Execute_ReferenceFormatWithoutParams(t *testing.T) {
 	svc := &fakePaymentService{resp: checkoutResponse()}
 
 	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil),
-		[]byte(`{"task_code":"CODE1","currency":"LKR","amount":12500,"reference":{"issuer":"ACME","id_type":"invoice_ref"}}`))
+		[]byte(`{"org_id":"cda","service_id":"app_fee","currency":"LKR","amount":12500,"reference":{"issuer":"ACME","id_type":"invoice_ref"}}`))
 
 	require.ErrorIs(t, err, ErrSuspended)
 	assert.Equal(t, refIDCall{issuer: "ACME", idType: "invoice_ref", params: map[string]string{}}, generatedFrom(t, svc.lastReq))
@@ -253,33 +274,115 @@ func TestPaymentPlugin_Execute_DefaultReferenceFormat(t *testing.T) {
 	assert.Empty(t, call.params)
 }
 
-// gateway_metadata cannot set the reference format: the generator draws from
-// the fee's own format, or the default.
-func TestPaymentPlugin_Execute_ReferenceKeysAreReserved(t *testing.T) {
-	planted := `"gateway_metadata":{"reference_issuer":"X","reference_id_type":"y","reference_param.exporterId":"9999"}`
-	for name, tc := range map[string]struct {
-		config string
-		want   refIDCall
-	}{
-		"fee without a format": {
-			config: `{"task_code":"CODE1","currency":"LKR","amount":12500,` + planted + `}`,
-			want:   refIDCall{issuer: nswpayment.DefaultReferenceIssuer, idType: nswpayment.DefaultReferenceIDType, params: map[string]string{}},
-		},
-		"fee with a format": {
-			config: `{"task_code":"CODE1","currency":"LKR","amount":12500,` + planted + `,
-				"reference":{"issuer":"CDA","id_type":"fee_payment_ref","values":{"exporterId":"0002"}}}`,
-			want: refIDCall{issuer: "CDA", idType: "fee_payment_ref", params: map[string]string{"exporterId": "0002"}},
-		},
+// A fee still declaring the GovPay+ ids it used to carry has them ignored: the
+// ids come from the payee's mapping in payment_methods.json, and the step's
+// metadata holds only its own bookkeeping and reference format.
+func TestPaymentPlugin_Execute_IgnoresLegacyGatewayMetadata(t *testing.T) {
+	svc := &fakePaymentService{resp: checkoutResponse()}
+	config := `{"task_code":"cda_app_fee_payment_v1","org_id":"cda","service_id":"app_fee","currency":"LKR","amount":12500,
+		"gateway_metadata":{"govpay_subinst_id":"004","govpay_service_id":"001","reference_issuer":"X","task_id":"other"}}`
+
+	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(config))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.Equal(t, map[string]string{"task_id": paymentTestTaskID, "method_id": "govpay"}, svc.lastReq.Metadata)
+}
+
+// The checkout is opened for the step's payee, and the step's output names it.
+func TestPaymentPlugin_Execute_OpensCheckoutForThePayee(t *testing.T) {
+	svc := &fakePaymentService{resp: checkoutResponse()}
+	ctx := paymentPluginCtx(nil)
+	ctx.OutputNamespace = "payment"
+
+	err := NewPaymentPlugin(svc).Execute(ctx, []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	want := payment.Payee{OrgID: "cda", ServiceID: "app_fee"}
+	assert.Equal(t, []payment.Payee{want}, svc.listedFor, "methods are listed for the payee")
+	assert.Equal(t, want, svc.lastReq.Payee)
+	out := ctx.Record.Data["payment"].(map[string]any)
+	assert.Equal(t, "cda", out["org_id"])
+	assert.Equal(t, "app_fee", out["service_id"])
+	assert.NotContains(t, out, "service_type")
+	assert.NotContains(t, out, "service_name")
+}
+
+func TestPaymentPlugin_Execute_RequiresThePayee(t *testing.T) {
+	for name, config := range map[string]string{
+		"no org_id":        `{"service_id":"app_fee","currency":"LKR","amount":12500}`,
+		"no service_id":    `{"org_id":"cda","currency":"LKR","amount":12500}`,
+		"blank service_id": `{"org_id":"cda","service_id":"  ","currency":"LKR","amount":12500}`,
+		"task_code only":   `{"task_code":"cda_app_fee_payment_v1","currency":"LKR","amount":12500}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc := &fakePaymentService{resp: checkoutResponse()}
+			ctx := paymentPluginCtx(nil)
 
-			err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(tc.config))
+			err := NewPaymentPlugin(svc).Execute(ctx, []byte(config))
 
-			require.ErrorIs(t, err, ErrSuspended)
-			assert.Equal(t, tc.want, generatedFrom(t, svc.lastReq))
+			require.ErrorContains(t, err, "org_id and plugin_properties.service_id are required")
+			assert.False(t, svc.called)
+			assert.NotEqual(t, "PENDING_PAYMENT", ctx.Record.State)
 		})
 	}
+}
+
+// The payer's choice must be a method that can pay the payee; with no choice,
+// the only such method is used, and with several the step asks for one.
+func TestPaymentPlugin_Execute_SelectsTheMethod(t *testing.T) {
+	for name, tc := range map[string]struct {
+		methods  []string
+		selected string
+		want     string
+		wantErr  string
+	}{
+		"selected":              {methods: []string{"govpay", "card"}, selected: "card", want: "card"},
+		"only method":           {methods: []string{"govpay"}, want: "govpay"},
+		"none selected of many": {methods: []string{"govpay", "card"}, wantErr: `"selected_method" is required: available methods are govpay, card`},
+		"selected cannot pay":   {methods: []string{"govpay"}, selected: "card", wantErr: `payment method "card" cannot pay this payee`},
+		"no method maps payee":  {methods: []string{}, wantErr: "no payment method can pay this payee"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := &fakePaymentService{methods: tc.methods, resp: checkoutResponse()}
+			inputs := map[string]any{}
+			if tc.selected != "" {
+				inputs["selected_method"] = tc.selected
+			}
+
+			err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(inputs), []byte(paymentConfigJSON))
+
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				assert.ErrorContains(t, err, "cda/app_fee", "the error names the payee")
+				assert.False(t, svc.called)
+				return
+			}
+			require.ErrorIs(t, err, ErrSuspended)
+			assert.Equal(t, tc.want, svc.lastReq.GatewayID)
+			assert.Equal(t, tc.want, svc.lastReq.Metadata["method_id"])
+		})
+	}
+}
+
+func TestPaymentPlugin_Execute_ListMethodsError(t *testing.T) {
+	boom := errors.New("registry unavailable")
+	svc := &fakePaymentService{listErr: boom, resp: checkoutResponse()}
+
+	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, boom)
+	assert.False(t, svc.called)
+}
+
+// A payee the selected method does not map comes back from the payment service
+// as payment.ErrPayeeNotMapped, naming the payee.
+func TestPaymentPlugin_Execute_PayeeNotMapped(t *testing.T) {
+	svc := &fakePaymentService{err: fmt.Errorf("gateway govpay, payee cda/app_fee: %w", payment.ErrPayeeNotMapped)}
+
+	err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, payment.ErrPayeeNotMapped)
+	assert.ErrorContains(t, err, "cda/app_fee")
 }
 
 func TestPaymentPlugin_Execute_RejectsMalformedReference(t *testing.T) {
@@ -314,7 +417,7 @@ func TestPaymentPlugin_Execute_RejectsMalformedReference(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc := &fakePaymentService{resp: checkoutResponse()}
-			config := `{"task_code":"CODE1","currency":"LKR","amount":12500,"reference":` + tc.reference + `}`
+			config := `{"org_id":"cda","service_id":"app_fee","currency":"LKR","amount":12500,"reference":` + tc.reference + `}`
 
 			err := NewPaymentPlugin(svc).Execute(paymentPluginCtx(tc.inputs), []byte(config))
 
