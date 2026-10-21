@@ -67,8 +67,24 @@ func assertDownloadURL(t *testing.T, rec *httptest.ResponseRecorder) {
 		DownloadURL string `json:"download_url"`
 		ExpiresAt   int64  `json:"expires_at"`
 	}
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || body.DownloadURL == "" || body.ExpiresAt <= time.Now().Unix() {
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.DownloadURL == "" || body.ExpiresAt <= time.Now().Unix() {
 		t.Fatalf("response = %+v (%v), want a download_url and a future expires_at", body, err)
+	}
+}
+
+// assertFileType checks that a successful download gives the file's
+// extension and type, and no name for it.
+func assertFileType(t *testing.T, rec *httptest.ResponseRecorder, ext, mimeType string) {
+	t.Helper()
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["extension"] != ext || body["mime_type"] != mimeType {
+		t.Errorf("extension, mime_type = %v, %v; want %q, %q", body["extension"], body["mime_type"], ext, mimeType)
+	}
+	if _, ok := body["name"]; ok {
+		t.Errorf("response %s names the file", rec.Body.String())
 	}
 }
 
@@ -103,7 +119,9 @@ func TestFileHandler_Download(t *testing.T) {
 	}
 
 	t.Run("the holder's token", func(t *testing.T) {
-		assertDownloadURL(t, download(h, token, user("alice")))
+		rec := download(h, token, user("alice"))
+		assertDownloadURL(t, rec)
+		assertFileType(t, rec, ".pdf", "application/pdf")
 	})
 	t.Run("someone else's token", func(t *testing.T) {
 		assertStatus(t, download(h, token, user("bob")), http.StatusForbidden)
@@ -244,7 +262,11 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertDownloadURL(t, download(agencyFiles, officerToken, officer))
+	rec := download(agencyFiles, officerToken, officer)
+	assertDownloadURL(t, rec)
+	// Only TNSW knows the file behind what the agency stores; the agency
+	// relays what TNSW says it is.
+	assertFileType(t, rec, ".pdf", "application/pdf")
 	assertStatus(t, download(agencyFiles, officerToken, user("another-officer")), http.StatusForbidden)
 
 	// An officer's own upload goes to TNSW too: TNSW issues the agency a
@@ -422,4 +444,25 @@ type failingService struct{ Service }
 
 func (failingService) DownloadURL(context.Context, string) (string, int64, error) {
 	return "", 0, errors.New("backend unavailable")
+}
+
+func TestDownloadOf_FileType(t *testing.T) {
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	for _, tc := range []struct{ key, ext, mimeType string }{
+		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b.pdf", ".pdf", "application/pdf"},
+		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b.HTML", ".HTML", "text/html"},
+		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b.unknownext", ".unknownext", ""},
+		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b", "", ""},
+	} {
+		dl, err := downloadOf(context.Background(), stack.Service, tc.key)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.key, err)
+		}
+		if dl.Extension != tc.ext || dl.MimeType != tc.mimeType {
+			t.Errorf("%s: extension, mime_type = %q, %q; want %q, %q", tc.key, dl.Extension, dl.MimeType, tc.ext, tc.mimeType)
+		}
+	}
 }

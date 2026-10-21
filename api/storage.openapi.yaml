@@ -265,3 +265,18 @@ components:
           format: int64
           description: When `download_url` stops working, in Unix seconds.
           example: 1791460800
+        extension:
+          type: string
+          description: |
+            The file's extension, with its dot, taken from the file as it was
+            uploaded. Absent when the file has none. A reference does not say
+            what the file is, so this is how a client names a file it saves or
+            tells whether a browser can show it. The name it was uploaded under
+            is not kept.
+          example: .xlsx
+        mime_type:
+          type: string
+          description: |
+            The media type `extension` stands for, without parameters. Absent
+            when the extension is not one this service knows.
+          example: application/pdf

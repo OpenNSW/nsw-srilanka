@@ -1,10 +1,13 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
+	"path"
 
 	"github.com/OpenNSW/core/httputil"
 	corestorage "github.com/OpenNSW/core/storage"
@@ -131,15 +134,63 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	downloadURL, expiresAt, err := h.svc.DownloadURL(r.Context(), value)
+	dl, err := downloadOf(r.Context(), h.svc, value)
 	if err != nil {
 		h.writeServiceError(w, r, err, "failed to generate access")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{
-		"download_url": downloadURL,
-		"expires_at":   expiresAt,
-	})
+	httputil.JSON(w, http.StatusOK, dl)
+}
+
+// fileDownload is what a download returns: a time-limited URL to the file,
+// when it expires, and what the file is. The client holds only a reference,
+// so it has no other way to name a saved file it saves or to tell whether a
+// browser can show it. The name the file was uploaded under is not kept, so
+// only its extension is given; the storage key it comes from is not.
+type fileDownload struct {
+	DownloadURL string `json:"download_url"`
+	ExpiresAt   int64  `json:"expires_at"`
+	// Extension is the file's, with its dot (".xlsx"), or empty when it has
+	// none.
+	Extension string `json:"extension,omitempty"`
+	// MimeType is the type the extension stands for, or empty when it is
+	// not known.
+	MimeType string `json:"mime_type,omitempty"`
+}
+
+// fileDownloader is a Service that describes the file behind a stored value
+// itself. ProxyService is one: what it stores is the owning service's
+// reference, so only the owning service knows the file it stands for.
+type fileDownloader interface {
+	fileDownload(ctx context.Context, key string) (fileDownload, error)
+}
+
+// downloadOf returns the download of the file stored under value. Unless svc
+// describes the file itself, value is a storage key, which core/storage
+// builds from the uploaded file's name to keep its extension.
+func downloadOf(ctx context.Context, svc Service, value string) (fileDownload, error) {
+	if d, ok := svc.(fileDownloader); ok {
+		return d.fileDownload(ctx, value)
+	}
+	downloadURL, expiresAt, err := svc.DownloadURL(ctx, value)
+	if err != nil {
+		return fileDownload{}, err
+	}
+	ext := path.Ext(value)
+	return fileDownload{DownloadURL: downloadURL, ExpiresAt: expiresAt, Extension: ext, MimeType: mimeTypeOf(ext)}, nil
+}
+
+// mimeTypeOf returns the media type ext stands for, without parameters, or
+// "" when it has none or it is not known.
+func mimeTypeOf(ext string) string {
+	if ext == "" {
+		return ""
+	}
+	mediaType, _, err := mime.ParseMediaType(mime.TypeByExtension(ext))
+	if err != nil {
+		return ""
+	}
+	return mediaType
 }
 
 // writeServiceError answers a failed Service call the way core/storage's and

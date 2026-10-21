@@ -140,25 +140,31 @@ func (s *ProxyService) GetDownloadURL(ctx context.Context, key string) (string, 
 // DownloadURL returns the owning service's time-limited download URL together
 // with the Unix time it expires at, as the owning service reported it.
 func (s *ProxyService) DownloadURL(ctx context.Context, key string) (string, int64, error) {
+	dl, err := s.fileDownload(ctx, key)
+	return dl.DownloadURL, dl.ExpiresAt, err
+}
+
+// fileDownload returns the owning service's download of the file, with the
+// extension and type it gives for it, if any.
+func (s *ProxyService) fileDownload(ctx context.Context, key string) (fileDownload, error) {
 	var resp struct {
-		DownloadURL string `json:"download_url"`
-		ExpiresAt   int64  `json:"expires_at"`
-		Error       string `json:"error"`
+		fileDownload
+		Error string `json:"error"`
 	}
 	err := s.caller.Call(ctx, s.cfg.Service, remote.Request{
 		Method: http.MethodGet,
 		Path:   keyPath(s.cfg.DownloadPath, key),
 	}, &resp)
 	if err != nil {
-		return "", 0, remoteFailure("get download URL", err, resp.Error)
+		return fileDownload{}, remoteFailure("get download URL", err, resp.Error)
 	}
 	if resp.DownloadURL == "" {
-		return "", 0, wrapUpstreamFailure("get download URL", errors.New("response missing download_url"))
+		return fileDownload{}, wrapUpstreamFailure("get download URL", errors.New("response missing download_url"))
 	}
 	if err := requireAbsoluteURL(resp.DownloadURL); err != nil {
-		return "", 0, wrapUpstreamFailure("validate download URL", err)
+		return fileDownload{}, wrapUpstreamFailure("validate download URL", err)
 	}
-	return resp.DownloadURL, resp.ExpiresAt, nil
+	return resp.fileDownload, nil
 }
 
 // Download streams the file from the owning service via its download URL.
