@@ -12,7 +12,6 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
-	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
@@ -105,9 +104,8 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 			"id": "form-step",
 			"task_type": "USER_INPUT",
 			"output_namespace": "form",
-			"plugin_properties": {"user_jsonforms_id": "the-form"},
 			"draft": {"command": "save_as_draft"},
-			"extensions": [{"id": "payload_schema", "phase": "PRE_RESUME"}]
+			"extensions": [{"id": "payload_schema", "phase": "PRE_RESUME", "properties": {"form": "the-form"}}]
 		}`),
 		"form.json": []byte(`{"schema": {
 			"type": "object",
@@ -119,14 +117,11 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 	reg.RegisterArtifact("the-form", generictemplate.Kind, "", "form.json")
 
 	extReg := extensions.NewRegistry()
-	stepTemplateOf := func(ctx context.Context, id string) (types.StepTemplate, error) {
-		return steptemplate.Load(ctx, reg, id)
-	}
 	formOf := func(ctx context.Context, id string) ([]byte, error) {
 		raw, err := generictemplate.Load(ctx, reg, id)
 		return []byte(raw), err
 	}
-	require.NoError(t, payloadschema.Register(extReg, stepTemplateOf, formOf))
+	require.NoError(t, payloadschema.Register(extReg, formOf))
 
 	db := &memTaskStore{record: store.TaskRecord{
 		TaskID: testTaskID, TaskWorkflowID: "task-wf", ActiveStepID: "step-1", ActiveTaskTemplateID: "form-step",

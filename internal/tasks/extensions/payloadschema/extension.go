@@ -7,39 +7,41 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
-
-// StepTemplateOf returns the step template with the given id.
-type StepTemplateOf func(ctx context.Context, stepTemplateID string) (types.StepTemplate, error)
 
 // FormOf returns the form template with the given id as the artifacts store it:
 // a JSON object whose "schema" member is the form's JSON Schema.
 type FormOf func(ctx context.Context, formID string) ([]byte, error)
 
 // Extension is the PRE_RESUME task extension that validates a submission
-// against the JSON Schema of the form its step template names in
-// plugin_properties.user_jsonforms_id. It runs on every step that lists it and
-// fails closed: a step whose form can't be found or compiled rejects every
-// submission rather than letting one through unchecked.
+// against the JSON Schema of the form the step names in the extension's
+// properties. It runs on every step that lists it and fails closed: a step
+// whose form can't be found or compiled rejects every submission rather than
+// letting one through unchecked.
 type Extension struct {
-	stepTemplateOf StepTemplateOf
-	formOf         FormOf
+	formOf FormOf
 }
 
-// NewExtension builds the extension over the lookups it reads step templates
-// and forms through.
-func NewExtension(stepTemplateOf StepTemplateOf, formOf FormOf) *Extension {
-	return &Extension{stepTemplateOf: stepTemplateOf, formOf: formOf}
+// properties is the extension's configuration on a step template:
+//
+//	{"id": "payload_schema", "phase": "PRE_RESUME", "properties": {"form": "<form id>"}}
+type properties struct {
+	// Form is the id of the form whose schema a submission must match.
+	Form string `json:"form"`
+}
+
+// NewExtension builds the extension over the lookup it reads forms through.
+func NewExtension(formOf FormOf) *Extension {
+	return &Extension{formOf: formOf}
 }
 
 // Execute runs in the PRE_RESUME phase, before the task resumes; a non-nil
 // return aborts the step. A payload that doesn't match the form is reported as
 // an *InvalidPayloadError, which matches ErrInvalidPayload; any other error is
-// a misconfiguration or a failed lookup. The extension takes no properties.
-func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, payload map[string]any, _ json.RawMessage) error {
+// a misconfiguration or a failed lookup.
+func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, payload map[string]any, props json.RawMessage) error {
 	// A draft may be incomplete, so it is not held to the form's rules. The
 	// read-only and undeclared-field checks, which do apply to drafts, are
 	// added here by #795 and #796.
@@ -47,13 +49,17 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 		return nil
 	}
 
-	schema, err := e.schemaOf(ctx, record.ActiveTaskTemplateID)
+	formID, err := namedForm(props)
+	if err != nil {
+		return fmt.Errorf("payload schema: step template %q: %w", record.ActiveTaskTemplateID, err)
+	}
+	schema, err := e.schemaOf(ctx, formID)
 	if err != nil {
 		return err
 	}
 	compiled, err := compile(schema)
 	if err != nil {
-		return fmt.Errorf("payload schema: form of step template %q: %w", record.ActiveTaskTemplateID, err)
+		return fmt.Errorf("payload schema: form %q: %w", formID, err)
 	}
 
 	if err := compiled.Validate(formData(payload)); err != nil {
@@ -66,37 +72,34 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 	return nil
 }
 
-// schemaOf returns the JSON Schema of the form step template stepTemplateID
-// names in plugin_properties.user_jsonforms_id.
-func (e *Extension) schemaOf(ctx context.Context, stepTemplateID string) ([]byte, error) {
-	step, err := e.stepTemplateOf(ctx, stepTemplateID)
-	if err != nil {
-		return nil, fmt.Errorf("payload schema: step template %q: %w", stepTemplateID, err)
-	}
-	var props struct {
-		UserJSONFormsID string `json:"user_jsonforms_id"`
-	}
-	if len(step.PluginProperties) > 0 {
-		if err := json.Unmarshal(step.PluginProperties, &props); err != nil {
-			return nil, fmt.Errorf("payload schema: plugin properties of step template %q: %w", stepTemplateID, err)
+// namedForm returns the id of the form the extension's properties name.
+func namedForm(props json.RawMessage) (string, error) {
+	var p properties
+	if len(props) > 0 {
+		if err := json.Unmarshal(props, &p); err != nil {
+			return "", fmt.Errorf("extension properties: %w", err)
 		}
 	}
-	if props.UserJSONFormsID == "" {
-		return nil, fmt.Errorf("payload schema: step template %q names no form in plugin_properties.user_jsonforms_id", stepTemplateID)
+	if p.Form == "" {
+		return "", errors.New(`extension properties name no "form"`)
 	}
+	return p.Form, nil
+}
 
-	raw, err := e.formOf(ctx, props.UserJSONFormsID)
+// schemaOf returns the JSON Schema of form formID.
+func (e *Extension) schemaOf(ctx context.Context, formID string) ([]byte, error) {
+	raw, err := e.formOf(ctx, formID)
 	if err != nil {
-		return nil, fmt.Errorf("payload schema: form %q of step template %q: %w", props.UserJSONFormsID, stepTemplateID, err)
+		return nil, fmt.Errorf("payload schema: form %q: %w", formID, err)
 	}
 	var form struct {
 		Schema json.RawMessage `json:"schema"`
 	}
 	if err := json.Unmarshal(raw, &form); err != nil {
-		return nil, fmt.Errorf("payload schema: form %q: %w", props.UserJSONFormsID, err)
+		return nil, fmt.Errorf("payload schema: form %q: %w", formID, err)
 	}
 	if len(form.Schema) == 0 || string(form.Schema) == "null" {
-		return nil, fmt.Errorf("payload schema: form %q has no schema", props.UserJSONFormsID)
+		return nil, fmt.Errorf("payload schema: form %q has no schema", formID)
 	}
 	return form.Schema, nil
 }

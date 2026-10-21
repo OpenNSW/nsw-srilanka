@@ -11,8 +11,8 @@ and draft saves (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`).
 
 ## Enabling it on a step
 
-List the extension on the step template. It takes no properties: the form is the one the
-step already names in `plugin_properties.user_jsonforms_id`.
+List the extension on the step template, naming the form a submission must match in its
+`form` property.
 
 ```json
 {
@@ -23,10 +23,17 @@ step already names in `plugin_properties.user_jsonforms_id`.
     "user_jsonforms_id": "npqs-apply-phyto-cert--reviewer-form"
   },
   "extensions": [
-    { "id": "payload_schema", "phase": "PRE_RESUME" }
+    {
+      "id": "payload_schema",
+      "phase": "PRE_RESUME",
+      "properties": { "form": "npqs-apply-phyto-cert--reviewer-form" }
+    }
   ]
 }
 ```
+
+The extension never reads `plugin_properties`; name the form the user fills in, which
+on a `USER_INPUT` step is usually the one `user_jsonforms_id` shows.
 
 Removing it from the step template turns validation off for that step. A step template
 that lists it while the running backend doesn't register it fails every submission on
@@ -54,8 +61,8 @@ use, so an edited form applies at once.
   are logged at warn level, not returned:
   the browser checks the same schema first, so this is either a form the browser and the
   server disagree on, or a call that skipped the browser.
-- **Misconfigured** (no `user_jsonforms_id`, an unknown form, a form without a `schema`,
-  or a schema that doesn't compile): `500`. The extension fails closed; it never lets a
+- **Misconfigured** (no `form` in the extension's properties, an unknown form, a form
+  without a `schema`, or a schema that doesn't compile): `500`. The extension fails closed; it never lets a
   submission through unchecked.
 
 ## Drafts

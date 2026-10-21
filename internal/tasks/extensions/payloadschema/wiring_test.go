@@ -7,18 +7,16 @@ import (
 )
 
 func TestRegister(t *testing.T) {
-	artifacts := fakeArtifacts{}
+	forms := fakeForms{}
 	tests := []struct {
-		name           string
-		nilReg         bool
-		stepTemplateOf StepTemplateOf
-		formOf         FormOf
-		wantErr        bool
+		name    string
+		nilReg  bool
+		formOf  FormOf
+		wantErr bool
 	}{
-		{name: "nil registry", nilReg: true, stepTemplateOf: artifacts.stepTemplate, formOf: artifacts.form, wantErr: true},
-		{name: "no step template lookup", formOf: artifacts.form, wantErr: true},
-		{name: "no form lookup", stepTemplateOf: artifacts.stepTemplate, wantErr: true},
-		{name: "valid", stepTemplateOf: artifacts.stepTemplate, formOf: artifacts.form},
+		{name: "nil registry", nilReg: true, formOf: forms.form, wantErr: true},
+		{name: "no form lookup", wantErr: true},
+		{name: "valid", formOf: forms.form},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -26,7 +24,7 @@ func TestRegister(t *testing.T) {
 			if !tt.nilReg {
 				reg = extensions.NewRegistry()
 			}
-			if err := Register(reg, tt.stepTemplateOf, tt.formOf); (err != nil) != tt.wantErr {
+			if err := Register(reg, tt.formOf); (err != nil) != tt.wantErr {
 				t.Fatalf("Register() err = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -34,12 +32,12 @@ func TestRegister(t *testing.T) {
 }
 
 func TestRegister_Duplicate(t *testing.T) {
-	artifacts := fakeArtifacts{}
+	forms := fakeForms{}
 	reg := extensions.NewRegistry()
-	if err := Register(reg, artifacts.stepTemplate, artifacts.form); err != nil {
+	if err := Register(reg, forms.form); err != nil {
 		t.Fatalf("first Register: %v", err)
 	}
-	if err := Register(reg, artifacts.stepTemplate, artifacts.form); err == nil {
+	if err := Register(reg, forms.form); err == nil {
 		t.Fatalf("second Register of %q: want error, got nil", ExtPayloadSchema)
 	}
 }

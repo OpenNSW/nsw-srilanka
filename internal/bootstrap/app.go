@@ -13,7 +13,6 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
-	"github.com/OpenNSW/core/artifact/adapter/types"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
@@ -779,13 +778,6 @@ func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
 	}
 }
 
-// stepTemplate looks up a step template in the artifact registry.
-func stepTemplate(reg *artifact.Registry) payloadschema.StepTemplateOf {
-	return func(ctx context.Context, stepTemplateID string) (types.StepTemplate, error) {
-		return steptemplate.Load(ctx, reg, stepTemplateID)
-	}
-}
-
 // stepCanAct decides whether a caller may act on a task's active step, by the
 // authz rules on its step template in the artifact registry. A task with no
 // active step template has nothing to act on.
@@ -944,7 +936,7 @@ func initTask(
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
-	if err := payloadschema.Register(extensionsRegistry, stepTemplate(artifactRegistry), registryTemplateProvider{reg: artifactRegistry}.GetTemplate); err != nil {
+	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{reg: artifactRegistry}.GetTemplate); err != nil {
 		return nil, nil, fmt.Errorf("register payload schema extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
