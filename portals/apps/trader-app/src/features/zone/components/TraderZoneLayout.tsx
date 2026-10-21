@@ -17,17 +17,20 @@ type Props = {
 
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
   return (
-    <div className={`${zoneWidthClass(task)} mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8`}>
+    <div className="px-4 md:px-6 py-10 space-y-8">
       <Header task={task} />
-      {task.alert !== undefined && <AlertBanner alert={task.alert} />}
-      {task.view.map((component) => (
-        <Zone
-          key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
-          component={component}
-          onAction={onSubmitForm}
-        />
-      ))}
-      {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
+      {/* Left-aligned under the title, at the width its form reads best. */}
+      <div className={`${zoneWidthClass(task)} space-y-8`}>
+        {task.alert !== undefined && <AlertBanner alert={task.alert} />}
+        {task.view.map((component) => (
+          <Zone
+            key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
+            component={component}
+            onAction={onSubmitForm}
+          />
+        ))}
+        {task.audit && task.audit.length > 0 && <AuditLog entries={task.audit} />}
+      </div>
     </div>
   )
 }
