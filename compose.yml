@@ -150,7 +150,9 @@ services:
     networks:
       - nsw-network
     ports:
-      - "${IDP_PORT:-8090}:${IDP_PORT:-8090}"
+      # Loopback only: the IdP serves plain HTTP (server.http_only in
+      # idp/deployment.yaml). Containers reach it over nsw-network.
+      - "127.0.0.1:${IDP_PORT:-8090}:${IDP_PORT:-8090}"
     env_file:
       - ./idp/.env
     volumes:
