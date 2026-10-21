@@ -135,7 +135,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	paymentRepo := payment.NewPaymentRepository(db)
 	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
-		"govpay": govpay.NewGovPayGatewayFactory(govpay.NewRepositoryIdentityResolver(paymentRepo)),
+		govpay.MethodID: govpay.NewGovPayGateway,
 	})
 	if err != nil {
 		_ = database.Close(db)

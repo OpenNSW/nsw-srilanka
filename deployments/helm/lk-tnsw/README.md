@@ -179,6 +179,13 @@ reference; an inline PEM is refused. Without it the backend starts but answers
 every GovPay+ call with 500; a key that is set but unreadable stops the backend
 at startup.
 
+The govpay entry also maps every payee a fee is charged to (`org_id` and
+`service_id` in the PAYMENT step) to that environment's GovPay+
+sub-institution and service ids, under `payees` (shape in
+[`configs/payment_methods.example.json`](../../../configs/payment_methods.example.json)).
+A mapping missing either id stops the backend at startup; a fee whose payee is
+not mapped fails its PAYMENT step.
+
 `backend.env` exposes each `nsw-secrets` key to the server as an env var, and
 `backend.config` references it by placeholder (see below). See
 [`configs/config.example.yaml`](../../../configs/config.example.yaml) for

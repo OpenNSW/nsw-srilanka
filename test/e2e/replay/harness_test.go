@@ -35,6 +35,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/OpenNSW/core/payment"
+
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
 
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
@@ -128,7 +130,13 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("gateway: connect db: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close(gwDB) })
-	gateway := newMockGateway(t, gwDB, payments, paymentKeys)
+	// The mock reads the gateway's ids for a payment's payee from the same
+	// payment methods config the app loads; it builds no gateways of its own.
+	gwPayees, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, nil)
+	if err != nil {
+		t.Fatalf("gateway: load payment methods: %v", err)
+	}
+	gateway := newMockGateway(t, gwDB, payments, paymentKeys, gwPayees)
 
 	// Seed one user record per member actor so each gets their own company identity.
 	memberUserIDs := make(map[string]string, len(members))

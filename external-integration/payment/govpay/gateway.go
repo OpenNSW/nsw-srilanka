@@ -7,7 +7,6 @@ package govpay
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	corepayment "github.com/OpenNSW/core/payment"
 )
@@ -20,70 +19,47 @@ type GovPayGateway struct {
 	// It is nil when no key is configured; the callback paths then fail with
 	// ErrEncryptionNotConfigured, which names the cause instead of panicking.
 	decryptor *Decryptor
-	// resolveIdentity recovers the expected GovPay+ identity for a reference
-	// number. Optional: when nil the update (webhook) callback is accepted
-	// without an identity check, which is how the gateway behaves in tests and
-	// for any deployment that has not wired a resolver.
-	resolveIdentity IdentityResolver
 }
 
 // NewGovPayGateway satisfies corepayment.Factory: it constructs a fully
 // configured GovPayGateway from its raw config.
-//
-// A gateway built this way cannot check the identity on the update (webhook)
-// callback, because that callback carries no transaction to compare against.
-// Use NewGovPayGatewayFactory to supply a resolver.
 func NewGovPayGateway(cfg json.RawMessage) (corepayment.PaymentGateway, error) {
-	return NewGovPayGatewayFactory(nil)(cfg)
-}
-
-// NewGovPayGatewayFactory returns a corepayment.Factory that builds gateways
-// wired to resolve, by reference number, the GovPay+ identity a fee was
-// registered under. Pass nil to disable the check on the update callback.
-func NewGovPayGatewayFactory(resolveIdentity IdentityResolver) corepayment.Factory {
-	return func(cfg json.RawMessage) (corepayment.PaymentGateway, error) {
-		var config Config
-		if err := json.Unmarshal(cfg, &config); err != nil {
-			return nil, err
-		}
-
-		// A key that is configured but unreadable is a hard failure: starting
-		// up and failing every call later would be strictly worse than
-		// refusing to build the gateway now.
-		decryptor, err := loadDecryptor(config.PrivateKey)
-		if err != nil {
-			return nil, err
-		}
-
-		return &GovPayGateway{
-			cfg:             config,
-			decryptor:       decryptor,
-			resolveIdentity: resolveIdentity,
-		}, nil
+	var config Config
+	if err := json.Unmarshal(cfg, &config); err != nil {
+		return nil, err
 	}
+
+	// A key that is configured but unreadable is a hard failure: starting
+	// up and failing every call later would be strictly worse than
+	// refusing to build the gateway now.
+	decryptor, err := loadDecryptor(config.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GovPayGateway{
+		cfg:       config,
+		decryptor: decryptor,
+	}, nil
 }
 
 func (g *GovPayGateway) GetFlowType() corepayment.InteractionType {
 	return corepayment.FlowTypeInstruction
 }
 
-// ValidateMetadata rejects a fee that did not declare the GovPay+ identity it
-// is registered under.
+// ValidatePayeeMapping rejects a payee mapping that does not declare the
+// GovPay+ identity the payee's fees are registered under.
 //
-// Both callbacks check the posted sub-institution and service ids against what
-// the fee declared, so a fee missing either could never be settled — it would
-// fail at presentment, by which time the artifact responsible is out of reach.
-// Enforcing it here means the misconfiguration surfaces the first time the fee
-// is charged, before any reference number or transaction row exists.
+// Both callbacks check the posted sub-institution and service ids against the
+// mapping, so a payee missing either could never be settled. core/payment calls
+// this for every mapping when it starts, so the misconfiguration stops startup
+// instead of surfacing at presentment.
 //
 // Whether the declared ids are the *right* ones is a separate question,
 // answered on the callback paths against the values GovPay+ actually posts.
-func (g *GovPayGateway) ValidateMetadata(metadata map[string]string) error {
-	if identityFromMetadata(metadata).complete() {
-		return nil
-	}
-	return fmt.Errorf("%w: gateway_metadata must declare %s and %s",
-		ErrIdentityNotConfigured, MetadataSubInstID, MetadataServiceID)
+func (g *GovPayGateway) ValidatePayeeMapping(mapping json.RawMessage) error {
+	_, err := parseIdentity(mapping)
+	return err
 }
 
 func (g *GovPayGateway) CreateSession(ctx context.Context, req corepayment.SessionRequest) (*corepayment.SessionResponse, error) {

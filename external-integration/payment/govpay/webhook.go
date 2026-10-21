@@ -19,7 +19,7 @@ import (
 // verify them before marking the transaction paid; the acknowledgement echoes
 // the request's protocol fields and submitted data[] and is independent of the
 // settlement outcome.
-func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers map[string][]string) (*corepayment.WebhookPayload, *corepayment.WebhookResponse, error) {
+func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers map[string][]string, payees corepayment.PayeeLookup) (*corepayment.WebhookPayload, *corepayment.WebhookResponse, error) {
 	req, aesKey, err := g.decryptRequest(ctx, body)
 	if err != nil {
 		return nil, nil, err
@@ -35,7 +35,7 @@ func (g *GovPayGateway) ParseWebhook(ctx context.Context, body []byte, headers m
 	// Confirm the notification is for the service this reference was registered
 	// under before anything is derived from it. Rejecting here means a receipt
 	// issued against a different GovPay+ service cannot settle this transaction.
-	if err := g.verifyWebhookIdentity(ctx, refNo, req); err != nil {
+	if err := g.verifyWebhookIdentity(ctx, refNo, req, payees); err != nil {
 		return nil, nil, err
 	}
 

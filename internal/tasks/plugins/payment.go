@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,21 +30,14 @@ func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
 }
 
 type paymentConfig struct {
-	TaskCode    string          `json:"task_code"`
-	ServiceName string          `json:"service_name"`
-	Amount      decimal.Decimal `json:"amount"`
-	Currency    string          `json:"currency"`
-
-	// Per-fee values the selected gateway needs, passed through opaquely and
-	// stored on the transaction so the gateway can recover them at callback
-	// time — by then the artifact that declared them is out of reach.
-	//
-	// This plugin attaches no meaning to the keys; each gateway defines its
-	// own, and each gateway enforces its own requirements via
-	// corepayment.PaymentGateway.ValidateMetadata — which the payment service
-	// calls before it persists anything, so a fee that omitted a required key
-	// fails on this Execute rather than at callback time.
-	GatewayMetadata map[string]string `json:"gateway_metadata"`
+	// OrgID and ServiceID name the payee the fee is paid to. Each payment
+	// method maps a payee to its own account ids under "payees" in
+	// payment_methods.json, so a fee never carries a gateway's ids, and only
+	// the methods that map the payee can collect it.
+	OrgID     string          `json:"org_id"`
+	ServiceID string          `json:"service_id"`
+	Amount    decimal.Decimal `json:"amount"`
+	Currency  string          `json:"currency"`
 
 	// Reference names the refid format of the fee's payment reference, the
 	// reference the payer pays against. A fee without one takes the default
@@ -63,40 +57,31 @@ type paymentReferenceConfig struct {
 	Values map[string]string `json:"values,omitempty"`
 }
 
-// reservedMetadataKeys are written by this plugin and may not be overridden by
-// an artifact's gateway_metadata, which would otherwise let a fee rewrite the
-// task it belongs to.
-var reservedMetadataKeys = map[string]struct{}{
-	"task_id":   {},
-	"task_code": {},
-	"method_id": {},
-}
-
-// isReservedMetadataKey reports whether key is one this plugin writes: its own
-// bookkeeping, or the fee's reference format.
-func isReservedMetadataKey(key string) bool {
-	_, reserved := reservedMetadataKeys[key]
-	return reserved || nswpayment.IsReferenceMetadataKey(key)
-}
-
 func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg paymentConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
 		return fmt.Errorf("payment: failed to parse generic_payment config: %w", err)
 	}
 
+	payee := payment.Payee{OrgID: strings.TrimSpace(cfg.OrgID), ServiceID: strings.TrimSpace(cfg.ServiceID)}
+	if payee.OrgID == "" || payee.ServiceID == "" {
+		return errors.New("payment: plugin_properties.org_id and plugin_properties.service_id are required")
+	}
 	if cfg.Currency == "" {
 		return fmt.Errorf("payment: plugin_properties.currency is required")
 	}
 
-	// 1. Determine selected payment gateway
-	selectedMethod, _ := ctx.Inputs["selected_method"].(string)
-	if selectedMethod == "" {
-		// Fallback for a fee whose form does not offer a choice. It has to name a
-		// method the registry actually carries, or checkout fails on a method that
-		// does not exist; kept as a literal so this package stays unaware of any
-		// particular gateway's package.
-		selectedMethod = "govpay"
+	// 1. Determine the payment method: the one the payer selected, which must
+	// be able to pay this payee, or, when the step offers no choice, the only
+	// method that can.
+	methods, err := p.paymentService.ListAvailableMethods(ctx.Context, payee)
+	if err != nil {
+		return fmt.Errorf("payment (%s): list payment methods: %w", payee, err)
+	}
+	requested, _ := ctx.Inputs["selected_method"].(string)
+	selectedMethod, err := selectPaymentMethod(strings.TrimSpace(requested), methods)
+	if err != nil {
+		return fmt.Errorf("payment (%s): %w", payee, err)
 	}
 
 	// 2. Resolve the amount to charge. If a workflow input is available, it takes
@@ -105,29 +90,27 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// make sure the payment amount is acceptable.
 	amount, err := resolvePaymentAmount(ctx.Inputs["amount"], cfg.Amount)
 	if err != nil {
-		return fmt.Errorf("payment: %w (task_code %q)", err, cfg.TaskCode)
+		return fmt.Errorf("payment (%s): %w", payee, err)
 	}
 	currency := cfg.Currency
 
 	referenceMetadata, err := paymentReferenceMetadata(ctx.Inputs, cfg.Reference)
 	if err != nil {
-		return fmt.Errorf("payment: reference (task_code %q): %w", cfg.TaskCode, err)
+		return fmt.Errorf("payment (%s): reference: %w", payee, err)
 	}
 
 	// 3. Transition task state to PENDING_PAYMENT
 	ctx.Record.State = "PENDING_PAYMENT"
 
 	slog.Info("task payment: initiating checkout session",
-		"taskId", ctx.Record.TaskID, "taskCode", cfg.TaskCode, "amount", amount, "method", selectedMethod)
+		"taskId", ctx.Record.TaskID, "payee", payee.String(), "amount", amount, "method", selectedMethod)
 
 	// 4. Create the checkout session via core/payment. The selected gateway is
 	// passed as GatewayID; the service takes the reference from
 	// nswpayment.RefGenerator, in the fee's format, and (for instruction-flow
-	// gateways) returns the instructions to display. An unknown
-	// gateway surfaces here as an error, as does a fee whose gateway_metadata
-	// omits something the selected gateway requires — the service asks the
-	// gateway to vet the metadata before it persists anything, so the task_code
-	// wrapped in below still names the artifact that has to be fixed.
+	// gateways) returns the instructions to display. A method that does not
+	// map the payee surfaces here as payment.ErrPayeeNotMapped, before anything
+	// is persisted, naming the payee to add to payment_methods.json.
 	// The settlement completes exactly this step: the payment service hands the
 	// token back to the task manager when the webhook arrives.
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
@@ -136,14 +119,15 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	}
 	resp, err := p.paymentService.CreateCheckoutSession(ctx.Context, payment.CreateCheckoutRequest{
 		GatewayID:     selectedMethod,
+		Payee:         payee,
 		Amount:        amount,
 		Currency:      currency,
 		ExpiresAt:     time.Now().Add(24 * time.Hour), // Aligned with typical TTL
-		Metadata:      buildPaymentMetadata(ctx.Record.TaskID, cfg, selectedMethod, referenceMetadata),
+		Metadata:      buildPaymentMetadata(ctx.Record.TaskID, selectedMethod, referenceMetadata),
 		CallbackToken: callbackToken,
 	})
 	if err != nil {
-		return fmt.Errorf("payment: failed to create checkout session (task_code %q): %w", cfg.TaskCode, err)
+		return fmt.Errorf("payment (%s): failed to create checkout session: %w", payee, err)
 	}
 
 	slog.Info("task payment: checkout session registered",
@@ -155,11 +139,6 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			ctx.Record.Data = make(map[string]any)
 		}
 
-		serviceName := cfg.ServiceName
-		if serviceName == "" {
-			serviceName = "Payment"
-		}
-
 		pData := map[string]any{
 			"session_id":       resp.SessionID,
 			"reference_number": resp.ReferenceNumber,
@@ -169,8 +148,8 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 			"checkout_url":     resp.CheckoutURL,
 			"instructions":     resp.Instructions,
 			"flow_type":        string(resp.Type),
-			"service_name":     serviceName,
-			"service_type":     cfg.TaskCode,
+			"org_id":           payee.OrgID,
+			"service_id":       payee.ServiceID,
 		}
 
 		ctx.Record.Data[ctx.OutputNamespace] = pData
@@ -180,38 +159,41 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	return ErrSuspended
 }
 
-// buildPaymentMetadata assembles the gateway metadata persisted with the
-// transaction: this plugin's own bookkeeping, the fee's reference format
-// (referenceMetadata, from paymentReferenceMetadata), plus whatever the
-// artifact declared for the gateway, passed through untouched apart from
-// trimming.
-//
-// The artifact's values are applied first so the reserved keys below always
-// win; a fee cannot rewrite the task it belongs to.
-func buildPaymentMetadata(taskID string, cfg paymentConfig, selectedMethod string, referenceMetadata map[string]string) map[string]string {
-	metadata := make(map[string]string, len(cfg.GatewayMetadata)+len(reservedMetadataKeys))
-
-	for key, value := range cfg.GatewayMetadata {
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if key == "" || value == "" {
-			continue
-		}
-		if isReservedMetadataKey(key) {
-			slog.Warn("task payment: ignoring reserved gateway_metadata key",
-				"taskId", taskID, "taskCode", cfg.TaskCode, "key", key)
-			continue
-		}
-		metadata[key] = value
-	}
-
-	metadata["task_id"] = taskID
-	metadata["task_code"] = cfg.TaskCode
-	metadata["method_id"] = selectedMethod
+// buildPaymentMetadata assembles the metadata persisted with the transaction:
+// the task it pays for and the method it was opened with, for correlation, and
+// the fee's reference format (referenceMetadata, from paymentReferenceMetadata),
+// which nswpayment.RefGenerator reads.
+func buildPaymentMetadata(taskID, selectedMethod string, referenceMetadata map[string]string) map[string]string {
+	metadata := make(map[string]string, len(referenceMetadata)+2)
 	for key, value := range referenceMetadata {
 		metadata[key] = value
 	}
+	metadata["task_id"] = taskID
+	metadata["method_id"] = selectedMethod
 	return metadata
+}
+
+// selectPaymentMethod picks the method to pay with from those that can pay the
+// payee: the selected one, which must be among them, or, when none is
+// selected, the only one there is.
+func selectPaymentMethod(selected string, methods []payment.GatewayInfo) (string, error) {
+	ids := make([]string, 0, len(methods))
+	for _, m := range methods {
+		ids = append(ids, m.ID)
+	}
+	if len(ids) == 0 {
+		return "", errors.New("no payment method can pay this payee; map it under payees in payment_methods.json")
+	}
+	if selected != "" {
+		if !slices.Contains(ids, selected) {
+			return "", fmt.Errorf("payment method %q cannot pay this payee (available: %s)", selected, strings.Join(ids, ", "))
+		}
+		return selected, nil
+	}
+	if len(ids) > 1 {
+		return "", fmt.Errorf(`input "selected_method" is required: available methods are %s`, strings.Join(ids, ", "))
+	}
+	return ids[0], nil
 }
 
 // paymentReferenceMetadata resolves a fee's reference format into the checkout
