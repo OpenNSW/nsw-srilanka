@@ -553,12 +553,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	closeFn := func() error {
 		var closeErrs []error
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := tel.Shutdown(shutdownCtx); err != nil {
-			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down telemetry: %w", err))
-		}
-		cancel()
-
 		if auditClient != nil && auditClient.IsEnabled() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			if err := auditClient.Close(shutdownCtx); err != nil {
@@ -580,6 +574,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		if err := database.Close(db); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to close database: %w", err))
 		}
+
+		// Last, so logs emitted while the rest of the process shuts down are
+		// still exported.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down telemetry: %w", err))
+		}
+		cancel()
 
 		return errors.Join(closeErrs...)
 	}

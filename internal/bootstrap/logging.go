@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -29,7 +30,11 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 	handlers := []slog.Handler{logging.NewHandler(slog.NewTextHandler(dest, opts))}
 	for _, h := range extras {
 		if h != nil {
-			handlers = append(handlers, h)
+			// otelslog reports every level as enabled. Without this filter,
+			// MultiHandler.Enabled is true for DEBUG even when logLevel is
+			// INFO, so those records are exported and debug-gated payload
+			// logging turns on.
+			handlers = append(handlers, &levelFilter{min: cfg.Server.LogLevel, next: h})
 		}
 	}
 	var logHandler slog.Handler
@@ -40,4 +45,30 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 	}
 	slog.SetDefault(slog.New(logHandler))
 	httputil.CorrelationIDFunc = trace.GetTraceID
+}
+
+// levelFilter drops records below min before they reach next. Enabled must
+// agree with Handle so slog skips building a record the handler will ignore.
+type levelFilter struct {
+	min  slog.Level
+	next slog.Handler
+}
+
+func (h *levelFilter) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.min && h.next.Enabled(ctx, level)
+}
+
+func (h *levelFilter) Handle(ctx context.Context, r slog.Record) error {
+	if r.Level < h.min {
+		return nil
+	}
+	return h.next.Handle(ctx, r)
+}
+
+func (h *levelFilter) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &levelFilter{min: h.min, next: h.next.WithAttrs(attrs)}
+}
+
+func (h *levelFilter) WithGroup(name string) slog.Handler {
+	return &levelFilter{min: h.min, next: h.next.WithGroup(name)}
 }

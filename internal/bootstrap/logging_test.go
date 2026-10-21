@@ -2,7 +2,9 @@ package bootstrap
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -69,5 +71,39 @@ func TestConfigureLoggingAddSourceTiedToDebugLevel(t *testing.T) {
 	slog.Info("test message")
 	if strings.Contains(infoOutput.String(), "source=") {
 		t.Errorf("expected no source location in log output at info level, got: %s", infoOutput.String())
+	}
+}
+
+// alwaysEnabled records every Handle. It reports every level as enabled, the
+// same way otelslog does, so a missing level filter would accept DEBUG.
+type alwaysEnabled struct {
+	levels []slog.Level
+}
+
+func (h *alwaysEnabled) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *alwaysEnabled) Handle(_ context.Context, r slog.Record) error {
+	h.levels = append(h.levels, r.Level)
+	return nil
+}
+
+func (h *alwaysEnabled) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *alwaysEnabled) WithGroup(string) slog.Handler { return h }
+
+func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
+	prevDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prevDefault) })
+
+	extra := &alwaysEnabled{}
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, io.Discard, extra)
+
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		t.Fatal("debug enabled at info log level")
+	}
+	slog.Debug("hidden")
+	slog.Info("shown")
+	if len(extra.levels) != 1 || extra.levels[0] != slog.LevelInfo {
+		t.Fatalf("extra handler levels = %v, want [INFO]", extra.levels)
 	}
 }
