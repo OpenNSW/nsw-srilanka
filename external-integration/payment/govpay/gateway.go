@@ -7,7 +7,6 @@ package govpay
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	corepayment "github.com/OpenNSW/core/payment"
 )
@@ -59,15 +58,8 @@ func (g *GovPayGateway) GetFlowType() corepayment.InteractionType {
 // Whether the declared ids are the *right* ones is a separate question,
 // answered on the callback paths against the values GovPay+ actually posts.
 func (g *GovPayGateway) ValidatePayeeMapping(mapping json.RawMessage) error {
-	identity, err := identityFromMapping(mapping)
-	if err != nil {
-		return err
-	}
-	if identity.complete() {
-		return nil
-	}
-	return fmt.Errorf("%w: a govpay payee mapping must declare subinst_id and service_id",
-		ErrIdentityNotConfigured)
+	_, err := parseIdentity(mapping)
+	return err
 }
 
 func (g *GovPayGateway) CreateSession(ctx context.Context, req corepayment.SessionRequest) (*corepayment.SessionResponse, error) {
