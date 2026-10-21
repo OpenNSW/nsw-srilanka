@@ -3,7 +3,7 @@
 // The IdP side (resource server, CDA Officer role, this client) is idp/bootstrap/20-agency-cda.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8083',
-  IDP_BASE_URL: 'https://localhost:8090',
+  IDP_BASE_URL: 'http://localhost:8090',
   IDP_CLIENT_ID: 'OGA_PORTAL_APP_CDA',
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.cda.nsw-agency.local',
   APP_URL: 'http://localhost:5176',

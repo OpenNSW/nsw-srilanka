@@ -7,6 +7,8 @@ server:
   hostname: {{.HOSTNAME}}
   public_url: {{.PUBLIC_URL}}
   port: {{.PORT}}
+  # Plain HTTP for local dev, so no client needs to trust the self-signed cert.
+  http_only: true
   security:
     # Gates the Direct API endpoints, which we do not use. setup.sh generates the
     # value; an empty secret blocks those endpoints rather than failing boot.

@@ -3,7 +3,7 @@
 // The IdP side (resource server, NPQS Officer role, this client) is idp/bootstrap/20-agency-npqs.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8081',
-  IDP_BASE_URL: 'https://localhost:8090',
+  IDP_BASE_URL: 'http://localhost:8090',
   IDP_CLIENT_ID: 'OGA_PORTAL_APP_NPQS',
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.npqs.nsw-agency.local',
   APP_URL: 'http://localhost:5174',

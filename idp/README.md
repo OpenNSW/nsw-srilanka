@@ -41,7 +41,8 @@ A full `docker compose up` runs three IdP services in order:
    secrets, and the Direct Auth Secret), then runs the in-process bootstrap over the
    declarative documents in `/opt/thunderid/bootstrap/` — the image's own defaults
    plus every document in [`bootstrap/`](bootstrap/) — and exits.
-3. **`thunderid`** — the long-running server (listens on `https://localhost:8090`).
+3. **`thunderid`** — the long-running server (listens on `http://localhost:8090`:
+   plain HTTP, set by `server.http_only` in [`deployment.yaml`](deployment.yaml)).
 
 Everything the platform needs locally (OUs, user types, resource servers, roles,
 groups, portals, M2M clients, sample users) exists once `thunderid-setup` finishes.
@@ -60,7 +61,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    ```bash
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=your-secure-password
-   PUBLIC_URL=https://localhost:8090
+   PUBLIC_URL=http://localhost:8090
    PORT=8090
    ```
 
@@ -86,7 +87,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
 
 ### Developer Console Access
 
-Once running, open the developer console at `https://localhost:8090/console`:
+Once running, open the developer console at `http://localhost:8090/console`:
 
 - **Credentials**: the `ADMIN_USERNAME` / `ADMIN_PASSWORD` values from your `.env`
   (`idp/.env.example` ships `admin` / `1234` for local dev)
@@ -193,11 +194,11 @@ The management API, the console's API, and `POST /import` need a `system`-scoped
 token. Locally, mint one from `admin-cli`:
 
 ```bash
-TOKEN=$(curl -k -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
+TOKEN=$(curl -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials" -d "scope=system" \
-  -d "resource=https://localhost:8090/mcp" \
-  https://localhost:8090/oauth2/token | jq -r .access_token)
+  -d "resource=http://localhost:8090/mcp" \
+  http://localhost:8090/oauth2/token | jq -r .access_token)
 ```
 
 The `resource` parameter is **required** here: `system` is a permission scope, so the
@@ -361,7 +362,7 @@ So every permission-bearing caller sends `resource`:
 | `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency            | `https://api.nsw-srilanka.local`    |
 | `NSW_TO_*` M2M               | AGENCY_API       | `endpoint_params` in `configs/services*.json`       | `https://api.nsw-agency.local`      |
 | `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                             | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | _Management token_ above                            | `https://localhost:8090/mcp`        |
+| `admin-cli` management token | System RS        | _Management token_ above                            | `http://localhost:8090/mcp`         |
 | `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the
@@ -375,7 +376,7 @@ passes to `clientcredentials.Config.EndpointParams`. Both take the same query-st
 as the SPA variable, so one syntax covers every caller:
 
 ```json
-"token_url": "https://thunderid:8090/oauth2/token",
+"token_url": "http://thunderid:8090/oauth2/token",
 "endpoint_params": { "resource": "https://api.nsw-agency.local" }
 ```
 

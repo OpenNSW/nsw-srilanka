@@ -160,7 +160,7 @@ services:
       - thunderid-secrets:/opt/thunderid/config/secrets:ro
       - ./idp/deployment.yaml:/opt/thunderid/deployment.yaml
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsk -o /dev/null https://localhost:8090/health/readiness || exit 1"]
+      test: ["CMD-SHELL", "curl -fs -o /dev/null http://localhost:8090/health/readiness || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 30

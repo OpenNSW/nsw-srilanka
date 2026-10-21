@@ -71,8 +71,8 @@ storage:
   # A test key: 32 bytes of 0x07.
   tokenKeyset: "test:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
 authn:
-  jwksURL: https://localhost:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://localhost:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.nsw-srilanka.local
 temporal:
   host: localhost

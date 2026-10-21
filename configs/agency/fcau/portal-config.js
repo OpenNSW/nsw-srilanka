@@ -3,7 +3,7 @@
 // The IdP side (resource server, FCAU Officer role, this client) is idp/bootstrap/20-agency-fcau.yaml.
 window.__APP_CONFIG__ = {
   API_BASE_URL: 'http://localhost:8082',
-  IDP_BASE_URL: 'https://localhost:8090',
+  IDP_BASE_URL: 'http://localhost:8090',
   IDP_CLIENT_ID: 'OGA_PORTAL_APP_FCAU',
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.fcau.nsw-agency.local',
   APP_URL: 'http://localhost:5175',
