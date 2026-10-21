@@ -104,6 +104,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	case cdn.EventCDNAmended:
 		h.handleCDNAmendment(w, r, body)
 
+	case cdn.EventCDNCancelled:
+		h.handleCDNCancellation(w, r, body)
+
 	default:
 		slog.WarnContext(r.Context(), "slce: unknown or unsupported event type", "event", eventType)
 		httputil.Error(w, r, http.StatusBadRequest, errUnknownEventType)
@@ -341,6 +344,38 @@ func (h *Handler) handleCDNAmendment(w http.ResponseWriter, r *http.Request, bod
 		default:
 			httputil.InternalServerError(w, r, "slce: failed to process CDN amendment", err, "cdn_ref", ref)
 		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleCDNCancellation ends the cancelled dispatch note's branch (§7.7). A
+// repeat delivery is answered like the first.
+func (h *Handler) handleCDNCancellation(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req cdn.CDNCancelledRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		slog.WarnContext(r.Context(), "slce: failed to decode CDN cancellation payload", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		slog.WarnContext(r.Context(), "slce: CDN cancellation validation failed", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+
+	if err := h.cdnService.ProcessCancellation(r.Context(), req); err != nil {
+		ref := req.Payload.CDNRef
+		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByCDNRef) {
+			// As for the acknowledgment: the integration result that records the
+			// reference may still be in flight, so SLC Edge is asked to retry.
+			slog.WarnContext(r.Context(), "slce: dispatch note not found for cancellation (may be transient)",
+				"cdn_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errDispatchNoteNotFoundRetry)
+			return
+		}
+		httputil.InternalServerError(w, r, "slce: failed to process CDN cancellation", err, "cdn_ref", ref)
 		return
 	}
 

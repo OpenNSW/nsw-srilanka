@@ -53,6 +53,20 @@ func (s *cdnWebhookService) resumeAcknowledgmentWait(ctx context.Context, note *
 	}, alreadyAcknowledged)
 }
 
+// resumeCancelledWait releases the acknowledgment wait as cancelled once §7.7
+// arrives: no acknowledgment will follow, so the branch finishes with the note
+// marked cancelled.
+func (s *cdnWebhookService) resumeCancelledWait(ctx context.Context, note *DispatchNote, alreadyCancelled bool) error {
+	return s.resumeWait(ctx, waitLookup{
+		note:       note,
+		templateID: acknowledgmentWaitTemplateID,
+		payload: map[string]any{
+			"__command":  "submit",
+			"ack_status": string(DispatchNoteStatusCancelled),
+		},
+	}, alreadyCancelled)
+}
+
 type waitLookup struct {
 	note       *DispatchNote
 	templateID string

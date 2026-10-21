@@ -56,6 +56,11 @@ func (m *mockCDNService) ProcessAmendment(ctx context.Context, req cdn.CDNAmende
 	return args.Error(0)
 }
 
+func (m *mockCDNService) ProcessCancellation(ctx context.Context, req cdn.CDNCancelledRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
 // Tests CusDec integration result success (v1.2 §6.2).
 func TestSLCEHandler_CusdecIntegrationResultSuccess(t *testing.T) {
 	cusdecSvc := new(mockCusdecService)
@@ -665,6 +670,54 @@ func TestSLCEHandler_CDNAmendedResponses(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cdnSvc := new(mockCDNService)
 			cdnSvc.On("ProcessAmendment", mock.Anything, mock.Anything).Return(tc.err)
+			rec := httptest.NewRecorder()
+
+			NewHandler(new(mockCusdecService), cdnSvc).HandleWebhook(rec,
+				httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tc.body)))
+
+			assert.Equal(t, tc.want, rec.Code)
+		})
+	}
+}
+
+const cdnCancelledPayload = `{
+	"eventType": "CDN_CANCELLED",
+	"processedAt": "2026-04-27T14:30:10Z",
+	"payload": {
+		"cdnRef": {"office": "CBEX1", "year": "2026", "serial": "C", "number": 28237}
+	}
+}`
+
+// A §7.7 CDN Cancelled notification reaches the CDN service with its reference,
+// and is answered 200.
+func TestSLCEHandler_CDNCancelled(t *testing.T) {
+	cdnSvc := new(mockCDNService)
+	handler := NewHandler(new(mockCusdecService), cdnSvc)
+	cdnSvc.On("ProcessCancellation", mock.Anything, mock.MatchedBy(func(req cdn.CDNCancelledRequest) bool {
+		return req.Payload.CDNRef == cdn.DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28237}
+	})).Return(nil)
+
+	rec := httptest.NewRecorder()
+	handler.HandleWebhook(rec, httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(cdnCancelledPayload)))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	cdnSvc.AssertExpectations(t)
+}
+
+func TestSLCEHandler_CDNCancelledResponses(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body string
+		err  error
+		want int
+	}{
+		"no reference":                 {body: strings.Replace(cdnCancelledPayload, `"cdnRef":`, `"other":`, 1), want: http.StatusBadRequest},
+		"no processing time":           {body: strings.Replace(cdnCancelledPayload, `"processedAt": "2026-04-27T14:30:10Z",`, ``, 1), want: http.StatusBadRequest},
+		"reference not registered yet": {body: cdnCancelledPayload, err: cdn.ErrDispatchNoteNotFoundByCDNRef, want: http.StatusServiceUnavailable},
+		"the wait could not be ended":  {body: cdnCancelledPayload, err: errors.New("boom"), want: http.StatusInternalServerError},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cdnSvc := new(mockCDNService)
+			cdnSvc.On("ProcessCancellation", mock.Anything, mock.Anything).Return(tc.err)
 			rec := httptest.NewRecorder()
 
 			NewHandler(new(mockCusdecService), cdnSvc).HandleWebhook(rec,

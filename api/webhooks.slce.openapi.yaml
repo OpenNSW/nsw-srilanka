@@ -12,7 +12,7 @@ paths:
     post:
       summary: Central SLCE Webhook Callback Handler
       description: |
-        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, CDN acknowledgments, and CDN amendments).
+        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, CDN acknowledgments, CDN amendments, and CDN cancellations).
       operationId: processSLCEWebhook
       security:
         - BearerAuth: []
@@ -29,6 +29,7 @@ paths:
                 - $ref: '#/components/schemas/CDNIntegrationResultRequest'
                 - $ref: '#/components/schemas/CDNAcknowledgmentRequest'
                 - $ref: '#/components/schemas/CDNAmendedRequest'
+                - $ref: '#/components/schemas/CDNCancelledRequest'
               discriminator:
                 propertyName: eventType
                 mapping:
@@ -39,6 +40,7 @@ paths:
                   CDN_INTEGRATED: '#/components/schemas/CDNIntegrationResultRequest'
                   CDN_ACKNOWLEDGED: '#/components/schemas/CDNAcknowledgmentRequest'
                   CDN_AMENDED: '#/components/schemas/CDNAmendedRequest'
+                  CDN_CANCELLED: '#/components/schemas/CDNCancelledRequest'
             examples:
               cusdecIntegrated:
                 summary: CUSDEC Integration Result — success (§6.2)
@@ -178,6 +180,17 @@ paths:
                           serial: "E"
                           number: 1047
                     operationTime: "2026-10-14T05:07:38Z"
+              cdnCancelled:
+                summary: CDN Cancelled (§7.7)
+                value:
+                  eventType: "CDN_CANCELLED"
+                  processedAt: "2026-04-27T14:30:10Z"
+                  payload:
+                    cdnRef:
+                      office: "CBEX1"
+                      year: "2026"
+                      serial: "C"
+                      number: 28237
       responses:
         '200':
           description: |
@@ -186,7 +199,8 @@ paths:
             types only) it repeats an event already applied to the declaration
             or dispatch note — acknowledged as a no-op rather than re-run. A
             repeated CDN_AMENDED names the flow its first delivery opened, which
-            is not opened again.
+            is not opened again. A repeated CDN_CANCELLED, or a CDN_ACKNOWLEDGED
+            for a cancelled dispatch note, is acknowledged without action.
         '202':
           description: |
             Accepted. CUSDEC_INTEGRATED only: this edgeId's integration result was
@@ -243,7 +257,7 @@ paths:
             TNSW records it as soon as SLC Edge accepts the submission, so the
             result arrived early. Or the declaration named by `cusDecRef`
             (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
-            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED) does not exist yet
+            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet
             — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
             callback for the same document. Transient: SLC Edge should retry.
           content:
@@ -717,3 +731,30 @@ components:
               type: string
               description: When the amendment was made in ASYCUDA World.
               example: "2026-10-14T05:07:38Z"
+
+    CDNCancelledRequest:
+      type: object
+      description: |
+        §7.7 CDN Cancelled. Ends the cancelled dispatch note's container branch:
+        its wait for the acknowledgment is released as cancelled, and the note
+        is left off the boat note. The consignment's other dispatch notes, and
+        its declaration, carry on.
+      required:
+        - eventType
+        - processedAt
+        - payload
+      properties:
+        eventType:
+          type: string
+          enum: [CDN_CANCELLED]
+        processedAt:
+          type: string
+          format: date-time
+          example: "2026-04-27T14:30:10Z"
+        payload:
+          type: object
+          required:
+            - cdnRef
+          properties:
+            cdnRef:
+              $ref: '#/components/schemas/DocumentReference'

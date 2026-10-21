@@ -27,6 +27,9 @@ const (
 	DispatchNoteStatusIntegrated   DispatchNoteStatus = "INTEGRATED"
 	DispatchNoteStatusFailed       DispatchNoteStatus = "FAILED"
 	DispatchNoteStatusAcknowledged DispatchNoteStatus = "ACKNOWLEDGED"
+	// DispatchNoteStatusCancelled is a note Customs cancelled (§7.7). It ends
+	// the note's lifecycle wherever it had reached.
+	DispatchNoteStatusCancelled DispatchNoteStatus = "CANCELLED"
 )
 
 // --------------------------------------------------------

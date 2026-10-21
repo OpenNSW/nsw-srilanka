@@ -14,6 +14,7 @@ type CDNWebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error
 	ProcessAcknowledgment(ctx context.Context, req CDNAcknowledgmentRequest) error
 	ProcessAmendment(ctx context.Context, req CDNAmendedRequest) error
+	ProcessCancellation(ctx context.Context, req CDNCancelledRequest) error
 }
 
 // TaskCompleter defines the task completion interface needed from the workflow
@@ -65,7 +66,8 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	// separately, so a delivery that lands while the task is not yet parked (or
 	// whose first delivery failed after the write) would otherwise leave the
 	// trader waiting on a note Customs has already answered.
-	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
+	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged ||
+		note.Status == DispatchNoteStatusCancelled {
 		slog.InfoContext(ctx, "dispatch note already recorded; releasing any task still parked on it",
 			"edge_id", req.Payload.EdgeID, "status", note.Status)
 		return s.resumeIntegrationWait(ctx, note, storedResult(req, note), true)
@@ -120,7 +122,8 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 // longer matches what was stored, or the acknowledgment could never correlate.
 func storedResult(req CDNIntegrationResultRequest, note *DispatchNote) CDNIntegrationResultRequest {
 	req.Payload.Integrated = note.Status == DispatchNoteStatusIntegrated ||
-		note.Status == DispatchNoteStatusAcknowledged
+		note.Status == DispatchNoteStatusAcknowledged ||
+		note.Status == DispatchNoteStatusCancelled
 	req.Payload.CDNRef = DocumentReference{
 		Office: note.CDNOffice,
 		Year:   note.CDNYear,
@@ -155,6 +158,13 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 	if note.Status == DispatchNoteStatusAcknowledged {
 		slog.InfoContext(ctx, "dispatch note already acknowledged; releasing any task still parked on it", "cdn_ref", ref)
 		return s.resumeAcknowledgmentWait(ctx, note, true)
+	}
+
+	// A cancelled note's branch has finished (§7.7): there is no wait left to
+	// release, and its status must stay cancelled.
+	if note.Status == DispatchNoteStatusCancelled {
+		slog.InfoContext(ctx, "acknowledgment for a cancelled dispatch note, acknowledging without action", "cdn_ref", ref)
+		return nil
 	}
 
 	if note.Status != DispatchNoteStatusIntegrated {
