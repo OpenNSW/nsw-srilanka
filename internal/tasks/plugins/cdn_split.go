@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 )
@@ -23,8 +24,12 @@ const maxContainersPerDeclaration = 200
 //
 // One CDN covers exactly one container — Annex B's container block is a single
 // object — so the number of dispatch notes a consignment needs is the
-// numberOfContainers the trader declared on the CusDec. Deriving the fan-out
-// here rather than asking for it again means the two can never disagree.
+// declaration's numberOfContainers. Customs can amend a declaration after the
+// trader submits it, so the count retrieved from ASYCUDA World just before the
+// split (latest_container_count) is used when there is one; the count the
+// trader declared is the fallback when the retrieve did not answer with one.
+// Deriving the fan-out here rather than asking for it again means the two can
+// never disagree.
 //
 // It is synchronous: it returns nil (not ErrSuspended) so the engine advances
 // immediately. Register it via trade.NewGenericExecutorPlugin.
@@ -68,13 +73,19 @@ func CDNSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error
 	return nil
 }
 
-// containerCount reads the declared container count from the task inputs. The
-// form declares it as a number and the value reaches this plugin as decoded
-// JSON, so it is a float64; int is accepted for a caller that builds the inputs
-// in Go rather than through a workflow.
+// containerCount reads the container count from the task inputs: the one
+// retrieved from ASYCUDA World (latest_container_count) when present, otherwise
+// the one the trader declared (container_count). Both reach this plugin as
+// decoded JSON, so they are float64; int is accepted for a caller that builds
+// the inputs in Go rather than through a workflow.
 func containerCount(inputs map[string]any) (int, error) {
-	raw, ok := inputs["container_count"]
-	if !ok {
+	raw, ok := inputs["latest_container_count"]
+	if ok && raw != nil {
+		if declared, found := inputs["container_count"]; found && fmt.Sprint(declared) != fmt.Sprint(raw) {
+			slog.Info("cdn_split_builder: using the retrieved container count over the declared one",
+				"retrieved", raw, "declared", declared)
+		}
+	} else if raw, ok = inputs["container_count"]; !ok {
 		return 0, fmt.Errorf("cdn_split_builder: container_count not found in inputs")
 	}
 

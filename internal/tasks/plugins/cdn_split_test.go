@@ -59,6 +59,36 @@ func TestCDNSplitBuilder_SingleContainerRaisesOneNote(t *testing.T) {
 	assert.Equal(t, "Container 1 of 1", payload["container_label"])
 }
 
+// The count retrieved from ASYCUDA World just before the split wins over the
+// declared one, so the branches follow an amendment.
+func TestCDNSplitBuilder_PrefersTheRetrievedCount(t *testing.T) {
+	ctx := splitCtx(map[string]any{
+		"container_count":        float64(3),
+		"latest_container_count": float64(2),
+		"cusdec_ref":             "CBEX1/2026/E/1047",
+	})
+	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+
+	items := ctx.Record.Data["split_items"].([]map[string]any)
+	require.Len(t, items, 2)
+	assert.Equal(t, "Container 2 of 2", items[1]["payload"].(map[string]any)["container_label"])
+}
+
+// Without a retrieved count — the retrieve failed or its input was not mapped —
+// the declared count is used.
+func TestCDNSplitBuilder_FallsBackToTheDeclaredCount(t *testing.T) {
+	for name, inputs := range map[string]map[string]any{
+		"not mapped": {"container_count": float64(3)},
+		"null":       {"container_count": float64(3), "latest_container_count": nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := splitCtx(inputs)
+			require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+			assert.Len(t, ctx.Record.Data["split_items"], 3)
+		})
+	}
+}
+
 func TestCDNSplitBuilder_RejectsUnusableCounts(t *testing.T) {
 	for name, inputs := range map[string]map[string]any{
 		"missing":       {},

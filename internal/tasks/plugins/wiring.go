@@ -40,6 +40,12 @@ const (
 	// registered, so the trader can check it before committing.
 	TaskTypeCustomsCusdecVerify = "CUSTOMS_CUSDEC_VERIFY"
 
+	// TaskTypeCustomsCusdecRetrieve is the same plugin wired with the retrieve
+	// interpreter: it fetches the declaration as it stands in ASYCUDA World, so
+	// the dispatch notes are raised for the containers Customs holds now, after
+	// any amendment, rather than the ones the trader first declared.
+	TaskTypeCustomsCusdecRetrieve = "CUSTOMS_CUSDEC_RETRIEVE"
+
 	// TaskTypeCustomsCDNDispatch is the generic AUTH_API_CALL plugin wired with
 	// the Sri Lanka Customs (SLC Edge) Cargo Dispatch Note interpreter. One
 	// dispatch note covers one container, so a consignment fans out to this task
@@ -169,6 +175,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files, customs.Declarations))},
 		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
+		{TaskTypeCustomsCusdecRetrieve, NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
