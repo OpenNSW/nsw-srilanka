@@ -46,6 +46,9 @@ type externalReviewConfig struct {
 // dispatch: the token the other side parked its own step on.
 const replyTokenInput = "replyToken"
 
+// replyPayloadInput is the reserved input that, when present, is all a reply sends.
+const replyPayloadInput = "payload"
+
 // Execute persists the reviewer form ID + QUEUED_EXTERNALLY status, then
 // POSTs the submission to the OGA portal so the officer's review queue is
 // populated. The body matches the SimpleFormExternalServiceRequest shape
@@ -134,26 +137,41 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 // tokens for the other side's client, as a dispatch sends them. The inputs are
 // the task's data, so the declared paths apply as they are.
 func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig, replyToken, callbackToken string) (string, map[string]any, error) {
-	sent, err := p.files.tokenize(ctx.Record.RenderConfig, "", ctx.Inputs, cfg.ServiceID)
+	// Only what the reply sends gets tokens, as a dispatch tokenizes only its
+	// submission: the payload input when there is one, else all the inputs.
+	root, data := "", any(ctx.Inputs)
+	if payload, ok := ctx.Inputs[replyPayloadInput]; ok {
+		if _, ok := payload.(map[string]any); !ok {
+			// The inputs are the same on every retry, so none can succeed.
+			return "", nil, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("external_review: %s must be an object, got %T", replyPayloadInput, payload),
+				"InvalidReplyPayload", nil)
+		}
+		root, data = replyPayloadInput, payload
+	}
+	sent, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
-	inputs, _ := sent.(map[string]any)
-	return replyRequest(cfg, inputs, replyToken, callbackToken)
+	// tokenize can return data itself, which is the step's own, so the reply
+	// gets a copy. All the inputs are non-nil here: they hold the replyToken.
+	payload := maps.Clone(sent.(map[string]any))
+	if root == "" {
+		delete(payload, replyTokenInput)
+	}
+	return replyRequest(cfg, payload, replyToken, callbackToken)
 }
 
 // replyRequest is a callback on the other side's parked step: {command, payload} on
-// replyToken, the envelope every callback takes, with this step's own token as
-// payload.callbackToken for the other side to answer on. The payload is the step's
-// inputs as mapped, so the receiving step's output_mapping reads them by the names
-// this node gave them.
-func replyRequest(cfg externalReviewConfig, inputs map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
+// replyToken, the envelope every callback takes, with this step's own token added to
+// payload as callbackToken for the other side to answer on. The payload is the
+// step's "payload" input when it has one, so that its other inputs are only for its
+// own page to show, and all of its inputs but replyToken otherwise. The receiving
+// step's output_mapping reads them by the names this node gave them.
+func replyRequest(cfg externalReviewConfig, payload map[string]any, replyToken, callbackToken string) (string, map[string]any, error) {
 	if cfg.ReplyCommand == "" {
 		return "", nil, fmt.Errorf("external_review: reply_command is required to reply")
 	}
-	// inputs is non-nil here: it holds the non-empty replyToken.
-	payload := maps.Clone(inputs)
-	delete(payload, replyTokenInput)
 	payload["callbackToken"] = callbackToken
 	return callbacksPath + "/" + url.PathEscape(replyToken),
 		map[string]any{"command": cfg.ReplyCommand, "payload": payload}, nil

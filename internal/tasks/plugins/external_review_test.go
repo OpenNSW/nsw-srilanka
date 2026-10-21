@@ -151,6 +151,73 @@ func TestExternalReview_RepliesOnReplyToken(t *testing.T) {
 	}, call.body)
 }
 
+func TestExternalReview_ReplySendsOnlyPayloadInput(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{"feedback": "attach the invoice"},
+		"submission": map[string]any{"field": "v1"},
+	})
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "needs_more_info"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{
+		"command": "needs_more_info",
+		"payload": map[string]any{
+			"feedback":      "attach the invoice",
+			"callbackToken": ownToken(t),
+		},
+	}, calls[0].body)
+	// The step keeps its inputs, for its page to show.
+	assert.Equal(t, map[string]any{"feedback": "attach the invoice"}, ctx.Inputs["payload"])
+	assert.Contains(t, ctx.Inputs, "submission")
+}
+
+func TestExternalReview_ReplyWithEmptyPayloadSendsOnlyCallbackToken(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{},
+		"submission": map[string]any{"field": "v1"},
+	})
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "needs_more_info"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{"callbackToken": ownToken(t)}, calls[0].body["payload"])
+	assert.Equal(t, map[string]any{}, ctx.Inputs["payload"], "callbackToken is not written into the step's own input")
+}
+
+func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
+	mgr, svc := newReviewService(t, http.StatusOK)
+	// tokenFor has no client for "agency": tokenizing the submission's invoice
+	// would fail the reply, though the reply does not send it.
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	ctx := reviewContext(map[string]any{
+		"replyToken": "tok_x",
+		"payload":    map[string]any{"feedback": "attach the invoice"},
+		"submission": map[string]any{"invoice": "k-invoice"},
+	})
+	ctx.Record.RenderConfig = json.RawMessage(reviewRenderConfig)
+
+	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "needs_more_info"}`))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	calls := svc.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, map[string]any{
+		"feedback":      "attach the invoice",
+		"callbackToken": ownToken(t),
+	}, calls[0].body["payload"])
+}
+
 func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	mgr, _ := newReviewService(t, http.StatusConflict)
 	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
@@ -164,6 +231,20 @@ func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	assert.True(t, appErr.NonRetryable())
 	assert.Equal(t, "StaleReplyToken", appErr.Type())
+}
+
+func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
+	mgr, _ := newReviewService(t, http.StatusOK)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+
+	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x", "payload": "x"}),
+		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
+
+	err = fmt.Errorf("plugin execution failed: %w", err)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	assert.True(t, appErr.NonRetryable())
+	assert.Equal(t, "InvalidReplyPayload", appErr.Type())
 }
 
 func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
@@ -189,6 +270,7 @@ func TestExternalReview_ConfigErrors(t *testing.T) {
 		{"dispatch without path", map[string]any{}, `{"service_id": "agency"}`, "path is required"},
 		{"reply without command", map[string]any{"replyToken": "tok_x"}, `{"service_id": "agency"}`, "reply_command is required"},
 		{"reply token not a string", map[string]any{"replyToken": 42}, `{"service_id": "agency", "reply_command": "submit"}`, "replyToken must be a string"},
+		{"reply payload not an object", map[string]any{"replyToken": "tok_x", "payload": "x"}, `{"service_id": "agency", "reply_command": "submit"}`, "payload must be an object"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

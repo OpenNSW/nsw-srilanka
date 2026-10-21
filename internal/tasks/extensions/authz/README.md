@@ -46,12 +46,34 @@ name to an OAuth2 client id.
 The composition root loads the file once (`internal/catalog`) and injects the
 `roles`/`clients` slice of it here, so this package reads no configuration file.
 
+The name `system` is reserved (`taskauthz.SystemPrincipal`): `Register` refuses a
+catalog that defines it as a role or a client.
+
+## System
+
+Some steps are completed by this service itself, on the authority of an event it was
+told about rather than a request: the payment service settling a payment, and the
+customs and SLPA webhook handlers resuming the step a callback answers. They reach
+the task manager through `internal/tasks/systemcaller`, which attaches the **system**
+principal (`taskauthz.WithSystem`). A rule names them as `system`, under the command
+each one sends:
+
+```json
+"properties": {
+  "QUEUED_EXTERNALLY": { "submit": ["system"] }
+}
+```
+
+No request can carry the system principal: Layer 1 maps a request only to a user or
+a client, and the catalog can't define `system`, so neither can match it.
+
 ## Decision
 
 - **User** — allowed iff, for some allowed name, the caller holds that role **and**
   their company owns the consignment in that role (ownership resolved by the API
   layer, tied to the required role — holding the role is not enough).
 - **Client (M2M)** — allowed iff an allowed name maps to the caller's client id.
+- **System** — allowed iff `system` is an allowed name.
 - Otherwise `403`; no principal ⇒ `401`.
 
 ## Who may act

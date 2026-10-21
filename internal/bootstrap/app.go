@@ -62,6 +62,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/systemcaller"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
@@ -231,7 +232,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, err
 	}
 	tm := task.Manager
-	paymentService.SetTaskCompleter(tm)
+	// The payment service and the webhook handlers below complete steps on their
+	// own authority, so they reach the task manager as the system principal.
+	systemTasks := systemcaller.New(tm)
+	paymentService.SetTaskCompleter(systemTasks)
 
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
@@ -365,10 +369,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if !agencyMode {
 		// ASYCUDA webhook stack.
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
-		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, tm)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, systemTasks)
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, systemTasks)
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
@@ -383,8 +387,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		// its own secret is missing (see the services registry), and a missing
 		// secret is a deployment fault worth stopping for either way.
 		slpaHandler, err = slpawebhook.NewHandler(
-			slpawebhook.NewOrderEvents(db, tm),
-			slpawebhook.NewInvoiceEvents(db, tm),
+			slpawebhook.NewOrderEvents(db, systemTasks),
+			slpawebhook.NewInvoiceEvents(db, systemTasks),
 			cfg.Integrations.SLPAWebhook(),
 		)
 		if err != nil {

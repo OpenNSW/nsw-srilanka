@@ -4,7 +4,7 @@ import './index.css'
 import './i18n'
 import App from './App.tsx'
 import '@radix-ui/themes/styles.css'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider } from 'react-oidc-context'
 import { userManager } from './oidcUserManager'
@@ -14,6 +14,9 @@ import { ThemedShell } from './components/ThemedShell'
 
 initAppConfig()
   .then(() => {
+    // A data router, not <BrowserRouter>: useBlocker (the unsaved-form guard)
+    // only works under one. App keeps its own <Routes>, under a single splat.
+    const router = createBrowserRouter([{ path: '*', element: <App /> }])
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
         <ErrorBoundary>
@@ -25,9 +28,7 @@ initAppConfig()
           >
             <ColorSchemeProvider>
               <ThemedShell>
-                <BrowserRouter>
-                  <App />
-                </BrowserRouter>
+                <RouterProvider router={router} />
               </ThemedShell>
             </ColorSchemeProvider>
           </AuthProvider>

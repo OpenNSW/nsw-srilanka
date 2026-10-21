@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
+import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import { CONTENT_TOP_PX } from '@/components/Layout'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
@@ -11,7 +11,6 @@ import { getCases } from './service'
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
 export function CaseListScreen() {
-  const navigate = useNavigate()
   const { t } = useTranslation()
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -96,18 +95,9 @@ export function CaseListScreen() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {cases.map((c) => (
-                    <tr
-                      key={c.id}
-                      onClick={() => void navigate(`/consignments/${c.id}`)}
-                      className="hover:bg-primary-subtle cursor-pointer transition-colors"
-                    >
+                    <LinkRow key={c.id} to={`/consignments/${c.id}`}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {/* The row click is a mouse shortcut; this link is the keyboard path. */}
-                        <Link
-                          to={`/consignments/${c.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        >
+                        <RowLink to={`/consignments/${c.id}`}>
                           {c.name ? (
                             <div className="flex flex-col">
                               <Text size="2" weight="bold" className="text-info-strong">
@@ -122,7 +112,7 @@ export function CaseListScreen() {
                               {c.id}
                             </Text>
                           )}
-                        </Link>
+                        </RowLink>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={getStateColor(c.state)}>
@@ -134,7 +124,7 @@ export function CaseListScreen() {
                           {c.createdAt ? formatDateTime(c.createdAt) : '-'}
                         </Text>
                       </td>
-                    </tr>
+                    </LinkRow>
                   ))}
                 </tbody>
               </table>

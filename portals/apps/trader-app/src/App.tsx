@@ -5,6 +5,7 @@ import { Footer } from '@/components/Layout'
 import { ConsignmentScreen } from './features/consignment/screens/ConsignmentScreen.tsx'
 import { ConsignmentDetailScreen } from './features/consignment/screens/ConsignmentDetailScreen.tsx'
 import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
+import { UnsavedChangesGuard } from '@/features/zone/components/UnsavedChangesGuard'
 import { CaseDetailScreen, CaseListScreen, isAgencyMode } from '@/features/case'
 import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminConsignmentDetailScreen.tsx'
@@ -87,7 +88,14 @@ function App() {
             path="/consignments/:consignmentId"
             element={isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />}
           />
-          <Route path="/consignments/:consignmentId/tasks/:taskId" element={<TaskDetailScreen />} />
+          <Route
+            path="/consignments/:consignmentId/tasks/:taskId"
+            element={
+              <UnsavedChangesGuard>
+                <TaskDetailScreen />
+              </UnsavedChangesGuard>
+            }
+          />
           {/* Internal ops view, not linked from nav — see AdminConsignmentEngineStatusScreen. */}
           <Route path="/admin/consignments/:consignmentId" element={<AdminConsignmentEngineStatusScreen />} />
           <Route path="/admin/consignments/:consignmentId/view" element={<AdminConsignmentDetailScreen />} />

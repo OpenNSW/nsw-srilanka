@@ -23,13 +23,23 @@ package taskauthz
 
 import "context"
 
-// PrincipalKind distinguishes a portal user from an M2M service client.
+// PrincipalKind distinguishes a portal user from an M2M service client, and both
+// from this service's own code.
 type PrincipalKind string
 
 const (
 	KindUser   PrincipalKind = "user"
 	KindClient PrincipalKind = "client"
+	// KindSystem is this service acting on its own behalf: an in-process caller,
+	// such as a webhook handler or the payment service, completing a step it was
+	// told about by some other means. No request ever resolves to it.
+	KindSystem PrincipalKind = "system"
 )
+
+// SystemPrincipal is the logical name a rule uses to let in-process callers
+// (KindSystem) act. It is reserved: the catalog may not define it as a role or a
+// client, so no user or M2M caller can ever match it.
+const SystemPrincipal = "system"
 
 // OwnedRolesFunc lazily resolves which logical owner roles the caller's company
 // satisfies for the task's case (keyed by the catalog's logical role
@@ -50,10 +60,19 @@ type Input struct {
 type ctxKey struct{}
 
 // WithInput returns a context carrying in for an evaluator to read. Layer 1 is
-// its only intended caller: minting an Input elsewhere would let a handler assert
-// an identity nothing verified.
+// its only intended caller, besides WithSystem: minting an Input elsewhere would
+// let a handler assert an identity nothing verified.
 func WithInput(ctx context.Context, in Input) context.Context {
 	return context.WithValue(ctx, ctxKey{}, in)
+}
+
+// WithSystem returns a context carrying the system principal, for a caller in this
+// process that completes a step on its own authority rather than on a request's:
+// the payment service settling a payment, or a webhook handler resuming the step
+// an external event answers. Layer 1 never attaches it, so it cannot be reached
+// over HTTP; only code that is itself the authority for the step may use it.
+func WithSystem(ctx context.Context) context.Context {
+	return WithInput(ctx, Input{Kind: KindSystem})
 }
 
 // InputFromContext returns the Input attached by WithInput; ok is false when none

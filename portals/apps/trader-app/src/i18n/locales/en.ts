@@ -145,6 +145,12 @@ const en = {
       submitSuccess: 'Application submitted successfully',
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
+      unsaved: {
+        title: 'Leave without saving?',
+        description: 'Your answers on this form have not been saved. If you leave now, they will be lost.',
+        stay: 'Stay on this page',
+        leave: 'Leave without saving',
+      },
       validation: {
         requiredFields: 'Please fill in all required fields.',
       },
