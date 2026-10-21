@@ -486,7 +486,7 @@ In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, 
 }
 ```
 
-A service's entry is merged over its org's `defaults`. The GovPay method needs both `subinst_id` and `service_id`, and the backend refuses to start if a mapping lacks either.
+A service's entry is merged over its org's `defaults`. The GovPay method needs both `subinst_id` and `service_id`, and the backend refuses to start if a mapping lacks either. For where the ids come from and a checklist for adding a fee, see the [GovPay+ gateway README](../external-integration/payment/govpay/README.md).
 
 The payment method is the step's `selected_method` input. It must be a method that maps the payee; with no selection, the only such method is used, and with several the step fails asking for one. A payee no method maps fails the step, naming the payee to add.
 
