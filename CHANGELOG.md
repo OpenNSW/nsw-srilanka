@@ -6,6 +6,85 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-22
+
+This release identifies each fee by the organization and service it pays, and reads the GovPay+ ids for them from `payment_methods.json`. It also settles a GovPay+ update that carries no status, matches SLC Edge callbacks by `edge_id` only, validates task form submissions against their JSON Schema, and shows long application forms in the Trader Portal one step at a time. Two migrations run, `payment_methods.json` needs a `payees` block, and the image version and the artifacts pin must change in the same deployment.
+
+### Upgrade notes
+
+#### Change the image version and the artifacts pin together ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834), [#821](https://github.com/OpenNSW/nsw-srilanka/pull/821))
+
+- Move the image or chart version and `artifactLoader.github.ref` in one deployment. This build needs artifacts that name each fee's payee: with older ones, every PAYMENT step fails asking for `org_id` and `service_id`. The pinned artifacts, in turn, need this build: they enable the `payload_schema` check on the NPQS application step, which 0.6.0 rejects every submission on, and they carry no `gateway_metadata`, which 0.6.0 reads for payments.
+
+#### Map the GovPay+ ids in `payment_methods.json` ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834))
+
+- Add a `payees` block to the `govpay` method, with this environment's GovPay+ sub-institution and service ids: one entry per organization, with its `subinst_id` under `defaults` and a `service_id` for each fee under `services`. [`configs/payment_methods.example.json`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.7.0/configs/payment_methods.example.json) maps the seven current fees (FCAU `app_fee`, NPQS `certificate_fee` and `treatment_fee`, SLTB `levy_fee` and `lab_fee`, CDA `app_fee` and `kcfn_fee`). The ids differ per environment, so use your own.
+- The backend refuses to start if a mapping lacks `subinst_id` or `service_id`. A fee whose payee isn't mapped fails its PAYMENT step, naming the payee. A GovPay+ call that carries other ids than the payee's mapping gets a 404, like an unknown reference.
+- A PAYMENT step uses its `selected_method` if that method maps the payee, and otherwise the only method that does. With several and no selection it fails, listing them: there is no fallback to `govpay`.
+- Agencies need no change: their `payment_methods.json` has no methods.
+
+#### Migrations
+
+Two migrations run before the API starts; the Helm hook and Docker Compose run them. Use the 0.7.0 `tnsw-migrate` image.
+
+- `000025_slce_edgeid_only` ([#813](https://github.com/OpenNSW/nsw-srilanka/pull/813)) renames the `edgeId` key to `edge_id` in the customs data (`cig` and `cig_cdn`) of `task_records_v2`, and drops the two indexes that served it. SLC Edge callbacks now find the waiting task by `edge_id` only, so a task already waiting needs this rename. Rolling back recreates the indexes but does not rename the key back.
+- `000026_payment_payee` ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834)) adds `org_id` and `service_id` to `payment_transactions`, and fills them in for existing payments from the GovPay+ ids or task code they stored. A pending payment for any of the seven current fees keeps working; any other pending payment can no longer be presented or settled. Rolling back drops the columns.
+
+#### Catalogs can't define `system` ([#824](https://github.com/OpenNSW/nsw-srilanka/pull/824))
+
+- Remove any role or client named `system` from TNSW's `catalog.json` and from each agency's. The API now refuses to start with one, because `system` is reserved for the service's own completions. The example catalogs have none.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`b7798b9`](https://github.com/OpenNSW/one-trade-artifacts/commit/b7798b98e5b419fa6d3884abc6ac6a57deb07391) (21 October 2026). It holds every artifact change this release depends on:
+  - [one-trade-artifacts#225](https://github.com/OpenNSW/one-trade-artifacts/pull/225): each PAYMENT step names its payee ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834));
+  - [one-trade-artifacts#201](https://github.com/OpenNSW/one-trade-artifacts/pull/201): the GovPay+ ids leave the PAYMENT steps ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834));
+  - [one-trade-artifacts#208](https://github.com/OpenNSW/one-trade-artifacts/pull/208): the previous SLC Edge attempt's id is read from where it is stored ([#813](https://github.com/OpenNSW/nsw-srilanka/pull/813));
+  - [one-trade-artifacts#220](https://github.com/OpenNSW/one-trade-artifacts/pull/220): server-side validation of the NPQS application ([#821](https://github.com/OpenNSW/nsw-srilanka/pull/821));
+  - [one-trade-artifacts#203](https://github.com/OpenNSW/one-trade-artifacts/pull/203): the long application forms split into steps ([#805](https://github.com/OpenNSW/nsw-srilanka/pull/805)).
+- It also holds the FCAU per-item inspection ([one-trade-artifacts#226](https://github.com/OpenNSW/one-trade-artifacts/pull/226)), which has no compatibility with FCAU applications already in progress. Let them finish before you upgrade.
+
+#### Local Docker Compose ([#827](https://github.com/OpenNSW/nsw-srilanka/pull/827), [#834](https://github.com/OpenNSW/nsw-srilanka/pull/834))
+
+- The local IdP now serves plain HTTP, and is published on `127.0.0.1` only. Your git-ignored copies keep the old settings, so update them by hand:
+  - `idp/.env`: `PUBLIC_URL`, `PORT` and `HOSTNAME` are no longer read and can be removed.
+  - `configs/config*.yaml`, `configs/services*.json` and `portals/apps/trader-app/public/config.js`: change the IdP URLs (`localhost:8090`, `thunderid:8090`) to `http://`, and remove the insecure-TLS flags.
+  - Run `docker compose up` so `thunderid-setup` re-imports the Console with `http://` redirect URIs. The token issuer becomes `http://localhost:8090`, so sign in again.
+- To pay fees on the local stack, copy the `payees` block of `configs/payment_methods.example.json` into your git-ignored `configs/payment_methods.json`.
+
+### Added
+
+- **Form validation on the server.** A step template can list the `payload_schema` extension, with the form's id as its `form` property. A submission is then checked against that form's JSON Schema, so a call that skips the browser is held to the same rules as the Trader Portal. An invalid payload gets a 400 with a fixed message, and the failing fields are logged at warn level. Draft saves are not checked. Nothing is validated until a step lists the extension: the pinned artifacts list it on the NPQS application step. ([#821](https://github.com/OpenNSW/nsw-srilanka/pull/821))
+- **A reserved `system` principal.** The payment service, the CusDec and CDN webhooks, and the SLPA order and invoice events complete task steps as `system`, and a payment step's completion carries the command `submit`. A step's `authz` rule can now admit them by naming it, such as `"QUEUED_EXTERNALLY": { "submit": ["system"] }`. No request can act as `system`. ([#824](https://github.com/OpenNSW/nsw-srilanka/pull/824), [#825](https://github.com/OpenNSW/nsw-srilanka/pull/825))
+- **Stepper forms.** The Trader Portal shows a form whose `Categorization` has `options.variant: "stepper"` one step at a time, with Submit on the last, review step. The pinned artifacts split the long application forms this way. ([#805](https://github.com/OpenNSW/nsw-srilanka/pull/805))
+
+### Changed
+
+- Fees are identified by the organization and service they pay (`org_id` and `service_id` in the PAYMENT step) instead of a task code, and the GovPay+ ids are mapped in `payment_methods.json`. See the upgrade notes. ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834))
+- The Trader Portal's form controls use `@opennsw/jsonforms-renderers` 0.16. Removing a list item or an uploaded file asks first, and the Remove button of an upload moves into a More actions menu next to View and Download. A list configured with `options.display: "cards"` shows each item as a card that opens in a dialog, with optional running totals above it; the pinned artifacts configure cards on the CusDec, NPQS, CDA, SLPA eCDN and FCAU application forms. ([#840](https://github.com/OpenNSW/nsw-srilanka/pull/840))
+
+### Fixed
+
+- A GovPay+ update that carries no status settles the payment. The update carries back only the returned parameters (`refNo`, `amount` and `currency`), so it used to be rejected as an unsupported status and the payment stayed unsettled. The amount and currency are still checked against the recorded ones. ([#831](https://github.com/OpenNSW/nsw-srilanka/pull/831))
+- A saved form's files are named and opened correctly. `GET /api/v1/storage/{ref}` now also returns the file's `extension` and `mime_type`, which the 0.16 renderers use for the download name and the View button. An agency relays them once TNSW runs this version too. ([#835](https://github.com/OpenNSW/nsw-srilanka/pull/835))
+- On a task page, the footer no longer covers the form's action bar. ([#839](https://github.com/OpenNSW/nsw-srilanka/pull/839))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- On the CDA application form, an `.xls` upload to the DC bags field is named `DC BAGS DETAILS _1.xlsx.xls`, because the artifact's `x-file.fileName` ends in `.xlsx` while the field also accepts `.xls`. Only the displayed and downloaded name is affected. The fix is in the artifact, not in TNSW.
+
 ## [0.6.0] - 2026-10-20
 
 This release lets an agency's review show the officer what they reviewed while it waits for a trader's resubmission, and has the Trader Portal warn before a form with unsaved answers is left. Deploy it on TNSW and on every agency before, or together with, moving the artifacts pin.
@@ -537,7 +616,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.3.0...v0.4.0
