@@ -101,6 +101,35 @@ func FromContext(ctx context.Context) (*Principal, bool) {
 // ContextWithPrincipal attaches p to ctx. Production code should not call this
 // directly — Manager.RequireAuthMiddleware does. It is exported for tests that
 // need an authenticated request without minting a real token.
+//
+// When ctx carries a RequestCaller allocated by an outer observer, p is also
+// written there. The principal itself lives on a child request, which does not
+// propagate back to the caller of ServeHTTP.
 func ContextWithPrincipal(ctx context.Context, p *Principal) context.Context {
+	if p != nil {
+		if slot := RequestCallerFrom(ctx); slot != nil {
+			slot.Principal = p
+		}
+	}
 	return context.WithValue(ctx, contextKey{}, p)
+}
+
+// RequestCaller is a slot an outer observer allocates before ServeHTTP.
+// ContextWithPrincipal fills Principal when authentication attaches one, so
+// the observer can read who called after the handler returns.
+type RequestCaller struct {
+	Principal *Principal
+}
+
+type requestCallerKey struct{}
+
+// WithRequestCaller returns ctx carrying slot.
+func WithRequestCaller(ctx context.Context, slot *RequestCaller) context.Context {
+	return context.WithValue(ctx, requestCallerKey{}, slot)
+}
+
+// RequestCallerFrom returns the slot on ctx, or nil when none was allocated.
+func RequestCallerFrom(ctx context.Context) *RequestCaller {
+	slot, _ := ctx.Value(requestCallerKey{}).(*RequestCaller)
+	return slot
 }

@@ -52,6 +52,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
@@ -546,8 +547,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to start telemetry: %w", err)
 	}
 	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
+	// Security log reads slog.Default after that, so its line is on the same
+	// stream. It sits inside trace middleware so the line carries the trace
+	// id. Authentication attaches the principal on a child request; the log
+	// reads it back from authn.RequestCaller.
 	configureLogging(cfg, os.Stdout, tel.SlogHandler())
-	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(tel.Handler("tnsw-api", mux)))
+	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(securitylog.Middleware(slog.Default())(tel.Handler("tnsw-api", mux))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
