@@ -29,6 +29,9 @@ const (
 	CusdecStatusPaid       CusdecStatus = "PAID"
 	CusdecStatusWarranted  CusdecStatus = "WARRANTED"
 	CusdecStatusReleased   CusdecStatus = "RELEASED"
+	// CusdecStatusCancelled is a declaration Customs cancelled (§6.5.5). It
+	// ends the lifecycle wherever it had reached.
+	CusdecStatusCancelled CusdecStatus = "CANCELLED"
 )
 
 // eventStatusOrder ranks the statuses a §6.5 event notification moves a

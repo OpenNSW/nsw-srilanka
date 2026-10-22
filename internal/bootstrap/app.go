@@ -374,7 +374,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, task.Store, systemTasks)
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, task.Store, systemTasks, caseFlowStarter{flowService})
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, task.Store, cusdecTasks{Completer: systemTasks, canceller: tm}, caseFlowStarter{flowService}, parentRunner)
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
@@ -752,13 +752,35 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 	return rec.ID, nil
 }
 
-// caseFlowStarter opens flows on a case for the SLC Edge webhooks, which name
-// the flow themselves (a §6.5.4 amendment opens one per amendment).
+// cusdecTasks is the task manager the CusDec webhooks use: they complete the steps a
+// callback answers as the system principal, and cancel the tasks a cancelled
+// declaration (§6.5.5) leaves open through the task manager itself.
+type cusdecTasks struct {
+	systemcaller.Completer
+	canceller interface {
+		CancelTask(ctx context.Context, taskID, reason string) error
+	}
+}
+
+func (t cusdecTasks) CancelTask(ctx context.Context, taskID, reason string) error {
+	return t.canceller.CancelTask(ctx, taskID, reason)
+}
+
+// caseFlowStarter opens and ends flows on a case for the SLC Edge webhooks,
+// which name the flow themselves (a §6.5.4 amendment opens one per amendment; a
+// §6.5.5 cancellation ends the export flow and opens a notice).
 type caseFlowStarter struct{ flows *caseflow.Service }
 
 func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error {
 	_, err := c.flows.StartFlow(ctx, caseflow.StartRequest{CaseID: caseID, TemplateID: templateID, WorkflowID: workflowID, Vars: vars})
 	return err
+}
+
+// EndFlow records a flow that was terminated as ended, as its completion would
+// have: the workflow ended without reaching its END node, so the engine never
+// reports it.
+func (c caseFlowStarter) EndFlow(_ context.Context, workflowID string) error {
+	return c.flows.CompletionHandler(workflowID, nil)
 }
 
 // newFileAccess builds the file tokens this deployment issues from its storage

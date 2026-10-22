@@ -84,6 +84,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	case cusdec.EventCusdecAmended:
 		h.handleCusdecAmendment(w, r, body)
 
+	case cusdec.EventCusdecCancelled:
+		h.handleCusdecCancellation(w, r, body)
+
 	case "CDN_INTEGRATED":
 		h.handleCDNIntegrationResult(w, r, body)
 
@@ -209,6 +212,44 @@ func (h *Handler) handleCusdecAmendment(w http.ResponseWriter, r *http.Request, 
 			httputil.Error(w, r, http.StatusNotFound, errCaseNotRecorded)
 		default:
 			httputil.InternalServerError(w, r, "slce: failed to process CusDec amendment", err, "cusdec_ref", ref)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// handleCusdecCancellation ends the consignment's export flow when Customs
+// cancels its declaration (§6.5.5). A repeat delivery, once the cancellation has
+// been applied, is acknowledged without action.
+func (h *Handler) handleCusdecCancellation(w http.ResponseWriter, r *http.Request, body []byte) {
+	var req cusdec.CusdecCancelledRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		slog.WarnContext(r.Context(), "slce: failed to decode CusDec cancellation payload", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		slog.WarnContext(r.Context(), "slce: CusDec cancellation validation failed", "error", err)
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestPayload)
+		return
+	}
+
+	if err := h.cusdecService.ProcessCancellation(r.Context(), req); err != nil {
+		ref := req.Payload.CusdecRef
+		switch {
+		case errors.Is(err, cusdec.ErrDuplicateEvent):
+			slog.InfoContext(r.Context(), "slce: duplicate CusDec cancellation acknowledged", "cusdec_ref", ref)
+			w.WriteHeader(http.StatusOK)
+		case errors.Is(err, cusdec.ErrCusdecNotFoundByRef):
+			slog.WarnContext(r.Context(), "slce: CusDec declaration not found for cancellation (may be transient)",
+				"cusdec_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errDeclarationNotFoundRetry)
+		case errors.Is(err, cusdec.ErrCaseNotRecorded):
+			slog.WarnContext(r.Context(), "slce: cancelled CusDec declaration has no case", "cusdec_ref", ref, "error", err)
+			httputil.Error(w, r, http.StatusNotFound, errCaseNotRecorded)
+		default:
+			httputil.InternalServerError(w, r, "slce: failed to process CusDec cancellation", err, "cusdec_ref", ref)
 		}
 		return
 	}

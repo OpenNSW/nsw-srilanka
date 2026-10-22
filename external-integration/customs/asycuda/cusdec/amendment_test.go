@@ -15,10 +15,18 @@ type startedFlow struct {
 }
 
 // recordingFlows records the flows started on cases.
-type recordingFlows struct{ started []startedFlow }
+type recordingFlows struct {
+	started []startedFlow
+	ended   []string
+}
 
 func (r *recordingFlows) StartFlow(_ context.Context, caseID, templateID, workflowID string, vars map[string]any) error {
 	r.started = append(r.started, startedFlow{caseID, templateID, workflowID, vars})
+	return nil
+}
+
+func (r *recordingFlows) EndFlow(_ context.Context, workflowID string) error {
+	r.ended = append(r.ended, workflowID)
 	return nil
 }
 
@@ -56,7 +64,7 @@ func registeredDeclaration() *CusdecDeclaration {
 func TestProcessAmendment_OpensTheAmendmentFlow(t *testing.T) {
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": registeredDeclaration()}}
 	flows := &recordingFlows{}
-	service := NewWebhookService(repo, fakeTasks{}, &mockTaskCompleter{}, flows)
+	service := NewWebhookService(repo, fakeTasks{}, &mockTaskCompleter{}, flows, nil)
 
 	require.NoError(t, service.ProcessAmendment(context.Background(), amendment(t, "2026-10-14T05:07:38Z")))
 
@@ -79,7 +87,7 @@ func TestProcessAmendment_OpensTheAmendmentFlow(t *testing.T) {
 func TestProcessAmendment_OneFlowPerAmendment(t *testing.T) {
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": registeredDeclaration()}}
 	flows := &recordingFlows{}
-	service := NewWebhookService(repo, fakeTasks{}, &mockTaskCompleter{}, flows)
+	service := NewWebhookService(repo, fakeTasks{}, &mockTaskCompleter{}, flows, nil)
 	ctx := context.Background()
 
 	require.NoError(t, service.ProcessAmendment(ctx, amendment(t, "2026-10-14T05:07:38Z")))
@@ -103,7 +111,7 @@ func TestProcessAmendment_Errors(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			flows := &recordingFlows{}
-			service := NewWebhookService(&mockCusdecRepository{declsByEdgeID: tc.decls}, fakeTasks{}, &mockTaskCompleter{}, flows)
+			service := NewWebhookService(&mockCusdecRepository{declsByEdgeID: tc.decls}, fakeTasks{}, &mockTaskCompleter{}, flows, nil)
 
 			err := service.ProcessAmendment(context.Background(), amendment(t, "2026-10-14T05:07:38Z"))
 
