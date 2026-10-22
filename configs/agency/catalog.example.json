@@ -1,5 +1,8 @@
 {
   "roles": {
     "officer": "Officer"
+  },
+  "clients": {
+    "tnsw": "NSW_TO_AGENCY"
   }
 }

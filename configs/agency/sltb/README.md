@@ -9,7 +9,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `config.yaml`          | Server config for a native run: `mode: agency`, port 8086, own database, Temporal namespace, artifacts, authn, reference ID formats                                            |
 | `config.docker.yaml`   | `config.yaml` for the `sltb-init` and `sltb-api` containers: Postgres, Temporal and the IdP by container hostname                                                              |
 | `sltb.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                             |
-| `catalog.json`         | `officer` → the `SLTB Officer` role SLTB officers hold in the IdP                                                                                                              |
+| `catalog.json`         | `officer` → the `SLTB Officer` role SLTB officers hold in the IdP; `tnsw` → `NSW_TO_SLTB`, the client TNSW replies as, so the steps that wait on its reply can name it         |
 | `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `SLTB_TO_NSW` |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                          |
 | `services.docker.json` | `services.json` for the `sltb-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
@@ -73,11 +73,11 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates SLTB for this deployment, on the `SLTB API` resource server
 (`https://api.sltb.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                |
-| ---------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*` |
-| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps                     |
-| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                         |
+| Caller                             | Client                | Grant                                                                                                                                 |
+| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
+| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps, which `catalog.json` maps `tnsw` to |
+| SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                          |
 
 TNSW's `services.json` `sltb` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.sltb.nsw-agency.local` (see `configs/services*.example.json`).

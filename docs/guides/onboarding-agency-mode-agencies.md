@@ -329,10 +329,11 @@ The image ships only templates, so mount the agency's three files at `/app/confi
 and in the Helm values below, the names, hosts and URLs are the examples; use yours.
 
 `catalog.json`, mapping each role the agency's tasks name to its IdP role's name,
-**exactly** as created in Step 2f:
+**exactly** as created in Step 2f, and `tnsw` to the TNSW-to-agency client, whose
+replies the tasks' waiting steps accept:
 
 ```json
-{ "roles": { "officer": "DEA Officer" } }
+{ "roles": { "officer": "DEA Officer" }, "clients": { "tnsw": "NSW_TO_DEA_M2M" } }
 ```
 
 `services.json`, `tnsw` being where `notify_decision` and storage go:
@@ -660,6 +661,7 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                          |
 | Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the `catalog.json` name doesn't match the token's `roles`, or the officer isn't in the group                                                               |
 | Inject `401`                                            | TNSW's `services.json` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                                        |
+| Reply `403` `client … is not permitted`                 | The agency's `catalog.json` doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                        |
 | Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `services.json` entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                                  |
 | Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                                 |
 | Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                         |

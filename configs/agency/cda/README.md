@@ -9,7 +9,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn, reference ID formats                                           |
 | `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                               |
 | `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                            |
-| `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP                                                                                                               |
+| `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP; `tnsw` → `NSW_TO_CDA`, the client TNSW replies as, so the steps that wait on its reply can name it           |
 | `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `CDA_TO_NSW` |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                         |
 | `services.docker.json` | `services.json` for the `cda-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
@@ -66,11 +66,11 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 CDA for this deployment, on the `CDA API` resource server
 (`https://api.cda.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                              | Client               | Grant                                                                                                               |
-| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`  |
-| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on CDA's parked steps                      |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write` |
+| Caller                              | Client               | Grant                                                                                                                               |
+| ----------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
+| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on CDA's parked steps, which `catalog.json` maps `tnsw` to |
+| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`                 |
 
 TNSW's `services.json` `cda` entry requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.cda.nsw-agency.local` (see `configs/services*.example.json`).

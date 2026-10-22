@@ -51,7 +51,7 @@ point it at the agency's own catalog and artifacts, and give it the agency API's
 as its audience:
 
 ```sh
-cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles
+cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles and TNSW's client
 ```
 
 ```yaml
@@ -211,6 +211,13 @@ No role is required of the catalog; it maps the roles the agency's tasks name. T
 The case list and detail admit an officer holding the token role of any catalog role.
 A role a task names that the catalog does not define matches nobody, so the task is
 closed to everyone.
+
+A step that waits for TNSW's reply, such as a review's `*--request-info` step parked
+until the trader resubmits, is completed by TNSW's machine client rather than an
+officer. The catalog maps that client under `clients` as `tnsw` (for example
+`"tnsw": "NSW_TO_CDA"`, the client TNSW injects and replies as), and such a step's
+`authz` names it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`. Without the
+mapping, TNSW's reply is refused with `403`.
 
 A catalog that maps no role (for example one with only `clients`) still starts, but no
 officer can open cases or act on tasks: the server logs a warning at start. And without
