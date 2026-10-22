@@ -78,12 +78,19 @@ func TestConfigureLoggingAddSourceTiedToDebugLevel(t *testing.T) {
 // same way otelslog does, so a missing level filter would accept DEBUG.
 type alwaysEnabled struct {
 	levels []slog.Level
+	attrs  []map[string]string
 }
 
 func (h *alwaysEnabled) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h *alwaysEnabled) Handle(_ context.Context, r slog.Record) error {
 	h.levels = append(h.levels, r.Level)
+	got := map[string]string{}
+	r.Attrs(func(a slog.Attr) bool {
+		got[a.Key] = a.Value.String()
+		return true
+	})
+	h.attrs = append(h.attrs, got)
 	return nil
 }
 
@@ -105,5 +112,24 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	slog.Info("shown")
 	if len(extra.levels) != 1 || extra.levels[0] != slog.LevelInfo {
 		t.Fatalf("extra handler levels = %v, want [INFO]", extra.levels)
+	}
+}
+
+func TestConfigureLoggingExtrasIncludeTraceID(t *testing.T) {
+	prevDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prevDefault) })
+
+	extra := &alwaysEnabled{}
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, io.Discard, extra)
+
+	const traceID = "abc123"
+	ctx := trace.ContextWithTraceID(context.Background(), traceID)
+	slog.InfoContext(ctx, "handled")
+
+	if len(extra.attrs) != 1 {
+		t.Fatalf("extra records = %d, want 1", len(extra.attrs))
+	}
+	if extra.attrs[0]["traceId"] != traceID {
+		t.Fatalf("traceId = %q, want %q", extra.attrs[0]["traceId"], traceID)
 	}
 }

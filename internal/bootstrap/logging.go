@@ -33,8 +33,10 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 			// otelslog reports every level as enabled. Without this filter,
 			// MultiHandler.Enabled is true for DEBUG even when logLevel is
 			// INFO, so those records are exported and debug-gated payload
-			// logging turns on.
-			handlers = append(handlers, &levelFilter{min: cfg.Server.LogLevel, next: h})
+			// logging turns on. logging.NewHandler attaches traceId so an
+			// exported record can be found by the correlationId returned to
+			// the client.
+			handlers = append(handlers, &levelFilter{min: cfg.Server.LogLevel, next: logging.NewHandler(h)})
 		}
 	}
 	var logHandler slog.Handler
