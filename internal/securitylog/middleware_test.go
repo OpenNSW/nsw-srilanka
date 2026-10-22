@@ -388,6 +388,38 @@ func TestMiddlewareRedactsSignedURLsAndCallbackToken(t *testing.T) {
 	}
 }
 
+func TestRedactInjectBodyHidesCallbackToken(t *testing.T) {
+	const marker = "aaaaaaaaaa"
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "inject",
+			body: `{"taskId":"t1","taskCode":"review_v1","callbackToken":"` + marker + `","data":{}}`,
+		},
+		{
+			name: "nested",
+			body: `{"command":"submit","payload":{"callbackToken":"` + marker + `","note":"keep"}}`,
+		},
+		{
+			name: "truncated",
+			body: `{"callbackToken":"` + marker,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(redactLogged("application/json", []byte(tc.body)))
+			if strings.Contains(got, marker) {
+				t.Fatalf("callbackToken still present: %s", got)
+			}
+			if !strings.Contains(got, redactedValue) {
+				t.Fatalf("body = %s", got)
+			}
+		})
+	}
+}
+
 func TestRedactTruncatedJSONRemovesSignedURL(t *testing.T) {
 	const signatureQuery = "X-Amz-Signature=truncated-marker"
 	body := []byte(`{"upload_url":"https://s3.example/k?` + signatureQuery)

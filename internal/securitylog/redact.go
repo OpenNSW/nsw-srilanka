@@ -15,7 +15,7 @@ const redactedValue = "[redacted]"
 func sensitiveKey(name string) bool {
 	switch strings.ToLower(name) {
 	case "upload_url", "download_url",
-		"token", "access_token", "refresh_token", "id_token",
+		"token", "callbacktoken", "access_token", "refresh_token", "id_token",
 		"password", "secret", "api_key", "apikey",
 		"authorization", "signature", "private_key", "client_secret":
 		return true
@@ -110,7 +110,7 @@ func redactAny(v any) bool {
 
 // jsonStringValue matches a JSON string field with a sensitive name, including
 // a value that was cut off before its closing quote.
-var jsonStringValue = regexp.MustCompile(`(?i)"(upload_url|download_url|access_token|refresh_token|id_token|private_key|client_secret|api_key|apikey|authorization|password|signature|token|secret)"\s*:\s*"(?:\\.|[^"\\]*)"?`)
+var jsonStringValue = regexp.MustCompile(`(?i)"(upload_url|download_url|access_token|refresh_token|id_token|private_key|client_secret|api_key|apikey|authorization|password|signature|callbacktoken|token|secret)"\s*:\s*"(?:\\.|[^"\\]*)"?`)
 
 // presignedString matches a JSON string that carries an S3 presigned query.
 var presignedString = regexp.MustCompile(`"(?:\\.|[^"\\])*(?:X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?:\\.|[^"\\]*)"?`)
