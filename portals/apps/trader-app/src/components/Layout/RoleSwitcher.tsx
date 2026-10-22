@@ -39,14 +39,16 @@ function RoleDisplay({ role, showPrimaryLabel }: { role: Role; showPrimaryLabel:
   )
 }
 
-export function RoleSwitcher() {
+// `className` sets its width: it fills the bar's free space by default, or a
+// menu's width on small screens.
+export function RoleSwitcher({ className = 'flex-1 max-w-md px-8' }: { className?: string }) {
   const { role, setRole, availableRoles, isLoading } = useRole()
   const { t } = useTranslation()
 
   const showSwitcher = availableRoles.length > 1
 
   return (
-    <Box className="flex-1 max-w-md px-8">
+    <Box className={className}>
       {!isLoading ? (
         <Box className="h-full w-full">
           <Select.Root value={role} onValueChange={(val) => setRole(val as Role)} disabled={!showSwitcher}>

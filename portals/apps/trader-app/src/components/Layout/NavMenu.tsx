@@ -93,6 +93,7 @@ export function NavMenu() {
     return (
       <Link
         to={target.path}
+        aria-current={isItemActive(target) ? 'page' : undefined}
         className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
           isItemActive(target) ? 'bg-primary-subtle text-primary' : 'text-foreground hover:bg-app-surface-muted'
         }`}

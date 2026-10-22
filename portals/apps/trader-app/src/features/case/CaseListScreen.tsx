@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
-import { CONTENT_TOP_PX } from '@/components/Layout'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
 
@@ -48,7 +47,7 @@ export function CaseListScreen() {
   const th = 'px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider'
 
   return (
-    <div style={{ minHeight: `calc(100vh - ${CONTENT_TOP_PX}px)` }} className="p-6">
+    <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('cases.list.title')}</h1>
         {totalCount > 0 && (

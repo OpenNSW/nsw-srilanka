@@ -13,6 +13,18 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
 
+/* How far content starts below the top of the window, clear of the TopBar:
+ * the 64 px bar flush with the top below 1024 px, and floating 12 px in (plus
+ * 12 px under it) from 1024 px up. */
+:root {
+  --app-top-offset: 64px;
+}
+@media (min-width: 64rem) {
+  :root {
+    --app-top-offset: 88px;
+  }
+}
+
 @theme {
   /* =========================================================================
    * COLOR TOKENS — lean semantic set. Each role has 3 rungs:
@@ -344,7 +356,7 @@ body {
 /* A stepper form's step list sticks, and a new step scrolls, this far below
  * the top of the viewport: clear of the fixed TopBar (top-3 + h-16 = 76px). */
 :root {
-  --form-steps-offset: 88px;
+  --form-steps-offset: var(--app-top-offset);
 }
 
 .rt-TextFieldRoot.rt-r-size-2 {

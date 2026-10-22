@@ -10,7 +10,6 @@ import { useRole } from '@/services/useRole'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
-import { CONTENT_TOP_PX } from '@/components/Layout'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -91,7 +90,7 @@ export function ConsignmentScreen() {
   }, [page, stateFilter, tradeFlowFilter, role, debouncedSearchQuery])
 
   return (
-    <div style={{ minHeight: `calc(100vh - ${CONTENT_TOP_PX}px)` }} className="p-6">
+    <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('consignments.list.title')}</h1>

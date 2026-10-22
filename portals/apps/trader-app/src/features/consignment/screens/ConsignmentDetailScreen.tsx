@@ -8,7 +8,6 @@ import { StartFlowButtons } from '@/features/consignment/components/StartFlowBut
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
-import { CONTENT_TOP_PX } from '@/components/Layout'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 
@@ -282,7 +281,7 @@ export function ConsignmentDetailScreen({
 
   return (
     <div
-      style={{ height: `calc(100vh - ${CONTENT_TOP_PX}px)` }}
+      style={{ height: 'calc(100vh - var(--app-top-offset))' }}
       className="p-4 md:p-6 max-w-5xl mx-auto w-full flex flex-col"
     >
       <div className="mb-3 flex items-center justify-between">

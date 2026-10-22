@@ -28,9 +28,14 @@ export function SignInButton() {
 export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
   const { t } = useTranslation()
   const auth = useAuth()
-  const name =
-    (auth.user?.profile?.name as string) || (auth.user?.profile?.email as string) || t('auth.unauthorized.title')
-  const email = (auth.user?.profile?.email as string) || ''
+  const profile = auth.user?.profile
+  // The person's name when the token has one; the email is then shown under
+  // it, and otherwise once, as the heading.
+  const personName =
+    (profile?.name as string) ||
+    [profile?.given_name, profile?.family_name].filter((part): part is string => Boolean(part)).join(' ')
+  const email = (profile?.email as string) || ''
+  const name = personName || email || t('auth.unauthorized.title')
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -43,7 +48,7 @@ export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         <button className="flex items-center gap-2 p-1 rounded-full hover:bg-app-surface-muted transition-colors cursor-pointer focus:outline-none">
-          <Avatar size="2" fallback={initials} radius="full" />
+          <Avatar size="2" fallback={initials} radius="full" highContrast />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" size="2" style={{ minWidth: 200 }}>
@@ -51,7 +56,7 @@ export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
           <Text size="2" weight="bold">
             {name}
           </Text>
-          {email && (
+          {personName && email && (
             <Text size="1" color="gray">
               {email}
             </Text>
