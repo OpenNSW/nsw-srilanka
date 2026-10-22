@@ -422,8 +422,9 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 		slog.WarnContext(r.Context(), "tasks: authorization denied", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 	case errors.Is(err, orchestrator.ErrStepNotGuarded):
-		// The step's template names no one who may act, so no one may.
-		slog.WarnContext(r.Context(), "tasks: step declares no authz rule", append(logAttrs, "error", err)...)
+		// The step's template names no one who may act, so no one may. That is a
+		// misconfigured template, not a caller's mistake, so it is logged as an error.
+		slog.ErrorContext(r.Context(), "tasks: step declares no authz rule", append(logAttrs, "error", err)...)
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
 	case errors.Is(err, payloadschema.ErrInvalidPayload):
 		// The browser checks the same schema first, so this is a form the browser and
