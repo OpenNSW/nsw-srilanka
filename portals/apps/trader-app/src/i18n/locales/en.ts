@@ -17,7 +17,6 @@ const en = {
     nav: {
       menu: 'Menu',
       consignments: 'Consignments',
-      notifications: 'Notifications',
       verifiedDocs: 'Verified Docs',
     },
 

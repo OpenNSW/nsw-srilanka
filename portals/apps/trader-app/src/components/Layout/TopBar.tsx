@@ -1,4 +1,4 @@
-import { BellIcon, HamburgerMenuIcon } from '@radix-ui/react-icons'
+import { HamburgerMenuIcon } from '@radix-ui/react-icons'
 import { Flex, IconButton, Popover } from '@radix-ui/themes'
 import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -50,22 +50,6 @@ function CompanyName() {
   )
 }
 
-// TODO: Show real notifications and link to a notifications page
-function NotificationsButton({ withLabel = false }: { withLabel?: boolean }) {
-  const { t } = useTranslation()
-  return (
-    <button
-      type="button"
-      aria-label={withLabel ? undefined : t('nav.notifications')}
-      className="relative flex items-center gap-2 p-2 text-sm text-foreground-subtle hover:text-foreground-muted hover:bg-app-surface-muted rounded-lg transition-colors"
-    >
-      <BellIcon className="w-5 h-5" />
-      <span className="absolute top-1.5 left-5 w-2 h-2 bg-error rounded-full"></span>
-      {withLabel && <span className="text-foreground">{t('nav.notifications')}</span>}
-    </button>
-  )
-}
-
 // Below 1024 px the bar has room only for the brand mark, this menu and the
 // avatar, so everything else moves in here. The full bar's role switcher alone
 // needs about 300 px, so this lasts up to 1024 px rather than the 768 px
@@ -94,7 +78,6 @@ function SmallScreenMenu() {
           <CompanyName />
           {!isAgencyMode && <RoleSwitcher className="w-full" />}
           <LanguageSwitcher />
-          <NotificationsButton withLabel />
         </Flex>
       </Popover.Content>
     </Popover.Root>
@@ -141,7 +124,6 @@ export function TopBar() {
     <TopBarShell>
       <div className="hidden items-center gap-5 lg:flex">
         {!isAgencyMode && <RoleSwitcher />}
-        <NotificationsButton />
         <LanguageSwitcher />
         <CompanyName />
       </div>
