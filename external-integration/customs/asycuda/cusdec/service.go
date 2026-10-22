@@ -58,22 +58,32 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 	// task a second time and drive the workflow past a step the trader has
 	// already been through. The edgeId is the correlator for the whole
 	// round-trip (§2.1), so it is what duplicates are judged on.
-	existing, err := s.repo.GetByEdgeID(ctx, req.EdgeID)
+	//
+	// Any status past SUBMITTED means the result was already recorded: the
+	// §6.5 events that move a declaration on to PAID, WARRANTED or RELEASED
+	// only follow an integration. Recording the repeat would put such a
+	// declaration back to INTEGRATED.
+	decl, err := s.repo.GetByEdgeID(ctx, req.EdgeID)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve CusDec declaration by edgeId %s: %w", req.EdgeID, err)
 	}
-	if existing != nil && (existing.Status == CusdecStatusIntegrated || existing.Status == CusdecStatusFailed) {
+	// The dispatch step records the declaration as soon as SLC Edge accepts it,
+	// before SLC Edge can call back, so a result for an edgeId with no row is
+	// early, not new: it is retried rather than recorded without its workflow.
+	if decl == nil {
+		return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrDeclarationNotRecorded)
+	}
+	if decl.Status != CusdecStatusSubmitted {
 		slog.InfoContext(ctx, "integration result already processed, acknowledging without action",
-			"edge_id", req.EdgeID, "status", existing.Status)
+			"edge_id", req.EdgeID, "status", decl.Status)
 		return ErrDuplicateIntegrationResult
 	}
 
-	decl, originalStatus, err := s.updateCusdecDeclaration(ctx, req)
-	if err != nil {
+	if err := s.recordIntegrationResult(ctx, decl, req); err != nil {
 		return err
 	}
 
-	if err := s.completeReviewTask(ctx, decl, originalStatus, req); err != nil {
+	if err := s.completeReviewTask(ctx, decl, req); err != nil {
 		return err
 	}
 
@@ -84,46 +94,27 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 	return nil
 }
 
-func (s *webhookService) updateCusdecDeclaration(ctx context.Context, req CusdecIntegrationResultRequest) (*CusdecDeclaration, CusdecStatus, error) {
-	decl, err := s.repo.GetByEdgeID(ctx, req.EdgeID)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to retrieve CusDec declaration by edgeId %s: %w", req.EdgeID, err)
+func (s *webhookService) recordIntegrationResult(ctx context.Context, decl *CusdecDeclaration, req CusdecIntegrationResultRequest) error {
+	if req.Integrated {
+		decl.Status = CusdecStatusIntegrated
+		decl.CusdecYear = req.Payload.CusdecRef.Year
+		decl.CusdecOffice = req.Payload.CusdecRef.Office
+		decl.CusdecSerial = req.Payload.CusdecRef.Serial
+		decl.CusdecNumber = req.Payload.CusdecRef.Number
+		decl.Errors = nil
+	} else {
+		decl.Status = CusdecStatusFailed
+		decl.Errors = req.Errors
 	}
 
-	// The dispatch step records the declaration as soon as SLC Edge accepts it,
-	// before SLC Edge can call back, so a result for an edgeId with no row is
-	// early, not new: it is retried rather than recorded without its workflow.
-	if decl == nil {
-		return nil, "", fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrDeclarationNotRecorded)
+	if err := s.repo.Update(ctx, decl); err != nil {
+		return fmt.Errorf("failed to update CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
 	}
-	originalStatus := decl.Status
-
-	if decl.Status != CusdecStatusIntegrated && decl.Status != CusdecStatusFailed {
-		if req.Integrated {
-			decl.Status = CusdecStatusIntegrated
-			decl.CusdecYear = req.Payload.CusdecRef.Year
-			decl.CusdecOffice = req.Payload.CusdecRef.Office
-			decl.CusdecSerial = req.Payload.CusdecRef.Serial
-			decl.CusdecNumber = req.Payload.CusdecRef.Number
-			decl.Errors = nil
-		} else {
-			decl.Status = CusdecStatusFailed
-			decl.Errors = req.Errors
-		}
-
-		if err := s.repo.Update(ctx, decl); err != nil {
-			return nil, "", fmt.Errorf("failed to update CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
-		}
-	}
-	return decl, originalStatus, nil
+	return nil
 }
 
-func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, originalStatus CusdecStatus, req CusdecIntegrationResultRequest) error {
+func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, req CusdecIntegrationResultRequest) error {
 	if decl.WorkflowID == "" {
-		if originalStatus != CusdecStatusSubmitted {
-			slog.InfoContext(ctx, "workflow not recorded but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
-			return nil
-		}
 		return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
 	}
 
@@ -134,10 +125,6 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 		return fmt.Errorf("locate the external review task for workflow %s: %w", decl.WorkflowID, err)
 	}
 	if !ok {
-		if originalStatus != CusdecStatusSubmitted {
-			slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
-			return nil
-		}
 		slog.ErrorContext(ctx, "failed to locate suspended external review task", "workflow_id", decl.WorkflowID)
 		// Not a 404: the task may not have parked yet, and SLC Edge retries
 		// what it was answered with a 5xx (§2).

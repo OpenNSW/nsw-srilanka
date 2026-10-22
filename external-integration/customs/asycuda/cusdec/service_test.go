@@ -499,3 +499,31 @@ func TestProcessCusdecIntegrationResult_UnrecordedEdgeIDIsRetried(t *testing.T) 
 	assert.False(t, repo.updateCalled)
 	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
+
+// A result for a declaration already past SUBMITTED is a repeat delivery: it is
+// reported as a duplicate, for the handler to acknowledge, and neither changes
+// the declaration nor resumes a task. A declaration the §6.5 events have moved
+// on must not be put back to INTEGRATED.
+func TestProcessCusdecIntegrationResult_RepeatIsDuplicate(t *testing.T) {
+	for _, status := range []CusdecStatus{
+		CusdecStatusIntegrated, CusdecStatusFailed, CusdecStatusPaid, CusdecStatusWarranted, CusdecStatusReleased,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			decl := submitted("edge-123")
+			decl.Status = status
+			repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": decl}}
+			completer := &mockTaskCompleter{}
+			service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+
+			err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+				EdgeID: "edge-123", Integrated: true,
+				Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+			})
+
+			require.ErrorIs(t, err, ErrDuplicateIntegrationResult)
+			assert.False(t, repo.updateCalled)
+			assert.Equal(t, status, decl.Status)
+			completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		})
+	}
+}
