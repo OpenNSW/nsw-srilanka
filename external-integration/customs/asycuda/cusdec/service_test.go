@@ -223,10 +223,10 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
+		WillReturnRows(sqlmock.NewRows([]string{"case_id"}).AddRow("case-1"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-123", "customs-wait-payment", "QUEUED_EXTERNALLY", 1).
+		WithArgs("case-1", "customs-wait-payment", "QUEUED_EXTERNALLY", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-payment-123", "step-task-payment-123"))
 
 	expectedPayload := map[string]any{
@@ -329,10 +329,10 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
+		WillReturnRows(sqlmock.NewRows([]string{"case_id"}).AddRow("case-1"))
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-123", "customs-wait-warranting", "QUEUED_EXTERNALLY", 1).
+		WithArgs("case-1", "customs-wait-warranting", "QUEUED_EXTERNALLY", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-warranting-123", "step-task-warranting-123"))
 
 	expectedPayload := map[string]any{
@@ -389,10 +389,10 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 
 	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
 		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
+		WillReturnRows(sqlmock.NewRows([]string{"case_id"}).AddRow("case-1"))
 
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-123", "customs-wait-export-release", "QUEUED_EXTERNALLY", 1).
+	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2" WHERE case_id = \$1 AND active_task_template_id = \$2`).
+		WithArgs("case-1", "customs-wait-export-release", "QUEUED_EXTERNALLY", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-release-123", "step-task-release-123"))
 
 	expectedPayload := map[string]any{

@@ -294,13 +294,15 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	payload map[string]any,
 	req CusdecEventRequest,
 ) error {
+	// The dispatch step's record is found by the edgeId it was given, and
+	// names the case -- the consignment -- the declaration belongs to.
 	var record struct {
-		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
+		CaseID string `gorm:"column:case_id"`
 	}
 	err := s.db.WithContext(ctx).
 		Table("task_records_v2").
 		Where("data->'cig'->>'edge_id' = ?", decl.EdgeID).
-		Select("parent_workflow_id").
+		Select("case_id").
 		First(&record).Error
 
 	if err != nil {
@@ -323,10 +325,16 @@ func (s *webhookService) completeEventTaskAndMetadata(
 		TaskID string `gorm:"column:task_id"`
 		StepID string `gorm:"column:active_step_id"`
 	}
+	// The waiting step is looked for across the whole case, not only the
+	// workflow the declaration was dispatched from. A parallel split runs each
+	// of its branches as a child workflow with an ID of its own: the customs
+	// flow waits on export release in one branch of the split after the CDNs,
+	// so that step's parent is never the dispatch step's. The case is shared
+	// by every flow of the consignment, at every level of nesting.
 	err = s.db.WithContext(ctx).
 		Table("task_records_v2").
-		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
-			record.ParentWorkflowID, taskTemplateID, "QUEUED_EXTERNALLY").
+		Where("case_id = ? AND active_task_template_id = ? AND state = ?",
+			record.CaseID, taskTemplateID, "QUEUED_EXTERNALLY").
 		Select("task_id", "active_step_id").
 		First(&task).Error
 
@@ -336,7 +344,7 @@ func (s *webhookService) completeEventTaskAndMetadata(
 				slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
 				return nil
 			}
-			slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
+			slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event, "case_id", record.CaseID)
 			decl.Status = targetStatus
 			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
 				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
