@@ -98,7 +98,7 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer, nil)
 
 	req := CusdecIntegrationResultRequest{
 		EdgeID:     "edge-123",
@@ -144,7 +144,7 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-v19": submitted("edge-v19")}}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-v19", "step-task-v19"), completer)
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-v19", "step-task-v19"), completer, nil)
 
 	assessed, paid, payable := 1350.0, 350.0, 1000.0
 	req := CusdecIntegrationResultRequest{
@@ -207,7 +207,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn("customs-wait-payment", "task-payment-123", "step-task-payment-123"), completer)
+	service := NewWebhookService(repo, parkedOn("customs-wait-payment", "task-payment-123", "step-task-payment-123"), completer, nil)
 
 	req := CusdecEventRequest{
 		Event:     "PAYMENT_CONFIRMED",
@@ -263,7 +263,7 @@ func TestProcessEvent_DuplicateEventIsAcknowledgedWithoutAction(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, fakeTasks{}, completer)
+	service := NewWebhookService(repo, fakeTasks{}, completer, nil)
 
 	req := CusdecEventRequest{
 		Event:     "PAYMENT_CONFIRMED",
@@ -308,7 +308,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn("customs-wait-warranting", "task-warranting-123", "step-task-warranting-123"), completer)
+	service := NewWebhookService(repo, parkedOn("customs-wait-warranting", "task-warranting-123", "step-task-warranting-123"), completer, nil)
 
 	req := CusdecEventRequest{
 		Event:     "WARRANTING_COMPLETED",
@@ -357,7 +357,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn("customs-wait-export-release", "task-release-123", "step-task-release-123"), completer)
+	service := NewWebhookService(repo, parkedOn("customs-wait-export-release", "task-release-123", "step-task-release-123"), completer, nil)
 
 	req := CusdecEventRequest{
 		Event:     "EXPORT_RELEASED",
@@ -400,7 +400,7 @@ func TestProcessCusdecIntegrationResult_UnlinkedDeclaration(t *testing.T) {
 	decl.CaseID, decl.WorkflowID = "", ""
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-unlinked": decl}}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer, nil)
 
 	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
 		EdgeID: "edge-unlinked", Integrated: true,
@@ -416,7 +416,7 @@ func TestProcessCusdecIntegrationResult_UnlinkedDeclaration(t *testing.T) {
 func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, fakeTasks{}, completer)
+	service := NewWebhookService(repo, fakeTasks{}, completer, nil)
 
 	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
 		EdgeID: "edge-123", Integrated: true,
