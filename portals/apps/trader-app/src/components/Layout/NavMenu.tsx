@@ -30,7 +30,9 @@ function isNavGroup(item: NavItemOrGroup): item is NavGroup {
 // rather than a permanent side rail — kept as an items/groups structure
 // (not just a single link) so a second destination or a grouped section
 // slots in without a redesign, the same shape the old Sidebar used.
-export function NavMenu() {
+// onNavigate fires when the person picks a destination, so a menu holding
+// this one (the TopBar's small-screen menu) can close.
+export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { role } = useRole()
@@ -93,6 +95,7 @@ export function NavMenu() {
     return (
       <Link
         to={target.path}
+        onClick={onNavigate}
         aria-current={isItemActive(target) ? 'page' : undefined}
         className={`flex items-center gap-2 pl-2.5 pr-3 h-10 rounded-xl text-sm font-semibold transition-colors ${
           isItemActive(target) ? 'bg-primary-subtle text-primary' : 'text-foreground hover:bg-app-surface-muted'
@@ -127,7 +130,10 @@ export function NavMenu() {
                 {item.items.map((child) => (
                   <DropdownMenu.Item
                     key={child.path}
-                    onSelect={() => void navigate(child.path)}
+                    onSelect={() => {
+                      onNavigate?.()
+                      void navigate(child.path)
+                    }}
                     className={isItemActive(child) ? 'bg-primary-subtle! text-primary!' : undefined}
                   >
                     <span className="flex items-center gap-2">
@@ -141,7 +147,10 @@ export function NavMenu() {
           ) : (
             <DropdownMenu.Item
               key={item.path}
-              onSelect={() => void navigate(item.path)}
+              onSelect={() => {
+                onNavigate?.()
+                void navigate(item.path)
+              }}
               className={isItemActive(item) ? 'bg-primary-subtle! text-primary!' : undefined}
             >
               <span className="flex items-center gap-2">

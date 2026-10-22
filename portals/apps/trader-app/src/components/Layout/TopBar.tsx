@@ -64,17 +64,9 @@ function SmallScreenMenu() {
           <HamburgerMenuIcon width="20" height="20" />
         </IconButton>
       </Popover.Trigger>
-      <Popover.Content
-        align="end"
-        width="320px"
-        maxWidth="calc(100vw - 32px)"
-        // Following a link inside closes the menu along with the page change.
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest('a')) setOpen(false)
-        }}
-      >
+      <Popover.Content align="end" width="320px" maxWidth="calc(100vw - 32px)">
         <Flex direction="column" gap="3" align="start">
-          <NavMenu />
+          <NavMenu onNavigate={() => setOpen(false)} />
           <CompanyName />
           {!isAgencyMode && <RoleSwitcher className="w-full" />}
           <LanguageSwitcher />
