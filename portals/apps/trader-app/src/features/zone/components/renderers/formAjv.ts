@@ -1,7 +1,9 @@
 import { createAjv, defaultErrorTranslator, type ErrorTranslator, type JsonSchema } from '@jsonforms/core'
+import { withRelativeDates } from '@opennsw/jsonforms-renderers'
 
 // $data: true — needed for formatMaximum: { $data: "1/<sibling>" } date-order rules in schemas.
-export const formAjv = createAjv({ useDefaults: true, $data: true })
+// withRelativeDates teaches formatMinimum: "today" before any schema is compiled.
+export const formAjv = withRelativeDates(createAjv({ useDefaults: true, $data: true }))
 
 function parentObjectSchema(root: JsonSchema, instancePath: string): JsonSchema | undefined {
   const segments = instancePath.split('/').filter(Boolean)
