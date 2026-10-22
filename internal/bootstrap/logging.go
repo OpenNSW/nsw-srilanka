@@ -59,7 +59,7 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 			auditHandlers = append(auditHandlers, logging.NewHandler(h))
 		}
 	}
-	var auditHandler slog.Handler = auditHandlers[0]
+	auditHandler := auditHandlers[0]
 	if len(auditHandlers) > 1 {
 		auditHandler = slog.NewMultiHandler(auditHandlers...)
 	}
