@@ -8,8 +8,7 @@ both complete a step through core's `CompleteTaskStep`, which runs this extensio
 Every step a caller completes or drafts must declare it. The task manager is built
 with core's `WithRequiredPreResumeExtensions("authz")`, so a step whose template has no
 `authz` extension is refused to everyone (`ErrStepNotGuarded`, answered with `403`)
-rather than open to anyone. `server.allowStepsWithoutAuthz: true` turns that off, as
-an escape hatch for artifacts that still lack a rule.
+rather than open to anyone. Nothing turns that off.
 
 It is a **pure evaluator**: the API layer (a task-write middleware) resolves the
 caller's identity and their ownership of the task's consignment and attaches an
@@ -88,9 +87,7 @@ a client, and the catalog can't define `system`, so neither can match it.
 task in its current state, without running one. `MayActOnStep` asks it of every
 `PRE_RESUME` `authz` extension on the active step's template, all of which must
 allow it, as core runs them all. A step with none is one no reader may act on,
-since the task manager refuses it (see above). With `server.allowStepsWithoutAuthz`
-set, nothing checks who submits it, so every reader may act on it. The bootstrap
-passes the same setting to the extension through `RuleRequired`.
+since the task manager refuses it (see above).
 
 `GET /api/v1/tasks/{id}` uses `MayActOnStep` to decide whether the reader's file
 references can be submitted back: a reader who may act gets `read` and `submit`,

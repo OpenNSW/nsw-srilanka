@@ -38,30 +38,11 @@ var (
 // by the reserved name taskauthz.SystemPrincipal. It is deny-by-default.
 type Extension struct {
 	catalog taskauthz.Catalog
-	// ruleRequired says a step must declare this extension to be acted on at all, as
-	// the task manager requires. Only MayActOnStep reads it: Execute runs only on a
-	// step that declares the extension.
-	ruleRequired bool
-}
-
-// Option configures an Extension.
-type Option func(*Extension)
-
-// RuleRequired tells MayActOnStep whether a step must declare this extension to be
-// acted on. Pass true when the task manager requires it (core's
-// WithRequiredPreResumeExtensions), so a step with no rule, which the task manager
-// refuses, is also one no reader may act on.
-func RuleRequired(required bool) Option {
-	return func(e *Extension) { e.ruleRequired = required }
 }
 
 // NewExtension builds the extension. The catalog is its only dependency.
-func NewExtension(catalog taskauthz.Catalog, opts ...Option) *Extension {
-	e := &Extension{catalog: catalog}
-	for _, opt := range opts {
-		opt(e)
-	}
-	return e
+func NewExtension(catalog taskauthz.Catalog) *Extension {
+	return &Extension{catalog: catalog}
 }
 
 // rules is the per-task config carried in the extension properties:
@@ -130,9 +111,8 @@ func (e *Extension) MayAct(ctx context.Context, record *store.TaskRecord, in tas
 // MayActOnStep reports whether in, the caller, may act on record's active step,
 // whose template is step: whether every PRE_RESUME authz extension on it lets
 // the caller run some command in the task's current state, as core runs them
-// all before a submission. A step with none is one no one may act on when the
-// rule is required (RuleRequired), since the task manager refuses it; otherwise
-// it checks no one's submission, so anyone who may read the task may act on it.
+// all before a submission. A step with none is one no one may act on, as the
+// task manager refuses it (core's WithRequiredPreResumeExtensions).
 func (e *Extension) MayActOnStep(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, step types.StepTemplate) (bool, error) {
 	declared := false
 	for _, ext := range step.Extensions {
@@ -144,7 +124,7 @@ func (e *Extension) MayActOnStep(ctx context.Context, record *store.TaskRecord, 
 			return false, err
 		}
 	}
-	return declared || !e.ruleRequired, nil
+	return declared, nil
 }
 
 func parseRules(record *store.TaskRecord, properties json.RawMessage) (rules, error) {

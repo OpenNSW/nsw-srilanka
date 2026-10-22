@@ -12,8 +12,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/store"
-
-	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
 )
 
 // draftStore holds one task whose active step can take a draft. Only what SaveDraft
@@ -33,8 +31,7 @@ func (s *draftStore) WriteDraft(context.Context, string, string, int64, map[stri
 	return 1, nil
 }
 
-// The task manager bootstrap builds refuses a step that declares no authz rule,
-// unless server.allowStepsWithoutAuthz opts out.
+// The task manager bootstrap builds refuses a step that declares no authz rule.
 func TestTaskManagerOptions(t *testing.T) {
 	reg := artifact.NewRegistry(testutil.MemLoader{
 		"no_rule.json": []byte(`{"id": "no_rule", "task_type": "USER_INPUT", "output_namespace": "userform",
@@ -46,7 +43,7 @@ func TestTaskManagerOptions(t *testing.T) {
 	reg.RegisterArtifact("no_rule", "subtask_template", "", "no_rule.json")
 	reg.RegisterArtifact("with_rule", "subtask_template", "", "with_rule.json")
 
-	draft := func(t *testing.T, server config.ServerConfig, template string, ext extensions.TaskExtension) (bool, error) {
+	draft := func(t *testing.T, template string, ext extensions.TaskExtension) (bool, error) {
 		t.Helper()
 		db := &draftStore{record: store.TaskRecord{TaskID: "t1", ActiveStepID: "s1", State: "PENDING_USER", ActiveTaskTemplateID: template}}
 		exts := extensions.NewRegistry()
@@ -55,28 +52,22 @@ func TestTaskManagerOptions(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		tm := orchestrator.NewTaskManager(db, reg, plugins.NewRegistry(), exts, nil, nil, nil, taskManagerOptions(server)...)
+		tm := orchestrator.NewTaskManager(db, reg, plugins.NewRegistry(), exts, nil, nil, nil, taskManagerOptions()...)
 		err := tm.SaveDraft(context.Background(), "t1", "s1", map[string]any{"name": "Al"})
 		return db.drafted, err
 	}
 
-	t.Run("a step with no rule is refused by default", func(t *testing.T) {
-		drafted, err := draft(t, config.ServerConfig{}, "no_rule", nil)
+	t.Run("a step with no rule is refused", func(t *testing.T) {
+		drafted, err := draft(t, "no_rule", nil)
 		if !errors.Is(err, orchestrator.ErrStepNotGuarded) || drafted {
 			t.Errorf("err = %v, drafted = %v; want ErrStepNotGuarded and nothing written", err, drafted)
 		}
 	})
 	t.Run("a step with a rule runs it", func(t *testing.T) {
 		allow := allowAll{}
-		drafted, err := draft(t, config.ServerConfig{}, "with_rule", &allow)
+		drafted, err := draft(t, "with_rule", &allow)
 		if err != nil || !drafted || !allow.ran {
 			t.Errorf("err = %v, drafted = %v, rule ran = %v; want the rule run and the draft saved", err, drafted, allow.ran)
-		}
-	})
-	t.Run("allowStepsWithoutAuthz lets a step with no rule through", func(t *testing.T) {
-		drafted, err := draft(t, config.ServerConfig{AllowStepsWithoutAuthz: true}, "no_rule", nil)
-		if err != nil || !drafted {
-			t.Errorf("err = %v, drafted = %v; want the draft saved", err, drafted)
 		}
 	})
 }

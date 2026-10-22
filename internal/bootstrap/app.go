@@ -412,10 +412,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	// A reader may act on a step with no authz rule only when the task manager would
-	// take it (see taskManagerOptions).
-	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog),
-		taskauthzext.RuleRequired(!cfg.Server.AllowStepsWithoutAuthz)))
+	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, recorder, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
@@ -788,12 +785,8 @@ func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
 
 // taskManagerOptions makes the task manager refuse to complete or draft a step whose
 // template declares no authz extension, so a step that forgets its rule is closed to
-// everyone rather than open to anyone. server.allowStepsWithoutAuthz turns that off.
-func taskManagerOptions(server config.ServerConfig) []orchestrator.Option {
-	if server.AllowStepsWithoutAuthz {
-		slog.Warn("server.allowStepsWithoutAuthz is set: a task step with no authz rule accepts any caller with task-write access")
-		return nil
-	}
+// everyone rather than open to anyone.
+func taskManagerOptions() []orchestrator.Option {
 	return []orchestrator.Option{orchestrator.WithRequiredPreResumeExtensions(taskauthzext.ExtAuthz)}
 }
 
@@ -958,7 +951,7 @@ func initTask(
 	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{reg: artifactRegistry}.GetTemplate, payloadschema.NamespaceOf(stepNamespace(artifactRegistry))); err != nil {
 		return nil, nil, fmt.Errorf("register payload schema extension: %w", err)
 	}
-	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer, taskManagerOptions(cfg.Server)...)
+	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer, taskManagerOptions()...)
 
 	if err := workflowRunner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start micro workflow worker: %w", err)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/OpenNSW/core/artifact/adapter/types"
@@ -317,36 +316,27 @@ func TestExtension_MayActOnStep(t *testing.T) {
 		name       string
 		extensions []types.ExtensionConfig
 		want       bool
-		// wantRequired is the answer when the rule is required (RuleRequired), as the
-		// task manager then refuses a step that declares none.
-		wantRequired bool
 	}{
-		{"an authz extension that allows the caller", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}, true, true},
+		{"an authz extension that allows the caller", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule)}, true},
 		// Core runs them all, so every one must allow the caller.
-		{"one of two authz extensions refuses", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule), authz(types.PhasePreResume, chaRule)}, false, false},
-		{"one that refuses", []types.ExtensionConfig{authz(types.PhasePreResume, chaRule)}, false, false},
-		// None of these checks who submits.
-		{"an authz extension after the step resumes", []types.ExtensionConfig{authz(types.PhasePostResume, chaRule)}, true, false},
-		{"another extension", []types.ExtensionConfig{{ID: "audit", Phase: types.PhasePreResume, Properties: chaRule}}, true, false},
-		{"no extensions", nil, true, false},
+		{"one of two authz extensions refuses", []types.ExtensionConfig{authz(types.PhasePreResume, traderRule), authz(types.PhasePreResume, chaRule)}, false},
+		{"one that refuses", []types.ExtensionConfig{authz(types.PhasePreResume, chaRule)}, false},
+		// None of these checks who submits, so the task manager refuses the step.
+		{"an authz extension after the step resumes", []types.ExtensionConfig{authz(types.PhasePostResume, traderRule)}, false},
+		{"another extension", []types.ExtensionConfig{{ID: "audit", Phase: types.PhasePreResume, Properties: traderRule}}, false},
+		{"no extensions", nil, false},
 	}
 	for _, tc := range tests {
-		for _, required := range []bool{false, true} {
-			want := tc.want
-			if required {
-				want = tc.wantRequired
+		t.Run(tc.name, func(t *testing.T) {
+			record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
+			got, err := NewExtension(testCatalog()).MayActOnStep(context.Background(), record, trader, types.StepTemplate{Extensions: tc.extensions})
+			if err != nil {
+				t.Fatalf("MayActOnStep: %v", err)
 			}
-			t.Run(fmt.Sprintf("%s, rule required %v", tc.name, required), func(t *testing.T) {
-				record := &store.TaskRecord{TaskID: "t1", CaseID: "c1", State: "PENDING_USER"}
-				got, err := NewExtension(testCatalog(), RuleRequired(required)).MayActOnStep(context.Background(), record, trader, types.StepTemplate{Extensions: tc.extensions})
-				if err != nil {
-					t.Fatalf("MayActOnStep: %v", err)
-				}
-				if got != want {
-					t.Errorf("MayActOnStep = %v, want %v", got, want)
-				}
-			})
-		}
+			if got != tc.want {
+				t.Errorf("MayActOnStep = %v, want %v", got, tc.want)
+			}
+		})
 	}
 
 	t.Run("a failure to decide", func(t *testing.T) {
