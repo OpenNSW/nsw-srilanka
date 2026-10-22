@@ -168,6 +168,146 @@ func TestMiddlewareTruncatesAndStillFeedsTheHandler(t *testing.T) {
 	assertEqual(t, "requestBytes", line["requestBytes"], float64(len(payload)))
 }
 
+func TestMiddlewareChunkedBodyUsesBytesRead(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	payload := strings.Repeat("a", maxLoggedBodyBytes+32)
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if len(got) != len(payload) {
+			t.Fatalf("handler saw %d bytes, want %d", len(got), len(payload))
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc", strings.NewReader(payload))
+	req.ContentLength = -1
+	req.Header.Set("Content-Type", "text/plain")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	line := decodeLine(t, buf.Bytes())
+	assertEqual(t, "requestBytes", line["requestBytes"], float64(len(payload)))
+	assertEqual(t, "requestBodyTruncated", line["requestBodyTruncated"], true)
+}
+
+func TestMiddlewareOmitsChunkedBinaryWithSize(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	body := []byte{0xff, 0xfe, 0x00, 0x01}
+
+	h := Middleware(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage", bytes.NewReader(body))
+	req.ContentLength = -1
+	req.Header.Set("Content-Type", "application/octet-stream")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	line := decodeLine(t, buf.Bytes())
+	if _, ok := line["requestBody"]; ok {
+		t.Fatalf("logged binary request body: %v", line["requestBody"])
+	}
+	assertEqual(t, "requestBodyOmitted", line["requestBodyOmitted"], true)
+	assertEqual(t, "requestBytes", line["requestBytes"], float64(len(body)))
+}
+
+func TestMiddlewareIgnoresInterimStatus(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	// ResponseRecorder keeps the first status and then refuses a body for 1xx.
+	// This writer accepts the body after the final status, as net/http does.
+	dst := &finalStatus{ResponseWriter: httptest.NewRecorder()}
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusContinue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	h.ServeHTTP(dst, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc", nil))
+
+	line := decodeLine(t, buf.Bytes())
+	assertEqual(t, "status", line["status"], float64(http.StatusCreated))
+	assertEqual(t, "responseBody", line["responseBody"], `{"ok":true}`)
+}
+
+func TestMiddlewarePassesReadFromThrough(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	const file = "file-bytes-not-for-the-log"
+	dst := &sendFile{ResponseWriter: httptest.NewRecorder()}
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		// A reader without WriteTo makes io.Copy use the writer's ReadFrom.
+		n, err := io.Copy(w, plainReader{strings.NewReader(file)})
+		if err != nil || n != int64(len(file)) {
+			t.Fatalf("copy = %d, %v", n, err)
+		}
+	}))
+	h.ServeHTTP(dst, httptest.NewRequest(http.MethodGet, "/api/v1/storage/k", nil))
+
+	if !dst.used {
+		t.Fatal("download did not use ReadFrom")
+	}
+	if dst.buf.String() != file {
+		t.Fatalf("client got %q", dst.buf.String())
+	}
+	raw := buf.String()
+	if strings.Contains(raw, file) {
+		t.Fatal("security log copied the downloaded file")
+	}
+	line := decodeLine(t, []byte(raw))
+	assertEqual(t, "responseBodyOmitted", line["responseBodyOmitted"], true)
+	assertEqual(t, "responseBytes", line["responseBytes"], float64(len(file)))
+}
+
+func TestMiddlewareLogsWhenHandlerPanics(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	h := Middleware(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	}))
+
+	func() {
+		defer func() { _ = recover() }()
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	}()
+
+	line := decodeLine(t, buf.Bytes())
+	assertEqual(t, "path", line["path"], "/health")
+	assertEqual(t, "callerKind", line["callerKind"], "anonymous")
+}
+
+// finalStatus records the last non-1xx status and still accepts a body.
+type finalStatus struct {
+	http.ResponseWriter
+	code int
+}
+
+func (f *finalStatus) WriteHeader(code int) {
+	if code >= 100 && code <= 199 {
+		return
+	}
+	f.code = code
+	f.ResponseWriter.WriteHeader(code)
+}
+
+type plainReader struct{ io.Reader }
+
+type sendFile struct {
+	http.ResponseWriter
+	buf  bytes.Buffer
+	used bool
+}
+
+func (s *sendFile) ReadFrom(r io.Reader) (int64, error) {
+	s.used = true
+	return io.Copy(&s.buf, r)
+}
+
 func TestMiddlewareCarriesTraceID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(logging.NewHandler(slog.NewJSONHandler(&buf, nil)))
