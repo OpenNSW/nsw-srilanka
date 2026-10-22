@@ -37,15 +37,38 @@ var capturedFields = []string{
 // Unlike the CusDec submission this is a plain JSON body — a CDN carries no
 // attachments (§7.1) — so the interpreter implements only BuildRequest and the
 // plugin sends it through the ordinary JSON transport.
-type CDNInterpreter struct{}
+type CDNInterpreter struct {
+	submissions Submissions
+}
+
+// Submissions records which workflow made a submission SLC Edge accepted, so
+// the callbacks that answer it (by edgeId, §2.1) can find the task it parks.
+// The repository satisfies it.
+type Submissions interface {
+	RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error
+}
 
 // NewCDNInterpreter returns the SLC Edge CDN submission interpreter.
 // cdnEndpoint names this exchange in the trace, so a dispatch note is
 // distinguishable from a declaration in one log.
 const cdnEndpoint = "cdn"
 
-func NewCDNInterpreter() *CDNInterpreter {
-	return &CDNInterpreter{}
+func NewCDNInterpreter(submissions Submissions) *CDNInterpreter {
+	return &CDNInterpreter{submissions: submissions}
+}
+
+// RecordDispatch records the edgeId SLC Edge acknowledged the dispatch note
+// with (§7.1.1) against the workflow that sent it, so the integration result
+// (§7.2) and the acknowledgment (§7.3) can resume that workflow's parked tasks.
+func (c CDNInterpreter) RecordDispatch(ctx context.Context, _, caseID, workflowID string, captured map[string]any) error {
+	if c.submissions == nil {
+		return nil
+	}
+	edgeID, _ := captured["edgeId"].(string)
+	if edgeID == "" {
+		return errors.New("cdn: SLC Edge accepted the dispatch note without an edgeId")
+	}
+	return c.submissions.RecordSubmitted(ctx, edgeID, caseID, workflowID)
 }
 
 // BuildRequest maps the trader form onto the Annex B payload.

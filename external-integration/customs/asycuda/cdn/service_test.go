@@ -5,12 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type mockRepository struct {
@@ -36,6 +33,11 @@ func (m *mockRepository) Create(ctx context.Context, note *DispatchNote) error {
 
 func (m *mockRepository) Update(ctx context.Context, note *DispatchNote) error {
 	m.updated = note
+	return nil
+}
+
+func (m *mockRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
+	m.byEdgeID[edgeID] = &DispatchNote{EdgeID: edgeID, Status: DispatchNoteStatusSubmitted, CaseID: caseID, WorkflowID: workflowID}
 	return nil
 }
 
@@ -152,17 +154,29 @@ func TestProcessAcknowledgment_InvalidState(t *testing.T) {
 
 // setupTestDB builds a gorm handle over a stubbed Postgres connection, matching
 // the pattern used by the service tests elsewhere in this repo.
-func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
+// fakeTasks stands in for core's task store: the tasks of each case.
+type fakeTasks map[string][]store.TaskRecord
 
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		Conn:       mockDB,
-		DriverName: "postgres",
-	}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	require.NoError(t, err)
+func (f fakeTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
+	return f[caseID]
+}
 
-	return db, sqlMock
+// dispatchedNote is a dispatch note as its dispatch left it: SLC Edge accepted
+// it as edgeID from workflow wf-branch-0 of case case-1.
+func dispatchedNote(edgeID string) *DispatchNote {
+	return &DispatchNote{ID: "note-" + edgeID, EdgeID: edgeID, Status: DispatchNoteStatusSubmitted, CaseID: "case-1", WorkflowID: "wf-branch-0"}
+}
+
+// parkedIntegrationWait is case-1 with wf-branch-0's CDN task parked on the
+// integration wait, beside another branch's task parked on the same template,
+// which must not be resumed.
+func parkedIntegrationWait() fakeTasks {
+	return fakeTasks{"case-1": {
+		{TaskID: "create_cdn:other", ActiveStepID: "step-other", ParentWorkflowID: "wf-branch-1", CaseID: "case-1",
+			ActiveTaskTemplateID: integrationWaitTemplateID, State: "QUEUED_EXTERNALLY"},
+		{TaskID: "create_cdn:abc", ActiveStepID: "step-abc", ParentWorkflowID: "wf-branch-0", CaseID: "case-1",
+			ActiveTaskTemplateID: integrationWaitTemplateID, State: "QUEUED_EXTERNALLY"},
+	}}
 }
 
 // resumeRecorder captures the task steps a callback completes.
@@ -234,19 +248,12 @@ func TestStoredResult_PrefersTheRecordedReference(t *testing.T) {
 }
 
 // The whole point of the §7.2 callback is that it releases the task parked on the
-// dispatch note: the workflow is located by the edgeId the dispatch step
-// recorded, then the task parked against the integration wait is completed.
+// dispatch note: the note names the workflow its dispatch was made from, and the
+// task that workflow parked on the integration wait is completed.
 func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
 	recorder := &resumeRecorder{}
-	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
-	svc := NewCDNWebhookService(repo, db, recorder)
-
-	// 1. the workflow carrying this edgeId, 2. the task parked inside it.
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("create_cdn:abc", "step-abc"))
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -266,21 +273,15 @@ func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) 
 	// The workflow is handed the registered reference, which is what the trader
 	// sees and what the acknowledgment is later correlated by.
 	assert.Equal(t, "CBEX1/2026/C/28242", payload["cdn_number"])
-	assert.NoError(t, sqlMock.ExpectationsWereMet())
+	assert.NotContains(t, recorder.completed, "create_cdn:other", "another branch's wait must not be resumed")
 }
 
 // A failed integration releases the same wait, but carries the reasons instead
 // of a reference so the trader is returned to the form knowing why.
 func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
 	recorder := &resumeRecorder{}
-	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
-	svc := NewCDNWebhookService(repo, db, recorder)
-
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("create_cdn:abc", "step-abc"))
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-2": dispatchedNote("edge-2")}}
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -297,5 +298,4 @@ func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	assert.Equal(t, false, payload["integrated"])
 	assert.NotContains(t, payload, "cdn_number")
 	assert.Contains(t, payload["error"], "Missing office Code")
-	assert.NoError(t, sqlMock.ExpectationsWereMet())
 }

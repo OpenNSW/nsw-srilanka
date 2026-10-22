@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // DispatchNoteRepository defines the persistence interface for DispatchNote entities.
@@ -13,6 +15,11 @@ type DispatchNoteRepository interface {
 	GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error)
 	Create(ctx context.Context, note *DispatchNote) error
 	Update(ctx context.Context, note *DispatchNote) error
+	// RecordSubmitted records that SLC Edge accepted a submission as edgeID,
+	// from workflow workflowID of case caseID, so its callbacks can find the
+	// task that workflow parks. A second call for the same edgeID, from a retry
+	// of the step, keeps one row and records the same link.
+	RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error
 }
 
 type dispatchNoteRepository struct {
@@ -48,6 +55,20 @@ func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref DocumentRe
 		return nil, err
 	}
 	return &note, nil
+}
+
+func (r *dispatchNoteRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
+	note := DispatchNote{
+		ID:         uuid.NewString(),
+		EdgeID:     edgeID,
+		Status:     DispatchNoteStatusSubmitted,
+		CaseID:     caseID,
+		WorkflowID: workflowID,
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "edge_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"case_id", "workflow_id"}),
+	}).Create(&note).Error
 }
 
 func (r *dispatchNoteRepository) Create(ctx context.Context, note *DispatchNote) error {

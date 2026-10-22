@@ -2,12 +2,12 @@ package cusdec
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 )
 
 // WebhookService defines the use-case layer for processing asynchronous
@@ -28,18 +28,24 @@ type TaskCompleter interface {
 
 type webhookService struct {
 	repo        DeclarationRepository
-	db          *gorm.DB
+	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
 }
 
-// NewWebhookService creates a new WebhookService.
-func NewWebhookService(repo DeclarationRepository, db *gorm.DB, taskManager TaskCompleter) WebhookService {
+// NewWebhookService creates a new WebhookService. tasks is core's task store:
+// a callback resumes the task the declaration's workflow parked, found by the
+// case and workflow the declaration recorded when it was dispatched.
+func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter) WebhookService {
 	return &webhookService{
 		repo:        repo,
-		db:          db,
+		tasks:       tasks,
 		taskManager: taskManager,
 	}
 }
+
+// reviewTemplateID is the step the declaration flow parks on until the
+// integration result (§6.2) arrives.
+const reviewTemplateID = "customs-cusdec--external-review"
 
 func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error {
 	slog.InfoContext(ctx, "processing CusDec integration result",
@@ -125,47 +131,24 @@ func (s *webhookService) updateCusdecDeclaration(ctx context.Context, req Cusdec
 }
 
 func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, originalStatus CusdecStatus, req CusdecIntegrationResultRequest) error {
-	var record struct {
-		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
-	}
-	err := s.db.WithContext(ctx).
-		Table("task_records_v2").
-		Where("data->'cig'->>'edge_id' = ?", req.EdgeID).
-		Select("parent_workflow_id").
-		First(&record).Error
-
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if originalStatus != CusdecStatusSubmitted {
-				slog.InfoContext(ctx, "workflow record not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
-				return nil
-			}
-			return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
+	if decl.WorkflowID == "" {
+		if originalStatus != CusdecStatusSubmitted {
+			slog.InfoContext(ctx, "workflow not recorded but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
+			return nil
 		}
-		slog.ErrorContext(ctx, "failed to locate task workflow by edgeId", "edge_id", req.EdgeID, "error", err)
-		return fmt.Errorf("failed to locate task workflow by edgeId %s: %w", req.EdgeID, err)
+		return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
 	}
 
-	var task struct {
-		TaskID string `gorm:"column:task_id"`
-		StepID string `gorm:"column:active_step_id"`
-	}
-	err = s.db.WithContext(ctx).
-		Table("task_records_v2").
-		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
-			record.ParentWorkflowID, "customs-cusdec--external-review", "QUEUED_EXTERNALLY").
-		Select("task_id", "active_step_id").
-		First(&task).Error
-
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if originalStatus != CusdecStatusSubmitted {
-				slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
-				return nil
-			}
+	task, ok := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, reviewTemplateID)
+	if !ok {
+		if originalStatus != CusdecStatusSubmitted {
+			slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
+			return nil
 		}
-		slog.ErrorContext(ctx, "failed to locate suspended external review task", "workflow_id", record.ParentWorkflowID, "error", err)
-		return fmt.Errorf("failed to locate suspended external review task for workflow %s: %w", record.ParentWorkflowID, err)
+		slog.ErrorContext(ctx, "failed to locate suspended external review task", "workflow_id", decl.WorkflowID)
+		// Not a 404: the task may not have parked yet, and SLC Edge retries
+		// what it was answered with a 5xx (§2).
+		return fmt.Errorf("failed to locate suspended external review task for workflow %s", decl.WorkflowID)
 	}
 
 	var payload map[string]any
@@ -294,56 +277,18 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	payload map[string]any,
 	req CusdecEventRequest,
 ) error {
-	var record struct {
-		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
-	}
-	err := s.db.WithContext(ctx).
-		Table("task_records_v2").
-		Where("data->'cig'->>'edge_id' = ?", decl.EdgeID).
-		Select("parent_workflow_id").
-		First(&record).Error
-
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if decl.Status == targetStatus {
-				slog.InfoContext(ctx, "workflow record not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
-				return nil
-			}
-			slog.WarnContext(ctx, "workflow record not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
-			decl.Status = targetStatus
-			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
-				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
-			}
+	task, ok := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, taskTemplateID)
+	if !ok {
+		if decl.Status == targetStatus {
+			slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
 			return nil
 		}
-		return fmt.Errorf("failed to locate workflow record: %w", err)
-	}
-
-	var task struct {
-		TaskID string `gorm:"column:task_id"`
-		StepID string `gorm:"column:active_step_id"`
-	}
-	err = s.db.WithContext(ctx).
-		Table("task_records_v2").
-		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
-			record.ParentWorkflowID, taskTemplateID, "QUEUED_EXTERNALLY").
-		Select("task_id", "active_step_id").
-		First(&task).Error
-
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if decl.Status == targetStatus {
-				slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
-				return nil
-			}
-			slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event)
-			decl.Status = targetStatus
-			if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
-				return fmt.Errorf("failed to update status during recovery: %w", updateErr)
-			}
-			return nil
+		slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event, "workflow_id", decl.WorkflowID)
+		decl.Status = targetStatus
+		if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
+			return fmt.Errorf("failed to update status during recovery: %w", updateErr)
 		}
-		return fmt.Errorf("failed to locate event task %s: %w", taskTemplateID, err)
+		return nil
 	}
 
 	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, payload); err != nil {
