@@ -29,6 +29,10 @@
 #     --from-literal=Authorization="Basic $(printf '%s:%s' email password | base64)"
 #   kubectl create secret generic govpay-go-private-key \
 #     --from-file=go_private.pem=...
+#   # Temporal client certificate (only when backend.config temporal.tls is set;
+#   # a cert-manager Certificate Secret has the same keys):
+#   kubectl create secret generic temporal-client-tls \
+#     --from-file=ca.crt=... --from-file=tls.crt=... --from-file=tls.key=...
 #
 # Adding a secret takes three steps: a key in the Secret, an entry in
 # backend.env, and a "{{env:NAME}}" placeholder in backend.config (migration.env
@@ -139,10 +143,17 @@ backend:
     - name: govpay-go-private-key
       secret:
         secretName: govpay-go-private-key
+    # The Temporal client certificate, for backend.config temporal.tls.
+    # - name: temporal-client-tls
+    #   secret:
+    #     secretName: temporal-client-tls
   volumeMounts:
     - name: govpay-go-private-key
       mountPath: /certs/govpay
       readOnly: true
+    # - name: temporal-client-tls
+    #   mountPath: /certs/temporal
+    #   readOnly: true
 
   # The server's config.yaml, authored here as values; the chart mounts it and
   # sets CONFIG_PATH (see values.yaml). There are no built-in defaults: every
@@ -261,6 +272,15 @@ backend:
       host: temporal
       port: 7233
       namespace: default
+      # For a Temporal server that requires TLS or client certificates, mount
+      # the temporal-client-tls Secret (backend.volumes above) and uncomment.
+      # The files are read once at startup, so restart the backend after the
+      # certificate is renewed. serverName defaults to host.
+      # tls:
+      #   caFile: /certs/temporal/ca.crt
+      #   certFile: /certs/temporal/tls.crt
+      #   keyFile: /certs/temporal/tls.key
+      #   serverName: temporal
 
     # Email/SMS gateways, one settings block per channel.
     notification:

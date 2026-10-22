@@ -170,6 +170,16 @@ temporal:
   host: localhost
   port: 7233
   namespace: default
+  # TLS to the Temporal server; leave it out for a plaintext connection. With
+  # certFile and keyFile the client also presents a certificate, for a server
+  # that requires client certificates (mutual TLS). An empty caFile means the
+  # system roots, and an empty serverName means host. The files are read once
+  # at startup, so a renewed certificate takes effect after a restart.
+  # tls:
+  #   caFile: /certs/temporal/ca.crt
+  #   certFile: /certs/temporal/tls.crt
+  #   keyFile: /certs/temporal/tls.key
+  #   serverName: ""
 
 # Audit service (Argus).
 audit:

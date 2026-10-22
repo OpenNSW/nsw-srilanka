@@ -5,10 +5,11 @@ go 1.27
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/LSFLK/argus/pkg/audit v0.1.0
-	github.com/OpenNSW/core v0.0.0-20261019051308-b3521096e55b
+	github.com/OpenNSW/core v0.0.0-20261022093513-70e269455051
 	github.com/OpenNSW/core/authn v0.4.0
 	github.com/OpenNSW/core/authz v0.1.0
 	github.com/OpenNSW/core/configyaml v0.0.0-20260921095813-be9ef41509ea
+	github.com/OpenNSW/core/cors v0.1.0
 	github.com/OpenNSW/core/database v0.3.0
 	github.com/OpenNSW/core/htmlgen v0.0.0-20261006063237-d8b90361237e
 	github.com/OpenNSW/core/httputil v0.1.0
@@ -21,6 +22,7 @@ require (
 	github.com/OpenNSW/core/secret v0.2.0
 	github.com/OpenNSW/core/shared v0.3.0
 	github.com/OpenNSW/core/storage v0.3.0
+	github.com/OpenNSW/core/temporal v0.1.0
 	github.com/OpenNSW/core/trace v0.2.0
 	github.com/OpenNSW/core/uiprojector v0.3.0
 	github.com/go-jose/go-jose/v4 v4.1.6
@@ -91,7 +93,7 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
-	go.temporal.io/api v1.63.7 // indirect
+	go.temporal.io/api v1.64.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
