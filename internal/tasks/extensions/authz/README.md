@@ -87,9 +87,10 @@ a client, and the catalog can't define `system`, so neither can match it.
 `MayAct` asks the same rules whether the caller may run **any** command on the
 task in its current state, without running one. `MayActOnStep` asks it of every
 `PRE_RESUME` `authz` extension on the active step's template, all of which must
-allow it, as core runs them all. A step with none checks no one here, but the task
-manager refuses to complete it (see above) unless `server.allowStepsWithoutAuthz` is
-set.
+allow it, as core runs them all. A step with none is one no reader may act on,
+since the task manager refuses it (see above). With `server.allowStepsWithoutAuthz`
+set, nothing checks who submits it, so every reader may act on it. The bootstrap
+passes the same setting to the extension through `RuleRequired`.
 
 `GET /api/v1/tasks/{id}` uses `MayActOnStep` to decide whether the reader's file
 references can be submitted back: a reader who may act gets `read` and `submit`,

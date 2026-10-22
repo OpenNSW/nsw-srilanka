@@ -50,4 +50,16 @@ func TestStepCanAct(t *testing.T) {
 	if _, err := canAct(context.Background(), record("missing"), input("Trader", "trader")); !errors.Is(err, artifact.ErrNotFound) {
 		t.Errorf("a template that doesn't load: err = %v, want ErrNotFound", err)
 	}
+
+	// A step with no rule: anyone may act on it unless the rule is required, as the
+	// task manager then refuses it.
+	reg = artifact.NewRegistry(testutil.MemLoader{"open.json": []byte(`{"id": "open", "task_type": "USER_INPUT"}`)})
+	reg.RegisterArtifact("open", "subtask_template", "", "open.json")
+	catalog := taskauthz.Catalog{Roles: map[string]string{"trader": "Trader"}}
+	for required, want := range map[bool]bool{false: true, true: false} {
+		canAct := stepCanAct(reg, taskauthzext.NewExtension(catalog, taskauthzext.RuleRequired(required)))
+		if got, err := canAct(context.Background(), record("open"), input("Trader", "trader")); err != nil || got != want {
+			t.Errorf("a step with no rule, rule required %v: canAct = %v, %v; want %v", required, got, err, want)
+		}
+	}
 }
