@@ -14,3 +14,8 @@ var ErrDispatchNoteNotFoundByCDNRef = errors.New("dispatch note not found by cdn
 // ErrInvalidCallbackPayload indicates the ASYCUDA callback payload was
 // malformed, missing required fields, or otherwise failed validation.
 var ErrInvalidCallbackPayload = errors.New("invalid callback payload")
+
+// ErrTaskNotParked indicates a callback arrived for a dispatch note whose
+// workflow has not yet parked the task it answers. Transient: answered with a
+// 5xx, so SLC Edge retries (§2) once the task is waiting.
+var ErrTaskNotParked = errors.New("dispatch note task not parked yet")

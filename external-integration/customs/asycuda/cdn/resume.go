@@ -60,9 +60,11 @@ type waitLookup struct {
 }
 
 // resumeWait finds the parked task the given callback answers and completes its
-// step. A missing task is only an error when this callback is genuinely new: a
-// redelivery (§2 retries up to four times) legitimately finds nothing left to
-// resume, and must still be acknowledged so the retries stop.
+// step. A missing task is only an error when this callback is genuinely new —
+// its task may not have parked yet, so SLC Edge is asked to retry. A redelivery
+// (§2 retries up to four times) legitimately finds nothing left to resume, and
+// must still be acknowledged so the retries stop. Tasks that could not be read
+// are always an error: whether one is parked is not known.
 func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alreadyProcessed bool) error {
 	edgeID := look.note.EdgeID
 	if s.tasks == nil || s.taskManager == nil {
@@ -81,11 +83,17 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 		return fmt.Errorf("edgeId %s: %w", edgeID, ErrDispatchNoteNotFoundByEdgeID)
 	}
 
-	task, ok := parkedtask.Find(ctx, s.tasks, look.note.CaseID, look.note.WorkflowID, look.templateID)
+	task, ok, err := parkedtask.Find(ctx, s.tasks, look.note.CaseID, look.note.WorkflowID, look.templateID)
+	if err != nil {
+		return fmt.Errorf("locate the %s task for workflow %s: %w", look.templateID, look.note.WorkflowID, err)
+	}
 	if !ok {
-		slog.InfoContext(ctx, "cdn: no parked task to resume",
-			"edge_id", edgeID, "template", look.templateID, "workflow_id", look.note.WorkflowID)
-		return nil
+		if alreadyProcessed {
+			slog.InfoContext(ctx, "cdn: no parked task to resume, callback already processed",
+				"edge_id", edgeID, "template", look.templateID, "workflow_id", look.note.WorkflowID)
+			return nil
+		}
+		return fmt.Errorf("edgeId %s, template %s: %w", edgeID, look.templateID, ErrTaskNotParked)
 	}
 
 	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, look.payload); err != nil {

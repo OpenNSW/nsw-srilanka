@@ -3,6 +3,7 @@ package cdn
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/OpenNSW/core/taskflow/store"
@@ -157,9 +158,18 @@ func TestProcessAcknowledgment_InvalidState(t *testing.T) {
 // fakeTasks stands in for core's task store: the tasks of each case.
 type fakeTasks map[string][]store.TaskRecord
 
-func (f fakeTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
-	return f[caseID]
+func (f fakeTasks) TasksOfCase(_ context.Context, caseID string) ([]store.TaskRecord, error) {
+	return f[caseID], nil
 }
+
+// failingTasks is a task store whose load fails.
+type failingTasks struct{}
+
+func (failingTasks) TasksOfCase(context.Context, string) ([]store.TaskRecord, error) {
+	return nil, errTaskStore
+}
+
+var errTaskStore = errors.New("task store: connection refused")
 
 // dispatchedNote is a dispatch note as its dispatch left it: SLC Edge accepted
 // it as edgeID from workflow wf-branch-0 of case case-1.
@@ -298,4 +308,65 @@ func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	assert.Equal(t, false, payload["integrated"])
 	assert.NotContains(t, payload, "cdn_number")
 	assert.Contains(t, payload["error"], "Missing office Code")
+}
+
+func integratedResult(edgeID string) CDNIntegrationResultRequest {
+	return CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED",
+		Payload: integrationResultPayload{
+			EdgeID:     edgeID,
+			Integrated: true,
+			CDNRef:     DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28242},
+		},
+	}
+}
+
+// A first delivery whose task has not parked yet is an error, so SLC Edge
+// retries it (§2) rather than being told it was handled.
+func TestProcessIntegrationResult_TaskNotParkedYetIsRetried(t *testing.T) {
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+	svc := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+
+	err := svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1"))
+
+	require.ErrorIs(t, err, ErrTaskNotParked)
+	assert.Empty(t, recorder.completed)
+}
+
+// A redelivery that finds nothing parked is acknowledged: the first delivery
+// resumed the task.
+func TestProcessIntegrationResult_RedeliveryWithNothingParkedIsAcknowledged(t *testing.T) {
+	note := dispatchedNote("edge-1")
+	note.Status = DispatchNoteStatusIntegrated
+	note.CDNOffice, note.CDNYear, note.CDNSerial, note.CDNNumber = "CBEX1", "2026", "C", 28242
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": note}}
+	svc := NewCDNWebhookService(repo, fakeTasks{}, &resumeRecorder{})
+
+	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")))
+}
+
+// Tasks that could not be read are an error on a redelivery too: whether the
+// task is still parked is not known.
+func TestProcessIntegrationResult_TaskStoreFailureIsAnError(t *testing.T) {
+	for name, note := range map[string]*DispatchNote{
+		"first delivery": dispatchedNote("edge-1"),
+		"redelivery": func() *DispatchNote {
+			n := dispatchedNote("edge-1")
+			n.Status = DispatchNoteStatusIntegrated
+			return n
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := &resumeRecorder{}
+			repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": note}}
+			svc := NewCDNWebhookService(repo, failingTasks{}, recorder)
+
+			err := svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1"))
+
+			require.ErrorIs(t, err, errTaskStore)
+			assert.NotErrorIs(t, err, ErrTaskNotParked)
+			assert.Empty(t, recorder.completed)
+		})
+	}
 }

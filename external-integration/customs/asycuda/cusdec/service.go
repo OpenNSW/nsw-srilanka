@@ -139,7 +139,12 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 		return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
 	}
 
-	task, ok := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, reviewTemplateID)
+	task, ok, err := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, reviewTemplateID)
+	if err != nil {
+		// Whether the task is parked is not known, so this is not a duplicate
+		// to acknowledge: SLC Edge retries what it is answered with a 5xx (§2).
+		return fmt.Errorf("locate the external review task for workflow %s: %w", decl.WorkflowID, err)
+	}
 	if !ok {
 		if originalStatus != CusdecStatusSubmitted {
 			slog.InfoContext(ctx, "external review task not found but CusDec declaration was already processed, ignoring duplicate callback", "edge_id", req.EdgeID, "status", originalStatus)
@@ -277,7 +282,12 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	payload map[string]any,
 	req CusdecEventRequest,
 ) error {
-	task, ok := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, taskTemplateID)
+	task, ok, err := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, taskTemplateID)
+	if err != nil {
+		// The status is left as it was: recording it would make SLC Edge's
+		// retry a duplicate, and the parked step would never be completed.
+		return fmt.Errorf("locate the %s task for workflow %s: %w", req.Event, decl.WorkflowID, err)
+	}
 	if !ok {
 		if decl.Status == targetStatus {
 			slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)

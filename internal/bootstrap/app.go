@@ -38,6 +38,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -381,10 +382,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if !agencyMode {
 		// ASYCUDA webhook stack.
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
-		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, task.Store, systemTasks)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks)
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, task.Store, systemTasks)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks)
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 

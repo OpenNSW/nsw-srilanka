@@ -3,6 +3,7 @@ package cusdec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -68,9 +69,18 @@ const (
 // fakeTasks stands in for core's task store: the tasks of each case.
 type fakeTasks map[string][]store.TaskRecord
 
-func (f fakeTasks) GetAllTasks(_ context.Context, caseID string) []store.TaskRecord {
-	return f[caseID]
+func (f fakeTasks) TasksOfCase(_ context.Context, caseID string) ([]store.TaskRecord, error) {
+	return f[caseID], nil
 }
+
+// failingTasks is a task store whose load fails.
+type failingTasks struct{}
+
+func (failingTasks) TasksOfCase(context.Context, string) ([]store.TaskRecord, error) {
+	return nil, errTaskStore
+}
+
+var errTaskStore = errors.New("task store: connection refused")
 
 // parkedOn returns the tests' case with one task of the declaration's workflow
 // parked on templateID, beside a task of another workflow parked on the same
@@ -424,6 +434,50 @@ func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
 	})
 
 	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Tasks that could not be read leave the declaration's status as it was and
+// answer with an error, so SLC Edge's retry can still resume the parked step.
+// Recording the status here would make that retry a duplicate.
+func TestProcessEvent_TaskStoreFailureLeavesTheStatus(t *testing.T) {
+	decl := &CusdecDeclaration{
+		EdgeID: "edge-123", CusdecOffice: "COL", CusdecYear: "2026", CusdecSerial: "C", CusdecNumber: 9876,
+		Status: CusdecStatusIntegrated, CaseID: testCaseID, WorkflowID: testWorkflowID,
+	}
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": decl}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, failingTasks{}, completer)
+
+	err := service.ProcessEvent(context.Background(), CusdecEventRequest{
+		Event:     "PAYMENT_CONFIRMED",
+		ProcessAt: time.Now(),
+		Payload: cusdecEventPayload{
+			CusdecRef:  DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 9876},
+			AmountPaid: 2035.00, Currency: "LKR",
+		},
+	})
+
+	require.ErrorIs(t, err, errTaskStore)
+	assert.False(t, repo.updateCalled, "the status must not be recorded while the step is unresumed")
+	assert.Equal(t, CusdecStatusIntegrated, decl.Status)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Tasks that could not be read are an error for the integration result too, not
+// a declaration already processed.
+func TestProcessCusdecIntegrationResult_TaskStoreFailure(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, failingTasks{}, completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.ErrorIs(t, err, errTaskStore)
 	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
 	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
