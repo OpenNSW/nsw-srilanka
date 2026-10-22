@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
+	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 func TestErrorResponseCorrelationIDMatchesTraceID(t *testing.T) {
@@ -112,6 +113,51 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	slog.Info("shown")
 	if len(extra.levels) != 1 || extra.levels[0] != slog.LevelInfo {
 		t.Fatalf("extra handler levels = %v, want [INFO]", extra.levels)
+	}
+}
+
+func TestConfigureLoggingAuditIgnoresLevelAndUsesLatestDest(t *testing.T) {
+	prevDefault := slog.Default()
+	t.Cleanup(func() {
+		slog.SetDefault(prevDefault)
+		nswaudit.SetProcessLogger(nil)
+	})
+
+	var first bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &first)
+	sink := nswaudit.NewLogSink(nil)
+
+	var second bytes.Buffer
+	extra := &alwaysEnabled{}
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &second, extra)
+	slog.Info("ops info hidden")
+	sink.Write(context.Background(), nswaudit.Record{
+		EventType:  nswaudit.EventTask,
+		Action:     nswaudit.ActionUpdate,
+		Status:     nswaudit.StatusSuccess,
+		ActorType:  nswaudit.ActorMember,
+		ActorID:    "u1",
+		TargetType: nswaudit.TargetTask,
+		TargetID:   "t1",
+	})
+
+	if strings.Contains(first.String(), "category=audit") {
+		t.Fatalf("audit line used the logger from before reconfigure: %s", first.String())
+	}
+	if !strings.Contains(second.String(), "category=audit") {
+		t.Fatalf("audit line missing from the latest destination: %s", second.String())
+	}
+	if strings.Contains(second.String(), "ops info hidden") {
+		t.Fatalf("info ops log written at warn level: %s", second.String())
+	}
+	var auditRecords int
+	for _, level := range extra.levels {
+		if level == slog.LevelInfo {
+			auditRecords++
+		}
+	}
+	if auditRecords != 1 {
+		t.Fatalf("extra handler info records = %d, want 1 (the audit line)", auditRecords)
 	}
 }
 

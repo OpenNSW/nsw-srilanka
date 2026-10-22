@@ -150,6 +150,16 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, err
 	}
 	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
+	// Built before payment and storage are handed to the task stack. Workers
+	// can emit events as soon as those services exist, so the auditor has to
+	// be attached here rather than after the task manager starts.
+	auditor := nswaudit.New()
+	auditor.RegisterSink(nswaudit.NewLogSink(nil))
+	coreAuditor := nswaudit.NewCoreAdapter(auditor)
+	var unwiredAudit []string
+	if !attachAuditor(paymentService, coreAuditor) {
+		unwiredAudit = append(unwiredAudit, "payment")
+	}
 
 	artifactRegistry, err := initArtifactRegistry(ctx, cfg)
 	if err != nil {
@@ -178,6 +188,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
+	}
+	if !attachAuditor(storageStack.Service, coreAuditor) {
+		unwiredAudit = append(unwiredAudit, "storage")
 	}
 	// The file tokens callers hold in place of stored file values.
 	fileAccess, err := newFileAccess(cfg.Storage)
@@ -243,11 +256,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	// Audit client. Events go to structured slog with category=audit (same
-	// process stream, filterable as the audit log). cfg.Audit is unused.
-	auditor := nswaudit.New()
-	auditor.RegisterSink(nswaudit.NewLogSink(nil))
-
 	// The mode decides what starts parent workflows: consignments in TNSW, injects in
 	// an agency (see agency.go). An agency builds none of the consignment stack, whose
 	// constructors require the trader and CHA roles an agency catalog does not map.
@@ -406,22 +414,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	staticDataHandler := staticdata.NewHandler(artifactRegistry)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
-	coreAuditor := nswaudit.NewCoreAdapter(auditor)
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	// Released payment and storage have no WithAuditor yet. The assertion is
-	// a no-op until a release accepts one.
-	if svc, ok := any(paymentService).(interface {
-		WithAuditor(a sharedaudit.Auditor)
-	}); ok {
-		svc.WithAuditor(coreAuditor)
-	}
-	if svc, ok := storageStack.Service.(interface {
-		WithAuditor(a sharedaudit.Auditor)
-	}); ok {
-		svc.WithAuditor(coreAuditor)
-	}
 	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
@@ -566,6 +561,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// attaches the principal on a child request; the log reads it back from
 	// authn.RequestCaller.
 	configureLogging(cfg, os.Stdout, tel.SlogHandler())
+	for _, name := range unwiredAudit {
+		slog.Warn(name + " audit is not wired: service has no WithAuditor")
+	}
 	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", mux))))
 	server := newHTTPServer(cfg.Server, handler)
 
@@ -878,6 +876,21 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 		}
 	}
 	return nil
+}
+
+// attachAuditor calls WithAuditor when the service has it. Released payment
+// and storage do not. The call sits next to construction, before the task
+// stack starts workers that would race a later assignment. The caller logs a
+// miss after logging is configured, so the warning reaches stdout and OTLP.
+func attachAuditor(svc any, auditor sharedaudit.Auditor) bool {
+	setter, ok := svc.(interface {
+		WithAuditor(a sharedaudit.Auditor)
+	})
+	if !ok {
+		return false
+	}
+	setter.WithAuditor(auditor)
+	return true
 }
 
 func initTask(

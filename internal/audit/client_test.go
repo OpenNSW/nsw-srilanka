@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"testing"
 
@@ -115,6 +116,31 @@ func TestLogSink_WritesCategoryAudit(t *testing.T) {
 	}
 	if line["eventType"] != string(EventConsignment) {
 		t.Fatalf("eventType = %v", line["eventType"])
+	}
+}
+
+func TestLogSink_NilLoggerResolvesAtWrite(t *testing.T) {
+	sink := NewLogSink(nil)
+	var buf bytes.Buffer
+	SetProcessLogger(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() {
+		SetProcessLogger(nil)
+		slog.SetDefault(prev)
+	})
+
+	sink.Write(context.Background(), Record{
+		EventType:  EventTask,
+		Action:     ActionUpdate,
+		Status:     StatusFailure,
+		ActorType:  ActorMember,
+		ActorID:    "u1",
+		TargetType: TargetTask,
+	})
+
+	if !bytes.Contains(buf.Bytes(), []byte(`"category":"audit"`)) {
+		t.Fatalf("audit record dropped or missing category: %s", buf.String())
 	}
 }
 

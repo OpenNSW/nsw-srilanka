@@ -30,8 +30,8 @@ github.com/OpenNSW/core/remote v0.8.0 h1:Ot44DtkEtzqKffy77EI0S6BCH1xDspQ2y2lSFKc
 github.com/OpenNSW/core/remote v0.8.0/go.mod h1:BzfC7ppzEAd5fUQmIsgeR2lZ6LzygNU4prNjvDpDH+4=
 github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrxBChQ=
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
-github.com/OpenNSW/core/shared v0.3.1-0.20261011235839-d0866ff9985b h1:5RPKIDzfzdRCmXGIKLMSkqFORfyhSBnIF1OaMtsFaH4=
-github.com/OpenNSW/core/shared v0.3.1-0.20261011235839-d0866ff9985b/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
+github.com/OpenNSW/core/shared v0.3.1-0.20261022063536-f6b1f0bced69 h1:lNqLBjGo7uybIUFUZJAJYeaAOJKCDXpGng/6JsyJZOc=
+github.com/OpenNSW/core/shared v0.3.1-0.20261022063536-f6b1f0bced69/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
 github.com/OpenNSW/core/storage v0.3.0 h1:TrPNxgu5dkJtafWtXkXxcVN4z7idygedFDu2Bh9iBEA=
 github.com/OpenNSW/core/storage v0.3.0/go.mod h1:PUkwnwzFP+GzXzbzIvmULmtsEgz74jlvq6qmTb59I2Y=
 github.com/OpenNSW/core/temporal v0.1.0 h1:/wFL05TyuZpnz0rOsg30eY3viXixMrfh+zDXA+DtvXA=
