@@ -25,10 +25,13 @@ func TestMiddlewareLogsCallerPayloadAndResponse(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
-		ctx := authn.ContextWithPrincipal(r.Context(), &authn.Principal{
-			Kind:   authn.KindUser,
-			UserID: "user-1",
-		})
+		p := &authn.Principal{Kind: authn.KindUser, UserID: "user-1"}
+		// attachPrincipal records the HTTP caller. ContextWithPrincipal only
+		// puts the principal on the handler's context.
+		if slot := authn.RequestCallerFrom(r.Context()); slot != nil {
+			slot.Principal = p
+		}
+		ctx := authn.ContextWithPrincipal(r.Context(), p)
 		if got, ok := authn.FromContext(ctx); !ok || got.Subject() != "user-1" {
 			t.Fatalf("principal on handler context = %v ok=%v", got, ok)
 		}
@@ -86,6 +89,11 @@ func TestMiddlewareAnonymousWhenUnauthenticated(t *testing.T) {
 	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := authn.FromContext(r.Context()); ok {
 			t.Fatal("expected no principal")
+		}
+		// A webhook authenticates itself and then reads the body. The log
+		// records what the handler actually read.
+		if _, err := io.ReadAll(r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -199,7 +207,11 @@ func TestMiddlewareOmitsChunkedBinaryWithSize(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	body := []byte{0xff, 0xfe, 0x00, 0x01}
 
-	h := Middleware(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := Middleware(logger)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		if _, err := io.ReadAll(r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+	}))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage", bytes.NewReader(body))
 	req.ContentLength = -1
 	req.Header.Set("Content-Type", "application/octet-stream")
@@ -271,14 +283,144 @@ func TestMiddlewareLogsWhenHandlerPanics(t *testing.T) {
 		panic("boom")
 	}))
 
+	panicked := false
 	func() {
-		defer func() { _ = recover() }()
-		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+		defer func() {
+			if recover() != nil {
+				panicked = true
+			}
+		}()
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/tasks/abc", nil))
 	}()
+	if !panicked {
+		t.Fatal("panic was swallowed")
+	}
 
 	line := decodeLine(t, buf.Bytes())
-	assertEqual(t, "path", line["path"], "/health")
+	assertEqual(t, "path", line["path"], "/api/v1/tasks/abc")
 	assertEqual(t, "callerKind", line["callerKind"], "anonymous")
+	assertEqual(t, "status", line["status"], float64(http.StatusInternalServerError))
+}
+
+func TestMiddlewareSkipsHealth(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	called := false
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	if !called {
+		t.Fatal("health handler was not called")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("health was logged: %s", buf.String())
+	}
+}
+
+func TestMiddlewareDoesNotReadBodyBeforeHandler(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	body := &countReader{r: strings.NewReader(`{"note":"secret payload"}`)}
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if body.n != 0 {
+			t.Fatalf("body read before the handler decided, %d bytes", body.n)
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc", body)
+	req.ContentLength = -1
+	req.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	if body.n != 0 {
+		t.Fatalf("middleware read %d bytes the handler never asked for", body.n)
+	}
+	line := decodeLine(t, buf.Bytes())
+	if _, ok := line["requestBody"]; ok {
+		t.Fatalf("logged a body the handler did not read: %v", line["requestBody"])
+	}
+}
+
+func TestMiddlewareRedactsSignedURLsAndCallbackToken(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	const token = "callback-secret"
+	const upload = "https://s3.example/bucket/k?X-Amz-Signature=sig-secret"
+	const download = "https://s3.example/bucket/k?X-Amz-Credential=cred-secret"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/callbacks/{token}", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := io.ReadAll(r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"download_url":"`+download+`","expires_at":1}`)
+	})
+
+	payload := `{"filename":"a.pdf","upload_url":"` + upload + `","note":"keep me"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/"+token+"?token="+token+"&x=1", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	Middleware(logger)(mux).ServeHTTP(httptest.NewRecorder(), req)
+
+	raw := buf.String()
+	for _, secret := range []string{token, "sig-secret", "cred-secret", upload, download} {
+		if strings.Contains(raw, secret) {
+			t.Fatalf("security log contained %q: %s", secret, raw)
+		}
+	}
+	line := decodeLine(t, []byte(raw))
+	assertEqual(t, "path", line["path"], "/api/v1/callbacks/{token}")
+	query, _ := line["query"].(string)
+	if !strings.Contains(query, "x=1") || !strings.Contains(query, "redacted") {
+		t.Fatalf("query = %q", query)
+	}
+	reqBody, _ := line["requestBody"].(string)
+	if !strings.Contains(reqBody, "keep me") || !strings.Contains(reqBody, redactedValue) {
+		t.Fatalf("requestBody = %q", reqBody)
+	}
+	respBody, _ := line["responseBody"].(string)
+	if !strings.Contains(respBody, "expires_at") || !strings.Contains(respBody, redactedValue) {
+		t.Fatalf("responseBody = %q", respBody)
+	}
+}
+
+func TestRedactTruncatedJSONRemovesSignedURL(t *testing.T) {
+	const signatureQuery = "X-Amz-Signature=truncated-marker"
+	body := []byte(`{"upload_url":"https://s3.example/k?` + signatureQuery)
+	got := string(redactLogged("application/json", body))
+	if strings.Contains(got, signatureQuery) || strings.Contains(got, "s3.example") {
+		t.Fatalf("truncated body still has the url: %s", got)
+	}
+	if !strings.Contains(got, redactedValue) {
+		t.Fatalf("truncated body = %s", got)
+	}
+}
+
+func TestMiddlewareLogsSwitchingProtocols(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusSwitchingProtocols)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ws", nil))
+
+	line := decodeLine(t, buf.Bytes())
+	assertEqual(t, "status", line["status"], float64(http.StatusSwitchingProtocols))
+}
+
+type countReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
 }
 
 // finalStatus records the last non-1xx status and still accepts a body.
@@ -316,7 +458,7 @@ func TestMiddlewareCarriesTraceID(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})))
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/abc", nil)
 	req.Header.Set("X-Trace-ID", "trace-abc")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 

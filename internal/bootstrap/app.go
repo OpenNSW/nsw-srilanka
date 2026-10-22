@@ -549,10 +549,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
 	// Security log reads slog.Default after that, so its line is on the same
 	// stream. It sits inside trace middleware so the line carries the trace
-	// id. Authentication attaches the principal on a child request; the log
-	// reads it back from authn.RequestCaller.
+	// id, and outside CORS so a preflight is logged too. Authentication
+	// attaches the principal on a child request; the log reads it back from
+	// authn.RequestCaller.
 	configureLogging(cfg, os.Stdout, tel.SlogHandler())
-	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(securitylog.Middleware(slog.Default())(tel.Handler("tnsw-api", mux))))
+	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", mux))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {

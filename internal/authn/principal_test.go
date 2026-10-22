@@ -25,6 +25,15 @@ func TestFromContext_Unauthenticated(t *testing.T) {
 	}
 }
 
+func TestContextWithPrincipal_DoesNotReplaceRecordedCaller(t *testing.T) {
+	slot := &RequestCaller{Principal: &Principal{Kind: KindUser, UserID: "caller"}}
+	ctx := WithRequestCaller(context.Background(), slot)
+	_ = ContextWithPrincipal(ctx, &Principal{Kind: KindClient, ClientID: "system"})
+	if slot.Principal == nil || slot.Principal.UserID != "caller" {
+		t.Fatalf("recorded caller = %#v", slot.Principal)
+	}
+}
+
 func TestContextWithPrincipal_RoundTrip(t *testing.T) {
 	want := &Principal{Kind: KindUser, UserID: "u1", OUHandle: "ou-1"}
 	got, ok := FromContext(ContextWithPrincipal(context.Background(), want))
