@@ -79,6 +79,8 @@ func (l *listSwitches) walk(el any, base string) {
 // control records a Control showing the value at path with options. Only a
 // list uses what is recorded; for anything else it is never asked for.
 func (l *listSwitches) control(path string, options any) {
+	// Options that aren't an object set nothing, as for the renderer: both
+	// switches stay on.
 	opts, _ := options.(map[string]any)
 	on := func(name string) bool {
 		v, ok := opts[name].(bool)

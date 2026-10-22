@@ -23,7 +23,7 @@ type NamespaceOf func(ctx context.Context, stepTemplateID string) (string, error
 // Extension is the PRE_RESUME task extension that validates a submission
 // against the form the step names in the extension's properties: its JSON
 // Schema, and the values it shows read-only, which must come back as the step
-// stored them (#795). It runs on every step that lists it and fails closed: a
+// stored them. It runs on every step that lists it and fails closed: a
 // step whose form can't be found or compiled rejects every submission rather
 // than letting one through unchecked.
 type Extension struct {

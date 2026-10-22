@@ -27,7 +27,7 @@ type value struct {
 }
 
 // readOnlyViolations compares submitted, a submission's form data, with
-// stored, the data the step holds, by the read-only rules (#795): every
+// stored, the data the step holds, by the read-only rules: every
 // read-only value comes back as the server stored it, and a list's rows come
 // back as rows the server sent, or as new rows without read-only values,
 // within what the list allows. A form without read-only values has none.
@@ -56,6 +56,9 @@ func (n *roNode) compare(st, sub value, at string, out *[]Violation) {
 			return
 		}
 	}
+	// A value that isn't an object has no keys: the read-only values under it
+	// count as absent, so they are reported as missing or set by the client,
+	// never passed over.
 	stObj, _ := st.v.(map[string]any)
 	subObj, _ := sub.v.(map[string]any)
 	for _, key := range keysOf(stObj, subObj) {
@@ -156,7 +159,7 @@ func (n *roNode) serverPart(v value) any {
 			return nil
 		}
 	}
-	obj, _ := v.v.(map[string]any)
+	obj, _ := v.v.(map[string]any) // not an object: no read-only values of its own
 	part := make(map[string]any)
 	for _, key := range keysOf(obj, n.namedKeys()) {
 		child := n.property(key)
@@ -174,7 +177,9 @@ func (n *roNode) serverPart(v value) any {
 	return part
 }
 
-// partKey returns a server part as a string two parts compare equal by.
+// partKey returns a server part as a string two parts compare equal by. It
+// can't fail for values decoded from JSON; if it did, the rows would pair on
+// "" and the value-by-value comparison of paired rows would still refuse them.
 func partKey(part any) string {
 	b, err := json.Marshal(part)
 	if err != nil {
@@ -201,7 +206,8 @@ func keysOf(objs ...map[string]any) []string {
 }
 
 // equalJSON reports whether a and b are the same JSON value: 1 and "1" differ,
-// 1 and 1.0 don't, and objects and lists compare in full.
+// 1 and 1.0 don't, and objects and lists compare in full. A value that can't
+// be encoded equals nothing, so the comparison fails closed.
 func equalJSON(a, b any) bool {
 	ja, errA := json.Marshal(a)
 	jb, errB := json.Marshal(b)

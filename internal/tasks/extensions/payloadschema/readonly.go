@@ -8,7 +8,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// readOnlyForm is what the read-only check (#795) knows about a form: the
+// readOnlyForm is what the read-only check knows about a form: the
 // values its schema marks readOnly, which the server owns, and whether the user
 // may add or remove the rows of each list. A UI schema "readonly" option is
 // display only and is not read.
@@ -26,6 +26,10 @@ type readOnlyForm struct {
 // refusedReadOnly and refSiblings), or when the UI schema isn't JSON: the form
 // is then misconfigured.
 func newReadOnlyForm(schema *jsonschema.Schema, raw []byte, uiSchema json.RawMessage) (*readOnlyForm, error) {
+	// Up to draft-07, "all other properties in a "$ref" object MUST be
+	// ignored" (JSON Schema Core draft-07, section 8.3); from draft 2019-09,
+	// $ref applies alongside them (JSON Schema Core 2019-09, section 8.2.4.1).
+	// The forms are draft-07.
 	if schema.DraftVersion < 2019 {
 		if err := refSiblings(raw); err != nil {
 			return nil, err
@@ -87,8 +91,8 @@ func (n *roNode) defaultValue() (any, bool) {
 
 // property returns the node for the value under key, or nil when nothing in
 // it is read-only. A key gets the schemas of the property of that name, of
-// every pattern it matches, and otherwise of additionalProperties, as JSON
-// Schema applies them.
+// every pattern it matches, and otherwise of additionalProperties (JSON Schema
+// Validation draft-07, sections 6.5.4 to 6.5.6).
 func (n *roNode) property(key string) *roNode {
 	var schemas []*jsonschema.Schema
 	for _, s := range n.schemas {
@@ -257,7 +261,8 @@ func refused(s *jsonschema.Schema) []refusedPart {
 		out = append(out, refusedPart{"prefixItems", p})
 	}
 	if len(s.PrefixItems) > 0 {
-		// items then covers only the rows after the prefix.
+		// items then covers only the rows after the prefix (JSON Schema
+		// Core 2020-12, section 10.3.1.2).
 		out = append(out, refusedPart{"items", s.Items2020})
 	}
 	if s.DynamicRef != nil {
@@ -268,11 +273,12 @@ func refused(s *jsonschema.Schema) []refusedPart {
 
 // refSiblings returns an error when an object in raw, a schema document of
 // draft-07 or older, has a $ref next to a default or a keyword that holds a
-// readOnly. Those drafts say to ignore every keyword beside $ref, and the
-// library drops most of them, including properties, allOf and default, but
-// the trader app's Ajv keeps them: a readOnly or a default the check needs
-// would be lost without a word. A form without readOnly values is not checked,
-// since the check needs nothing from it.
+// readOnly. Those drafts say to ignore every keyword beside $ref (JSON Schema
+// Core draft-07, section 8.3), and the library drops most of them, including
+// properties, allOf and default, but the trader app's Ajv keeps them: a
+// readOnly or a default the check needs would be lost without a word. A form
+// without readOnly values is not checked, since the check needs nothing from
+// it.
 //
 // The walk reads every key as a keyword, so a property named like one ("$ref",
 // "readOnly") can refuse a form that is fine; that fails closed, and is

@@ -193,7 +193,7 @@ func TestHandleCompleteTaskStep_AcceptsASubmissionMatchingTheForm(t *testing.T) 
 }
 
 // A draft is held to the read-only rule: it overwrites the stored values, so a
-// draft changing one is refused and the stored value kept (#795).
+// draft changing one is refused and the stored value kept.
 func TestHandleSaveDraft_RefusesADraftChangingAReadOnlyValue(t *testing.T) {
 	h, db, wf := draftValidationFixture(t)
 
@@ -206,7 +206,7 @@ func TestHandleSaveDraft_RefusesADraftChangingAReadOnlyValue(t *testing.T) {
 }
 
 // A submission changing a read-only value is refused, even when it matches
-// the form's schema (#795).
+// the form's schema.
 func TestHandleCompleteTaskStep_RefusesAChangedReadOnlyValue(t *testing.T) {
 	h, db, wf := draftValidationFixture(t)
 
