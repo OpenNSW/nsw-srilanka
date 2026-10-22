@@ -151,6 +151,8 @@ const en = {
         stay: 'Stay on this page',
         leave: 'Leave without saving',
       },
+      // SLTB Review Pickup Schedule — officer proposes an alternative slot.
+      submitSuccessProposedPickupDate: 'Your proposed date has been submitted successfully',
       validation: {
         requiredFields: 'Please fill in all required fields.',
       },
