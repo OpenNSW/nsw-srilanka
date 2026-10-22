@@ -1,19 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Spinner, Text } from '@radix-ui/themes'
+import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { getZoneView, saveTaskStepDraft, submitTaskStep } from './service'
 import { HttpError } from '@/services/http'
 import { getConsignment } from '@/features/consignment/service.ts'
-import type { WorkflowNode } from '@/features/consignment/types'
+import type { Consignment, WorkflowNode } from '@/features/consignment/types'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 import { zoneWidthClass } from '@/features/zone/width'
+import { TaskBreadcrumb } from './TaskBreadcrumb'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
-const SUBMIT_SUCCESS_DISMISS_MS = 5000
 const NEXT_TASK_MAX_ATTEMPTS = 5
 const NEXT_TASK_RETRY_MS = 1000
 const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
@@ -26,12 +26,6 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
   })
   const successor = actionable.find((node) => node.depends_on?.includes(currentTaskId))
   return (successor ?? actionable[0])?.id
-}
-
-function hasRejection(zv: ZoneView): boolean {
-  const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
-  if (variant === 'error') return true
-  return zv.view.some((zone) => zone.id.toLowerCase().includes('reject'))
 }
 
 export function TaskDetailScreen() {
@@ -55,7 +49,6 @@ export function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [hasSubmitted, setHasSubmitted] = useState(false)
-  const [showSubmitSuccess, setShowSubmitSuccess] = useState(false)
   // Bumped once an action's refetch has landed, and mixed into the zone keys so
   // the form remounts against what came back. A form seeds its data on mount
   // and deliberately ignores later polls, which is what stops a background
@@ -64,11 +57,12 @@ export function TaskDetailScreen() {
   // values it mounted with, from before the submission was saved.
   const [formEpoch, setFormEpoch] = useState(0)
   const [nextTaskId, setNextTaskId] = useState<string | null>(null)
+  // The consignment, for the breadcrumb and the task's own name.
+  const [consignment, setConsignment] = useState<Consignment | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
-    setShowSubmitSuccess(false)
     setNextTaskId(null)
   }
 
@@ -111,6 +105,19 @@ export function TaskDetailScreen() {
   }, [taskId, t])
 
   useEffect(() => {
+    if (!consignmentId) return
+    let cancelled = false
+    void getConsignment(consignmentId)
+      .then((c) => {
+        if (!cancelled) setConsignment(c)
+      })
+      .catch((err) => console.error('TaskDetailScreen: failed to load consignment:', err))
+    return () => {
+      cancelled = true
+    }
+  }, [consignmentId])
+
+  useEffect(() => {
     if (!consignmentId || !taskId || zoneView?.state !== 'COMPLETED') return
 
     let cancelled = false
@@ -122,6 +129,7 @@ export function TaskDetailScreen() {
       try {
         const consignment = await getConsignment(consignmentId)
         if (cancelled || !consignment) return
+        setConsignment(consignment)
         const id = nextActionableTaskId(consignment.workflowNodes ?? [], taskId)
         setNextTaskId(id ?? null)
         if (!id && attempt < NEXT_TASK_MAX_ATTEMPTS) {
@@ -190,43 +198,28 @@ export function TaskDetailScreen() {
   }
 
   const width = zoneWidthClass(zoneView)
+  const nodeName = (id: string | null | undefined) =>
+    consignment?.workflowNodes?.find((node) => node.id === id)?.workflowNodeTemplate.name
+  const taskName = nodeName(taskId)
+  const nextTaskName = nodeName(nextTaskId)
 
   return (
     <div className="min-h-full">
-      <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between`}>
-        <div className="flex items-center gap-6">
-          <Button variant="ghost" color="gray" onClick={goToTasks} className="cursor-pointer">
-            <ArrowLeftIcon />
-            {t('tasks.back')}
-          </Button>
-          {zoneView.state === 'COMPLETED' && nextTaskId && (
-            <Button variant="ghost" color="gray" onClick={() => goToNextTask(nextTaskId)} className="cursor-pointer">
-              {t('tasks.nextTask')}
-              <ArrowRightIcon />
-            </Button>
-          )}
-        </div>
-        <Button
-          variant="soft"
-          color="blue"
-          size="2"
-          onClick={() => void fetchTask()}
-          disabled={refreshing}
-          className="cursor-pointer"
-        >
-          <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-          {t('tasks.refresh')}
-        </Button>
+      <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between gap-4`}>
+        <TaskBreadcrumb consignmentId={consignmentId} consignmentName={consignment?.name} taskName={taskName} />
+        <Tooltip content={t('tasks.refresh')}>
+          <IconButton
+            type="button"
+            variant="soft"
+            color="gray"
+            onClick={() => void fetchTask()}
+            disabled={refreshing}
+            aria-label={t('tasks.refresh')}
+          >
+            <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
+          </IconButton>
+        </Tooltip>
       </div>
-      {showSubmitSuccess && (
-        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
-          <div className="rounded-xl bg-success-subtle px-4 py-3 shadow-sm">
-            <Text size="2" weight="medium" className="text-success-strong">
-              {t('tasks.submitSuccess')}
-            </Text>
-          </div>
-        </div>
-      )}
       {submitError && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
           <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
@@ -238,6 +231,7 @@ export function TaskDetailScreen() {
       )}
       <TraderZoneLayout
         task={zoneView}
+        title={taskName}
         formEpoch={formEpoch}
         onSubmitForm={
           hasSubmitted
@@ -273,17 +267,11 @@ export function TaskDetailScreen() {
                   window.scrollTo({ top: 0, behavior: 'smooth' })
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
-                  const zv = await fetchTask()
+                  await fetchTask()
                   // Reseed from what the refetch returned, not from what the
                   // form mounted with. Safe to discard the on-screen values
                   // here: the submission that just succeeded carried them.
                   setFormEpoch((n) => n + 1)
-                  // Show the success banner only when the task moved out of PENDING_USER.
-                  // A draft save leaves it there, a real submission advances it.
-                  if (zv && zv.state !== 'PENDING_USER' && !hasRejection(zv)) {
-                    setShowSubmitSuccess(true)
-                    setTimeout(() => setShowSubmitSuccess(false), SUBMIT_SUCCESS_DISMISS_MS)
-                  }
                 } catch (err) {
                   // Use a local error here rather than the screen-level `error`, which
                   // would unmount the layout and discard the user's entered form data.
@@ -310,6 +298,20 @@ export function TaskDetailScreen() {
               }
         }
       />
+      {zoneView.state === 'COMPLETED' && (
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
+          {nextTaskId ? (
+            <Button size="3" onClick={() => goToNextTask(nextTaskId)}>
+              {nextTaskName ? t('tasks.continueTo', { name: nextTaskName }) : t('tasks.continueToNext')}
+              <ArrowRightIcon />
+            </Button>
+          ) : (
+            <Button size="3" variant="soft" onClick={goToTasks}>
+              {t('tasks.backToConsignment')}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
