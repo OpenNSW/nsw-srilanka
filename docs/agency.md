@@ -195,9 +195,9 @@ the agency's artifacts therefore declare for every task:
 - the render config's `read.roles` says which roles may open the task, e.g.
   `["officer"]`.
 
-A step without an `authz` block is not checked on writes, and a render config without
-a `read` block is readable by every catalog role, so a task that should be open to one
-role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
+A step without an `authz` block is refused on writes (unless the server sets
+`allowStepsWithoutAuthz`), and a render config without a `read` block is readable by
+every catalog role, so a task that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
 (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).
 

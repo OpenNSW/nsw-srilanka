@@ -5,6 +5,12 @@ a task at its current state. It is the enforcement point behind both task-write
 routes, `POST /api/v1/tasks/{id}/steps/{stepId}` and `POST /api/v1/callbacks/{token}`:
 both complete a step through core's `CompleteTaskStep`, which runs this extension.
 
+Every step a caller completes or drafts must declare it. The task manager is built
+with core's `WithRequiredPreResumeExtensions("authz")`, so a step whose template has no
+`authz` extension is refused to everyone (`ErrStepNotGuarded`, answered with `403`)
+rather than open to anyone. `server.allowStepsWithoutAuthz: true` turns that off, as
+an escape hatch for artifacts that still lack a rule.
+
 It is a **pure evaluator**: the API layer (a task-write middleware) resolves the
 caller's identity and their ownership of the task's consignment and attaches an
 `Input` to the request context. This extension only matches that `Input` against
@@ -81,8 +87,9 @@ a client, and the catalog can't define `system`, so neither can match it.
 `MayAct` asks the same rules whether the caller may run **any** command on the
 task in its current state, without running one. `MayActOnStep` asks it of every
 `PRE_RESUME` `authz` extension on the active step's template, all of which must
-allow it, as core runs them all. A step with none doesn't check who submits, so
-every reader may act on it.
+allow it, as core runs them all. A step with none checks no one here, but the task
+manager refuses to complete it (see above) unless `server.allowStepsWithoutAuthz` is
+set.
 
 `GET /api/v1/tasks/{id}` uses `MayActOnStep` to decide whether the reader's file
 references can be submitted back: a reader who may act gets `read` and `submit`,

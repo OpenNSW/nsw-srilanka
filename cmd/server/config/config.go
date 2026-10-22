@@ -71,6 +71,11 @@ type ServerConfig struct {
 	ReadTimeout              time.Duration `yaml:"readTimeout"`
 	WriteTimeout             time.Duration `yaml:"writeTimeout"`
 	IdleTimeout              time.Duration `yaml:"idleTimeout"`
+	// AllowStepsWithoutAuthz lets a task step whose template declares no authz
+	// extension be completed or drafted by any caller with task-write access. Off
+	// by default: such a step is refused with 403. It is an escape hatch for a
+	// deployment whose pinned artifacts still lack a rule, not a setting to keep.
+	AllowStepsWithoutAuthz bool `yaml:"allowStepsWithoutAuthz"`
 }
 
 // AuditConfig is what a deployment sets for the Argus audit client. The

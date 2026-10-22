@@ -802,6 +802,17 @@ func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), errDraftNotEnabled)
 }
 
+// A step whose template names no one who may act is closed to everyone.
+func TestWriteCompletion_StepNotGuardedIsForbidden(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"))
+
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
+}
+
 func TestWriteCompletion_InvalidPayloadIsABadRequest(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
