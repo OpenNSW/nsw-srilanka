@@ -13,12 +13,13 @@ import (
 type DispatchNoteRepository interface {
 	GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error)
 	GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error)
-	Create(ctx context.Context, note *DispatchNote) error
 	Update(ctx context.Context, note *DispatchNote) error
 	// RecordSubmitted records that SLC Edge accepted a submission as edgeID,
 	// from workflow workflowID of case caseID, so its callbacks can find the
-	// task that workflow parks. A second call for the same edgeID, from a retry
-	// of the step, keeps one row and records the same link.
+	// task that workflow parks. It is the only writer that creates the row: SLC
+	// Edge issues a new edgeID for every submission and calls back only after
+	// returning it, so a second call for the same edgeID comes from a retry of
+	// the step, carries the same link, and leaves the row as it is.
 	RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error
 }
 
@@ -67,12 +68,8 @@ func (r *dispatchNoteRepository) RecordSubmitted(ctx context.Context, edgeID, ca
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "edge_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"case_id", "workflow_id"}),
+		DoNothing: true,
 	}).Create(&note).Error
-}
-
-func (r *dispatchNoteRepository) Create(ctx context.Context, note *DispatchNote) error {
-	return r.db.WithContext(ctx).Create(note).Error
 }
 
 func (r *dispatchNoteRepository) Update(ctx context.Context, note *DispatchNote) error {

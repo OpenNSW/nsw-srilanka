@@ -92,7 +92,10 @@ func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 // An unseen edgeId is the normal case, not an error: the §7.1 submission is
 // recorded in the workflow rather than in this table, so the integration result
 // is the first this service hears of a dispatch note.
-func TestProcessIntegrationResult_CreatesNoteForUnseenEdgeID(t *testing.T) {
+// The dispatch step records a note before SLC Edge can call back, so a result
+// for an edgeId with no row is early: it is retried, and no note is created
+// without the workflow it belongs to.
+func TestProcessIntegrationResult_UnrecordedEdgeIDIsRetried(t *testing.T) {
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
 	svc := NewCDNWebhookService(repo, nil, nil)
 
@@ -103,14 +106,11 @@ func TestProcessIntegrationResult_CreatesNoteForUnseenEdgeID(t *testing.T) {
 			CDNRef:     DocumentReference{Year: "2026", Office: "CBEX1", Serial: "C", Number: 28237},
 		},
 	}
-	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), req))
+	err := svc.ProcessIntegrationResult(context.Background(), req)
 
-	require.NotNil(t, repo.created)
+	require.ErrorIs(t, err, ErrDispatchNoteNotRecorded)
+	assert.Nil(t, repo.created)
 	assert.Nil(t, repo.updated)
-	assert.Equal(t, "edge-unseen", repo.created.EdgeID)
-	assert.NotEmpty(t, repo.created.ID)
-	assert.Equal(t, DispatchNoteStatusIntegrated, repo.created.Status)
-	assert.Equal(t, 28237, repo.created.CDNNumber)
 }
 
 func TestProcessAcknowledgment_Success(t *testing.T) {

@@ -116,6 +116,12 @@ func (h *Handler) handleCusdecIntegrationResult(w http.ResponseWriter, r *http.R
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
+		if errors.Is(err, cusdec.ErrDeclarationNotRecorded) {
+			slog.WarnContext(r.Context(), "slce: CusDec integration result arrived before its submission was recorded; retry",
+				"edge_id", req.EdgeID)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errDeclarationNotFoundRetry)
+			return
+		}
 		if errors.Is(err, cusdec.ErrWorkflowNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: workflow not found for CusDec integration result",
 				"edge_id", req.EdgeID, "error", err)
@@ -190,6 +196,12 @@ func (h *Handler) handleCDNIntegrationResult(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.cdnService.ProcessIntegrationResult(r.Context(), req); err != nil {
+		if errors.Is(err, cdn.ErrDispatchNoteNotRecorded) {
+			slog.WarnContext(r.Context(), "slce: CDN integration result arrived before its submission was recorded; retry",
+				"edge_id", req.Payload.EdgeID)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errDispatchNoteNotFoundRetry)
+			return
+		}
 		if errors.Is(err, cdn.ErrDispatchNoteNotFoundByEdgeID) {
 			slog.WarnContext(r.Context(), "slce: dispatch note not found for integration result",
 				"edge_id", req.Payload.EdgeID, "error", err)

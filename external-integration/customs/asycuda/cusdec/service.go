@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/uuid"
-
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 )
 
@@ -92,17 +90,13 @@ func (s *webhookService) updateCusdecDeclaration(ctx context.Context, req Cusdec
 		return nil, "", fmt.Errorf("failed to retrieve CusDec declaration by edgeId %s: %w", req.EdgeID, err)
 	}
 
-	originalStatus := CusdecStatus("")
-	isNew := false
+	// The dispatch step records the declaration as soon as SLC Edge accepts it,
+	// before SLC Edge can call back, so a result for an edgeId with no row is
+	// early, not new: it is retried rather than recorded without its workflow.
 	if decl == nil {
-		isNew = true
-		decl = &CusdecDeclaration{
-			ID:     uuid.NewString(),
-			EdgeID: req.EdgeID,
-		}
-	} else {
-		originalStatus = decl.Status
+		return nil, "", fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrDeclarationNotRecorded)
 	}
+	originalStatus := decl.Status
 
 	if decl.Status != CusdecStatusIntegrated && decl.Status != CusdecStatusFailed {
 		if req.Integrated {
@@ -117,14 +111,8 @@ func (s *webhookService) updateCusdecDeclaration(ctx context.Context, req Cusdec
 			decl.Errors = req.Errors
 		}
 
-		if isNew {
-			if err := s.repo.Create(ctx, decl); err != nil {
-				return nil, "", fmt.Errorf("failed to create CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
-			}
-		} else {
-			if err := s.repo.Update(ctx, decl); err != nil {
-				return nil, "", fmt.Errorf("failed to update CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
-			}
+		if err := s.repo.Update(ctx, decl); err != nil {
+			return nil, "", fmt.Errorf("failed to update CusDec declaration for edgeId %s: %w", decl.EdgeID, err)
 		}
 	}
 	return decl, originalStatus, nil

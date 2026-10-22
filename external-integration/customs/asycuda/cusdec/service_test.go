@@ -481,3 +481,21 @@ func TestProcessCusdecIntegrationResult_TaskStoreFailure(t *testing.T) {
 	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
 	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
+
+// The dispatch step records a declaration before SLC Edge can call back, so a
+// result for an edgeId with no row is early: it is retried, and no declaration
+// is created without the workflow it belongs to.
+func TestProcessCusdecIntegrationResult_UnrecordedEdgeIDIsRetried(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, fakeTasks{}, completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-unseen", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.ErrorIs(t, err, ErrDeclarationNotRecorded)
+	assert.False(t, repo.updateCalled)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}

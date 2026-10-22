@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/uuid"
-
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 )
 
@@ -52,18 +50,11 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		return fmt.Errorf("failed to retrieve dispatch note by edgeId %s: %w", req.Payload.EdgeID, err)
 	}
 
-	// The §7.1 acknowledgement is recorded in the workflow, not in this table:
-	// the dispatch step is fire-and-forget from the plugin's point of view, so
-	// the first this service hears of an edgeId is the integration result. A row
-	// is therefore created on demand rather than looked up, which is also what
-	// the CusDec side does with its declarations.
-	isNew := note == nil
-	if isNew {
-		note = &DispatchNote{
-			ID:     uuid.NewString(),
-			EdgeID: req.Payload.EdgeID,
-			Status: DispatchNoteStatusSubmitted,
-		}
+	// The dispatch step records the note as soon as SLC Edge accepts it, before
+	// SLC Edge can call back, so a result for an edgeId with no row is early, not
+	// new: it is retried rather than recorded without its workflow.
+	if note == nil {
+		return fmt.Errorf("edgeId %s: %w", req.Payload.EdgeID, ErrDispatchNoteNotRecorded)
 	}
 
 	// A note already in a terminal state is not recorded again — but the parked
@@ -77,11 +68,6 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		return s.resumeIntegrationWait(ctx, note, storedResult(req, note), true)
 	}
 
-	save := s.repo.Update
-	if isNew {
-		save = s.repo.Create
-	}
-
 	if req.Payload.Integrated {
 		note.Status = DispatchNoteStatusIntegrated
 		note.CDNYear = req.Payload.CDNRef.Year
@@ -89,7 +75,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		note.CDNSerial = req.Payload.CDNRef.Serial
 		note.CDNNumber = req.Payload.CDNRef.Number
 
-		if err := save(ctx, note); err != nil {
+		if err := s.repo.Update(ctx, note); err != nil {
 			return fmt.Errorf("failed to record dispatch note as INTEGRATED: %w", err)
 		}
 
@@ -105,7 +91,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 
 		note.Status = DispatchNoteStatusFailed
 		note.Errors = req.Payload.Errors
-		if err := save(ctx, note); err != nil {
+		if err := s.repo.Update(ctx, note); err != nil {
 			return fmt.Errorf("failed to record dispatch note as FAILED: %w", err)
 		}
 

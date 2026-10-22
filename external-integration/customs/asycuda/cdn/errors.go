@@ -6,6 +6,11 @@ import "errors"
 // This is a permanent condition — the caller should not retry.
 var ErrDispatchNoteNotFoundByEdgeID = errors.New("dispatch note not found by edgeId")
 
+// ErrDispatchNoteNotRecorded indicates an integration result arrived for an
+// edgeId the dispatch step has not recorded yet. Transient: the step records it
+// as soon as SLC Edge accepts the submission, so the caller should retry.
+var ErrDispatchNoteNotRecorded = errors.New("no dispatch note recorded for edgeId")
+
 // ErrDispatchNoteNotFoundByCDNRef indicates no dispatch note matches the given cdnRef.
 // This can be a transient condition if the acknowledgment callback arrives before
 // the integration result callback has finished processing — the caller should retry.
