@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -387,35 +386,6 @@ func TestFileHandler_UploadRejects(t *testing.T) {
 		rec := upload(NewFileHandler(stack.Service, failingRefs{}), user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`)
 		assertStatus(t, rec, http.StatusInternalServerError)
 	})
-}
-
-// A refused upload is logged as a warning with what it asked for, since no
-// other log records it.
-func TestFileHandler_UploadRejectionIsLogged(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	access, _ := testFileAccess(t)
-	h := NewFileHandler(stack.Service, access)
-
-	var logs bytes.Buffer
-	defer slog.SetDefault(slog.Default())
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-
-	rec := upload(h, user("alice"), `{"filename":"a.xls","mime_type":"application/vnd.ms-excel","size":10}`)
-	assertStatus(t, rec, http.StatusUnsupportedMediaType)
-
-	var entry map[string]any
-	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
-		t.Fatalf("log %q: %v", logs.String(), err)
-	}
-	if entry["level"] != "WARN" || entry["filename"] != "a.xls" || entry["mime_type"] != "application/vnd.ms-excel" {
-		t.Errorf("log = %v, want a WARN naming the file and its type", entry)
-	}
-	if !strings.Contains(fmt.Sprint(entry["error"]), "content type not allowed") {
-		t.Errorf("log error = %v, want the storage error", entry["error"])
-	}
 }
 
 // In proxy mode the owning service's rejection is relayed, and its failure to

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"mime"
 	"net/http"
 	"path"
@@ -44,13 +43,6 @@ func NewFileHandler(svc Service, refs FileRefs) *FileHandler {
 	return &FileHandler{svc: svc, refs: refs}
 }
 
-// uploadRequest is what an upload asks for.
-type uploadRequest struct {
-	Filename string `json:"filename"`
-	MimeType string `json:"mime_type"`
-	Size     int64  `json:"size"`
-}
-
 // uploadResponse is what an upload returns: the reference to keep for the
 // file, and where to upload it.
 type uploadResponse struct {
@@ -71,7 +63,11 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, http.StatusUnauthorized, "authentication required")
 		return
 	}
-	var req uploadRequest
+	var req struct {
+		Filename string `json:"filename"`
+		MimeType string `json:"mime_type"`
+		Size     int64  `json:"size"`
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.Error(w, r, http.StatusBadRequest, "invalid request body")
@@ -88,7 +84,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	meta, err := h.svc.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
 	if err != nil {
-		h.writeServiceError(w, r, err, "failed to prepare upload", &req)
+		h.writeServiceError(w, r, err, "failed to prepare upload", req.MimeType)
 		return
 	}
 	ref, err := h.refs.Issue(p, meta.Key, fileaccess.UploadScopes(p)...)
@@ -140,7 +136,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 	dl, err := downloadOf(r.Context(), h.svc, value)
 	if err != nil {
-		h.writeServiceError(w, r, err, "failed to generate access", nil)
+		h.writeServiceError(w, r, err, "failed to generate access", "")
 		return
 	}
 	httputil.JSON(w, http.StatusOK, dl)
@@ -198,27 +194,11 @@ func mimeTypeOf(ext string) string {
 }
 
 // writeServiceError answers a failed Service call the way core/storage's and
-// the proxy's own handlers do. up is the upload that failed, or nil for a
-// download.
-//
-// A request refused for what it asks, here or by the owning service, is
-// logged as a warning with what it asked for: no other log records it, and
-// the person it was refused for is the one to ask why. Failures of this
-// service or the owning one are logged as errors where they are answered.
-func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback string, up *uploadRequest) {
+// the proxy's own handlers do. mimeType is the type an upload asked for, named
+// when it is refused so the uploader can see what their file was sent as; it
+// is empty for a download.
+func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback, mimeType string) {
 	var tooLarge *corestorage.FileTooLargeError
-	var rejection *RemoteRejection
-	if errors.Is(err, corestorage.ErrInvalidKey) ||
-		errors.Is(err, corestorage.ErrInvalidSize) ||
-		errors.As(err, &tooLarge) ||
-		errors.Is(err, corestorage.ErrContentTypeNotAllowed) ||
-		errors.As(err, &rejection) {
-		attrs := []any{"error", err}
-		if up != nil {
-			attrs = append(attrs, "filename", up.Filename, "mime_type", up.MimeType, "size", up.Size)
-		}
-		slog.WarnContext(r.Context(), "storage: request rejected", attrs...)
-	}
 	switch {
 	case errors.Is(err, corestorage.ErrInvalidKey):
 		httputil.Error(w, r, http.StatusBadRequest, "invalid key format")
@@ -228,8 +208,8 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 		httputil.Error(w, r, http.StatusBadRequest, fmt.Sprintf("file size exceeds %s limit", formatSize(tooLarge.Limit)))
 	case errors.Is(err, corestorage.ErrContentTypeNotAllowed):
 		message := "invalid or prohibited file type"
-		if up != nil {
-			message += ": " + up.MimeType
+		if mimeType != "" {
+			message += ": " + mimeType
 		}
 		httputil.Error(w, r, http.StatusUnsupportedMediaType, message)
 	case isUpstreamFailure(err):
