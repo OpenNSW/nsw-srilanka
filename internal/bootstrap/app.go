@@ -389,6 +389,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 
+		// TEMPORARY debugging code (see asycuda/debug_forward.go): copy every SLC
+		// Edge callback to the slce-debug-forward service when config.yaml has one.
+		for _, svc := range cfg.Services {
+			if svc.ID == asycuda.DebugForwardServiceID {
+				slceHandler.DebugForward = remoteManager
+				slog.Warn("slce debug forward is ON: every SLC Edge callback is copied to another deployment", "url", svc.URL)
+			}
+		}
+
 		// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
 		// presenting an IdP token, so this handler owns its own authentication and
 		// the route below carries no bearer middleware.

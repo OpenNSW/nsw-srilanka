@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/httputil"
+	"github.com/OpenNSW/core/remote"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
@@ -30,6 +31,11 @@ const (
 type Handler struct {
 	cusdecService cusdec.WebhookService
 	cdnService    cdn.CDNWebhookService
+
+	// DebugForward is TEMPORARY debugging code: see debug_forward.go, which says
+	// how to remove it. When set, every callback is also sent to the
+	// slce-debug-forward service.
+	DebugForward *remote.Manager
 }
 
 // NewHandler creates a new central SLCE webhook handler.
@@ -58,6 +64,9 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 
 	edgetrace.Webhook(r.Context(), r.URL.Path, body)
+
+	// TEMPORARY debugging code: see debug_forward.go.
+	h.forwardDebugCopy(r.Context(), body)
 
 	var env payloadEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
