@@ -32,6 +32,12 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
   return (successor ?? actionable[0])?.id
 }
 
+function hasRejection(zv: ZoneView): boolean {
+  const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
+  if (variant === 'error') return true
+  return zv.view.some((zone) => zone.id.toLowerCase().includes('reject'))
+}
+
 export function TaskDetailScreen() {
   const { taskId, consignmentId } = useParams<{ taskId: string; consignmentId: string }>()
   const navigate = useNavigate()
@@ -290,11 +296,17 @@ export function TaskDetailScreen() {
                   window.scrollTo({ top: 0, behavior: 'smooth' })
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
-                  await fetchTask()
+                  const zv = await fetchTask()
                   // Reseed from what the refetch returned, not from what the
                   // form mounted with. Safe to discard the on-screen values
                   // here: the submission that just succeeded carried them.
                   setFormEpoch((n) => n + 1)
+                  // A submit that leaves the task pending stored the answers
+                  // but did not send the application. A rejection already
+                  // explains itself through the task alert.
+                  if (zv?.state === 'PENDING_USER' && !hasRejection(zv)) {
+                    setSubmitError(t('tasks.error.submitNotSent'))
+                  }
                 } catch (err) {
                   // Use a local error here rather than the screen-level `error`, which
                   // would unmount the layout and discard the user's entered form data.
