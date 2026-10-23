@@ -337,7 +337,7 @@ func TestConsignmentService_ListConsignments_NoFilter(t *testing.T) {
 
 	_, err := svc.ListConsignments(context.Background(), Filter{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "TraderCompanyID or CHACompanyID must be set")
+	assert.Contains(t, err.Error(), "at least one of TraderCompanyID or CHACompanyID must be set")
 }
 
 func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {

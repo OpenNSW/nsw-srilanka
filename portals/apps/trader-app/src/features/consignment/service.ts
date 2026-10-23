@@ -105,13 +105,11 @@ export async function getAllConsignments(
   limit: number = 50,
   state?: ConsignmentState | 'all',
   flow?: TradeFlow | 'all',
-  role: 'trader' | 'cha' | 'nswAdmin' = 'trader',
   q?: string,
 ): Promise<ConsignmentListResult> {
   const params: Record<string, string | number> = { offset, limit }
   if (state && state !== 'all') params.state = state
   if (flow && flow !== 'all') params.flow = flow
-  params.role = role
   if (q && q.trim() !== '') params.q = q.trim()
 
   const { data } = await http.request<ConsignmentListResult>({

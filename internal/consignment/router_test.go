@@ -235,7 +235,7 @@ func TestConsignmentRouter_HandleGetConsignments(t *testing.T) {
 	sqlMock.ExpectQuery("(?i)SELECT count").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 	sqlMock.ExpectQuery("(?i)SELECT .* FROM \"consignments\"").WillReturnRows(sqlmock.NewRows([]string{"id", "trader_id", "trader_company_id"}).AddRow(uuid.NewString(), traderID, companyID))
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&state=IN_PROGRESS&flow=IMPORT", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/consignments?state=IN_PROGRESS&flow=IMPORT", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
@@ -251,7 +251,7 @@ func TestConsignmentRouter_HandleGetConsignments_RejectsUnknownFilters(t *testin
 			svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
 			r := mustNewRouter(t, svc, nil, mockCompany, nil)
 
-			req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&"+query, nil)
+			req, _ := http.NewRequest("GET", "/api/v1/consignments?"+query, nil)
 			req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
 			w := httptest.NewRecorder()
 			r.HandleGetConsignments(w, req)
@@ -296,7 +296,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockTaskStore.On("GetAllTasks", mock.Anything, returnedID).Return([]store.TaskRecord(nil))
 
 	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
-	req = req.WithContext(withAuthContext(req.Context(), traderID))
+	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleCreateConsignment(w, req)
 
@@ -330,7 +330,7 @@ func TestConsignmentRouter_HandleGetConsignments_WithSearch(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*LIKE`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "trader_id", "trader_company_id"}))
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader&q=abc123", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/consignments?q=abc123", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), traderID, "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
@@ -653,35 +653,27 @@ func TestConsignmentRouter_HandleGetConsignments_Unauthorized(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestConsignmentRouter_HandleGetConsignments_InvalidRole(t *testing.T) {
-	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, nil, nil)
-
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=superadmin", nil)
-	req = req.WithContext(withAuthContextOU(req.Context(), "user1", "ou1"))
-	w := httptest.NewRecorder()
-	r.HandleGetConsignments(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestConsignmentRouter_HandleGetConsignments_DefaultRole(t *testing.T) {
+// A caller holding both roles lists the consignments its company is the trader or the CHA on.
+func TestConsignmentRouter_HandleGetConsignments_BothRoles(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
 	svc := mustNewService(t, db, nil, nil, mockCompany, nil, nil)
 	r := mustNewRouter(t, svc, nil, mockCompany, nil)
 
-	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
+	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "both-ou").
 		Return(&company.Record{ID: "company-1"}, nil)
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*\(trader_company_id = \$1 OR cha_company_id = \$2\)`).
+		WithArgs("company-1", "company-1", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil) // no ?role param
-	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
+	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "user1", "both-ou", "Trader", "CHA"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	mockCompany.AssertExpectations(t)
+	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
 func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
@@ -694,7 +686,7 @@ func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").
 		Return(nil, company.ErrCompanyNotFound)
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
@@ -704,7 +696,6 @@ func TestConsignmentRouter_HandleGetConsignments_CompanyNotFound(t *testing.T) {
 	require.Len(t, recs, 1)
 	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
 	assert.Equal(t, "company not found", recs[0].Metadata["error"])
-	assert.Equal(t, "trader", recs[0].Metadata["role"])
 }
 
 func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
@@ -718,7 +709,7 @@ func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
 	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
 		WillReturnError(errors.New("db error"))
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
@@ -726,8 +717,7 @@ func TestConsignmentRouter_HandleGetConsignments_ListError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-// A CHA-role caller requesting role=cha is allowed — there is no coverage of the
-// cha branch elsewhere in this file.
+// A CHA-only caller lists the consignments its company is the CHA on.
 func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
 	db, sqlMock := setupTestDB(t)
 	mockCompany := new(MockCompanyService)
@@ -736,10 +726,11 @@ func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "cha-ou").
 		Return(&company.Record{ID: "company-cha"}, nil)
-	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+	sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments".*cha_company_id = \$1`).
+		WithArgs("company-cha", sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=cha", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), "cha1", "cha-ou", "CHA"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
@@ -748,15 +739,15 @@ func TestConsignmentRouter_HandleGetConsignments_CHARole(t *testing.T) {
 	mockCompany.AssertExpectations(t)
 }
 
-// A Trader-only caller asserting role=cha via the query param is denied before
-// any company lookup — the entitlement check must short-circuit ahead of it.
+// A caller holding neither the trader nor the cha role is denied before any company
+// lookup — the entitlement check must short-circuit ahead of it.
 func TestConsignmentRouter_HandleGetConsignments_RoleNotHeld(t *testing.T) {
 	mockCompany := new(MockCompanyService)
 	client, capture := nswaudit.NewWithCapture()
 	r := mustNewRouter(t, mustNewService(t, nil, nil, nil, nil, nil, nil), nil, mockCompany, client)
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=cha", nil)
-	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
+	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "officer1", "officer-ou", "NSW Admin"))
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
 
@@ -768,7 +759,6 @@ func TestConsignmentRouter_HandleGetConsignments_RoleNotHeld(t *testing.T) {
 	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
 	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
 	assert.Equal(t, "role not held", recs[0].Metadata["error"])
-	assert.Equal(t, "cha", recs[0].Metadata["role"])
 }
 
 // An empty/unusable OU handle surfaces as ErrInvalidCompanyID and must fail
@@ -783,7 +773,7 @@ func TestConsignmentRouter_HandleGetConsignments_InvalidCompanyID(t *testing.T) 
 	mockCompany.On("GetCompanyByOUHandle", mock.Anything, "").
 		Return(nil, company.ErrInvalidCompanyID)
 
-	req, _ := http.NewRequest("GET", "/api/v1/consignments?role=trader", nil)
+	req, _ := http.NewRequest("GET", "/api/v1/consignments", nil)
 	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "", "Trader")) // empty OU handle
 	w := httptest.NewRecorder()
 	r.HandleGetConsignments(w, req)
@@ -819,6 +809,27 @@ func TestNewRouter_ValidatesRoles(t *testing.T) {
 	}
 }
 
+// A caller without the trader role (here a CHA) cannot create a consignment.
+func TestConsignmentRouter_HandleCreateConsignment_TraderRoleRequired(t *testing.T) {
+	mockUser := new(MockUserService)
+	svc := mustNewService(t, nil, nil, nil, nil, mockUser, nil)
+	client, capture := nswaudit.NewWithCapture()
+	r := mustNewRouter(t, svc, nil, nil, client)
+
+	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
+	req = req.WithContext(withAuthContextRoles(req.Context(), "cha1", "cha-ou", "CHA"))
+	w := httptest.NewRecorder()
+	r.HandleCreateConsignment(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	mockUser.AssertNotCalled(t, "GetUser", mock.Anything, mock.Anything)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.ActionCreate, recs[0].Action)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "trader role not held", recs[0].Metadata["error"])
+}
+
 func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 	mockUser := new(MockUserService)
 	svc := mustNewService(t, nil, nil, nil, nil, mockUser, nil)
@@ -827,7 +838,7 @@ func TestConsignmentRouter_HandleCreateConsignment_ServiceError(t *testing.T) {
 	mockUser.On("GetUser", mock.Anything, "trader1").Return(nil, errors.New("lookup failed"))
 
 	req, _ := http.NewRequest("POST", "/api/v1/consignments", nil)
-	req = req.WithContext(withAuthContext(req.Context(), "trader1"))
+	req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "", "Trader"))
 	w := httptest.NewRecorder()
 	r.HandleCreateConsignment(w, req)
 

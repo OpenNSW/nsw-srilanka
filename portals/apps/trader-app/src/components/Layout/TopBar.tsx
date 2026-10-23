@@ -4,12 +4,10 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SignedIn, SignedOut, SignInButton, UserDropdown } from '@/components/Auth'
 import { useSignOutHandler } from '@/hooks/useSignOutHandler'
-import { RoleSwitcher } from './RoleSwitcher'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { NavMenu } from './NavMenu'
 import { appConfig, displayName } from '@/config'
 import { useProfile } from '@/services/useProfile'
-import { isAgencyMode } from '@/features/case'
 
 function BrandMark() {
   if (appConfig.branding.systemLogoUrl) {
@@ -51,9 +49,7 @@ function CompanyName() {
 }
 
 // Below 1024 px the bar has room only for the brand mark, this menu and the
-// avatar, so everything else moves in here. The full bar's role switcher alone
-// needs about 300 px, so this lasts up to 1024 px rather than the 768 px
-// break the review suggested.
+// avatar, so everything else moves in here.
 function SmallScreenMenu() {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -68,7 +64,6 @@ function SmallScreenMenu() {
         <Flex direction="column" gap="3" align="start">
           <NavMenu onNavigate={() => setOpen(false)} />
           <CompanyName />
-          {!isAgencyMode && <RoleSwitcher className="w-full" />}
           <LanguageSwitcher />
         </Flex>
       </Popover.Content>
@@ -115,7 +110,6 @@ export function TopBar() {
   return (
     <TopBarShell>
       <div className="hidden items-center gap-5 lg:flex">
-        {!isAgencyMode && <RoleSwitcher />}
         <LanguageSwitcher />
         <CompanyName />
       </div>

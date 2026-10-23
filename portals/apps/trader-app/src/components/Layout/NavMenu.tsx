@@ -3,21 +3,17 @@ import { DashboardIcon, ChevronDownIcon, HamburgerMenuIcon } from '@radix-ui/rea
 import { type ReactNode, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DropdownMenu } from '@radix-ui/themes'
-import { useRole } from '@/services/useRole'
-import type { Role } from '@/services/RoleContext'
 
 interface NavItem {
   name: string
   path: string
   icon: ReactNode
-  roles?: Role[]
 }
 
 interface NavGroup {
   name: string
   icon: ReactNode
   items: NavItem[]
-  roles?: Role[]
 }
 
 type NavItemOrGroup = NavItem | NavGroup
@@ -35,7 +31,6 @@ function isNavGroup(item: NavItemOrGroup): item is NavGroup {
 export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { role } = useRole()
   const { t } = useTranslation()
 
   const navStructure = useMemo(
@@ -45,28 +40,11 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     [t],
   )
 
-  const filteredNavStructure = useMemo(
-    () =>
-      navStructure
-        .filter((item) => !(item.roles && !item.roles.includes(role)))
-        .map((item) => {
-          if (isNavGroup(item)) {
-            return {
-              ...item,
-              items: item.items.filter((child) => !child.roles || child.roles.includes(role)),
-            }
-          }
-          return item
-        })
-        .filter((item) => !(isNavGroup(item) && item.items.length === 0)),
-    [role, navStructure],
-  )
-
   const isItemActive = (item: NavItem) =>
     location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
 
   const currentLabel = useMemo(() => {
-    for (const item of filteredNavStructure) {
+    for (const item of navStructure) {
       if (isNavGroup(item)) {
         const active = item.items.find(isItemActive)
         if (active) return active.name
@@ -76,19 +54,16 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     }
     return t('nav.menu')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredNavStructure, location.pathname, t])
+  }, [navStructure, location.pathname, t])
 
   // A dropdown that opens to reveal the one destination you're either
   // already on or about to go to is just noise — same call the app already
-  // makes for RoleSwitcher/LanguageSwitcher when there's only one option.
+  // makes for LanguageSwitcher when there's only one option.
   // Show it as a plain link instead, and only promote to the full menu once
   // there's an actual choice (a second item, or any group).
-  const destinationCount = filteredNavStructure.reduce(
-    (count, item) => count + (isNavGroup(item) ? item.items.length : 1),
-    0,
-  )
+  const destinationCount = navStructure.reduce((count, item) => count + (isNavGroup(item) ? item.items.length : 1), 0)
   if (destinationCount <= 1) {
-    const only = filteredNavStructure[0]
+    const only = navStructure[0]
     if (!only) return null
     const target = isNavGroup(only) ? only.items[0] : only
     if (!target) return null
@@ -117,7 +92,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="min-w-56">
-        {filteredNavStructure.map((item) =>
+        {navStructure.map((item) =>
           isNavGroup(item) ? (
             <DropdownMenu.Sub key={item.name}>
               <DropdownMenu.SubTrigger>

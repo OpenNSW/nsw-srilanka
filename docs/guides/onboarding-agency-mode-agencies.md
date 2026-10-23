@@ -465,11 +465,6 @@ frontend:
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
     IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read"
-    IDP_ROLE_CLAIM_NAME: "roles"
-    # The officer role's name. Officers sign in as the app's "Trader" role; see docs/agency.md, UI.
-    IDP_TRADER_ROLE_NAME: "DEA Officer"
-    IDP_CHA_ROLE_NAME: "CHA"
-    IDP_NSW_ADMIN_ROLE_NAME: "NSW Admin"
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"
@@ -486,12 +481,11 @@ These values must agree, or officers and TNSW get `401`:
 | `backend.config.authn.audience`                         | the API identifier (Step 2b) |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
 
-And these, or officers are signed in but can't act: the portal says they have no role, or
-their calls get `403`:
+And this, or officers are signed in but their calls get `403`:
 
-| This                                               | must equal                        |
-| -------------------------------------------------- | --------------------------------- |
-| `IDP_TRADER_ROLE_NAME` and the `catalog.json` role | the officer role's name (Step 2f) |
+| This                    | must equal                        |
+| ----------------------- | --------------------------------- |
+| the `catalog.json` role | the officer role's name (Step 2f) |
 
 ### 4d. Install
 
@@ -506,8 +500,8 @@ IdP's JWKS.
 ## Step 5: Verify the agency on its own
 
 1. An officer signs in at the portal URL. The portal shows an empty case list.
-   If sign-in loops or the app says the user has no role, check the role name and
-   `IDP_TRADER_ROLE_NAME`.
+   If the case list fails with `403`, check the officer role's name in the IdP and in
+   `catalog.json`.
 2. TNSW can get a token for the agency. From a machine that has the TNSW-to-agency
    client's secret, with your client ID, API identifier and IdP host:
 
@@ -636,7 +630,7 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Add a role                                | A role and group in ThunderID (Step 2f), the agency's `catalog.json`, and the tasks' `authz` and `read.roles` (Step 1)     |
 | Add a kind of review                      | A task config and workflow (Step 1), the TNSW step (Step 6c), then move both deployments' artifact `ref`                   |
 | Add a portal URL                          | Add it to the portal application's redirect URIs in the console, to the agency's `cors`, and to ThunderID's CORS (Step 2g) |
-| Change the officer role's name            | The IdP role, the agency's `catalog.json` and `IDP_TRADER_ROLE_NAME` together                                              |
+| Change the officer role's name            | The IdP role and the agency's `catalog.json` together                                                                      |
 | Rotate the agency-to-TNSW client's secret | **Regenerate Client Secret** in the console (Step 2e), update the agency's Secret, then restart the agency backend         |
 | Rotate the TNSW-to-agency client's secret | **Regenerate Client Secret** in the console (Step 2e), update TNSW's Secret, then restart the TNSW backend                 |
 | Upgrade                                   | `helm upgrade <release> …` with the same chart version as TNSW. Migrations are shared, so keep the two on the same release |

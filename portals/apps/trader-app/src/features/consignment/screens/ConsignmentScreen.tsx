@@ -6,7 +6,6 @@ import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
-import { useRole } from '@/services/useRole'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
@@ -26,8 +25,6 @@ export function ConsignmentScreen() {
   const [stateFilter, setStateFilter] = useState<string>('all')
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
-  const { role } = useRole()
-
   const [creating, setCreating] = useState(false)
 
   const listRequestIdRef = useRef(0)
@@ -35,12 +32,6 @@ export function ConsignmentScreen() {
   const [prevDebouncedSearchQuery, setPrevDebouncedSearchQuery] = useState(debouncedSearchQuery)
   if (debouncedSearchQuery !== prevDebouncedSearchQuery) {
     setPrevDebouncedSearchQuery(debouncedSearchQuery)
-    setPage(0)
-  }
-
-  const [prevRole, setPrevRole] = useState(role)
-  if (role !== prevRole) {
-    setPrevRole(role)
     setPage(0)
   }
 
@@ -66,7 +57,6 @@ export function ConsignmentScreen() {
           limit,
           stateFilter as ConsignmentState | 'all',
           tradeFlowFilter as TradeFlow | 'all',
-          role,
           debouncedSearchQuery,
         )
         if (requestId !== listRequestIdRef.current) {
@@ -87,7 +77,7 @@ export function ConsignmentScreen() {
     }
 
     void fetchConsignments()
-  }, [page, stateFilter, tradeFlowFilter, role, debouncedSearchQuery])
+  }, [page, stateFilter, tradeFlowFilter, debouncedSearchQuery])
 
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
@@ -101,12 +91,10 @@ export function ConsignmentScreen() {
           )}
         </div>
         <div className="flex gap-2">
-          {role === 'cha' ? null : (
-            <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-              <PlusIcon />
-              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-            </Button>
-          )}
+          <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+            <PlusIcon />
+            {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+          </Button>
         </div>
       </div>
 
@@ -176,9 +164,7 @@ export function ConsignmentScreen() {
               <Text size="3" color="gray">
                 {debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
                   ? t('consignments.list.empty.filtered')
-                  : role === 'cha'
-                    ? t('consignments.list.empty.cha')
-                    : t('consignments.list.empty.trader')}
+                  : t('consignments.list.empty.none')}
               </Text>
             </div>
           ) : (

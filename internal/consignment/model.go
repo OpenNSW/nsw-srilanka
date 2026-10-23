@@ -181,8 +181,9 @@ type WorkflowNodeTemplateResponseDTO struct {
 // ── Query ─────────────────────────────────────────────────────────────────────
 
 // Filter scopes a batch consignment query.
-// Use TraderCompanyID for role=trader and CHACompanyID for role=cha so that
-// colleagues at the same company see each other's consignments.
+// TraderCompanyID scopes to a trader-role caller's company and CHACompanyID to a
+// cha-role caller's, so that colleagues at the same company see each other's
+// consignments; with both set, a consignment matching either is listed.
 type Filter struct {
 	TraderCompanyID *string `json:"traderCompanyId,omitempty"`
 	CHACompanyID    *string `json:"chaCompanyId,omitempty"`

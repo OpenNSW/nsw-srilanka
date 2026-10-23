@@ -404,17 +404,20 @@ func (s *Service) GetOwnership(ctx context.Context, consignmentID string) (trade
 	return consignment.TraderCompanyID, chaCompanyID, nil
 }
 
-// ListConsignments returns consignments scoped to a company. For role=trader the caller passes
-// TraderCompanyID; for role=cha the caller passes CHACompanyID. Exactly one of the two must be set.
+// ListConsignments returns consignments scoped to a company: those it is the trader on
+// (TraderCompanyID), those it is the CHA on (CHACompanyID), or either when both are set. At
+// least one of the two must be set.
 func (s *Service) ListConsignments(ctx context.Context, filter Filter) (*ListResult, error) {
-	if (filter.CHACompanyID != nil) == (filter.TraderCompanyID != nil) {
-		return nil, fmt.Errorf("exactly one of TraderCompanyID or CHACompanyID must be set in filter")
-	}
 	var baseQuery *gorm.DB
-	if filter.CHACompanyID != nil {
-		baseQuery = s.withCase(ctx).Where("cha_company_id = ?", *filter.CHACompanyID)
-	} else {
+	switch {
+	case filter.TraderCompanyID != nil && filter.CHACompanyID != nil:
+		baseQuery = s.withCase(ctx).Where("(trader_company_id = ? OR cha_company_id = ?)", *filter.TraderCompanyID, *filter.CHACompanyID)
+	case filter.TraderCompanyID != nil:
 		baseQuery = s.withCase(ctx).Where("trader_company_id = ?", *filter.TraderCompanyID)
+	case filter.CHACompanyID != nil:
+		baseQuery = s.withCase(ctx).Where("cha_company_id = ?", *filter.CHACompanyID)
+	default:
+		return nil, fmt.Errorf("at least one of TraderCompanyID or CHACompanyID must be set in filter")
 	}
 	return s.listConsignmentsWithBaseQuery(ctx, baseQuery, filter)
 }

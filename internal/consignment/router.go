@@ -24,10 +24,10 @@ import (
 const (
 	errUnauthorized          = "unauthorized"
 	errConsignmentIDRequired = "consignment ID is required"
-	errInvalidRole           = "query param role must be trader or cha"
 	errInvalidState          = "query param state must be IN_PROGRESS or FINISHED"
 	errInvalidFlow           = "query param flow must be IMPORT or EXPORT"
-	errForbiddenRole         = "caller does not hold the requested role"
+	errForbiddenRole         = "caller holds neither the trader nor the cha role"
+	errTraderRoleRequired    = "creating a consignment requires the trader role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
 	errWorkflowNotFound      = "workflow execution not found"
@@ -59,8 +59,8 @@ type Router struct {
 }
 
 // NewRouter builds the router. roles is the global catalog's Roles map; it must
-// define "trader" and "cha" — HandleGetConsignments resolves a caller's ?role=
-// query param through it.
+// define "trader" and "cha" — the handlers resolve the caller's token roles
+// through it.
 func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor, roles map[string]string) (*Router, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
@@ -93,6 +93,19 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	p, ok := authn.FromContext(ctx)
 	if !ok || p.Kind != authn.KindUser {
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	if !slices.Contains(p.Roles, c.roles["trader"]) {
+		c.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionCreate,
+			TargetType: nswaudit.TargetConsignment,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error": "trader role not held",
+			},
+		})
+		httputil.Error(w, r, http.StatusForbidden, errTraderRoleRequired)
 		return
 	}
 
@@ -171,8 +184,9 @@ func buildConsignmentFilter(r *http.Request) (Filter, string) {
 }
 
 // HandleGetConsignments handles GET /api/v1/consignments
-// Query params: role=trader | role=cha (defaults to trader). The caller must hold
-// the JWT role that maps to the requested role, or the request is forbidden.
+// The scope comes from the caller's token roles: the trader role lists the consignments
+// of the caller's company as trader, the cha role those it is the CHA on, and holding
+// both lists both. A caller holding neither is forbidden.
 func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p, ok := authn.FromContext(ctx)
@@ -181,32 +195,18 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	role := r.URL.Query().Get("role")
-	if role == "" {
-		role = "trader"
-	}
 	filter, filterErr := buildConsignmentFilter(r)
 	if filterErr != "" {
 		httputil.Error(w, r, http.StatusBadRequest, filterErr)
 		return
 	}
 
-	// Role-based identity resolution.
-	if role != "trader" && role != "cha" {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRole)
-		return
-	}
-
-	// The caller must actually hold the role they're asserting via the query
-	// param — resolved through the global catalog, not hardcoded, so it stays in
-	// step with the same "trader"/"cha" -> token-role mapping the task-authz
-	// layer (internal/tasks/taskauthz) uses.
-	requiredTokenRole, roleOK := c.roles[role]
-	if !roleOK {
-		httputil.InternalServerError(w, r, "role not configured in catalog", fmt.Errorf("catalog has no mapping for role %q", role))
-		return
-	}
-	if !slices.Contains(p.Roles, requiredTokenRole) {
+	// Resolved through the global catalog, not hardcoded, so it stays in step with the
+	// same "trader"/"cha" -> token-role mapping the task-authz layer
+	// (internal/tasks/taskauthz) uses.
+	asTrader := slices.Contains(p.Roles, c.roles["trader"])
+	asCHA := slices.Contains(p.Roles, c.roles["cha"])
+	if !asTrader && !asCHA {
 		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionRead,
@@ -214,7 +214,6 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 			Failure:    true,
 			Metadata: map[string]any{
 				"error": "role not held",
-				"role":  role,
 			},
 		})
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
@@ -231,7 +230,6 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 				Failure:    true,
 				Metadata: map[string]any{
 					"error": "company not found",
-					"role":  role,
 				},
 			})
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
@@ -241,11 +239,11 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch role {
-	case "cha":
-		filter.CHACompanyID = &userCompany.ID
-	case "trader":
+	if asTrader {
 		filter.TraderCompanyID = &userCompany.ID
+	}
+	if asCHA {
+		filter.CHACompanyID = &userCompany.ID
 	}
 	consignments, err := c.cs.ListConsignments(ctx, filter)
 	if err != nil {
