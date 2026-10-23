@@ -66,6 +66,26 @@ paths:
 
         Any other `eventType`, or none, is refused with `400`.
 
+        What each event can answer besides `400`, `401` and `403` (all final).
+        SLC Edge should retry `503` and `500` only:
+
+        | `eventType` | Final | Retry |
+        | --- | --- | --- |
+        | `CUSDEC_INTEGRATED` | `200`, `202`, `404` | `503`, `500` |
+        | `PAYMENT_CONFIRMED` | `200` | `503`, `500` |
+        | `WARRANTING_COMPLETED` | `200` | `503`, `500` |
+        | `EXPORT_RELEASED` | `200` | `503`, `500` |
+        | `CUSDEC_AMENDED` | `200`, `404` | `503`, `500` |
+        | `CDN_INTEGRATED` | `200`, `404` | `503`, `500` |
+        | `CDN_ACKNOWLEDGED` | `200` | `503`, `500` |
+        | `CDN_AMENDED` | `200`, `404` | `503`, `500` |
+        | `CDN_CANCELLED` | `200` | `503`, `500` |
+
+        A callback resumes a step its workflow parked, and the step is completed
+        before the declaration or dispatch note is saved. A failure after the
+        step completed but before the save is answered `500`, and its retry
+        cannot complete the step again; see `500`.
+
         Requires scope `nsw:slce-webhooks:write`.
       operationId: processSLCEWebhook
       x-required-scope: nsw:slce-webhooks:write
@@ -270,30 +290,33 @@ paths:
             it repeats one already applied and is acknowledged as a no-op. Final:
             SLC Edge stops retrying.
 
-            - `CUSDEC_INTEGRATED`: the result was recorded against `edgeId` and
-              the review step completed. When no workflow or parked review step
-              matches the `edgeId`, the result is still recorded and answered
-              `200`; nothing is advanced.
+            - `CUSDEC_INTEGRATED`: the declaration's parked review step was
+              completed, then the result recorded against `edgeId` (declaration
+              `INTEGRATED` or `FAILED`). It is never `200` without both.
             - `PAYMENT_CONFIRMED`, `WARRANTING_COMPLETED`, `EXPORT_RELEASED`: the
-              declaration's status advanced and its wait completed. A
-              declaration already at or past the event's status (`PAID`,
-              `WARRANTED`, `RELEASED` in that order) is a repeat: `200`, nothing
-              changed. When no waiting step is found, the status is still
-              advanced and `200` returned.
-            - `CDN_INTEGRATED`: the dispatch note was recorded and its
-              integration wait released. A redelivery for a note already
-              integrated or acknowledged is `200`, and releases the wait if it
-              is still parked.
-            - `CDN_ACKNOWLEDGED`: the note moved to `ACKNOWLEDGED` and its wait
-              was released. A note already acknowledged, or one Customs
-              cancelled, is `200` with no action.
+              event's wait, looked for across the declaration's whole case, was
+              completed, then the declaration's status advanced. A declaration
+              already at or past the event's status (`PAID`, `WARRANTED`,
+              `RELEASED` in that order) is a repeat: `200`, nothing changed.
+              When no step in the case is waiting on the event, the status is
+              still advanced and `200` returned; a wait that parks later is not
+              completed by any redelivery, which is then a repeat.
+            - `CDN_INTEGRATED`: the dispatch note's integration wait was
+              released, then the result recorded. A redelivery for a note
+              already `INTEGRATED` or `ACKNOWLEDGED` (or a failure for a note
+              already `FAILED`) is `200`: the note is not recorded again, and
+              the wait is released if it is still parked.
+            - `CDN_ACKNOWLEDGED`: the note's acknowledgment wait was released,
+              then the note moved to `ACKNOWLEDGED`. A note already acknowledged
+              is `200`, and releases the wait if it is still parked. A note
+              Customs cancelled is `200` with no action.
             - `CUSDEC_AMENDED`, `CDN_AMENDED`: an amendment flow was opened on
               the consignment, showing the declaration or note as amended. The
               document's own workflow is not touched. A redelivery of the same
               amendment (same reference and `operationTime`) opens nothing
               again.
             - `CDN_CANCELLED`: the note's acknowledgment wait was released as
-              cancelled and the note moved to `CANCELLED`. A note already
+              cancelled, then the note moved to `CANCELLED`. A note already
               cancelled is `200` with no action.
           headers:
             X-Trace-ID:
@@ -302,7 +325,8 @@ paths:
           description: |
             Accepted, with an empty body. `CUSDEC_INTEGRATED` only: an
             integration result for this `edgeId` is already recorded (the
-            declaration is `INTEGRATED` or `FAILED`). §2 has SLC Edge retry a
+            declaration is past `SUBMITTED`: `INTEGRATED` or `FAILED`, or a
+            later `PAID`, `WARRANTED` or `RELEASED`). §2 has SLC Edge retry a
             callback up to four times, so a repeat is expected whenever a prior
             200 was lost in transit — it is acknowledged and nothing is re-run.
             Final: SLC Edge stops retrying.
@@ -355,18 +379,25 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           description: |
-            Not Found. `CDN_INTEGRATED` only: no customs workflow recorded this
-            `edgeId` for a dispatch note. The result itself has been recorded
-            before this answer, so a redelivery of the same callback is answered
-            `200`; there is nothing for SLC Edge to gain by retrying. Also
-            `CUSDEC_AMENDED` and `CDN_AMENDED`: the declaration or dispatch note
-            has no consignment case recorded to open the amendment flow on.
-            Permanent: SLC Edge should not retry.
+            Not Found. The declaration or dispatch note recorded for this
+            `edgeId` names no workflow, so there is no step to resume. Nothing is
+            recorded: the row stays `SUBMITTED` and a redelivery is answered
+            `404` again. Final: SLC Edge stops retrying.
 
-            The handler also maps a missing workflow on `CUSDEC_INTEGRATED` to
-            `404 workflow not found`, but the service records the result first
-            and answers `200` when no workflow matches, so that event does not
-            return `404` today.
+            `CUSDEC_AMENDED` / `CDN_AMENDED`: the declaration or dispatch note
+            has no consignment case recorded to open the amendment flow on
+            (`declaration has no case recorded`, `dispatch note has no case
+            recorded`). Final: SLC Edge stops retrying.
+
+            - `CUSDEC_INTEGRATED`: `error` is `workflow not found`.
+            - `CDN_INTEGRATED`: `error` is `dispatch note not found`, for a note
+              still `SUBMITTED` (or `FAILED`, for a success result). A
+              redelivery for a note already past that is `200`.
+
+            The handler also maps a missing workflow on `PAYMENT_CONFIRMED`,
+            `WARRANTING_COMPLETED` and `EXPORT_RELEASED` to `404`, but those
+            events find their step by case and never report one, so they do not
+            return `404`.
           headers:
             X-Trace-ID:
               $ref: '#/components/headers/XTraceID'
@@ -374,22 +405,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: "dispatch note not found"
-                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+              examples:
+                workflowNotFound:
+                  value:
+                    error: "workflow not found"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                dispatchNoteNotFound:
+                  value:
+                    error: "dispatch note not found"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '500':
           description: |
-            Internal Server Error. A database or workflow failure while applying
-            the event, logged server-side. Also returned for `CDN_ACKNOWLEDGED`
-            when the dispatch note is not `INTEGRATED` (e.g. it is still
-            `SUBMITTED` or `FAILED`), or when no workflow is found for the note's
-            `edgeId`. SLC Edge may retry.
+            Internal Server Error. A database, task-store or workflow failure
+            while applying the event, logged server-side. SLC Edge should retry.
+            Returned when:
 
-            A retry does not always re-run the work. `CUSDEC_INTEGRATED` records
-            the result before it advances the workflow, so a retry after a `500`
-            from the workflow step is answered `202` and the review step is not
-            completed; the same holds for `CDN_ACKNOWLEDGED`, whose retry is
-            answered `200`. Those cases need an operator.
+            - the declaration or dispatch note cannot be read;
+            - the task store cannot be read, so whether a step is waiting is not
+              known;
+            - completing the waiting step fails;
+            - saving the declaration or dispatch note fails;
+            - `CUSDEC_INTEGRATED`: the declaration's review step is not parked
+              (it may not have parked yet);
+            - `CDN_ACKNOWLEDGED`: the note is `INTEGRATED` but records no
+              workflow. A redelivery answers `500` again.
+
+            In every case but a failed save nothing was saved — the declaration
+            or note is as it was — so a retry re-runs the event. A failed save
+            is different: the step was already completed, so it is no longer
+            waiting. A retry of `CUSDEC_INTEGRATED` then answers `500`, and one
+            of `CDN_INTEGRATED` or `CDN_ACKNOWLEDGED` `503`, until SLC Edge
+            stops retrying, and the declaration or note stays unsaved; those
+            cases need an operator. A retry of `PAYMENT_CONFIRMED`,
+            `WARRANTING_COMPLETED` or `EXPORT_RELEASED` finds no step waiting,
+            advances the status and answers `200`.
           headers:
             X-Trace-ID:
               $ref: '#/components/headers/XTraceID'
@@ -402,15 +451,29 @@ paths:
                 correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '503':
           description: |
-            Service Unavailable. The declaration named by `cusDecRef`
-            (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED, CUSDEC_AMENDED) or the
-            dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet
-            — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
-            callback for the same document. Or the dispatch note's wait for its
-            acknowledgment has not parked yet (CDN_ACKNOWLEDGED, CDN_CANCELLED);
-            the note is left as it was, so the retry releases it. Transient:
-            SLC Edge should retry.
-            No `Retry-After` header is sent.
+            Service Unavailable. The callback arrived before what it answers is
+            ready. Transient: SLC Edge should retry. No `Retry-After` header is
+            sent. Returned when:
+
+            - `CUSDEC_INTEGRATED` / `CDN_INTEGRATED`: no declaration or dispatch
+              note is recorded for `edgeId` yet. The dispatch step records it
+              when SLC Edge accepts the submission, so a result for an unknown
+              `edgeId` is taken as early. `error` is `declaration not found,
+              retry later` or `dispatch note not found, retry later`.
+            - `PAYMENT_CONFIRMED`, `WARRANTING_COMPLETED`, `EXPORT_RELEASED`: no
+              declaration is recorded with this `cusDecRef` — the event likely
+              raced the `CUSDEC_INTEGRATED` result for the same declaration.
+              `error` is `declaration not found, retry later`.
+            - `CUSDEC_AMENDED`: no declaration is recorded with this
+              `cusDecRef`. `error` is `declaration not found, retry later`.
+            - `CDN_ACKNOWLEDGED`, `CDN_AMENDED`, `CDN_CANCELLED`: no dispatch
+              note is recorded with this `cdnRef` — the event likely raced the
+              `CDN_INTEGRATED` result. `error` is `dispatch note not found,
+              retry later`.
+            - `CDN_INTEGRATED` / `CDN_ACKNOWLEDGED` / `CDN_CANCELLED`: the note's
+              workflow has not parked the wait this callback releases. Nothing
+              is recorded.
+              `error` is `task not waiting yet, retry later`.
           headers:
             X-Trace-ID:
               $ref: '#/components/headers/XTraceID'
@@ -426,6 +489,10 @@ paths:
                 dispatchNoteNotFound:
                   value:
                     error: "dispatch note not found, retry later"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                taskNotWaiting:
+                  value:
+                    error: "task not waiting yet, retry later"
                     correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
 
 components:
@@ -657,8 +724,15 @@ components:
         Other fields SLC Edge sends (e.g. `nswId`, `status`) are accepted and
         ignored.
 
-        Idempotency: the first result for an `edgeId` is recorded (declaration
-        `INTEGRATED` or `FAILED`); every later one for it is answered `202` and
+        The `edgeId` must name a declaration the dispatch step recorded when
+        SLC Edge accepted the submission (otherwise `503`), and that
+        declaration must name its workflow (otherwise `404`). The review step
+        that workflow parked is completed first; only then is the result
+        recorded, so a result that fails before that leaves the declaration
+        `SUBMITTED` and its retry is applied as new.
+
+        Idempotency: once a result for an `edgeId` is recorded (declaration
+        `INTEGRATED` or `FAILED`), every later one for it is answered `202` and
         not applied, whatever it carries.
       required:
         - eventType
@@ -859,10 +933,17 @@ components:
         failure (`integrated` false or absent) `cdnRef` is not read and `errors`
         is stored as the reason.
 
+        The `edgeId` must name a dispatch note the dispatch step recorded when
+        SLC Edge accepted the submission (otherwise `503`), and that note must
+        name its workflow (otherwise `404`). The integration wait that workflow
+        parked is released first (`503` if it has not parked yet); only then
+        is the result recorded.
+
         Idempotency: a redelivery for a note already `INTEGRATED` or
         `ACKNOWLEDGED` is not recorded again — the reference already stored is
         kept — and is answered `200`, releasing the integration wait if it is
         still parked. A redelivered failure for a `FAILED` note does the same.
+        A success for a `FAILED` note is handled as a new result.
       required:
         - eventType
         - processedAt
@@ -914,8 +995,12 @@ components:
       description: |
         §7.3 CDN Acknowledgment. Correlated by `cdnRef`, which must name a
         dispatch note already recorded as `INTEGRATED` by its `CDN_INTEGRATED`
-        result: an unknown `cdnRef` is `503` (retry), a note in any other state
-        `500`. A note already `ACKNOWLEDGED` is answered `200`.
+        result: an unknown `cdnRef` is `503` (retry). Only that result stores
+        a `cdnRef`, so the note found is `INTEGRATED` or `ACKNOWLEDGED`. The
+        acknowledgment wait the note's workflow parked is released first
+        (`503` if it has not parked yet); only then does the note move to
+        `ACKNOWLEDGED`. A note already `ACKNOWLEDGED` is answered `200`,
+        releasing the wait if it is still parked.
       required:
         - eventType
         - processedAt
