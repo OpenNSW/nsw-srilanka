@@ -49,6 +49,10 @@ const en = {
         title: 'Consignments',
         create: 'New Consignment',
         creating: 'Creating...',
+        error: {
+          loadFailed: 'Could not load consignments.',
+          createFailed: 'Could not create the consignment. Please try again.',
+        },
         searchPlaceholder: 'Search by Name, ID, or HS Code...',
         filter: {
           statePlaceholder: 'State',

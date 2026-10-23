@@ -15,6 +15,7 @@ import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
+import { LoadError } from '@/components/common/LoadError.tsx'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const NEXT_TASK_MAX_ATTEMPTS = 5
@@ -48,6 +49,7 @@ export function TaskDetailScreen() {
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
+  const [retryCount, setRetryCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -111,7 +113,7 @@ export function TaskDetailScreen() {
     return () => {
       cancelled = true
     }
-  }, [taskId, t])
+  }, [taskId, t, retryCount])
 
   // The zone view lags the URL until the new task loads.
   const taskState = zoneView?.task_id === taskId ? zoneView?.state : undefined
@@ -168,16 +170,19 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-2xl shadow-md p-6 text-center">
-          <Text size="4" color="red" weight="medium">
-            {error}
-          </Text>
-          <div className="mt-4">
-            <Button variant="soft" onClick={goToTasks}>
-              <ArrowLeftIcon />
-              {t('tasks.goBack')}
-            </Button>
-          </div>
+        <div className="bg-app-surface rounded-2xl shadow-md p-8 flex flex-col items-center gap-4">
+          <LoadError
+            message={error}
+            onRetry={() => {
+              setLoading(true)
+              setError(null)
+              setRetryCount((n) => n + 1)
+            }}
+          />
+          <Button variant="soft" color="gray" onClick={goToTasks}>
+            <ArrowLeftIcon />
+            {t('tasks.goBack')}
+          </Button>
         </div>
       </div>
     )
