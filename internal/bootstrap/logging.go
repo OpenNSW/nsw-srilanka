@@ -48,22 +48,9 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 	}
 	slog.SetDefault(slog.New(logHandler))
 	httputil.CorrelationIDFunc = trace.GetTraceID
-	// Audit lines share these destinations but stay at Info. The process
-	// handler above drops them when server.logLevel is WARN or ERROR, and
-	// LogSink(nil) is built before this second call replaces slog.Default.
-	auditHandlers := []slog.Handler{
-		logging.NewHandler(slog.NewTextHandler(dest, &slog.HandlerOptions{Level: slog.LevelInfo})),
-	}
-	for _, h := range extras {
-		if h != nil {
-			auditHandlers = append(auditHandlers, logging.NewHandler(h))
-		}
-	}
-	auditHandler := auditHandlers[0]
-	if len(auditHandlers) > 1 {
-		auditHandler = slog.NewMultiHandler(auditHandlers...)
-	}
-	nswaudit.SetProcessLogger(slog.New(auditHandler))
+	// Audit lines use this logger, so they follow server.logLevel and the
+	// handler installed here, including one added after OpenTelemetry starts.
+	nswaudit.SetProcessLogger(slog.Default())
 }
 
 // levelFilter drops records below min before they reach next. Enabled must

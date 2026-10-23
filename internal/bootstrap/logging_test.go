@@ -116,22 +116,14 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	}
 }
 
-func TestConfigureLoggingAuditIgnoresLevelAndUsesLatestDest(t *testing.T) {
+func TestConfigureLoggingAuditUsesServerLevelAndLatestDest(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() {
 		slog.SetDefault(prevDefault)
 		nswaudit.SetProcessLogger(nil)
 	})
 
-	var first bytes.Buffer
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &first)
-	sink := nswaudit.NewLogSink(nil)
-
-	var second bytes.Buffer
-	extra := &alwaysEnabled{}
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &second, extra)
-	slog.Info("ops info hidden")
-	sink.Write(context.Background(), nswaudit.Record{
+	record := nswaudit.Record{
 		EventType:  nswaudit.EventTask,
 		Action:     nswaudit.ActionUpdate,
 		Status:     nswaudit.StatusSuccess,
@@ -139,16 +131,22 @@ func TestConfigureLoggingAuditIgnoresLevelAndUsesLatestDest(t *testing.T) {
 		ActorID:    "u1",
 		TargetType: nswaudit.TargetTask,
 		TargetID:   "t1",
-	})
+	}
+
+	var first bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &first)
+	sink := nswaudit.NewLogSink(nil)
+
+	var second bytes.Buffer
+	extra := &alwaysEnabled{}
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &second, extra)
+	sink.Write(context.Background(), record)
 
 	if strings.Contains(first.String(), "category=audit") {
 		t.Fatalf("audit line used the logger from before reconfigure: %s", first.String())
 	}
 	if !strings.Contains(second.String(), "category=audit") {
 		t.Fatalf("audit line missing from the latest destination: %s", second.String())
-	}
-	if strings.Contains(second.String(), "ops info hidden") {
-		t.Fatalf("info ops log written at warn level: %s", second.String())
 	}
 	var auditRecords int
 	for _, level := range extra.levels {
@@ -158,6 +156,13 @@ func TestConfigureLoggingAuditIgnoresLevelAndUsesLatestDest(t *testing.T) {
 	}
 	if auditRecords != 1 {
 		t.Fatalf("extra handler info records = %d, want 1 (the audit line)", auditRecords)
+	}
+
+	var warnBuf bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf)
+	sink.Write(context.Background(), record)
+	if strings.Contains(warnBuf.String(), "category=audit") {
+		t.Fatalf("audit line written below server.logLevel: %s", warnBuf.String())
 	}
 }
 

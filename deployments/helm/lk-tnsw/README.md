@@ -5,7 +5,7 @@ Helm chart for Sri Lanka's Trade National Single Window platform: the
 (`cmd/server`) and the **Trader Portal** frontend
 ([`portals/apps/trader-app`](../../../portals/apps/trader-app)), deployed
 together as one release with `backend`/`frontend` sections in values. Infra
-this stack depends on (Postgres, Temporal, Thunder ID, Argus) is deployed
+this stack depends on (Postgres, Temporal, Thunder ID) is deployed
 separately — the backend's config just points at their in-cluster Service
 names or external URLs.
 
@@ -149,7 +149,6 @@ kubectl create secret generic nsw-secrets \
   --from-literal=m2m-efc-secret=... \
   --from-literal=m2m-sltb-secret=... \
   --from-literal=m2m-asycuda-secret=... \
-  --from-literal=argus-api-key=... \
   --from-literal=notification-email-token=... \
   --from-literal=notification-sms-password=... \
   --from-literal=storage-token-keyset=...

@@ -9,14 +9,13 @@ import (
 const categoryAudit = "audit"
 
 // processLog is the logger a nil-logger LogSink writes to. Bootstrap installs
-// it from the same stdout and OTLP handlers as the process logger, without
-// the server.logLevel filter: audit lines are Info, so WARN would drop every
-// record. Resolving it at Write time also picks up the handler installed
-// after OpenTelemetry starts, which replaces slog.Default.
+// the process logger here, so audit lines follow server.logLevel and reach
+// the same stdout and OTLP handlers. Resolving it at Write time picks up the
+// handler installed after OpenTelemetry starts, which replaces slog.Default.
 var processLog atomic.Pointer[slog.Logger]
 
 // SetProcessLogger installs the logger a nil-logger LogSink writes to.
-// The logger should accept Info. A nil argument clears it.
+// A nil argument clears it.
 func SetProcessLogger(logger *slog.Logger) {
 	if logger == nil {
 		processLog.Store(nil)
