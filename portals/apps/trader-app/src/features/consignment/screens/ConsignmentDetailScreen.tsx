@@ -347,6 +347,7 @@ export function ConsignmentDetailScreen({
         <div className="p-4 sm:p-6">
           {workflowNodes.length > 0 ? (
             <ConsignmentTasks
+              key={`${consignment.id}-${consignment.state}`}
               steps={workflowNodes}
               consignmentId={consignmentId!}
               consignmentState={consignment.state}
