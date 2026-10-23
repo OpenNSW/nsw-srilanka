@@ -4,12 +4,35 @@ info:
   description: |
     OpenAPI 3.0 specification for the ops/admin views of any consignment —
     full detail, its flows, and each flow's raw workflow-engine state, with no
-    trader/CHA ownership check.
+    trader/CHA ownership check — and for resolving a workflow node parked for
+    admin intervention. These routes are mounted only when the server runs in
+    TNSW mode.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
-    carrying the scope named on each operation. Every error response uses the
-    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+    carrying the scope named on each operation. Any authenticated principal
+    holding that scope is accepted, user or client token alike. Errors written
+    by a handler use the `ErrorResponse` envelope
+    (`{"error": "...", "correlationId": "..."}`); the authentication and scope
+    middleware in front of every handler write their own
+    `{"error": "...", "message": "..."}` body (`MiddlewareError`) instead, see
+    the shared `Unauthorized` and `Forbidden` responses.
+
+    Every response carries an `X-Trace-ID` header. The server reuses a valid
+    `X-Trace-ID`, `X-Correlation-ID` or `X-Request-ID` request header (in that
+    order; at most 64 characters of `[A-Za-z0-9-_:./=]`), else generates one;
+    it is the `correlationId` of an `ErrorResponse`.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+
+tags:
+  - name: Admin
+    description: >-
+      Ops/admin views of any consignment and its workflows' raw engine state,
+      and resolution of nodes parked for admin intervention. Held by the
+      IdP's NSW Admin role.
 
 security:
   - BearerAuth: []
@@ -17,6 +40,7 @@ security:
 paths:
   /api/v1/admin/consignments/{id}:
     get:
+      tags: [Admin]
       summary: "[Admin] Get any consignment's full detail and flows"
       description: |
         Ops/admin view: fetches the full consignment detail for **any**
@@ -24,39 +48,32 @@ paths:
         `GET /api/v1/consignments/{id}`, which is scoped to the caller's own
         consignments. `flows` lists the consignment's top-level workflows
         (the export flow, flows a trader started, notices); open one with
-        `GET /api/v1/admin/workflows/{id}/engine-status`.
+        `GET /api/v1/admin/workflows/{id}/engine-status`. Access is
+        audit-logged.
 
         Requires scope `nsw:consignment:adminread`.
       operationId: adminGetConsignmentByID
+      x-required-scope: nsw:consignment:adminread
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminDetailDTO'
-        '400':
-          description: Missing consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No such consignment.
+          description: No such consignment (`consignment not found`).
           content:
             application/json:
               schema:
@@ -70,6 +87,7 @@ paths:
 
   /api/v1/admin/workflows/{id}/engine-status:
     get:
+      tags: [Admin]
       summary: "[Admin] Get a workflow's raw engine state"
       description: |
         Returns a workflow's raw engine state (per-node status straight
@@ -80,42 +98,35 @@ paths:
         (`AdminDetailDTO.flows`) or a child-branch workflow of one
         (`EngineNodeDTO.child_workflow_ids`). No per-consignment ownership
         check: any caller holding the admin scope may view any workflow's
-        engine state.
+        engine state. Each TASK node whose task has started carries
+        `task_workflow_id`. Access is audit-logged.
 
         `global_variables` may hold business/PII data, which is why this is
         gated on the admin scope rather than the trader/CHA read scope.
 
         Requires scope `nsw:consignment:adminread`.
       operationId: getWorkflowEngineStatus
+      x-required-scope: nsw:consignment:adminread
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
         - $ref: '#/components/parameters/WorkflowID'
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EngineStatusDTO'
-        '400':
-          description: Missing workflow ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No workflow execution exists for this ID.
+          description: No workflow execution exists for this ID (`workflow execution not found`).
           content:
             application/json:
               schema:
@@ -129,6 +140,7 @@ paths:
 
   /api/v1/admin/task/{id}/engine-status:
     get:
+      tags: [Admin]
       summary: "[Admin] Get a task workflow's raw engine state"
       description: |
         Returns the raw engine state of a TASK node's independent per-task
@@ -136,44 +148,34 @@ paths:
         the flow/child-workflow IDs used by
         `GET /api/v1/admin/workflows/{id}/engine-status`. The ID is
         obtained from `EngineNodeDTO.task_workflow_id` on the TASK node that
-        spawned it.
+        spawned it. Nodes in this response never carry `task_workflow_id`.
+        Access is audit-logged.
 
         Requires scope `nsw:consignment:adminread`.
       operationId: getTaskWorkflowEngineStatus
+      x-required-scope: nsw:consignment:adminread
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: A task workflow's own workflow ID (see `EngineNodeDTO.task_workflow_id`).
-          schema:
-            type: string
+        - $ref: '#/components/parameters/TaskWorkflowID'
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/EngineStatusDTO'
-        '400':
-          description: Missing task workflow ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminread`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No workflow execution exists for this task workflow ID.
+          description: >-
+            No workflow execution exists for this task workflow ID
+            (`workflow execution not found`).
           content:
             application/json:
               schema:
@@ -187,6 +189,7 @@ paths:
 
   /api/v1/admin/workflows/{id}/steps/{stepId}/resolve:
     post:
+      tags: [Admin]
       summary: "[Admin] Resolve a node parked for admin intervention"
       description: |
         Resolves a node that is parked in `AWAITING_ADMIN` (see
@@ -204,15 +207,22 @@ paths:
         response: it names that one parking, so a resolve sent after the node
         was resolved and parked again is rejected (`409`).
 
+        The body must be exactly one JSON object with no unknown fields. The
+        server sets no size limit on it and does not check `Content-Type`.
+
         The node is re-checked to be parked before the resolution is sent.
         `204` means the resolution was handed to the workflow, not that it has
         been applied: fetch the engine status again to see the outcome. Two
         admins resolving the same node at the same moment can both receive
         `204` although only the first takes effect; resolution is expected to
-        be done by one admin at a time.
+        be done by one admin at a time. Every attempt, failed or not, is
+        audit-logged.
 
         Requires scope `nsw:consignment:adminwrite`.
       operationId: resolveAdminIntervention
+      x-required-scope: nsw:consignment:adminwrite
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
         - name: id
           in: path
@@ -222,12 +232,7 @@ paths:
             node (see above).
           schema:
             type: string
-        - name: stepId
-          in: path
-          required: true
-          description: The parked node's current step (`EngineNodeDTO.step_id`).
-          schema:
-            type: string
+        - $ref: '#/components/parameters/StepID'
       requestBody:
         required: true
         content:
@@ -236,46 +241,28 @@ paths:
               $ref: '#/components/schemas/ResolveAdminInterventionRequest'
       responses:
         '204':
-          description: The resolution was handed to the workflow.
+          description: The resolution was handed to the workflow. No body.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
         '400':
-          description: >-
-            Missing workflow or step ID; an invalid request body (malformed JSON, an
-            unknown field, or anything after the JSON value); an `action`
-            other than `RETRY`, `COMPLETE` or `ABORT`; a missing or blank
-            `reason`; or `COMPLETE` on a GATEWAY node.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ResolveBadRequest'
         '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No workflow execution exists for `{id}`.
+          description: No workflow execution exists for `{id}` (`workflow execution not found`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: >-
-            No node in this workflow is parked under `{stepId}`: it was already
-            resolved, or the node has parked again since under a new step (each
-            run gets a new step ID), or the step never existed here.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NodeNotParked'
         '500':
-          description: Internal error.
+          description: >-
+            Internal error, including a workflow manager that does not support
+            resolving admin interventions.
           content:
             application/json:
               schema:
@@ -283,6 +270,7 @@ paths:
 
   /api/v1/admin/task/{id}/steps/{stepId}/resolve:
     post:
+      tags: [Admin]
       summary: "[Admin] Resolve a node parked inside a task workflow"
       description: |
         Resolves a node that is parked in `AWAITING_ADMIN` (see
@@ -299,30 +287,25 @@ paths:
         parked node's `EngineNodeDTO.step_id` from that task workflow's
         response to `GET /api/v1/admin/task/{id}/engine-status`.
 
+        The body must be exactly one JSON object with no unknown fields. The
+        server sets no size limit on it and does not check `Content-Type`.
+
         The node is re-checked to be parked before the resolution is sent.
         `204` means the resolution was handed to the workflow, not that it has
         been applied: fetch the engine status again to see the outcome. Two
         admins resolving the same node at the same moment can both receive
         `204` although only the first takes effect; resolution is expected to
-        be done by one admin at a time.
+        be done by one admin at a time. Every attempt, failed or not, is
+        audit-logged.
 
         Requires scope `nsw:consignment:adminwrite`.
       operationId: resolveTaskWorkflowAdminIntervention
+      x-required-scope: nsw:consignment:adminwrite
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: >-
-            A task workflow's own workflow ID (see
-            `EngineNodeDTO.task_workflow_id`).
-          schema:
-            type: string
-        - name: stepId
-          in: path
-          required: true
-          description: The parked node's current step (`EngineNodeDTO.step_id`).
-          schema:
-            type: string
+        - $ref: '#/components/parameters/TaskWorkflowID'
+        - $ref: '#/components/parameters/StepID'
       requestBody:
         required: true
         content:
@@ -331,46 +314,28 @@ paths:
               $ref: '#/components/schemas/ResolveAdminInterventionRequest'
       responses:
         '204':
-          description: The resolution was handed to the workflow.
+          description: The resolution was handed to the workflow. No body.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
         '400':
-          description: >-
-            Missing workflow or step ID; an invalid request body (malformed JSON, an
-            unknown field, or anything after the JSON value); an `action`
-            other than `RETRY`, `COMPLETE` or `ABORT`; a missing or blank
-            `reason`; or `COMPLETE` on a GATEWAY node.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ResolveBadRequest'
         '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No workflow execution exists for `{id}`.
+          description: No workflow execution exists for `{id}` (`workflow execution not found`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: >-
-            No node in this workflow is parked under `{stepId}`: it was already
-            resolved, or the node has parked again since under a new step (each
-            run gets a new step ID), or the step never existed here.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NodeNotParked'
         '500':
-          description: Internal error.
+          description: >-
+            Internal error, including a workflow manager that does not support
+            resolving admin interventions.
           content:
             application/json:
               schema:
@@ -382,12 +347,41 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        A JWT access token issued by the deployment's ThunderID IdP, sent as
+        `Authorization: Bearer <token>`. The server (`internal/authn`, over
+        `core/authn`) checks:
+
+        - the signature, against the IdP's JWKS (`authn.jwksURL`), with
+          `RS256`, `RS384` or `RS512` only and a `kid` header naming the key;
+        - `iss` equals `authn.issuer` and `aud` contains `authn.audience`;
+        - `exp` is present and not past, and `nbf` if present, with 30
+          seconds of leeway;
+        - `client_id` is present, and `grant_type` is `authorization_code`
+          (a user token, which must also carry `sub`, `email`, `ouId` and
+          `ouHandle`) or `client_credentials` (a client token).
+
+        Scopes are read from the token's space-delimited `scope` claim, roles
+        from `roles`.
+
+  headers:
+    X-Trace-ID:
+      description: >-
+        The request's trace ID: the caller's `X-Trace-ID`, `X-Correlation-ID`
+        or `X-Request-ID` when valid, else a generated 32-hex-digit ID. Equals
+        an error body's `correlationId`.
+      schema:
+        type: string
+        maxLength: 64
 
   parameters:
     ConsignmentID:
       name: id
       in: path
       required: true
+      description: >-
+        The consignment ID (a UUID). Its format is not validated: any value
+        that names no consignment is `404`.
       schema:
         type: string
         format: uuid
@@ -400,20 +394,125 @@ components:
         or a child-branch workflow of one.
       schema:
         type: string
+    TaskWorkflowID:
+      name: id
+      in: path
+      required: true
+      description: A task workflow's own workflow ID (see `EngineNodeDTO.task_workflow_id`).
+      schema:
+        type: string
+    StepID:
+      name: stepId
+      in: path
+      required: true
+      description: The parked node's current step (`EngineNodeDTO.step_id`).
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: |
+        Unauthenticated. Written by the authentication or scope middleware
+        (`MiddlewareError`): no `Authorization` header
+        (`{"error":"unauthorized","message":"authentication required"}`), or
+        a header that is not `Bearer <token>` or a token that fails
+        validation (`{"error":"unauthorized","message":"invalid authentication token"}`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MiddlewareError'
+          examples:
+            missing:
+              value: {error: unauthorized, message: authentication required}
+            invalid:
+              value: {error: unauthorized, message: invalid authentication token}
+
+    Forbidden:
+      description: >-
+        The bearer token lacks the operation's required scope. Written by the
+        scope middleware (`MiddlewareError`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MiddlewareError'
+          example: {error: forbidden, message: insufficient scope}
+
+    ResolveBadRequest:
+      description: |
+        The request was rejected before anything was sent to the workflow:
+
+        - `invalid request body` — empty or malformed JSON, or anything after
+          the JSON value;
+        - `invalid request body: unknown field "<name>"` — a field the request
+          does not define;
+        - `action must be one of RETRY, COMPLETE, ABORT` (case-sensitive);
+        - `reason is required` — missing or blank;
+        - `complete is not supported for GATEWAY nodes; use retry or abort`.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NodeNotParked:
+      description: >-
+        No node in this workflow is parked under `{stepId}`: it was already
+        resolved, or the node has parked again since under a new step (each
+        run gets a new step ID), or the step never existed here
+        (`node is not currently awaiting admin intervention`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
     ErrorResponse:
       type: object
+      description: The error body a handler writes (`core/httputil`).
       required:
         - error
         - correlationId
       properties:
         error:
           type: string
+          description: >-
+            A fixed, safe message. Every `500` says
+            `An error occurred while processing your request`.
           example: "consignment not found"
         correlationId:
           type: string
+          description: The request's trace ID, as in the `X-Trace-ID` response header.
           example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    MiddlewareError:
+      type: object
+      description: >-
+        The error body the authentication (`core/authn`) and scope
+        (`core/authz`) middleware write. It carries no `correlationId`.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden]
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
 
     Flow:
       type: string
@@ -429,18 +528,29 @@ components:
 
     WorkflowNodeTemplateResponseDTO:
       type: object
+      required:
+        - name
+        - description
+        - type
       properties:
         name:
           type: string
+          description: >-
+            The task's display title from its render config, else its task
+            template ID.
         description:
           type: string
+          description: Currently always an empty string.
         type:
           type: string
+          description: The task's type. `SYSTEM` tasks are never listed.
 
     WorkflowNodeResponseDTO:
       type: object
       required:
         - id
+        - createdAt
+        - updatedAt
         - workflowNodeTemplate
         - state
       properties:
@@ -471,6 +581,9 @@ components:
         - state
         - traderId
         - traderCompanyId
+        - chaCompanyId
+        - createdAt
+        - updatedAt
         - workflowNodes
         - startableFlows
       properties:
@@ -479,6 +592,7 @@ components:
           format: uuid
         name:
           type: string
+          description: Omitted when the consignment has no name.
         flow:
           $ref: '#/components/schemas/Flow'
         state:
@@ -489,21 +603,26 @@ components:
           type: string
         chaCompanyId:
           type: string
+          description: Always present; an empty string until the workflow selects a CHA company.
         chaId:
           type: string
+          description: Omitted until a CHA claims the consignment.
         createdAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         updatedAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         workflowNodes:
           type: array
+          description: The consignment's non-`SYSTEM` tasks. Never null.
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
         startableFlows:
           type: array
-          description: The flows a trader or CHA may start on the consignment.
+          description: The flows a trader or CHA may start on the consignment. Never null.
           items:
             $ref: '#/components/schemas/FlowOption'
 
@@ -528,7 +647,7 @@ components:
           properties:
             flows:
               type: array
-              description: The consignment's top-level workflows, oldest first.
+              description: The consignment's top-level workflows, oldest first. Never null.
               items:
                 $ref: '#/components/schemas/FlowDTO'
 
@@ -556,9 +675,11 @@ components:
         createdAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         updatedAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
 
     EngineNodeDTO:
       type: object
@@ -570,6 +691,8 @@ components:
         - id
         - type
         - status
+        - created_at
+        - updated_at
       properties:
         id:
           type: string
@@ -585,19 +708,31 @@ components:
             (`POST …/steps/{step_id}/resolve`).
         type:
           type: string
+          enum: [START, END, TASK, GATEWAY, SPLIT_TASK, TIMER, SIGNALING]
         gateway_type:
           type: string
+          description: Set only on a GATEWAY node.
+          enum:
+            - EXCLUSIVE_SPLIT
+            - PARALLEL_SPLIT
+            - EXCLUSIVE_JOIN
+            - PARALLEL_JOIN
+            - BATCH_SPLIT
+            - BATCH_JOIN
         task_template_id:
           type: string
         task_workflow_id:
           type: string
           description: |
             Set only for a TASK node whose task has actually started its own
-            per-task ("micro") workflow. Pass this as `{id}` to
-            `GET /api/v1/admin/task/{id}/engine-status` to view that
+            per-task ("micro") workflow, and only in
+            `GET /api/v1/admin/workflows/{id}/engine-status`. Pass this as
+            `{id}` to `GET /api/v1/admin/task/{id}/engine-status` to view that
             workflow's engine state.
         status:
           type: string
+          description: Nodes the interpreter has not reached (`NOT_STARTED`) are omitted.
+          enum: [RUNNING, COMPLETED, FAILED, AWAITING_ADMIN]
         last_error:
           type: string
         park_category:
@@ -660,9 +795,11 @@ components:
         created_at:
           type: string
           format: date-time
+          description: RFC 3339 with nanoseconds.
         updated_at:
           type: string
           format: date-time
+          description: RFC 3339 with nanoseconds.
         child_workflow_ids:
           type: array
           description: |
@@ -683,14 +820,21 @@ components:
           type: string
         status:
           type: string
-          description: The workflow's overall status, e.g. RUNNING, COMPLETED, AWAITING_ADMIN.
+          description: >-
+            The workflow's overall execution status. A workflow with a node in
+            `AWAITING_ADMIN` is still `RUNNING`.
+          enum: [RUNNING, COMPLETED, FAILED]
         nodes:
           type: array
-          description: Only nodes the interpreter has already reached; not-yet-started nodes are omitted.
+          description: >-
+            Only nodes the interpreter has already reached; not-yet-started
+            nodes are omitted. Ordered by `created_at`, then `id`. Never null.
           items:
             $ref: '#/components/schemas/EngineNodeDTO'
         audit_trail:
           type: array
+          nullable: true
+          description: The workflow's event log, oldest first. `null` when the engine has none.
           items:
             type: string
         global_variables:
@@ -698,12 +842,13 @@ components:
           description: |
             The workflow instance's shared, dynamic business data —
             workflow-wide, not per node. May contain business/PII data.
+            Omitted when empty.
           additionalProperties: true
         edges:
           type: array
           description: |
             The workflow's graph connections, so an admin can see what a parked
-            GATEWAY's outgoing edges check.
+            GATEWAY's outgoing edges check. Omitted when empty.
           items:
             $ref: '#/components/schemas/EngineEdgeDTO'
 
@@ -765,4 +910,6 @@ components:
         reason:
           type: string
           minLength: 1
-          description: Why the admin is doing this. Required, and must not be blank.
+          description: >-
+            Why the admin is doing this. Required, and must not be blank
+            (whitespace only is `400`). Recorded in the audit log.

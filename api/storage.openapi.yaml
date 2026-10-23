@@ -20,15 +20,50 @@ info:
     - A machine client's (an OGA's) works only for that client, and never
       expires.
 
-    An agency runs this API in front of the deployment that stores its files.
-    It relays that deployment's rejections with their status and message, and
-    answers 502 when that deployment fails or refuses the agency's
-    credentials.
+    Where the presigned URLs point depends on `storage.type`:
 
-    All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
-    carrying the scope named on each operation. Every error response uses the
-    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+    - `s3`: the bucket. The client talks to S3 directly; this API serves no
+      content.
+    - `local`: this API's own origin (`storage.local.publicURL`), on the
+      content routes tagged *Storage (local driver only)* below. For local
+      development only.
+    - `proxy`: whatever the owning deployment hands out. Every agency runs
+      this way, with TNSW as the owning deployment.
+
+    An agency runs this API in front of the deployment that stores its files.
+    It relays that deployment's 4xx rejections with their status and
+    message, and answers 502 when that deployment fails, is unreachable, or
+    refuses the agency's credentials (a 401 or 403 from it).
+
+    The two routes under `/api/v1/storage` require a JWT bearer token (see
+    `securitySchemes.BearerAuth`) carrying the scope named on each
+    operation. The authentication and scope middleware answer 401/403 with
+    the `AuthError` body (`{"error": "...", "message": "..."}`); the
+    handlers' own errors use the shared `ErrorResponse` envelope
+    (`{"error": "...", "correlationId": "..."}`).
+
+    Every response carries an `X-Trace-ID` header, the same value as
+    `correlationId`. An inbound `X-Trace-ID`, `X-Correlation-ID` or
+    `X-Request-ID` (in that order) is used as the trace id when present.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+  - url: http://localhost:8081
+    description: Local Docker Compose (NPQS agency API; CDA 8083, FCAU 8082, EFC 8085, SLTB 8086)
+
+tags:
+  - name: Storage
+    description: Reserve an upload and get a download URL for a file reference.
+  - name: Storage (local driver only)
+    description: |
+      The content routes the local driver's presigned URLs point at,
+      standing in for S3. Registered only when `storage.type` is `local`:
+      production (S3) and agency (proxy) deployments do not serve them, and
+      an API gateway in front of a production deployment should not expose
+      them. Public: authorized by the HMAC token in the URL, not a bearer
+      token.
 
 security:
   - BearerAuth: []
@@ -36,20 +71,32 @@ security:
 paths:
   /api/v1/storage:
     post:
+      tags:
+        - Storage
       summary: Reserve an upload
       description: |
         Reserves a stored file and returns a file reference to it, issued to
         the caller, with the URL to upload the file to:
 
         1. `PUT` the file's bytes to `upload_url`, with the `Content-Type`
-           given as `mime_type` and exactly `size` bytes.
+           given as `mime_type` and at most `size` bytes. (S3 signs the URL
+           for exactly `size` bytes.)
         2. Keep `key` as the file's value, for example in a form's file field.
 
+        The request body carries only the file's metadata, never its
+        content, and is limited to 1 MiB. It is read as JSON whatever its
+        `Content-Type`; unknown fields are ignored.
+
         The allowed types and the size limit are the deployment's
-        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`).
+        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`: 32 MiB in
+        the example configs). An agency applies none of its own: the owning
+        deployment's apply, and its rejections are relayed.
 
         Requires scope `nsw:storage:write`.
       operationId: reserveUpload
+      x-required-scope: nsw:storage:write
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal, agency-api]
       requestBody:
         required: true
         content:
@@ -65,26 +112,23 @@ paths:
                 $ref: '#/components/schemas/UploadResponse'
         '400':
           description: |
-            Malformed JSON, a missing `filename` or `mime_type`, a `size` that
-            is not positive, or a file over the size limit.
+            Malformed JSON or a body over 1 MiB (`invalid request body`), a
+            missing `filename` or `mime_type`, a `size` that is not positive
+            (`size must be greater than 0`), or a file over the size limit
+            (`file size exceeds 32MB limit`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "file size exceeds 32MB limit"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '401':
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:storage:write`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '415':
-          description: The file type is not allowed.
+          description: The file type is not allowed (`invalid or prohibited file type`).
           content:
             application/json:
               schema:
@@ -95,27 +139,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "An error occurred while processing your request"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '502':
-          description: |
-            Agency only. The deployment that stores the files failed, or
-            refused this deployment's credentials.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadGateway'
 
   /api/v1/storage/{key}:
     get:
+      tags:
+        - Storage
       summary: Get a download URL
       description: |
         Returns a time-limited URL to download the file `{key}` stands for,
-        and when the URL expires.
+        and when the URL expires (`storage.presignTTLSeconds`: 15 minutes by
+        default). The URL is not checked against the stored file: one for a
+        file that was never uploaded fails only when it is fetched.
 
         `{key}` must be a file reference issued to the caller. A storage key
         grants nothing on its own.
 
         Requires scope `nsw:storage:read`.
       operationId: getDownloadURL
+      x-required-scope: nsw:storage:read
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal, agency-api]
       parameters:
         - name: key
           in: path
@@ -131,29 +179,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/DownloadResponse'
         '400':
-          description: Missing `{key}`.
+          description: |
+            The reference stands for a value that is not a valid storage key
+            (`invalid key format`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: |
-            The bearer token lacks scope `nsw:storage:read`; `{key}` is not
-            a file reference issued to the caller (someone else's reference,
-            a raw storage key or any other value get the same answer); or it
-            is a user's upload reference, which can only be submitted:
-            refetch the task once the form is submitted or saved as a draft,
-            for one that opens the file.
+            Either body:
+
+            - `AuthError`: the bearer token lacks scope `nsw:storage:read`.
+            - `ErrorResponse`: `{key}` is not a file reference issued to the
+              caller (someone else's reference, a raw storage key or any
+              other value get the same answer); or it is a user's upload
+              reference, which can only be submitted: refetch the task once
+              the form is submitted or saved as a draft, for one that opens
+              the file.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                anyOf:
+                  - $ref: '#/components/schemas/AuthError'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                scope:
+                  value:
+                    error: "forbidden"
+                    message: "insufficient scope"
+                notYours:
+                  value:
+                    error: "this is not a file reference issued to you"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                submitOnly:
+                  value:
+                    error: "this file reference can't be used to open the file; save the form to view it"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '410':
           description: |
             `{key}` is a file reference that has expired. Refetch the task
@@ -162,6 +226,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "this file reference has expired; reload to get a new one"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '500':
           description: Internal error resolving the reference or signing the URL.
           content:
@@ -169,13 +236,187 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /api/v1/storage/{key}/content:
+    parameters:
+      - $ref: '#/components/parameters/StorageKey'
+    put:
+      tags:
+        - Storage (local driver only)
+      summary: Upload a file's bytes (local driver)
+      description: |
+        The target of an `upload_url` the local driver signed. Send the raw
+        file bytes as the body, with the `Content-Type` the upload was
+        reserved for. The body is limited to `maxSizeBytes` (the reserved
+        `size`); the server's `readTimeout` (15 s in the example configs)
+        also bounds the upload.
+
+        Use `upload_url` as it was returned: every query parameter is
+        signed. Served only when `storage.type` is `local`; production (S3)
+        deployments don't serve it, and the API gateway should not expose
+        it there.
+
+        Public: no token.
+      operationId: uploadLocalContent
+      x-required-scope: null
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [browser, agency-api]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ContentToken'
+        - $ref: '#/components/parameters/ContentExpiresAt'
+        - name: contentType
+          in: query
+          required: true
+          description: The MIME type the upload was reserved for. The request's `Content-Type` must equal it exactly.
+          schema:
+            type: string
+            example: application/pdf
+        - name: maxSizeBytes
+          in: query
+          required: true
+          description: The largest body accepted, in bytes; the reserved `size`.
+          schema:
+            type: integer
+            format: int64
+            example: 482133
+      requestBody:
+        required: true
+        description: |
+          The file's bytes. A missing `Content-Type` is taken as
+          `application/octet-stream`.
+        content:
+          '*/*':
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: Stored.
+        '400':
           description: |
-            Agency only. The deployment that stores the files failed, or
-            refused this deployment's credentials.
+            `{key}` is not a storage key (`invalid key format`), or
+            `expiresAt`/`maxSizeBytes` is not an integer.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/LocalContentError'
+        '401':
+          description: |
+            A query parameter is missing (`missing security token or
+            constraints`), or the token does not match the key and
+            constraints (`invalid security token`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '403':
+          description: The URL has expired (`upload link expired`). Reserve the upload again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '413':
+          description: The body is over `maxSizeBytes` (`file size exceeds specified limit`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '415':
+          description: The request's `Content-Type` is not `contentType` (`content-type mismatch`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '500':
+          description: The file could not be saved (`failed to save file`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+    get:
+      tags:
+        - Storage (local driver only)
+      summary: Download a file's bytes (local driver)
+      description: |
+        The target of a `download_url` the local driver signed. Streams the
+        file inline, with the type it was uploaded as and headers that keep
+        a browser from running anything in it.
+
+        Use `download_url` as it was returned: every query parameter is
+        signed. Served only when `storage.type` is `local`; production (S3)
+        deployments don't serve it, and the API gateway should not expose
+        it there.
+
+        Public: no token.
+      operationId: downloadLocalContent
+      x-required-scope: null
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [browser, agency-api]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ContentToken'
+        - $ref: '#/components/parameters/ContentExpiresAt'
+      responses:
+        '200':
+          description: The file's bytes.
+          headers:
+            Content-Type:
+              description: The type the file was uploaded as; `application/octet-stream` when none was recorded.
+              schema:
+                type: string
+            Content-Length:
+              description: The file's size, when known.
+              schema:
+                type: integer
+            Content-Disposition:
+              description: Always `inline`.
+              schema:
+                type: string
+                enum: [inline]
+            Content-Security-Policy:
+              description: Always `sandbox`, so an uploaded HTML or SVG file cannot run script on this origin.
+              schema:
+                type: string
+                enum: [sandbox]
+            X-Content-Type-Options:
+              description: Always `nosniff`.
+              schema:
+                type: string
+                enum: [nosniff]
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: '`{key}` is not a storage key (`invalid key format`), or `expiresAt` is not an integer.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '401':
+          description: |
+            `token` or `expiresAt` is missing (`missing security token or
+            expiration`), or the token does not match (`invalid security
+            token`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '403':
+          description: The URL has expired (`download link expired`). Get a new download URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
+        '500':
+          description: The file could not be read, including one that was never uploaded (`failed to get file`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalContentError'
 
 components:
   securitySchemes:
@@ -183,8 +424,99 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        A JWT access token issued by the deployment's ThunderID IdP, sent as
+        `Authorization: Bearer <token>`. `internal/authn` (over
+        `core/authn`) checks an RS256/RS384/RS512 signature against the IdP's
+        JWKS (by the token's `kid`), the configured issuer (`iss`) and
+        audience (`aud`), and requires `exp` (30 s leeway), `client_id`, and
+        a `grant_type` claim of `authorization_code` (a user) or
+        `client_credentials` (a machine client). The scope is read from the
+        space-delimited `scope` claim.
+
+  parameters:
+    StorageKey:
+      name: key
+      in: path
+      required: true
+      description: |
+        The storage key the URL was signed for — a UUID, optionally followed
+        by a dot and an alphanumeric extension. Not a file reference.
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\.[a-zA-Z0-9]+)?$'
+        example: 3f2b8c1e-5d4a-4c3b-9e8f-1a2b3c4d5e6f.pdf
+    ContentToken:
+      name: token
+      in: query
+      required: true
+      description: The HMAC-SHA256 token, in hex, the local driver signed over the operation, key and the other query parameters.
+      schema:
+        type: string
+    ContentExpiresAt:
+      name: expiresAt
+      in: query
+      required: true
+      description: When the URL stops working, in Unix seconds (`storage.presignTTLSeconds` after it was signed).
+      schema:
+        type: integer
+        format: int64
+        example: 1791460800
+
+  responses:
+    Unauthorized:
+      description: |
+        The `Authorization` header is missing, malformed, or its token fails
+        validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+          examples:
+            missing:
+              value:
+                error: "unauthorized"
+                message: "authentication required"
+            invalid:
+              value:
+                error: "unauthorized"
+                message: "invalid authentication token"
+    Forbidden:
+      description: The token lacks the operation's scope (`core/authz`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+          example:
+            error: "forbidden"
+            message: "insufficient scope"
+    BadGateway:
+      description: |
+        Agency only. The deployment that stores the files failed, was
+        unreachable, returned an unusable answer, or refused this
+        deployment's credentials. Retryable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    AuthError:
+      type: object
+      description: |
+        The body the authentication (`core/authn`) and scope
+        (`core/authz`) middleware answer with.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden]
+        message:
+          type: string
+          example: "authentication required"
+
     ErrorResponse:
       type: object
       required:
@@ -195,7 +527,18 @@ components:
           example: "this file reference has expired; reload to get a new one"
         correlationId:
           type: string
+          description: The request's trace id, as in `X-Trace-ID`. Omitted when there is none.
           example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    LocalContentError:
+      type: object
+      description: The local content routes' error body. It carries no `correlationId`.
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "upload link expired"
 
     UploadRequest:
       type: object
@@ -207,6 +550,7 @@ components:
         filename:
           type: string
           minLength: 1
+          description: The file's name. Only its extension is kept, on the storage key.
           example: "invoice.pdf"
         mime_type:
           type: string
@@ -217,7 +561,7 @@ components:
           type: integer
           format: int64
           minimum: 1
-          description: The file's size in bytes; the upload must send exactly this many.
+          description: The file's size in bytes; the upload may send at most this many.
           example: 482133
 
     UploadResponse:
@@ -226,6 +570,8 @@ components:
         - key
         - name
         - upload_url
+        - size
+        - mime_type
       properties:
         key:
           type: string
@@ -240,7 +586,13 @@ components:
           example: "invoice.pdf"
         upload_url:
           type: string
-          description: The presigned URL to `PUT` the file's bytes to. It expires in minutes.
+          description: |
+            The presigned URL to `PUT` the file's bytes to. It expires after
+            `storage.presignTTLSeconds` (15 minutes by default). An S3 URL,
+            or with local storage this API's
+            `/api/v1/storage/{key}/content` route on
+            `storage.local.publicURL`; behind an agency, the owning
+            deployment's, always absolute.
         size:
           type: integer
           format: int64
@@ -258,8 +610,9 @@ components:
         download_url:
           type: string
           description: |
-            The presigned URL to download the file from. With local storage it
-            can be a path on this API's host.
+            The presigned URL to download the file from: an S3 URL, or with
+            local storage this API's `/api/v1/storage/{key}/content` route
+            on `storage.local.publicURL`. Always absolute.
         expires_at:
           type: integer
           format: int64
@@ -279,4 +632,4 @@ components:
           description: |
             The media type `extension` stands for, without parameters. Absent
             when the extension is not one this service knows.
-          example: application/pdf
+          example: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet

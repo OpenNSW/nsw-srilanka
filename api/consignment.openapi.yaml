@@ -3,14 +3,34 @@ info:
   title: NSW Sri Lanka / Consignment API
   description: |
     OpenAPI 3.0 specification for the consignment domain: creating export
-    consignments, and listing and reading a caller's own trader/CHA-owned
-    consignments. Ops/admin views of any consignment are in the separate
-    Admin API.
+    consignments, listing and reading a caller's own trader/CHA-owned
+    consignments, starting further flows on one, and the allowlisted
+    agency-facing summary. Ops/admin views of any consignment are in the
+    separate Admin API. These routes are mounted only when the server runs in
+    TNSW mode.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
-    carrying the scope named on each operation. Every error response uses the
-    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+    carrying the scope named on each operation. Errors written by a handler use
+    the `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`);
+    the authentication and scope middleware in front of every handler write
+    their own `{"error": "...", "message": "..."}` body (`MiddlewareError`)
+    instead, see the shared `Unauthorized` and `Forbidden` responses.
+
+    Every response carries an `X-Trace-ID` header. The server reuses a valid
+    `X-Trace-ID`, `X-Correlation-ID` or `X-Request-ID` request header (in that
+    order; at most 64 characters of `[A-Za-z0-9-_:./=]`), else generates one;
+    it is the `correlationId` of an `ErrorResponse`.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+
+tags:
+  - name: Consignments
+    description: >-
+      A trader's or CHA's own consignments, and the allowlisted summary of a
+      consignment for agency systems.
 
 security:
   - BearerAuth: []
@@ -18,126 +38,147 @@ security:
 paths:
   /api/v1/consignments:
     post:
+      tags: [Consignments]
       summary: Create and start an export consignment
       description: |
         Creates an export consignment for the caller's trader company and
-        immediately starts its workflow — no CHA company or HS code is
-        collected up front; the workflow's own tasks collect those later.
+        immediately starts its workflow (template `trade-export-v1`) — no CHA
+        company or HS code is collected up front; the workflow's own tasks
+        collect those later. The trader company is the one whose OU handle the
+        caller's user profile carries.
+
+        The request body is not read: send none, or any body (the trader
+        portal sends `{}`); it is ignored.
+
+        Only a user token is accepted (an authorization-code grant); a
+        client-credentials token gets `401`.
 
         Requires scope `nsw:consignment:write`.
       operationId: createConsignment
-      requestBody:
-        required: false
-        description: |
-          Ignored in production: the workflow template is always
-          `trade-export-v1`. Only honored when the deployment runs in dev
-          mode, where `template_id` may name a `test-*` template for testing.
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                template_id:
-                  type: string
-                  description: Dev-mode only. Must equal `trade-export-v1` or start with `test-`.
-                  example: "test-export-v1"
+      x-required-scope: nsw:consignment:write
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       responses:
         '201':
           description: Created. The new consignment, with its workflow started.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailDTO'
-        '400':
-          description: Invalid request body (dev mode only — e.g. a disallowed `template_id`).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedUserOnly'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal error creating or starting the consignment.
+          description: >-
+            Internal error: the caller's user profile or trader company could
+            not be resolved, or creating or starting the consignment failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
     get:
+      tags: [Consignments]
       summary: List the caller's own consignments
       description: |
         Lists consignments scoped to the caller's company, in the role given
-        by `?role=`. The caller must actually hold the JWT role mapped to the
-        requested logical role ("trader" or "cha") in the deployment's role
-        catalog, or the request is forbidden.
+        by `?role=`: for `trader`, consignments whose trader company is the
+        caller's; for `cha`, those whose CHA company is the caller's. The
+        caller must actually hold the JWT role (`roles` claim) mapped to the
+        requested logical role in the deployment's role catalog, or the
+        request is forbidden. Newest first.
+
+        Only a user token is accepted (an authorization-code grant); a
+        client-credentials token gets `401`.
 
         Requires scope `nsw:consignment:read`.
       operationId: listConsignments
+      x-required-scope: nsw:consignment:read
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
         - name: role
           in: query
-          description: Which company-side view to list as. Defaults to `trader`.
+          description: >-
+            Which company-side view to list as. Defaults to `trader`; any value
+            other than `trader` or `cha` is `400`.
           schema:
             type: string
             enum: [trader, cha]
             default: trader
         - name: state
           in: query
+          description: Only consignments in this state. Any other value is `400`.
           schema:
             $ref: '#/components/schemas/State'
         - name: flow
           in: query
+          description: Only consignments of this flow. Any other value is `400`.
           schema:
             $ref: '#/components/schemas/Flow'
         - name: q
           in: query
-          description: Free-text search filter.
+          description: >-
+            Case-insensitive substring match on the consignment ID or name.
+            Leading and trailing whitespace is trimmed; blank means no filter.
           schema:
             type: string
         - name: offset
           in: query
+          description: A non-integer or negative value is `400`.
           schema:
             type: integer
             minimum: 0
             default: 0
         - name: limit
           in: query
+          description: >-
+            Page size. A non-integer or a value below 1 is `400`; a value above
+            100 is not rejected but capped at 100.
           schema:
             type: integer
             minimum: 1
-            maximum: 100
             default: 50
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListResult'
         '400':
-          description: Invalid `role`, or invalid pagination parameters.
+          description: >-
+            Invalid pagination parameters (`invalid pagination parameters`), or
+            an invalid `state`, `flow` or `role`.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedUserOnly'
         '403':
           description: |
-            The caller does not hold the JWT role mapped to the requested
-            `?role=`, or has no resolvable company profile.
+            The bearer token lacks the required scope (scope middleware,
+            `MiddlewareError`); or, from the handler (`ErrorResponse`), the
+            caller does not hold the JWT role mapped to the requested `?role=`
+            (`caller does not hold the requested role`), or the caller's
+            `ouHandle` names no company profile (`company not found`).
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/MiddlewareError'
+                  - $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error.
           content:
@@ -147,42 +188,40 @@ paths:
 
   /api/v1/consignments/{id}:
     get:
+      tags: [Consignments]
       summary: Get one of the caller's own consignments
       description: |
         Fetches full consignment detail, scoped to the caller's company and
-        JWT role. A consignment that exists but is not owned by the caller's
-        company/role is reported the same as one that does not exist (404,
+        JWT role: the caller's company must be the consignment's trader
+        company and the caller hold the trader role, or its CHA company and
+        the caller hold the CHA role. A consignment that exists but fails
+        this check is reported the same as one that does not exist (404,
         not 403), so the response cannot be used to probe which IDs exist.
+
+        Only a user token is accepted (an authorization-code grant); a
+        client-credentials token gets `401`.
 
         Requires scope `nsw:consignment:read`.
       operationId: getConsignmentByID
+      x-required-scope: nsw:consignment:read
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailDTO'
-        '400':
-          description: Missing consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedUserOnly'
         '403':
-          description: The caller has no resolvable company profile.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenOrNoCompany'
         '404':
           description: |
             No such consignment, or the caller's company/role does not own
@@ -200,6 +239,7 @@ paths:
 
   /api/v1/consignments/{id}/flows:
     post:
+      tags: [Consignments]
       summary: Start a flow on one of the caller's own consignments
       description: |
         Starts one of the consignment's startable flows
@@ -209,16 +249,27 @@ paths:
         `workflowNodes`. A consignment that has `FINISHED` still takes new
         flows; starting one sets it back to `IN_PROGRESS`.
 
+        The body is read before the caller's company or the consignment is
+        looked up: at most 1 KiB (1024 bytes), exactly one JSON object, with
+        `templateId` its only field. The `Content-Type` header is not checked.
+
         Access is checked as for `GET /api/v1/consignments/{id}`: a
         consignment the caller's company/role does not own is reported as
         not found.
 
+        Only a user token is accepted (an authorization-code grant); a
+        client-credentials token gets `401`.
+
         Requires scope `nsw:consignment:write`.
       operationId: startConsignmentFlow
+      x-required-scope: nsw:consignment:write
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
       requestBody:
         required: true
+        description: At most 1 KiB.
         content:
           application/json:
             schema:
@@ -226,31 +277,28 @@ paths:
       responses:
         '201':
           description: The flow started.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/FlowDTO'
         '400':
           description: >-
-            Missing consignment ID; an invalid request body (malformed JSON, any
-            field besides `templateId`, or anything after the JSON value); or a `templateId`
-            that is not one of the consignment's startable flows.
+            An invalid request body (`invalid request body`: empty, malformed
+            JSON, any field besides `templateId`, or anything after the JSON
+            value); or a `templateId` that is missing or not one of the
+            consignment's startable flows (`templateId is not a flow that can
+            be started on this consignment`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedUserOnly'
         '403':
-          description: The caller has no resolvable company profile.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenOrNoCompany'
         '404':
           description: |
             No such consignment, or the caller's company/role does not own
@@ -260,7 +308,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '413':
-          description: Request body is larger than 1 KiB.
+          description: Request body is larger than 1 KiB (`request body too large`).
           content:
             application/json:
               schema:
@@ -274,36 +322,36 @@ paths:
 
   /api/v1/consignments/{id}/agency:
     get:
+      tags: [Consignments]
       summary: Get the allowlisted agency-facing summary of a consignment
       description: |
         Returns a small, allowlisted projection of a consignment for
-        authenticated M2M (or user) callers. Knowing the unguessable UUID is
-        sufficient — there is no trader/CHA company ownership check. Access
-        is audit-logged.
+        authenticated M2M (or user) callers — an agency deployment's
+        `<AGENCY>_TO_NSW` client holds this scope. Knowing the unguessable
+        UUID is sufficient — there is no trader/CHA company ownership check.
+        Access is audit-logged.
 
         Requires scope `nsw:consignment:read`.
       operationId: getConsignmentAgency
+      x-required-scope: nsw:consignment:read
+      x-deployment-modes: [tnsw]
+      x-callers: [agency-api]
       parameters:
         - $ref: '#/components/parameters/ConsignmentID'
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/X-Trace-ID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AgencyDTO'
-        '400':
-          description: Missing consignment ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No such consignment.
           content:
@@ -323,29 +371,160 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        A JWT access token issued by the deployment's ThunderID IdP, sent as
+        `Authorization: Bearer <token>`. The server (`internal/authn`, over
+        `core/authn`) checks:
+
+        - the signature, against the IdP's JWKS (`authn.jwksURL`), with
+          `RS256`, `RS384` or `RS512` only and a `kid` header naming the key;
+        - `iss` equals `authn.issuer` and `aud` contains `authn.audience`;
+        - `exp` is present and not past, and `nbf` if present, with 30
+          seconds of leeway;
+        - `client_id` is present, and `grant_type` is `authorization_code`
+          (a user token, which must also carry `sub`, `email`, `ouId` and
+          `ouHandle`) or `client_credentials` (a client token).
+
+        Scopes are read from the token's space-delimited `scope` claim, roles
+        from `roles`.
+
+  headers:
+    X-Trace-ID:
+      description: >-
+        The request's trace ID: the caller's `X-Trace-ID`, `X-Correlation-ID`
+        or `X-Request-ID` when valid, else a generated 32-hex-digit ID. Equals
+        an error body's `correlationId`.
+      schema:
+        type: string
+        maxLength: 64
 
   parameters:
     ConsignmentID:
       name: id
       in: path
       required: true
+      description: >-
+        The consignment ID (a UUID). Its format is not validated: any value
+        that names no consignment is `404`.
       schema:
         type: string
         format: uuid
 
+  responses:
+    Unauthorized:
+      description: |
+        Unauthenticated. Written by the authentication or scope middleware
+        (`MiddlewareError`): no `Authorization` header
+        (`{"error":"unauthorized","message":"authentication required"}`), or
+        a header that is not `Bearer <token>` or a token that fails
+        validation (`{"error":"unauthorized","message":"invalid authentication token"}`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MiddlewareError'
+          examples:
+            missing:
+              value: {error: unauthorized, message: authentication required}
+            invalid:
+              value: {error: unauthorized, message: invalid authentication token}
+
+    UnauthorizedUserOnly:
+      description: |
+        Unauthenticated, as `Unauthorized` (`MiddlewareError`); or, from the
+        handler, a valid token that is not a user token, e.g. a
+        client-credentials token
+        (`{"error":"unauthorized","correlationId":"..."}`, `ErrorResponse`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/MiddlewareError'
+              - $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing:
+              value: {error: unauthorized, message: authentication required}
+            invalid:
+              value: {error: unauthorized, message: invalid authentication token}
+            notAUser:
+              value: {error: unauthorized, correlationId: 1d67eb9ce46b7b08c6bcf1bdd91de5d5}
+
+    Forbidden:
+      description: >-
+        The bearer token lacks the operation's required scope. Written by the
+        scope middleware (`MiddlewareError`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MiddlewareError'
+          example: {error: forbidden, message: insufficient scope}
+
+    ForbiddenOrNoCompany:
+      description: |
+        The bearer token lacks the operation's required scope (scope
+        middleware, `MiddlewareError`); or the caller's `ouHandle` names no
+        company profile (handler, `ErrorResponse` with error
+        `company not found`).
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/X-Trace-ID'
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/MiddlewareError'
+              - $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            scope:
+              value: {error: forbidden, message: insufficient scope}
+            noCompany:
+              value: {error: company not found, correlationId: 1d67eb9ce46b7b08c6bcf1bdd91de5d5}
+
   schemas:
     ErrorResponse:
       type: object
+      description: The error body a handler writes (`core/httputil`).
       required:
         - error
         - correlationId
       properties:
         error:
           type: string
+          description: >-
+            A fixed, safe message. Every `500` says
+            `An error occurred while processing your request`.
           example: "consignment not found"
         correlationId:
           type: string
+          description: The request's trace ID, as in the `X-Trace-ID` response header.
           example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    MiddlewareError:
+      type: object
+      description: >-
+        The error body the authentication (`core/authn`) and scope
+        (`core/authz`) middleware write. It carries no `correlationId`.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden]
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
 
     Flow:
       type: string
@@ -357,6 +536,10 @@ components:
 
     WorkflowNodeState:
       type: string
+      description: >-
+        `IN_PROGRESS`: the trader (or CHA) still has work on the task;
+        `QUEUED_EXTERNALLY`: submitted, waiting on an agency officer;
+        `COMPLETED`; `FAILED`.
       enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED]
 
     SummaryDTO:
@@ -368,12 +551,16 @@ components:
         - state
         - traderId
         - traderCompanyId
+        - chaCompanyId
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+          description: Omitted when the consignment has no name.
         flow:
           $ref: '#/components/schemas/Flow'
         state:
@@ -386,16 +573,20 @@ components:
           description: Company the trader belongs to.
         chaCompanyId:
           type: string
-          description: CHA company selected at Stage 1.
+          description: >-
+            CHA company selected for the consignment. Always present; an empty
+            string until the workflow selects one.
         chaId:
           type: string
-          description: CHA assigned at Stage 2 (empty until claimed).
+          description: CHA who claimed the consignment. Omitted until claimed.
         createdAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         updatedAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
 
     ListResult:
       type: object
@@ -408,15 +599,18 @@ components:
       properties:
         items:
           type: array
+          description: Never null; an empty page is `[]`.
           items:
             $ref: '#/components/schemas/SummaryDTO'
         total:
           type: integer
           format: int64
+          description: The number of consignments matching the filters, across all pages.
         offset:
           type: integer
         limit:
           type: integer
+          description: The page size applied, after the cap of 100.
 
     AgencyDTO:
       type: object
@@ -432,18 +626,29 @@ components:
 
     WorkflowNodeTemplateResponseDTO:
       type: object
+      required:
+        - name
+        - description
+        - type
       properties:
         name:
           type: string
+          description: >-
+            The task's display title from its render config, else its task
+            template ID.
         description:
           type: string
+          description: Currently always an empty string.
         type:
           type: string
+          description: The task's type. `SYSTEM` tasks are never listed.
 
     WorkflowNodeResponseDTO:
       type: object
       required:
         - id
+        - createdAt
+        - updatedAt
         - workflowNodeTemplate
         - state
       properties:
@@ -473,6 +678,9 @@ components:
         - state
         - traderId
         - traderCompanyId
+        - chaCompanyId
+        - createdAt
+        - updatedAt
         - workflowNodes
         - startableFlows
       properties:
@@ -481,6 +689,7 @@ components:
           format: uuid
         name:
           type: string
+          description: Omitted when the consignment has no name.
         flow:
           $ref: '#/components/schemas/Flow'
         state:
@@ -491,23 +700,28 @@ components:
           type: string
         chaCompanyId:
           type: string
+          description: Always present; an empty string until the workflow selects a CHA company.
         chaId:
           type: string
+          description: Omitted until a CHA claims the consignment.
         createdAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         updatedAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         workflowNodes:
           type: array
+          description: The consignment's non-`SYSTEM` tasks. Never null.
           items:
             $ref: '#/components/schemas/WorkflowNodeResponseDTO'
         startableFlows:
           type: array
           description: >-
             The flows the caller may start on the consignment with
-            `POST /api/v1/consignments/{id}/flows`.
+            `POST /api/v1/consignments/{id}/flows`. Never null.
           items:
             $ref: '#/components/schemas/FlowOption'
 
@@ -562,6 +776,8 @@ components:
         createdAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
         updatedAt:
           type: string
           format: date-time
+          description: RFC 3339, seconds precision.
