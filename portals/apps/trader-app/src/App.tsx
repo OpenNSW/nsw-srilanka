@@ -17,7 +17,6 @@ import { SearchServiceProvider, UploadProvider } from '@opennsw/jsonforms-render
 import { uploadFile, getDownloadUrl } from './services/storage'
 import { searchServices } from './services/searchService'
 import { useAuthContext } from './hooks/useAuthContext'
-import { UnauthorizedScreen } from './screens/UnauthorizedScreen.tsx'
 import { ZonePreviewScreen } from '@/features/zone/ZonePreviewScreen.tsx'
 import { appConfig, displayName } from './config'
 import { useEffect } from 'react'
@@ -37,10 +36,12 @@ function ProtectedLayout() {
 
   if (isLoading || (isSignedIn && (isResolvingRoles || availableRoles === null))) return null
   if (!isSignedIn) return <Navigate to="/login" replace />
-  if (!availableRoles || availableRoles.length === 0) return <UnauthorizedScreen />
+  // Every signed-in user is admitted; the backend authorizes each request. A user
+  // with no mapped role falls back to the trader view.
+  const roles = availableRoles && availableRoles.length > 0 ? availableRoles : ['trader' as const]
 
   return (
-    <RoleProvider availableRoles={availableRoles} isLoading={isResolvingRoles}>
+    <RoleProvider availableRoles={roles} isLoading={isResolvingRoles}>
       <ProfileProvider>
         <UploadWrapper>
           <Layout />

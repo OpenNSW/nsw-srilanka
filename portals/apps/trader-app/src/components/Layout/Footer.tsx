@@ -9,7 +9,7 @@ import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 // the same one instance across every screen.
 //
 // Height contract: h-16 (64px) below sm, sm:h-8 (32px) at sm+ breakpoints.
-// Every screen (Layout.tsx, LoginScreen.tsx, UnauthorizedScreen.tsx,
+// Every screen (Layout.tsx, LoginScreen.tsx,
 // ZonePreviewScreen.tsx) must reserve space for it with `pb-16 sm:pb-8` so
 // the reserve stays in sync with this component.
 //
