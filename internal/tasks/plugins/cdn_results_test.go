@@ -137,3 +137,22 @@ func TestCDNResultsCollector_RejectsUnusableInput(t *testing.T) {
 	assert.Error(t, CDNResultsCollectorFunc(splitCtx(map[string]any{"cdn_results": "nope"}), nil))
 	assert.Error(t, CDNResultsCollectorFunc(splitCtx(map[string]any{"cdn_results": []any{"nope"}}), nil))
 }
+
+// With no accepted note, the fallback form must not be a cancelled note's: a
+// cancelled note is never quoted downstream.
+func TestCDNResultsCollector_FallbackSkipsCancelledNotes(t *testing.T) {
+	cancelled := branch("CDN-1", "edge-1", false)
+	cancelled["ack_status"] = "CANCELLED"
+
+	ctx := splitCtx(map[string]any{"cdn_results": []any{cancelled, branch("CDN-2", "edge-2", false)}})
+	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
+	assert.Equal(t, "CDN-2", ctx.Record.Data["cdn_userform"].(map[string]any)["registeredCdnNumber"])
+
+	// One container, and its note cancelled: nothing to quote, but still a form.
+	only := branch("CDN-1", "edge-1", true)
+	only["ack_status"] = "CANCELLED"
+	ctx = splitCtx(map[string]any{"cdn_results": []any{only}})
+	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
+	assert.Equal(t, map[string]any{}, ctx.Record.Data["cdn_userform"])
+	assert.Equal(t, "", ctx.Record.Data["cdn_number"])
+}

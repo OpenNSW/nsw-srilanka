@@ -713,6 +713,7 @@ func TestSLCEHandler_CDNCancelledResponses(t *testing.T) {
 		"no reference":                 {body: strings.Replace(cdnCancelledPayload, `"cdnRef":`, `"other":`, 1), want: http.StatusBadRequest},
 		"no processing time":           {body: strings.Replace(cdnCancelledPayload, `"processedAt": "2026-04-27T14:30:10Z",`, ``, 1), want: http.StatusBadRequest},
 		"reference not registered yet": {body: cdnCancelledPayload, err: cdn.ErrDispatchNoteNotFoundByCDNRef, want: http.StatusServiceUnavailable},
+		"wait not parked yet":          {body: cdnCancelledPayload, err: cdn.ErrTaskNotParked, want: http.StatusServiceUnavailable},
 		"the wait could not be ended":  {body: cdnCancelledPayload, err: errors.New("boom"), want: http.StatusInternalServerError},
 	} {
 		t.Run(name, func(t *testing.T) {

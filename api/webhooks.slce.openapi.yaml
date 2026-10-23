@@ -259,7 +259,10 @@ paths:
             (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
             dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet
             — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
-            callback for the same document. Transient: SLC Edge should retry.
+            callback for the same document. Or the dispatch note's wait for its
+            acknowledgment has not parked yet (CDN_ACKNOWLEDGED, CDN_CANCELLED);
+            the note is left as it was, so the retry releases it. Transient:
+            SLC Edge should retry.
           content:
             application/json:
               schema:

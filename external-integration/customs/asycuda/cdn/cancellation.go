@@ -44,9 +44,10 @@ func (r CDNCancelledRequest) Validate() error {
 // the acknowledgment wait is released as cancelled and the branch finishes; the
 // consignment's other containers, and the declaration, carry on.
 //
-// The note is marked cancelled before the wait is released, as an acknowledgment
-// does, so a redelivery (§2) of a cancellation whose release found no task
-// parked yet tries the release again.
+// The wait is released before the note is marked cancelled, as an acknowledgment
+// does: once the note is cancelled, SLC Edge's retry is a redelivery, so a
+// lookup that fails or a wait not parked yet must leave the note as it was for
+// the retry (§2) to release it.
 func (s *cdnWebhookService) ProcessCancellation(ctx context.Context, req CDNCancelledRequest) error {
 	ref := req.Payload.CDNRef
 	note, err := s.repo.GetByCDNRef(ctx, ref)
@@ -70,15 +71,16 @@ func (s *cdnWebhookService) ProcessCancellation(ctx context.Context, req CDNCanc
 		return fmt.Errorf("invalid state transition: cannot cancel dispatch note in status %s", note.Status)
 	}
 
-	wasAcknowledged := note.Status == DispatchNoteStatusAcknowledged
+	if note.Status == DispatchNoteStatusIntegrated {
+		if err := s.resumeCancelledWait(ctx, note, false); err != nil {
+			return err
+		}
+	}
+
 	note.Status = DispatchNoteStatusCancelled
 	if err := s.repo.Update(ctx, note); err != nil {
 		return fmt.Errorf("failed to update dispatch note to CANCELLED: %w", err)
 	}
 	slog.InfoContext(ctx, "dispatch note cancelled", "id", note.ID, "cdn_ref", ref)
-
-	if wasAcknowledged {
-		return nil
-	}
-	return s.resumeCancelledWait(ctx, note, false)
+	return nil
 }

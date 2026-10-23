@@ -44,6 +44,9 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 	var (
 		numbers []any
 		firstOK map[string]any
+		// firstLive is the first branch Customs did not cancel, for the
+		// fallback below.
+		firstLive map[string]any
 	)
 	containers := make([]map[string]any, 0, len(branches))
 
@@ -56,6 +59,9 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 
 		userform, _ := branch["userform"].(map[string]any)
 		cig, _ := branch["cig_cdn"].(map[string]any)
+		if firstLive == nil {
+			firstLive = userform
+		}
 
 		accepted, _ := cig["accepted"].(bool)
 
@@ -76,10 +82,16 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 	}
 
 	// COLLECT_ALL lets a branch finish rejected, so there may be no accepted
-	// note at all. Falling back to the first branch keeps the downstream steps
-	// populated with something the trader recognizes rather than nothing.
+	// note at all. Falling back to the first branch Customs did not cancel keeps
+	// the downstream steps populated with something the trader recognizes. A
+	// cancelled note is never quoted, so with every note cancelled the form is
+	// empty: not nil, which a required mapping would read as missing and park the
+	// consignment on.
+	if firstOK == nil {
+		firstOK = firstLive
+	}
 	if firstOK == nil && len(branches) > 0 {
-		firstOK, _ = branches[0]["userform"].(map[string]any)
+		firstOK = map[string]any{}
 	}
 
 	if ctx.Record == nil {

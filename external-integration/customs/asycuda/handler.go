@@ -375,6 +375,12 @@ func (h *Handler) handleCDNCancellation(w http.ResponseWriter, r *http.Request, 
 			httputil.Error(w, r, http.StatusServiceUnavailable, errDispatchNoteNotFoundRetry)
 			return
 		}
+		if errors.Is(err, cdn.ErrTaskNotParked) {
+			slog.WarnContext(r.Context(), "slce: CDN cancellation arrived before its task was waiting; retry",
+				"cdn_ref", ref)
+			httputil.Error(w, r, http.StatusServiceUnavailable, errTaskNotParkedRetry)
+			return
+		}
 		httputil.InternalServerError(w, r, "slce: failed to process CDN cancellation", err, "cdn_ref", ref)
 		return
 	}

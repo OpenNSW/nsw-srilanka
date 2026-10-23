@@ -144,3 +144,35 @@ func TestProcessIntegrationResult_CancelledNoteStaysCancelled(t *testing.T) {
 	assert.Nil(t, repo.created)
 	assert.Equal(t, DispatchNoteStatusCancelled, repo.byEdgeID["edge-1"].Status)
 }
+
+// The wait is released before the note is marked cancelled. A cancellation whose
+// wait has not parked yet is retried, and leaves the note INTEGRATED, so the
+// retry finds the wait and releases it.
+func TestProcessCancellation_WaitNotParkedYetIsRetried(t *testing.T) {
+	repo := &mockRepository{byCDNRef: noteIn(DispatchNoteStatusIntegrated)}
+	recorder := &resumeRecorder{}
+
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder, nil)
+	require.ErrorIs(t, early.ProcessCancellation(context.Background(), cancellation(t)), ErrTaskNotParked)
+	assert.Nil(t, repo.updated, "the note must not be cancelled, or the retry is a redelivery")
+	assert.Equal(t, DispatchNoteStatusIntegrated, repo.byCDNRef["2026-CBEX1-C"].Status)
+
+	retry := NewCDNWebhookService(repo, parkedAcknowledgmentWait(), recorder, nil)
+	require.NoError(t, retry.ProcessCancellation(context.Background(), cancellation(t)))
+	assert.Equal(t, "CANCELLED", recorder.completed["wait_ack:abc"]["ack_status"])
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusCancelled, repo.updated.Status)
+}
+
+// Tasks that could not be read are an error, and leave the note as it was.
+func TestProcessCancellation_TaskStoreFailureLeavesTheNote(t *testing.T) {
+	repo := &mockRepository{byCDNRef: noteIn(DispatchNoteStatusIntegrated)}
+	recorder := &resumeRecorder{}
+	svc := NewCDNWebhookService(repo, failingTasks{}, recorder, nil)
+
+	err := svc.ProcessCancellation(context.Background(), cancellation(t))
+
+	require.ErrorIs(t, err, errTaskStore)
+	assert.Nil(t, repo.updated)
+	assert.Empty(t, recorder.completed)
+}
