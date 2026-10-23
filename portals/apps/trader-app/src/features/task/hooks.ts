@@ -15,7 +15,7 @@ export type ClaimOp = 'claim' | 'release'
 export type ClaimErrorKey = 'completed' | 'changed' | 'notHolder' | 'unavailable' | 'failed'
 
 // Why a draft save or a submission failed.
-export type ActionErrorKey = 'staleStep' | 'draftFailed' | 'submitFailed'
+export type ActionErrorKey = 'staleStep' | 'draftFailed' | 'submitFailed' | 'submitNotSent'
 
 export interface UseTaskResult {
   zoneView: ZoneView | null
@@ -63,8 +63,9 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
 
   // Reloads the task and reseeds the form from what came back, not from what it mounted with.
   const reloadForm = async () => {
-    await task.refetch()
+    const zv = await task.refetch()
     setFormEpoch((n) => n + 1)
+    return zv
   }
 
   const claim = useMutation(async (op: ClaimOp) => {
@@ -115,7 +116,12 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
       window.scrollTo({ top: 0, behavior: 'smooth' })
       await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
       // Safe to discard the on-screen values here: the submission that just succeeded carried them.
-      await reloadForm()
+      const zv = await reloadForm()
+      // A submit that leaves the task pending stored the answers but did not send
+      // the application. A rejection already explains itself through the task alert.
+      if (zv?.state === 'PENDING_USER' && !hasRejection(zv)) {
+        setActionError('submitNotSent')
+      }
     } catch (err) {
       if (isConflict(err)) {
         // The task moved on since this view loaded (another tab, a callback). Show where it is
@@ -151,6 +157,12 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
     saveDraft: saveDraft.mutate,
     submit: submit.mutate,
   }
+}
+
+function hasRejection(zv: ZoneView): boolean {
+  const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
+  if (variant === 'error') return true
+  return zv.view.some((zone) => zone.id.toLowerCase().includes('reject'))
 }
 
 function isConflict(err: unknown): boolean {

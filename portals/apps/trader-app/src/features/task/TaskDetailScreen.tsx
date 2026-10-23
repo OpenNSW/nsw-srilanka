@@ -54,6 +54,7 @@ export function TaskDetailScreen() {
     staleStep: t('tasks.error.staleStep'),
     draftFailed: t('tasks.error.draftFailed'),
     submitFailed: t('tasks.error.submitFailed'),
+    submitNotSent: t('tasks.error.submitNotSent'),
   }
   const submitError = actionError && actionErrorMessages[actionError]
 

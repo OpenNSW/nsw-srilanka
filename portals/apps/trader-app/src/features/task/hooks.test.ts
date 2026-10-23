@@ -193,7 +193,42 @@ describe('useTask', () => {
     expect(mockGetZoneView).toHaveBeenCalledTimes(2)
     expect(result.current.submitted).toBe(false)
     expect(result.current.formEpoch).toBe(1)
+    expect(result.current.actionError).toBeNull()
     scrollTo.mockRestore()
+  })
+
+  it('reports a submit that leaves the task pending', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result } = await renderLoaded()
+    mockGetZoneView.mockResolvedValue(makeZoneView('PENDING_USER'))
+    vi.useFakeTimers()
+
+    await act(async () => {
+      const submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(POST_SUBMIT_REFETCH_DELAY_MS)
+      await submitted
+    })
+
+    expect(result.current.actionError).toBe('submitNotSent')
+    expect(result.current.formEpoch).toBe(1)
+  })
+
+  it('leaves a pending rejection to the task alert', async () => {
+    mockSubmit.mockResolvedValue(undefined)
+    const { result } = await renderLoaded()
+    mockGetZoneView.mockResolvedValue({
+      ...makeZoneView('PENDING_USER'),
+      alert: { message: 'Rejected', variant: 'error' },
+    })
+    vi.useFakeTimers()
+
+    await act(async () => {
+      const submitted = result.current.submit('SUBMIT', {})
+      await vi.advanceTimersByTimeAsync(POST_SUBMIT_REFETCH_DELAY_MS)
+      await submitted
+    })
+
+    expect(result.current.actionError).toBeNull()
   })
 
   it('reloads the form when a submission targets a step the task has left', async () => {
