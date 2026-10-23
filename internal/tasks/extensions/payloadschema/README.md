@@ -51,7 +51,8 @@ it:
 - ajv-formats' `formatMaximum`, `formatMinimum` and their exclusive forms as the forms use
   them: on a `date`, with the limit read from a sibling through Ajv's `$data`
   (`{"$data": "1/<sibling>"}`), so one date can't be later than another. Only that use is
-
+  checked; a limit written in the schema, on another format, read from elsewhere, or on a
+  value that isn't an object's property is left to the browser.
 - standard JSON Schema semantics: `required` only checks that a key is present.
 
 The schema is compiled on every call, as the other artifact templates are parsed on every
