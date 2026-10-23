@@ -16,6 +16,7 @@
 (?i)hardcode
 (?i)idp
 (?i)linkcheck
+(?i)liveness
 (?i)markdownlint('s)?
 (?i)mdlint
 (?i)middleware
@@ -28,6 +29,7 @@
 (?i)params?
 (?i)pnpm
 (?i)Postgres
+(?i)presigned
 (?i)proxied
 (?i)stdin
 (?i)substring

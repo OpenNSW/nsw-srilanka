@@ -1,0 +1,590 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / Agency API
+  description: |
+    OpenAPI 3.0 specification for the routes a backend serves only when its
+    `config.yaml` sets `mode: agency`: TNSW injecting an application into the
+    agency (`POST /api/v1/inject`), and the officer case views the agency
+    portal lists and opens (`GET /api/v1/cases`, `GET /api/v1/cases/{id}`).
+    A TNSW deployment (`mode: tnsw`) does not register these routes; there
+    they answer 404.
+
+    Each injected `taskId` starts its own workflow in the agency. Workflows
+    injected under the same `consignmentId` are grouped into one **case**,
+    keyed by that `consignmentId`. Officers work the resulting tasks on the
+    shared task routes.
+
+    An agency backend also serves the shared routes, documented in their own
+    specs: the task routes (`GET /api/v1/tasks/{id}`,
+    `POST /api/v1/tasks/{id}/steps/{stepId}`,
+    `PUT /api/v1/tasks/{id}/steps/{stepId}/draft` and
+    `POST /api/v1/callbacks/{token}`, in the tasks spec), static data
+    (`GET /api/v1/static-data/{id}`), the profile
+    (`GET /api/v1/users/me`), storage, and `GET /health` (system spec). An
+    agency sends its decision back to TNSW on TNSW's
+    `POST /api/v1/callbacks/{token}` (tasks spec), with the `callbackToken`
+    the inject carried; TNSW replies on the agency's own parked steps on the
+    agency's `POST /api/v1/callbacks/{token}` the same way.
+
+    All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
+    carrying the scope named on each operation. Errors the handlers write use
+    the shared `ErrorResponse` envelope (`{"error": "...", "correlationId":
+    "..."}`). The authentication and scope middleware in front of them write
+    their own `{"error": "...", "message": "..."}` body instead (see
+    `components.responses.Unauthorized` and `Forbidden`).
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8081
+    description: Local Docker Compose (NPQS agency API; CDA 8083, FCAU 8082, EFC 8085, SLTB 8086)
+
+tags:
+  - name: Inject
+    description: |
+      Machine-to-machine entry point TNSW uses to start a workflow in the
+      agency.
+  - name: Cases
+    description: |
+      Officer-facing case list and detail, in the JSON shape of TNSW's
+      consignment list and detail so the portal renders a case unchanged.
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/inject:
+    post:
+      tags:
+        - Inject
+      summary: Start a workflow in the agency
+      description: |
+        Records the request and starts the workflow that the `taskCode`'s
+        `task_config` names, with `taskId` as the workflow instance ID. The
+        case keyed by `consignmentId` is created if new, and reopened if it
+        had finished. The workflow is seeded with `taskId`, `taskCode`,
+        `consignmentId`, `data` (as the `notification` variable) and, when
+        sent, `callbackToken`.
+
+        **Idempotency.** `taskId` is the idempotency key and names one
+        workflow for good. Repeating an inject with the same `taskId`,
+        `taskCode` and `consignmentId` is a retry: if the earlier start
+        failed (status `STARTING`) the workflow is started again, otherwise
+        the recorded row is returned and nothing else happens. A retry always
+        runs with the `data` and `callbackToken` of the first inject; later
+        values are ignored. The same `taskId` with a different `taskCode` or
+        `consignmentId` is refused with 409. A repeat inject is not a new
+        review round: it is never delivered to the running workflow.
+
+        The body is decoded as one JSON object. Unknown fields are ignored,
+        and nothing after the first JSON value is read. The handler sets no
+        body size limit of its own (it does not apply
+        `server.maxRequestBytes`); the server's `server.readTimeout` bounds
+        how long the body may take to arrive.
+
+        Only TNSW's machine client for this agency (`NSW_TO_<AGENCY>`, for
+        example `NSW_TO_NPQS`) is granted the scope in the shipped IdP
+        bootstrap.
+
+        Requires scope `nsw:workflow:inject`.
+      operationId: injectWorkflow
+      x-required-scope: nsw:workflow:inject
+      x-deployment-modes:
+        - agency
+      x-callers:
+        - tnsw-api
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjectRequest'
+      responses:
+        '200':
+          description: |
+            OK. The workflow is started, or was already started or completed
+            by an earlier inject with the same `taskId`. The body is the
+            recorded row, so on a retry it shows the first inject's `data`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workflow'
+        '400':
+          description: |
+            A body that is not a JSON object of the documented shape
+            (`invalid request body`; an empty body included), a missing or
+            empty `taskId`, `taskCode` or `consignmentId` (`taskId is
+            required`, `taskCode is required`, `consignmentId is required`,
+            checked in that order), or a `taskCode` with no registered
+            `task_config` (`unknown task code "<code>"`). An unknown task
+            code records nothing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unknown task code "npqs-phyto-v9"
+                correlationId: 1d67eb9ce46b7b08c6bcf1bdd91de5d5
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            `taskId` is already recorded with a different `consignmentId` or
+            `taskCode`. Nothing is started. The message names the recorded
+            values: `taskId already injected with different details: "<taskId>"
+            is recorded for consignment "<consignmentId>", task code
+            "<taskCode>"`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: |
+            Internal error loading the task config or workflow definition,
+            recording the row, or starting the workflow. The body is the
+            generic `An error occurred while processing your request`. A row
+            left in `STARTING` is started again by a retry with the same
+            body, so the caller should retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cases:
+    get:
+      tags:
+        - Cases
+      summary: List cases
+      description: |
+        Returns one page of every case in the agency, newest first (by
+        creation time). A case has no owner the way a consignment has a
+        trader company, so every officer sees every case.
+
+        Besides the scope, the caller must be a user (not a machine client)
+        whose token `roles` hold the token role of at least one role in the
+        agency's catalog (`catalog.json` `roles`); anyone else gets 403.
+
+        Requires scope `nsw:consignment:read`.
+      operationId: listCases
+      x-required-scope: nsw:consignment:read
+      x-deployment-modes:
+        - agency
+      x-callers:
+        - agency-portal
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          description: Number of cases to skip. Defaults to 0.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: |
+            Page size. Defaults to 50; a value above 100 is capped at 100
+            (the response's `limit` shows the size used).
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasePage'
+        '400':
+          description: |
+            `offset` or `limit` is not an integer, `offset` is negative, or
+            `limit` is below 1 (`invalid pagination parameters`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ForbiddenCatalogRole'
+        '500':
+          description: Internal error listing the cases.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/cases/{id}:
+    get:
+      tags:
+        - Cases
+      summary: Get a case and its tasks
+      description: |
+        Returns the case and the tasks of every workflow injected under it,
+        in the `workflowNodes` shape of TNSW's consignment detail. Workflows
+        are taken in the order they were injected; system tasks are left
+        out. Each node's `id` is a task ID to open on
+        `GET /api/v1/tasks/{id}`.
+
+        The caller must hold a catalog role, as for `GET /api/v1/cases`.
+
+        Requires scope `nsw:consignment:read`.
+      operationId: getCase
+      x-required-scope: nsw:consignment:read
+      x-deployment-modes:
+        - agency
+      x-callers:
+        - agency-portal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The case ID, which is the `consignmentId` the injects carried.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ForbiddenCatalogRole'
+        '404':
+          description: No such case (`case not found`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error reading the case or its workflows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token issued by the deployment's ThunderID IdP, sent as
+        `Authorization: Bearer <token>` (the scheme word is matched
+        case-insensitively). The server checks:
+
+        - the signature, with an RSA key (`RS256`, `RS384` or `RS512`) found
+          by the token's `kid` in the JWKS at `authn.jwksURL`. Keys are cached
+          for 5 minutes, and an unknown `kid` forces one refetch;
+        - `iss` equals `authn.issuer`;
+        - `aud` contains `authn.audience` (each agency has its own, such as
+          `https://api.npqs.nsw-agency.local`);
+        - `exp` is present and not past, and `nbf`, when present, is not in
+          the future, with 30 seconds of leeway;
+        - `client_id` is present, and `grant_type` is `authorization_code`
+          (a user token, which also needs `sub`, `email`, `ouId` and
+          `ouHandle`) or `client_credentials` (a machine client token).
+
+        Scopes are read from the space-delimited `scope` claim and roles from
+        the `roles` claim.
+
+  responses:
+    Unauthorized:
+      description: |
+        Unauthorized. Written by the authentication middleware, not the
+        handler, so the body is not the `ErrorResponse` envelope and carries
+        no `correlationId` (the `X-Trace-ID` response header still does).
+        A request with no `Authorization` header gets `message:
+        "authentication required"`. A header that is not `Bearer <token>`,
+        or a token that fails any check under `BearerAuth` (the JWKS being
+        unreachable included), gets `message: "invalid authentication
+        token"`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthErrorResponse'
+          examples:
+            missingToken:
+              summary: No Authorization header
+              value:
+                error: unauthorized
+                message: authentication required
+            invalidToken:
+              summary: Token rejected
+              value:
+                error: unauthorized
+                message: invalid authentication token
+    Forbidden:
+      description: |
+        Forbidden. The token is valid but lacks the operation's scope.
+        Written by the scope middleware, so the body is not the
+        `ErrorResponse` envelope and carries no `correlationId`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthErrorResponse'
+          example:
+            error: forbidden
+            message: insufficient scope
+    ForbiddenCatalogRole:
+      description: |
+        Forbidden. Either the token lacks scope `nsw:consignment:read`
+        (written by the scope middleware: `{"error": "forbidden", "message":
+        "insufficient scope"}`), or it is a machine client token, or a user
+        token whose `roles` hold no token role the agency catalog maps
+        (written by the handler: `{"error": "catalog role required",
+        "correlationId": "..."}`).
+      content:
+        application/json:
+          schema:
+            anyOf:
+              - $ref: '#/components/schemas/AuthErrorResponse'
+              - $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            insufficientScope:
+              summary: Scope missing
+              value:
+                error: forbidden
+                message: insufficient scope
+            noCatalogRole:
+              summary: No catalog role held
+              value:
+                error: catalog role required
+                correlationId: 1d67eb9ce46b7b08c6bcf1bdd91de5d5
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "case not found"
+        correlationId:
+          type: string
+          description: The request's trace ID, the same value as the `X-Trace-ID` response header.
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    AuthErrorResponse:
+      type: object
+      description: The body the authentication and scope middleware write.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum:
+            - unauthorized
+            - forbidden
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
+
+    InjectRequest:
+      type: object
+      required:
+        - taskId
+        - taskCode
+        - consignmentId
+      properties:
+        taskId:
+          type: string
+          minLength: 1
+          description: |
+            The caller's ID for this application. It becomes the workflow
+            instance ID and is the idempotency key.
+          example: "0198f3a2-5c1e-7b7a-9d2e-6f0c1a2b3c4d"
+        taskCode:
+          type: string
+          minLength: 1
+          description: |
+            Selects the `task_config` artifact, and through it the workflow,
+            to run. Must be registered in the agency's artifacts.
+          example: "npqs-phyto-v1"
+        consignmentId:
+          type: string
+          minLength: 1
+          description: The case to group this workflow under (the case's ID).
+          example: "CONS-2026-000123"
+        callbackToken:
+          type: string
+          description: |
+            Opaque token the caller expects the decision back on, at the
+            caller's `POST /api/v1/callbacks/{token}`. Optional; a workflow
+            that calls back without one fails at the start. Stored, never
+            echoed in responses, and redacted from the security log.
+        data:
+          description: |
+            The application itself: any JSON value, handed to the workflow as
+            its `notification` variable. Optional.
+
+    Workflow:
+      type: object
+      description: The recorded row for one injected `taskId`.
+      required:
+        - taskId
+        - taskCode
+        - caseId
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        taskId:
+          type: string
+        taskCode:
+          type: string
+        caseId:
+          type: string
+          description: The `consignmentId` the workflow was injected under.
+        status:
+          type: string
+          enum:
+            - STARTING
+            - STARTED
+            - COMPLETED
+          description: |
+            `STARTED` after a successful start, `COMPLETED` once the workflow
+            has finished. `STARTING` is the state of a failed start and is not
+            normally returned with 200.
+        payload:
+          description: The `data` of the first inject for this `taskId`. Omitted when it carried none.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CaseSummary:
+      type: object
+      required:
+        - id
+        - state
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          description: The case ID (the injects' `consignmentId`).
+        name:
+          type: string
+          description: Display name. Omitted when the case has none, which is the case today.
+        state:
+          type: string
+          enum:
+            - IN_PROGRESS
+            - FINISHED
+          description: |
+            `FINISHED` once every workflow in the case has completed. A new
+            inject into a finished case sets it back to `IN_PROGRESS`.
+        createdAt:
+          type: string
+          format: date-time
+          description: RFC 3339, second precision.
+        updatedAt:
+          type: string
+          format: date-time
+          description: RFC 3339, second precision.
+
+    CasePage:
+      type: object
+      required:
+        - items
+        - total
+        - offset
+        - limit
+      properties:
+        items:
+          type: array
+          description: The page's cases. Never null; empty when past the end.
+          items:
+            $ref: '#/components/schemas/CaseSummary'
+        total:
+          type: integer
+          format: int64
+          description: Number of cases in the agency.
+        offset:
+          type: integer
+          description: The offset used.
+        limit:
+          type: integer
+          description: The page size used, after the default and the cap of 100.
+
+    CaseDetail:
+      allOf:
+        - $ref: '#/components/schemas/CaseSummary'
+        - type: object
+          required:
+            - workflowNodes
+          properties:
+            workflowNodes:
+              type: array
+              description: The non-system tasks of every workflow in the case. Never null.
+              items:
+                $ref: '#/components/schemas/WorkflowNode'
+
+    WorkflowNode:
+      type: object
+      required:
+        - id
+        - createdAt
+        - updatedAt
+        - workflowNodeTemplate
+        - state
+        - depends_on
+      properties:
+        id:
+          type: string
+          description: The task ID (one run of a task node), to open on `GET /api/v1/tasks/{id}`.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        workflowNodeTemplate:
+          $ref: '#/components/schemas/WorkflowNodeTemplate'
+        state:
+          type: string
+          enum:
+            - IN_PROGRESS
+            - QUEUED_EXTERNALLY
+            - COMPLETED
+            - FAILED
+          description: The task's state; every state other than the three named ones is reported as `IN_PROGRESS`.
+        depends_on:
+          type: array
+          description: Always empty.
+          items:
+            type: string
+
+    WorkflowNodeTemplate:
+      type: object
+      required:
+        - name
+        - description
+        - type
+      properties:
+        name:
+          type: string
+          description: |
+            The `task_config` title, else the task's render config title,
+            else its template ID.
+        description:
+          type: string
+          description: The `task_config` description; empty when it has none or cannot be loaded.
+        type:
+          type: string
+          description: The task type.

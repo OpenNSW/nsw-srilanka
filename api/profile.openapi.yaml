@@ -5,72 +5,131 @@ info:
     OpenAPI 3.0 specification for the identity/profile-adjacent read
     endpoints: the caller's own user profile, the CHA directory, and the
     company directory. These are small, closely related reference-data
-    reads mounted together in `internal/bootstrap/app.go`; the handlers
-    themselves live in `internal/profile`, `internal/profile/cha` and
-    `internal/profile/company`.
+    reads; the handlers live in `internal/profile`, `internal/profile/cha`
+    and `internal/profile/company`. `GET /api/v1/users/me` is mounted in
+    `internal/bootstrap/app.go` and runs in both deployment modes; the CHA
+    and company directories are mounted in `internal/bootstrap/tnsw.go` and
+    run in TNSW only (an agency answers them 404).
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
-    carrying the scope named on each operation. Every error response uses the
-    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+    carrying the scope named on each operation. Errors the handlers write use
+    the shared `ErrorResponse` envelope (`{"error": "...", "correlationId":
+    "..."}`); the authentication and scope middleware write their own
+    `AuthError` body (`{"error": "...", "message": "..."}`). Every response
+    carries `X-Trace-ID`.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+  - url: http://localhost:8081
+    description: Local Docker Compose (NPQS agency API; CDA 8083, FCAU 8082, EFC 8085, SLTB 8086)
+
+tags:
+  - name: Profile
+    description: The caller's own profile, and the CHA and company directories.
 
 security:
   - BearerAuth: []
 
 paths:
   /api/v1/users/me:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     get:
+      tags:
+        - Profile
       summary: Get the caller's own user profile
       description: |
         Returns the authenticated caller's own profile, trimmed to
         caller-facing fields, with the caller's company summary nested when
-        the user is associated with one.
+        the user's OU handle matches a company. Only a user token has a
+        profile; a client (`client_credentials`) token is refused with 401.
+        The profile is created on the caller's first authenticated request.
+
+        Runs in both deployment modes; served from the root `servers` entry
+        of either.
 
         Requires scope `nsw:profile:read`.
       operationId: getMyProfile
+      x-required-scope: nsw:profile:read
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal]
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserProfile'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
+          description: |
+            Unauthorized. Either the middleware's `AuthError` (see the
+            `Unauthorized` response), or, from the handler, `ErrorResponse`
+            `{"error": "unauthorized"}` when the token is a client token
+            rather than a user's.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/AuthError'
+                  - $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:profile:read`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No persisted user profile exists for the caller.
+          description: 'No persisted user profile exists for the caller. Body `{"error": "user profile not found"}`.'
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error.
+          description: Internal error reading the user profile, or looking up the caller's company (5-second timeout).
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/chas:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     get:
+      tags:
+        - Profile
       summary: List Customs House Agents
       description: |
-        Returns every registered Customs House Agent. Unpaginated.
+        Returns every registered Customs House Agent, ordered by name.
+        Unpaginated; takes no query parameters. TNSW only.
 
         Requires scope `nsw:cha:read`.
       operationId: listCHAs
+      x-required-scope: nsw:cha:read
+      x-deployment-modes: [tnsw]
+      x-callers: []
+      servers:
+        - url: http://localhost:8080
+          description: Local Docker Compose (TNSW API)
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
@@ -78,88 +137,89 @@ paths:
                 items:
                   $ref: '#/components/schemas/CHARecord'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:cha:read`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/companies:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     get:
+      tags:
+        - Profile
       summary: List companies
       description: |
-        Returns a paginated, filterable directory of companies (e.g. for the
-        trader-app's CHA-company picker).
+        Returns a paginated, filterable directory of companies, ordered by
+        name (e.g. for the trader-app's CHA-company picker). TNSW only.
 
         Requires scope `nsw:company:read`.
       operationId: listCompanies
+      x-required-scope: nsw:company:read
+      x-deployment-modes: [tnsw]
+      x-callers: [trader-portal]
+      servers:
+        - url: http://localhost:8080
+          description: Local Docker Compose (TNSW API)
       parameters:
         - name: has_cha
           in: query
-          description: Filter to companies whose `hasCha` flag matches.
+          description: |
+            Filter to companies whose `hasCha` flag matches. Parsed as a Go
+            boolean (`true`/`false`, `1`/`0`, `t`/`f`, any case); an empty
+            value is treated as absent.
           schema:
             type: boolean
         - name: name
           in: query
-          description: Case-insensitive substring filter on company name.
+          description: Case-insensitive substring filter on company name, trimmed; empty or blank is no filter.
           schema:
             type: string
         - name: offset
           in: query
+          description: An empty value is treated as absent.
           schema:
             type: integer
             minimum: 0
             default: 0
         - name: limit
           in: query
+          description: An empty value is treated as absent; values above 100 are clamped to 100.
           schema:
             type: integer
             minimum: 1
-            maximum: 100
             default: 50
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CompanyListResult'
         '400':
-          description: Invalid `has_cha`, or invalid pagination parameters.
+          description: |
+            `invalid has_cha (expected true or false)`, or `invalid pagination
+            parameters`: an `offset` or `limit` that is not an integer, a
+            negative `offset`, or a `limit` below 1.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:company:read`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '500':
-          description: Internal error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
 components:
   securitySchemes:
@@ -167,20 +227,135 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        JWT access token issued by the deployment's ThunderID IdP; validated
+        against its JWKS (cached for 5 minutes). The token must be signed with
+        RS256, RS384 or RS512 under a `kid` the JWKS holds, carry the
+        configured `iss` (`authn.issuer`) and `aud` (`authn.audience`), have
+        an `exp` (expiry and not-before are checked with 30 seconds' leeway),
+        a `client_id`, and a `grant_type` of `authorization_code` (a user
+        token, which must also carry `sub`, `email`, `ouId` and `ouHandle`)
+        or `client_credentials` (a client token). Scopes are read from
+        `scope` and roles from `roles`. A request without an `Authorization`
+        header, or with a token that fails any check, gets 401.
+
+  headers:
+    XTraceID:
+      description: |
+        The request's trace id: the caller's `X-Trace-ID`,
+        `X-Correlation-ID` or `X-Request-ID` (first present, if 1-64
+        characters of `[A-Za-z0-9-_:./=]`), else a generated 32-hex-character
+        id. Equal to `correlationId` in an `ErrorResponse`. Set on every
+        response.
+      schema:
+        type: string
+        example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+  parameters:
+    XTraceIDRequest:
+      name: X-Trace-ID
+      in: header
+      required: false
+      description: Trace id to reuse for this request (preferred over the two below). An invalid value is replaced by a generated one.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+    XCorrelationIDRequest:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Used as the trace id when `X-Trace-ID` is absent.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+    XRequestIDRequest:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Used as the trace id when `X-Trace-ID` and `X-Correlation-ID` are absent.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+
+  responses:
+    Unauthorized:
+      description: |
+        Unauthorized. Written by the authentication middleware:
+        `{"error": "unauthorized", "message": "authentication required"}`
+        with no `Authorization` header, or `"message": "invalid
+        authentication token"` for a malformed header or a token that fails
+        validation. The scope middleware writes the first body when no
+        principal was attached.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+    Forbidden:
+      description: |
+        Forbidden. The bearer token lacks the route's scope. Written by the
+        scope middleware: `{"error": "forbidden", "message": "insufficient scope"}`.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+    InternalError:
+      description: |
+        Internal error. Body `{"error": "An error occurred while processing
+        your request"}`; the cause is logged under the `correlationId`.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
     ErrorResponse:
       type: object
+      description: The error envelope the handlers write.
       required:
         - error
         - correlationId
       properties:
         error:
           type: string
-          example: "unauthorized"
+          example: "user profile not found"
         correlationId:
           type: string
+          description: The request's trace id, as in the `X-Trace-ID` response header.
           example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    AuthError:
+      type: object
+      description: The body the authentication and scope middleware write. It carries no `correlationId`.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum:
+            - unauthorized
+            - forbidden
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
+      example:
+        error: forbidden
+        message: insufficient scope
 
     CompanySummary:
       type: object
@@ -202,6 +377,7 @@ components:
         - id
         - email
         - phoneNumber
+        - data
         - createdAt
         - updatedAt
       properties:
@@ -209,12 +385,14 @@ components:
           type: string
         email:
           type: string
-          format: email
+          description: As persisted from the token's `email` claim; may be empty.
         phoneNumber:
           type: string
+          description: As persisted from the token's `phone_number` claim; empty when the token carried none.
         data:
           type: object
-          description: Free-form persisted user attributes.
+          description: Free-form persisted user attributes, or `null` when none are stored.
+          nullable: true
           additionalProperties: true
         createdAt:
           type: string
@@ -223,7 +401,9 @@ components:
           type: string
           format: date-time
         company:
-          $ref: '#/components/schemas/CompanySummary'
+          allOf:
+            - $ref: '#/components/schemas/CompanySummary'
+          description: The company whose OU handle matches the user's. Omitted when there is none.
 
     CHARecord:
       type: object
@@ -231,6 +411,7 @@ components:
       required:
         - id
         - name
+        - description
         - companyId
         - createdAt
         - updatedAt
@@ -241,9 +422,10 @@ components:
           type: string
         description:
           type: string
+          description: Empty when none is stored.
         email:
           type: string
-          format: email
+          description: Omitted when empty.
         companyId:
           type: string
         createdAt:
@@ -269,7 +451,9 @@ components:
         total:
           type: integer
           format: int64
+          description: The number of companies matching the filters.
         offset:
           type: integer
         limit:
           type: integer
+          description: The limit applied (50 by default, at most 100).
