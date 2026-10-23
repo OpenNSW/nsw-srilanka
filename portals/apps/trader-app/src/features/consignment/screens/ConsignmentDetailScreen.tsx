@@ -5,7 +5,7 @@ import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 import { CopyableId } from '@/components/CopyableId'
-import { ActionListView } from '@/features/consignment/components/WorkflowViewer'
+import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
@@ -337,16 +337,13 @@ export function ConsignmentDetailScreen({
           </div>
         )}
 
-        <div className="p-4">
+        <div className="p-4 sm:p-6">
           {workflowNodes.length > 0 ? (
-            <div>
-              <ActionListView
-                steps={workflowNodes}
-                consignmentId={consignmentId!}
-                refreshing={refreshing}
-                consignmentState={consignment.state}
-              />
-            </div>
+            <ConsignmentTasks
+              steps={workflowNodes}
+              consignmentId={consignmentId!}
+              consignmentState={consignment.state}
+            />
           ) : (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
