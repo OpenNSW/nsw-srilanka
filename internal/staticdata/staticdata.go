@@ -51,10 +51,11 @@ func (l *loadable) Parse(raw []byte) error {
 	return nil
 }
 
-// Load fetches one version of a static data artifact by id. version is
-// required: callers pin the exact version they want, since (id, version)
-// identifies immutable content that can be cached indefinitely.
-func Load(ctx context.Context, reg *artifact.Registry, id, version string) (json.RawMessage, error) {
-	w, err := artifact.Get[loadable](ctx, reg, id, version)
+// Load fetches one version of a static data artifact by id, from whichever manifest
+// lists it. version is required: callers pin the exact version they want, since (id,
+// version) identifies immutable content that can be cached indefinitely, and every
+// manifest that lists it points it at the same file (see artifact.GetExplicit).
+func Load(ctx context.Context, set *artifact.Set, id, version string) (json.RawMessage, error) {
+	w, err := artifact.GetExplicit[loadable](ctx, set, id, version)
 	return w.RawMessage, err
 }
