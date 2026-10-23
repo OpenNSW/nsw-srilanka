@@ -32,8 +32,8 @@ github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrx
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
 github.com/OpenNSW/core/shared v0.3.1-0.20261022063536-f6b1f0bced69 h1:lNqLBjGo7uybIUFUZJAJYeaAOJKCDXpGng/6JsyJZOc=
 github.com/OpenNSW/core/shared v0.3.1-0.20261022063536-f6b1f0bced69/go.mod h1:Lgh13h6agGl6WFR9i1W0iaUUky7wC0uLJrVc+FRRtMU=
-github.com/OpenNSW/core/storage v0.3.0 h1:TrPNxgu5dkJtafWtXkXxcVN4z7idygedFDu2Bh9iBEA=
-github.com/OpenNSW/core/storage v0.3.0/go.mod h1:PUkwnwzFP+GzXzbzIvmULmtsEgz74jlvq6qmTb59I2Y=
+github.com/OpenNSW/core/storage v0.4.0 h1:Q0cMgWYme28UFL5obmm1uTEtMJrGzjIkedp/w2/tt5s=
+github.com/OpenNSW/core/storage v0.4.0/go.mod h1:ZBWInmdTpu6E5Hgdu4r0UO0lq8r9CI4c59NtiT94wls=
 github.com/OpenNSW/core/temporal v0.1.0 h1:/wFL05TyuZpnz0rOsg30eY3viXixMrfh+zDXA+DtvXA=
 github.com/OpenNSW/core/temporal v0.1.0/go.mod h1:ikXldXu6p4ugoxdNVqIa1iHxk7a9WYH6S+OZIttD8Ak=
 github.com/OpenNSW/core/trace v0.2.0 h1:C0ngf3m03oySzYvdpQNG+D+dsGs9+n5zWugoyMmWnlg=

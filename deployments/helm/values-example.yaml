@@ -332,11 +332,25 @@ backend:
         # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
         # a known malware vector.
         - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-        # XML is accepted as data to download, not to display: served from S3 it
-        # would render in the browser, and XHTML or an XSLT stylesheet inside it
-        # can run script.
+        # XML is data to download, not to display: it is not in inlineTypes, so a
+        # download saves it instead of opening it.
         - text/xml
         - application/xml
+      # What a download opens in the browser; every other file is saved. MIME
+      # types, compared exactly with the stored type. Not read when type is
+      # proxy: the owning service applies its own. text/html is listed for the
+      # documents this service generates and stores itself, and is never in
+      # allowedUploadTypes: a type a browser interprets as a document runs script
+      # from the origin it is served on, so startup fails when a type clients may
+      # upload is listed here and is not one of the first six.
+      inlineTypes:
+        - application/pdf
+        - image/png
+        - image/jpeg
+        - image/gif
+        - image/webp
+        - text/plain
+        - text/html
       # Largest upload, in bytes (32 MiB). Not read when type is proxy.
       maxUploadBytes: 33554432
       # Seals the file tokens clients hold in place of stored file keys.
