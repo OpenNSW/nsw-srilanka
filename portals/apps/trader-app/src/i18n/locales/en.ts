@@ -52,12 +52,17 @@ const en = {
           import: 'Import',
           export: 'Export',
         },
+        role: {
+          trader: 'Trader',
+          cha: 'CHA',
+        },
         empty: {
           none: 'No consignments yet.',
           filtered: 'No consignments match your filters.',
         },
         table: {
           id: 'Consignment',
+          role: 'Role',
           tradeFlow: 'Trade Flow',
           state: 'State',
           created: 'Created',

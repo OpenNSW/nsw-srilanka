@@ -498,6 +498,7 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			TraderCompanyID: c.TraderCompanyID,
 			ChaCompanyID:    chaCompanyID,
 			ChaID:           chaID,
+			CallerRoles:     callerRolesOn(c.TraderCompanyID, chaCompanyID, filter),
 			CreatedAt:       c.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:       c.UpdatedAt.Format(time.RFC3339),
 		})
@@ -505,6 +506,21 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 
 	result := pagination.NewPageResult(consignmentDTOs, totalCount, finalOffset, finalLimit)
 	return &result, nil
+}
+
+// callerRolesOn reports the logical roles the caller acts in on a consignment with
+// these trader and CHA companies. The handler sets a company filter only for a role
+// the caller holds, so a filter matching the consignment's slot means the caller
+// acts in that role there.
+func callerRolesOn(traderCompanyID, chaCompanyID string, filter Filter) []string {
+	roles := []string{}
+	if filter.TraderCompanyID != nil && traderCompanyID == *filter.TraderCompanyID {
+		roles = append(roles, "trader")
+	}
+	if filter.CHACompanyID != nil && chaCompanyID == *filter.CHACompanyID {
+		roles = append(roles, "cha")
+	}
+	return roles
 }
 
 // buildConsignmentDetailDTO builds a DetailDTO from a Consignment.

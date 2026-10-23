@@ -97,8 +97,11 @@ type SummaryDTO struct {
 	TraderCompanyID string `json:"traderCompanyId"` // Company the trader belongs to
 	ChaCompanyID    string `json:"chaCompanyId"`    // CHA company selected at Stage 1
 	ChaID           string `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
-	CreatedAt       string `json:"createdAt"`       // Timestamp of consignment creation
-	UpdatedAt       string `json:"updatedAt"`       // Timestamp of last consignment update
+	// CallerRoles are the logical roles ("trader", "cha") the caller acts in on this
+	// consignment: a role the caller holds whose slot the caller's company fills.
+	CallerRoles []string `json:"callerRoles"`
+	CreatedAt   string   `json:"createdAt"` // Timestamp of consignment creation
+	UpdatedAt   string   `json:"updatedAt"` // Timestamp of last consignment update
 }
 
 // ListResult is the pagination envelope returned by the list consignments endpoint.

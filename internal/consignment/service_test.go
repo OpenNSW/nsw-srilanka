@@ -357,7 +357,46 @@ func TestConsignmentService_ListConsignments_CHACompany(t *testing.T) {
 	assert.Len(t, result.Items, 1)
 	assert.Equal(t, consignmentID, result.Items[0].ID)
 	assert.Equal(t, chaCompanyID, result.Items[0].ChaCompanyID)
+	assert.Equal(t, []string{"cha"}, result.Items[0].CallerRoles)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// Each row says which roles the caller acts in on it: a role counts only when its
+// company filter is set (the caller holds it) and the row's slot matches.
+func TestConsignmentService_ListConsignments_CallerRoles(t *testing.T) {
+	companyID := "company-1"
+	cols := []string{"id", "flow", "state", "trader_id", "trader_company_id", "cha_company_id", "created_at", "updated_at"}
+
+	t.Run("both roles", func(t *testing.T) {
+		db, sqlMock := setupTestDB(t)
+		svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+		sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+			WillReturnRows(sqlmock.NewRows(cols).
+				AddRow("as-trader", "EXPORT", "IN_PROGRESS", "t1", companyID, "other-co", time.Now(), time.Now()).
+				AddRow("as-cha", "EXPORT", "IN_PROGRESS", "t2", "other-co", companyID, time.Now(), time.Now()).
+				AddRow("as-both", "EXPORT", "IN_PROGRESS", "t3", companyID, companyID, time.Now(), time.Now()))
+
+		result, err := svc.ListConsignments(context.Background(), Filter{TraderCompanyID: &companyID, CHACompanyID: &companyID})
+		require.NoError(t, err)
+		require.Len(t, result.Items, 3)
+		assert.Equal(t, []string{"trader"}, result.Items[0].CallerRoles)
+		assert.Equal(t, []string{"cha"}, result.Items[1].CallerRoles)
+		assert.Equal(t, []string{"trader", "cha"}, result.Items[2].CallerRoles)
+	})
+
+	// The company fills both slots, but the caller holds only the trader role.
+	t.Run("trader role only", func(t *testing.T) {
+		db, sqlMock := setupTestDB(t)
+		svc := mustNewService(t, db, nil, nil, nil, nil, nil)
+		sqlMock.ExpectQuery(`(?i)SELECT .* FROM "consignments"`).
+			WillReturnRows(sqlmock.NewRows(cols).
+				AddRow("as-both", "EXPORT", "IN_PROGRESS", "t1", companyID, companyID, time.Now(), time.Now()))
+
+		result, err := svc.ListConsignments(context.Background(), Filter{TraderCompanyID: &companyID})
+		require.NoError(t, err)
+		require.Len(t, result.Items, 1)
+		assert.Equal(t, []string{"trader"}, result.Items[0].CallerRoles)
+	})
 }
 
 func TestConsignmentService_ListConsignments_WithFilters(t *testing.T) {

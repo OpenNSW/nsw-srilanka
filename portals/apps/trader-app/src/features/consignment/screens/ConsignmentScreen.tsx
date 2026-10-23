@@ -176,6 +176,9 @@ export function ConsignmentScreen() {
                       {t('consignments.list.table.id')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
+                      {t('consignments.list.table.role')}
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
                       {t('consignments.list.table.tradeFlow')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider">
@@ -206,6 +209,15 @@ export function ConsignmentScreen() {
                             </Text>
                           )}
                         </RowLink>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex gap-1">
+                          {(consignment.callerRoles ?? []).map((role) => (
+                            <Badge key={role} size="1" color={role === 'cha' ? 'purple' : 'gray'} variant="soft">
+                              {t(`consignments.list.role.${role}`)}
+                            </Badge>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
