@@ -332,6 +332,93 @@ func TestProcessIntegrationResult_TaskNotParkedYetIsRetried(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrTaskNotParked)
 	assert.Empty(t, recorder.completed)
+	assert.Nil(t, repo.updated, "the result must not be recorded, or the retry is a redelivery")
+}
+
+// The task is released before the result is recorded, so a retry that finds
+// the task parked completes it, and only then is the result recorded.
+func TestProcessIntegrationResult_RetryAfterTheTaskParksCompletesIt(t *testing.T) {
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	require.ErrorIs(t, early.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")), ErrTaskNotParked)
+	assert.Equal(t, DispatchNoteStatusSubmitted, repo.byEdgeID["edge-1"].Status)
+
+	retry := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
+	require.NoError(t, retry.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")))
+
+	assert.Contains(t, recorder.completed, "create_cdn:abc")
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusIntegrated, repo.updated.Status)
+}
+
+// failingCompleter is a task manager whose completion fails.
+type failingCompleter struct{}
+
+func (failingCompleter) CompleteTaskStep(context.Context, string, string, map[string]any) error {
+	return errCompletion
+}
+
+var errCompletion = errors.New("complete task step: workflow unavailable")
+
+// A completion that fails leaves the note as it was, so the retry resumes it.
+func TestProcessIntegrationResult_FailedCompletionLeavesTheNote(t *testing.T) {
+	for name, req := range map[string]CDNIntegrationResultRequest{
+		"integrated": integratedResult("edge-1"),
+		"failed": {Payload: integrationResultPayload{
+			EdgeID: "edge-1", Errors: json.RawMessage(`{"code":"ERR_VAL_01"}`),
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+			svc := NewCDNWebhookService(repo, parkedIntegrationWait(), failingCompleter{})
+
+			err := svc.ProcessIntegrationResult(context.Background(), req)
+
+			require.ErrorIs(t, err, errCompletion)
+			assert.Nil(t, repo.updated)
+			assert.Equal(t, DispatchNoteStatusSubmitted, repo.byEdgeID["edge-1"].Status)
+		})
+	}
+}
+
+// integratedNote is a note whose integration result was recorded, with the
+// acknowledgment wait of case-1's wf-branch-0 to come.
+func integratedNote() *DispatchNote {
+	note := dispatchedNote("edge-1")
+	note.Status = DispatchNoteStatusIntegrated
+	note.CDNOffice, note.CDNYear, note.CDNSerial, note.CDNNumber = "CBEX1", "2026", "C", 28242
+	return note
+}
+
+func acknowledgment() CDNAcknowledgmentRequest {
+	return CDNAcknowledgmentRequest{
+		Event:   "CDN_ACKNOWLEDGED",
+		Payload: acknowledgmentPayload{CDNRef: DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28242}},
+	}
+}
+
+// An acknowledgment whose wait has not parked yet is retried, and the note
+// stays INTEGRATED so the retry can still resume the wait.
+func TestProcessAcknowledgment_RetryAfterTheTaskParksCompletesIt(t *testing.T) {
+	note := integratedNote()
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byCDNRef: map[string]*DispatchNote{"2026-CBEX1-C": note}}
+
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	require.ErrorIs(t, early.ProcessAcknowledgment(context.Background(), acknowledgment()), ErrTaskNotParked)
+	assert.Nil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusIntegrated, note.Status)
+
+	parked := fakeTasks{"case-1": {{TaskID: "create_cdn:abc", ActiveStepID: "step-ack", ParentWorkflowID: "wf-branch-0",
+		CaseID: "case-1", ActiveTaskTemplateID: acknowledgmentWaitTemplateID, State: "QUEUED_EXTERNALLY"}}}
+	retry := NewCDNWebhookService(repo, parked, recorder)
+	require.NoError(t, retry.ProcessAcknowledgment(context.Background(), acknowledgment()))
+
+	assert.Equal(t, "step-ack", recorder.steps["create_cdn:abc"])
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusAcknowledged, repo.updated.Status)
 }
 
 // A redelivery that finds nothing parked is acknowledged: the first delivery
@@ -367,6 +454,7 @@ func TestProcessIntegrationResult_TaskStoreFailureIsAnError(t *testing.T) {
 			require.ErrorIs(t, err, errTaskStore)
 			assert.NotErrorIs(t, err, ErrTaskNotParked)
 			assert.Empty(t, recorder.completed)
+			assert.Nil(t, repo.updated)
 		})
 	}
 }

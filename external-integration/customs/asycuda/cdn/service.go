@@ -67,6 +67,19 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 			"edge_id", req.Payload.EdgeID, "status", note.Status)
 		return s.resumeIntegrationWait(ctx, note, storedResult(req, note), true)
 	}
+	if !req.Payload.Integrated && note.Status == DispatchNoteStatusFailed {
+		slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edge_id", req.Payload.EdgeID)
+		return s.resumeIntegrationWait(ctx, note, req, true)
+	}
+
+	// The trader's CDN task is parked on the integration wait; releasing it
+	// completes the dispatch note step and opens the acknowledgment wait. It is
+	// released before the result is recorded: once recorded, SLC Edge's retry is
+	// a redelivery, so a lookup that fails or a task not parked yet must leave
+	// the note as it was for the retry to work.
+	if err := s.resumeIntegrationWait(ctx, note, req, false); err != nil {
+		return err
+	}
 
 	if req.Payload.Integrated {
 		note.Status = DispatchNoteStatusIntegrated
@@ -84,11 +97,6 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 			"cdn_ref", req.Payload.CDNRef,
 		)
 	} else {
-		if note.Status == DispatchNoteStatusFailed {
-			slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edge_id", req.Payload.EdgeID)
-			return s.resumeIntegrationWait(ctx, note, req, true)
-		}
-
 		note.Status = DispatchNoteStatusFailed
 		note.Errors = req.Payload.Errors
 		if err := s.repo.Update(ctx, note); err != nil {
@@ -100,10 +108,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 			"errors", string(req.Payload.Errors),
 		)
 	}
-
-	// The trader's CDN task is parked on the integration wait; releasing it
-	// completes the dispatch note step and opens the acknowledgment wait.
-	return s.resumeIntegrationWait(ctx, note, req, false)
+	return nil
 }
 
 // storedResult re-points an already-recorded result at the reference actually on
@@ -153,6 +158,13 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 		return fmt.Errorf("invalid state transition: cannot acknowledge dispatch note in status %s", note.Status)
 	}
 
+	// Released before the acknowledgment is recorded, for the same reason as the
+	// integration wait: a recorded acknowledgment makes SLC Edge's retry a
+	// redelivery.
+	if err := s.resumeAcknowledgmentWait(ctx, note, false); err != nil {
+		return err
+	}
+
 	note.Status = DispatchNoteStatusAcknowledged
 	if err := s.repo.Update(ctx, note); err != nil {
 		return fmt.Errorf("failed to update dispatch note to ACKNOWLEDGED: %w", err)
@@ -162,6 +174,5 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 		"id", note.ID,
 		"cdn_ref", ref,
 	)
-
-	return s.resumeAcknowledgmentWait(ctx, note, false)
+	return nil
 }
