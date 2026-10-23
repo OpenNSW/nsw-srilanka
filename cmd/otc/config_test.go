@@ -109,17 +109,17 @@ db:
 }
 
 // Placeholders are resolved across the whole file, so one in a section otc
-// does not read still has to resolve.
+// does not read still has to resolve. integrations is a real server section.
 func TestLoad_UnsetPlaceholderElsewhereFails(t *testing.T) {
 	_, err := loadYAML(t, `
 db:
   postgres:
     password: testpassword
-marker:
-  token: "{{env:OTC_TEST_UNSET_VAR}}"
+integrations:
+  slpaWebhookSecret: "{{env:OTC_TEST_UNSET_VAR}}"
 `)
-	if err == nil || !strings.Contains(err.Error(), "marker.token") {
-		t.Fatalf("expected the unset placeholder to fail naming marker.token, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "integrations.slpaWebhookSecret") {
+		t.Fatalf("expected the unset placeholder to fail naming integrations.slpaWebhookSecret, got: %v", err)
 	}
 }
 
