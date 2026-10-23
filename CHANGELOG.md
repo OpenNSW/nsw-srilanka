@@ -6,27 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Upgrade notes
-
-- Outbound services now live in the top-level `services` list of each deployment's
-  `config.yaml` (and `config.docker.yaml` for Compose). Move the entries from the
-  old `services*.json` files there and remove `server.servicesConfigPath`. The
-  agency configs and TNSW templates are migrated; `make setup` keeps existing
-  local files, so migrate those and Helm overlays before starting this build.
-- Auth now uses a typed block (`auth.oauth2`, `auth.bearer` or `auth.apiKey`) in
-  place of `auth.options`. Rename `token_url`, `client_id`, `client_secret`,
-  `endpoint_params` and `insecure_skip_tls_verify` to `tokenURL`, `clientID`,
-  `clientSecret`, `endpointParams` and `insecureSkipTLSVerify`; mTLS uses
-  `clientCertFile` and `clientKeyFile`. Remote secrets now use `{{env:NAME}}` or
-  `{{file:/path}}` placeholders, expanded by the YAML loader. Replace bare
-  `env:NAME` / `file:/path` references in service auth fields. Insecure token
-  TLS still requires `APP_ENV=development`.
-- Upgrade `core/remote` to `v0.9.0`. Every process reading the server YAML
-  (including Compose init, migration and seed jobs) must receive the service
-  secret variables; the Compose shared environments now supply them. Helm
-  migrations use a separate database-only config. The application release
-  version is unchanged.
-
 ## [0.8.0] - 2026-10-22
 
 This release refuses any task step whose workflow artifact declares no `authz` rule, so the artifacts pin and each agency's catalog must move with it. It also renames the `metrics` config section to `otel` and exports logs and traces as well as metrics, can connect to Temporal over TLS and mutual TLS, logs every HTTP request as a security event, and resumes the CusDec export release step that never resumed before. No migrations run.
