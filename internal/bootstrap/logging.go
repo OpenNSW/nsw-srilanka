@@ -10,7 +10,6 @@ import (
 	"github.com/OpenNSW/core/trace"
 	"github.com/OpenNSW/core/trace/logging"
 	"github.com/OpenNSW/nsw-srilanka/cmd/server/config"
-	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 )
 
 // ConfigureLogging installs the trace-aware slog handler as the process
@@ -19,6 +18,19 @@ import (
 // to server logs. Must be called before any request is served.
 func ConfigureLogging(cfg *config.Config) {
 	configureLogging(cfg, os.Stdout)
+	// configureLogging runs again once OpenTelemetry is up, so the warning
+	// stays here and is logged once.
+	logSuppressedAudit(cfg)
+}
+
+// logSuppressedAudit reports that audit records are not written when
+// server.logLevel is above info. Audit lines are Info, and the message is
+// logged at the configured level so the filter it describes lets it through.
+func logSuppressedAudit(cfg *config.Config) {
+	if cfg.Server.LogLevel > slog.LevelInfo {
+		slog.Log(context.Background(), cfg.Server.LogLevel,
+			"server.logLevel is above info: audit records (category=audit) are not written")
+	}
 }
 
 // configureLogging is ConfigureLogging with an injectable log destination
@@ -48,9 +60,6 @@ func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler
 	}
 	slog.SetDefault(slog.New(logHandler))
 	httputil.CorrelationIDFunc = trace.GetTraceID
-	// Audit lines use this logger, so they follow server.logLevel and the
-	// handler installed here, including one added after OpenTelemetry starts.
-	nswaudit.SetProcessLogger(slog.Default())
 }
 
 // levelFilter drops records below min before they reach next. Enabled must

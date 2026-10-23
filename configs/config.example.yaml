@@ -3,7 +3,7 @@
 # start without it. There are no built-in
 # defaults: every setting the server needs is written here, and one left out
 # (or empty) stops the server at startup rather than running on a value the
-# code chose. Only the optional sections (audit, otel, refid, the inactive
+# code chose. Only the optional sections (otel, refid, the inactive
 # storage and artifactLoader backends) may be left out; payments and
 # REFID_GENERATOR steps need refid.
 #
@@ -53,7 +53,8 @@ db:
 
 server:
   port: 8080
-  # debug | info | warn | error
+  # debug | info | warn | error. Audit records (category=audit) are written
+  # at info, so warn or error drops them. Startup logs that at this level.
   logLevel: debug
   # This API's own base URL, as its callers reach it.
   serviceURL: http://localhost:8080

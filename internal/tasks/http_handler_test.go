@@ -885,7 +885,7 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
 
-	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, false)
+	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, []any{"taskId", testTaskID, "stepId", "step-1", "command", payload["__command"]})
 
 	require.True(t, ok)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)

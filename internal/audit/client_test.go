@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -122,11 +121,10 @@ func TestLogSink_WritesCategoryAudit(t *testing.T) {
 func TestLogSink_NilLoggerResolvesAtWrite(t *testing.T) {
 	sink := NewLogSink(nil)
 	var buf bytes.Buffer
-	SetProcessLogger(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	// Installed after construction: a nil logger reads slog.Default at Write.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() {
-		SetProcessLogger(nil)
 		slog.SetDefault(prev)
 	})
 

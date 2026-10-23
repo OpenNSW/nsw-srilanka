@@ -546,6 +546,19 @@ integrations:
 	}
 }
 
+// A deployment that still carries the removed audit: section keeps loading.
+func TestLoad_LeftoverAuditSectionIsIgnored(t *testing.T) {
+	if _, err := loadYAML(t, configYAML(t, `
+db:
+  postgres:
+    password: testpassword
+audit:
+  baseURL: http://audit.example
+`)); err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+}
+
 func TestLoad_UnsetSecretPlaceholderFails(t *testing.T) {
 	_, err := loadYAML(t, configYAML(t, `
 db:

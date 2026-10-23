@@ -207,13 +207,17 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	}
 
 	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
-	if !ok || !h.resolveFiles(w, r, taskID, stepID, payload, false) {
+	if !ok {
 		return
 	}
-	// Read before the call: core may strip system keys from the payload.
-	command := payload["__command"]
+	// Captured before the call: core may strip system keys from the payload.
+	// The same list is what a file-resolution denial records.
+	attrs := []any{"taskId", taskID, "stepId", stepID, "command", payload[orchestrator.CommandVar]}
+	if !h.resolveFiles(w, r, taskID, stepID, payload, attrs) {
+		return
+	}
 	err := h.Manager.CompleteTaskStep(r.Context(), taskID, stepID, payload)
-	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "command", command)
+	h.writeCompletion(w, r, err, attrs...)
 }
 
 // HandleCompleteTaskStepByToken advances a task by completing the step an external
@@ -238,13 +242,17 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 	}
 
 	payload, ok := h.decodeSubmission(w, r, "taskId", taskID, "stepId", stepID)
-	if !ok || !h.resolveFiles(w, r, taskID, stepID, payload, false) {
+	if !ok {
 		return
 	}
-	// Read before the call: core may strip system keys from the payload.
-	command := payload["__command"]
+	// Captured before the call: core may strip system keys from the payload.
+	// The same list is what a file-resolution denial records.
+	attrs := []any{"taskId", taskID, "stepId", stepID, "command", payload[orchestrator.CommandVar]}
+	if !h.resolveFiles(w, r, taskID, stepID, payload, attrs) {
+		return
+	}
 	err = h.Manager.CompleteTaskStepByToken(r.Context(), token, payload)
-	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "command", command)
+	h.writeCompletion(w, r, err, attrs...)
 }
 
 // HandleSaveDraft stores a draft of a step without completing it. It is the
@@ -285,13 +293,14 @@ func (h *HTTPHandler) HandleSaveDraft(w http.ResponseWriter, r *http.Request) {
 	if payload == nil {
 		payload = make(map[string]any)
 	}
-	if !h.resolveFiles(w, r, taskID, stepID, payload, true) {
+	attrs := []any{"taskId", taskID, "stepId", stepID, "draft", true}
+	if !h.resolveFiles(w, r, taskID, stepID, payload, attrs) {
 		return
 	}
 	// Marked as a draft save so the payload schema extension knows a draft by the
 	// route it came through, not by the command core sets for it.
 	err := h.Manager.SaveDraft(payloadschema.WithDraft(r.Context()), taskID, stepID, payload)
-	h.writeCompletion(w, r, err, "taskId", taskID, "stepId", stepID, "draft", true)
+	h.writeCompletion(w, r, err, attrs...)
 }
 
 // decodeSubmission reads the {command, payload} envelope both completion routes take
@@ -379,19 +388,10 @@ func (h *HTTPHandler) decodeEnvelope(w http.ResponseWriter, r *http.Request, log
 
 // resolveFiles replaces the file references in a submission for step stepID
 // of task taskID with the stored values they stand for, so only those are
-// stored. draft is true for a save-draft call, which has no command. On
-// failure it writes the response and returns false.
-func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskID, stepID string, payload map[string]any, draft bool) bool {
+// stored. auditAttrs is the slog-style list the denial and the completion
+// record both carry. On failure it writes the response and returns false.
+func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskID, stepID string, payload map[string]any, auditAttrs []any) bool {
 	ctx := r.Context()
-	auditAttrs := []any{"taskId", taskID, "stepId", stepID}
-	if draft {
-		auditAttrs = append(auditAttrs, "draft", true)
-	}
-	if payload != nil {
-		if cmd, ok := payload[orchestrator.CommandVar].(string); ok && cmd != "" {
-			auditAttrs = append(auditAttrs, "command", cmd)
-		}
-	}
 	record, ok := h.Store.GetTask(ctx, taskID)
 	if !ok {
 		h.rejectFiles(w, r, taskID, http.StatusNotFound, errTaskNotFound, "task_not_found", auditAttrs...)

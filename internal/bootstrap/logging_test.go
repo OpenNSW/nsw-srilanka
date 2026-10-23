@@ -120,7 +120,6 @@ func TestConfigureLoggingAuditUsesServerLevelAndLatestDest(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() {
 		slog.SetDefault(prevDefault)
-		nswaudit.SetProcessLogger(nil)
 	})
 
 	record := nswaudit.Record{
@@ -163,6 +162,25 @@ func TestConfigureLoggingAuditUsesServerLevelAndLatestDest(t *testing.T) {
 	sink.Write(context.Background(), record)
 	if strings.Contains(warnBuf.String(), "category=audit") {
 		t.Fatalf("audit line written below server.logLevel: %s", warnBuf.String())
+	}
+}
+
+func TestLogSuppressedAuditWarnsAboveInfo(t *testing.T) {
+	prevDefault := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prevDefault) })
+
+	var warnBuf bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf)
+	logSuppressedAudit(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}})
+	if !strings.Contains(warnBuf.String(), "audit records (category=audit) are not written") {
+		t.Fatalf("missing audit-dropped warning: %s", warnBuf.String())
+	}
+
+	var infoBuf bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &infoBuf)
+	logSuppressedAudit(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}})
+	if infoBuf.Len() != 0 {
+		t.Fatalf("warning at info: %s", infoBuf.String())
 	}
 }
 
