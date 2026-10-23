@@ -4,6 +4,7 @@ import { type ReactNode, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DropdownMenu } from '@radix-ui/themes'
 import { isAgencyMode } from '@/features/case/mode'
+import { ROUTES } from '@/constants'
 
 interface NavItem {
   name: string
@@ -38,7 +39,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     (): NavItemOrGroup[] => [
       {
         name: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'),
-        path: '/consignments',
+        path: ROUTES.CONSIGNMENTS,
         icon: <DashboardIcon className="w-4 h-4" />,
       },
     ],

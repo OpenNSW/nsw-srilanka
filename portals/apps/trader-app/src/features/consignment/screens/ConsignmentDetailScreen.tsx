@@ -11,6 +11,7 @@ import { StartFlowButtons } from '@/features/consignment/components/StartFlowBut
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
+import { ROUTES } from '@/constants'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 
@@ -47,9 +48,9 @@ export function ConsignmentDetailScreen({
   const navigate = useNavigate()
   const { t } = useTranslation()
   // An agency's officers work on cases: the same records, under their own name.
-  const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: '/consignments' }
+  const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS }
   const untitled = t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title')
-  const backTo = up.to ?? '/consignments'
+  const backTo = up.to ?? ROUTES.CONSIGNMENTS
   const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(!!consignmentId)
   const [refreshing, setRefreshing] = useState(false)

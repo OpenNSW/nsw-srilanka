@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useMatch } from 'react-router-dom'
 import { appConfig } from '@/config'
+import { ROUTES } from '@/constants'
 import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 
 // Deliberately tiny — a thin white bar, not a full government footer. Fixed
@@ -18,7 +19,7 @@ import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 // the end of the page instead, below the reserve.
 export function Footer() {
   const { t } = useTranslation()
-  const onTaskPage = useMatch('/consignments/:consignmentId/tasks/:taskId') !== null
+  const onTaskPage = useMatch(ROUTES.TASK_FORM_PATTERN) !== null
   const footerLinks = appConfig.branding.footerLinks ?? []
   const version = (import.meta.env.VITE_APP_VERSION as string | undefined) || 'dev'
   const copyrightNotice = appConfig.branding.copyrightNotice

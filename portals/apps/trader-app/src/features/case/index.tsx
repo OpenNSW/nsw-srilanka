@@ -1,6 +1,6 @@
 // Agency mode: the same app, deployed for an agency, lists and opens cases instead of
-// consignments. The screens mount at the /consignments paths so the navigation that
-// existing components hardcode (task cards, the task screen's back button) keeps working.
+// consignments. The screens mount at /cases (see ROUTES), with the routes' params still
+// named after consignments.
 import { ConsignmentDetailScreen } from '@/features/consignment/screens/ConsignmentDetailScreen.tsx'
 import { getCase } from './service'
 

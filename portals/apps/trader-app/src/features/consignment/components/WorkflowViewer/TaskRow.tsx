@@ -5,6 +5,7 @@ import { ChevronRightIcon, InfoCircledIcon } from '@radix-ui/react-icons'
 import type { WorkflowNode, WorkflowNodeState } from '@/features/consignment/types'
 import { WORKFLOW_STATUS_I18N_KEYS } from '@/features/consignment/workflowStatus'
 import { formatDateTime } from '@/features/consignment/utils'
+import { ROUTES } from '@/constants'
 
 const STATUS_COLORS: Record<WorkflowNodeState, 'green' | 'blue' | 'orange' | 'gray' | 'red'> = {
   COMPLETED: 'green',
@@ -27,7 +28,7 @@ export function TaskRow({
 }) {
   const { t } = useTranslation()
   const name = step.workflowNodeTemplate.name || t('workflow.untitledTask')
-  const href = `/consignments/${consignmentId}/tasks/${step.id}`
+  const href = ROUTES.TASK_FORM(consignmentId, step.id)
   const status = (
     <Badge color={STATUS_COLORS[step.state] ?? 'gray'} variant="soft" size="1">
       {t(`workflow.status.${WORKFLOW_STATUS_I18N_KEYS[step.state] ?? 'inProgress'}`)}

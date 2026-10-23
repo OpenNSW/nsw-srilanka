@@ -8,6 +8,7 @@ import { TaskDetailScreen } from '@/features/task/TaskDetailScreen.tsx'
 import { UnsavedChangesGuard } from '@/features/zone/components/UnsavedChangesGuard'
 import { CaseDetailScreen, CaseListScreen } from '@/features/case'
 import { isAgencyMode } from '@/features/case/mode'
+import { ROUTES } from '@/constants'
 import { AdminConsignmentEngineStatusScreen } from '@/features/admin/screens/AdminConsignmentEngineStatusScreen.tsx'
 import { AdminConsignmentDetailScreen } from '@/features/admin/screens/AdminConsignmentDetailScreen.tsx'
 import { useAuth } from 'react-oidc-context'
@@ -80,14 +81,14 @@ function App() {
         <Route path="/login" element={<SignedOutRoute />} />
 
         <Route element={<ProtectedLayout />}>
-          <Route path="/" element={<Navigate to="/consignments" replace />} />
-          <Route path="/consignments" element={isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />} />
+          <Route path="/" element={<Navigate to={ROUTES.CONSIGNMENTS} replace />} />
+          <Route path={ROUTES.CONSIGNMENTS} element={isAgencyMode ? <CaseListScreen /> : <ConsignmentScreen />} />
           <Route
-            path="/consignments/:consignmentId"
+            path={ROUTES.CONSIGNMENT_DETAIL_PATTERN}
             element={isAgencyMode ? <CaseDetailScreen /> : <ConsignmentDetailScreen />}
           />
           <Route
-            path="/consignments/:consignmentId/tasks/:taskId"
+            path={ROUTES.TASK_FORM_PATTERN}
             element={
               <UnsavedChangesGuard>
                 <TaskDetailScreen />

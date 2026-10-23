@@ -6,6 +6,7 @@ import { PaginationControl } from '@/components/common/PaginationControl.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
+import { ROUTES } from '@/constants'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
@@ -94,9 +95,9 @@ export function CaseListScreen() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {cases.map((c) => (
-                    <LinkRow key={c.id} to={`/consignments/${c.id}`}>
+                    <LinkRow key={c.id} to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <RowLink to={`/consignments/${c.id}`}>
+                        <RowLink to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
                           {c.name ? (
                             <div className="flex flex-col">
                               <Text size="2" weight="bold" className="text-info-strong">
