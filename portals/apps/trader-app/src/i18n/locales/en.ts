@@ -138,11 +138,15 @@ const en = {
 
     tasks: {
       loading: 'Loading task...',
-      back: 'Back to Tasks',
-      nextTask: 'Next Task',
+      breadcrumb: 'Breadcrumb',
       goBack: 'Go Back',
       refresh: 'Refresh',
-      submitSuccess: 'Application submitted successfully',
+      taskId: 'Task ID',
+      copyTaskId: 'Copy task ID',
+      copied: 'Copied',
+      continueTo: 'Continue to {{name}}',
+      continueToNext: 'Continue to next task',
+      backToConsignment: 'Back to consignment',
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
       unsaved: {
