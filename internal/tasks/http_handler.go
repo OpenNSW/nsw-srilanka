@@ -130,14 +130,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		// indistinguishable from a task that does not exist and cannot be used to
 		// probe which task ids are real. Mirrors GET /api/v1/consignments/{id}.
 		slog.WarnContext(ctx, "tasks: read authorization denied", "taskId", taskID)
-		h.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventTask,
-			Action:     nswaudit.ActionRead,
-			TargetType: nswaudit.TargetTask,
-			TargetID:   taskID,
-			Failure:    true,
-			Metadata:   map[string]any{"error": "task read access denied"},
-		})
+		h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, true, map[string]any{"error": "task read access denied"}))
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return
 	}
@@ -157,13 +150,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventTask,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetTask,
-		TargetID:   taskID,
-		Failure:    false,
-	})
+	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionRead, taskID, false, nil))
 	httputil.JSON(w, http.StatusOK, zv)
 }
 
@@ -474,14 +461,7 @@ func (h *HTTPHandler) writeCompletion(w http.ResponseWriter, r *http.Request, er
 }
 
 func (h *HTTPHandler) auditTaskUpdate(ctx context.Context, taskID string, failure bool, meta map[string]any) {
-	h.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventTask,
-		Action:     nswaudit.ActionUpdate,
-		TargetType: nswaudit.TargetTask,
-		TargetID:   taskID,
-		Failure:    failure,
-		Metadata:   meta,
-	})
+	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionUpdate, taskID, failure, meta))
 }
 
 // taskAuditMeta copies the step, command, and draft flag out of a slog-style
