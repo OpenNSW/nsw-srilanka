@@ -73,7 +73,7 @@ export function TaskRow({
   }
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 border-b border-app-surface-muted px-1 py-3 last:border-b-0">
+    <li className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-1 py-3 last:border-b-0">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-foreground">{name}</span>

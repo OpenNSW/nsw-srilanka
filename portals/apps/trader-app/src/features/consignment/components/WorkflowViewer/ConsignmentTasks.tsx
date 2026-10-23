@@ -1,9 +1,23 @@
 import { useMemo } from 'react'
-import { Tabs } from '@radix-ui/themes'
+import type { ReactNode } from 'react'
+import { Badge, Tabs } from '@radix-ui/themes'
+import { ClockIcon, LightningBoltIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { TaskRow } from './TaskRow'
+
+function SectionHeading({ icon, title, count }: { icon: ReactNode; title: string; count: number }) {
+  return (
+    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+      {icon}
+      {title}
+      <Badge color="gray" variant="soft" radius="full">
+        {count}
+      </Badge>
+    </h2>
+  )
+}
 
 const newestFirst = (a: WorkflowNode, b: WorkflowNode) => b.updatedAt.localeCompare(a.updatedAt)
 
@@ -54,10 +68,12 @@ export function ConsignmentTasks({
       <Tabs.Content value="active" className="pt-5">
         {status && <p className="mb-6 text-sm text-foreground-muted">{status}</p>}
         {groups.needsAction.length > 0 && (
-          <section className="mb-6">
-            <h2 className="mb-3 text-xs font-semibold tracking-wide text-foreground-muted uppercase">
-              {t('workflow.actionRequired')}
-            </h2>
+          <section>
+            <SectionHeading
+              icon={<LightningBoltIcon aria-hidden className="text-info" />}
+              title={t('workflow.actionRequired')}
+              count={groups.needsAction.length}
+            />
             <ul className="space-y-3">
               {groups.needsAction.map((step) => (
                 <TaskRow key={step.id} step={step} consignmentId={consignmentId} needsAction />
@@ -66,18 +82,20 @@ export function ConsignmentTasks({
           </section>
         )}
         {groups.waiting.length > 0 && (
-          <section className="mb-6">
-            <h2 className="mb-1 text-xs font-semibold tracking-wide text-foreground-muted uppercase">
-              {t('workflow.waitingOnOthers')}
-            </h2>
-            <ul>
+          <section className={groups.needsAction.length > 0 ? 'mt-8 border-t border-border pt-6' : undefined}>
+            <SectionHeading
+              icon={<ClockIcon aria-hidden className="text-warning" />}
+              title={t('workflow.waitingOnOthers')}
+              count={groups.waiting.length}
+            />
+            <ul className="rounded-xl bg-app-surface-muted px-4">
               {groups.waiting.map((step) => (
                 <TaskRow key={step.id} step={step} consignmentId={consignmentId} />
               ))}
             </ul>
           </section>
         )}
-        {!status && <p className="text-sm text-foreground-muted">{t('workflow.newStepsAppear')}</p>}
+        {!status && <p className="mt-6 text-sm text-foreground-muted">{t('workflow.newStepsAppear')}</p>}
       </Tabs.Content>
 
       <Tabs.Content value="done" className="pt-5">
