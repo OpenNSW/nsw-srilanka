@@ -73,10 +73,17 @@ type Request struct {
 	Body         any               `json:"body,omitempty"`
 	ExpectStatus int               `json:"expectStatus,omitempty"` // default 200
 	Extract      map[string]string `json:"extract,omitempty"`      // var -> response field path (dot-notation, e.g. "consignment.id"; a number indexes an array, e.g. "flows.0.workflowId")
+	// ExtractEquals, when set, requires each named flow variable (from Extract)
+	// to equal the given string after a successful extract. With Retry on a GET,
+	// a mismatch is retried — used after a needs_more_info loop so the read
+	// waits for PENDING_USER (and its step_id) rather than the review step that
+	// is still ActiveStepID for a moment.
+	ExtractEquals map[string]string `json:"extractEquals,omitempty"`
 	// Retry, for a GET only, re-issues the request until it gets the expected
-	// status and every Extract path is present, or this long elapses (e.g. "30s").
-	// For state that lands a moment after a wait matched: a task's step_id is
-	// set when its step is claimed, just after the node shows IN_PROGRESS.
+	// status, every Extract path is present, and ExtractEquals matches, or this
+	// long elapses (e.g. "30s"). For state that lands a moment after a wait
+	// matched: a task's step_id is set when its step is claimed, just after the
+	// node shows IN_PROGRESS.
 	Retry string `json:"retry,omitempty"`
 }
 
@@ -266,6 +273,12 @@ func (r *Runner) doRequestOnce(ctx context.Context, req *Request) error {
 				return fmt.Errorf("extract: path %q not present in response", path)
 			}
 			r.Vars[varName] = v
+		}
+		for varName, want := range req.ExtractEquals {
+			got, _ := r.Vars[varName].(string)
+			if got != want {
+				return fmt.Errorf("extractEquals: %s = %q, want %q", varName, got, want)
+			}
 		}
 	}
 	return nil
