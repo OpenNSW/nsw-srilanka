@@ -810,6 +810,20 @@ func TestConfigValidate_ArtifactLoaderError(t *testing.T) {
 	}
 }
 
+func TestConfigValidate_ArtifactsError(t *testing.T) {
+	cfg := validConfig()
+	cfg.Artifacts.ManifestVersion = -1
+	err := cfg.Validate()
+	if err == nil || !containsString(err.Error(), "invalid artifacts configuration") {
+		t.Errorf("expected artifacts config error, got: %v", err)
+	}
+
+	cfg.Artifacts.ManifestVersion = 3
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("a positive pin should validate, got: %v", err)
+	}
+}
+
 func TestConfigValidate_AuthnError(t *testing.T) {
 	cfg := validConfig()
 	cfg.Authn = authn.Config{} // all empty → JWKSURL required

@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/core v0.0.0-20261022093513-70e269455051 h1:8Yhw1UfaO0qg1CJN/hKOhdbbhZqn71G3mpjCYNc2EXQ=
-github.com/OpenNSW/core v0.0.0-20261022093513-70e269455051/go.mod h1:TjjsW9kcC3Od4Qi0VZa6VlbVYQGluAtzrzKMaPkSpx4=
+github.com/OpenNSW/core v0.0.0-20261023160907-5829350d3079 h1:mR6ShzO7SuMTMmy/yNuS889xLYfldsLuvmLZyq/AshQ=
+github.com/OpenNSW/core v0.0.0-20261023160907-5829350d3079/go.mod h1:pKFzidLBaXj8N4wyjkFgPwxhfxAgwvnZLok8Qt3KMTM=
 github.com/OpenNSW/core/authn v0.4.0 h1:kZNUGp49aAZ1ui19soMKF2qGVOc2os1PyS6UuRpT7UY=
 github.com/OpenNSW/core/authn v0.4.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=
@@ -259,8 +259,8 @@ google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc h1:
 google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc/go.mod h1:K/n0XLazCJHjD73YuMyNJsN38BPPy1kfFnKxUXaThFU=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc h1:4bNTbnb44EqGVy9HaQxSY2jnafSUdgV3qHtedvNpDKg=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc/go.mod h1:OaIUM3+LpYcK2GXM4FTmhWoIq371Owdr+Cc7/BsYHHc=
-google.golang.org/grpc v1.83.2 h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=
-google.golang.org/grpc v1.83.2/go.mod h1:YPI1hK3kDked6iHvgX3tR0y+nX/qpMFKhPgFsokw1S8=
+google.golang.org/grpc v1.84.0 h1:soMyaPJ8pAak5PIQ0DGBUir0XRo2fRoMqhNWMLlLxO0=
+google.golang.org/grpc v1.84.0/go.mod h1:ljCht0DrxQrXBDRTZp52Qxh3Ffk8CdYm2sj4O2QN2C0=
 google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
 google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=

@@ -377,6 +377,16 @@ artifactLoader:
   #   # Optional in-bucket key prefix every path resolves against.
   #   prefix: ""
 
+# How this deployment uses the versioned manifests in the artifacts
+# (manifest_v1.json, manifest_v2.json, …; a source with none loads manifest.json
+# as version 1). A published manifest and the files it lists never change; a
+# change is a new manifest. Each flow runs on the version current when it
+# started. Optional.
+artifacts:
+  # Pin the version new flows start on, e.g. to roll back. 0 takes the highest
+  # published one.
+  manifestVersion: 0
+
 # What this deployment runs as: "tnsw" or "agency". Required.
 # The modes are exclusive. An agency serves inject and the officer case views in
 # place of TNSW's consignment, payment and webhook routes, and its catalog maps

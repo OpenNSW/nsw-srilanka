@@ -162,11 +162,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		unwiredAudit = append(unwiredAudit, "payment")
 	}
 
-	artifactRegistry, err := initArtifactRegistry(ctx, cfg)
+	artifacts, err := initArtifacts(ctx, cfg)
 	if err != nil {
 		_ = database.Close(db)
 		return nil, err
 	}
+	// Templates resolve through the current manifest version until flows record their own.
+	artifactRegistry := artifacts.CurrentRegistry()
 
 	chaService := cha.NewService(db)
 	companyService := company.NewService(db)
@@ -427,7 +429,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		paymentHandler = payment.NewHTTPHandler(paymentService)
 	}
 
-	staticDataHandler := staticdata.NewHandler(artifactRegistry)
+	staticDataHandler := staticdata.NewHandler(artifacts)
 	profileHandler := profile.NewHandler(userProfileService, companyService)
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
@@ -1044,28 +1046,20 @@ func initTask(
 	}, stop, nil
 }
 
-// initArtifactRegistry initializes the artifact loader, registry, and registers
-// the manifest.
-func initArtifactRegistry(ctx context.Context, cfg *config.Config) (*artifact.Registry, error) {
+// initArtifacts creates the artifact loader and loads every published manifest
+// (manifest_v1.json, manifest_v2.json, …, or manifest.json as version 1 where there are
+// none). New flows start on the highest version, or on artifacts.manifestVersion when it
+// pins one.
+func initArtifacts(ctx context.Context, cfg *config.Config) (*artifact.Set, error) {
 	artifactLoader, err := loaders.New(ctx, cfg.ArtifactLoader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create artifact loader: %w", err)
 	}
 
-	data, err := artifactLoader.Load(ctx, artifact.ManifestFilename)
+	artifacts, err := artifact.LoadSet(ctx, artifactLoader, artifact.WithPinnedVersion(cfg.Artifacts.ManifestVersion))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load root manifest %q: %w", artifact.ManifestFilename, err)
+		return nil, fmt.Errorf("failed to load artifact manifests: %w", err)
 	}
 
-	var manifestCfg artifact.ManifestConfig
-	if err := json.Unmarshal(data, &manifestCfg); err != nil {
-		return nil, fmt.Errorf("failed to parse manifest %q: %w", artifact.ManifestFilename, err)
-	}
-
-	artifactRegistry := artifact.NewRegistry(artifactLoader)
-	if err := artifact.RegisterFromConfig(artifactRegistry, manifestCfg); err != nil {
-		return nil, fmt.Errorf("failed to register manifest %q: %w", artifact.ManifestFilename, err)
-	}
-
-	return artifactRegistry, nil
+	return artifacts, nil
 }
