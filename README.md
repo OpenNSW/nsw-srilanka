@@ -67,13 +67,8 @@ make setup
 
 This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/{payment_methods,catalog,companies}.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
 
-> [!IMPORTANT]
-> **Outbound services now live in YAML.** Move each entry from your old
-> `configs/services.json` or `services.docker.json` into the corresponding
-> `config.yaml` or `config.docker.yaml` top-level `services` list and remove
-> `server.servicesConfigPath`. Use the new camelCase fields and `auth.oauth2`
-> block shown in the examples. Write remote secrets as `{{env:NAME}}` / `{{file:/path}}`
-> placeholders. `make setup` preserves existing files; it does not migrate them.
+Configure outbound HTTP services in the YAML config's top-level `services` list.
+Secret values use quoted `{{env:NAME}}` or `{{file:/path}}` placeholders.
 
 > [!IMPORTANT]
 > **Upgrading an existing clone to the plain-HTTP IdP.** Because `make setup` keeps

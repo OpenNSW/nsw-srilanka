@@ -898,8 +898,8 @@ services:
 	}
 }
 
-// Exercise the committed deployment files through both YAML decoding and the
-// remote manager, so a stale auth/options key cannot silently remove M2M auth.
+// Check committed deployment files through YAML loading and remote setup,
+// including M2M authentication, scopes, resource audiences and mTLS paths.
 func TestServices_DeploymentTemplates(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "configs")
 	paths := []string{filepath.Join(root, "config.example.yaml"), filepath.Join(root, "config.docker.example.yaml")}
