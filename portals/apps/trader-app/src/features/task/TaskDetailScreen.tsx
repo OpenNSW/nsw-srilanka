@@ -56,14 +56,20 @@ export function TaskDetailScreen() {
   // returns to the same form (verify, save) would otherwise keep displaying the
   // values it mounted with, from before the submission was saved.
   const [formEpoch, setFormEpoch] = useState(0)
-  const [nextTaskId, setNextTaskId] = useState<string | null>(null)
-  // The consignment, for the breadcrumb and the task's own name.
+  // The trader's next task once this one is done: undefined while it's still
+  // being looked up, null once the lookup found none.
+  const [nextTaskId, setNextTaskId] = useState<string | null | undefined>(undefined)
+  // Set once a step of this task is submitted here. The task that follows
+  // starts a moment after a submit, so only then is the lookup retried.
+  const [submittedHere, setSubmittedHere] = useState(false)
+  // The consignment, for the breadcrumb and the task names.
   const [consignment, setConsignment] = useState<Consignment | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
-    setNextTaskId(null)
+    setSubmittedHere(false)
+    setNextTaskId(undefined)
   }
 
   const fetchTask = useCallback(async (): Promise<ZoneView | undefined> => {
@@ -104,51 +110,46 @@ export function TaskDetailScreen() {
     }
   }, [taskId, t])
 
-  useEffect(() => {
-    if (!consignmentId) return
-    let cancelled = false
-    void getConsignment(consignmentId)
-      .then((c) => {
-        if (!cancelled) setConsignment(c)
-      })
-      .catch((err) => console.error('TaskDetailScreen: failed to load consignment:', err))
-    return () => {
-      cancelled = true
-    }
-  }, [consignmentId])
+  // The zone view lags the URL until the new task loads.
+  const taskState = zoneView?.task_id === taskId ? zoneView?.state : undefined
 
+  // Loads the consignment, and once the task is done, finds the next task.
+  // The only writer of both: a change of consignment, task or state cancels
+  // the run, so a late response never overwrites a newer one.
   useEffect(() => {
-    if (!consignmentId || !taskId || zoneView?.state !== 'COMPLETED') return
+    if (!consignmentId || !taskId) return
+    const findNext = taskState === 'COMPLETED'
+    const maxAttempts = findNext && submittedHere ? NEXT_TASK_MAX_ATTEMPTS : 1
 
     let cancelled = false
     let attempt = 0
     let timeout: ReturnType<typeof setTimeout> | undefined
 
-    const loadNextTask = async () => {
+    const load = async () => {
       attempt += 1
+      let id: string | undefined
       try {
-        const consignment = await getConsignment(consignmentId)
-        if (cancelled || !consignment) return
-        setConsignment(consignment)
-        const id = nextActionableTaskId(consignment.workflowNodes ?? [], taskId)
-        setNextTaskId(id ?? null)
-        if (!id && attempt < NEXT_TASK_MAX_ATTEMPTS) {
-          timeout = setTimeout(() => void loadNextTask(), NEXT_TASK_RETRY_MS)
-        }
+        const loaded = await getConsignment(consignmentId)
+        if (cancelled) return
+        if (loaded) setConsignment(loaded)
+        if (!findNext) return
+        id = loaded ? nextActionableTaskId(loaded.workflowNodes ?? [], taskId) : undefined
       } catch (err) {
-        console.error('TaskDetailScreen: failed to resolve next task:', err)
-        if (!cancelled && attempt < NEXT_TASK_MAX_ATTEMPTS) {
-          timeout = setTimeout(() => void loadNextTask(), NEXT_TASK_RETRY_MS)
-        }
+        if (cancelled) return
+        console.error('TaskDetailScreen: failed to load consignment:', err)
+        if (!findNext) return
       }
+      if (id) setNextTaskId(id)
+      else if (attempt < maxAttempts) timeout = setTimeout(() => void load(), NEXT_TASK_RETRY_MS)
+      else setNextTaskId(null)
     }
 
-    void loadNextTask()
+    void load()
     return () => {
       cancelled = true
       if (timeout) clearTimeout(timeout)
     }
-  }, [consignmentId, taskId, zoneView])
+  }, [consignmentId, taskId, taskState, submittedHere])
 
   if (loading) {
     return (
@@ -198,15 +199,17 @@ export function TaskDetailScreen() {
   }
 
   const width = zoneWidthClass(zoneView)
+  // Only the consignment in the URL: the screen stays mounted across task URLs.
+  const current = consignment?.id === consignmentId ? consignment : null
   const nodeName = (id: string | null | undefined) =>
-    consignment?.workflowNodes?.find((node) => node.id === id)?.workflowNodeTemplate.name
+    current?.workflowNodes?.find((node) => node.id === id)?.workflowNodeTemplate.name
   const taskName = nodeName(taskId)
   const nextTaskName = nodeName(nextTaskId)
 
   return (
     <div className="min-h-full">
       <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between gap-4`}>
-        <TaskBreadcrumb consignmentId={consignmentId} consignmentName={consignment?.name} taskName={taskName} />
+        <TaskBreadcrumb consignmentId={consignmentId} consignmentName={current?.name} taskName={taskName} />
         <Tooltip content={t('tasks.refresh')}>
           <IconButton
             type="button"
@@ -264,6 +267,7 @@ export function TaskDetailScreen() {
                   // Latch the action off during the transition window so the step
                   // can't be double-submitted while the backend advances.
                   setHasSubmitted(true)
+                  setSubmittedHere(true)
                   window.scrollTo({ top: 0, behavior: 'smooth' })
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
@@ -300,7 +304,13 @@ export function TaskDetailScreen() {
       />
       {zoneView.state === 'COMPLETED' && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
-          {nextTaskId ? (
+          {nextTaskId === undefined ? (
+            // Held until the lookup settles, so "Back" can't be clicked just
+            // before "Continue" would have appeared.
+            <Button size="3" loading disabled>
+              {t('tasks.continueToNext')}
+            </Button>
+          ) : nextTaskId ? (
             <Button size="3" onClick={() => goToNextTask(nextTaskId)}>
               {nextTaskName ? t('tasks.continueTo', { name: nextTaskName }) : t('tasks.continueToNext')}
               <ArrowRightIcon />
