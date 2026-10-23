@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { Badge, Box, Button, Flex, Heading, Text } from '@radix-ui/themes'
-import { ClockIcon, ReloadIcon, UpdateIcon } from '@radix-ui/react-icons'
+import { Badge, Box, Flex, Heading, Text } from '@radix-ui/themes'
+import { ClockIcon, UpdateIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
@@ -12,20 +12,11 @@ const sortByUpdatedAt = (a: WorkflowNode, b: WorkflowNode) => b.updatedAt.locale
 interface ActionListViewProps {
   steps: WorkflowNode[]
   consignmentId: string
-  onRefresh?: () => void
   refreshing?: boolean
-  className?: string
   consignmentState?: ConsignmentState
 }
 
-export function ActionListView({
-  steps,
-  consignmentId,
-  onRefresh,
-  refreshing = false,
-  className = '',
-  consignmentState,
-}: ActionListViewProps) {
+export function ActionListView({ steps, consignmentId, refreshing = false, consignmentState }: ActionListViewProps) {
   const { t } = useTranslation()
 
   const filteredSteps = useMemo(
@@ -46,17 +37,9 @@ export function ActionListView({
 
   const isConsignmentTerminal = consignmentState === 'FINISHED'
 
-  const RefreshButton =
-    onRefresh && !isConsignmentTerminal ? (
-      <Button variant="soft" color="blue" size="2" onClick={onRefresh} disabled={refreshing} className="cursor-pointer">
-        <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-        {t('workflow.refresh')}
-      </Button>
-    ) : null
-
   return (
-    <div className={`w-full flex flex-col min-h-0 relative ${className}`}>
-      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-0">
+    <div className="w-full relative">
+      <div>
         {isConsignmentTerminal ? (
           <Box mb="6">
             <Flex align="center" justify="between" my="4" px="3">
@@ -64,7 +47,7 @@ export function ActionListView({
                 <div
                   className={`w-1.5 h-5 ${consignmentState === 'FINISHED' ? 'bg-success' : 'bg-error'} rounded-full`}
                 />
-                <Heading size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
+                <Heading as="h2" size="4" color={consignmentState === 'FINISHED' ? 'green' : 'red'} weight="bold">
                   {t('workflow.taskHistory')}
                 </Heading>
                 <Badge color={consignmentState === 'FINISHED' ? 'green' : 'red'} variant="solid" radius="full">
@@ -85,7 +68,7 @@ export function ActionListView({
                 <Flex align="center" justify="between" my="4" px="3">
                   <Flex align="center" gap="2">
                     <div className="w-1.5 h-5 bg-info rounded-full" />
-                    <Heading size="4" color="blue" weight="bold">
+                    <Heading as="h2" size="4" color="blue" weight="bold">
                       {t('workflow.actionRequired')}
                     </Heading>
                     <Badge color="blue" variant="solid" radius="full">
@@ -106,7 +89,7 @@ export function ActionListView({
                 <Flex align="center" justify="between" my="4" px="3">
                   <Flex align="center" gap="2">
                     <div className="w-1.5 h-5 bg-warning rounded-full" />
-                    <Heading size="4" color="orange" weight="bold">
+                    <Heading as="h2" size="4" color="orange" weight="bold">
                       {t('workflow.inReview')}
                     </Heading>
                     <Badge color="orange" variant="soft" radius="full">
@@ -123,10 +106,9 @@ export function ActionListView({
             ) : null}
 
             {groups.active.length === 0 && groups.inReview.length === 0 && filteredSteps.length > 0 ? (
-              <Box py="8" px="6" mb="6" className="text-center relative">
-                {onRefresh && <div className="absolute top-3 right-3">{RefreshButton}</div>}
+              <Box py="8" px="6" mb="6" className="text-center">
                 <ClockIcon className="w-12 h-12 text-foreground-subtle mx-auto mb-3" />
-                <Heading size="3" color="gray" mb="1">
+                <Heading as="h2" size="3" color="gray" mb="1">
                   {t('workflow.waitingForUpdates.title')}
                 </Heading>
                 <Text size="2" color="gray">

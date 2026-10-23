@@ -1,13 +1,11 @@
 import type { Alert, AlertVariant, AuditEntry, ZoneAction, ZoneView } from '@/features/zone/types'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { IconButton, Tooltip } from '@radix-ui/themes'
-import { CheckIcon, CopyIcon } from '@radix-ui/react-icons'
 import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
 import { zoneWidthClass } from '@/features/zone/width'
+import { CopyableId } from '@/components/CopyableId'
 
 type Props = {
   task: ZoneView
@@ -211,41 +209,13 @@ function Header({ task, title }: { task: ZoneView; title?: string }) {
         <h1 className="text-3xl font-semibold tracking-tight text-foreground">
           {title || humanizeStatus(task.task_type)}
         </h1>
-        <TaskId id={task.task_id} />
+        <p className="mt-1">
+          <CopyableId label={t('tasks.taskId')} id={task.task_id} />
+        </p>
       </div>
       <span className="inline-flex shrink-0 items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary">
         {statusLabel}
       </span>
     </div>
-  )
-}
-
-// The task's ID, kept findable for support without heading the page.
-function TaskId({ id }: { id: string }) {
-  const { t } = useTranslation()
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    void navigator.clipboard.writeText(id).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-  return (
-    <p className="mt-1 flex items-center gap-1 text-xs text-foreground-muted">
-      <span>{t('tasks.taskId')}</span>
-      <span className="font-mono">{id}</span>
-      <Tooltip content={copied ? t('tasks.copied') : t('tasks.copyTaskId')}>
-        <IconButton
-          type="button"
-          size="1"
-          variant="ghost"
-          color="gray"
-          aria-label={t('tasks.copyTaskId')}
-          onClick={copy}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </IconButton>
-      </Tooltip>
-    </p>
   )
 }

@@ -11,7 +11,7 @@ import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 import { zoneWidthClass } from '@/features/zone/width'
-import { TaskBreadcrumb } from './TaskBreadcrumb'
+import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const NEXT_TASK_MAX_ATTEMPTS = 5
@@ -205,11 +205,19 @@ export function TaskDetailScreen() {
     current?.workflowNodes?.find((node) => node.id === id)?.workflowNodeTemplate.name
   const taskName = nodeName(taskId)
   const nextTaskName = nodeName(nextTaskId)
+  const breadcrumb: BreadcrumbItem[] = [{ label: t('nav.consignments'), to: '/consignments' }]
+  if (consignmentId) {
+    breadcrumb.push({
+      label: current?.name || t('consignments.detail.title'),
+      to: `/consignments/${consignmentId}`,
+    })
+  }
+  if (taskName) breadcrumb.push({ label: taskName })
 
   return (
     <div className="min-h-full">
       <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex items-center justify-between gap-4`}>
-        <TaskBreadcrumb consignmentId={consignmentId} consignmentName={current?.name} taskName={taskName} />
+        <Breadcrumb items={breadcrumb} />
         <Tooltip content={t('tasks.refresh')}>
           <IconButton
             type="button"

@@ -89,7 +89,6 @@ const en = {
           consignment: 'Loading consignment...',
           settingUp: 'Setting up your consignment...',
         },
-        back: 'Back',
         backToList: 'Back to Consignments',
         tryAgain: 'Try Again',
         refresh: 'Refresh',
@@ -138,12 +137,9 @@ const en = {
 
     tasks: {
       loading: 'Loading task...',
-      breadcrumb: 'Breadcrumb',
       goBack: 'Go Back',
       refresh: 'Refresh',
       taskId: 'Task ID',
-      copyTaskId: 'Copy task ID',
-      copied: 'Copied',
       continueTo: 'Continue to {{name}}',
       continueToNext: 'Continue to next task',
       backToConsignment: 'Back to consignment',
@@ -174,7 +170,6 @@ const en = {
       inReview: 'In Review',
       processHistory: 'Process History',
       updatingList: 'Updating your list...',
-      refresh: 'Refresh',
       waitingForUpdates: {
         title: 'Waiting for Updates',
         description: 'Current steps are being processed. Next tasks will unlock automatically.',
@@ -210,6 +205,9 @@ const en = {
     },
 
     common: {
+      breadcrumb: 'Breadcrumb',
+      copied: 'Copied',
+      copyNamed: 'Copy {{name}}',
       dateTimeAt: '{{date}} at {{time}}',
       poweredBy: 'Powered by OpenNSW',
       pagination: {
