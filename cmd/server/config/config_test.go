@@ -992,7 +992,8 @@ func TestServices_SecretPlaceholders(t *testing.T) {
 					if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
 						t.Fatal(err)
 					}
-					placeholder = "{{file:" + path + "}}"
+					// Forward slashes: Windows backslashes are escapes in a quoted YAML scalar.
+					placeholder = "{{file:" + filepath.ToSlash(path) + "}}"
 				}
 				cfg, err := loadYAML(t, configYAML(t, strings.ReplaceAll(servicesSecretYAML, "SECRET_PLACEHOLDER", placeholder)))
 				if err != nil {
