@@ -127,6 +127,8 @@ func ruleMessage(k jsonschema.ErrorKind) string {
 		return "must be < " + number(k.Want)
 	case *kind.MultipleOf:
 		return "must be a multiple of " + number(k.Want)
+	case *dateLimitKind:
+		return k.LocalizedString(printer)
 	}
 	return "'" + strings.Join(k.KeywordPath(), "/") + "' failed"
 }
