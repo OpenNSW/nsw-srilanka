@@ -12,6 +12,7 @@ import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 import { zoneWidthClass } from '@/features/zone/width'
 import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
+import { humanizeStatus } from '@/utils/formatStatus'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const NEXT_TASK_MAX_ATTEMPTS = 5
@@ -203,7 +204,8 @@ export function TaskDetailScreen() {
   const current = consignment?.id === consignmentId ? consignment : null
   const nodeName = (id: string | null | undefined) =>
     current?.workflowNodes?.find((node) => node.id === id)?.workflowNodeTemplate.name
-  const taskName = nodeName(taskId)
+  // The task's configured name, or its type until the consignment has loaded.
+  const title = nodeName(taskId) || humanizeStatus(zoneView.task_type)
   const nextTaskName = nodeName(nextTaskId)
   const breadcrumb: BreadcrumbItem[] = [{ label: t('nav.consignments'), to: '/consignments' }]
   if (consignmentId) {
@@ -212,7 +214,7 @@ export function TaskDetailScreen() {
       to: `/consignments/${consignmentId}`,
     })
   }
-  if (taskName) breadcrumb.push({ label: taskName })
+  breadcrumb.push({ label: title })
 
   return (
     <div className="min-h-full">
@@ -242,7 +244,7 @@ export function TaskDetailScreen() {
       )}
       <TraderZoneLayout
         task={zoneView}
-        title={taskName}
+        title={title}
         formEpoch={formEpoch}
         onSubmitForm={
           hasSubmitted

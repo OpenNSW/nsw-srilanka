@@ -242,7 +242,7 @@ export function ConsignmentDetailScreen({
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Breadcrumb items={[up]} />
+          <Breadcrumb items={[up, { label: t('consignments.detail.title') }]} />
         </div>
         <div className="bg-app-surface rounded-2xl shadow-md p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
