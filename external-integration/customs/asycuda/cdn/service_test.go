@@ -48,7 +48,7 @@ func TestProcessIntegrationResult_Success(t *testing.T) {
 			"edge-123": {ID: "1", EdgeID: "edge-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
-	svc := NewCDNWebhookService(repo, nil, nil)
+	svc := NewCDNWebhookService(repo, nil, nil, nil)
 
 	req := CDNIntegrationResultRequest{
 		Event: "INTEGRATION_RESULT",
@@ -71,7 +71,7 @@ func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 			"edge-123": {ID: "1", EdgeID: "edge-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
-	svc := NewCDNWebhookService(repo, nil, nil)
+	svc := NewCDNWebhookService(repo, nil, nil, nil)
 
 	rawErrors := json.RawMessage(`{"code":"ERR_VAL_01","message":"Invalid weight value"}`)
 	req := CDNIntegrationResultRequest{
@@ -97,7 +97,7 @@ func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 // without the workflow it belongs to.
 func TestProcessIntegrationResult_UnrecordedEdgeIDIsRetried(t *testing.T) {
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
-	svc := NewCDNWebhookService(repo, nil, nil)
+	svc := NewCDNWebhookService(repo, nil, nil, nil)
 
 	req := CDNIntegrationResultRequest{
 		Payload: integrationResultPayload{
@@ -119,7 +119,7 @@ func TestProcessAcknowledgment_Success(t *testing.T) {
 			"2026-COL-C": {ID: "note-123", Status: DispatchNoteStatusIntegrated},
 		},
 	}
-	svc := NewCDNWebhookService(repo, nil, nil)
+	svc := NewCDNWebhookService(repo, nil, nil, nil)
 
 	req := CDNAcknowledgmentRequest{
 		Event: "ACKNOWLEDGMENT",
@@ -139,7 +139,7 @@ func TestProcessAcknowledgment_InvalidState(t *testing.T) {
 			"2026-COL-C": {ID: "note-123", Status: DispatchNoteStatusSubmitted},
 		},
 	}
-	svc := NewCDNWebhookService(repo, nil, nil)
+	svc := NewCDNWebhookService(repo, nil, nil, nil)
 
 	req := CDNAcknowledgmentRequest{
 		Event: "ACKNOWLEDGMENT",
@@ -220,7 +220,7 @@ func TestProcessIntegrationResult_RedeliveryStillResumesParkedTask(t *testing.T)
 	}
 	// No db/taskManager wiring here: the assertion is that the call reaches the
 	// resume path instead of returning at the duplicate guard, and stays a 200.
-	svc := NewCDNWebhookService(repo, nil, nil)
+	svc := NewCDNWebhookService(repo, nil, nil, nil)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -263,7 +263,7 @@ func TestStoredResult_PrefersTheRecordedReference(t *testing.T) {
 func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) {
 	recorder := &resumeRecorder{}
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
-	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder, nil)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -291,7 +291,7 @@ func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) 
 func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	recorder := &resumeRecorder{}
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-2": dispatchedNote("edge-2")}}
-	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder, nil)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -326,7 +326,7 @@ func integratedResult(edgeID string) CDNIntegrationResultRequest {
 func TestProcessIntegrationResult_TaskNotParkedYetIsRetried(t *testing.T) {
 	recorder := &resumeRecorder{}
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
-	svc := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	svc := NewCDNWebhookService(repo, fakeTasks{}, recorder, nil)
 
 	err := svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1"))
 
@@ -341,11 +341,11 @@ func TestProcessIntegrationResult_RetryAfterTheTaskParksCompletesIt(t *testing.T
 	recorder := &resumeRecorder{}
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
 
-	early := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder, nil)
 	require.ErrorIs(t, early.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")), ErrTaskNotParked)
 	assert.Equal(t, DispatchNoteStatusSubmitted, repo.byEdgeID["edge-1"].Status)
 
-	retry := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
+	retry := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder, nil)
 	require.NoError(t, retry.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")))
 
 	assert.Contains(t, recorder.completed, "create_cdn:abc")
@@ -372,7 +372,7 @@ func TestProcessIntegrationResult_FailedCompletionLeavesTheNote(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
-			svc := NewCDNWebhookService(repo, parkedIntegrationWait(), failingCompleter{})
+			svc := NewCDNWebhookService(repo, parkedIntegrationWait(), failingCompleter{}, nil)
 
 			err := svc.ProcessIntegrationResult(context.Background(), req)
 
@@ -406,14 +406,14 @@ func TestProcessAcknowledgment_RetryAfterTheTaskParksCompletesIt(t *testing.T) {
 	recorder := &resumeRecorder{}
 	repo := &mockRepository{byCDNRef: map[string]*DispatchNote{"2026-CBEX1-C": note}}
 
-	early := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder, nil)
 	require.ErrorIs(t, early.ProcessAcknowledgment(context.Background(), acknowledgment()), ErrTaskNotParked)
 	assert.Nil(t, repo.updated)
 	assert.Equal(t, DispatchNoteStatusIntegrated, note.Status)
 
 	parked := fakeTasks{"case-1": {{TaskID: "create_cdn:abc", ActiveStepID: "step-ack", ParentWorkflowID: "wf-branch-0",
 		CaseID: "case-1", ActiveTaskTemplateID: acknowledgmentWaitTemplateID, State: "QUEUED_EXTERNALLY"}}}
-	retry := NewCDNWebhookService(repo, parked, recorder)
+	retry := NewCDNWebhookService(repo, parked, recorder, nil)
 	require.NoError(t, retry.ProcessAcknowledgment(context.Background(), acknowledgment()))
 
 	assert.Equal(t, "step-ack", recorder.steps["create_cdn:abc"])
@@ -428,7 +428,7 @@ func TestProcessIntegrationResult_RedeliveryWithNothingParkedIsAcknowledged(t *t
 	note.Status = DispatchNoteStatusIntegrated
 	note.CDNOffice, note.CDNYear, note.CDNSerial, note.CDNNumber = "CBEX1", "2026", "C", 28242
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": note}}
-	svc := NewCDNWebhookService(repo, fakeTasks{}, &resumeRecorder{})
+	svc := NewCDNWebhookService(repo, fakeTasks{}, &resumeRecorder{}, nil)
 
 	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")))
 }
@@ -447,7 +447,7 @@ func TestProcessIntegrationResult_TaskStoreFailureIsAnError(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			recorder := &resumeRecorder{}
 			repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": note}}
-			svc := NewCDNWebhookService(repo, failingTasks{}, recorder)
+			svc := NewCDNWebhookService(repo, failingTasks{}, recorder, nil)
 
 			err := svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1"))
 

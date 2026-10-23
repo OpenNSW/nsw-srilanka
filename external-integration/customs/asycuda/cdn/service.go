@@ -13,6 +13,7 @@ import (
 type CDNWebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error
 	ProcessAcknowledgment(ctx context.Context, req CDNAcknowledgmentRequest) error
+	ProcessAmendment(ctx context.Context, req CDNAmendedRequest) error
 }
 
 // TaskCompleter defines the task completion interface needed from the workflow
@@ -28,14 +29,16 @@ type cdnWebhookService struct {
 	repo        DispatchNoteRepository
 	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
+	flows       CaseFlows
 }
 
 // NewCDNWebhookService creates a new CDNWebhookService. tasks (core's task
 // store) and taskManager carry the workflow side: the callbacks resume the task
 // parked by the workflow the dispatch note recorded. Both may be nil, in which
-// case callbacks are recorded but no workflow is advanced.
-func NewCDNWebhookService(repo DispatchNoteRepository, tasks parkedtask.Tasks, taskManager TaskCompleter) CDNWebhookService {
-	return &cdnWebhookService{repo: repo, tasks: tasks, taskManager: taskManager}
+// case callbacks are recorded but no workflow is advanced. flows opens the
+// amendment flow (§7.6) on the note's case.
+func NewCDNWebhookService(repo DispatchNoteRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows) CDNWebhookService {
+	return &cdnWebhookService{repo: repo, tasks: tasks, taskManager: taskManager, flows: flows}
 }
 
 func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error {

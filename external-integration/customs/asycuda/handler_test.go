@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,11 @@ func (m *mockCusdecService) ProcessEvent(ctx context.Context, req cusdec.CusdecE
 	return args.Error(0)
 }
 
+func (m *mockCusdecService) ProcessAmendment(ctx context.Context, req cusdec.CusdecAmendedRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
 // mockCDNService is a mock implementation of cdn.CDNWebhookService.
 type mockCDNService struct {
 	mock.Mock
@@ -41,6 +47,11 @@ func (m *mockCDNService) ProcessIntegrationResult(ctx context.Context, req cdn.C
 }
 
 func (m *mockCDNService) ProcessAcknowledgment(ctx context.Context, req cdn.CDNAcknowledgmentRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
+func (m *mockCDNService) ProcessAmendment(ctx context.Context, req cdn.CDNAmendedRequest) error {
 	args := m.Called(ctx, req)
 	return args.Error(0)
 }
@@ -548,4 +559,118 @@ func TestSLCEHandler_CusdecRejectionWithEmptyDutiesArrayIsProcessed(t *testing.T
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	cusdecSvc.AssertExpectations(t)
+}
+
+// amendedPayload is the §6.5.4 example, with a declaration abridged to a few
+// Annex A fields.
+const amendedPayload = `{
+	"eventType": "CUSDEC_AMENDED",
+	"processedAt": "2026-04-26T11:15:22Z",
+	"payload": {
+		"cusDecRef": {"office": "CBEX1", "year": "2026", "serial": "E", "number": 1047},
+		"cusDec": {"properties": {"submitter": "", "nswId": ""}, "baseGeneralSegment": {"declarationType": "EX"}},
+		"duties": {
+			"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}],
+			"itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxBaseAmount": 125, "taxRateNumeric": 0.0, "taxAssessedAmount": 0, "paymentMethodCode": "1"}]}]
+		},
+		"operationTime": "2026-10-14T05:07:38Z"
+	}
+}`
+
+// A §6.5.4 Declaration Amended notification reaches the CusDec service with its
+// reference, declaration and operation time, and is answered 200.
+func TestSLCEHandler_CusdecAmended(t *testing.T) {
+	cusdecSvc := new(mockCusdecService)
+	handler := NewHandler(cusdecSvc, new(mockCDNService))
+	cusdecSvc.On("ProcessAmendment", mock.Anything, mock.MatchedBy(func(req cusdec.CusdecAmendedRequest) bool {
+		return req.Payload.CusdecRef == cusdec.DocumentReference{Office: "CBEX1", Year: "2026", Serial: "E", Number: 1047} &&
+			req.Payload.OperationTime == "2026-10-14T05:07:38Z" &&
+			bytes.Contains(req.Payload.Cusdec, []byte(`"declarationType": "EX"`))
+	})).Return(nil)
+
+	rec := httptest.NewRecorder()
+	handler.HandleWebhook(rec, httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(amendedPayload)))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	cusdecSvc.AssertExpectations(t)
+}
+
+func TestSLCEHandler_CusdecAmendedResponses(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body string
+		err  error
+		want int
+	}{
+		"no declaration object":         {body: strings.Replace(amendedPayload, `"cusDec"`, `"other"`, 1), want: http.StatusBadRequest},
+		"no operation time":             {body: strings.Replace(amendedPayload, `"operationTime": "2026-10-14T05:07:38Z"`, `"operationTime": ""`, 1), want: http.StatusBadRequest},
+		"reference not registered yet":  {body: amendedPayload, err: cusdec.ErrCusdecNotFoundByRef, want: http.StatusServiceUnavailable},
+		"declaration without a case":    {body: amendedPayload, err: cusdec.ErrCaseNotRecorded, want: http.StatusNotFound},
+		"the flow could not be started": {body: amendedPayload, err: errors.New("boom"), want: http.StatusInternalServerError},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cusdecSvc := new(mockCusdecService)
+			cusdecSvc.On("ProcessAmendment", mock.Anything, mock.Anything).Return(tc.err)
+			rec := httptest.NewRecorder()
+
+			NewHandler(cusdecSvc, new(mockCDNService)).HandleWebhook(rec,
+				httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tc.body)))
+
+			assert.Equal(t, tc.want, rec.Code)
+		})
+	}
+}
+
+// cdnAmendedPayload is the §7.6 example, with a dispatch note abridged to a few
+// Annex B fields.
+const cdnAmendedPayload = `{
+	"eventType": "CDN_AMENDED",
+	"processedAt": "2026-04-27T14:30:10Z",
+	"payload": {
+		"cdnRef": {"office": "CBEX1", "year": "2026", "serial": "C", "number": 28237},
+		"cdn": {"properties": {"submitter": "", "nswId": ""}, "containerNumber": "MSCU1234567", "cusDecRefs": [{"office": "CBEX1", "year": "2026", "serial": "E", "number": 1047}]},
+		"operationTime": "2026-10-14T05:07:38Z"
+	}
+}`
+
+// A §7.6 CDN Amended notification reaches the CDN service with its reference,
+// dispatch note and operation time, and is answered 200.
+func TestSLCEHandler_CDNAmended(t *testing.T) {
+	cdnSvc := new(mockCDNService)
+	handler := NewHandler(new(mockCusdecService), cdnSvc)
+	cdnSvc.On("ProcessAmendment", mock.Anything, mock.MatchedBy(func(req cdn.CDNAmendedRequest) bool {
+		return req.Payload.CDNRef == cdn.DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28237} &&
+			req.Payload.OperationTime == "2026-10-14T05:07:38Z" &&
+			bytes.Contains(req.Payload.CDN, []byte(`"containerNumber": "MSCU1234567"`))
+	})).Return(nil)
+
+	rec := httptest.NewRecorder()
+	handler.HandleWebhook(rec, httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(cdnAmendedPayload)))
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	cdnSvc.AssertExpectations(t)
+}
+
+func TestSLCEHandler_CDNAmendedResponses(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body string
+		err  error
+		want int
+	}{
+		"no dispatch note object":       {body: strings.Replace(cdnAmendedPayload, `"cdn":`, `"other":`, 1), want: http.StatusBadRequest},
+		"no operation time":             {body: strings.Replace(cdnAmendedPayload, `"operationTime": "2026-10-14T05:07:38Z"`, `"operationTime": ""`, 1), want: http.StatusBadRequest},
+		"reference not registered yet":  {body: cdnAmendedPayload, err: cdn.ErrDispatchNoteNotFoundByCDNRef, want: http.StatusServiceUnavailable},
+		"dispatch note without a case":  {body: cdnAmendedPayload, err: cdn.ErrCaseNotRecorded, want: http.StatusNotFound},
+		"the flow could not be started": {body: cdnAmendedPayload, err: errors.New("boom"), want: http.StatusInternalServerError},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cdnSvc := new(mockCDNService)
+			cdnSvc.On("ProcessAmendment", mock.Anything, mock.Anything).Return(tc.err)
+			rec := httptest.NewRecorder()
+
+			NewHandler(new(mockCusdecService), cdnSvc).HandleWebhook(rec,
+				httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tc.body)))
+
+			assert.Equal(t, tc.want, rec.Code)
+		})
+	}
 }

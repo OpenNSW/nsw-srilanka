@@ -27,7 +27,7 @@ func (s *cdnWebhookService) resumeIntegrationWait(ctx context.Context, note *Dis
 	}
 	if req.Payload.Integrated {
 		ref := req.Payload.CDNRef
-		payload["cdn_number"] = fmt.Sprintf("%s/%s/%s/%d", ref.Office, ref.Year, ref.Serial, ref.Number)
+		payload["cdn_number"] = formatCDNRef(ref)
 	} else {
 		payload["error"] = describeErrors(req.Payload.Errors)
 	}

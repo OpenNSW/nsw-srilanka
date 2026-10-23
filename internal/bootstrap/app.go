@@ -382,12 +382,21 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if !agencyMode {
 		// ASYCUDA webhook stack.
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
-		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
+
+		// TEMPORARY debugging code (see asycuda/debug_forward.go): copy every SLC
+		// Edge callback to the slce-debug-forward service when config.yaml has one.
+		for _, svc := range cfg.Services {
+			if svc.ID == asycuda.DebugForwardServiceID {
+				slceHandler.DebugForward = remoteManager
+				slog.Warn("slce debug forward is ON: every SLC Edge callback is copied to another deployment", "url", svc.URL)
+			}
+		}
 
 		// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
 		// presenting an IdP token, so this handler owns its own authentication and
@@ -765,6 +774,15 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 		return "", nil
 	}
 	return rec.ID, nil
+}
+
+// caseFlowStarter opens flows on a case for the SLC Edge webhooks, which name
+// the flow themselves (a §6.5.4 or §7.6 amendment opens one per amendment).
+type caseFlowStarter struct{ flows *caseflow.Service }
+
+func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error {
+	_, err := c.flows.StartFlow(ctx, caseflow.StartRequest{CaseID: caseID, TemplateID: templateID, WorkflowID: workflowID, Vars: vars})
+	return err
 }
 
 // newFileAccess builds the file tokens this deployment issues from its storage
