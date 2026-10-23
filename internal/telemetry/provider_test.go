@@ -1,13 +1,17 @@
 package telemetry
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/OpenNSW/core/trace"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
 )
 
@@ -98,6 +102,47 @@ func TestHandlerDropsServerAddressFromHost(t *testing.T) {
 		if a.Key == semconv.ServerAddressKey || a.Key == semconv.ServerPortKey {
 			t.Fatalf("unexpected attribute %s=%v", a.Key, a.Value.AsInterface())
 		}
+	}
+}
+
+func TestHandlerUsesCorrelationIDDespiteTraceparent(t *testing.T) {
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSyncer(exp),
+		sdktrace.WithIDGenerator(correlationIDGenerator{}),
+	)
+	t.Cleanup(func() { _ = tp.Shutdown(t.Context()) })
+	p := &Provider{
+		mp:       sdkmetric.NewMeterProvider(),
+		tp:       tp,
+		enabled:  true,
+		shutdown: func(context.Context) error { return nil },
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := p.Handler("tnsw-api", mux)
+
+	const correlationID = "ba06a9e9121683fe4b08a16cc00a3f59"
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	// sampled=0 and a different trace id. A public endpoint must still record
+	// a root span under the correlation id.
+	req.Header.Set("traceparent", "00-11111111111111111111111111111111-2222222222222222-00")
+	req = req.WithContext(trace.ContextWithTraceID(req.Context(), correlationID))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	spans := exp.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("spans = %d, want 1", len(spans))
+	}
+	if got := spans[0].SpanContext.TraceID().String(); got != correlationID {
+		t.Fatalf("trace id = %s, want %s", got, correlationID)
 	}
 }
 

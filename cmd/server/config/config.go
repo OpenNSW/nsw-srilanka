@@ -33,14 +33,17 @@ type Config struct {
 	// Mode is what this deployment runs as: TNSW or an agency. Required.
 	Mode Mode `yaml:"mode"`
 
-	Database     database.Config     `yaml:"db"`
-	Server       ServerConfig        `yaml:"server"`
-	CORS         cors.Config         `yaml:"cors"`
-	Storage      nswstorage.Config   `yaml:"storage"`
-	Authn        authn.Config        `yaml:"authn"`
-	Notification NotificationConfig  `yaml:"notification"`
-	Temporal     temporal.Config     `yaml:"temporal"`
-	Otel         telemetry.Config    `yaml:"otel"`
+	Database     database.Config    `yaml:"db"`
+	Server       ServerConfig       `yaml:"server"`
+	CORS         cors.Config        `yaml:"cors"`
+	Storage      nswstorage.Config  `yaml:"storage"`
+	Authn        authn.Config       `yaml:"authn"`
+	Notification NotificationConfig `yaml:"notification"`
+	Temporal     temporal.Config    `yaml:"temporal"`
+	Otel         telemetry.Config   `yaml:"otel"`
+	// Metrics is the pre-0.8 name of Otel. A leftover section used to leave
+	// export off with no error.
+	Metrics      map[string]any      `yaml:"metrics"`
 	Integrations integrations.Config `yaml:"integrations"`
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
@@ -113,8 +116,8 @@ func (s ServerConfig) Validate() error {
 // configs/config.yaml) and validates it. The file is mandatory. Settings the
 // server can't run without are checked by Validate, so one left out fails
 // here, at startup, rather than when it is first used. Optional settings left
-// out take Go's zero value (false, 0, empty), and unrecognised keys are
-// ignored.
+// out take Go's zero value (false, 0, empty). A metrics section is rejected.
+// Other unrecognised keys are ignored.
 //
 // The server reads only two env vars itself: CONFIG_PATH and APP_ENV. Every
 // other setting is in the config file. A secret may still come from the
@@ -200,6 +203,9 @@ func (c *Config) Validate() error {
 // validateAuxiliary checks the remaining config sections. Kept separate so
 // Validate stays under the gocyclo limit.
 func (c *Config) validateAuxiliary() error {
+	if len(c.Metrics) > 0 {
+		return fmt.Errorf("config section \"metrics\" was renamed to \"otel\"; the old section is ignored and export stays off")
+	}
 	if err := c.Temporal.Validate(); err != nil {
 		return fmt.Errorf("invalid temporal configuration: %w", err)
 	}
