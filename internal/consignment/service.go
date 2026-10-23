@@ -144,6 +144,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	initialVars := map[string]any{"traderCompany": traderCompanyVars}
 
 	// Checked before anything is written, so an unknown template creates no consignment.
+	// caseflow starts the flow on the same current version.
 	if _, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), templateID); err != nil {
 		return nil, fmt.Errorf("failed to get workflow template %q: %w", templateID, err)
 	}
@@ -310,12 +311,14 @@ func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO
 	return dtos, nil
 }
 
-// flowDTO presents f, named by its workflow definition's name (its template ID when the
-// definition has none or cannot be loaded).
+// flowDTO presents f, named by its workflow definition's name in the manifest version
+// the flow runs on (its template ID when the definition has none or cannot be loaded).
 func (s *Service) flowDTO(ctx context.Context, f caseflow.Flow) FlowDTO {
 	name := f.TemplateID
-	if def, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), f.TemplateID); err == nil && def.Name != "" {
-		name = def.Name
+	if reg, err := s.artifacts.Registry(ctx, f.ManifestVersion); err == nil {
+		if def, err := workflowdef.Load(ctx, reg, f.TemplateID); err == nil && def.Name != "" {
+			name = def.Name
+		}
 	}
 	return FlowDTO{
 		WorkflowID:   f.WorkflowID,

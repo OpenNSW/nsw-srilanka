@@ -12,11 +12,21 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
-func newRegistry() *artifact.Set {
+// newArtifacts has two manifests; v2, the current one, points export at a new file and
+// drops legacy.
+func newArtifacts() *artifact.Set {
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
-		"export.json":      []byte(`{"id":"export","nodes":[],"edges":[]}`),
-		"notice.json":      []byte(`{"id":"notice","nodes":[],"edges":[]}`),
-		"manifest_v1.json": []byte(`{"artifacts":[{"id":"export","kind":"workflow","path":"export.json"},{"id":"notice","kind":"workflow","path":"notice.json"}]}`),
+		"export.json":    []byte(`{"id":"export","name":"Export v1","nodes":[],"edges":[]}`),
+		"export_v2.json": []byte(`{"id":"export","name":"Export v2","nodes":[],"edges":[]}`),
+		"notice.json":    []byte(`{"id":"notice","nodes":[],"edges":[]}`),
+		"legacy.json":    []byte(`{"id":"legacy","nodes":[],"edges":[]}`),
+		"manifest_v1.json": []byte(`{"artifacts":[
+			{"id":"export","kind":"workflow","path":"export.json"},
+			{"id":"notice","kind":"workflow","path":"notice.json"},
+			{"id":"legacy","kind":"workflow","path":"legacy.json"}]}`),
+		"manifest_v2.json": []byte(`{"artifacts":[
+			{"id":"export","kind":"workflow","path":"export_v2.json"},
+			{"id":"notice","kind":"workflow","path":"notice.json"}]}`),
 	})
 	if err != nil {
 		panic(err)
@@ -83,6 +93,7 @@ func (r *memRepo) MarkCompleted(_ context.Context, workflowID string) (bool, err
 
 type start struct {
 	id   string
+	def  workflow.WorkflowDefinition
 	vars map[string]any
 }
 
@@ -93,14 +104,14 @@ type startCapture struct {
 	err    error
 }
 
-func (m *startCapture) StartWorkflow(_ context.Context, id string, _ workflow.WorkflowDefinition, vars map[string]any) error {
-	m.starts = append(m.starts, start{id: id, vars: vars})
+func (m *startCapture) StartWorkflow(_ context.Context, id string, def workflow.WorkflowDefinition, vars map[string]any) error {
+	m.starts = append(m.starts, start{id: id, def: def, vars: vars})
 	return m.err
 }
 
 func newService(t *testing.T, repo Repository, wm workflow.Manager) *Service {
 	t.Helper()
-	svc := NewService(repo, newRegistry())
+	svc := NewService(repo, newArtifacts())
 	if wm != nil {
 		if err := svc.RegisterWorkflowManager(wm); err != nil {
 			t.Fatal(err)
@@ -127,9 +138,6 @@ func TestStartFlowBuildsWorkflowID(t *testing.T) {
 	}
 	if got := wm.starts[0].vars[workflow.VarCaseID]; got != "C1" {
 		t.Errorf("%s = %v, want the case ID", workflow.VarCaseID, got)
-	}
-	if got := wm.starts[0].vars[workflow.VarManifestVersion]; got != 1 {
-		t.Errorf("%s = %v, want the current manifest version 1", workflow.VarManifestVersion, got)
 	}
 }
 
@@ -239,5 +247,75 @@ func TestCompletionHandler(t *testing.T) {
 	}
 	if err := svc.CompletionHandler("unknown", nil); err == nil {
 		t.Error("completion of an unrecorded workflow: want an error")
+	}
+}
+
+// A new flow runs on the current manifest: it is recorded with it and started with it.
+func TestStartFlowPinsTheCurrentManifestVersion(t *testing.T) {
+	repo, wm := newMemRepo(), &startCapture{}
+	f, err := newService(t, repo, wm).StartFlow(context.Background(), StartRequest{CaseID: "C1", TemplateID: "export"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.ManifestVersion != 2 || repo.flows[f.WorkflowID].ManifestVersion != 2 {
+		t.Errorf("manifest version = %d, recorded %d; want 2", f.ManifestVersion, repo.flows[f.WorkflowID].ManifestVersion)
+	}
+	if got := wm.starts[0].vars[workflow.VarManifestVersion]; got != 2 {
+		t.Errorf("%s = %v, want 2", workflow.VarManifestVersion, got)
+	}
+	if wm.starts[0].def.Name != "Export v2" {
+		t.Errorf("started %q, want the v2 definition", wm.starts[0].def.Name)
+	}
+}
+
+// A retry of a flow recorded before a deploy starts on the manifest it was recorded with.
+func TestStartFlowRetryKeepsTheRecordedManifestVersion(t *testing.T) {
+	repo := newMemRepo(Flow{WorkflowID: "C1:export:ev1", CaseID: "C1", TemplateID: "export", ManifestVersion: 1, Status: StatusStarting})
+	wm := &startCapture{}
+	f, err := newService(t, repo, wm).StartFlow(context.Background(), StartRequest{CaseID: "C1", TemplateID: "export", WorkflowID: "C1:export:ev1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.ManifestVersion != 1 {
+		t.Errorf("manifest version = %d, want the recorded 1", f.ManifestVersion)
+	}
+	if len(wm.starts) != 1 || wm.starts[0].def.Name != "Export v1" {
+		t.Fatalf("starts = %+v, want one start of the v1 definition", wm.starts)
+	}
+	if got := wm.starts[0].vars[workflow.VarManifestVersion]; got != 1 {
+		t.Errorf("%s = %v, want 1", workflow.VarManifestVersion, got)
+	}
+}
+
+// A caller cannot pick the manifest version through the flow's variables.
+func TestStartFlowOverridesAManifestVersionInVars(t *testing.T) {
+	repo, wm := newMemRepo(), &startCapture{}
+	_, err := newService(t, repo, wm).StartFlow(context.Background(), StartRequest{
+		CaseID: "C1", TemplateID: "notice", Vars: map[string]any{workflow.VarManifestVersion: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := wm.starts[0].vars[workflow.VarManifestVersion]; got != 2 {
+		t.Errorf("%s = %v, want the current 2", workflow.VarManifestVersion, got)
+	}
+}
+
+// A retry of a flow recorded on a manifest that the current one dropped its template from
+// still starts it, on the recorded version.
+func TestStartFlowRetryOfATemplateTheCurrentManifestDropped(t *testing.T) {
+	repo := newMemRepo(Flow{WorkflowID: "C1:legacy:ev1", CaseID: "C1", TemplateID: "legacy", ManifestVersion: 1, Status: StatusStarting})
+	wm := &startCapture{}
+	f, err := newService(t, repo, wm).StartFlow(context.Background(), StartRequest{CaseID: "C1", TemplateID: "legacy", WorkflowID: "C1:legacy:ev1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Status != StatusStarted || len(wm.starts) != 1 || wm.starts[0].def.ID != "legacy" {
+		t.Fatalf("flow %+v, starts %+v; want legacy started", f, wm.starts)
+	}
+
+	// A new flow on that template is refused: the current manifest does not hold it.
+	if _, err := newService(t, newMemRepo(), &startCapture{}).StartFlow(context.Background(), StartRequest{CaseID: "C1", TemplateID: "legacy"}); !errors.Is(err, ErrUnknownTemplate) {
+		t.Fatalf("new flow on a dropped template: err = %v, want ErrUnknownTemplate", err)
 	}
 }

@@ -135,8 +135,8 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 	consignmentID := uuid.NewString()
 	started := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{flows: []caseflow.Flow{
-		{WorkflowID: consignmentID + ":trade-export:u1", CaseID: consignmentID, TemplateID: "trade-export", Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
-		{WorkflowID: consignmentID + ":slpa_payment:u2", CaseID: consignmentID, TemplateID: "slpa_payment", Status: caseflow.StatusStarted, CreatedAt: started, UpdatedAt: started},
+		{WorkflowID: consignmentID + ":trade-export:u1", CaseID: consignmentID, TemplateID: "trade-export", ManifestVersion: 1, Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
+		{WorkflowID: consignmentID + ":slpa_payment:u2", CaseID: consignmentID, TemplateID: "slpa_payment", ManifestVersion: 1, Status: caseflow.StatusStarted, CreatedAt: started, UpdatedAt: started},
 	}}))
 
 	// Row belongs to a company entirely unrelated to whoever's inspecting it — there is no

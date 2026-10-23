@@ -3,7 +3,8 @@
 // standalone workflow started through StartFlow and recorded in case_flows. Nothing
 // stays open in the engine, so a case can take new flows at any time. Every flow is
 // started with the case ID as its engine case (workflow.VarCaseID), so its tasks are
-// grouped under the case.
+// grouped under the case, and with the artifact manifest version current when it was
+// recorded (workflow.VarManifestVersion), so a deploy never changes its templates.
 //
 // The case state follows its flows: FINISHED once every flow has completed,
 // IN_PROGRESS again when a new one starts. It is a label, never a gate: nothing here
@@ -90,23 +91,56 @@ func FlowWorkflowID(caseID, templateID, suffix string) string {
 // to retry: a row left STARTING by a failed start is started again, and a start racing
 // another for the same workflow ID is deduplicated by the engine, which attaches to the
 // running execution instead of starting a second one.
+//
+// The flow runs on the artifact manifest version current when its row was first
+// recorded; a retry after a deploy starts it on that version, not the new current one.
 func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error) {
-	newFlow, def, err := s.prepare(ctx, req)
+	newFlow, err := newFlowRow(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// A retry of a recorded flow starts on the manifest version it was recorded with,
+	// so it is not checked against the current one, which may no longer hold its
+	// template. Only a caller-chosen workflow ID can name a recorded flow.
+	if req.WorkflowID != "" {
+		f, err := s.repo.Get(ctx, newFlow.WorkflowID)
+		switch {
+		case err == nil:
+			return s.resume(ctx, req, f, nil)
+		case !errors.Is(err, ErrFlowNotFound):
+			return nil, fmt.Errorf("caseflow: failed to read flow: %w", err)
+		}
+	}
+
+	// A new flow runs on the current version. Its template is checked before anything is
+	// written, so a request for an unknown template leaves no rows.
+	newFlow.ManifestVersion = s.artifacts.Current()
+	def, err := s.definition(ctx, newFlow.ManifestVersion, req.TemplateID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.repo.Record(ctx, newFlow); err != nil {
 		return nil, fmt.Errorf("caseflow: failed to record flow: %w", err)
 	}
-
 	f, err := s.repo.Get(ctx, newFlow.WorkflowID)
 	if err != nil {
 		return nil, fmt.Errorf("caseflow: failed to read flow: %w", err)
 	}
+	// A concurrent request may have recorded the row first, on another replica's version.
+	if f.ManifestVersion != newFlow.ManifestVersion {
+		return s.resume(ctx, req, f, nil)
+	}
+	return s.resume(ctx, req, f, &def)
+}
+
+// resume starts the recorded flow f unless it has already started. def is f's definition
+// if the caller has loaded it; nil loads it from f's manifest version.
+func (s *Service) resume(ctx context.Context, req StartRequest, f *Flow, def *workflow.WorkflowDefinition) (*Flow, error) {
 	// A workflow ID names one flow for good, so a repeat is a retry only if it agrees
-	// with the recorded row. Checked against the row that won the insert, not before
-	// Record, so concurrent requests cannot race past it. It also means def is the row's
-	// own definition: a retry cannot start a different template under this ID.
+	// with the recorded row. Checked against the row that won the insert, so concurrent
+	// requests cannot race past it. It also means a retry cannot start a different
+	// template under this ID.
 	if f.CaseID != req.CaseID || f.TemplateID != req.TemplateID {
 		return nil, fmt.Errorf("%w: %q is recorded for case %q, template %q",
 			ErrConflict, f.WorkflowID, f.CaseID, f.TemplateID)
@@ -116,8 +150,15 @@ func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error
 	if f.Status != StatusStarting {
 		return f, nil
 	}
+	if def == nil {
+		loaded, err := s.definition(ctx, f.ManifestVersion, f.TemplateID)
+		if err != nil {
+			return nil, err
+		}
+		def = &loaded
+	}
 
-	if err := s.start(ctx, f, def); err != nil {
+	if err := s.start(ctx, f, *def); err != nil {
 		return nil, err
 	}
 	if err := s.repo.MarkStarted(ctx, f.WorkflowID); err != nil {
@@ -127,36 +168,44 @@ func (s *Service) StartFlow(ctx context.Context, req StartRequest) (*Flow, error
 	return f, nil
 }
 
-// prepare validates req and builds the row to record and the definition to start. It
+// newFlowRow validates req and builds the row to record, without a manifest version. It
 // touches nothing, so a request it rejects leaves no rows.
-func (s *Service) prepare(ctx context.Context, req StartRequest) (Flow, workflow.WorkflowDefinition, error) {
-	var def workflow.WorkflowDefinition
+func newFlowRow(req StartRequest) (Flow, error) {
 	if req.CaseID == "" || req.TemplateID == "" {
-		return Flow{}, def, fmt.Errorf("%w: case ID and template are required", ErrInvalidRequest)
+		return Flow{}, fmt.Errorf("%w: case ID and template are required", ErrInvalidRequest)
 	}
-	def, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), req.TemplateID)
-	if err != nil {
-		if errors.Is(err, artifact.ErrNotFound) {
-			return Flow{}, def, fmt.Errorf("%w %q", ErrUnknownTemplate, req.TemplateID)
-		}
-		return Flow{}, def, fmt.Errorf("caseflow: failed to load workflow %q: %w", req.TemplateID, err)
-	}
-
 	workflowID := req.WorkflowID
 	if workflowID == "" {
 		workflowID = FlowWorkflowID(req.CaseID, req.TemplateID, uuid.NewString())
 	}
 	if strings.Contains(workflowID, "/") {
-		return Flow{}, def, fmt.Errorf("%w: workflow ID %q contains \"/\"", ErrInvalidRequest, workflowID)
+		return Flow{}, fmt.Errorf("%w: workflow ID %q contains \"/\"", ErrInvalidRequest, workflowID)
 	}
 
 	var payload json.RawMessage
 	if req.Vars != nil {
+		var err error
 		if payload, err = json.Marshal(req.Vars); err != nil {
-			return Flow{}, def, fmt.Errorf("%w: variables are not JSON: %w", ErrInvalidRequest, err)
+			return Flow{}, fmt.Errorf("%w: variables are not JSON: %w", ErrInvalidRequest, err)
 		}
 	}
-	return Flow{WorkflowID: workflowID, CaseID: req.CaseID, TemplateID: req.TemplateID, Payload: payload}, def, nil
+	return Flow{WorkflowID: workflowID, CaseID: req.CaseID, TemplateID: req.TemplateID, Payload: payload}, nil
+}
+
+// definition loads templateID's workflow definition from manifest version.
+func (s *Service) definition(ctx context.Context, version int, templateID string) (workflow.WorkflowDefinition, error) {
+	reg, err := s.artifacts.Registry(ctx, version)
+	if err != nil {
+		return workflow.WorkflowDefinition{}, fmt.Errorf("caseflow: %w", err)
+	}
+	def, err := workflowdef.Load(ctx, reg, templateID)
+	if err != nil {
+		if errors.Is(err, artifact.ErrNotFound) {
+			return workflow.WorkflowDefinition{}, fmt.Errorf("%w %q", ErrUnknownTemplate, templateID)
+		}
+		return workflow.WorkflowDefinition{}, fmt.Errorf("caseflow: failed to load workflow %q: %w", templateID, err)
+	}
+	return def, nil
 }
 
 // start starts f's workflow. Variables are seeded from the recorded row, not the
@@ -174,9 +223,8 @@ func (s *Service) start(ctx context.Context, f *Flow, def workflow.WorkflowDefin
 	// Every flow of a case shares the case ID as its root, so the engine files every
 	// task it spawns, at any depth, under the case.
 	vars[workflow.VarCaseID] = f.CaseID
-	// Every template the flow reaches, at any depth, resolves through the manifest
-	// version current now, the one its definition was loaded from.
-	vars[workflow.VarManifestVersion] = s.artifacts.Current()
+	// Every template the flow reaches, at any depth, resolves through its recorded version.
+	vars[workflow.VarManifestVersion] = f.ManifestVersion
 
 	if err := s.wm.StartWorkflow(ctx, f.WorkflowID, def, vars); err != nil {
 		return fmt.Errorf("caseflow: failed to start workflow %q: %w", f.WorkflowID, err)
