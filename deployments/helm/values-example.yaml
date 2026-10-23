@@ -159,6 +159,8 @@ backend:
 
     server:
       port: 8080               # keep in step with containerPort above
+      # Audit records (category=audit) are written at info, so warn or error
+      # drops them. Startup logs that at this level.
       logLevel: info
       serviceURL: "https://nsw-api.example.com"
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).
