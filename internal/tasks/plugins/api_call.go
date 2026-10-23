@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/OpenNSW/core/remote"
 )
@@ -26,6 +27,50 @@ type Interpreter interface {
 	// transport/HTTP error (nil on success); resp is the decoded response body,
 	// which the remote client populates even on a 4xx/5xx JSON error.
 	Interpret(callErr error, resp map[string]any) (accepted bool, captured map[string]any)
+}
+
+// DispatchRecorder is implemented by interpreters whose service answers an
+// accepted call later, by a callback, so the task that made the call has to be
+// found again when the answer arrives. RecordDispatch runs once Interpret has
+// accepted the call, with the task's ID, case and parent workflow and the
+// fields Interpret captured.
+//
+// RecordDispatch must be safe to repeat, as an upsert on the call's own id is:
+// a failed write is retried (see recordDispatch), and an error never fails the
+// step, because the service has already accepted the call.
+type DispatchRecorder interface {
+	RecordDispatch(ctx context.Context, taskID, caseID, workflowID string, captured map[string]any) error
+}
+
+// recordDispatchBackoff is how long recordDispatch waits before each retry of
+// a failed write.
+var recordDispatchBackoff = []time.Duration{200 * time.Millisecond, time.Second, 3 * time.Second}
+
+// recordDispatch records an accepted call, retrying a failed write after each
+// of the backoff delays. It does not fail the step even when every attempt
+// fails: failing it would retry the activity and send the call again, which
+// the service takes as a second submission under a new id, while the first
+// id's callbacks still find no record. A dispatch that could not be recorded
+// is logged instead; its callbacks are answered 503 until the service stops
+// retrying, and the task stays waiting for them.
+func recordDispatch(ctx context.Context, rec DispatchRecorder, taskID, caseID, workflowID string, captured map[string]any, backoff []time.Duration) {
+	err := rec.RecordDispatch(ctx, taskID, caseID, workflowID, captured)
+	for i := 0; err != nil && i < len(backoff); i++ {
+		slog.Warn("api_call: failed to record the accepted call; retrying",
+			"taskId", taskID, "attempt", i+1, "retryIn", backoff[i], "error", err)
+		select {
+		case <-ctx.Done():
+			slog.Error("api_call: accepted call not recorded: the step was cancelled",
+				"taskId", taskID, "caseId", caseID, "workflowId", workflowID, "captured", captured, "error", err)
+			return
+		case <-time.After(backoff[i]):
+		}
+		err = rec.RecordDispatch(ctx, taskID, caseID, workflowID, captured)
+	}
+	if err != nil {
+		slog.Error("api_call: accepted call not recorded; its callbacks will not find the task",
+			"taskId", taskID, "caseId", caseID, "workflowId", workflowID, "captured", captured, "error", err)
+	}
 }
 
 // MultipartInterpreter is implemented by interpreters whose service expects a
@@ -263,6 +308,9 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	}
 
 	if accepted {
+		if rec, ok := p.interpreter.(DispatchRecorder); ok {
+			recordDispatch(ctx.Context, rec, ctx.Record.TaskID, ctx.Record.CaseID, ctx.Record.ParentWorkflowID, out, recordDispatchBackoff)
+		}
 		slog.Info("api_call: request accepted", "taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID)
 	} else {
 		slog.Warn("api_call: request not accepted", "taskId", ctx.Record.TaskID, "serviceId", cfg.ServiceID, "callErr", callErr, "result", out)

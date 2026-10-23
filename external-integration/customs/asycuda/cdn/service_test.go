@@ -3,14 +3,12 @@ package cdn
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 type mockRepository struct {
@@ -36,6 +34,11 @@ func (m *mockRepository) Create(ctx context.Context, note *DispatchNote) error {
 
 func (m *mockRepository) Update(ctx context.Context, note *DispatchNote) error {
 	m.updated = note
+	return nil
+}
+
+func (m *mockRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
+	m.byEdgeID[edgeID] = &DispatchNote{EdgeID: edgeID, Status: DispatchNoteStatusSubmitted, CaseID: caseID, WorkflowID: workflowID}
 	return nil
 }
 
@@ -89,7 +92,10 @@ func TestProcessIntegrationResult_FailureWithErrorPersistence(t *testing.T) {
 // An unseen edgeId is the normal case, not an error: the §7.1 submission is
 // recorded in the workflow rather than in this table, so the integration result
 // is the first this service hears of a dispatch note.
-func TestProcessIntegrationResult_CreatesNoteForUnseenEdgeID(t *testing.T) {
+// The dispatch step records a note before SLC Edge can call back, so a result
+// for an edgeId with no row is early: it is retried, and no note is created
+// without the workflow it belongs to.
+func TestProcessIntegrationResult_UnrecordedEdgeIDIsRetried(t *testing.T) {
 	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
 	svc := NewCDNWebhookService(repo, nil, nil)
 
@@ -100,14 +106,11 @@ func TestProcessIntegrationResult_CreatesNoteForUnseenEdgeID(t *testing.T) {
 			CDNRef:     DocumentReference{Year: "2026", Office: "CBEX1", Serial: "C", Number: 28237},
 		},
 	}
-	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), req))
+	err := svc.ProcessIntegrationResult(context.Background(), req)
 
-	require.NotNil(t, repo.created)
+	require.ErrorIs(t, err, ErrDispatchNoteNotRecorded)
+	assert.Nil(t, repo.created)
 	assert.Nil(t, repo.updated)
-	assert.Equal(t, "edge-unseen", repo.created.EdgeID)
-	assert.NotEmpty(t, repo.created.ID)
-	assert.Equal(t, DispatchNoteStatusIntegrated, repo.created.Status)
-	assert.Equal(t, 28237, repo.created.CDNNumber)
 }
 
 func TestProcessAcknowledgment_Success(t *testing.T) {
@@ -152,17 +155,38 @@ func TestProcessAcknowledgment_InvalidState(t *testing.T) {
 
 // setupTestDB builds a gorm handle over a stubbed Postgres connection, matching
 // the pattern used by the service tests elsewhere in this repo.
-func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
+// fakeTasks stands in for core's task store: the tasks of each case.
+type fakeTasks map[string][]store.TaskRecord
 
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		Conn:       mockDB,
-		DriverName: "postgres",
-	}), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	require.NoError(t, err)
+func (f fakeTasks) TasksOfCase(_ context.Context, caseID string) ([]store.TaskRecord, error) {
+	return f[caseID], nil
+}
 
-	return db, sqlMock
+// failingTasks is a task store whose load fails.
+type failingTasks struct{}
+
+func (failingTasks) TasksOfCase(context.Context, string) ([]store.TaskRecord, error) {
+	return nil, errTaskStore
+}
+
+var errTaskStore = errors.New("task store: connection refused")
+
+// dispatchedNote is a dispatch note as its dispatch left it: SLC Edge accepted
+// it as edgeID from workflow wf-branch-0 of case case-1.
+func dispatchedNote(edgeID string) *DispatchNote {
+	return &DispatchNote{ID: "note-" + edgeID, EdgeID: edgeID, Status: DispatchNoteStatusSubmitted, CaseID: "case-1", WorkflowID: "wf-branch-0"}
+}
+
+// parkedIntegrationWait is case-1 with wf-branch-0's CDN task parked on the
+// integration wait, beside another branch's task parked on the same template,
+// which must not be resumed.
+func parkedIntegrationWait() fakeTasks {
+	return fakeTasks{"case-1": {
+		{TaskID: "create_cdn:other", ActiveStepID: "step-other", ParentWorkflowID: "wf-branch-1", CaseID: "case-1",
+			ActiveTaskTemplateID: integrationWaitTemplateID, State: "QUEUED_EXTERNALLY"},
+		{TaskID: "create_cdn:abc", ActiveStepID: "step-abc", ParentWorkflowID: "wf-branch-0", CaseID: "case-1",
+			ActiveTaskTemplateID: integrationWaitTemplateID, State: "QUEUED_EXTERNALLY"},
+	}}
 }
 
 // resumeRecorder captures the task steps a callback completes.
@@ -234,19 +258,12 @@ func TestStoredResult_PrefersTheRecordedReference(t *testing.T) {
 }
 
 // The whole point of the §7.2 callback is that it releases the task parked on the
-// dispatch note: the workflow is located by the edgeId the dispatch step
-// recorded, then the task parked against the integration wait is completed.
+// dispatch note: the note names the workflow its dispatch was made from, and the
+// task that workflow parked on the integration wait is completed.
 func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
 	recorder := &resumeRecorder{}
-	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
-	svc := NewCDNWebhookService(repo, db, recorder)
-
-	// 1. the workflow carrying this edgeId, 2. the task parked inside it.
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("create_cdn:abc", "step-abc"))
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -266,21 +283,15 @@ func TestProcessIntegrationResult_ResumesTheParkedIntegrationWait(t *testing.T) 
 	// The workflow is handed the registered reference, which is what the trader
 	// sees and what the acknowledgment is later correlated by.
 	assert.Equal(t, "CBEX1/2026/C/28242", payload["cdn_number"])
-	assert.NoError(t, sqlMock.ExpectationsWereMet())
+	assert.NotContains(t, recorder.completed, "create_cdn:other", "another branch's wait must not be resumed")
 }
 
 // A failed integration releases the same wait, but carries the reasons instead
 // of a reference so the trader is returned to the form knowing why.
 func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
-	db, sqlMock := setupTestDB(t)
 	recorder := &resumeRecorder{}
-	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
-	svc := NewCDNWebhookService(repo, db, recorder)
-
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("wf-branch-0"))
-	sqlMock.ExpectQuery(`task_records_v2`).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("create_cdn:abc", "step-abc"))
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-2": dispatchedNote("edge-2")}}
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
 
 	req := CDNIntegrationResultRequest{
 		Event: "CDN_INTEGRATED",
@@ -297,5 +308,153 @@ func TestProcessIntegrationResult_ResumesWithFailureReasons(t *testing.T) {
 	assert.Equal(t, false, payload["integrated"])
 	assert.NotContains(t, payload, "cdn_number")
 	assert.Contains(t, payload["error"], "Missing office Code")
-	assert.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+func integratedResult(edgeID string) CDNIntegrationResultRequest {
+	return CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED",
+		Payload: integrationResultPayload{
+			EdgeID:     edgeID,
+			Integrated: true,
+			CDNRef:     DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28242},
+		},
+	}
+}
+
+// A first delivery whose task has not parked yet is an error, so SLC Edge
+// retries it (§2) rather than being told it was handled.
+func TestProcessIntegrationResult_TaskNotParkedYetIsRetried(t *testing.T) {
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+	svc := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+
+	err := svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1"))
+
+	require.ErrorIs(t, err, ErrTaskNotParked)
+	assert.Empty(t, recorder.completed)
+	assert.Nil(t, repo.updated, "the result must not be recorded, or the retry is a redelivery")
+}
+
+// The task is released before the result is recorded, so a retry that finds
+// the task parked completes it, and only then is the result recorded.
+func TestProcessIntegrationResult_RetryAfterTheTaskParksCompletesIt(t *testing.T) {
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	require.ErrorIs(t, early.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")), ErrTaskNotParked)
+	assert.Equal(t, DispatchNoteStatusSubmitted, repo.byEdgeID["edge-1"].Status)
+
+	retry := NewCDNWebhookService(repo, parkedIntegrationWait(), recorder)
+	require.NoError(t, retry.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")))
+
+	assert.Contains(t, recorder.completed, "create_cdn:abc")
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusIntegrated, repo.updated.Status)
+}
+
+// failingCompleter is a task manager whose completion fails.
+type failingCompleter struct{}
+
+func (failingCompleter) CompleteTaskStep(context.Context, string, string, map[string]any) error {
+	return errCompletion
+}
+
+var errCompletion = errors.New("complete task step: workflow unavailable")
+
+// A completion that fails leaves the note as it was, so the retry resumes it.
+func TestProcessIntegrationResult_FailedCompletionLeavesTheNote(t *testing.T) {
+	for name, req := range map[string]CDNIntegrationResultRequest{
+		"integrated": integratedResult("edge-1"),
+		"failed": {Payload: integrationResultPayload{
+			EdgeID: "edge-1", Errors: json.RawMessage(`{"code":"ERR_VAL_01"}`),
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": dispatchedNote("edge-1")}}
+			svc := NewCDNWebhookService(repo, parkedIntegrationWait(), failingCompleter{})
+
+			err := svc.ProcessIntegrationResult(context.Background(), req)
+
+			require.ErrorIs(t, err, errCompletion)
+			assert.Nil(t, repo.updated)
+			assert.Equal(t, DispatchNoteStatusSubmitted, repo.byEdgeID["edge-1"].Status)
+		})
+	}
+}
+
+// integratedNote is a note whose integration result was recorded, with the
+// acknowledgment wait of case-1's wf-branch-0 to come.
+func integratedNote() *DispatchNote {
+	note := dispatchedNote("edge-1")
+	note.Status = DispatchNoteStatusIntegrated
+	note.CDNOffice, note.CDNYear, note.CDNSerial, note.CDNNumber = "CBEX1", "2026", "C", 28242
+	return note
+}
+
+func acknowledgment() CDNAcknowledgmentRequest {
+	return CDNAcknowledgmentRequest{
+		Event:   "CDN_ACKNOWLEDGED",
+		Payload: acknowledgmentPayload{CDNRef: DocumentReference{Office: "CBEX1", Year: "2026", Serial: "C", Number: 28242}},
+	}
+}
+
+// An acknowledgment whose wait has not parked yet is retried, and the note
+// stays INTEGRATED so the retry can still resume the wait.
+func TestProcessAcknowledgment_RetryAfterTheTaskParksCompletesIt(t *testing.T) {
+	note := integratedNote()
+	recorder := &resumeRecorder{}
+	repo := &mockRepository{byCDNRef: map[string]*DispatchNote{"2026-CBEX1-C": note}}
+
+	early := NewCDNWebhookService(repo, fakeTasks{}, recorder)
+	require.ErrorIs(t, early.ProcessAcknowledgment(context.Background(), acknowledgment()), ErrTaskNotParked)
+	assert.Nil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusIntegrated, note.Status)
+
+	parked := fakeTasks{"case-1": {{TaskID: "create_cdn:abc", ActiveStepID: "step-ack", ParentWorkflowID: "wf-branch-0",
+		CaseID: "case-1", ActiveTaskTemplateID: acknowledgmentWaitTemplateID, State: "QUEUED_EXTERNALLY"}}}
+	retry := NewCDNWebhookService(repo, parked, recorder)
+	require.NoError(t, retry.ProcessAcknowledgment(context.Background(), acknowledgment()))
+
+	assert.Equal(t, "step-ack", recorder.steps["create_cdn:abc"])
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusAcknowledged, repo.updated.Status)
+}
+
+// A redelivery that finds nothing parked is acknowledged: the first delivery
+// resumed the task.
+func TestProcessIntegrationResult_RedeliveryWithNothingParkedIsAcknowledged(t *testing.T) {
+	note := dispatchedNote("edge-1")
+	note.Status = DispatchNoteStatusIntegrated
+	note.CDNOffice, note.CDNYear, note.CDNSerial, note.CDNNumber = "CBEX1", "2026", "C", 28242
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": note}}
+	svc := NewCDNWebhookService(repo, fakeTasks{}, &resumeRecorder{})
+
+	require.NoError(t, svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1")))
+}
+
+// Tasks that could not be read are an error on a redelivery too: whether the
+// task is still parked is not known.
+func TestProcessIntegrationResult_TaskStoreFailureIsAnError(t *testing.T) {
+	for name, note := range map[string]*DispatchNote{
+		"first delivery": dispatchedNote("edge-1"),
+		"redelivery": func() *DispatchNote {
+			n := dispatchedNote("edge-1")
+			n.Status = DispatchNoteStatusIntegrated
+			return n
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := &resumeRecorder{}
+			repo := &mockRepository{byEdgeID: map[string]*DispatchNote{"edge-1": note}}
+			svc := NewCDNWebhookService(repo, failingTasks{}, recorder)
+
+			err := svc.ProcessIntegrationResult(context.Background(), integratedResult("edge-1"))
+
+			require.ErrorIs(t, err, errTaskStore)
+			assert.NotErrorIs(t, err, ErrTaskNotParked)
+			assert.Empty(t, recorder.completed)
+			assert.Nil(t, repo.updated)
+		})
+	}
 }

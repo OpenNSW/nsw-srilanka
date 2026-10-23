@@ -392,6 +392,55 @@ func TestSLCEHandler_ErrorResponses(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
+	t.Run("Integration result before its submission was recorded (503 Service Unavailable)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
+		cusdecSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cusdec.ErrDeclarationNotRecorded)
+		cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cdn.ErrDispatchNoteNotRecorded)
+
+		for name, payload := range map[string]string{
+			"CusDec": `{"eventType": "CUSDEC_INTEGRATED", "processedAt": "2026-07-23T10:00:00Z", "payload": {
+				"edgeId": "edge-early", "integrated": true, "totalAssessedAmount": 1244, "amountPayable": 1244,
+				"cusDecRef": {"year": "2026", "office": "CBEX1", "serial": "E", "number": 43254}}}`,
+			"CDN": `{"eventType": "CDN_INTEGRATED", "processedAt": "2026-07-23T10:00:00Z", "payload": {
+				"edgeId": "edge-early", "integrated": true,
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 28237}}}`,
+		} {
+			req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.HandleWebhook(w, req)
+
+			assert.Equal(t, http.StatusServiceUnavailable, w.Code, name)
+		}
+	})
+
+	t.Run("CDN callback before its task was waiting (503 Service Unavailable)", func(t *testing.T) {
+		cusdecSvc := new(mockCusdecService)
+		cdnSvc := new(mockCDNService)
+		handler := NewHandler(cusdecSvc, cdnSvc)
+		cdnSvc.On("ProcessIntegrationResult", mock.Anything, mock.Anything).Return(cdn.ErrTaskNotParked)
+		cdnSvc.On("ProcessAcknowledgment", mock.Anything, mock.Anything).Return(cdn.ErrTaskNotParked)
+
+		for name, payload := range map[string]string{
+			"integration result": `{"eventType": "CDN_INTEGRATED", "processedAt": "2026-07-23T10:00:00Z", "payload": {
+				"edgeId": "edge-early", "integrated": true,
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 28237}}}`,
+			"acknowledgment": `{"eventType": "CDN_ACKNOWLEDGED", "processedAt": "2026-07-23T10:00:00Z", "payload": {
+				"cdnRef": {"year": "2026", "office": "CBEX1", "serial": "C", "number": 28237}}}`,
+		} {
+			req := httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(payload))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.HandleWebhook(w, req)
+
+			assert.Equal(t, http.StatusServiceUnavailable, w.Code, name)
+		}
+	})
+
 	t.Run("Cusdec not found by reference (503 Service Unavailable)", func(t *testing.T) {
 		cusdecSvc := new(mockCusdecService)
 		cdnSvc := new(mockCDNService)

@@ -84,7 +84,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	meta, err := h.svc.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
 	if err != nil {
-		h.writeServiceError(w, r, err, "failed to prepare upload")
+		h.writeServiceError(w, r, err, "failed to prepare upload", req.MimeType)
 		return
 	}
 	ref, err := h.refs.Issue(p, meta.Key, fileaccess.UploadScopes(p)...)
@@ -136,7 +136,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 	dl, err := downloadOf(r.Context(), h.svc, value)
 	if err != nil {
-		h.writeServiceError(w, r, err, "failed to generate access")
+		h.writeServiceError(w, r, err, "failed to generate access", "")
 		return
 	}
 	httputil.JSON(w, http.StatusOK, dl)
@@ -194,8 +194,10 @@ func mimeTypeOf(ext string) string {
 }
 
 // writeServiceError answers a failed Service call the way core/storage's and
-// the proxy's own handlers do.
-func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback string) {
+// the proxy's own handlers do. mimeType is the type an upload asked for, named
+// when it is refused so the uploader can see what their file was sent as; it
+// is empty for a download.
+func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback, mimeType string) {
 	var tooLarge *corestorage.FileTooLargeError
 	switch {
 	case errors.Is(err, corestorage.ErrInvalidKey):
@@ -205,7 +207,11 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 	case errors.As(err, &tooLarge):
 		httputil.Error(w, r, http.StatusBadRequest, fmt.Sprintf("file size exceeds %s limit", formatSize(tooLarge.Limit)))
 	case errors.Is(err, corestorage.ErrContentTypeNotAllowed):
-		httputil.Error(w, r, http.StatusUnsupportedMediaType, "invalid or prohibited file type")
+		message := "invalid or prohibited file type"
+		if mimeType != "" {
+			message += ": " + mimeType
+		}
+		httputil.Error(w, r, http.StatusUnsupportedMediaType, message)
 	case isUpstreamFailure(err):
 		writeProxyError(w, r, err, fallback)
 	default:

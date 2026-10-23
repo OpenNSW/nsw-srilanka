@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/google/uuid"
-	"gorm.io/gorm"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 )
 
 // CDNWebhookService defines the use-case layer for processing asynchronous
@@ -27,16 +26,16 @@ type TaskCompleter interface {
 
 type cdnWebhookService struct {
 	repo        DispatchNoteRepository
-	db          *gorm.DB
+	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
 }
 
-// NewCDNWebhookService creates a new CDNWebhookService. db and taskManager carry
-// the workflow side: the callbacks resume the task parked against the dispatch
-// note. Both may be nil, in which case callbacks are recorded but no workflow is
-// advanced.
-func NewCDNWebhookService(repo DispatchNoteRepository, db *gorm.DB, taskManager TaskCompleter) CDNWebhookService {
-	return &cdnWebhookService{repo: repo, db: db, taskManager: taskManager}
+// NewCDNWebhookService creates a new CDNWebhookService. tasks (core's task
+// store) and taskManager carry the workflow side: the callbacks resume the task
+// parked by the workflow the dispatch note recorded. Both may be nil, in which
+// case callbacks are recorded but no workflow is advanced.
+func NewCDNWebhookService(repo DispatchNoteRepository, tasks parkedtask.Tasks, taskManager TaskCompleter) CDNWebhookService {
+	return &cdnWebhookService{repo: repo, tasks: tasks, taskManager: taskManager}
 }
 
 func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CDNIntegrationResultRequest) error {
@@ -51,18 +50,11 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		return fmt.Errorf("failed to retrieve dispatch note by edgeId %s: %w", req.Payload.EdgeID, err)
 	}
 
-	// The §7.1 acknowledgement is recorded in the workflow, not in this table:
-	// the dispatch step is fire-and-forget from the plugin's point of view, so
-	// the first this service hears of an edgeId is the integration result. A row
-	// is therefore created on demand rather than looked up, which is also what
-	// the CusDec side does with its declarations.
-	isNew := note == nil
-	if isNew {
-		note = &DispatchNote{
-			ID:     uuid.NewString(),
-			EdgeID: req.Payload.EdgeID,
-			Status: DispatchNoteStatusSubmitted,
-		}
+	// The dispatch step records the note as soon as SLC Edge accepts it, before
+	// SLC Edge can call back, so a result for an edgeId with no row is early, not
+	// new: it is retried rather than recorded without its workflow.
+	if note == nil {
+		return fmt.Errorf("edgeId %s: %w", req.Payload.EdgeID, ErrDispatchNoteNotRecorded)
 	}
 
 	// A note already in a terminal state is not recorded again — but the parked
@@ -73,12 +65,20 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	if note.Status == DispatchNoteStatusIntegrated || note.Status == DispatchNoteStatusAcknowledged {
 		slog.InfoContext(ctx, "dispatch note already recorded; releasing any task still parked on it",
 			"edge_id", req.Payload.EdgeID, "status", note.Status)
-		return s.resumeIntegrationWait(ctx, storedResult(req, note), true)
+		return s.resumeIntegrationWait(ctx, note, storedResult(req, note), true)
+	}
+	if !req.Payload.Integrated && note.Status == DispatchNoteStatusFailed {
+		slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edge_id", req.Payload.EdgeID)
+		return s.resumeIntegrationWait(ctx, note, req, true)
 	}
 
-	save := s.repo.Update
-	if isNew {
-		save = s.repo.Create
+	// The trader's CDN task is parked on the integration wait; releasing it
+	// completes the dispatch note step and opens the acknowledgment wait. It is
+	// released before the result is recorded: once recorded, SLC Edge's retry is
+	// a redelivery, so a lookup that fails or a task not parked yet must leave
+	// the note as it was for the retry to work.
+	if err := s.resumeIntegrationWait(ctx, note, req, false); err != nil {
+		return err
 	}
 
 	if req.Payload.Integrated {
@@ -88,7 +88,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		note.CDNSerial = req.Payload.CDNRef.Serial
 		note.CDNNumber = req.Payload.CDNRef.Number
 
-		if err := save(ctx, note); err != nil {
+		if err := s.repo.Update(ctx, note); err != nil {
 			return fmt.Errorf("failed to record dispatch note as INTEGRATED: %w", err)
 		}
 
@@ -97,14 +97,9 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 			"cdn_ref", req.Payload.CDNRef,
 		)
 	} else {
-		if note.Status == DispatchNoteStatusFailed {
-			slog.InfoContext(ctx, "dispatch note already failed; releasing any task still parked on it", "edge_id", req.Payload.EdgeID)
-			return s.resumeIntegrationWait(ctx, req, true)
-		}
-
 		note.Status = DispatchNoteStatusFailed
 		note.Errors = req.Payload.Errors
-		if err := save(ctx, note); err != nil {
+		if err := s.repo.Update(ctx, note); err != nil {
 			return fmt.Errorf("failed to record dispatch note as FAILED: %w", err)
 		}
 
@@ -113,10 +108,7 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 			"errors", string(req.Payload.Errors),
 		)
 	}
-
-	// The trader's CDN task is parked on the integration wait; releasing it
-	// completes the dispatch note step and opens the acknowledgment wait.
-	return s.resumeIntegrationWait(ctx, req, false)
+	return nil
 }
 
 // storedResult re-points an already-recorded result at the reference actually on
@@ -166,6 +158,13 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 		return fmt.Errorf("invalid state transition: cannot acknowledge dispatch note in status %s", note.Status)
 	}
 
+	// Released before the acknowledgment is recorded, for the same reason as the
+	// integration wait: a recorded acknowledgment makes SLC Edge's retry a
+	// redelivery.
+	if err := s.resumeAcknowledgmentWait(ctx, note, false); err != nil {
+		return err
+	}
+
 	note.Status = DispatchNoteStatusAcknowledged
 	if err := s.repo.Update(ctx, note); err != nil {
 		return fmt.Errorf("failed to update dispatch note to ACKNOWLEDGED: %w", err)
@@ -175,6 +174,5 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 		"id", note.ID,
 		"cdn_ref", ref,
 	)
-
-	return s.resumeAcknowledgmentWait(ctx, note, false)
+	return nil
 }
