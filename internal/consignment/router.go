@@ -99,44 +99,25 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 	traderID := p.UserID
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, defaultExportWorkflowTemplateID)
 	if err != nil {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionCreate,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": err.Error(),
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, "", true, map[string]any{
+			"error": err.Error(),
+		}))
 		httputil.InternalServerError(w, r, "failed to create and start consignment", err)
 		return
 	}
 	if consignment == nil {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionCreate,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": "consignment is nil after successful creation",
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, "", true, map[string]any{
+			"error": "consignment is nil after successful creation",
+		}))
 		httputil.InternalServerError(w, r, "consignment is nil after successful creation", nil)
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionCreate,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignment.ID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"flow":            consignment.Flow,
-			"traderCompanyId": consignment.TraderCompanyID,
-			"chaCompanyId":    consignment.ChaCompanyID,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionCreate, consignment.ID, false, map[string]any{
+		"flow":            consignment.Flow,
+		"traderCompanyId": consignment.TraderCompanyID,
+		"chaCompanyId":    consignment.ChaCompanyID,
+	}))
 	httputil.JSON(w, http.StatusCreated, consignment)
 }
 
@@ -207,16 +188,10 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(p.Roles, requiredTokenRole) {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionRead,
-			TargetType: nswaudit.TargetConsignment,
-			Failure:    true,
-			Metadata: map[string]any{
-				"error": "role not held",
-				"role":  role,
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, "", true, map[string]any{
+			"error": "role not held",
+			"role":  role,
+		}))
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return
 	}
@@ -224,16 +199,10 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
-			c.auditEvent(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventConsignment,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetConsignment,
-				Failure:    true,
-				Metadata: map[string]any{
-					"error": "company not found",
-					"role":  role,
-				},
-			})
+			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, "", true, map[string]any{
+				"error": "company not found",
+				"role":  role,
+			}))
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
@@ -288,17 +257,10 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccessDenied):
-			c.auditEvent(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventConsignment,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetConsignment,
-				TargetID:   consignmentID,
-				Failure:    true,
-				Metadata: map[string]any{
-					"error":           "consignment access denied",
-					"callerCompanyId": userCompany.ID,
-				},
-			})
+			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, true, map[string]any{
+				"error":           "consignment access denied",
+				"callerCompanyId": userCompany.ID,
+			}))
 			// Respond with ErrConsignmentNotFound's text, not ErrAccessDenied's, and
 			// 404 (not 403), so a denied read — whether cross-company or company-matched
 			// with the wrong role — is indistinguishable from a non-existent consignment
@@ -314,16 +276,9 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"callerCompanyId": userCompany.ID,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
+		"callerCompanyId": userCompany.ID,
+	}))
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
@@ -383,14 +338,7 @@ func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Reque
 	auditEvent := func(failure bool, metadata map[string]any) {
 		metadata["view"] = "start-flow"
 		metadata["templateId"] = req.TemplateID
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionUpdate,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   consignmentID,
-			Failure:    failure,
-			Metadata:   metadata,
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, consignmentID, failure, metadata))
 	}
 
 	flow, err := c.cs.StartConsignmentFlow(ctx, consignmentID, req.TemplateID, userCompany.ID, p.Roles)
@@ -441,13 +389,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Metadata:   map[string]any{"view": "admin"},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{"view": "admin"}))
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
@@ -470,17 +412,10 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 	dto, err := c.cs.GetAgencySummary(ctx, consignmentID)
 	if err != nil {
 		if errors.Is(err, ErrConsignmentNotFound) {
-			c.auditEvent(ctx, nswaudit.Event{
-				EventType:  nswaudit.EventConsignment,
-				Action:     nswaudit.ActionRead,
-				TargetType: nswaudit.TargetConsignment,
-				TargetID:   consignmentID,
-				Failure:    true,
-				Metadata: map[string]any{
-					"view":  "agency",
-					"error": errConsignmentNotFound,
-				},
-			})
+			c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, true, map[string]any{
+				"view":  "agency",
+				"error": errConsignmentNotFound,
+			}))
 			httputil.Error(w, r, http.StatusNotFound, errConsignmentNotFound)
 			return
 		}
@@ -488,16 +423,9 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   consignmentID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view": "agency",
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, consignmentID, false, map[string]any{
+		"view": "agency",
+	}))
 	httputil.JSON(w, http.StatusOK, dto)
 }
 
@@ -559,16 +487,9 @@ func (c *Router) handleEngineStatus(
 	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
 	// TaskRecord.CaseID) that doesn't exist yet; see the issue for why the obvious
 	// GlobalVariables[VarCaseID] shortcut doesn't work here.
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionRead,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   id,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view": view,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionRead, id, false, map[string]any{
+		"view": view,
+	}))
 	httputil.JSON(w, http.StatusOK, status)
 }
 
@@ -664,19 +585,12 @@ func (c *Router) handleResolveAdminIntervention(
 	}
 
 	auditFail := func(errMsg string) {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionUpdate,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   workflowID,
-			Failure:    true,
-			Metadata: map[string]any{
-				"view":   view,
-				"stepId": stepID,
-				"action": req.Action,
-				"error":  errMsg,
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, true, map[string]any{
+			"view":   view,
+			"stepId": stepID,
+			"action": req.Action,
+			"error":  errMsg,
+		}))
 	}
 
 	sig := workflow.AdminResolutionSignal{
@@ -704,20 +618,13 @@ func (c *Router) handleResolveAdminIntervention(
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionUpdate,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   workflowID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view":   view,
-			"stepId": stepID,
-			"nodeId": nodeID,
-			"action": req.Action,
-			"reason": req.Reason,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, false, map[string]any{
+		"view":   view,
+		"stepId": stepID,
+		"nodeId": nodeID,
+		"action": req.Action,
+		"reason": req.Reason,
+	}))
 	w.WriteHeader(http.StatusNoContent)
 }
 
