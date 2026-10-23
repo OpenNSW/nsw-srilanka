@@ -32,11 +32,13 @@ export function ConsignmentTasks({
 
   const finished = consignmentState === 'FINISHED'
   const activeCount = groups.needsAction.length + groups.waiting.length
-  const footer = finished
+  // Where the actions would be, the tab says why there are none; under a list
+  // of actions, that more can come is only a footnote.
+  const status = finished
     ? t('workflow.consignmentComplete')
     : groups.needsAction.length === 0
       ? `${t('workflow.nothingNeeded')} ${t('workflow.newStepsAppear')}`
-      : t('workflow.newStepsAppear')
+      : undefined
 
   return (
     <Tabs.Root defaultValue={finished ? 'done' : 'active'}>
@@ -50,6 +52,7 @@ export function ConsignmentTasks({
       </Tabs.List>
 
       <Tabs.Content value="active" className="pt-5">
+        {status && <p className="mb-6 text-sm text-foreground-muted">{status}</p>}
         {groups.needsAction.length > 0 && (
           <section className="mb-6">
             <h2 className="mb-3 text-xs font-semibold tracking-wide text-foreground-muted uppercase">
@@ -74,7 +77,7 @@ export function ConsignmentTasks({
             </ul>
           </section>
         )}
-        <p className="text-sm text-foreground-muted">{footer}</p>
+        {!status && <p className="text-sm text-foreground-muted">{t('workflow.newStepsAppear')}</p>}
       </Tabs.Content>
 
       <Tabs.Content value="done" className="pt-5">
