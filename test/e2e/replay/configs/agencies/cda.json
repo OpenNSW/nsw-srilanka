@@ -1,0 +1,23 @@
+{
+  "id": "cda",
+  "identity": {
+    "clientID": "CDA_TO_NSW",
+    "roles": ["AgencyM2M"],
+    "scopes": [
+      "nsw:task:write",
+      "nsw:consignment:read",
+      "nsw:storage:read",
+      "nsw:storage:write"
+    ]
+  },
+  "inbound": {
+    "endpoint": "POST /api/v1/inject",
+    "taskIDField": "taskId",
+    "callbackTokenField": "callbackToken"
+  },
+  "outbound": {
+    "callbackPath": "/api/v1/callbacks/{callbackToken}",
+    "commandField": "command",
+    "payloadField": "payload"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "name": "cda_application_approve",
+  "steps": [
+    {
+      "name": "trader creates consignment",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/consignments",
+        "expectStatus": 201,
+        "extract": { "consignmentId": "id" }
+      }
+    },
+    {
+      "name": "wait for Initialize Consignment task",
+      "wait": { "node": "Initialize Consignment", "state": "IN_PROGRESS", "into": "initTask", "timeout": "45s" }
+    },
+    {
+      "name": "trader reads the step initTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{initTask}}",
+        "extract": { "initTaskStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader initializes consignment (name + CHA)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{initTask}}/steps/{{initTaskStep}}",
+        "body": { "command": "submit", "payload": { "consignment_name": "E2E CDA Consignment", "cha_company_id": "adam-pvt-ltd" } },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for HS-code selection task",
+      "wait": { "node": "Select HS Codes", "state": "IN_PROGRESS", "into": "hsTask", "timeout": "45s" }
+    },
+    {
+      "name": "cha reads the step hsTask is on",
+      "request": {
+        "actor": "cha",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{hsTask}}",
+        "extract": { "hsTaskStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "cha selects the CDA coconut-certificate HS code",
+      "request": {
+        "actor": "cha",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{hsTask}}/steps/{{hsTaskStep}}",
+        "body": { "command": "submit", "payload": { "hs_codes": ["cda-certificate-reg"] } },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for CDA application task (agency split fired)",
+      "wait": { "node": "Submit Application", "state": "IN_PROGRESS", "into": "cdaApp", "timeout": "60s" }
+    },
+    {
+      "name": "trader reads the step cdaApp is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{cdaApp}}",
+        "extract": { "cdaAppStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader submits the CDA application (DC payment path)",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{cdaApp}}/steps/{{cdaAppStep}}",
+        "body": {
+          "command": "submit",
+          "payload": {
+            "exporter_details": "EXP-CDA-001",
+            "cusdec_number": "CUSDEC-2026-904821",
+            "relates_to_previous_approval": false,
+            "product_type_dc": true,
+            "product_type_value_added_dc": false,
+            "dc_grades": [
+              {
+                "dc_grade": "FINE",
+                "number_of_bags": 500,
+                "weight_of_bag": 25,
+                "total_weight": 12500
+              }
+            ],
+            "port_of_discharge": "Port of Rotterdam",
+            "final_destination": "Rotterdam, Netherlands",
+            "container_filling_status": "full",
+            "cert_type": "PS",
+            "uploaded_dc_bags_details": "s3://e2e/cda-dc-bags.xlsx"
+          }
+        },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "wait for CDA application to reach officer verification",
+      "wait": { "node": "Submit Application", "state": "QUEUED_EXTERNALLY", "into": "cdaApp", "timeout": "60s" }
+    },
+    {
+      "name": "CDA agency approves the application",
+      "callback": {
+        "taskVar": "cdaApp",
+        "command": "approve",
+        "content": {
+          "verification_outcome": "approve"
+        },
+        "timeout": "60s"
+      }
+    },
+    {
+      "name": "wait for CDA pay-fee task (DC path advanced)",
+      "wait": { "node": "Pay Application Fee", "state": "IN_PROGRESS", "into": "payTask", "timeout": "60s" }
+    },
+    {
+      "name": "trader reads the step payTask is on",
+      "request": {
+        "actor": "trader",
+        "method": "GET",
+        "path": "/api/v1/tasks/{{payTask}}",
+        "extract": { "payTaskStep": "step_id" },
+        "retry": "30s"
+      }
+    },
+    {
+      "name": "trader selects the payment method",
+      "request": {
+        "actor": "trader",
+        "method": "POST",
+        "path": "/api/v1/tasks/{{payTask}}/steps/{{payTaskStep}}",
+        "body": { "command": "submit", "payload": { "selected_method": "govpay" } },
+        "expectStatus": 204
+      }
+    },
+    {
+      "name": "payment gateway confirms the application fee",
+      "pay": { "taskVar": "payTask", "method": "govpay", "status": "paid", "timeout": "60s" }
+    },
+    {
+      "name": "wait for the application fee to be paid (workflow advanced past pay-fee)",
+      "wait": { "node": "Pay Application Fee", "state": "COMPLETED", "timeout": "60s" }
+    }
+  ]
+}
