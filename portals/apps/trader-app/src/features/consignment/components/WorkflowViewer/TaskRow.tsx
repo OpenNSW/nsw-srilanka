@@ -15,8 +15,7 @@ const STATUS_COLORS: Record<WorkflowNodeState, 'green' | 'blue' | 'orange' | 'gr
   FAILED: 'red',
 }
 
-// One task of a consignment. A task that needs action is a highlighted card
-// with the page's main button; the others are plain rows that can be opened.
+// One task of a consignment, as a card that opens it.
 export function TaskRow({
   step,
   consignmentId,
@@ -47,49 +46,44 @@ export function TaskRow({
     </p>
   )
 
-  if (needsAction) {
-    return (
-      <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-info/40 bg-info-subtle/40 px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-foreground">{name}</span>
-            {status}
-          </div>
-          {step.workflowNodeTemplate.description && (
-            <p className="mt-1 text-sm text-foreground-muted">{step.workflowNodeTemplate.description}</p>
-          )}
-          {note}
+  // Every task is the same card; one that needs action is tinted and holds
+  // the page's main button.
+  return (
+    <li
+      className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+        needsAction ? 'border-info/40 bg-info-subtle/40' : 'border-border bg-app-surface'
+      }`}
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-foreground">{name}</span>
+          {status}
         </div>
-        {step.state !== 'LOCKED' && (
+        {step.workflowNodeTemplate.description && (
+          <p className="mt-1 text-sm text-foreground-muted">{step.workflowNodeTemplate.description}</p>
+        )}
+        {when && <p className="mt-0.5 text-xs text-foreground-muted">{when}</p>}
+        {note}
+      </div>
+      {needsAction ? (
+        step.state !== 'LOCKED' && (
           <Button asChild size="2">
             <Link to={href} aria-label={t('workflow.continueTask', { name })}>
               {t('workflow.continue')}
               <ChevronRightIcon aria-hidden />
             </Link>
           </Button>
-        )}
-      </li>
-    )
-  }
-
-  return (
-    <li className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-1 py-3 last:border-b-0">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-foreground">{name}</span>
-          {status}
-        </div>
-        {when && <p className="mt-0.5 text-xs text-foreground-muted">{when}</p>}
-        {note}
-      </div>
-      <Link
-        to={href}
-        aria-label={t('workflow.viewTask', { name })}
-        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-      >
-        {t('workflow.view')}
-        <ChevronRightIcon aria-hidden />
-      </Link>
+        )
+      ) : (
+        <Link
+          to={href}
+          aria-label={t('workflow.viewTask', { name })}
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+        >
+          {t('workflow.view')}
+          <ChevronRightIcon aria-hidden />
+        </Link>
+      )}
     </li>
   )
 }

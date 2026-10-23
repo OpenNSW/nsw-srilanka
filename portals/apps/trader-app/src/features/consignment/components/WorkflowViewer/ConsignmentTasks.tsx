@@ -88,7 +88,7 @@ export function ConsignmentTasks({
               title={t('workflow.waitingOnOthers')}
               count={groups.waiting.length}
             />
-            <ul className="rounded-xl bg-app-surface-muted px-4">
+            <ul className="space-y-3">
               {groups.waiting.map((step) => (
                 <TaskRow key={step.id} step={step} consignmentId={consignmentId} />
               ))}
@@ -101,7 +101,7 @@ export function ConsignmentTasks({
       <Tabs.Content value="done" className="pt-5">
         {finished && <p className="mb-3 text-sm text-foreground-muted">{t('workflow.consignmentComplete')}</p>}
         {groups.done.length > 0 ? (
-          <ul>
+          <ul className="space-y-3">
             {groups.done.map((step) => (
               <TaskRow key={step.id} step={step} consignmentId={consignmentId} />
             ))}
