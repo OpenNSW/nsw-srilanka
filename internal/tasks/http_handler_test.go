@@ -817,6 +817,63 @@ func TestHandleCompleteTaskStep_AuditsFileDenial(t *testing.T) {
 	assert.Equal(t, "step-1", recs[0].Metadata["stepId"])
 	assert.Equal(t, "file_not_yours", recs[0].Metadata["error"])
 	assert.Equal(t, http.StatusForbidden, recs[0].Metadata["status"])
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+}
+
+func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	body, err := json.Marshal(map[string]any{"command": "submit", "payload": map[string]any{}})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-0", strings.NewReader(string(body)))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-0")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "stale_step", recs[0].Metadata["error"])
+	assert.Equal(t, "step-0", recs[0].Metadata["stepId"])
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+}
+
+func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-0/draft", strings.NewReader(`{"payload":{}}`))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-0")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleSaveDraft(rec, req)
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "stale_step", recs[0].Metadata["error"])
+	assert.Equal(t, "step-0", recs[0].Metadata["stepId"])
+	assert.Equal(t, true, recs[0].Metadata["draft"])
+	_, hasCommand := recs[0].Metadata["command"]
+	assert.False(t, hasCommand)
 }
 
 func TestResolveFiles_StoresTheValues(t *testing.T) {
@@ -828,7 +885,7 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
 
-	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload)
+	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, false)
 
 	require.True(t, ok)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
@@ -896,13 +953,19 @@ func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
 
 // A step whose template names no one who may act is closed to everyone.
 func TestWriteCompletion_StepNotGuardedIsForbidden(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 
-	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"))
+	(&HTTPHandler{Audit: client}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"), "taskId", "t1", "stepId", "s1")
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "step_not_guarded", recs[0].Metadata["error"])
+	assert.Equal(t, "s1", recs[0].Metadata["stepId"])
 }
 
 func TestWriteCompletion_InvalidPayloadIsABadRequest(t *testing.T) {
