@@ -36,6 +36,10 @@ func compile(schema []byte) (*jsonschema.Schema, error) {
 	for _, f := range ajvFormats {
 		c.RegisterFormat(f)
 	}
+	// Ajv applies ajv-formats' limits whatever draft a form declares; this
+	// library applies a vocabulary of its own from 2019-09 only when told to.
+	c.RegisterVocabulary(ajvDateLimit)
+	c.AssertVocabs()
 
 	const location = "form.json"
 	if err := c.AddResource(location, doc); err != nil {
