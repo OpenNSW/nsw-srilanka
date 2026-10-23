@@ -29,7 +29,7 @@ The PR must always land on `OpenNSW/nsw-srilanka`, never on a contributor's fork
 2. `git status` — everything that should be in the PR must be committed. Uncommitted changes are not silently included.
 3. `git branch --show-current` for the head branch.
 4. Base branch: honor a user-specified base; otherwise resolve it with `gh repo view OpenNSW/nsw-srilanka --json defaultBranchRef --template '{{.defaultBranchRef.name}}'`. Don't hardcode `main` or resolve the base against a fork.
-5. Fetch `origin` and inspect the full PR diff and commits. If `origin` is a fork, verify that `upstream` points to the canonical repository before using it. If there is no verified upstream remote, fetch the canonical base directly with `git fetch https://github.com/OpenNSW/nsw-srilanka.git <base>` and inspect `git diff FETCH_HEAD...HEAD`. Do not treat a fork's potentially stale base as current upstream.
+5. Fetch `origin`. For a direct clone of the canonical repository, inspect `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD`. For a fork, verify that `upstream` points to the canonical repository and refresh the base with `git fetch upstream <base>`; if there is no verified upstream remote, use `git fetch https://github.com/OpenNSW/nsw-srilanka.git <base>` instead. After that fetch succeeds, inspect `git diff FETCH_HEAD...HEAD` and `git log FETCH_HEAD..HEAD`. Review the full PR diff and commits against the freshly fetched canonical base, never a potentially stale fork or upstream ref.
 
 ## Get the template
 
@@ -70,7 +70,7 @@ gh pr create [--draft] --repo OpenNSW/nsw-srilanka \
 
 Pass `--label` for the labels the workflow won't add (everything except the `feat`/`fix`/`!` ones), once per label. Labelling needs triage access to `OpenNSW/nsw-srilanka`: if `gh` reports it couldn't add a label, the PR may still have been created — check with `gh pr view`, and tell the user a maintainer must add the label before the check can pass.
 
-Before creating a PR, check for an existing open PR using `gh pr list --repo OpenNSW/nsw-srilanka --head <head> --base <base> --state open`, verifying the head owner for a fork. If one exists, use `gh pr edit --repo OpenNSW/nsw-srilanka <number> --title ... --body-file ...` instead of creating a second one, with `--add-label` / `--remove-label` if its label should change. Preserve unrelated labels. After a publishing error, check whether the operation succeeded before retrying.
+Before creating a PR, check for an existing open PR using `gh pr list --repo OpenNSW/nsw-srilanka --head <branch-name> --base <base> --state open --json number,headRefName,headRepositoryOwner`. For this lookup, `--head` takes the bare branch name, without an owner prefix. Select the result whose `headRepositoryOwner.login` matches `<origin-owner>` and whose `headRefName` matches `<branch-name>`. Use the owner-qualified head only for `gh pr create` in a fork workflow. If a matching PR exists, use `gh pr edit --repo OpenNSW/nsw-srilanka <number> --title ... --body-file ...` instead of creating a second one, with `--add-label` / `--remove-label` if its label should change. Preserve unrelated labels. After a publishing error, check whether the operation succeeded before retrying.
 
 Write the body file with actual newlines to a temporary directory outside the repository, such as `$TMPDIR`, and pass it through `--body-file`. Avoid shell interpolation of the body text.
 
