@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -913,8 +914,11 @@ func TestServices_DeploymentTemplates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var cfg Config
-			if err := yaml.Unmarshal(data, &cfg); err != nil {
+			for _, match := range regexp.MustCompile(`\{\{env:([A-Z0-9_]+)\}\}`).FindAllSubmatch(data, -1) {
+				t.Setenv(string(match[1]), "test-client-secret")
+			}
+			cfg, err := loadFile(path)
+			if err != nil {
 				t.Fatal(err)
 			}
 			if len(cfg.Services) == 0 {
@@ -945,11 +949,9 @@ func checkOAuthServiceTemplate(t *testing.T, service remote.ServiceConfig) {
 	if oauth.TokenURL == "" || oauth.ClientID == "" {
 		t.Fatalf("service %q lost its token endpoint or client ID", service.ID)
 	}
-	ref := string(oauth.ClientSecret)
-	if !strings.HasPrefix(ref, "env:") {
-		t.Fatalf("service %q must use an env secret reference", service.ID)
+	if oauth.ClientSecret != "test-client-secret" {
+		t.Fatalf("service %q secret placeholder was not expanded", service.ID)
 	}
-	t.Setenv(strings.TrimPrefix(ref, "env:"), "test-client-secret")
 	if service.ID != "slpa" && service.ID != "customs-asycuda" {
 		if len(oauth.Scopes) == 0 || len(oauth.EndpointParams["resource"]) == 0 {
 			t.Fatalf("service %q lost its scopes or resource audience", service.ID)
@@ -957,9 +959,7 @@ func checkOAuthServiceTemplate(t *testing.T, service remote.ServiceConfig) {
 	}
 }
 
-func TestServices_MissingSecretFailsAtSetup(t *testing.T) {
-	t.Setenv("TEST_REMOTE_SECRET", "")
-	cfg, err := loadYAML(t, configYAML(t, `
+const servicesSecretYAML = `
 services:
   - id: agency
     url: https://agency.example.com
@@ -968,23 +968,49 @@ services:
       oauth2:
         tokenURL: https://idp.example.com/token
         clientID: test-client
-        clientSecret: env:TEST_REMOTE_SECRET
+        clientSecret: "SECRET_PLACEHOLDER"
         endpointParams:
           resource: [https://agency.example.com, https://storage.example.com]
-`))
-	if err != nil {
-		t.Fatal(err)
+`
+
+func TestServices_MissingSecretFailsAtLoad(t *testing.T) {
+	t.Setenv("TEST_REMOTE_SECRET", "")
+	_, err := loadYAML(t, configYAML(t, strings.ReplaceAll(servicesSecretYAML, "SECRET_PLACEHOLDER", "{{env:TEST_REMOTE_SECRET}}")))
+	if err == nil || !strings.Contains(err.Error(), "TEST_REMOTE_SECRET") {
+		t.Fatalf("expected missing-secret error while loading YAML, got: %v", err)
 	}
-	if got := cfg.Services[0].Auth.OAuth2.EndpointParams["resource"]; len(got) != 2 {
-		t.Fatalf("resource parameters = %v, want two values", got)
-	}
-	manager := remote.NewManager()
-	if err := manager.SetServices(cfg.Services...); err == nil || !strings.Contains(err.Error(), "TEST_REMOTE_SECRET") {
-		t.Fatalf("expected missing-secret error at service setup, got: %v", err)
-	}
-	t.Setenv("TEST_REMOTE_SECRET", "resolved-secret")
-	if err := manager.SetServices(cfg.Services...); err != nil {
-		t.Fatalf("setup with a resolved secret: %v", err)
+}
+
+func TestServices_SecretPlaceholders(t *testing.T) {
+	// Secret values with scheme prefixes must reach remote verbatim.
+	for _, value := range []string{"env:NOT_A_REFERENCE", "file:/not-a-reference", "literal:secret"} {
+		for _, source := range []string{"env", "file"} {
+			t.Run(source+"/"+value, func(t *testing.T) {
+				placeholder := "{{env:TEST_REMOTE_SECRET}}"
+				t.Setenv("TEST_REMOTE_SECRET", value)
+				if source == "file" {
+					path := filepath.Join(t.TempDir(), "secret")
+					if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					placeholder = "{{file:" + path + "}}"
+				}
+				cfg, err := loadYAML(t, configYAML(t, strings.ReplaceAll(servicesSecretYAML, "SECRET_PLACEHOLDER", placeholder)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				oauth := cfg.Services[0].Auth.OAuth2
+				if oauth.ClientSecret != value {
+					t.Fatal("secret was not passed through verbatim")
+				}
+				if len(oauth.EndpointParams["resource"]) != 2 {
+					t.Fatal("expected both resource parameters")
+				}
+				if err := remote.NewManager().SetServices(cfg.Services...); err != nil {
+					t.Fatalf("setup with a resolved secret: %v", err)
+				}
+			})
+		}
 	}
 }
 

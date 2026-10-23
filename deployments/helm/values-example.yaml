@@ -63,7 +63,7 @@ backend:
     port: 80
 
   # Only what config.yaml cannot hold: APP_ENV, and the secrets referenced
-  # as {{env:NAME}} / env:NAME — each pulled from a
+  # as {{env:NAME}} — each pulled from a
   # Kubernetes Secret, never inlined.
   env:
     # Gates authn.insecureSkipTLSVerify and each service's OAuth2
@@ -101,7 +101,7 @@ backend:
         secretKeyRef: { name: nsw-secrets, key: storage-token-keyset }
 
     # --- Outbound M2M (NSW -> Agency): client secrets referenced as
-    # env:M2M_NSW_TO_<AGENCY>_SECRET in the services list in config.yaml. ---
+    # {{env:M2M_NSW_TO_<AGENCY>_SECRET}} in the services list in config.yaml. ---
     M2M_NSW_TO_NPQS_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-npqs-secret }
@@ -191,7 +191,7 @@ backend:
           oauth2:
             tokenURL: http://localhost:8090/oauth2/token
             clientID: NSW_TO_NPQS
-            clientSecret: env:M2M_NSW_TO_NPQS_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
@@ -205,7 +205,7 @@ backend:
           oauth2:
             tokenURL: http://localhost:8090/oauth2/token
             clientID: NSW_TO_FCAU
-            clientSecret: env:M2M_NSW_TO_FCAU_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
@@ -219,7 +219,7 @@ backend:
           oauth2:
             tokenURL: http://localhost:8090/oauth2/token
             clientID: NSW_TO_CDA
-            clientSecret: env:M2M_NSW_TO_CDA_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
@@ -233,7 +233,7 @@ backend:
           oauth2:
             tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
             clientID: NSW_TO_SLPA_CLIENT_ID
-            clientSecret: env:M2M_NSW_TO_SLPA_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
       - id: efc
         url: http://localhost:8085
         timeout: 30s
@@ -242,7 +242,7 @@ backend:
           oauth2:
             tokenURL: http://localhost:8090/oauth2/token
             clientID: NSW_TO_EFC
-            clientSecret: env:M2M_NSW_TO_EFC_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
@@ -256,7 +256,7 @@ backend:
           oauth2:
             tokenURL: https://idp.example.com/oauth2/token
             clientID: NSW_TO_ASYCUDA_CLIENT_ID
-            clientSecret: env:M2M_NSW_TO_ASYCUDA_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_ASYCUDA_SECRET}}"
             scopes: []
             insecureSkipTLSVerify: false
       - id: ippc-hub
@@ -273,7 +273,7 @@ backend:
           oauth2:
             tokenURL: http://localhost:8090/oauth2/token
             clientID: NSW_TO_SLTB
-            clientSecret: env:M2M_NSW_TO_SLTB_SECRET
+            clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
             scopes:
               - nsw:workflow:inject
               - nsw:task:write

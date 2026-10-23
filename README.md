@@ -72,8 +72,8 @@ This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.
 > `configs/services.json` or `services.docker.json` into the corresponding
 > `config.yaml` or `config.docker.yaml` top-level `services` list and remove
 > `server.servicesConfigPath`. Use the new camelCase fields and `auth.oauth2`
-> block shown in the examples. Keep remote secrets as `env:NAME` / `file:/path`
-> references. `make setup` preserves existing files; it does not migrate them.
+> block shown in the examples. Write remote secrets as `{{env:NAME}}` / `{{file:/path}}`
+> placeholders. `make setup` preserves existing files; it does not migrate them.
 
 > [!IMPORTANT]
 > **Upgrading an existing clone to the plain-HTTP IdP.** Because `make setup` keeps

@@ -17,11 +17,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   place of `auth.options`. Rename `token_url`, `client_id`, `client_secret`,
   `endpoint_params` and `insecure_skip_tls_verify` to `tokenURL`, `clientID`,
   `clientSecret`, `endpointParams` and `insecureSkipTLSVerify`; mTLS uses
-  `clientCertFile` and `clientKeyFile`. Remote secrets remain `env:NAME` or
-  `file:/path` references, resolved by remote at startup. Insecure token TLS
-  still requires `APP_ENV=development`.
-- `core/remote` is pinned to unreleased commit `d7c9eeb376ee9e643fb0ca630be3282740c7adeb`
-  (`v0.8.1-0.20261023034233-d7c9eeb376ee`). No release version is changed.
+  `clientCertFile` and `clientKeyFile`. Remote secrets now use `{{env:NAME}}` or
+  `{{file:/path}}` placeholders, expanded by the YAML loader. Replace bare
+  `env:NAME` / `file:/path` references in service auth fields. Insecure token
+  TLS still requires `APP_ENV=development`.
+- Upgrade `core/remote` to `v0.9.0`. Every process reading the server YAML
+  (including Compose init, migration and seed jobs) must receive the service
+  secret variables; the Compose shared environments now supply them. Helm
+  migrations use a separate database-only config. The application release
+  version is unchanged.
 
 ## [0.8.0] - 2026-10-22
 

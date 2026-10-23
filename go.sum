@@ -26,8 +26,8 @@ github.com/OpenNSW/core/payment v0.4.0 h1:NbO+mEv/kI5F6cqg7l3LKH3EjVHWnb/N3cgv7w
 github.com/OpenNSW/core/payment v0.4.0/go.mod h1:eO38K6QNtl5IpZaWEYkPksKOb0WqcnnQJOyJyJhuUkk=
 github.com/OpenNSW/core/refid v0.3.0 h1:Uwom1jGsNGULG/+zm6ogJCGs3E/5eVmvDrnz94XYidM=
 github.com/OpenNSW/core/refid v0.3.0/go.mod h1:XAsH8UTKJU4Zu6d9WcqBUP21xqmi8afqxAOH9T2pph4=
-github.com/OpenNSW/core/remote v0.8.1-0.20261023034233-d7c9eeb376ee h1:5CW+1Dar5Mo47Gx2/eBk5QgRkgyPetx2vFd27UHCr3E=
-github.com/OpenNSW/core/remote v0.8.1-0.20261023034233-d7c9eeb376ee/go.mod h1:2ugrVH9bT4XiWZqSgQE8yG+Cbi1/gkU6FW5cUpAG5U4=
+github.com/OpenNSW/core/remote v0.9.0 h1:vwmzRZTvYqDkHW4hDX641TD6nNvLjykpWe6v5Xe0coU=
+github.com/OpenNSW/core/remote v0.9.0/go.mod h1:ldtY4TRSPVX5L9BGEB7c4cIgpyJSSEVDit7fiTh4Qzs=
 github.com/OpenNSW/core/secret v0.2.0 h1:7kxJYbVNJhN9X9/YyTUci4bv9oYKcm0nT/wBVrxBChQ=
 github.com/OpenNSW/core/secret v0.2.0/go.mod h1:MEkX9vnlPRVTn+JQQsb192PoY6p3hbFSOIV+FxIMrc0=
 github.com/OpenNSW/core/shared v0.3.1-0.20261022063536-f6b1f0bced69 h1:lNqLBjGo7uybIUFUZJAJYeaAOJKCDXpGng/6JsyJZOc=

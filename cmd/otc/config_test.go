@@ -129,6 +129,9 @@ func TestLoad_ServerTemplates(t *testing.T) {
 	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET", "STORAGE_TOKEN_KEYSET"} {
 		t.Setenv(k, "example-"+k)
 	}
+	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {
+		t.Setenv("M2M_NSW_TO_"+agency+"_SECRET", "example-client-secret")
+	}
 	for name, host := range map[string]string{
 		"config.example.yaml":        "localhost",
 		"config.docker.example.yaml": "db",

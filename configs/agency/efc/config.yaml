@@ -38,8 +38,8 @@ server:
   paymentMethodsConfigPath: ./configs/agency/efc/payment_methods.json
   catalogConfigPath: ./configs/agency/efc/catalog.json
 
-# Outbound HTTP services (core/remote). Secret fields use env:NAME or file:/path
-# references, resolved by remote at startup; do not use {{env:NAME}} here.
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
 services:
   - id: tnsw
     url: http://localhost:8080
@@ -49,7 +49,7 @@ services:
       oauth2:
         tokenURL: http://localhost:8090/oauth2/token
         clientID: EFC_TO_NSW
-        clientSecret: env:M2M_EFC_TO_NSW_SECRET
+        clientSecret: "{{env:M2M_EFC_TO_NSW_SECRET}}"
         scopes:
           - nsw:task:write
           - nsw:storage:read

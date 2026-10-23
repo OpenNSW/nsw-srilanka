@@ -69,8 +69,8 @@ server:
   # The global catalog: logical names -> IdP token roles and OAuth2 client ids.
   catalogConfigPath: ./configs/catalog.json
 
-# Outbound HTTP services (core/remote). Secret fields use env:NAME or file:/path
-# references, resolved by remote at startup; do not use {{env:NAME}} here.
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
 services:
   - id: npqs
     url: http://localhost:8081
@@ -80,7 +80,7 @@ services:
       oauth2:
         tokenURL: http://localhost:8090/oauth2/token
         clientID: NSW_TO_NPQS
-        clientSecret: env:M2M_NSW_TO_NPQS_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
         scopes:
           - nsw:workflow:inject
           - nsw:task:write
@@ -94,7 +94,7 @@ services:
       oauth2:
         tokenURL: http://localhost:8090/oauth2/token
         clientID: NSW_TO_FCAU
-        clientSecret: env:M2M_NSW_TO_FCAU_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
         scopes:
           - nsw:workflow:inject
           - nsw:task:write
@@ -108,7 +108,7 @@ services:
       oauth2:
         tokenURL: http://localhost:8090/oauth2/token
         clientID: NSW_TO_CDA
-        clientSecret: env:M2M_NSW_TO_CDA_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
         scopes:
           - nsw:workflow:inject
           - nsw:task:write
@@ -122,7 +122,7 @@ services:
       oauth2:
         tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
         clientID: NSW_TO_SLPA_CLIENT_ID
-        clientSecret: env:M2M_NSW_TO_SLPA_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
   - id: efc
     url: http://localhost:8085
     timeout: 30s
@@ -131,7 +131,7 @@ services:
       oauth2:
         tokenURL: http://localhost:8090/oauth2/token
         clientID: NSW_TO_EFC
-        clientSecret: env:M2M_NSW_TO_EFC_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
         scopes:
           - nsw:workflow:inject
           - nsw:task:write
@@ -145,7 +145,7 @@ services:
       oauth2:
         tokenURL: https://idp.example.com/oauth2/token
         clientID: NSW_TO_ASYCUDA_CLIENT_ID
-        clientSecret: env:M2M_NSW_TO_ASYCUDA_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_ASYCUDA_SECRET}}"
         scopes: []
         insecureSkipTLSVerify: false
   - id: ippc-hub
@@ -162,7 +162,7 @@ services:
       oauth2:
         tokenURL: http://localhost:8090/oauth2/token
         clientID: NSW_TO_SLTB
-        clientSecret: env:M2M_NSW_TO_SLTB_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
         scopes:
           - nsw:workflow:inject
           - nsw:task:write

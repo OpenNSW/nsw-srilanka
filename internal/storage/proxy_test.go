@@ -15,7 +15,6 @@ import (
 	coreauthn "github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/remote"
 	remoteauth "github.com/OpenNSW/core/remote/auth"
-	"github.com/OpenNSW/core/secret"
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
 )
@@ -75,7 +74,7 @@ func newRegistry(t *testing.T, url, token string) *remote.Manager {
 	m := remote.NewManager()
 	if err := m.SetServices(remote.ServiceConfig{
 		ID: "files-api", URL: url,
-		Auth: &remoteauth.Config{Type: remoteauth.TypeBearer, Bearer: &remoteauth.BearerConfig{Token: secret.SecretRef(token)}},
+		Auth: &remoteauth.Config{Type: remoteauth.TypeBearer, Bearer: &remoteauth.BearerConfig{Token: token}},
 	}); err != nil {
 		t.Fatalf("SetServices: %v", err)
 	}

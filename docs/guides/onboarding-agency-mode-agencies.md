@@ -338,7 +338,7 @@ replies the tasks' waiting steps accept:
 
 The agency's outbound `tnsw` service, used by `notify_decision` and storage,
 lives in `backend.config.services` in the Helm values below. Its OAuth2 secret is
-an `env:NAME` reference resolved by remote at startup.
+a `{{env:NAME}}` placeholder expanded while loading the YAML config.
 
 `payment_methods.json`, empty, since an agency takes no payments but the server loads it:
 
@@ -397,7 +397,7 @@ backend:
           oauth2:
             tokenURL: https://idp.example.com/oauth2/token
             clientID: "<agency-to-TNSW client ID>"
-            clientSecret: env:M2M_DEA_TO_NSW_SECRET
+            clientSecret: "{{env:M2M_DEA_TO_NSW_SECRET}}"
             scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write"]
             endpointParams:
               resource: https://api.nsw-srilanka.local
@@ -570,7 +570,7 @@ services:
       oauth2:
         tokenURL: https://idp.example.com/oauth2/token
         clientID: "<TNSW-to-agency client ID>"
-        clientSecret: env:M2M_NSW_TO_DEA_SECRET
+        clientSecret: "{{env:M2M_NSW_TO_DEA_SECRET}}"
         scopes: ["nsw:workflow:inject", "nsw:task:write"]
         endpointParams:
           resource: https://api.dea.nsw-agency.local

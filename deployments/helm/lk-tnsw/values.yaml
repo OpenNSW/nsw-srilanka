@@ -71,8 +71,7 @@ backend:
   #
   # Non-secret only. A secret goes in as a placeholder the server resolves at
   # startup, e.g. "{{env:SOME_SECRET}}" with SOME_SECRET set via env/valueFrom;
-  # Helm passes it through untouched. Outbound service secrets instead use
-  # env:SOME_SECRET or file:/path references, resolved by core/remote.
+  # Helm passes it through untouched, including outbound service secrets.
   config: {}
 
   # Directory config.yaml is mounted into. Kept apart from /app/configs so the

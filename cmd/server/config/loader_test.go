@@ -164,6 +164,9 @@ func TestLoadFile_ExamplesLoad(t *testing.T) {
 	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
 		t.Setenv(k, "example-"+k)
 	}
+	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {
+		t.Setenv("M2M_NSW_TO_"+agency+"_SECRET", "example-client-secret")
+	}
 	// Validated as a keyset, so it takes the form .env.example gives it.
 	t.Setenv("STORAGE_TOKEN_KEYSET", "example:"+base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	// Both are dev templates, run under APP_ENV=development (make dev, make
