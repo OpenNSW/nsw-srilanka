@@ -27,8 +27,10 @@ type Service interface {
 	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 	// GetDownloadURL returns a time-limited URL the client downloads the file from.
 	GetDownloadURL(ctx context.Context, key string) (string, error)
-	// DownloadURL is GetDownloadURL plus the Unix time the URL expires at.
-	DownloadURL(ctx context.Context, key string) (string, int64, error)
+	// DownloadURL is GetDownloadURL plus the Unix time the URL expires at, the
+	// type the file was stored with and how the URL serves it: inline when a
+	// browser opens the file, attachment when it saves it.
+	DownloadURL(ctx context.Context, key string) (corestorage.Download, error)
 	// Delete removes a stored file.
 	Delete(ctx context.Context, key string) error
 	// Save stores content this service produced itself — a generated
@@ -82,6 +84,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 	}
 	svc := corestorage.NewService(driver,
 		corestorage.WithAllowedUploadTypes(cfg.AllowedUploadTypes...),
+		corestorage.WithInlineTypes(cfg.InlineTypes...),
 		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
 	)
 
