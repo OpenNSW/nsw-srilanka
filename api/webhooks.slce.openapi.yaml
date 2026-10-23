@@ -195,9 +195,9 @@ paths:
                     example: "unauthorized"
         '404':
           description: |
-            Not Found. No task workflow matches the callback's `edgeId`
-            (CUSDEC_INTEGRATED, CDN_INTEGRATED), or no dispatch note matches the
-            `cdnRef` (CDN_INTEGRATED). Permanent — SLC Edge should not retry.
+            Not Found. The declaration or dispatch note the callback's `edgeId`
+            names has no workflow recorded (CUSDEC_INTEGRATED, CDN_INTEGRATED).
+            Permanent — SLC Edge should not retry.
           content:
             application/json:
               schema:
@@ -210,7 +210,10 @@ paths:
                     example: "workflow not found"
         '503':
           description: |
-            Service Unavailable. The declaration named by `cusDecRef`
+            Service Unavailable. No declaration or dispatch note is recorded yet
+            for the callback's `edgeId` (CUSDEC_INTEGRATED, CDN_INTEGRATED) —
+            TNSW records it as soon as SLC Edge accepts the submission, so the
+            result arrived early. Or the declaration named by `cusDecRef`
             (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
             dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED) does not exist yet
             — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED

@@ -57,7 +57,15 @@ const maxAttachmentBytes = 300 * 1024
 // files — so this interpreter implements BuildParts and the plugin routes it
 // through the multipart transport rather than sending a JSON body.
 type CusdecInterpreter struct {
-	files FileFetcher
+	files       FileFetcher
+	submissions Submissions
+}
+
+// Submissions records which workflow made a submission SLC Edge accepted, so
+// the callbacks that answer it (by edgeId, §2.1) can find the task it parks.
+// The repository satisfies it.
+type Submissions interface {
+	RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error
 }
 
 // NewCusdecInterpreter returns the SLC Edge CusDec interpreter. files may be
@@ -69,8 +77,22 @@ type CusdecInterpreter struct {
 // satisfy the interpreter contract.
 const cusdecEndpoint = "cusdec"
 
-func NewCusdecInterpreter(files FileFetcher) *CusdecInterpreter {
-	return &CusdecInterpreter{files: files}
+func NewCusdecInterpreter(files FileFetcher, submissions Submissions) *CusdecInterpreter {
+	return &CusdecInterpreter{files: files, submissions: submissions}
+}
+
+// RecordDispatch records the edgeId SLC Edge acknowledged the declaration with
+// (§6.1.4) against the workflow that sent it, so the integration result (§6.2)
+// and the events after it can resume that workflow's parked tasks.
+func (c CusdecInterpreter) RecordDispatch(ctx context.Context, _, caseID, workflowID string, captured map[string]any) error {
+	if c.submissions == nil {
+		return nil
+	}
+	edgeID, _ := captured["edgeId"].(string)
+	if edgeID == "" {
+		return errors.New("cusdec: SLC Edge accepted the declaration without an edgeId")
+	}
+	return c.submissions.RecordSubmitted(ctx, edgeID, caseID, workflowID)
 }
 
 // BuildRequest satisfies the Interpreter interface. The CusDec submission is

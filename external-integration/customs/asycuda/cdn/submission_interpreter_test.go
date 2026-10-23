@@ -1,6 +1,7 @@
 package cdn
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestCDNInterpreter_BuildRequest(t *testing.T) {
-	sub := NewCDNInterpreter().BuildRequest(map[string]any{"payload": fullForm()})
+	sub := NewCDNInterpreter(nil).BuildRequest(map[string]any{"payload": fullForm()})
 
 	body, err := json.Marshal(sub.(remote.JSONBody).V)
 	require.NoError(t, err)
@@ -22,7 +23,7 @@ func TestCDNInterpreter_BuildRequest(t *testing.T) {
 // A form that cannot be mapped must surface the reason to the trader rather
 // than putting a half-built note in front of Customs.
 func TestCDNInterpreter_BuildRequestOnUnusableForm(t *testing.T) {
-	req := NewCDNInterpreter().BuildRequest(map[string]any{})
+	req := NewCDNInterpreter(nil).BuildRequest(map[string]any{})
 
 	m, ok := req.(remote.JSONBody).V.(map[string]any)
 	require.True(t, ok, "expected an error object, got %T", req)
@@ -37,7 +38,7 @@ func TestCDNInterpreter_InterpretAccepted(t *testing.T) {
 		"message":    "CDN submission accepted and queued for processing.",
 	}
 
-	accepted, out := NewCDNInterpreter().Interpret(nil, resp)
+	accepted, out := NewCDNInterpreter(nil).Interpret(nil, resp)
 	assert.True(t, accepted)
 	// The edgeId is what the §7.2 callback is correlated by, so it has to be
 	// captured on every accepted submission.
@@ -47,7 +48,7 @@ func TestCDNInterpreter_InterpretAccepted(t *testing.T) {
 }
 
 func TestCDNInterpreter_InterpretRejections(t *testing.T) {
-	interp := NewCDNInterpreter()
+	interp := NewCDNInterpreter(nil)
 
 	t.Run("spec segment-keyed errors object", func(t *testing.T) {
 		var resp map[string]any
@@ -104,4 +105,17 @@ func TestCDNInterpreter_InterpretRejections(t *testing.T) {
 		accepted, _ := interp.Interpret(nil, map[string]any{"status": "PENDING_SOMETHING"})
 		assert.False(t, accepted)
 	})
+}
+
+// An accepted dispatch note is recorded against the workflow that sent it, by
+// the edgeId SLC Edge acknowledged it with, so its callbacks can find it.
+func TestCDNInterpreter_RecordDispatch(t *testing.T) {
+	repo := &mockRepository{byEdgeID: map[string]*DispatchNote{}}
+
+	require.NoError(t, NewCDNInterpreter(repo).RecordDispatch(context.Background(), "task-1", "case-1", "wf-1",
+		map[string]any{"edgeId": "edge-9", "status": "RECEIVED"}))
+
+	assert.Equal(t, &DispatchNote{EdgeID: "edge-9", Status: DispatchNoteStatusSubmitted, CaseID: "case-1", WorkflowID: "wf-1"}, repo.byEdgeID["edge-9"])
+	assert.Error(t, NewCDNInterpreter(repo).RecordDispatch(context.Background(), "task-1", "case-1", "wf-1", map[string]any{}),
+		"an acceptance without an edgeId could never be answered")
 }

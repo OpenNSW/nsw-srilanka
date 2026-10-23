@@ -3,15 +3,14 @@ package cusdec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 type mockCusdecRepository struct {
@@ -47,6 +46,11 @@ func (m *mockCusdecRepository) Update(ctx context.Context, decl *CusdecDeclarati
 	return nil
 }
 
+func (m *mockCusdecRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
+	m.declsByEdgeID[edgeID] = &CusdecDeclaration{EdgeID: edgeID, Status: CusdecStatusSubmitted, CaseID: caseID, WorkflowID: workflowID}
+	return nil
+}
+
 type mockTaskCompleter struct {
 	mock.Mock
 }
@@ -56,28 +60,67 @@ func (m *mockTaskCompleter) CompleteTaskStep(ctx context.Context, taskID, stepID
 	return args.Error(0)
 }
 
-func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
-	mockDB, sqlMock, err := sqlmock.New()
-	require.NoError(t, err)
+// The case and workflow the tests' declaration was dispatched from.
+const (
+	testCaseID     = "case-1"
+	testWorkflowID = "parent-wf-123"
+)
 
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		Conn: mockDB,
-	}), &gorm.Config{})
-	require.NoError(t, err)
+// fakeTasks stands in for core's task store: the tasks of each case.
+type fakeTasks map[string][]store.TaskRecord
 
-	return db, sqlMock
+func (f fakeTasks) TasksOfCase(_ context.Context, caseID string) ([]store.TaskRecord, error) {
+	return f[caseID], nil
+}
+
+// failingTasks is a task store whose load fails.
+type failingTasks struct{}
+
+func (failingTasks) TasksOfCase(context.Context, string) ([]store.TaskRecord, error) {
+	return nil, errTaskStore
+}
+
+var errTaskStore = errors.New("task store: connection refused")
+
+// parkedOn returns the tests' case with one task of the declaration's workflow
+// parked on templateID, beside a task of another workflow parked on the same
+// template that must not be resumed.
+func parkedOn(templateID, taskID, stepID string) fakeTasks {
+	return fakeTasks{testCaseID: {
+		{TaskID: "other-task", ActiveStepID: "other-step", ParentWorkflowID: "other-wf", CaseID: testCaseID,
+			ActiveTaskTemplateID: templateID, State: "QUEUED_EXTERNALLY"},
+		{TaskID: taskID, ActiveStepID: stepID, ParentWorkflowID: testWorkflowID, CaseID: testCaseID,
+			ActiveTaskTemplateID: templateID, State: "QUEUED_EXTERNALLY"},
+	}}
+}
+
+// parkedInBranch returns the tests' case with one task parked on templateID in
+// a branch of a parallel split: a child workflow of its own, so its parent is
+// never the workflow the declaration was dispatched from.
+func parkedInBranch(templateID, taskID, stepID string) fakeTasks {
+	return fakeTasks{testCaseID: {
+		{TaskID: "dispatch-task", ActiveStepID: "dispatch-step", ParentWorkflowID: testWorkflowID, CaseID: testCaseID,
+			ActiveTaskTemplateID: reviewTemplateID, State: "COMPLETED"},
+		{TaskID: taskID, ActiveStepID: stepID, ParentWorkflowID: "split-branch-wf", CaseID: testCaseID,
+			ActiveTaskTemplateID: templateID, State: "QUEUED_EXTERNALLY"},
+	}}
+}
+
+// submitted is the declaration as its dispatch left it: SLC Edge accepted it as
+// edgeID from the tests' workflow.
+func submitted(edgeID string) *CusdecDeclaration {
+	return &CusdecDeclaration{ID: "decl-" + edgeID, EdgeID: edgeID, Status: CusdecStatusSubmitted, CaseID: testCaseID, WorkflowID: testWorkflowID}
 }
 
 func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	ctx := context.Background()
 	payable1244 := 1244.0
-	db, sqlMock := setupTestDB(t)
 
 	repo := &mockCusdecRepository{
-		declsByEdgeID: make(map[string]*CusdecDeclaration),
+		declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
 
 	req := CusdecIntegrationResultRequest{
 		EdgeID:     "edge-123",
@@ -97,14 +140,6 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 		},
 	}
 
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-123"))
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-123", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-abc", "step-task-abc"))
-
 	expectedPayload := map[string]any{
 		"__command":      "submit",
 		"review_outcome": "approve",
@@ -116,24 +151,22 @@ func TestProcessCusdecIntegrationResult_Success(t *testing.T) {
 	err := service.ProcessIntegrationResult(ctx, req)
 	require.NoError(t, err)
 
-	assert.True(t, repo.createCalled)
-	assert.Equal(t, CusdecStatusIntegrated, repo.createdDecl.Status)
-	assert.Equal(t, "COL", repo.createdDecl.CusdecOffice)
-	assert.Equal(t, 9876, repo.createdDecl.CusdecNumber)
+	assert.True(t, repo.updateCalled)
+	assert.Equal(t, CusdecStatusIntegrated, repo.updatedDecl.Status)
+	assert.Equal(t, "COL", repo.updatedDecl.CusdecOffice)
+	assert.Equal(t, 9876, repo.updatedDecl.CusdecNumber)
 
 	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
 // A v1.9 result hands the review step what is still due, and the assessment
 // and the amount already paid beside it.
 func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 	ctx := context.Background()
-	db, sqlMock := setupTestDB(t)
 
-	repo := &mockCusdecRepository{declsByEdgeID: make(map[string]*CusdecDeclaration)}
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-v19": submitted("edge-v19")}}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-v19", "step-task-v19"), completer)
 
 	assessed, paid, payable := 1350.0, 350.0, 1000.0
 	req := CusdecIntegrationResultRequest{
@@ -152,13 +185,6 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 		"globalDuties": [{"typeCode": "EPF", "taxBaseAmount": 550, "taxRateNumeric": 2.0, "taxAssessedAmount": 1100, "paymentMethodCode": "1"}],
 		"itemDutiesList": [{"itemSequenceNumeric": 1, "dutyTaxFees": [{"typeCode": "CED", "taxBaseAmount": 125, "taxRateNumeric": 0.0, "taxAssessedAmount": 250, "paymentMethodCode": "1"}]}]
 	}`), &req.Payload.Duties))
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-v19", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"parent_workflow_id"}).AddRow("parent-wf-v19"))
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("parent-wf-v19", "customs-cusdec--external-review", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-v19", "step-task-v19"))
 
 	completer.On("CompleteTaskStep", mock.Anything, "task-v19", "step-task-v19", map[string]any{
 		"__command":             "submit",
@@ -182,12 +208,10 @@ func TestProcessCusdecIntegrationResult_V19Assessment(t *testing.T) {
 
 	require.NoError(t, service.ProcessIntegrationResult(ctx, req))
 	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
 func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	ctx := context.Background()
-	db, sqlMock := setupTestDB(t)
 
 	decl := &CusdecDeclaration{
 		EdgeID:       "edge-123",
@@ -196,6 +220,8 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 		CusdecSerial: "C",
 		CusdecNumber: 9876,
 		Status:       CusdecStatusIntegrated,
+		CaseID:       testCaseID,
+		WorkflowID:   testWorkflowID,
 	}
 	repo := &mockCusdecRepository{
 		declsByEdgeID: map[string]*CusdecDeclaration{
@@ -203,7 +229,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, parkedInBranch("customs-wait-payment", "task-payment-123", "step-task-payment-123"), completer)
 
 	req := CusdecEventRequest{
 		Event:     "PAYMENT_CONFIRMED",
@@ -220,14 +246,6 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 			BankReference: "84004328",
 		},
 	}
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"case_id"}).AddRow("case-1"))
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("case-1", "customs-wait-payment", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-payment-123", "step-task-payment-123"))
 
 	expectedPayload := map[string]any{
 		"__command":      "submit",
@@ -246,12 +264,10 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 	assert.True(t, repo.updateCalled)
 	assert.Equal(t, CusdecStatusPaid, repo.updatedDecl.Status)
 	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
 func TestProcessEvent_DuplicateEventIsAcknowledgedWithoutAction(t *testing.T) {
 	ctx := context.Background()
-	db, sqlMock := setupTestDB(t)
 
 	decl := &CusdecDeclaration{
 		EdgeID:       "edge-123",
@@ -260,6 +276,8 @@ func TestProcessEvent_DuplicateEventIsAcknowledgedWithoutAction(t *testing.T) {
 		CusdecSerial: "C",
 		CusdecNumber: 9876,
 		Status:       CusdecStatusPaid,
+		CaseID:       testCaseID,
+		WorkflowID:   testWorkflowID,
 	}
 	repo := &mockCusdecRepository{
 		declsByEdgeID: map[string]*CusdecDeclaration{
@@ -267,7 +285,7 @@ func TestProcessEvent_DuplicateEventIsAcknowledgedWithoutAction(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, fakeTasks{}, completer)
 
 	req := CusdecEventRequest{
 		Event:     "PAYMENT_CONFIRMED",
@@ -291,12 +309,10 @@ func TestProcessEvent_DuplicateEventIsAcknowledgedWithoutAction(t *testing.T) {
 
 	assert.False(t, repo.updateCalled)
 	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
 func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 	ctx := context.Background()
-	db, sqlMock := setupTestDB(t)
 
 	decl := &CusdecDeclaration{
 		EdgeID:       "edge-123",
@@ -305,6 +321,8 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 		CusdecSerial: "C",
 		CusdecNumber: 9876,
 		Status:       CusdecStatusPaid,
+		CaseID:       testCaseID,
+		WorkflowID:   testWorkflowID,
 	}
 	repo := &mockCusdecRepository{
 		declsByEdgeID: map[string]*CusdecDeclaration{
@@ -312,7 +330,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, parkedInBranch("customs-wait-warranting", "task-warranting-123", "step-task-warranting-123"), completer)
 
 	req := CusdecEventRequest{
 		Event:     "WARRANTING_COMPLETED",
@@ -327,14 +345,6 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 		},
 	}
 
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"case_id"}).AddRow("case-1"))
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("case-1", "customs-wait-warranting", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-warranting-123", "step-task-warranting-123"))
-
 	expectedPayload := map[string]any{
 		"__command":         "submit",
 		"warranting_status": "WARRANTED",
@@ -348,12 +358,10 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 	assert.True(t, repo.updateCalled)
 	assert.Equal(t, CusdecStatusWarranted, repo.updatedDecl.Status)
 	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
 }
 
 func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 	ctx := context.Background()
-	db, sqlMock := setupTestDB(t)
 
 	decl := &CusdecDeclaration{
 		EdgeID:       "edge-123",
@@ -362,6 +370,8 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		CusdecSerial: "C",
 		CusdecNumber: 9876,
 		Status:       CusdecStatusWarranted,
+		CaseID:       testCaseID,
+		WorkflowID:   testWorkflowID,
 	}
 	repo := &mockCusdecRepository{
 		declsByEdgeID: map[string]*CusdecDeclaration{
@@ -369,7 +379,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, db, completer)
+	service := NewWebhookService(repo, parkedInBranch("customs-wait-export-release", "task-release-123", "step-task-release-123"), completer)
 
 	req := CusdecEventRequest{
 		Event:     "EXPORT_RELEASED",
@@ -387,14 +397,6 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		},
 	}
 
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2"`).
-		WithArgs("edge-123", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"case_id"}).AddRow("case-1"))
-
-	sqlMock.ExpectQuery(`(?i)SELECT.*FROM "task_records_v2" WHERE case_id = \$1 AND active_task_template_id = \$2`).
-		WithArgs("case-1", "customs-wait-export-release", "QUEUED_EXTERNALLY", 1).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "active_step_id"}).AddRow("task-release-123", "step-task-release-123"))
-
 	expectedPayload := map[string]any{
 		"__command":       "submit",
 		"release_status":  "RELEASED",
@@ -410,5 +412,176 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 	assert.True(t, repo.updateCalled)
 	assert.Equal(t, CusdecStatusReleased, repo.updatedDecl.Status)
 	completer.AssertExpectations(t)
-	require.NoError(t, sqlMock.ExpectationsWereMet())
+}
+
+// A declaration dispatched before its workflow was recorded cannot be routed:
+// the integration result is refused as not found, so SLC Edge retries it, rather
+// than resuming a task of some other workflow.
+func TestProcessCusdecIntegrationResult_UnlinkedDeclaration(t *testing.T) {
+	decl := submitted("edge-unlinked")
+	decl.CaseID, decl.WorkflowID = "", ""
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-unlinked": decl}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-unlinked", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.ErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// The review task has not parked yet: the result is answered with an error that
+// is not "not found", and nothing is recorded, so SLC Edge retries it (§2)
+// until the task is there.
+func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, fakeTasks{}, completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	assert.False(t, repo.updateCalled, "the result must not be recorded while the step is unresumed")
+	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// SLC Edge's retry of a result that arrived before the review task parked
+// resumes the task once it has: the first attempt recorded nothing, so the
+// retry is not taken for a duplicate.
+func TestProcessCusdecIntegrationResult_RetryAfterNotParkedYetCompletes(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	req := CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	}
+
+	err := NewWebhookService(repo, fakeTasks{}, completer).ProcessIntegrationResult(context.Background(), req)
+	require.Error(t, err)
+
+	completer.On("CompleteTaskStep", mock.Anything, "task-abc", "step-task-abc", mock.Anything).Return(nil)
+	err = NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer).
+		ProcessIntegrationResult(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, CusdecStatusIntegrated, repo.updatedDecl.Status)
+	completer.AssertExpectations(t)
+}
+
+// A review step that could not be completed leaves the declaration SUBMITTED,
+// so SLC Edge's retry tries the step again rather than being acknowledged.
+func TestProcessCusdecIntegrationResult_CompletionFailureLeavesTheStatus(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	completer.On("CompleteTaskStep", mock.Anything, "task-abc", "step-task-abc", mock.Anything).Return(errors.New("temporal: unavailable"))
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.Error(t, err)
+	assert.False(t, repo.updateCalled)
+	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)
+}
+
+// Tasks that could not be read leave the declaration's status as it was and
+// answer with an error, so SLC Edge's retry can still resume the parked step.
+// Recording the status here would make that retry a duplicate.
+func TestProcessEvent_TaskStoreFailureLeavesTheStatus(t *testing.T) {
+	decl := &CusdecDeclaration{
+		EdgeID: "edge-123", CusdecOffice: "COL", CusdecYear: "2026", CusdecSerial: "C", CusdecNumber: 9876,
+		Status: CusdecStatusIntegrated, CaseID: testCaseID, WorkflowID: testWorkflowID,
+	}
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": decl}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, failingTasks{}, completer)
+
+	err := service.ProcessEvent(context.Background(), CusdecEventRequest{
+		Event:     "PAYMENT_CONFIRMED",
+		ProcessAt: time.Now(),
+		Payload: cusdecEventPayload{
+			CusdecRef:  DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 9876},
+			AmountPaid: 2035.00, Currency: "LKR",
+		},
+	})
+
+	require.ErrorIs(t, err, errTaskStore)
+	assert.False(t, repo.updateCalled, "the status must not be recorded while the step is unresumed")
+	assert.Equal(t, CusdecStatusIntegrated, decl.Status)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// Tasks that could not be read are an error for the integration result too, not
+// a declaration already processed.
+func TestProcessCusdecIntegrationResult_TaskStoreFailure(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, failingTasks{}, completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.ErrorIs(t, err, errTaskStore)
+	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	assert.False(t, repo.updateCalled, "the result must not be recorded while the step is unresumed")
+	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// The dispatch step records a declaration before SLC Edge can call back, so a
+// result for an edgeId with no row is early: it is retried, and no declaration
+// is created without the workflow it belongs to.
+func TestProcessCusdecIntegrationResult_UnrecordedEdgeIDIsRetried(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{}}
+	completer := &mockTaskCompleter{}
+	service := NewWebhookService(repo, fakeTasks{}, completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-unseen", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.ErrorIs(t, err, ErrDeclarationNotRecorded)
+	assert.False(t, repo.updateCalled)
+	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// A result for a declaration already past SUBMITTED is a repeat delivery: it is
+// reported as a duplicate, for the handler to acknowledge, and neither changes
+// the declaration nor resumes a task. A declaration the §6.5 events have moved
+// on must not be put back to INTEGRATED.
+func TestProcessCusdecIntegrationResult_RepeatIsDuplicate(t *testing.T) {
+	for _, status := range []CusdecStatus{
+		CusdecStatusIntegrated, CusdecStatusFailed, CusdecStatusPaid, CusdecStatusWarranted, CusdecStatusReleased,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			decl := submitted("edge-123")
+			decl.Status = status
+			repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": decl}}
+			completer := &mockTaskCompleter{}
+			service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+
+			err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+				EdgeID: "edge-123", Integrated: true,
+				Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+			})
+
+			require.ErrorIs(t, err, ErrDuplicateIntegrationResult)
+			assert.False(t, repo.updateCalled)
+			assert.Equal(t, status, decl.Status)
+			completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		})
+	}
 }

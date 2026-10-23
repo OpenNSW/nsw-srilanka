@@ -6,6 +6,11 @@ import "errors"
 // This is a permanent condition — the caller should not retry.
 var ErrWorkflowNotFoundByEdgeID = errors.New("workflow not found by edgeId")
 
+// ErrDeclarationNotRecorded indicates an integration result arrived for an
+// edgeId the dispatch step has not recorded yet. Transient: the step records it
+// as soon as SLC Edge accepts the submission, so the caller should retry.
+var ErrDeclarationNotRecorded = errors.New("no declaration recorded for edgeId")
+
 // ErrCusdecNotFoundByRef indicates no Customs Declaration matches the given reference.
 // This can be a transient condition if an event callback arrives before the integration
 // result callback has finished processing — the caller should retry.
