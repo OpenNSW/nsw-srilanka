@@ -47,7 +47,7 @@ func mountAgency(
 
 	// ConsignmentRead is the read scope the portal's token already carries; the
 	// handler additionally requires the token role of any catalog role.
-	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifacts.CurrentRegistry(), roles)
+	cases := agency.NewCaseHandler(agency.NewCaseRepository(db), tasks, artifacts, roles)
 	mux.Handle("GET /api/v1/cases", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleListCases))))
 	mux.Handle("GET /api/v1/cases/{id}", withAuth(withScope(scopes.ConsignmentRead)(http.HandlerFunc(cases.HandleGetCase))))
 }

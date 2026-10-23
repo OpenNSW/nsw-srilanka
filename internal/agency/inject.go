@@ -17,6 +17,7 @@ import (
 	"github.com/OpenNSW/core/httputil"
 	workflow "github.com/OpenNSW/core/workflow"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig"
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig/taskconfigart"
 )
 
@@ -69,35 +70,55 @@ func NewService(repo Repository, artifacts *artifact.Set, wm workflow.Manager) *
 // It is safe to retry: a row left in StatusStarting by a failed start is started
 // again, and a start racing another for the same taskId is deduplicated by the
 // engine, which returns the running execution instead of starting a second one.
+//
+// The workflow runs on the artifact manifest version current when its row was first
+// recorded; a retry after a deploy starts it on that version, not the new current one.
 func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, error) {
-	// Resolved before anything is recorded, so an unknown taskCode leaves no rows.
-	cfg, err := taskconfigart.Load(ctx, s.artifacts.CurrentRegistry(), req.TaskCode)
-	if err != nil {
-		if errors.Is(err, artifact.ErrNotFound) {
-			return nil, fmt.Errorf("%w %q", ErrUnknownTaskCode, req.TaskCode)
-		}
-		return nil, fmt.Errorf("agency: failed to load task config %q: %w", req.TaskCode, err)
+	// A retry of a recorded inject starts on the manifest version it was recorded with,
+	// so it is not checked against the current one, which may no longer hold its config.
+	w, err := s.repo.Get(ctx, req.TaskID)
+	switch {
+	case err == nil:
+		return s.resume(ctx, req, w, nil)
+	case !errors.Is(err, ErrWorkflowNotFound):
+		return nil, fmt.Errorf("agency: failed to read workflow: %w", err)
 	}
 
+	// A new inject runs on the current version. Its taskCode is resolved before anything
+	// is recorded, so an unknown taskCode leaves no rows.
+	version := s.artifacts.Current()
+	cfg, err := s.taskConfig(ctx, version, req.TaskCode)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.repo.Record(ctx, Workflow{
 		TaskID:   req.TaskID,
 		TaskCode: req.TaskCode,
 		// Callers speak trade, so the case is keyed by their consignment id.
-		CaseID:        req.ConsignmentID,
-		CallbackToken: req.CallbackToken,
-		Payload:       req.Data,
+		CaseID:          req.ConsignmentID,
+		ManifestVersion: version,
+		CallbackToken:   req.CallbackToken,
+		Payload:         req.Data,
 	}); err != nil {
 		return nil, fmt.Errorf("agency: failed to record workflow: %w", err)
 	}
-
-	w, err := s.repo.Get(ctx, req.TaskID)
-	if err != nil {
+	if w, err = s.repo.Get(ctx, req.TaskID); err != nil {
 		return nil, fmt.Errorf("agency: failed to read workflow: %w", err)
 	}
+	// A concurrent inject may have recorded the row first, on another replica's version.
+	if w.ManifestVersion != version {
+		return s.resume(ctx, req, w, nil)
+	}
+	return s.resume(ctx, req, w, cfg)
+}
+
+// resume starts the recorded workflow w unless it has already started. cfg is w's task
+// config if the caller has loaded it; nil loads it from w's manifest version.
+func (s *Service) resume(ctx context.Context, req InjectRequest, w *Workflow, cfg *taskconfig.TaskConfig) (*Workflow, error) {
 	// A taskId names one workflow for good, so a repeat is a retry only if it agrees
-	// with the recorded row. Checked against the row that won the insert, not before
-	// Record, so concurrent requests cannot race past it. It also means cfg below is
-	// the row's own config: a retry cannot start a different taskCode's workflow.
+	// with the recorded row. Checked against the row that won the insert, so concurrent
+	// requests cannot race past it. It also means a retry cannot start a different
+	// taskCode's workflow.
 	if w.CaseID != req.ConsignmentID || w.TaskCode != req.TaskCode {
 		return nil, fmt.Errorf("%w: %q is recorded for consignment %q, task code %q",
 			ErrConflict, w.TaskID, w.CaseID, w.TaskCode)
@@ -106,6 +127,12 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 	// workflow completes, the engine would accept the same ID as a brand-new run.
 	if w.Status != StatusStarting {
 		return w, nil
+	}
+	if cfg == nil {
+		var err error
+		if cfg, err = s.taskConfig(ctx, w.ManifestVersion, w.TaskCode); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := s.start(ctx, w, cfg.Workflow); err != nil {
@@ -118,11 +145,31 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 	return w, nil
 }
 
-// start loads workflowID and starts it with w.TaskID as the instance ID. Variables
-// are seeded from the recorded row, not the current request, so a retried start runs
-// with the first payload and callback token.
+// taskConfig loads taskCode's task_config from manifest version.
+func (s *Service) taskConfig(ctx context.Context, version int, taskCode string) (*taskconfig.TaskConfig, error) {
+	reg, err := s.artifacts.Registry(ctx, version)
+	if err != nil {
+		return nil, fmt.Errorf("agency: %w", err)
+	}
+	cfg, err := taskconfigart.Load(ctx, reg, taskCode)
+	if err != nil {
+		if errors.Is(err, artifact.ErrNotFound) {
+			return nil, fmt.Errorf("%w %q", ErrUnknownTaskCode, taskCode)
+		}
+		return nil, fmt.Errorf("agency: failed to load task config %q: %w", taskCode, err)
+	}
+	return cfg, nil
+}
+
+// start loads workflowID from w's manifest version and starts it with w.TaskID as the
+// instance ID. Variables are seeded from the recorded row, not the current request, so
+// a retried start runs with the first payload, callback token and manifest version.
 func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) error {
-	def, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), workflowID)
+	reg, err := s.artifacts.Registry(ctx, w.ManifestVersion)
+	if err != nil {
+		return fmt.Errorf("agency: %w", err)
+	}
+	def, err := workflowdef.Load(ctx, reg, workflowID)
 	if err != nil {
 		return fmt.Errorf("agency: failed to load workflow %q: %w", workflowID, err)
 	}
@@ -139,15 +186,14 @@ func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) err
 		"taskCode":      w.TaskCode,
 		"consignmentId": w.CaseID,
 		"notification":  notification,
-		// Every template the workflow reaches, at any depth, resolves through the
-		// manifest version current now, the one its definition was loaded from.
-		workflow.VarManifestVersion: s.artifacts.Current(),
 	}
 	// Seeded only when the caller sent one: a workflow that calls back by it then fails
 	// on the missing variable at the start, instead of calling back on an empty token.
 	if w.CallbackToken != "" {
 		vars["callbackToken"] = w.CallbackToken
 	}
+	// Every template the workflow reaches, at any depth, resolves through this version.
+	vars[workflow.VarManifestVersion] = w.ManifestVersion
 
 	if err := s.wm.StartWorkflow(ctx, w.TaskID, def, vars); err != nil {
 		return fmt.Errorf("agency: failed to start workflow: %w", err)

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/artifact"
-	"github.com/OpenNSW/core/artifact/testutil"
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
@@ -21,14 +20,13 @@ func (r recordingRepo) Record(context.Context, Workflow) error {
 	return nil
 }
 
+func (recordingRepo) Get(context.Context, string) (*Workflow, error) { return nil, ErrWorkflowNotFound }
+
 func TestInjectUnknownTaskCode(t *testing.T) {
-	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{"manifest_v1.json": []byte(`{"artifacts":[]}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	set := newSet(t, nil, nil)
 	svc := NewService(recordingRepo{t: t}, set, nil)
 
-	_, err = svc.Inject(context.Background(), InjectRequest{TaskID: "t1", TaskCode: "nope", ConsignmentID: "C1"})
+	_, err := svc.Inject(context.Background(), InjectRequest{TaskID: "t1", TaskCode: "nope", ConsignmentID: "C1"})
 	if !errors.Is(err, ErrUnknownTaskCode) {
 		t.Fatalf("err = %v, want ErrUnknownTaskCode", err)
 	}
@@ -49,12 +47,11 @@ func (r storedRepo) Get(context.Context, string) (*Workflow, error) {
 }
 
 func TestInjectRepeatTaskID(t *testing.T) {
-	reg := testSet(t, testutil.MemLoader{
-		"verify.json":      []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
-		"letter.json":      []byte(`{"schemaVersion":2,"taskCode":"letter","workflow":"letter_wf","meta":{"title":"Letter"}}`),
-		"manifest_v1.json": []byte(`{"artifacts":[{"id":"verify","kind":"task_config","path":"verify.json"},{"id":"letter","kind":"task_config","path":"letter.json"}]}`),
-	})
-	row := Workflow{TaskID: "T1", TaskCode: "verify", CaseID: "C1", Status: StatusStarted}
+	reg := newSet(t, map[string]string{
+		"verify.json": `{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`,
+		"letter.json": `{"schemaVersion":2,"taskCode":"letter","workflow":"letter_wf","meta":{"title":"Letter"}}`,
+	}, []artifact.ManifestRow{row("verify", "task_config", "verify.json"), row("letter", "task_config", "letter.json")})
+	stored := Workflow{TaskID: "T1", TaskCode: "verify", CaseID: "C1", ManifestVersion: 1, Status: StatusStarted}
 
 	// The workflow manager is nil: reaching the engine would panic, so these also
 	// prove no repeat starts a workflow.
@@ -69,7 +66,7 @@ func TestInjectRepeatTaskID(t *testing.T) {
 		"different taskCode while starting": {StatusStarting, InjectRequest{TaskID: "T1", TaskCode: "letter", ConsignmentID: "C1"}, ErrConflict},
 		"same details":                      {StatusStarted, InjectRequest{TaskID: "T1", TaskCode: "verify", ConsignmentID: "C1"}, nil},
 	} {
-		r := row
+		r := stored
 		r.Status = tc.status
 		got, err := NewService(storedRepo{row: r}, reg, nil).Inject(context.Background(), tc.req)
 		if !errors.Is(err, tc.want) {
@@ -98,29 +95,33 @@ func (r *startingRepo) Record(_ context.Context, w Workflow) error {
 }
 
 func (r *startingRepo) Get(context.Context, string) (*Workflow, error) {
+	if r.recorded == nil {
+		return nil, ErrWorkflowNotFound
+	}
 	w := *r.recorded
 	return &w, nil
 }
 
 func (r *startingRepo) MarkStarted(context.Context, string) error { return nil }
 
-// startCapture records the variables each workflow was started with.
+// startCapture records the definition and variables each workflow was started with.
 type startCapture struct {
 	workflow.Manager
+	defs []workflow.WorkflowDefinition
 	vars []map[string]any
 }
 
-func (m *startCapture) StartWorkflow(_ context.Context, _ string, _ workflow.WorkflowDefinition, vars map[string]any) error {
+func (m *startCapture) StartWorkflow(_ context.Context, _ string, def workflow.WorkflowDefinition, vars map[string]any) error {
+	m.defs = append(m.defs, def)
 	m.vars = append(m.vars, vars)
 	return nil
 }
 
 func TestInjectSeedsCallbackToken(t *testing.T) {
-	reg := testSet(t, testutil.MemLoader{
-		"verify.json":      []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
-		"verify_wf.json":   []byte(`{"id":"verify_wf","nodes":[],"edges":[]}`),
-		"manifest_v1.json": []byte(`{"artifacts":[{"id":"verify","kind":"task_config","path":"verify.json"},{"id":"verify_wf","kind":"workflow","path":"verify_wf.json"}]}`),
-	})
+	reg := newSet(t, map[string]string{
+		"verify.json":    `{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`,
+		"verify_wf.json": `{"id":"verify_wf","nodes":[],"edges":[]}`,
+	}, []artifact.ManifestRow{row("verify", "task_config", "verify.json"), row("verify_wf", "workflow", "verify_wf.json")})
 	req := InjectRequest{TaskID: "T1", TaskCode: "verify", ConsignmentID: "C1"}
 
 	t.Run("token is seeded from the recorded row", func(t *testing.T) {
@@ -147,9 +148,6 @@ func TestInjectSeedsCallbackToken(t *testing.T) {
 			if vars["callbackToken"] != "tok-1" {
 				t.Errorf("start %d: callbackToken = %v, want tok-1", i, vars["callbackToken"])
 			}
-			if vars[workflow.VarManifestVersion] != 1 {
-				t.Errorf("start %d: %s = %v, want the current manifest version 1", i, workflow.VarManifestVersion, vars[workflow.VarManifestVersion])
-			}
 		}
 	})
 
@@ -164,12 +162,76 @@ func TestInjectSeedsCallbackToken(t *testing.T) {
 	})
 }
 
-// testSet loads files, which must include manifest_v1.json, as a one-manifest artifact set.
-func testSet(t *testing.T, files testutil.MemLoader) *artifact.Set {
-	t.Helper()
-	set, err := artifact.LoadSet(context.Background(), files)
-	if err != nil {
+// versionedSet has two manifests; v2, the current one, points verify at a config whose
+// workflow is verify_wf_v2.
+func versionedSet(t *testing.T) *artifact.Set {
+	files := map[string]string{
+		"verify.json":       `{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`,
+		"verify_v2.json":    `{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf_v2","meta":{"title":"Verify"}}`,
+		"verify_wf.json":    `{"id":"verify_wf","nodes":[],"edges":[]}`,
+		"verify_wf_v2.json": `{"id":"verify_wf_v2","nodes":[],"edges":[]}`,
+	}
+	v1 := []artifact.ManifestRow{row("verify", "task_config", "verify.json"), row("verify_wf", "workflow", "verify_wf.json")}
+	v2 := []artifact.ManifestRow{row("verify", "task_config", "verify_v2.json"), row("verify_wf_v2", "workflow", "verify_wf_v2.json")}
+	return newSet(t, files, v1, v2)
+}
+
+// A new inject runs on the current manifest: it is recorded with it and started with it.
+func TestInjectPinsTheCurrentManifestVersion(t *testing.T) {
+	repo, wm := &startingRepo{}, &startCapture{}
+	if _, err := NewService(repo, versionedSet(t), wm).Inject(context.Background(), InjectRequest{TaskID: "T1", TaskCode: "verify", ConsignmentID: "C1"}); err != nil {
 		t.Fatal(err)
 	}
-	return set
+	if repo.recorded.ManifestVersion != 2 {
+		t.Errorf("recorded manifest version = %d, want 2", repo.recorded.ManifestVersion)
+	}
+	if len(wm.defs) != 1 || wm.defs[0].ID != "verify_wf_v2" {
+		t.Fatalf("started %+v, want verify_wf_v2", wm.defs)
+	}
+	if got := wm.vars[0][workflow.VarManifestVersion]; got != 2 {
+		t.Errorf("%s = %v, want 2", workflow.VarManifestVersion, got)
+	}
+}
+
+// A retry of an inject recorded before a deploy starts the workflow its manifest named.
+func TestInjectRetryKeepsTheRecordedManifestVersion(t *testing.T) {
+	repo := &startingRepo{recorded: &Workflow{TaskID: "T1", TaskCode: "verify", CaseID: "C1", ManifestVersion: 1, Status: StatusStarting}}
+	wm := &startCapture{}
+	if _, err := NewService(repo, versionedSet(t), wm).Inject(context.Background(), InjectRequest{TaskID: "T1", TaskCode: "verify", ConsignmentID: "C1"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(wm.defs) != 1 || wm.defs[0].ID != "verify_wf" {
+		t.Fatalf("started %+v, want the v1 workflow verify_wf", wm.defs)
+	}
+	if got := wm.vars[0][workflow.VarManifestVersion]; got != 1 {
+		t.Errorf("%s = %v, want 1", workflow.VarManifestVersion, got)
+	}
+}
+
+// A retry of an inject recorded on a manifest whose task config the current one dropped
+// still starts it, on the recorded version.
+func TestInjectRetryOfATaskCodeTheCurrentManifestDropped(t *testing.T) {
+	files := map[string]string{
+		"old.json":    `{"schemaVersion":2,"taskCode":"old","workflow":"old_wf","meta":{"title":"Old"}}`,
+		"old_wf.json": `{"id":"old_wf","nodes":[],"edges":[]}`,
+		"new.json":    `{"schemaVersion":2,"taskCode":"new","workflow":"new_wf","meta":{"title":"New"}}`,
+		"new_wf.json": `{"id":"new_wf","nodes":[],"edges":[]}`,
+	}
+	set := newSet(t, files,
+		[]artifact.ManifestRow{row("old", "task_config", "old.json"), row("old_wf", "workflow", "old_wf.json")},
+		[]artifact.ManifestRow{row("new", "task_config", "new.json"), row("new_wf", "workflow", "new_wf.json")})
+
+	repo := &startingRepo{recorded: &Workflow{TaskID: "T1", TaskCode: "old", CaseID: "C1", ManifestVersion: 1, Status: StatusStarting}}
+	wm := &startCapture{}
+	if _, err := NewService(repo, set, wm).Inject(context.Background(), InjectRequest{TaskID: "T1", TaskCode: "old", ConsignmentID: "C1"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(wm.defs) != 1 || wm.defs[0].ID != "old_wf" {
+		t.Fatalf("started %+v, want old_wf", wm.defs)
+	}
+
+	// A new inject of that task code is refused: the current manifest does not hold it.
+	if _, err := NewService(&startingRepo{}, set, &startCapture{}).Inject(context.Background(), InjectRequest{TaskID: "T2", TaskCode: "old", ConsignmentID: "C1"}); !errors.Is(err, ErrUnknownTaskCode) {
+		t.Fatalf("new inject of a dropped task code: err = %v, want ErrUnknownTaskCode", err)
+	}
 }
