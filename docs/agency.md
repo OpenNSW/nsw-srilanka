@@ -171,7 +171,8 @@ contract is in `api/tasks.openapi.yaml`.
 ## Task configs
 
 Each `taskCode` a caller may inject has a `task_config` artifact, registered in the
-agency manifest under the task code as its id:
+agency manifests under the task code as its id. An inject records the manifest version
+current when it arrives, and the workflow runs on it:
 
 ```json
 {

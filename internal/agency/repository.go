@@ -39,7 +39,10 @@ type Workflow struct {
 	TaskID   string `gorm:"column:task_id" json:"taskId"`
 	TaskCode string `gorm:"column:task_code" json:"taskCode"`
 	CaseID   string `gorm:"column:case_id" json:"caseId"`
-	Status   Status `gorm:"column:status" json:"status"`
+	// ManifestVersion is the artifact manifest version the workflow resolves its templates
+	// through: the current one when the row was recorded. A retried start keeps it.
+	ManifestVersion int    `gorm:"column:manifest_version" json:"manifestVersion"`
+	Status          Status `gorm:"column:status" json:"status"`
 	// CallbackToken is the token the injecting system expects the decision back on.
 	// Not echoed in responses: only the workflow needs it.
 	CallbackToken string          `gorm:"column:callback_token" json:"-"`
@@ -51,7 +54,8 @@ type Workflow struct {
 // Repository persists injected workflows.
 type Repository interface {
 	// Record inserts the row for taskID, and its case if new, on first sight and is a
-	// no-op afterwards, so the first payload is the one the workflow was started with.
+	// no-op afterwards, so the first payload and manifest version are the ones the
+	// workflow was started with.
 	Record(ctx context.Context, w Workflow) error
 	MarkStarted(ctx context.Context, taskID string) error
 	Get(ctx context.Context, taskID string) (*Workflow, error)
@@ -81,8 +85,8 @@ func (r *repository) Record(ctx context.Context, w Workflow) error {
 		ON CONFLICT (id) DO NOTHING
 	`
 	const insertWorkflow = `
-		INSERT INTO agency_workflow (task_id, task_code, case_id, status, callback_token, payload, created_at, updated_at)
-		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, now(), now())
+		INSERT INTO agency_workflow (task_id, task_code, case_id, manifest_version, status, callback_token, payload, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, now(), now())
 		ON CONFLICT (task_id) DO NOTHING
 	`
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -90,7 +94,7 @@ func (r *repository) Record(ctx context.Context, w Workflow) error {
 		if caseResult.Error != nil {
 			return caseResult.Error
 		}
-		result := tx.Exec(insertWorkflow, w.TaskID, w.TaskCode, w.CaseID, StatusStarting, w.CallbackToken, w.Payload)
+		result := tx.Exec(insertWorkflow, w.TaskID, w.TaskCode, w.CaseID, w.ManifestVersion, StatusStarting, w.CallbackToken, w.Payload)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -159,7 +163,7 @@ func (r *repository) MarkStarted(ctx context.Context, taskID string) error {
 
 func (r *repository) Get(ctx context.Context, taskID string) (*Workflow, error) {
 	const q = `
-		SELECT task_id, task_code, case_id, status, COALESCE(callback_token, '') AS callback_token,
+		SELECT task_id, task_code, case_id, manifest_version, status, COALESCE(callback_token, '') AS callback_token,
 			payload, created_at, updated_at
 		FROM agency_workflow
 		WHERE task_id = ?
@@ -205,11 +209,12 @@ type CaseRepository interface {
 	ListWorkflows(ctx context.Context, caseID string) ([]CaseWorkflow, error)
 }
 
-// CaseWorkflow identifies one workflow of a case: its instance id and the taskCode
-// that selected its task_config.
+// CaseWorkflow identifies one workflow of a case: its instance id, the taskCode that
+// selected its task_config, and the manifest version it resolves that config through.
 type CaseWorkflow struct {
-	TaskID   string `gorm:"column:task_id"`
-	TaskCode string `gorm:"column:task_code"`
+	TaskID          string `gorm:"column:task_id"`
+	TaskCode        string `gorm:"column:task_code"`
+	ManifestVersion int    `gorm:"column:manifest_version"`
 }
 
 // NewCaseRepository creates a CaseRepository on the app's shared *gorm.DB.
@@ -249,7 +254,7 @@ func (r *repository) GetCase(ctx context.Context, id string) (*Case, error) {
 }
 
 func (r *repository) ListWorkflows(ctx context.Context, caseID string) ([]CaseWorkflow, error) {
-	const q = `SELECT task_id, task_code FROM agency_workflow WHERE case_id = ? ORDER BY created_at`
+	const q = `SELECT task_id, task_code, manifest_version FROM agency_workflow WHERE case_id = ? ORDER BY created_at`
 	var workflows []CaseWorkflow
 	if err := r.db.WithContext(ctx).Raw(q, caseID).Scan(&workflows).Error; err != nil {
 		return nil, err
