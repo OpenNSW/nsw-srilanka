@@ -259,3 +259,20 @@ prose: ## Check Markdown spelling and term casing with Vale (needs Docker)
 
 .PHONY: docs-check
 docs-check: mdlint linkcheck prose ## Run all docs checks: mdlint → linkcheck → prose
+
+# ---------------------------------------------------------------------------
+# API reference (the OpenAPI specs in api/; rules: api/redocly.yaml)
+# ---------------------------------------------------------------------------
+
+REDOCLY_VERSION := 2.60.0
+NGINX_IMAGE     := nginx:1.29.1-alpine
+API_DOCS_PORT   ?= 8088
+
+.PHONY: api-lint
+api-lint: ## Lint the OpenAPI specs in api/ with Redocly
+	npx --yes @redocly/cli@$(REDOCLY_VERSION) lint --config api/redocly.yaml api/*.openapi.yaml
+
+.PHONY: api-docs
+api-docs: ## Serve the specs in Swagger UI at http://localhost:8088 (needs Docker; API_DOCS_PORT=<port> to change)
+	@echo "Swagger UI: http://localhost:$(API_DOCS_PORT)"
+	docker run --rm -p "127.0.0.1:$(API_DOCS_PORT):80" -v "$(CURDIR)/api:/usr/share/nginx/html:ro" $(NGINX_IMAGE)

@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  Swagger UI over every spec in this folder. Serve the folder over HTTP
+  (`make api-docs`) and open http://localhost:8088; a file:// URL cannot load
+  the specs. Add a new spec to SPECS below.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TNSW API Reference</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.1/swagger-ui.css" />
+    <style>
+      body { margin: 0; background: #fafafa; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.1/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.33.1/swagger-ui-standalone-preset.js"></script>
+    <script>
+      const SPECS = [
+        { name: "Consignments", url: "consignment.openapi.yaml" },
+        { name: "Tasks", url: "tasks.openapi.yaml" },
+        { name: "Storage", url: "storage.openapi.yaml" },
+        { name: "Static data", url: "staticdata.openapi.yaml" },
+        { name: "Profile", url: "profile.openapi.yaml" },
+        { name: "Admin", url: "admin.openapi.yaml" },
+        { name: "Agency", url: "agency.openapi.yaml" },
+        { name: "Payment callbacks (GovPay+)", url: "payment.openapi.yaml" },
+        { name: "Webhook: SLC Edge (ASYCUDA)", url: "webhooks.slce.openapi.yaml" },
+        { name: "Webhook: SLPA", url: "webhooks.slpa.openapi.yaml" },
+        { name: "System", url: "system.openapi.yaml" },
+      ];
+      window.ui = SwaggerUIBundle({
+        urls: SPECS,
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        // Shows x-required-scope, x-deployment-modes and x-callers on each operation.
+        showExtensions: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: "StandaloneLayout",
+      });
+    </script>
+  </body>
+</html>

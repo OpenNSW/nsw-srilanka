@@ -3,28 +3,61 @@ info:
   title: NSW Sri Lanka / Tasks API
   description: |
     OpenAPI 3.0 specification for the task-orchestrator HTTP surface: reading
-    a single task's rendered "zone view" and advancing it by submitting a
-    step. A task is one node of a consignment's workflow; access is derived
-    from the caller's role-tied ownership of the task's consignment.
+    a single task's rendered "zone view", advancing it by submitting a step or
+    saving a draft of one, and the callback route external systems use to
+    complete the step they were dispatched for. A task is one node of a case's
+    workflow (in TNSW, a consignment; in an agency, an injected workflow).
 
-    All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
-    carrying the scope named on each operation. Every error response uses the
-    shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
+    These routes run in both deployment modes. In TNSW (`mode: tnsw`) the
+    trader portal reads and submits tasks, and agency backends call back on
+    `POST /api/v1/callbacks/{token}`. In an agency (`mode: agency`) the
+    agency's officer portal (the trader-app in agency mode) reads and submits
+    tasks, and TNSW calls back on the agency's callback route.
+
+    Every route requires a JWT bearer token (see `securitySchemes.BearerAuth`)
+    carrying the scope named on each operation. The route is wrapped, outermost
+    first, in: trace middleware (sets `X-Trace-ID`), the security log, CORS
+    (answers an `OPTIONS` preflight itself with 204), authentication, the scope
+    check, and the task authz gate (attaches the caller's identity and a lazy
+    ownership resolver; it never writes a response itself).
+
+    Errors the handlers write use the `ErrorResponse` envelope
+    (`{"error": "...", "correlationId": "..."}`, `correlationId` equal to the
+    `X-Trace-ID` response header). The authentication and scope middleware
+    write their own `AuthError` body (`{"error": "...", "message": "..."}`)
+    with no `correlationId`.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+  - url: http://localhost:8081
+    description: Local Docker Compose (NPQS agency API; CDA 8083, FCAU 8082, EFC 8085, SLTB 8086)
+
+tags:
+  - name: Tasks
+    description: Read a task's zone view, submit or draft its active step, and complete a dispatched step by callback token.
 
 security:
   - BearerAuth: []
 
 paths:
   /api/v1/tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     get:
+      tags:
+        - Tasks
       summary: Get a task's rendered zone view
       description: |
         Returns the ZoneView payload for a single task, scoped to the
-        caller: they must own the task's consignment in a role the task's
-        render config admits. A task the caller may not read is reported the
-        same as one that does not exist (404), so the response cannot be
-        used to probe which task IDs exist.
+        caller: they must own the task's case in a role the task's render
+        config admits (in TNSW, the trader or CHA company of its consignment;
+        in an agency, an officer role). A task the caller may not read is
+        reported the same as one that does not exist (404, same body), so the
+        response cannot be used to probe which task IDs exist.
 
         Each value the task's render config declares under `files` is
         replaced by a **file reference** issued to the caller: an opaque
@@ -36,73 +69,74 @@ paths:
 
         Requires scope `nsw:task:read`.
       operationId: getTask
+      x-required-scope: nsw:task:read
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal]
       parameters:
         - $ref: '#/components/parameters/TaskID'
       responses:
         '200':
           description: OK.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ZoneView'
-        '400':
-          description: Missing task ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. No usable principal on the request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:task:read`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: |
             No such task, or the caller may not read it (indistinguishable
-            from "not found" by design).
+            from "not found" by design). Body `{"error": "task not found"}`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: |
-            Internal error resolving access, issuing file references (a
-            render config whose `files` does not parse, or does not match
-            the task's data, included), or assembling the view.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/tasks/{id}/steps/{stepId}:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     post:
+      tags:
+        - Tasks
       summary: Advance a task by completing a step (portal)
       description: |
         Submits a command (and optional payload) to advance the task's
-        underlying workflow. The request body must contain exactly one JSON
-        value; trailing data after it is rejected.
+        underlying workflow. The body is read up to the deployment's
+        `server.maxRequestBytes` (32 MiB in the shipped configs) and must
+        contain exactly one JSON value; trailing data after it is rejected.
+        Unknown top-level fields are ignored, and the `Content-Type` header
+        is not checked.
 
         `{stepId}` is the step being completed: the `step_id` the task's zone
         view reported. Only that step is completed; a submission for a step
         the task has since left is rejected with 409 and changes nothing.
-        External reviewers call back on `POST /api/v1/callbacks/{token}`
+        External systems call back on `POST /api/v1/callbacks/{token}`
         instead.
 
         Each `payload` field the task's render config declares under `files`
         must hold a file reference issued to the caller that can be
         submitted, from an upload or the task's zone view; the stored value
         it stands for is what gets stored. A value that is not a reference,
-        such as a raw storage key, is refused with 400.
+        such as a raw storage key, is refused with 400. When the step's
+        template names a form, the payload is then validated against it.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
+      x-required-scope: nsw:task:write
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal]
       parameters:
         - $ref: '#/components/parameters/TaskID'
         - $ref: '#/components/parameters/StepID'
@@ -118,91 +152,88 @@ paths:
             No Content. The workflow accepted the step; the task shows
             ADVANCING (or its next step) from then on, so refetch it rather
             than assume its state.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
         '400':
           description: |
-            Missing task or step ID, malformed JSON, unexpected trailing data,
-            a missing/empty `command`, a `payload` that sets the reserved
-            `__command` key, or a declared file field that does not have the
-            declared shape (such as a list where one file is declared) or
-            holds a value that is not a file reference.
+            One of:
+            - `invalid request body`: an empty body, malformed JSON (a
+              `command` that is not a string or a `payload` that is not an
+              object included), unexpected trailing data, a missing/empty
+              `command`, or a `payload` that sets the reserved `__command` key.
+            - `a file in the submission is not a file reference; upload it again`.
+            - `a file field in the submission does not have the shape the task declares`
+              (such as a list where one file is declared).
+            - `submission does not match the form`: the payload fails the
+              step's form schema, or changes a value the form marks read-only.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: |
-            The caller may not perform this action on this task, or a
-            declared file field holds a file reference issued to someone
-            else, or one that can't be submitted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenTaskAction'
         '404':
-          description: No such task.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/TaskNotFound'
         '409':
           description: |
             `{stepId}` is not the task's active step: the task has moved on (or
-            completed) since the caller read it. Refetch the task.
+            completed) since the caller read it. Body
+            `{"error": "this step is no longer active; refetch the task"}`.
+            Refetch the task; do not retry the same request.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '410':
-          description: |
-            A declared file field holds a file reference from the task's view
-            that has expired. Refetch the task and resubmit.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/FileExpired'
         '413':
-          description: Request body exceeds the configured maximum size.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/PayloadTooLarge'
         '500':
-          description: |
-            Internal error resolving the submission's file references (a
-            render config whose `files` does not parse included) or
-            completing the step.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/tasks/{id}/steps/{stepId}/draft:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     put:
+      tags:
+        - Tasks
       summary: Save a draft of the task's active step
       description: |
         Stores `payload` as a draft of the step, without completing it. The
         draft is stored where a submission would be, so the next read of the
         task shows it, but the step, its `step_id` and the task's `version`
         do not change, and other open views stay current. Drafts may be
-        partial. Only a step whose template declares drafts accepts one;
-        the server authorizes it as the command the template names for
-        drafts, so the body carries no `command`.
+        partial: the step's form schema is not applied, but values the form
+        marks read-only must not change. Only a step whose template declares
+        drafts accepts one; the server authorizes it as the command the
+        template names for drafts, so the body carries no `command`.
 
-        Declared file fields follow the same rule as a submission.
+        The body is read like a submission's (one JSON value within
+        `server.maxRequestBytes`, unknown top-level fields ignored), and an
+        empty body saves an empty draft. Declared file fields follow the same
+        rule as a submission.
 
         Requires scope `nsw:task:write`.
       operationId: saveTaskStepDraft
+      x-required-scope: nsw:task:write
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal]
       parameters:
         - $ref: '#/components/parameters/TaskID'
         - $ref: '#/components/parameters/StepID'
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -210,88 +241,92 @@ paths:
       responses:
         '204':
           description: No Content. The draft is stored.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
         '400':
           description: |
-            Missing task or step ID, malformed JSON, unexpected trailing data,
-            a `command` in the body, a `payload` that sets the reserved
-            `__command` key, a declared file field that does not have the
-            declared shape or holds a value that is not a file reference, or
-            a step that does not accept drafts.
+            One of:
+            - `invalid request body`: malformed JSON, unexpected trailing
+              data, a non-empty `command` in the body, or a `payload` that sets
+              the reserved `__command` key.
+            - `a file in the submission is not a file reference; upload it again`.
+            - `a file field in the submission does not have the shape the task declares`.
+            - `submission does not match the form`: the draft changes a value
+              the form marks read-only.
+            - `this step does not accept drafts`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: |
-            The caller may not save a draft of this step, or a declared file
-            field holds a file reference issued to someone else, or one that
-            can't be submitted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenTaskAction'
         '404':
-          description: No such task.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/TaskNotFound'
         '409':
           description: |
             `{stepId}` is not the task's active step, or it has already been
-            submitted. Refetch the task.
+            submitted (including while this draft was being saved). Body
+            `{"error": "this step is no longer active; refetch the task"}`.
+            Refetch the task.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '410':
-          description: |
-            A declared file field holds a file reference from the task's view
-            that has expired. Refetch the task and save again.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/FileExpired'
         '413':
-          description: Request body exceeds the configured maximum size.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/PayloadTooLarge'
         '500':
-          description: Internal error resolving file references or storing the draft.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/callbacks/{token}:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     post:
-      summary: Complete the step an external reviewer was dispatched for
+      tags:
+        - Tasks
+      summary: Complete the step an external system was dispatched for
       description: |
-        The route an external reviewer (an OGA portal or agency) calls back
-        on. `{token}` is the opaque `callbackToken` from the dispatch envelope
-        (the reviewer posts to `{serviceUrl}/{callbackToken}`). It names one
-        step of one task, so a callback that arrives after the task has moved
-        on is rejected with 409 instead of completing a later step. Treat it
-        as an opaque string; it is also the reviewer's idempotency key (the
-        same on every retry of one dispatch, different for every step).
+        The route a service calls back on to complete a step that was
+        parked waiting for it. `{token}` is the opaque `callbackToken` the
+        dispatch carried: an agency's API posts its decision to TNSW here
+        (the agency's `notify_decision` step, as its `<AGENCY>_TO_NSW`
+        client), and TNSW replies on an agency's own parked step here (as its
+        `NSW_TO_<AGENCY>` client). The token names one step of one task, so a
+        callback that arrives after the task has moved on is rejected with 409
+        instead of completing a later step. Treat it as an opaque string; it
+        is also the caller's idempotency key (the same on every retry of one
+        dispatch, different for every step). The security log replaces it in
+        the logged path.
 
         The body is the same envelope as the portal's
-        `POST /api/v1/tasks/{id}/steps/{stepId}`, and must contain exactly one
-        JSON value. Its declared file fields follow the same rule: each must
+        `POST /api/v1/tasks/{id}/steps/{stepId}`, read the same way (one JSON
+        value within `server.maxRequestBytes`, unknown top-level fields
+        ignored). Its declared file fields follow the same rule: each must
         hold a file reference issued to the caller's client that can be
         submitted, such as one an upload returned. A reference the dispatch
         carried can only be opened, so it can't be sent back.
 
+        A caller should retry on 5xx and on transport errors, and stop on
+        409: the step is no longer waiting, so no retry can succeed. TNSW's
+        own replies follow this rule.
+
         Requires scope `nsw:task:write`.
       operationId: completeTaskStepByCallbackToken
+      x-required-scope: nsw:task:write
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [agency-api, tnsw-api]
       parameters:
         - name: token
           in: path
@@ -308,68 +343,51 @@ paths:
       responses:
         '204':
           description: No Content. The workflow accepted the step.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
         '400':
           description: |
-            A malformed token, malformed JSON, unexpected trailing data, a
-            missing/empty `command`, a `payload` that sets the reserved
-            `__command` key, or a declared file field that does not have the
-            declared shape or holds a value that is not a file reference.
+            One of:
+            - `invalid callback token`: the token does not decode.
+            - `invalid request body`: an empty body, malformed JSON,
+              unexpected trailing data, a missing/empty `command`, or a
+              `payload` that sets the reserved `__command` key.
+            - `a file in the submission is not a file reference; upload it again`.
+            - `a file field in the submission does not have the shape the task declares`.
+            - `submission does not match the form`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Authentication required.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: |
-            The caller may not perform this action on this task, or a
-            declared file field holds a file reference issued to someone
-            else, or one that can't be submitted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenTaskAction'
         '404':
-          description: No such task.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/TaskNotFound'
         '409':
           description: |
             The token's step is no longer the task's active step: this callback
-            was already applied, or the task has moved on.
+            was already applied, or the task has moved on. Body
+            `{"error": "this step is no longer active; refetch the task"}`.
+            Do not retry.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '410':
-          description: |
-            A declared file field holds a file reference from the task's view
-            that has expired. Refetch the task and resubmit.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/FileExpired'
         '413':
-          description: Request body exceeds the configured maximum size.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/PayloadTooLarge'
         '500':
-          description: |
-            Internal error resolving the submission's file references (a
-            render config whose `files` does not parse included) or
-            completing the step.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InternalError'
 
 components:
   securitySchemes:
@@ -377,6 +395,29 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        JWT access token issued by the deployment's ThunderID IdP; validated
+        against its JWKS (cached for 5 minutes). The token must be signed with
+        RS256, RS384 or RS512 under a `kid` the JWKS holds, carry the
+        configured `iss` (`authn.issuer`) and `aud` (`authn.audience`), have
+        an `exp` (expiry and not-before are checked with 30 seconds' leeway),
+        a `client_id`, and a `grant_type` of `authorization_code` (a user
+        token, which must also carry `sub`, `email`, `ouId` and `ouHandle`)
+        or `client_credentials` (a client token). Scopes are read from
+        `scope` and roles from `roles`. A request without an `Authorization`
+        header, or with a token that fails any check, gets 401.
+
+  headers:
+    XTraceID:
+      description: |
+        The request's trace id: the caller's `X-Trace-ID`,
+        `X-Correlation-ID` or `X-Request-ID` (first present, if 1-64
+        characters of `[A-Za-z0-9-_:./=]`), else a generated 32-hex-character
+        id. Equal to `correlationId` in an `ErrorResponse`. Set on every
+        response.
+      schema:
+        type: string
+        example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
 
   parameters:
     TaskID:
@@ -392,19 +433,176 @@ components:
       description: The step being completed (the task's `step_id`).
       schema:
         type: string
+    XTraceIDRequest:
+      name: X-Trace-ID
+      in: header
+      required: false
+      description: Trace id to reuse for this request (preferred over the two below). An invalid value is replaced by a generated one.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+    XCorrelationIDRequest:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Used as the trace id when `X-Trace-ID` is absent.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+    XRequestIDRequest:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Used as the trace id when `X-Trace-ID` and `X-Correlation-ID` are absent.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+
+  responses:
+    Unauthorized:
+      description: |
+        Unauthorized. Written by one of:
+        - the authentication middleware (`AuthError`): `{"error":
+          "unauthorized", "message": "authentication required"}` with no
+          `Authorization` header, or `"message": "invalid authentication
+          token"` for a malformed header or a token that fails validation;
+        - the scope middleware (`AuthError`): `{"error": "unauthorized",
+          "message": "authentication required"}` when no principal was
+          attached;
+        - the task handler (`ErrorResponse`): `{"error": "authentication
+          required"}` when the task authz gate attached no identity, or the
+          authz extension found none.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/AuthError'
+              - $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: |
+        Forbidden. The bearer token lacks the route's scope. Written by the
+        scope middleware: `{"error": "forbidden", "message": "insufficient scope"}`.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+    ForbiddenTaskAction:
+      description: |
+        Forbidden. One of:
+        - the bearer token lacks scope `nsw:task:write` (scope middleware,
+          `AuthError`: `{"error": "forbidden", "message": "insufficient scope"}`);
+        - `you may not perform this action on this task` (`ErrorResponse`):
+          the step's authz rule does not admit the caller for this command in
+          the task's state (no role it allows, no ownership of the task's
+          case, a client it does not name), or the step declares no authz
+          rule at all;
+        - `a file in the submission was issued to someone else` (`ErrorResponse`);
+        - `a file in the submission can't be submitted; refetch the task`
+          (`ErrorResponse`): a reference that may only be opened.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/AuthError'
+              - $ref: '#/components/schemas/ErrorResponse'
+    TaskNotFound:
+      description: 'No such task. Body `{"error": "task not found"}`.'
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FileExpired:
+      description: |
+        A declared file field holds a file reference from the task's view
+        that has expired. Body `{"error": "a file in the submission has
+        expired; refetch the task and submit again"}`. Refetch the task and
+        send again with fresh references.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: |
+        The request body exceeds `server.maxRequestBytes`. Body
+        `{"error": "request body too large"}`.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: |
+        Internal error: resolving access, issuing or resolving file
+        references (a render config whose `files` does not parse, or does not
+        match the task's data, included), assembling the view, or completing
+        or storing the step. Body `{"error": "An error occurred while
+        processing your request"}`; the cause is logged under the
+        `correlationId`. Safe to retry.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
     ErrorResponse:
       type: object
+      description: The error envelope the handlers write.
       required:
         - error
+        - correlationId
       properties:
         error:
           type: string
           example: "task not found"
         correlationId:
           type: string
+          description: The request's trace id, as in the `X-Trace-ID` response header.
           example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    AuthError:
+      type: object
+      description: The body the authentication and scope middleware write. It carries no `correlationId`.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum:
+            - unauthorized
+            - forbidden
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
+      example:
+        error: forbidden
+        message: insufficient scope
 
     CompleteTaskStepRequest:
       type: object
@@ -421,26 +619,35 @@ components:
           description: |
             Command-specific data. Genuinely dynamic per task type; must not
             set the reserved `__command` key, which the server adds itself.
+            Omitted or `null` is taken as an empty object.
+          nullable: true
           additionalProperties: true
           not:
             required:
               - __command
+            properties:
+              __command: {}
 
     SaveTaskStepDraftRequest:
       type: object
-      not:
-        required:
-          - command
+      description: A `command` that is present but empty is tolerated; a non-empty one is refused.
       properties:
+        command:
+          type: string
+          maxLength: 0
+          description: Must be absent or empty.
         payload:
           type: object
           description: |
             The form data so far, as a submission would carry it. Must not set
-            the reserved `__command` key.
+            the reserved `__command` key. Omitted or `null` saves an empty draft.
+          nullable: true
           additionalProperties: true
           not:
             required:
               - __command
+            properties:
+              __command: {}
 
     HandleClaim:
       type: object
@@ -455,6 +662,7 @@ components:
           type: string
         element:
           type: string
+          description: Omitted when the render config names none.
 
     EnrichedComponent:
       type: object
@@ -478,8 +686,7 @@ components:
           items:
             $ref: '#/components/schemas/HandleClaim'
         payload:
-          description: Renderer-defined payload for this zone's component type.
-          additionalProperties: true
+          description: Renderer-defined payload for this zone's component type; any JSON value.
 
     ZoneView:
       type: object
@@ -492,6 +699,7 @@ components:
         - task_id
         - task_type
         - state
+        - version
         - view
         - created_at
         - updated_at
@@ -513,6 +721,13 @@ components:
           type: integer
           format: int64
           description: Increases every time the task moves on. Read-only.
+        claimed_by:
+          type: string
+          description: Who holds the task's claim, as the host recorded it. Omitted when the task is unclaimed.
+        claimed_at:
+          type: string
+          format: date-time
+          description: When the claim was taken. Omitted when the task is unclaimed.
         view:
           type: array
           description: Sections in render order.

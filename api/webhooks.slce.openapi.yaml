@@ -5,15 +5,74 @@ info:
     OpenAPI 3.0 specification for National Single Window (NSW) inbound ASYCUDA / SLC Edge webhook endpoints.
 
     All callback events are delivered through a single central endpoint (`POST /webhooks/slce`) and dynamically routed based on the `eventType` discriminator field.
+
+    The route is mounted in TNSW mode only (`internal/bootstrap/tnsw.go`) and is
+    handled by `external-integration/customs/asycuda`. It requires a JWT bearer
+    token carrying scope `nsw:slce-webhooks:write` (see
+    `securitySchemes.BearerAuth`).
+
+    **Delivery and retries.** §2 has SLC Edge retry a callback up to four times.
+    Every event is therefore safe to redeliver: a repeat is acknowledged
+    (`200`, or `202` for `CUSDEC_INTEGRATED`) and nothing is re-run. Only `503`
+    and `500` ask SLC Edge to try again; every other answer is final.
+
+    **Request handling, common to every event.**
+    - The body is read up to 1 MiB (1,048,576 bytes); a longer body is refused
+      with `400`, not `413`.
+    - `Content-Type` is not checked; the body is always decoded as JSON.
+    - Unknown fields are ignored. Field names are matched as Go's
+      `encoding/json` matches them (exact name first, then case-insensitively).
+    - `eventType` is read from the top level of the body, trimmed and
+      upper-cased before it is matched, so `cdn_integrated` routes like
+      `CDN_INTEGRATED`.
+    - `processedAt` is required and must be an RFC 3339 date-time. The live
+      API's `processAt` is accepted in its place.
+    - Every error body is `{"error": "<message>", "correlationId": "<trace id>"}`;
+      `correlationId` is the request's trace ID, also returned in the
+      `X-Trace-ID` response header on every response.
   version: 1.3.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+
+tags:
+  - name: SLC Edge callbacks
+    description: |
+      Callbacks SLC Edge (Sri Lanka Customs' ASYCUDA World gateway) pushes to TNSW
+      as a declaration (CusDec) or cargo dispatch note (CDN) moves through
+      customs.
 
 paths:
   /webhooks/slce:
     post:
+      tags:
+        - SLC Edge callbacks
       summary: Central SLCE Webhook Callback Handler
       description: |
-        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, CDN integration results, CDN acknowledgments, CDN amendments, and CDN cancellations).
+        Receives inbound ASYCUDA World callback events (CusDec integration results, payment notifications, warranting notifications, export release, declaration amendments, CDN integration results, CDN acknowledgments, CDN amendments, and CDN cancellations).
+
+        | `eventType` | Spec | Correlated by | Resumes |
+        | --- | --- | --- | --- |
+        | `CUSDEC_INTEGRATED` | §6.2 | `payload.edgeId` | the declaration's external review step |
+        | `PAYMENT_CONFIRMED` | §6.5.1 | `payload.cusDecRef` | the payment wait |
+        | `WARRANTING_COMPLETED` | §6.5.2 | `payload.cusDecRef` | the warranting wait |
+        | `EXPORT_RELEASED` | §6.5.3 | `payload.cusDecRef` | the export release wait |
+        | `CUSDEC_AMENDED` | §6.5.4 | `payload.cusDecRef` | nothing: opens an amendment flow on the consignment |
+        | `CDN_INTEGRATED` | §7.2 | `payload.edgeId` | the dispatch note's integration wait |
+        | `CDN_ACKNOWLEDGED` | §7.3 | `payload.cdnRef` | the dispatch note's acknowledgment wait |
+        | `CDN_AMENDED` | §7.6 | `payload.cdnRef` | nothing: opens an amendment flow on the consignment |
+        | `CDN_CANCELLED` | §7.7 | `payload.cdnRef` | the dispatch note's acknowledgment wait, released as cancelled |
+
+        Any other `eventType`, or none, is refused with `400`.
+
+        Requires scope `nsw:slce-webhooks:write`.
       operationId: processSLCEWebhook
+      x-required-scope: nsw:slce-webhooks:write
+      x-deployment-modes:
+        - tnsw
+      x-callers:
+        - slc-edge
       security:
         - BearerAuth: []
       requestBody:
@@ -50,7 +109,6 @@ paths:
                   payload:
                     edgeId: "41d31df5-afab-40e8-bf32-1bec8180c0f6"
                     integrated: true
-                    nswId: "111222437000"
                     totalAssessedAmount: 1350.0
                     amountPaid: 1350.0
                     amountPayable: 0.0
@@ -80,7 +138,6 @@ paths:
                               taxAssessedAmount: 0
                               paymentMethodCode: "1"
                     errors: {}
-                    status: "Paid"
               cusdecIntegrationFailed:
                 summary: CUSDEC Integration Result — failure (§6.2)
                 value:
@@ -89,8 +146,11 @@ paths:
                   payload:
                     edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
                     integrated: false
+                    duties: {}
                     errors:
-                      Declaration.HSCode: ["Invalid HS code for the declared item"]
+                      "0":
+                        - code: 300
+                          description: "Invalid HS code for the declared item"
               paymentConfirmed:
                 summary: CUSDEC Payment Notification (§6.5.1)
                 value:
@@ -133,19 +193,31 @@ paths:
                     voyageNo: "023W 08/01/2025"
                     portOfLoading: "LKCMB"
               cdnIntegrated:
-                summary: CDN Integration Result (§7.2)
+                summary: CDN Integration Result — success (§7.2)
                 value:
                   eventType: "CDN_INTEGRATED"
-                  edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
-                  integrated: true
                   processedAt: "2026-06-26T04:04:52Z"
                   payload:
+                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    integrated: true
                     cdnRef:
                       office: "CBEX1"
                       year: "2026"
                       serial: "E"
                       number: 333
-                  errors: {}
+                    errors: {}
+              cdnIntegrationFailed:
+                summary: CDN Integration Result — failure (§7.2)
+                value:
+                  eventType: "CDN_INTEGRATED"
+                  processedAt: "2026-06-26T04:04:52Z"
+                  payload:
+                    edgeId: "5516e4c8-a93d-429d-8a18-6a484d331176"
+                    integrated: false
+                    errors:
+                      "0":
+                        - code: 210
+                          description: "Unknown carrier code"
               cdnAcknowledged:
                 summary: CDN Acknowledgment (§7.3)
                 value:
@@ -194,85 +266,167 @@ paths:
       responses:
         '200':
           description: |
-            OK. Either the callback was validated and processed successfully, or
-            (for the (6.5) CusdecEventRequest / CDNAcknowledgmentRequest event
-            types only) it repeats an event already applied to the declaration
-            or dispatch note — acknowledged as a no-op rather than re-run. A
-            repeated CDN_AMENDED names the flow its first delivery opened, which
-            is not opened again. A repeated CDN_CANCELLED, or a CDN_ACKNOWLEDGED
-            for a cancelled dispatch note, is acknowledged without action.
+            OK, with an empty body. The callback was validated and applied — or
+            it repeats one already applied and is acknowledged as a no-op. Final:
+            SLC Edge stops retrying.
+
+            - `CUSDEC_INTEGRATED`: the result was recorded against `edgeId` and
+              the review step completed. When no workflow or parked review step
+              matches the `edgeId`, the result is still recorded and answered
+              `200`; nothing is advanced.
+            - `PAYMENT_CONFIRMED`, `WARRANTING_COMPLETED`, `EXPORT_RELEASED`: the
+              declaration's status advanced and its wait completed. A
+              declaration already at or past the event's status (`PAID`,
+              `WARRANTED`, `RELEASED` in that order) is a repeat: `200`, nothing
+              changed. When no waiting step is found, the status is still
+              advanced and `200` returned.
+            - `CDN_INTEGRATED`: the dispatch note was recorded and its
+              integration wait released. A redelivery for a note already
+              integrated or acknowledged is `200`, and releases the wait if it
+              is still parked.
+            - `CDN_ACKNOWLEDGED`: the note moved to `ACKNOWLEDGED` and its wait
+              was released. A note already acknowledged, or one Customs
+              cancelled, is `200` with no action.
+            - `CUSDEC_AMENDED`, `CDN_AMENDED`: an amendment flow was opened on
+              the consignment, showing the declaration or note as amended. The
+              document's own workflow is not touched. A redelivery of the same
+              amendment (same reference and `operationTime`) opens nothing
+              again.
+            - `CDN_CANCELLED`: the note's acknowledgment wait was released as
+              cancelled and the note moved to `CANCELLED`. A note already
+              cancelled is `200` with no action.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
         '202':
           description: |
-            Accepted. CUSDEC_INTEGRATED only: this edgeId's integration result was
-            already recorded by an earlier delivery. §2 has SLC Edge retry a
+            Accepted, with an empty body. `CUSDEC_INTEGRATED` only: an
+            integration result for this `edgeId` is already recorded (the
+            declaration is `INTEGRATED` or `FAILED`). §2 has SLC Edge retry a
             callback up to four times, so a repeat is expected whenever a prior
             200 was lost in transit — it is acknowledged and nothing is re-run.
+            Final: SLC Edge stops retrying.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
         '400':
-          description: Bad Request. Malformed JSON, missing mandatory fields, validation failure, or an unrecognized `eventType`.
+          description: |
+            Bad Request. Final: a redelivery fails the same way. Returned when:
+
+            - the body cannot be read, or exceeds 1 MiB;
+            - the body is not JSON, or a field has the wrong JSON type (e.g. a
+              string `number`, or a non-RFC 3339 `processedAt`);
+            - `eventType` is missing or not one of the six above — `error` is
+              `unknown or unsupported event type`;
+            - `processedAt` (or `processAt`) is missing;
+            - `CUSDEC_INTEGRATED`/`CDN_INTEGRATED`: `payload.edgeId` is missing
+              or empty;
+            - `CUSDEC_INTEGRATED` with `integrated: true`: the reference is not
+              fully populated, or `totalAssessedAmount` or `amountPayable` is
+              absent;
+            - `CDN_INTEGRATED` with `integrated: true`: `cdnRef` is not fully
+              populated;
+            - `PAYMENT_CONFIRMED`/`WARRANTING_COMPLETED`/`EXPORT_RELEASED`:
+              `cusDecRef` is not fully populated;
+            - `CDN_ACKNOWLEDGED`: `cdnRef` is not fully populated;
+            - `duties` is a non-empty array, or `itemSequenceNumeric` is not a
+              whole number.
+
+            Every case but the unknown event type answers `invalid request payload`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  error:
-                    type: string
-                    example: "invalid request payload"
-                  correlationId:
-                    type: string
-                    example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPayload:
+                  value:
+                    error: "invalid request payload"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                unknownEvent:
+                  value:
+                    error: "unknown or unsupported event type"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '401':
-          description: Unauthorized. Missing or invalid OAuth 2.0 Bearer token.
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  error:
-                    type: string
-                    example: "unauthorized"
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: |
-            Not Found. The declaration or dispatch note the callback's `edgeId`
-            names has no workflow recorded (CUSDEC_INTEGRATED, CDN_INTEGRATED),
-            or the dispatch note an amendment names (CDN_AMENDED) has no case
-            recorded. Permanent — SLC Edge should not retry.
+            Not Found. `CDN_INTEGRATED` only: no customs workflow recorded this
+            `edgeId` for a dispatch note. The result itself has been recorded
+            before this answer, so a redelivery of the same callback is answered
+            `200`; there is nothing for SLC Edge to gain by retrying. Also
+            `CUSDEC_AMENDED` and `CDN_AMENDED`: the declaration or dispatch note
+            has no consignment case recorded to open the amendment flow on.
+            Permanent: SLC Edge should not retry.
+
+            The handler also maps a missing workflow on `CUSDEC_INTEGRATED` to
+            `404 workflow not found`, but the service records the result first
+            and answers `200` when no workflow matches, so that event does not
+            return `404` today.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  error:
-                    type: string
-                    example: "workflow not found"
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "dispatch note not found"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+        '500':
+          description: |
+            Internal Server Error. A database or workflow failure while applying
+            the event, logged server-side. Also returned for `CDN_ACKNOWLEDGED`
+            when the dispatch note is not `INTEGRATED` (e.g. it is still
+            `SUBMITTED` or `FAILED`), or when no workflow is found for the note's
+            `edgeId`. SLC Edge may retry.
+
+            A retry does not always re-run the work. `CUSDEC_INTEGRATED` records
+            the result before it advances the workflow, so a retry after a `500`
+            from the workflow step is answered `202` and the review step is not
+            completed; the same holds for `CDN_ACKNOWLEDGED`, whose retry is
+            answered `200`. Those cases need an operator.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "An error occurred while processing your request"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '503':
           description: |
-            Service Unavailable. No declaration or dispatch note is recorded yet
-            for the callback's `edgeId` (CUSDEC_INTEGRATED, CDN_INTEGRATED) —
-            TNSW records it as soon as SLC Edge accepts the submission, so the
-            result arrived early. Or the declaration named by `cusDecRef`
-            (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED) or the
+            Service Unavailable. The declaration named by `cusDecRef`
+            (PAYMENT_CONFIRMED, WARRANTING_COMPLETED, EXPORT_RELEASED, CUSDEC_AMENDED) or the
             dispatch note named by `cdnRef` (CDN_ACKNOWLEDGED, CDN_AMENDED, CDN_CANCELLED) does not exist yet
             — this event likely raced the CUSDEC_INTEGRATED / CDN_INTEGRATED
             callback for the same document. Or the dispatch note's wait for its
             acknowledgment has not parked yet (CDN_ACKNOWLEDGED, CDN_CANCELLED);
             the note is left as it was, so the retry releases it. Transient:
             SLC Edge should retry.
+            No `Retry-After` header is sent.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - error
-                properties:
-                  error:
-                    type: string
-                    example: "declaration not found, retry later"
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                declarationNotFound:
+                  value:
+                    error: "declaration not found, retry later"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                dispatchNoteNotFound:
+                  value:
+                    error: "dispatch note not found, retry later"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
 
 components:
   securitySchemes:
@@ -280,10 +434,107 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        `Authorization: Bearer <access token>`: a JWT access token issued by the
+        deployment's ThunderID IdP to SLC Edge's M2M client `SLCE_TO_NSW`
+        (`idp/bootstrap/10-nsw-platform.yaml`), obtained with the
+        `client_credentials` grant (`client_secret_basic`). The token request
+        must send `resource=https://api.nsw-srilanka.local`, or the IdP refuses
+        it with `invalid_target` (see `idp/README.md`). Tokens are valid for
+        3600 s.
+
+        `internal/authn` (core/authn) accepts the token only if:
+        - it is signed RS256, RS384 or RS512 by a key in the JWKS at
+          `authn.jwksURL`, and its header names that key's `kid`;
+        - `iss` equals `authn.issuer` and `aud` contains `authn.audience`
+          (`https://api.nsw-srilanka.local` in the examples);
+        - `exp` is present and not past (30 s leeway is allowed on time claims);
+        - `client_id` is present and `grant_type` is `client_credentials`.
+
+        core/authz then requires `nsw:slce-webhooks:write` among the
+        space-delimited `scope` claim. The route checks the scope only: any
+        client granted that scope is admitted, not only `SLCE_TO_NSW`.
+
+  headers:
+    XTraceID:
+      description: |
+        The request's trace ID: the caller's `X-Trace-ID`, `X-Correlation-ID`
+        or `X-Request-ID` header when it is a valid ID, otherwise one
+        generated here. It is the `correlationId` in error bodies.
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: |
+        Unauthorized, from the authentication middleware (core/authn) before the
+        body is read. `message` is `authentication required` when there is no
+        `Authorization` header, and `invalid authentication token` when the
+        header is not `Bearer <token>` or the token fails any check listed under
+        `securitySchemes.BearerAuth`. No `WWW-Authenticate` header is sent.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthErrorResponse'
+          examples:
+            missingToken:
+              value:
+                error: "unauthorized"
+                message: "authentication required"
+            invalidToken:
+              value:
+                error: "unauthorized"
+                message: "invalid authentication token"
+    Forbidden:
+      description: |
+        Forbidden, from core/authz `RequireScope`: the token is valid but its
+        `scope` claim does not include `nsw:slce-webhooks:write`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthErrorResponse'
+          example:
+            error: "forbidden"
+            message: "insufficient scope"
 
   schemas:
+    ErrorResponse:
+      type: object
+      description: The handler's error body (`github.com/OpenNSW/core/httputil`).
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "invalid request payload"
+        correlationId:
+          type: string
+          description: The request's trace ID; also the `X-Trace-ID` response header.
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    AuthErrorResponse:
+      type: object
+      description: The authentication and authorization middleware's error body.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum: [unauthorized, forbidden]
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
+
     DocumentReference:
       type: object
+      description: |
+        A registered ASYCUDA document reference (§4.1). Where a reference is
+        required, all four fields must be present and non-empty, and `number`
+        greater than 0; otherwise the callback is refused with `400`.
       required:
         - office
         - year
@@ -292,20 +543,36 @@ components:
       properties:
         office:
           type: string
+          minLength: 1
           example: "CBEX1"
           description: Customs office code
         year:
           type: string
+          minLength: 1
           example: "2026"
           description: Registration year
         serial:
           type: string
+          minLength: 1
           example: "E"
           description: Registration serial
         number:
           type: integer
+          minimum: 1
           example: 1047
           description: Registration number
+
+    SegmentErrors:
+      description: |
+        Segment-keyed errors (§4.5): `"0"` is the document as a whole, any other
+        key an item number, each holding `{code, description}` entries. Stored
+        as received and shown to the trader; any JSON value is accepted, and one
+        that does not have this shape is shown as raw text. Empty object {} on
+        success.
+      example:
+        "0":
+          - code: 300
+            description: "Invalid HS code for the declared item"
 
     DutyTaxFee:
       type: object
@@ -350,8 +617,12 @@ components:
             type: object
             properties:
               itemSequenceNumeric:
-                type: integer
-                description: Item number; matches goodsShipments[].sequenceNumeric.
+                type: number
+                multipleOf: 1
+                description: |
+                  Item number; matches goodsShipments[].sequenceNumeric. A whole
+                  number written as `1.0` is read as 1; a fractional value is
+                  refused with `400`.
                 example: 1
               dutyTaxFees:
                 type: array
@@ -363,11 +634,13 @@ components:
       type: object
       description: |
         §6.2 Declaration Integration Result. Carries the outcome of processing the
-        submission identified by `edgeId`.
+        submission identified by `edgeId`. `edgeId`, `integrated` and `errors`
+        travel inside `payload`; any copy at the top level is ignored.
 
         On success: `integrated` = true; `cusdecRef` present; `duties` populated; `errors` = {}.
-        On failure: `integrated` = false; `cusdecRef` absent/null; `duties` empty; `errors` populated
-        and keyed by segment. Success and errors are mutually exclusive.
+        On failure: `integrated` = false (an absent `integrated` is read as false);
+        `duties` empty; `errors` populated and keyed by segment. On failure the
+        reference, amounts and duties are not read.
 
         All amounts are in LKR. `amountPayable` = `totalAssessedAmount` − `amountPaid`, and it is
         what the trader is asked to pay. A successful result must carry `totalAssessedAmount` and
@@ -378,12 +651,19 @@ components:
 
         `cusdecRef` is the canonical field name, as spec v1.9 uses throughout.
         `cusDecRef` (capital `D`), from an earlier draft of this contract, is
-        still accepted as an alias.
+        still accepted as an alias; when both are sent, a fully populated
+        `cusDecRef` wins.
+
+        Other fields SLC Edge sends (e.g. `nswId`, `status`) are accepted and
+        ignored.
+
+        Idempotency: the first result for an `edgeId` is recorded (declaration
+        `INTEGRATED` or `FAILED`); every later one for it is answered `202` and
+        not applied, whatever it carries.
       required:
         - eventType
         - processedAt
         - payload
-      additionalProperties: false
       properties:
         eventType:
           type: string
@@ -391,43 +671,29 @@ components:
         processedAt:
           type: string
           format: date-time
-          description: Processing time.
+          description: Processing time. `processAt` is accepted in its place.
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
           required:
             - edgeId
-            - integrated
-            - errors
-          additionalProperties: false
           properties:
             edgeId:
               type: string
-              format: uuid
-              description: Correlation ID from the 202 acknowledgement.
+              minLength: 1
+              description: Correlation ID from the 202 acknowledgement of the declaration submission.
               example: "5516e4c8-a93d-429d-8a18-6a484d331176"
             integrated:
               type: boolean
-              description: true on success, false on failure.
+              description: true on success, false on failure. Absent is read as false.
               example: true
             cusdecRef:
-              description: Registered reference (§4.1). Present on success; absent/null on failure.
+              $ref: '#/components/schemas/DocumentReference'
             cusDecRef:
-              description: |
-                Alias for `cusdecRef` (capital `D`), from an earlier draft of
-                this contract; still accepted. Present on success; absent/null
-                on failure.
-            nswId:
-              type: string
-              description: NSW-assigned submission identifier (§2.2).
-              example: "111222437000"
-            status:
-              type: string
-              description: Declaration status in ASYCUDA after integration (e.g. Assessed, Paid).
-              example: "Paid"
+              $ref: '#/components/schemas/DocumentReference'
             totalAssessedAmount:
               type: number
-              description: Total duties and taxes assessed on the declaration, in LKR.
+              description: Total duties and taxes assessed on the declaration, in LKR. Required on success.
               example: 1350.0
             amountPaid:
               type: number
@@ -435,24 +701,24 @@ components:
               example: 1350.0
             amountPayable:
               type: number
-              description: Amount still due, in LKR (totalAssessedAmount − amountPaid). 0 when fully paid.
+              description: Amount still due, in LKR (totalAssessedAmount − amountPaid). 0 when fully paid. Required on success.
               example: 0.0
             duties:
-              nullable: true
               description: |
                 The duty breakdown. Populated on success. Empty on failure, where an
-                empty object, an empty array and null are all accepted.
+                empty object, an empty array and null are all accepted; a
+                non-empty array is refused with `400`.
               anyOf:
                 - $ref: '#/components/schemas/DutyAssessment'
                 - type: array
+                  nullable: true
                   maxItems: 0
             errors:
-              type: object
-              description: Segment-keyed errors (§4.4). Empty object {} on success.
-          oneOf:
+              $ref: '#/components/schemas/SegmentErrors'
+          anyOf:
             - title: Integrated
               required:
-                - errors
+                - integrated
                 - totalAssessedAmount
                 - amountPayable
               anyOf:
@@ -460,52 +726,36 @@ components:
                 - required: [cusdecRef]
               properties:
                 integrated:
+                  type: boolean
                   enum: [true]
-                cusDecRef:
-                  $ref: '#/components/schemas/DocumentReference'
-                cusdecRef:
-                  $ref: '#/components/schemas/DocumentReference'
-                errors:
-                  type: object
-                  maxProperties: 0
             - title: Rejected
-              required:
-                - errors
               properties:
                 integrated:
+                  type: boolean
                   enum: [false]
-                cusdecRef:
-                  type: object
-                  nullable: true
-                  enum: [null]
-                  description: Registered reference (§4.1). Present on success; absent/null on failure.
-                cusDecRef:
-                  type: object
-                  nullable: true
-                  enum: [null]
-                  description: Alias for `cusdecRef`, from an earlier draft. Present on success; absent/null on failure.
-                duties:
-                  nullable: true
-                  description: |
-                    Empty on failure. The spec does not say how, so an empty
-                    object, an empty array and null are all accepted.
-                  anyOf:
-                    - type: object
-                      properties:
-                        globalDuties:
-                          type: array
-                          maxItems: 0
-                        itemDutiesList:
-                          type: array
-                          maxItems: 0
-                    - type: array
-                      maxItems: 0
-                errors:
-                  type: object
-                  minProperties: 1
+
+    CusdecEventPayload:
+      type: object
+      description: |
+        The §6.5 notification payload: `cusDecRef` names the declaration, which
+        must already be recorded by its `CUSDEC_INTEGRATED` result (otherwise
+        `503`). `cusdecRef` is accepted as an alias. The event-specific fields
+        are optional and are passed to the waiting step as received.
+
+        Idempotency: a declaration already at or past the status this event
+        sets is answered `200` and not changed, so an event that arrives after a
+        later one cannot move the status backwards.
+      required:
+        - cusDecRef
+      properties:
+        cusDecRef:
+          $ref: '#/components/schemas/DocumentReference'
+        cusdecRef:
+          $ref: '#/components/schemas/DocumentReference'
 
     CusdecPaymentNotificationRequest:
       type: object
+      description: §6.5.1 Payment Notification. Moves the declaration to `PAID`.
       required:
         - eventType
         - processedAt
@@ -517,26 +767,27 @@ components:
         processedAt:
           type: string
           format: date-time
+          description: Processing time. `processAt` is accepted in its place.
           example: "2026-04-26T11:15:22Z"
         payload:
-          type: object
-          required:
-            - cusDecRef
-          properties:
-            cusDecRef:
-              $ref: '#/components/schemas/DocumentReference'
-            amountPaid:
-              type: number
-              example: 2035.00
-            currency:
-              type: string
-              example: "LKR"
-            bankReference:
-              type: string
-              example: "BNK-2026-0098765"
+          allOf:
+            - $ref: '#/components/schemas/CusdecEventPayload'
+            - type: object
+              properties:
+                amountPaid:
+                  type: number
+                  description: What Customs took, in `currency`.
+                  example: 2035.00
+                currency:
+                  type: string
+                  example: "LKR"
+                bankReference:
+                  type: string
+                  example: "BNK-2026-0098765"
 
     CusdecWarrantingNotificationRequest:
       type: object
+      description: §6.5.2 Warranting Notification. Moves the declaration to `WARRANTED`.
       required:
         - eventType
         - processedAt
@@ -548,23 +799,25 @@ components:
         processedAt:
           type: string
           format: date-time
+          description: Processing time. `processAt` is accepted in its place.
           example: "2026-04-26T11:15:22Z"
         payload:
-          type: object
-          required:
-            - cusDecRef
-          properties:
-            cusDecRef:
-              $ref: '#/components/schemas/DocumentReference'
-            releaseOrderNo:
-              type: string
-              example: "RO/2026/004567"
-            examinationRequired:
-              type: boolean
-              example: false
+          allOf:
+            - $ref: '#/components/schemas/CusdecEventPayload'
+            - type: object
+              properties:
+                releaseOrderNo:
+                  type: string
+                  description: Sent by some deployments; shown when present.
+                  example: "RO/2026/004567"
+                examinationRequired:
+                  type: boolean
+                  description: Accepted; not acted on.
+                  example: false
 
     CusdecExportReleaseRequest:
       type: object
+      description: §6.5.3 Export Release. Moves the declaration to `RELEASED`.
       required:
         - eventType
         - processedAt
@@ -576,106 +829,93 @@ components:
         processedAt:
           type: string
           format: date-time
+          description: Processing time. `processAt` is accepted in its place.
           example: "2026-04-26T11:15:22Z"
         payload:
-          type: object
-          required:
-            - cusDecRef
-          properties:
-            cusDecRef:
-              $ref: '#/components/schemas/DocumentReference'
-            vesselName:
-              type: string
-              example: "EVER GIVEN"
-            voyageNo:
-              type: string
-              example: "023W 08/01/2025"
-            portOfLoading:
-              type: string
-              example: "LKCMB"
+          allOf:
+            - $ref: '#/components/schemas/CusdecEventPayload'
+            - type: object
+              properties:
+                vesselName:
+                  type: string
+                  example: "EVER GIVEN"
+                voyageNo:
+                  type: string
+                  example: "023W 08/01/2025"
+                portOfLoading:
+                  type: string
+                  example: "LKCMB"
 
     CDNIntegrationResultRequest:
       type: object
       description: |
-        §7.2 CDN Integration Result. Single shape: `edgeId`, `integrated`, and
-        `errors` are top-level; `payload` carries only `cdnRef`.
+        §7.2 CDN Integration Result. As in §6.2, `edgeId`, `integrated`, `cdnRef`
+        and `errors` all travel inside `payload`; the top level carries only the
+        event discriminator and its timestamp, and any copy of those fields there
+        is ignored.
 
         Same success/failure conditions as the declaration result (§6.2), with no
-        taxes block for CDN. Present on success; absent/null on failure.
+        taxes block for CDN: on success `cdnRef` must be fully populated; on
+        failure (`integrated` false or absent) `cdnRef` is not read and `errors`
+        is stored as the reason.
+
+        Idempotency: a redelivery for a note already `INTEGRATED` or
+        `ACKNOWLEDGED` is not recorded again — the reference already stored is
+        kept — and is answered `200`, releasing the integration wait if it is
+        still parked. A redelivered failure for a `FAILED` note does the same.
       required:
-        - edgeId
-        - integrated
         - eventType
         - processedAt
         - payload
-        - errors
-      additionalProperties: false
       properties:
-        edgeId:
-          type: string
-          format: uuid
-          description: Correlation ID from the 202 acknowledgement.
-          example: "5516e4c8-a93d-429d-8a18-6a484d331176"
-        integrated:
-          type: boolean
-          description: true on success, false on failure.
-          example: true
         eventType:
           type: string
           enum: [CDN_INTEGRATED]
         processedAt:
           type: string
           format: date-time
+          description: Processing time. `processAt` is accepted in its place.
           example: "2026-06-26T04:04:52Z"
         payload:
           type: object
-          additionalProperties: false
-          description: Payload carrying cdnRef on success or absent/null on failure.
+          required:
+            - edgeId
           properties:
+            edgeId:
+              type: string
+              minLength: 1
+              description: Correlation ID from the 202 acknowledgement of the CDN submission.
+              example: "5516e4c8-a93d-429d-8a18-6a484d331176"
+            integrated:
+              type: boolean
+              description: true on success, false on failure. Absent is read as false.
+              example: true
             cdnRef:
-              description: Registered CDN reference. Present on success; absent/null on failure.
-        errors:
-          type: object
-          description: Segment-keyed errors (§4.4). Empty object {} on success.
-      oneOf:
-        - title: Integrated
-          required:
-            - errors
-          properties:
-            integrated:
-              enum: [true]
-            payload:
-              type: object
+              $ref: '#/components/schemas/DocumentReference'
+            errors:
+              $ref: '#/components/schemas/SegmentErrors'
+          anyOf:
+            - title: Integrated
               required:
+                - integrated
                 - cdnRef
-              additionalProperties: false
               properties:
-                cdnRef:
-                  $ref: '#/components/schemas/DocumentReference'
-            errors:
-              type: object
-              maxProperties: 0
-        - title: Rejected
-          required:
-            - errors
-          properties:
-            integrated:
-              enum: [false]
-            payload:
-              type: object
-              additionalProperties: false
+                integrated:
+                  type: boolean
+                  enum: [true]
+            - title: Rejected
               properties:
-                cdnRef:
-                  type: object
-                  nullable: true
-                  enum: [null]
-                  description: Registered reference. Present on success; absent/null on failure.
-            errors:
-              type: object
-              minProperties: 1
+                integrated:
+                  type: boolean
+                  enum: [false]
 
     CDNAcknowledgmentRequest:
       type: object
+      description: |
+        §7.3 CDN Acknowledgment. Correlated by `cdnRef`, which must name a
+        dispatch note already recorded as `INTEGRATED` by its `CDN_INTEGRATED`
+        result: an unknown `cdnRef` is `503` (retry), a note in any other state
+        `500`. A note already `ACKNOWLEDGED` is answered `200`.
       required:
         - eventType
         - processedAt
@@ -687,6 +927,7 @@ components:
         processedAt:
           type: string
           format: date-time
+          description: Processing time. `processAt` is accepted in its place.
           example: "2026-04-27T14:30:10Z"
         payload:
           type: object

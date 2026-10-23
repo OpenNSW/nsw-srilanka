@@ -4,14 +4,43 @@ info:
   description: |
     OpenAPI 3.0 specification for the inbound webhook that receives what
     SLPA's Cargo Management System (CMS) reports back: the approvals a
-    service order goes through, and the invoice raised once one is approved
-    and later paid.
+    service order goes through, and the payment of the invoice raised once
+    one is approved.
 
     Unlike the IdP-authenticated OGA portal routes, this endpoint carries no
     bearer token: SLPA signs each call with a secret shared out of band (see
     `securitySchemes.SLPASignature`), and that signature is the whole of its
-    authentication.
+    authentication. The route is mounted in TNSW mode only
+    (`internal/bootstrap/tnsw.go`) and handled by
+    `external-integration/slpa/webhook`.
+
+    **Request handling.**
+    - The body is read up to 1 MiB (1,048,576 bytes); a longer body is refused
+      with `400`, not `413`. This happens before the signature is checked.
+    - `Content-Type` is not checked; the body is always decoded as JSON.
+    - Unknown fields are ignored. Field names are matched as Go's
+      `encoding/json` matches them (exact name first, then case-insensitively);
+      `event` values are matched exactly.
+    - Every error body is `{"error": "<message>", "correlationId": "<trace id>"}`;
+      `correlationId` is the request's trace ID, also returned in the
+      `X-Trace-ID` response header on every response.
+
+    **Redelivery.** There is no event ID and no deduplication store. A
+    redelivery is recognized by the state of the task waiting on it: once
+    that wait has run to completion, a repeat is answered `200` and not
+    applied. A non-final decision sends the order back to the same wait, so a
+    repeat of one that lands while the wait is open again is applied again.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+
+tags:
+  - name: SLPA CMS callbacks
+    description: |
+      Callbacks SLPA's Cargo Management System pushes to TNSW as a service order
+      is approved and its invoice paid.
 
 security:
   - SLPASignature: []
@@ -19,6 +48,8 @@ security:
 paths:
   /webhooks/slpa:
     post:
+      tags:
+        - SLPA CMS callbacks
       summary: Receive an SLPA CMS service-order or invoice event
       description: |
         One signed route carries both lifecycles the CMS sends: service-order
@@ -26,12 +57,33 @@ paths:
         events (`event` prefixed `invoice.`). Which envelope a body is
         decides only who reads it — see the `oneOf` discriminator below.
 
-        Every event resumes the task step waiting on it. A decision that
-        does not end a lifecycle (e.g. approved by the clerk, still with the
-        accountant) is applied as non-final, and the task's own workflow
-        gateway sends it straight back to the same wait — so the trader sees
-        it move without any record being edited in place.
+        | `event` | Decision | Final | Correlated by |
+        | --- | --- | --- | --- |
+        | `service_order.approved_by_accounts_clerk` | `PENDING` | no | `slug` |
+        | `service_order.rejected_to_accounts_clerk` | `PENDING` | no | `slug` |
+        | `service_order.approved_by_accountant` | `APPROVED` | yes | `slug` |
+        | `service_order.rejected_by_accounts_clerk` | `REJECTED` | yes | `slug` |
+        | `service_order.rejected_by_accountant` | `REJECTED` | yes | `slug` |
+        | `invoice.paid` | — | yes | `slug`, else `service_order_no` |
+
+        Any other `event` — including `invoice.generated` — is refused with
+        `400`.
+
+        Every event resumes the task step waiting on it: an order decision the
+        approval wait (`slpa-approval--wait`), `invoice.paid` the payment wait
+        (`slpa-invoice--wait`). A decision that does not end a lifecycle (e.g.
+        approved by the clerk, still with the accountant) is applied as
+        non-final, and the task's own workflow gateway sends it straight back
+        to the same wait — so the trader sees it move without any record
+        being edited in place.
+
+        No bearer token: authenticated by the HMAC signature.
       operationId: handleSLPAWebhook
+      x-required-scope: null
+      x-deployment-modes:
+        - tnsw
+      x-callers:
+        - slpa-cms
       requestBody:
         required: true
         content:
@@ -83,18 +135,29 @@ paths:
                   service_order_no: "SO/2026/001234"
                   invoice_no: "INV/2026/005678"
                   status: "paid"
-                  total_amount: 15000.00
+                  total_amount: 132
                   timestamp: "2026-06-26T06:00:00Z"
                   payment_receipt:
                     invoice_no: "INV/2026/005678"
                     invoice_serial: "E"
-                    paid_amount: 15000.00
+                    invoice_type: "export"
+                    paid_amount: 39402.00
                     paid_datetime: "2026-06-26T06:00:00Z"
                     payment_receipt: "100415624"
+                    payment_receipt_url: "https://cms.example.org/receipts/100415624.pdf"
                     service_order_no: "SO/2026/001234"
+                    cusdec_no: "CBEX1/2026/E/1047"
+                    shipper: "Example Exports (Pvt) Ltd"
+                    consignee: "Example Imports GmbH"
       responses:
         '200':
-          description: OK. The event was applied (or, for a redelivery of an already-settled approval/invoice, acknowledged as a no-op).
+          description: |
+            OK. The event was applied — or the wait it answers has already run to
+            completion, and it is acknowledged as a redelivery without being
+            applied. Final: the CMS stops retrying.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
@@ -104,37 +167,86 @@ paths:
                 properties:
                   received:
                     type: boolean
+                    enum: [true]
                     example: true
         '400':
-          description: Malformed JSON, or `event` is not one this route models.
+          description: |
+            Bad Request. Final: a redelivery fails the same way. Returned when:
+
+            - the body cannot be read, or exceeds 1 MiB (checked before the
+              signature) — `invalid request payload`;
+            - the signed body is not JSON — `invalid request payload`;
+            - `event` is missing, does not start with `service_order.` or
+              `invoice.`, or is not one of the six above — `unknown or unsupported
+              event type`;
+            - a field has the wrong JSON type (e.g. `total_amount` as a string) —
+              also `unknown or unsupported event type`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPayload:
+                  value:
+                    error: "invalid request payload"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+                unknownEvent:
+                  value:
+                    error: "unknown or unsupported event type"
+                    correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '401':
-          description: The `X-NSW-Signature` header is missing or does not match the request body.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/SignatureRejected'
         '404':
-          description: No service order matches the event's correlator (slug, or order number). The CMS should retry.
+          description: |
+            No task holds the order the event names (`slug`, or for
+            `invoice.paid` `slug` or `service_order_no`): it was raised
+            elsewhere, or has not been recorded yet. The CMS should retry,
+            which is what a race with TNSW's own write wants.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "no service order with that slug"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '409':
-          description: The consignment holds the order but is not yet waiting on this event — the previous event is still being applied. The CMS should retry shortly.
+          description: |
+            The consignment holds the order but is not waiting on this event
+            right now: the previous event is still being applied, or the wait
+            for this one has not opened yet. The CMS should retry shortly. No
+            `Retry-After` header is sent.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "the order is not waiting on this yet, retry shortly"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
         '500':
-          description: Internal error applying the event.
+          description: |
+            Internal error applying the event: a database or task-manager
+            failure, logged server-side. Also returned — and not curable by a
+            retry — for a service-order event without a `slug`, and for
+            `invoice.paid` with neither `slug` nor `service_order_no`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "An error occurred while processing your request"
+                correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
 
 components:
   securitySchemes:
@@ -143,23 +255,70 @@ components:
       in: header
       name: X-NSW-Signature
       description: |
-        `sha256=<hex HMAC-SHA256 of the raw request body, keyed with the
-        shared secret>` — GitHub-style. Verified with a constant-time
+        `X-NSW-Signature: sha256=<hex>` — GitHub-style. `<hex>` is the
+        HMAC-SHA256 of the raw request body, exactly the bytes sent, keyed
+        with the shared secret. The `sha256=` prefix is required and matched
+        case-sensitively; the hex digest may be either case. Nothing else is
+        signed: no timestamp, method, path or other header.
+
+        The secret is `integrations.slpaWebhookSecret` in `config.yaml`,
+        referenced as `{{env:SLPA_WEBHOOK_SECRET}}` in the examples. The API
+        refuses to start without it. Verified with a constant-time
         comparison.
+
+        There is no replay protection: no timestamp or nonce is signed, and
+        the body's `timestamp` is not checked, so a captured request verifies
+        again for as long as the secret is unchanged. What a replay can do is
+        bounded by the redelivery rules in `info.description`.
+
+  headers:
+    XTraceID:
+      description: |
+        The request's trace ID: the caller's `X-Trace-ID`, `X-Correlation-ID`
+        or `X-Request-ID` header when it is a valid ID, otherwise one
+        generated here. It is the `correlationId` in error bodies.
+      schema:
+        type: string
+
+  responses:
+    SignatureRejected:
+      description: |
+        Unauthorized: `X-NSW-Signature` is missing, lacks the `sha256=`
+        prefix, is not hex, or does not match the body. Checked by the handler
+        before the body is decoded. No `WWW-Authenticate` header is sent.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "signature verification failed"
+            correlationId: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
 
   schemas:
     ErrorResponse:
       type: object
+      description: The handler's error body (`github.com/OpenNSW/core/httputil`).
       required:
         - error
       properties:
         error:
           type: string
           example: "signature verification failed"
+        correlationId:
+          type: string
+          description: The request's trace ID; also the `X-Trace-ID` response header.
+          example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
 
     OrderEvent:
       type: object
-      description: A decision on a service order as it moves through SLPA's approvals.
+      description: |
+        A decision on a service order as it moves through SLPA's approvals.
+        The CMS's payload also carries the whole order (invoice details, line
+        items, receipts); only the fields below are read, and the rest is
+        ignored.
       required:
         - event
         - slug
@@ -174,32 +333,36 @@ components:
             - service_order.rejected_to_accounts_clerk
         slug:
           type: string
-          description: Correlator recorded when the order was raised.
+          minLength: 1
+          description: |
+            Correlator recorded when the order was raised. Required: an event
+            without one is answered `500`.
         service_order_no:
           type: string
         cusdec_serial:
           type: string
+          description: Accepted; not acted on.
         status:
           type: string
-          description: The CMS's own internal status code, e.g. "actclk_approve_act".
+          description: The CMS's own internal status code, e.g. "actclk_approve_act". Passed on as received.
         invoice_no:
           type: string
           description: Set once an approval also raises the invoice.
         total_amount:
           type: number
+          description: Passed on to the trader when non-zero.
         timestamp:
           type: string
-          format: date-time
+          description: When the decision was made. Passed on as text; not parsed or checked.
 
     InvoiceEvent:
       type: object
       description: |
         The one invoice event this integration acts on: `invoice.paid`. What
         SLPA bills for is settled outside the Single Window (bank transfer),
-        so this is the CMS's announcement that the money landed. The
-        payload is intentionally flat on the envelope (`payment_receipt`),
-        but an older, nested shape (`details.invoice_details`) is also
-        tolerated for a deployment still sending it.
+        so this is the CMS's announcement that the money landed. Everything
+        worth keeping sits on `payment_receipt`; the envelope carries the
+        correlation fields.
       required:
         - event
       properties:
@@ -208,78 +371,59 @@ components:
           enum: [invoice.paid]
         slug:
           type: string
-          description: Correlator; falls back to `service_order_no` when absent.
+          description: |
+            Correlator; falls back to `service_order_no` when absent. An event
+            with neither is answered `500`.
         status:
           type: string
+          description: Passed on as received.
         service_order_no:
           type: string
         invoice_no:
           type: string
         cusdec_serial:
           type: string
+          description: Accepted; not acted on.
         total_amount:
           type: number
-          description: The order's priced amount — not necessarily what was paid. See `payment_receipt.paid_amount`.
-        invoice_url:
-          type: string
-          format: uri
+          description: |
+            Not read. It is the order priced in dollars, not what was paid — see
+            `payment_receipt.paid_amount`.
         timestamp:
           type: string
-          format: date-time
+          description: Accepted; not acted on.
         payment_receipt:
           type: object
           description: The receipt the CMS issues when the payment lands.
           properties:
             invoice_no:
               type: string
+              description: Accepted; the envelope's `invoice_no` is the one read.
             invoice_serial:
+              type: string
+            invoice_type:
               type: string
             paid_amount:
               type: number
+              description: What was transferred, in LKR.
             paid_datetime:
               type: string
-              format: date-time
+              description: When it was paid. Passed on as text; not parsed or checked.
             payment_receipt:
               type: string
               description: A receipt reference number, not a link.
+            payment_receipt_url:
+              type: string
+              description: The link to the receipt itself.
             service_order_no:
               type: string
-        details:
-          type: object
-          description: Legacy nested shape; read only when the flat fields above are absent.
-          properties:
-            invoice_details:
-              type: object
-              additionalProperties: true
-              properties:
-                status:
-                  type: string
-                service_order_no:
-                  type: string
-                invoice_no:
-                  type: string
-                cusdec_serial:
-                  type: string
-                total_amount:
-                  type: number
-                invoice_url:
-                  type: string
-                timestamp:
-                  type: string
-                payment_receipt:
-                  type: object
-                  additionalProperties: true
-                  properties:
-                    invoice_no:
-                      type: string
-                    invoice_serial:
-                      type: string
-                    paid_amount:
-                      type: number
-                    paid_datetime:
-                      type: string
-                    payment_receipt:
-                      type: string
-                      description: A receipt reference number, not a link.
-                    service_order_no:
-                      type: string
+              description: Accepted; the envelope's `service_order_no` is the one read.
+            cusdec_no:
+              type: string
+            shipper:
+              type: string
+            consignee:
+              type: string
+            consignee_address:
+              type: string
+              description: Accepted; not acted on.

@@ -3,30 +3,64 @@ info:
   title: NSW Sri Lanka / Static Data API
   description: |
     OpenAPI 3.0 specification for the static reference-data lookup endpoint.
-    Serves immutable JSON artifacts (HS code lists, lookup tables, etc.) out
-    of the artifact registry, keyed by (id, version).
+    Serves immutable JSON artifacts of kind `static_data` (HS code lists,
+    lookup tables, etc.) out of the artifact registry, keyed by
+    (id, version), either whole or as one ranked, paginated page of options.
+
+    The route runs in both deployment modes, and is read by the trader-app's
+    form fields in either (the trader portal in TNSW, the officer portal in
+    an agency).
 
     Requires a JWT bearer token (see `securitySchemes.BearerAuth`) carrying
     scope `nsw:task:read` — reused from the task domain since static data is
     consumed alongside rendered tasks, not a distinct resource of its own.
+    Errors the handler writes use the `ErrorResponse` envelope; the
+    authentication and scope middleware write their own `AuthError` body.
+    Every response carries `X-Trace-ID`.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+  - url: http://localhost:8081
+    description: Local Docker Compose (NPQS agency API; CDA 8083, FCAU 8082, EFC 8085, SLTB 8086)
+
+tags:
+  - name: Static Data
+    description: Versioned, immutable reference-data artifacts for form fields.
 
 security:
   - BearerAuth: []
 
 paths:
   /api/v1/static-data/{id}:
+    parameters:
+      - $ref: '#/components/parameters/XTraceIDRequest'
+      - $ref: '#/components/parameters/XCorrelationIDRequest'
+      - $ref: '#/components/parameters/XRequestIDRequest'
     get:
-      summary: Get a static reference-data artifact
+      tags:
+        - Static Data
+      summary: Get or search a static reference-data artifact
       description: |
-        Returns the raw JSON artifact registered under `id` at the given
-        `version`. The response is cacheable by the caller's own browser for
-        up to one year (see the `Cache-Control` response header) —
-        `(id, version)` identifies immutable content — but marked `private`
-        since this endpoint is scope-protected.
+        Without `q`, `offset` or `limit` in the query string, returns the raw
+        JSON artifact registered under `id` at the given `version`: an object
+        with a top-level `data` array. With any of the three present (even
+        empty), returns one page of the artifact's options instead: the
+        object entries of `data`, each with a non-empty `const` and `title`
+        (other entries are skipped), filtered by `parent`, ranked against
+        `q`, and paginated.
+
+        Either response is cacheable by the caller's own browser for up to
+        one year (see the `Cache-Control` response header) — `(id, version)`
+        identifies immutable content, and the query string is part of the
+        URL — but marked `private` since this endpoint is scope-protected.
 
         Requires scope `nsw:task:read`.
       operationId: getStaticData
+      x-required-scope: nsw:task:read
+      x-deployment-modes: [tnsw, agency]
+      x-callers: [trader-portal, agency-portal]
       parameters:
         - name: id
           in: path
@@ -37,47 +71,99 @@ paths:
         - name: version
           in: query
           required: true
+          description: The artifact version. An empty value is treated as missing.
           schema:
             type: string
           example: "2026.1"
+        - name: q
+          in: query
+          required: false
+          description: |
+            Search mode. Matched case-insensitively (after trimming) against
+            each option's `title` and `const`, ranked: exact match, then
+            prefix, then the start of a later word in the title (words split
+            on space, `/` and `-`), then substring; ties go to the shorter
+            title, then the `const`. Empty keeps artifact order.
+          schema:
+            type: string
+        - name: parent
+          in: query
+          required: false
+          description: |
+            Search mode only (ignored otherwise). Keeps only options whose
+            `parents` list contains this value; an option with no `parents`
+            does not match. Applied before ranking and pagination, so `total`
+            counts the filtered set.
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: Search mode. An empty value is treated as absent.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          description: Search mode. An empty value is treated as absent; values above 100 are clamped to 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
       responses:
         '200':
-          description: OK. The raw JSON artifact; its shape is defined by the artifact itself, not by this endpoint.
+          description: |
+            OK. In raw mode, the artifact exactly as registered
+            (`StaticDataArtifact`); in search mode, a `StaticDataSearchResult`.
           headers:
             Cache-Control:
               schema:
                 type: string
                 example: "private, max-age=31536000, immutable"
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
-                description: Arbitrary valid JSON; may be an object, array, string, number, boolean, or null.
+                oneOf:
+                  - $ref: '#/components/schemas/StaticDataArtifact'
+                  - $ref: '#/components/schemas/StaticDataSearchResult'
         '400':
-          description: Missing `version` query parameter.
+          description: |
+            `version query parameter is required`, or (search mode)
+            `invalid pagination parameters`: an `offset` or `limit` that is
+            not an integer, a negative `offset`, or a `limit` below 1.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Unauthorized. Missing or invalid bearer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Unauthorized'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:task:read`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: No artifact registered for this `(id, version)`.
+          description: 'No `static_data` artifact registered for this `(id, version)`. Body `{"error": "static data not found"}`.'
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Internal error loading the artifact.
+          description: |
+            Internal error loading the artifact (one that is not an object with
+            a `data` array included), or, in search mode, an object entry
+            without a non-empty `const` and `title`. Body `{"error": "An error
+            occurred while processing your request"}`.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/XTraceID'
           content:
             application/json:
               schema:
@@ -89,16 +175,177 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        JWT access token issued by the deployment's ThunderID IdP; validated
+        against its JWKS (cached for 5 minutes). The token must be signed with
+        RS256, RS384 or RS512 under a `kid` the JWKS holds, carry the
+        configured `iss` (`authn.issuer`) and `aud` (`authn.audience`), have
+        an `exp` (expiry and not-before are checked with 30 seconds' leeway),
+        a `client_id`, and a `grant_type` of `authorization_code` (a user
+        token, which must also carry `sub`, `email`, `ouId` and `ouHandle`)
+        or `client_credentials` (a client token). Scopes are read from
+        `scope` and roles from `roles`. A request without an `Authorization`
+        header, or with a token that fails any check, gets 401.
+
+  headers:
+    XTraceID:
+      description: |
+        The request's trace id: the caller's `X-Trace-ID`,
+        `X-Correlation-ID` or `X-Request-ID` (first present, if 1-64
+        characters of `[A-Za-z0-9-_:./=]`), else a generated 32-hex-character
+        id. Equal to `correlationId` in an `ErrorResponse`. Set on every
+        response.
+      schema:
+        type: string
+        example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+  parameters:
+    XTraceIDRequest:
+      name: X-Trace-ID
+      in: header
+      required: false
+      description: Trace id to reuse for this request (preferred over the two below). An invalid value is replaced by a generated one.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+    XCorrelationIDRequest:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Used as the trace id when `X-Trace-ID` is absent.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+    XRequestIDRequest:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Used as the trace id when `X-Trace-ID` and `X-Correlation-ID` are absent.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9\-_:./=]+$'
+
+  responses:
+    Unauthorized:
+      description: |
+        Unauthorized. Written by the authentication middleware:
+        `{"error": "unauthorized", "message": "authentication required"}`
+        with no `Authorization` header, or `"message": "invalid
+        authentication token"` for a malformed header or a token that fails
+        validation. The scope middleware writes the first body when no
+        principal was attached.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+    Forbidden:
+      description: |
+        Forbidden. The bearer token lacks the route's scope. Written by the
+        scope middleware: `{"error": "forbidden", "message": "insufficient scope"}`.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/XTraceID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
 
   schemas:
     ErrorResponse:
       type: object
+      description: The error envelope the handler writes.
       required:
         - error
+        - correlationId
       properties:
         error:
           type: string
           example: "static data not found"
         correlationId:
           type: string
+          description: The request's trace id, as in the `X-Trace-ID` response header.
           example: "1d67eb9ce46b7b08c6bcf1bdd91de5d5"
+
+    AuthError:
+      type: object
+      description: The body the authentication and scope middleware write. It carries no `correlationId`.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum:
+            - unauthorized
+            - forbidden
+        message:
+          type: string
+          enum:
+            - authentication required
+            - invalid authentication token
+            - insufficient scope
+      example:
+        error: forbidden
+        message: insufficient scope
+
+    StaticDataArtifact:
+      type: object
+      description: |
+        A `static_data` artifact as registered. The registry only accepts an
+        object with a top-level `data` array; other top-level fields are
+        served as they are.
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          description: The artifact's entries. Their shape is defined by the artifact; search mode reads them as `StaticDataOption`.
+          items: {}
+      additionalProperties: true
+
+    StaticDataOption:
+      type: object
+      description: One selectable row of a `static_data` artifact.
+      required:
+        - const
+        - title
+      properties:
+        const:
+          type: string
+          description: The option's value; its unique key within the artifact.
+        title:
+          type: string
+        parents:
+          type: array
+          description: The values a `parent` filter matches this option on. Omitted when empty.
+          items:
+            type: string
+
+    StaticDataSearchResult:
+      type: object
+      description: One page of an artifact's options.
+      required:
+        - items
+        - total
+        - offset
+        - limit
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticDataOption'
+        total:
+          type: integer
+          format: int64
+          description: The number of options that matched `parent` and `q`.
+        offset:
+          type: integer
+        limit:
+          type: integer
+          description: The limit applied (50 by default, at most 100).

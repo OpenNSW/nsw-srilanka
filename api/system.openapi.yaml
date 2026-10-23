@@ -1,0 +1,261 @@
+openapi: 3.0.3
+info:
+  title: NSW Sri Lanka / System API
+  description: |
+    OpenAPI 3.0 specification for the health check, and for the behaviour
+    every route of the backend shares, in both deployment modes (`mode: tnsw`
+    and `mode: agency`). The facts below hold for every route in every spec.
+
+    ## Request pipeline
+
+    Every request passes, outermost first, through: trace ID middleware,
+    the security log, CORS, OpenTelemetry HTTP instrumentation (only when
+    `otel.endpoint` is set), then the router. Authentication and the scope
+    check are per route, inside the router. CORS and trace headers are
+    therefore set on every response, 401s and 403s included, and a CORS
+    preflight is traced and logged. A path or method no route matches gets
+    the router's plain-text `404 page not found` or `405 Method Not Allowed`
+    (with an `Allow` header), not a JSON body.
+
+    ## Trace and correlation IDs
+
+    Every request gets one trace ID. The server takes the first of these
+    request headers that is set, in this order: `X-Trace-ID`,
+    `X-Correlation-ID`, `X-Request-ID`. A value is kept only if it is 1 to
+    64 characters of `A-Z a-z 0-9 - _ : . / =`; otherwise (or when none is
+    set) the server generates 32 lowercase hex characters. The later headers
+    are not consulted when an earlier one is set but invalid.
+
+    The trace ID is written back on every response as `X-Trace-ID`, is the
+    `correlationId` of every `ErrorResponse` body, and is the `traceId` on
+    every log line of the request. It is not forwarded on the server's
+    outbound calls. When OpenTelemetry export is on, the W3C `traceparent`
+    header is also read, for OTel spans only; it does not set the trace ID.
+    The shipped CORS config does not allow these headers on cross-origin
+    requests or expose `X-Trace-ID` to browser scripts (see below), so they
+    work for server-to-server callers and gateways, not browser code, unless
+    a deployment adds them.
+
+    ## CORS
+
+    Configured under `cors` in `config.yaml`; there are no built-in
+    defaults:
+
+    - `allowedOrigins` (required): exact origins (each an http(s) URL), or
+      `*`. `*` is refused at startup together with `allowCredentials: true`.
+    - `allowedMethods` (required), `allowedHeaders` (required): sent as
+      given, comma-joined, on preflight responses.
+    - `allowCredentials` (default false): adds
+      `Access-Control-Allow-Credentials: true`.
+    - `maxAge` (seconds, default 0): sent as `Access-Control-Max-Age` when
+      above 0.
+
+    A request without `Origin` is not a CORS request and passes through
+    untouched. With `Origin`, the response gets `Vary: Origin`. An origin in
+    `allowedOrigins` is echoed in `Access-Control-Allow-Origin`; one only
+    matched by `*` gets `*`. An `OPTIONS` request with an allowed origin is
+    answered by the CORS layer itself, on any path, with 204 and the
+    allow-methods/headers/max-age headers; it never reaches authentication
+    or the router. An `OPTIONS` request from an origin not allowed gets 204
+    with no CORS headers. Any other request from an origin not allowed is
+    served normally, without CORS headers, so the browser withholds the
+    response. No `Access-Control-Expose-Headers` is sent. An `OPTIONS`
+    request without `Origin` reaches the router, which answers 405 (404 on
+    a path no route matches).
+
+    The shipped configs allow `GET, POST, PUT, DELETE, OPTIONS`, the headers
+    `Content-Type, Authorization`, credentials, and a max age of 3600, for
+    the local portal origins (`http://localhost:5173`-`5179` on TNSW; each
+    agency its own portal, for example `http://localhost:5174` for NPQS).
+
+    ## Authentication
+
+    Protected routes take `Authorization: Bearer <JWT>` issued by the
+    deployment's ThunderID IdP, configured under `authn`: `jwksURL` (the
+    signing keys), `issuer` (must equal `iss`) and `audience` (must be in
+    `aud`), all required; `insecureSkipTLSVerify` (JWKS fetch only) is
+    refused unless `APP_ENV=development`. Tokens must be RS256/384/512 with a
+    `kid` found in the JWKS (cached 5 minutes, refetched once on an unknown
+    `kid`, 10-second fetch timeout), carry `exp` and `client_id`, and pass
+    expiry and not-before checks with 30 seconds of leeway. `grant_type`
+    must be `authorization_code` (users; `sub`, `email`, `ouId` and
+    `ouHandle` are also required) or `client_credentials` (machine
+    clients). Scopes come from the `scope` claim, roles from `roles`.
+
+    A missing header is answered 401 `{"error": "unauthorized", "message":
+    "authentication required"}`; a malformed header or rejected token 401
+    `{"error": "unauthorized", "message": "invalid authentication token"}`;
+    a valid token without the route's scope 403 `{"error": "forbidden",
+    "message": "insufficient scope"}`. These three bodies are written by
+    middleware and carry no `correlationId` (use the `X-Trace-ID` header).
+    No `WWW-Authenticate` header is sent.
+
+    ## Server limits
+
+    Plain HTTP (no TLS) on `server.port`; TLS terminates in front of the
+    server. Timeouts are set in `config.yaml` under `server`, are required
+    and must be above zero (Go duration strings). The shipped values are:
+
+    - `readHeaderTimeout` 5s: time to read the request headers.
+    - `readTimeout` 15s: time to read the whole request, body included.
+    - `writeTimeout` 30s: from the end of reading the headers to the end of
+      writing the response.
+    - `idleTimeout` 60s: keep-alive idle time between requests.
+
+    The maximum header size is not configured, so it is Go's default of
+    1 MiB (`http.DefaultMaxHeaderBytes`); larger headers get 431. On
+    SIGINT/SIGTERM the server stops accepting connections and waits up to
+    30 seconds for in-flight requests.
+
+    There is no request body limit applied to every route.
+    `server.maxRequestBytes` (shipped 33554432, 32 MiB; required) is
+    applied only by the task step submit, draft and callback handlers
+    (413 when exceeded). Other routes set their own fixed limits or none:
+    see each spec. Routes without a limit, such as the agency's
+    `POST /api/v1/inject`, are bounded only by `readTimeout`.
+
+    ## Security log
+
+    Every request except `GET /health` (CORS preflights and rejected
+    requests included) emits one `slog` line, message `http request`,
+    `category=security`, at INFO, after the response is written (also when
+    the handler panics, logged as 500). It records `method`, `path` (the
+    callback token in `/api/v1/callbacks/{token}` replaced by `{token}`),
+    `callerKind` (`user`, `client` or `anonymous`), `callerID` (the user ID,
+    or the machine `client_id`), `status`, `durationMs`, and when present
+    `origin`, `query`, `requestBytes`, `pattern` (the matched route),
+    `responseBytes`, and the request and response bodies
+    (`requestBody`/`responseBody`). The line carries the request's
+    `traceId`.
+
+    Bodies are logged only when textual (`text/*`, JSON, XML, form-encoded,
+    or untyped valid UTF-8), and only the first 4 KiB, with
+    `requestBodyTruncated`/`responseBodyTruncated` set when cut; other
+    bodies and streamed file downloads set `requestBodyOmitted`/
+    `responseBodyOmitted` instead. Only the part of the request body the
+    handler actually read is logged. The `Authorization` header is never
+    logged. In JSON and form bodies and the query string, the values of
+    `upload_url`, `download_url`, `token`, `callbackToken`, `access_token`,
+    `refresh_token`, `id_token`, `password`, `secret`, `api_key`, `apikey`,
+    `authorization`, `signature`, `private_key` and `client_secret` (any
+    case), and any JSON string holding an S3 presigned URL, are replaced
+    with `[redacted]`. Other payload fields, personal data included, are
+    logged as sent.
+
+    Logs are written as text to stdout, and also exported over OTLP when
+    `otel.endpoint` is set.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+  - url: http://localhost:8081
+    description: Local Docker Compose (NPQS agency API; CDA 8083, FCAU 8082, EFC 8085, SLTB 8086)
+
+tags:
+  - name: System
+    description: Operational endpoints for load balancers and operators.
+
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      summary: Check the server's health
+      description: |
+        Reports whether the server can serve requests. It pings the database
+        (5-second timeout) and checks that the authentication subsystem is
+        initialized; it does not fetch the IdP's JWKS or call Temporal, the
+        IdP or any other dependency. Every call runs the checks again; nothing
+        is cached.
+
+        The body is JSON in both outcomes. `service` is always `tnsw-api`,
+        in agency mode too, so it does not tell a TNSW backend from an
+        agency one. `version` is the build version (`dev` for a local
+        build). Failures are reported by component name only, without error
+        details.
+
+        The route also answers `HEAD`. It is not written to the security log.
+
+        Public: no token.
+      operationId: getHealth
+      x-required-scope: null
+      x-deployment-modes:
+        - tnsw
+        - agency
+      x-callers:
+        - load-balancer
+        - ops
+      security: []
+      responses:
+        '200':
+          description: OK. Every check passed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                service: tnsw-api
+                version: 0.8.0
+        '503':
+          description: |
+            Service Unavailable. At least one check failed;
+            `unhealthy_components` names every failing one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: error
+                service: tnsw-api
+                version: 0.8.0
+                unhealthy_components:
+                  - database
+        '405':
+          description: |
+            Method Not Allowed. Any method other than `GET` or `HEAD`; Go's
+            router answers it in plain text, with `Allow: GET, HEAD`. An
+            `OPTIONS` preflight from an allowed origin gets 204 from the CORS
+            layer instead.
+          headers:
+            Allow:
+              schema:
+                type: string
+              example: GET, HEAD
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Method Not Allowed
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - version
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - error
+        service:
+          type: string
+          enum:
+            - tnsw-api
+          description: Always `tnsw-api`, in both deployment modes.
+        version:
+          type: string
+          description: The build version, `dev` for a local build.
+        unhealthy_components:
+          type: array
+          description: Omitted on 200. On 503, the failing checks.
+          items:
+            type: string
+            enum:
+              - database
+              - authn
