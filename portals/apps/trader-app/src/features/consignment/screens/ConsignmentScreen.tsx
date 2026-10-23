@@ -178,7 +178,10 @@ export function ConsignmentScreen() {
           )}
           {loadFailed ? (
             <div className="p-16">
-              <LoadError message={t('consignments.list.error.loadFailed')} onRetry={() => setRetryCount((n) => n + 1)} />
+              <LoadError
+                message={t('consignments.list.error.loadFailed')}
+                onRetry={() => setRetryCount((n) => n + 1)}
+              />
             </div>
           ) : consignments.length === 0 ? (
             <div className="p-16 text-center">
