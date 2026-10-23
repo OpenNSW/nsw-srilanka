@@ -292,7 +292,7 @@ services:
       # Mount local test artifacts for development and workflow test harnesses.
       - ./test:/app/test:ro
       # Operator-supplied IPPC Hub mTLS material (git-ignored), referenced by
-      # the "ippc-hub" service's tls block in services.docker.json. Create
+      # the "ippc-hub" service's tls block in config.docker.yaml services. Create
       # ./certs/ippc/{nppo.crt,nppo.key} from your Hub Admin Console connection.
       - ./certs/ippc:/certs/ippc:ro
       # This GO's GovPay+ RSA private key (git-ignored), referenced by the govpay
@@ -312,12 +312,12 @@ services:
       # edit it there, not here; what follows is only what the file cannot hold.
       <<: *config-env
       # APP_ENV gates the insecure-TLS flags (authn.insecureSkipTLSVerify in
-      # config.yaml, insecure_skip_tls_verify in services.json): they are only
+      # config.yaml, services[].auth.oauth2.insecureSkipTLSVerify): they are only
       # honored when APP_ENV=development, otherwise the backend refuses to start.
       # Injected as "development" by `make dev`/`make preview` (dev only); left empty
       # for a raw `docker compose up` or any deployment, which then fails closed.
       APP_ENV: ${APP_ENV:-}
-      # NSW -> Agency m2m client secrets, referenced as env:... in services.*.json
+      # NSW -> Agency m2m client secrets, referenced as env:... in config.docker.yaml services
       M2M_NSW_TO_NPQS_SECRET: ${M2M_NSW_TO_NPQS_SECRET:-1234}
       M2M_NSW_TO_FCAU_SECRET: ${M2M_NSW_TO_FCAU_SECRET:-1234}
       M2M_NSW_TO_CDA_SECRET: ${M2M_NSW_TO_CDA_SECRET:-1234}
@@ -422,7 +422,7 @@ services:
   # (mode: agency, see docs/agency.md), next to TNSW. CDA shares Postgres, Temporal and the IdP with TNSW, but has its own database
   # and Temporal namespace, so neither picks up the other's workflows. Config lives
   # in configs/agency/cda/ (config.docker.yaml for these services). TNSW reaches it at host.docker.internal:8083, as its
-  # services.docker.json "cda" entry already expects.
+  # config.docker.yaml services "cda" entry already expects.
 
   # One-shot: creates cda_db on the shared Postgres and the cda Temporal namespace if
   # missing, then migrates cda_db. Its image puts psql (the base), the temporal CLI and
@@ -486,7 +486,7 @@ services:
       <<: *cda-config-env
       # Same gate as the api service: insecure TLS is honored only in development.
       APP_ENV: ${APP_ENV:-}
-      # CDA -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      # CDA -> NSW m2m client secret, referenced as env:... in config.docker.yaml services.
       M2M_CDA_TO_NSW_SECRET: ${M2M_CDA_TO_NSW_SECRET:-1234}
     depends_on:
       cda-init:
@@ -516,7 +516,7 @@ services:
   # (mode: agency, see docs/agency.md), next to TNSW, exactly as CDA does above: shared Postgres, Temporal
   # and IdP, but its own database and Temporal namespace. Config lives in
   # configs/agency/efc/ (config.docker.yaml for these services). TNSW reaches it at
-  # host.docker.internal:8085, as its services.docker.json "efc" entry already expects.
+  # host.docker.internal:8085, as its config.docker.yaml services "efc" entry already expects.
 
   # One-shot: creates efc_db on the shared Postgres and the efc Temporal
   # namespace if missing, then migrates efc_db. Same image as cda-init.
@@ -578,7 +578,7 @@ services:
       <<: *efc-config-env
       # Same gate as the api service: insecure TLS is honored only in development.
       APP_ENV: ${APP_ENV:-}
-      # EFC -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      # EFC -> NSW m2m client secret, referenced as env:... in config.docker.yaml services.
       M2M_EFC_TO_NSW_SECRET: ${M2M_EFC_TO_NSW_SECRET:-1234}
     depends_on:
       efc-init:
@@ -609,7 +609,7 @@ services:
   # above: shared Postgres, Temporal and IdP, but its own database and Temporal
   # namespace. Config lives in configs/agency/npqs/ (config.docker.yaml for these
   # services). TNSW reaches it at host.docker.internal:8081, as its
-  # services.docker.json "npqs" entry already expects.
+  # config.docker.yaml services "npqs" entry already expects.
 
   # One-shot: creates npqs_db on the shared Postgres and the npqs Temporal
   # namespace if missing, then migrates npqs_db. Same image as cda-init.
@@ -671,7 +671,7 @@ services:
       <<: *npqs-config-env
       # Same gate as the api service: insecure TLS is honored only in development.
       APP_ENV: ${APP_ENV:-}
-      # NPQS -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      # NPQS -> NSW m2m client secret, referenced as env:... in config.docker.yaml services.
       M2M_NPQS_TO_NSW_SECRET: ${M2M_NPQS_TO_NSW_SECRET:-1234}
     depends_on:
       npqs-init:
@@ -702,7 +702,7 @@ services:
   # NPQS do above: shared Postgres, Temporal and IdP, but its own database and
   # Temporal namespace. Config lives in configs/agency/sltb/ (config.docker.yaml
   # for these services). TNSW reaches it at host.docker.internal:8086, as its
-  # services.docker.json "sltb" entry already expects.
+  # config.docker.yaml services "sltb" entry already expects.
 
   # One-shot: creates sltb_db on the shared Postgres and the sltb Temporal
   # namespace if missing, then migrates sltb_db. Same image as cda-init.
@@ -764,7 +764,7 @@ services:
       <<: *sltb-config-env
       # Same gate as the api service: insecure TLS is honored only in development.
       APP_ENV: ${APP_ENV:-}
-      # SLTB -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      # SLTB -> NSW m2m client secret, referenced as env:... in config.docker.yaml services.
       M2M_SLTB_TO_NSW_SECRET: ${M2M_SLTB_TO_NSW_SECRET:-1234}
     depends_on:
       sltb-init:
@@ -795,7 +795,7 @@ services:
   # NPQS and SLTB do above: shared Postgres, Temporal and IdP, but its own database
   # and Temporal namespace. Config lives in configs/agency/fcau/ (config.docker.yaml
   # for these services). TNSW reaches it at host.docker.internal:8082, as its
-  # services.docker.json "fcau" entry already expects.
+  # config.docker.yaml services "fcau" entry already expects.
 
   # One-shot: creates fcau_db on the shared Postgres and the fcau Temporal
   # namespace if missing, then migrates fcau_db. Same image as cda-init.
@@ -857,7 +857,7 @@ services:
       <<: *fcau-config-env
       # Same gate as the api service: insecure TLS is honored only in development.
       APP_ENV: ${APP_ENV:-}
-      # FCAU -> NSW m2m client secret, referenced as env:... in services.docker.json.
+      # FCAU -> NSW m2m client secret, referenced as env:... in config.docker.yaml services.
       M2M_FCAU_TO_NSW_SECRET: ${M2M_FCAU_TO_NSW_SECRET:-1234}
     depends_on:
       fcau-init:

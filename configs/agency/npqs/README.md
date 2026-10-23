@@ -4,17 +4,15 @@ Configuration to run this backend as the National Plant Quarantine Service (NPQS
 next to TNSW on the same machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
 Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
-| File                   | Purpose                                                                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn, reference formats                                               |
-| `config.docker.yaml`   | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname, with the same reference formats                             |
-| `npqs.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                             |
-| `catalog.json`         | `officer` → the `NPQS Officer` role NPQS officers hold in the IdP; `tnsw` → `NSW_TO_NPQS`, the client TNSW replies as, so the steps that wait on its reply can name it         |
-| `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `NPQS_TO_NSW` |
-| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                          |
-| `services.docker.json` | `services.json` for the `npqs-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
-| `portal-config.js`     | Runtime config of the `npqs-portal` container: the trader-app in agency mode                                                                                                   |
-| `branding.json`        | Branding for the `npqs-portal` container, as the NPQS officer portal had it in nsw-agency                                                                                      |
+| File                   | Purpose                                                                                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn, reference formats                                       |
+| `config.docker.yaml`   | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname, with the same reference formats                     |
+| `npqs.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                        |
+| `catalog.json`         | `officer` → the `NPQS Officer` role NPQS officers hold in the IdP; `tnsw` → `NSW_TO_NPQS`, the client TNSW replies as, so the steps that wait on its reply can name it |
+| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                  |
+| `portal-config.js`     | Runtime config of the `npqs-portal` container: the trader-app in agency mode                                                                                           |
+| `branding.json`        | Branding for the `npqs-portal` container, as the NPQS officer portal had it in nsw-agency                                                                              |
 
 NPQS keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
@@ -42,6 +40,9 @@ Two things nsw-agency did for NPQS aren't here yet:
   treatment request review) reaches TNSW, but the trader's resubmission doesn't
   reach NPQS yet; see #600.
 
+The YAML's `services` list registers `tnsw` for storage and the workflows'
+`notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
+
 ## Run with Docker Compose
 
 `make dev` and `make preview` start NPQS with the rest of the stack. It adds:
@@ -57,7 +58,7 @@ reload); rebuild them after a change with
 `docker compose up -d --build npqs-api npqs-portal`.
 
 TNSW in compose reaches it at `host.docker.internal:8081`, through the `npqs` entry
-its `services.docker.json` already has. To change a setting, edit `config.docker.yaml`
+its `config.docker.yaml` services list already has. To change a setting, edit `config.docker.yaml`
 and restart `npqs-api`. `npqs-api` loads its artifacts from a `one-trade-artifacts`
 clone next to this repo (`../one-trade-artifacts/npqs`); set
 `NPQS_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `npqs` dir.
@@ -74,7 +75,7 @@ set -a; . configs/agency/npqs/npqs.env; set +a
 go run ./cmd/server
 ```
 
-TNSW reaches it through its own `configs/services.json` entry `npqs`
+TNSW reaches it through its own `configs/config.yaml` services entry `npqs`
 (`http://localhost:8081`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
@@ -95,8 +96,8 @@ creates NPQS for this deployment, on the `NPQS API` resource server
 | TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps, which `catalog.json` maps `tnsw` to |
 | NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                          |
 
-TNSW's `services.json` `npqs` entry requests `nsw:workflow:inject` and `nsw:task:write` with
-`resource=https://api.npqs.nsw-agency.local` (see `configs/services*.example.json`).
+TNSW's `config.yaml` services entry `npqs` requests `nsw:workflow:inject` and `nsw:task:write` with
+`resource=https://api.npqs.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
 down` and remove the `thunderid-*` volumes; see

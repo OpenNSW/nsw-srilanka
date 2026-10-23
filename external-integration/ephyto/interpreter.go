@@ -1,6 +1,6 @@
 // Package ephyto is the National Single Window's in-repo IPPC ePhyto Hub
-// integration. The Hub is a registered remote service ("ippc_hub" in
-// services.json — endpoint, timeout, mTLS client certificate), called by the
+// integration. The Hub is a registered remote service ("ippc-hub" in
+// config.yaml's services list — endpoint, timeout, mTLS client certificate), called by the
 // generic SOAP-call taskflow plugin wired with the HubInterpreter below. The
 // ePhyto/SOAP building blocks live in the sibling spscert and hub packages
 // (ported from the OpenNSW external-integrations-sandbox `ippc` module); the
@@ -19,7 +19,7 @@ import (
 // (NPQS_EPHYTO_HUB) wired with this interpreter, so the trader drives the
 // whole flow through the standard task endpoint — no separate HTTP endpoint
 // or auth. Transport (endpoint, timeout, mTLS client certificate) is the
-// "ippc_hub" service in services.json. The subtask template's
+// "ippc-hub" service in config.yaml's services list. The subtask template's
 // plugin_properties select the operation:
 //
 //	{ "operation": "submit" } — build the ePhyto from the application, validate

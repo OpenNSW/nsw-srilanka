@@ -8,8 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -70,11 +68,8 @@ func newReviewService(t *testing.T, status int) (*remote.Manager, *reviewService
 	}))
 	t.Cleanup(srv.Close)
 
-	services := fmt.Sprintf(`{"version": "1.0", "services": [{"id": "agency", "url": %q, "timeout": "5s"}]}`, srv.URL)
-	file := filepath.Join(t.TempDir(), "services.json")
-	require.NoError(t, os.WriteFile(file, []byte(services), 0o600))
 	mgr := remote.NewManager()
-	require.NoError(t, mgr.LoadServices(file))
+	require.NoError(t, mgr.SetServices(remote.ServiceConfig{ID: "agency", URL: srv.URL, Timeout: "5s"}))
 	return mgr, svc
 }
 

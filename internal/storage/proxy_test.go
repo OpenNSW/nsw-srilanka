@@ -8,14 +8,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	coreauthn "github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/remote"
+	remoteauth "github.com/OpenNSW/core/remote/auth"
+	"github.com/OpenNSW/core/secret"
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
 )
@@ -72,15 +72,12 @@ func newOwningService(t *testing.T) *httptest.Server {
 // newRegistry registers the owning service as "files-api".
 func newRegistry(t *testing.T, url, token string) *remote.Manager {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "services.json")
-	registry := fmt.Sprintf(`{"version":"1","services":[{"id":"files-api","url":%q,`+
-		`"auth":{"type":"bearer","options":{"token":%q}}}]}`, url, token)
-	if err := os.WriteFile(path, []byte(registry), 0o600); err != nil {
-		t.Fatalf("write services.json: %v", err)
-	}
 	m := remote.NewManager()
-	if err := m.LoadServices(path); err != nil {
-		t.Fatalf("LoadServices: %v", err)
+	if err := m.SetServices(remote.ServiceConfig{
+		ID: "files-api", URL: url,
+		Auth: &remoteauth.Config{Type: remoteauth.TypeBearer, Bearer: &remoteauth.BearerConfig{Token: secret.SecretRef(token)}},
+	}); err != nil {
+		t.Fatalf("SetServices: %v", err)
 	}
 	return m
 }

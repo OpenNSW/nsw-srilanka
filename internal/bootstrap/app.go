@@ -172,12 +172,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyService := company.NewService(db)
 	userProfileService := user.NewService(db)
 
-	// Outbound HTTP caller configurations. Loaded before storage, which in
+	// Outbound HTTP caller configurations. Set before storage, which in
 	// proxy mode reaches the service that owns the files through it.
 	remoteManager := remote.NewManager()
-	if err := remoteManager.LoadServices(cfg.Server.ServicesConfigPath); err != nil {
+	if err := remoteManager.SetServices(cfg.Services...); err != nil {
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to load remote services from %s: %w", cfg.Server.ServicesConfigPath, err)
+		return nil, fmt.Errorf("failed to configure remote services: %w", err)
 	}
 
 	// Storage is built here rather than alongside its HTTP handler further

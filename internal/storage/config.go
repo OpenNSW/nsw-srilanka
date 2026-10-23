@@ -135,7 +135,7 @@ func (c Config) validateBackend() error {
 // the files and where it serves its storage API.
 type ProxyConfig struct {
 	// Service is the owning service's ID in the outbound services registry
-	// (services.json), which supplies its URL, authentication and timeout.
+	// (config.yaml services), which supplies its URL, authentication and timeout.
 	Service string `yaml:"service"`
 	// UploadPath is the owning service's upload endpoint (POST), which
 	// allocates a key and returns the file metadata with an upload URL.

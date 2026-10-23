@@ -19,7 +19,7 @@
 #
 # CONFIG_PATH and APP_ENV are the only settings read from the environment.
 # APP_ENV=development is what lets authn.insecureSkipTLSVerify (and any
-# insecure_skip_tls_verify in services.json) through; anything else fails the
+# services[].auth.oauth2.insecureSkipTLSVerify) through; anything else fails the
 # boot rather than trusting an unverified cert. `make dev`/`make preview`/
 # `make test-e2e` set it.
 #
@@ -64,10 +64,110 @@ server:
   # Config file paths, relative to the container's working directory (/app),
   # whose configs/ is the repo's, bind-mounted read-only.
   # The outbound services registry, reaching the agencies by container hostname.
-  servicesConfigPath: configs/services.docker.json
+
   paymentMethodsConfigPath: configs/payment_methods.json
   # The global catalog: logical names -> IdP token roles and OAuth2 client ids.
   catalogConfigPath: configs/catalog.json
+
+# Outbound HTTP services (core/remote). Secret fields use env:NAME or file:/path
+# references, resolved by remote at startup; do not use {{env:NAME}} here.
+services:
+  - id: npqs
+    url: http://host.docker.internal:8081
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_NPQS
+        clientSecret: env:M2M_NSW_TO_NPQS_SECRET
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.npqs.nsw-agency.local
+  - id: fcau
+    url: http://host.docker.internal:8082
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_FCAU
+        clientSecret: env:M2M_NSW_TO_FCAU_SECRET
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.fcau.nsw-agency.local
+  - id: cda
+    url: http://host.docker.internal:8083
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_CDA
+        clientSecret: env:M2M_NSW_TO_CDA_SECRET
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.cda.nsw-agency.local
+  - id: slpa
+    url: http://host.docker.internal:8084
+    timeout: 60s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://host.docker.internal:8084/api/nsw/v1/token
+        clientID: NSW_TO_SLPA_CLIENT_ID
+        clientSecret: env:M2M_NSW_TO_SLPA_SECRET
+  - id: efc
+    url: http://host.docker.internal:8085
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_EFC
+        clientSecret: env:M2M_NSW_TO_EFC_SECRET
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.efc.nsw-agency.local
+  - id: customs-asycuda
+    url: https://customs-asycuda.example.com
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: https://idp.example.com/oauth2/token
+        clientID: NSW_TO_ASYCUDA_CLIENT_ID
+        clientSecret: env:M2M_NSW_TO_ASYCUDA_SECRET
+        scopes: []
+        insecureSkipTLSVerify: false
+  - id: ippc-hub
+    url: https://uat-hub.ephytoexchange.org/hub
+    timeout: 60s
+    tls:
+      clientCertFile: /certs/ippc/nppo.crt
+      clientKeyFile: /certs/ippc/nppo.key
+  - id: sltb
+    url: http://host.docker.internal:8086
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_SLTB
+        clientSecret: env:M2M_NSW_TO_SLTB_SECRET
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.sltb.nsw-agency.local
 
 # Agency portals are listed too: they call the storage service directly.
 cors:
@@ -135,7 +235,7 @@ storage:
   #   publicURL: ""
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
-  # (server.servicesConfigPath), which supplies its URL and authentication. All
+  # (services), which supplies its URL and authentication. All
   # four are required in proxy mode; below are that service's usual storage
   # routes, and {key} may appear anywhere in the download/delete paths.
   # proxy:

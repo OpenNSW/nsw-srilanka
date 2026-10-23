@@ -26,7 +26,7 @@ db:
       maxConnLifetimeSeconds: 3600
 
 server:
-  # 8085 is where TNSW's services.json already points its "efc" service.
+  # 8085 is where TNSW's services list in config.yaml points its "efc" service.
   port: 8085
   logLevel: debug
   serviceURL: http://localhost:8085
@@ -35,10 +35,27 @@ server:
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  # services.json: "tnsw", where notify_decision posts the decision back.
-  servicesConfigPath: ./configs/agency/efc/services.json
   paymentMethodsConfigPath: ./configs/agency/efc/payment_methods.json
   catalogConfigPath: ./configs/agency/efc/catalog.json
+
+# Outbound HTTP services (core/remote). Secret fields use env:NAME or file:/path
+# references, resolved by remote at startup; do not use {{env:NAME}} here.
+services:
+  - id: tnsw
+    url: http://localhost:8080
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://localhost:8090/oauth2/token
+        clientID: EFC_TO_NSW
+        clientSecret: env:M2M_EFC_TO_NSW_SECRET
+        scopes:
+          - nsw:task:write
+          - nsw:storage:read
+          - nsw:storage:write
+        endpointParams:
+          resource: https://api.nsw-srilanka.local
 
 # The EFC portal (the trader-app in agency mode).
 cors:
@@ -50,7 +67,7 @@ cors:
   maxAge: 3600
 
 # EFC keeps no files of its own: it serves TNSW's storage, calling TNSW as
-# EFC_TO_NSW (services.json, service tnsw), so officers open the documents
+# EFC_TO_NSW (services entry tnsw), so officers open the documents
 # traders uploaded there. TNSW applies its own upload limits.
 storage:
   type: proxy

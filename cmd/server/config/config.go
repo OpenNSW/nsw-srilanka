@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
 	"github.com/OpenNSW/core/refid"
+	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/temporal"
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
@@ -54,13 +54,15 @@ type Config struct {
 	// generates from. Optional: with no issuers, generation is disabled and a
 	// template using the plugin fails at run time (see bootstrap.initRefIDs).
 	RefID refid.Config `yaml:"refid"`
+
+	// Services declares outbound endpoints and authentication in this file.
+	Services []remote.ServiceConfig `yaml:"services"`
 }
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
 	Port                     int           `yaml:"port"`
 	ServiceURL               string        `yaml:"serviceURL"`
-	ServicesConfigPath       string        `yaml:"servicesConfigPath"`
 	PaymentMethodsConfigPath string        `yaml:"paymentMethodsConfigPath"`
 	CatalogConfigPath        string        `yaml:"catalogConfigPath"`
 	LogLevel                 slog.Level    `yaml:"logLevel"`
@@ -106,7 +108,6 @@ func (s ServerConfig) Validate() error {
 		return fmt.Errorf("server.idleTimeout must be greater than zero")
 	}
 	for _, p := range []struct{ key, path string }{
-		{"server.servicesConfigPath", s.ServicesConfigPath},
 		{"server.paymentMethodsConfigPath", s.PaymentMethodsConfigPath},
 		{"server.catalogConfigPath", s.CatalogConfigPath},
 	} {
@@ -194,9 +195,12 @@ func (c *Config) Validate() error {
 	if c.Authn.InsecureSkipTLSVerify && !isDevEnvironment() {
 		return fmt.Errorf("authn.insecureSkipTLSVerify: insecure TLS verification requested but APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start — provide a trusted certificate chain, or set APP_ENV=development for a non-production run")
 	}
-	// Outbound M2M (services.json) may also disable TLS verification per service;
+	// Outbound M2M may also disable TLS verification per service;
 	// hold it to the same rule so an insecure token endpoint can't ship to prod.
-	if err := guardServicesConfigTLS(c.Server.ServicesConfigPath); err != nil {
+	if len(c.Services) == 0 {
+		return fmt.Errorf("services is required: declare outbound services in config.yaml")
+	}
+	if err := guardServicesConfigTLS(c.Services); err != nil {
 		return err
 	}
 	return c.validateAuxiliary()
@@ -239,40 +243,12 @@ func validateCORS(c cors.Config) error {
 	return nil
 }
 
-// servicesTLSProbe is a minimal view of the outbound services registry
-// (configs/services*.json) used only to detect per-service TLS-skip flags.
-type servicesTLSProbe struct {
-	Services []struct {
-		ID   string `json:"id"`
-		Auth struct {
-			Options struct {
-				InsecureSkipTLSVerify bool `json:"insecure_skip_tls_verify"`
-			} `json:"options"`
-		} `json:"auth"`
-	} `json:"services"`
-}
-
 // guardServicesConfigTLS enforces the APP_ENV=development gate on any per-service
-// insecure_skip_tls_verify in the outbound services registry. A missing/empty
-// path is not an error here — remote.LoadServices reports that at bootstrap.
-func guardServicesConfigTLS(path string) error {
-	if strings.TrimSpace(path) == "" {
-		return nil
-	}
-	data, err := os.ReadFile(path) //nolint:gosec // G703: path is server.servicesConfigPath from the operator's own config.yaml, not user input.
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // absent config: surfaced later by LoadServices
-		}
-		return fmt.Errorf("read services config %s: %w", path, err)
-	}
-	var probe servicesTLSProbe
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return fmt.Errorf("parse services config %s: %w", path, err)
-	}
-	for _, s := range probe.Services {
-		if s.Auth.Options.InsecureSkipTLSVerify && !isDevEnvironment() {
-			return fmt.Errorf("insecure_skip_tls_verify (services.json service %q): APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start", s.ID)
+// insecureSkipTLSVerify in the outbound services registry.
+func guardServicesConfigTLS(services []remote.ServiceConfig) error {
+	for _, s := range services {
+		if s.Auth != nil && s.Auth.OAuth2 != nil && s.Auth.OAuth2.InsecureSkipTLSVerify && !isDevEnvironment() {
+			return fmt.Errorf("services service %q auth.oauth2.insecureSkipTLSVerify: APP_ENV is not \"development\" (unset or any other value is treated as production); refusing to start", s.ID)
 		}
 	}
 	return nil

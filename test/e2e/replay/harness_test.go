@@ -36,6 +36,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/OpenNSW/core/payment"
+	"github.com/OpenNSW/core/remote"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
 
@@ -120,7 +121,7 @@ func newHarness(t *testing.T) *harness {
 	// here regardless of which agency a flow exercises. Unused by flows that don't
 	// reach an external review.
 	agency := newMockAgency(t, agencies)
-	cfg.Server.ServicesConfigPath = writeServicesConfig(t, agency.server.URL, agencies)
+	cfg.Services = agencyServices(agency.server.URL, agencies)
 
 	// A controllable mock payment gateway confirms payments by posting the GovPay
 	// webhook; it reads the generated reference from the payment store, so it
@@ -203,27 +204,13 @@ func seedUser(t *testing.T, cfg *config.Config, userID, ouHandle string) {
 	}
 }
 
-// writeServicesConfig writes a temp remote-services config pointing all agency
-// service ids at the mock agency server, and returns its path.
-func writeServicesConfig(t *testing.T, agencyURL string, agencies []AgencyConfig) string {
-	t.Helper()
-	services := make([]map[string]any, 0, len(agencies))
+// agencyServices points each agency service at its prefix on the mock server.
+func agencyServices(agencyURL string, agencies []AgencyConfig) []remote.ServiceConfig {
+	services := make([]remote.ServiceConfig, 0, len(agencies))
 	for _, ac := range agencies {
-		// Each agency gets a prefixed base URL so the NSW app sends injects to
-		// /<agencyID>/... — the mock registers handlers at those prefixed paths,
-		// allowing multiple agencies to share the same real-world inject path.
-		services = append(services, map[string]any{"id": ac.ID, "url": agencyURL + "/" + ac.ID, "timeout": "30s"})
+		services = append(services, remote.ServiceConfig{ID: ac.ID, URL: agencyURL + "/" + ac.ID, Timeout: "30s"})
 	}
-	cfg := map[string]any{"version": "1.0", "services": services}
-	raw, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal services config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "services.json")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatalf("write services config: %v", err)
-	}
-	return path
+	return services
 }
 
 // mintPaymentKeys generates a 2048-bit RSA key pair for each payment gateway

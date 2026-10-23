@@ -4,21 +4,22 @@ Configuration to run this backend as the Coconut Development Authority, next to
 TNSW on the same machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
 Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
-| File                   | Purpose                                                                                                                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn, reference ID formats                                           |
-| `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                               |
-| `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` and `services.json` reference                                                            |
-| `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP; `tnsw` → `NSW_TO_CDA`, the client TNSW replies as, so the steps that wait on its reply can name it           |
-| `services.json`        | `tnsw`: where the workflows' `notify_decision` step posts the decision back to TNSW (`POST /api/v1/callbacks/{callbackToken}`), and where storage is proxied, as `CDA_TO_NSW` |
-| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                         |
-| `services.docker.json` | `services.json` for the `cda-api` container: TNSW at `api:8080`, the IdP at `thunderid:8090`                                                                                  |
-| `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                                   |
-| `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                                   |
+| File                   | Purpose                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn, outbound services, reference ID formats              |
+| `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                     |
+| `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                     |
+| `catalog.json`         | `officer` → the `CDA Officer` role CDA officers hold in the IdP; `tnsw` → `NSW_TO_CDA`, the client TNSW replies as, so the steps that wait on its reply can name it |
+| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                               |
+| `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                         |
+| `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                         |
 
 CDA keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
 TNSW as `CDA_TO_NSW`. TNSW applies its own upload limits.
+
+The YAML's `services` list registers `tnsw` for storage and the workflows'
+`notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
 
 ## Run with Docker Compose
 
@@ -34,7 +35,7 @@ TNSW as `CDA_TO_NSW`. TNSW applies its own upload limits.
 rebuild them after a change with `docker compose up -d --build cda-api cda-portal`.
 
 TNSW in compose reaches it at `host.docker.internal:8083`, through the `cda` entry its
-`services.docker.json` already has. To change a setting, edit `config.docker.yaml` and
+`config.docker.yaml` services list already has. To change a setting, edit `config.docker.yaml` and
 restart `cda-api`. `cda-api` loads its artifacts from a `one-trade-artifacts` clone
 next to this repo (`../one-trade-artifacts/cda`); set `CDA_ARTIFACT_LOCAL_ROOT` in
 `.env` to use another clone's `cda` dir.
@@ -51,7 +52,7 @@ set -a; . configs/agency/cda/cda.env; set +a
 go run ./cmd/server
 ```
 
-TNSW reaches it through its own `configs/services.json` entry `cda`
+TNSW reaches it through its own `configs/config.yaml` services entry `cda`
 (`http://localhost:8083`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
@@ -72,8 +73,8 @@ CDA for this deployment, on the `CDA API` resource server
 | TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on CDA's parked steps, which `catalog.json` maps `tnsw` to |
 | CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`                 |
 
-TNSW's `services.json` `cda` entry requests `nsw:workflow:inject` and `nsw:task:write` with
-`resource=https://api.cda.nsw-agency.local` (see `configs/services*.example.json`).
+TNSW's `config.yaml` services entry `cda` requests `nsw:workflow:inject` and `nsw:task:write` with
+`resource=https://api.cda.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
 down` and remove the `thunderid-*` volumes; see

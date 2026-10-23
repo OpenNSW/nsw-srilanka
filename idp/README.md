@@ -189,7 +189,7 @@ without passwords; strip and fix those before committing.
 To add an agency run by this backend in agency mode, copy one of the
 `20-agency-*.yaml` files, change the handle, names and port, and give every document a
 new `id` (and update the references to it). Then add its port to the `cors` server
-config, and its clients to the backends' catalog and `services.json`.
+config, and its clients to the backends' catalog and `config.yaml` services.
 
 ### Management token (local dev)
 
@@ -277,20 +277,20 @@ becomes the access-token **audience** (`aud`):
 >   is set in `configs/agency/cda/config.yaml` and `configs/agency/cda/config.docker.yaml`. Its
 >   callers request it as `resource=`: the CDA portal in
 >   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
->   `configs/services*.example.json`. Changing the identifier means changing all of these
->   (and any existing local `configs/services*.json`).
+>   `configs/config*.example.yaml`. Changing the identifier means changing all of these
+>   (and any existing local `configs/config*.yaml`).
 > - **EFC** (`efc-api`): the `EFC API` identifier,
 >   `https://api.efc.nsw-agency.local`, in the same places under
->   `configs/agency/efc/` and TNSW's `efc` entry in `configs/services*.example.json`.
+>   `configs/agency/efc/` and TNSW's `efc` entry in `configs/config*.example.yaml`.
 > - **NPQS** (`npqs-api`): the `NPQS API` identifier, `https://api.npqs.nsw-agency.local`,
 >   in the same places under `configs/agency/npqs/` and TNSW's `npqs` entry in
->   `configs/services*.example.json`.
+>   `configs/config*.example.yaml`.
 > - **SLTB** (`sltb-api`): the `SLTB API` identifier, `https://api.sltb.nsw-agency.local`,
 >   in the same places under `configs/agency/sltb/` and TNSW's `sltb` entry in
->   `configs/services*.example.json`.
+>   `configs/config*.example.yaml`.
 > - **FCAU** (`fcau-api`): the `FCAU API` identifier, `https://api.fcau.nsw-agency.local`,
 >   in the same places under `configs/agency/fcau/` and TNSW's `fcau` entry in
->   `configs/services*.example.json`.
+>   `configs/config*.example.yaml`.
 
 Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, EFC, NPQS, SLTB and FCAU APIs reuse `nsw:*` names, since they
 are the same backend; that is safe because every caller names its target with `resource`
@@ -358,30 +358,32 @@ gets a hard `invalid_target` at the token endpoint, naming the problem.
 
 So every permission-bearing caller sends `resource`:
 
-| Caller                       | Sends `resource` | Where it is configured                              | Token `aud`                         |
-| ---------------------------- | ---------------- | --------------------------------------------------- | ----------------------------------- |
-| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`)   | `https://api.nsw-srilanka.local`    |
-| OGA portal users             | AGENCY_API       | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-agency.local`      |
-| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency            | `https://api.nsw-srilanka.local`    |
-| `NSW_TO_*` M2M               | AGENCY_API       | `endpoint_params` in `configs/services*.json`       | `https://api.nsw-agency.local`      |
-| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                             | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | _Management token_ above                            | `https://localhost:8090/mcp`        |
-| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                | app `defaultAudience` / `client_id` |
+| Caller                       | Sends `resource` | Where it is configured                                            | Token `aud`                         |
+| ---------------------------- | ---------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`)                 | `https://api.nsw-srilanka.local`    |
+| OGA portal users             | AGENCY_API       | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency               | `https://api.nsw-agency.local`      |
+| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency                          | `https://api.nsw-srilanka.local`    |
+| `NSW_TO_*` M2M               | AGENCY_API       | `services[].auth.oauth2.endpointParams` in `configs/config*.yaml` | `https://api.nsw-agency.local`      |
+| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                                           | `https://api.nsw-srilanka.local`    |
+| `admin-cli` management token | System RS        | _Management token_ above                                          | `https://localhost:8090/mcp`        |
+| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                              | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the
 whole session: the IdP records the value on the authorization code and reuses the bound
 audience on refresh, so `automaticSilentRenew` needs no extra handling.
 
 **M2M clients** send it in the token request body, as RFC 6749 §3.2 requires. In
-`configs/services*.json` that is the `endpoint_params` field of
-`github.com/OpenNSW/core/remote` (v0.6.0+); nsw-agency uses `NSW_TOKEN_PARAMS`, which it
-passes to `clientcredentials.Config.EndpointParams`. Both take the same query-string shape
-as the SPA variable, so one syntax covers every caller:
+`configs/config*.yaml`, set `services[].auth.oauth2.endpointParams`:
 
-```json
-"token_url": "http://thunderid:8090/oauth2/token",
-"endpoint_params": { "resource": "https://api.nsw-agency.local" }
+```yaml
+tokenURL: http://thunderid:8090/oauth2/token
+endpointParams:
+  resource: https://api.nsw-agency.local
 ```
+
+Each parameter accepts a string or a list of strings. The separate nsw-agency
+application uses `NSW_TOKEN_PARAMS`, passed to
+`clientcredentials.Config.EndpointParams`.
 
 > Earlier revisions appended `?resource=…` to `token_url` instead. That worked only
 > because the token endpoint calls `r.ParseForm()`, which merges the URL query into the

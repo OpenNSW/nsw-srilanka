@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/OpenNSW/core/remote"
@@ -131,11 +128,8 @@ func newOGA(t *testing.T) (*remote.Manager, *[]map[string]any) {
 	}))
 	t.Cleanup(srv.Close)
 
-	path := filepath.Join(t.TempDir(), "services.json")
-	registry := fmt.Sprintf(`{"version":"1","services":[{"id":"cda","url":%q}]}`, srv.URL)
-	require.NoError(t, os.WriteFile(path, []byte(registry), 0o600))
 	m := remote.NewManager()
-	require.NoError(t, m.LoadServices(path))
+	require.NoError(t, m.SetServices(remote.ServiceConfig{ID: "cda", URL: srv.URL}))
 	return m, &pushed
 }
 

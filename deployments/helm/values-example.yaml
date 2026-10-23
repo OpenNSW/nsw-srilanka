@@ -62,12 +62,12 @@ backend:
     type: ClusterIP
     port: 80
 
-  # Only what config.yaml cannot hold: APP_ENV, and the secrets it (and
-  # services.json) references as {{env:NAME}} / env:NAME — each pulled from a
+  # Only what config.yaml cannot hold: APP_ENV, and the secrets referenced
+  # as {{env:NAME}} / env:NAME — each pulled from a
   # Kubernetes Secret, never inlined.
   env:
-    # Gates authn.insecureSkipTLSVerify and services.json's per-service
-    # insecure_skip_tls_verify. Leave unset in any real deployment — the
+    # Gates authn.insecureSkipTLSVerify and each service's OAuth2
+    # insecureSkipTLSVerify. Leave unset in any real deployment — the
     # backend then fails closed rather than trusting an unverified cert.
     APP_ENV: ""
 
@@ -101,7 +101,7 @@ backend:
         secretKeyRef: { name: nsw-secrets, key: storage-token-keyset }
 
     # --- Outbound M2M (NSW -> Agency): client secrets referenced as
-    # env:M2M_NSW_TO_<AGENCY>_SECRET in configs/services*.json. ---
+    # env:M2M_NSW_TO_<AGENCY>_SECRET in the services list in config.yaml. ---
     M2M_NSW_TO_NPQS_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-npqs-secret }
@@ -177,9 +177,108 @@ backend:
       # (Only the *.example.json templates ship in the image — see the root
       # Dockerfile. The live files below are gitignored, so supply them via a
       # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
-      servicesConfigPath: configs/services.json
       paymentMethodsConfigPath: configs/payment_methods.json
       catalogConfigPath: configs/catalog.json
+
+
+    # Outbound services; replace the local endpoints for this deployment.
+    services:
+      - id: npqs
+        url: http://localhost:8081
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_NPQS
+            clientSecret: env:M2M_NSW_TO_NPQS_SECRET
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.npqs.nsw-agency.local
+      - id: fcau
+        url: http://localhost:8082
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_FCAU
+            clientSecret: env:M2M_NSW_TO_FCAU_SECRET
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.fcau.nsw-agency.local
+      - id: cda
+        url: http://localhost:8083
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_CDA
+            clientSecret: env:M2M_NSW_TO_CDA_SECRET
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.cda.nsw-agency.local
+      - id: slpa
+        url: https://slpa-cms.example.com
+        timeout: 60s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
+            clientID: NSW_TO_SLPA_CLIENT_ID
+            clientSecret: env:M2M_NSW_TO_SLPA_SECRET
+      - id: efc
+        url: http://localhost:8085
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_EFC
+            clientSecret: env:M2M_NSW_TO_EFC_SECRET
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.efc.nsw-agency.local
+      - id: customs-asycuda
+        url: https://customs-asycuda.example.com
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://idp.example.com/oauth2/token
+            clientID: NSW_TO_ASYCUDA_CLIENT_ID
+            clientSecret: env:M2M_NSW_TO_ASYCUDA_SECRET
+            scopes: []
+            insecureSkipTLSVerify: false
+      - id: ippc-hub
+        url: https://uat-hub.ephytoexchange.org/hub
+        timeout: 60s
+        tls:
+          clientCertFile: /certs/ippc/nppo.crt
+          clientKeyFile: /certs/ippc/nppo.key
+      - id: sltb
+        url: http://localhost:8086
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_SLTB
+            clientSecret: env:M2M_NSW_TO_SLTB_SECRET
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.sltb.nsw-agency.local
 
     # The server's (and the otc CLI's) database connection: core/database's
     # Config (github.com/OpenNSW/core/database). The schema migrator has its own,
