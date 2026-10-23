@@ -116,7 +116,7 @@ CREATE INDEX IF NOT EXISTS idx_workflow_nodes_state ON workflow_nodes (state);
 -- -------------------------------------------------------------------
 -- 4. Business Consignments
 --    cha_company_id is nullable: direct-start consignments (e.g.
---    trade-export) select the CHA inside the workflow, not up front.
+--    trade-export-v1) select the CHA inside the workflow, not up front.
 -- -------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS consignments (
 	id text NOT NULL PRIMARY KEY,
