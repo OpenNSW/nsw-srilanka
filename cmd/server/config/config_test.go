@@ -524,7 +524,7 @@ func TestLoad_DatabaseValidationError(t *testing.T) {
 
 func TestLoad_SecretPlaceholders(t *testing.T) {
 	t.Setenv("TEST_DB_PASSWORD", "from-env")
-	secret := filepath.Join(t.TempDir(), "argus-key")
+	secret := filepath.Join(t.TempDir(), "webhook-secret")
 	if err := os.WriteFile(secret, []byte("from-file"), 0o600); err != nil {
 		t.Fatalf("failed to write fixture: %v", err)
 	}
@@ -532,9 +532,8 @@ func TestLoad_SecretPlaceholders(t *testing.T) {
 db:
   postgres:
     password: "{{env:TEST_DB_PASSWORD}}"
-audit:
-  baseURL: http://argus:3001
-  apiKey: '{{file:`+secret+`}}'
+integrations:
+  slpaWebhookSecret: '{{file:`+secret+`}}'
 `))
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -542,8 +541,8 @@ audit:
 	if cfg.Database.Postgres.Password != "from-env" {
 		t.Errorf("Database.Password = %q, want it resolved from the env var", cfg.Database.Postgres.Password)
 	}
-	if cfg.Audit.BaseURL != "http://argus:3001" || cfg.Audit.APIKey != "from-file" {
-		t.Errorf("Audit = {BaseURL: %q, APIKey: %q}, want the file's values", cfg.Audit.BaseURL, cfg.Audit.APIKey)
+	if cfg.Integrations.SLPAWebhookSecret != "from-file" {
+		t.Errorf("SLPAWebhookSecret = %q, want it resolved from the file", cfg.Integrations.SLPAWebhookSecret)
 	}
 }
 

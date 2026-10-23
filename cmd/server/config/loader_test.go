@@ -161,7 +161,7 @@ refid:
 // defaults, each has to set every required setting itself. Their placeholders
 // resolve from the env vars .env.example sets.
 func TestLoadFile_ExamplesLoad(t *testing.T) {
-	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
+	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
 		t.Setenv(k, "example-"+k)
 	}
 	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {

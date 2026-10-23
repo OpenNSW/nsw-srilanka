@@ -1,7 +1,7 @@
 # Neutral defaults for the NSW Single Window platform: the Backend API
 # (cmd/server) and the Trader Portal frontend (portals/apps/trader-app), as
 # two components of one chart/release. Their infra dependencies (Postgres,
-# Temporal, Thunder ID, Argus) are separate deployments — component env just
+# Temporal, Thunder ID) are separate deployments — component env just
 # points at their in-cluster Service names or external URLs.
 #
 # Everything below is intentionally left as neutral defaults and is filled in

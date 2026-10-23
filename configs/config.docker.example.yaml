@@ -269,11 +269,6 @@ temporal:
   port: 7233
   namespace: default
 
-# Audit service (Argus).
-audit:
-  baseURL: http://argus:3001
-  apiKey: "{{env:ARGUS_API_KEY}}"
-
 # Optional OTLP/HTTP export of metrics, logs and traces. Empty endpoint (or omit
 # the section) leaves export off. Point endpoint at an OpenObserve (or other
 # OTLP/HTTP) base URL when one is reachable from this stack; leave commented

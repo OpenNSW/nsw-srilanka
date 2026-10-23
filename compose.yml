@@ -35,7 +35,6 @@ x-config-env: &config-env
   M2M_NSW_TO_SLTB_SECRET: ${M2M_NSW_TO_SLTB_SECRET:-1234}
   M2M_NSW_TO_ASYCUDA_SECRET: ${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
-  ARGUS_API_KEY: ${ARGUS_API_KEY:-nsw-super-secret-audit-token}
   SLPA_WEBHOOK_SECRET: ${SLPA_WEBHOOK_SECRET:-local-dev-slpa-webhook-secret}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -339,8 +338,6 @@ services:
         condition: service_healthy
       thunderid:
         condition: service_started
-      argus:
-        condition: service_started
 
   # -------------------------------------------------------------------
   # 6a. Trader Portal Runtime Config Bootstrap
@@ -386,39 +383,6 @@ services:
         condition: service_started
       thunderid:
         condition: service_started
-
-  # -------------------------------------------------------------------
-  # 7. Audit Service (Argus)
-  # -------------------------------------------------------------------
-  argus:
-    build:
-      context: https://github.com/LSFLK/argus.git#main
-      dockerfile: Dockerfile
-      args:
-        BUILD_VERSION: 858f4ee608e839fac48873bfb4d582e14105a8df
-    image: nsw-argus:local
-    container_name: nsw-argus
-    networks:
-      - nsw-network
-    ports:
-      - "${ARGUS_PORT:-3001}:3001"
-    volumes:
-      - ./configs/argus/config.yaml:/app/configs/config.yaml:ro
-    environment:
-      - ENVIRONMENT=development
-      - PORT=3001
-      - AUDIT_ENUMS_CONFIG=/app/configs/config.yaml
-      - DB_TYPE=postgres
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-nsw_db}
-      - DB_USERNAME=${DB_USERNAME:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - DB_SSLMODE=${DB_SSLMODE:-disable}
-      - ARGUS_API_KEY=${ARGUS_API_KEY:-nsw-super-secret-audit-token}
-    depends_on:
-      db:
-        condition: service_healthy
 
   # -------------------------------------------------------------------
   # 8. CDA Agency

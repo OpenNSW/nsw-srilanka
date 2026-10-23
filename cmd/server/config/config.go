@@ -40,7 +40,6 @@ type Config struct {
 	Authn        authn.Config        `yaml:"authn"`
 	Notification NotificationConfig  `yaml:"notification"`
 	Temporal     temporal.Config     `yaml:"temporal"`
-	Audit        AuditConfig         `yaml:"audit"`
 	Otel         telemetry.Config    `yaml:"otel"`
 	Integrations integrations.Config `yaml:"integrations"`
 
@@ -71,14 +70,6 @@ type ServerConfig struct {
 	ReadTimeout              time.Duration `yaml:"readTimeout"`
 	WriteTimeout             time.Duration `yaml:"writeTimeout"`
 	IdleTimeout              time.Duration `yaml:"idleTimeout"`
-}
-
-// AuditConfig is retained so existing config.yaml / Compose still decode the
-// optional audit: section. The process does not use these fields: audit events
-// are written by internal/audit.LogSink (structured logs with category=audit).
-type AuditConfig struct {
-	BaseURL string `yaml:"baseURL"`
-	APIKey  string `yaml:"apiKey"`
 }
 
 // Validate checks that the server configuration is valid.

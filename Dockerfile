@@ -140,8 +140,8 @@ COPY --chown=1001:0 --from=builder /out/server /app/server
 COPY --chown=1001:0 --from=builder /out/otc /usr/local/bin/otc
 
 # Bake the configs directory. Only the committed *.example.json templates
-# (payment_methods, catalog), the config*.example.yaml templates and
-# argus/ land here — the live files they seed are excluded by .dockerignore
+# (payment_methods, catalog) and the config*.example.yaml templates
+# land here — the live files they seed are excluded by .dockerignore
 # because they carry literal credentials, so no build bakes them regardless of
 # the working tree.
 # Deployments supply the real files via ConfigMap or bind mount.

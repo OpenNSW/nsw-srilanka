@@ -115,18 +115,18 @@ func TestLoad_UnsetPlaceholderElsewhereFails(t *testing.T) {
 db:
   postgres:
     password: testpassword
-audit:
-  apiKey: "{{env:OTC_TEST_UNSET_VAR}}"
+marker:
+  token: "{{env:OTC_TEST_UNSET_VAR}}"
 `)
-	if err == nil || !strings.Contains(err.Error(), "audit.apiKey") {
-		t.Fatalf("expected the unset placeholder to fail naming audit.apiKey, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "marker.token") {
+		t.Fatalf("expected the unset placeholder to fail naming marker.token, got: %v", err)
 	}
 }
 
 // The server's committed templates load as otc's config too, with the env vars
 // .env.example sets for their placeholders.
 func TestLoad_ServerTemplates(t *testing.T) {
-	for _, k := range []string{"DB_PASSWORD", "ARGUS_API_KEY", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET", "STORAGE_TOKEN_KEYSET"} {
+	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_TOKEN", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET", "STORAGE_TOKEN_KEYSET"} {
 		t.Setenv(k, "example-"+k)
 	}
 	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {
