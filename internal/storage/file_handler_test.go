@@ -73,15 +73,16 @@ func assertDownloadURL(t *testing.T, rec *httptest.ResponseRecorder) {
 }
 
 // assertFileType checks that a successful download gives the file's
-// extension and type, and no name for it.
-func assertFileType(t *testing.T, rec *httptest.ResponseRecorder, ext, mimeType string) {
+// extension, the type it was stored with and how the URL serves it, and no
+// name for it.
+func assertFileType(t *testing.T, rec *httptest.ResponseRecorder, ext, mimeType, disposition string) {
 	t.Helper()
 	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body["extension"] != ext || body["mime_type"] != mimeType {
-		t.Errorf("extension, mime_type = %v, %v; want %q, %q", body["extension"], body["mime_type"], ext, mimeType)
+	if body["extension"] != ext || body["mime_type"] != mimeType || body["disposition"] != disposition {
+		t.Errorf("extension, mime_type, disposition = %v, %v, %v; want %q, %q, %q", body["extension"], body["mime_type"], body["disposition"], ext, mimeType, disposition)
 	}
 	if _, ok := body["name"]; ok {
 		t.Errorf("response %s names the file", rec.Body.String())
@@ -95,8 +96,20 @@ func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
-// uploadKey reserves a key with svc, as an upload would.
-func uploadKey(t *testing.T, svc Service) string {
+// storedKey stores a PDF with svc and returns its key. A download is only
+// issued for a file the backend holds.
+func storedKey(t *testing.T, svc Service) string {
+	t.Helper()
+	meta, err := svc.Save(context.Background(), "a.pdf", "application/pdf", strings.NewReader("%PDF-1.4"), 8)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	return meta.Key
+}
+
+// reservedKey reserves a key with svc, as an upload would, without storing a
+// file under it.
+func reservedKey(t *testing.T, svc Service) string {
 	t.Helper()
 	meta, err := svc.Upload(context.Background(), "a.pdf", 10, "application/pdf")
 	if err != nil {
@@ -112,7 +125,7 @@ func TestFileHandler_Download(t *testing.T) {
 	}
 	access, now := testFileAccess(t)
 	h := NewFileHandler(stack.Service, access)
-	key := uploadKey(t, stack.Service)
+	key := storedKey(t, stack.Service)
 	token, err := access.Issue(user("alice"), key, fileaccess.ScopeRead)
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +134,14 @@ func TestFileHandler_Download(t *testing.T) {
 	t.Run("the holder's token", func(t *testing.T) {
 		rec := download(h, token, user("alice"))
 		assertDownloadURL(t, rec)
-		assertFileType(t, rec, ".pdf", "application/pdf")
+		assertFileType(t, rec, ".pdf", "application/pdf", drivers.DispositionInline)
+	})
+	t.Run("a file the backend does not hold", func(t *testing.T) {
+		missing, err := access.Issue(user("alice"), reservedKey(t, stack.Service), fileaccess.ScopeRead)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertStatus(t, download(h, missing, user("alice")), http.StatusNotFound)
 	})
 	t.Run("someone else's token", func(t *testing.T) {
 		assertStatus(t, download(h, token, user("bob")), http.StatusForbidden)
@@ -175,11 +195,29 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 	t.Run("the holder's token", func(t *testing.T) {
 		stack := newProxyStack(t, ownerToken)
 		h := NewFileHandler(stack.Service, access)
-		token, err := access.Issue(user("alice"), uploadKey(t, stack.Service), fileaccess.ScopeRead)
+		token, err := access.Issue(user("alice"), storedKey(t, stack.Service), fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertDownloadURL(t, download(h, token, user("alice")))
+		rec := download(h, token, user("alice"))
+		assertDownloadURL(t, rec)
+		// What the owning service says about the file is relayed as it said it.
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body["mime_type"] != "application/pdf" || body["disposition"] != drivers.DispositionInline {
+			t.Errorf("mime_type, disposition = %v, %v; want application/pdf, %s", body["mime_type"], body["disposition"], drivers.DispositionInline)
+		}
+	})
+	t.Run("a file the owner does not hold", func(t *testing.T) {
+		stack := newProxyStack(t, ownerToken)
+		h := NewFileHandler(stack.Service, access)
+		token, err := access.Issue(user("alice"), reservedKey(t, stack.Service), fileaccess.ScopeRead)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertStatus(t, download(h, token, user("alice")), http.StatusNotFound)
 	})
 	t.Run("the owner's rejection is relayed", func(t *testing.T) {
 		h := NewFileHandler(newProxyStack(t, ownerToken).Service, access)
@@ -244,7 +282,7 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	mux.HandleFunc(DownloadRoute, asAgency(tnswFiles.Download))
 	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
 
-	key := uploadKey(t, tnswService)
+	key := storedKey(t, tnswService)
 	pushed, err := tnswAccess.IssueForClient(agencyClient, key, fileaccess.ScopeRead)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +304,7 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	assertDownloadURL(t, rec)
 	// Only TNSW knows the file behind what the agency stores; the agency
 	// relays what TNSW says it is.
-	assertFileType(t, rec, ".pdf", "application/pdf")
+	assertFileType(t, rec, ".pdf", "application/pdf", drivers.DispositionInline)
 	assertStatus(t, download(agencyFiles, officerToken, user("another-officer")), http.StatusForbidden)
 
 	// An officer's own upload goes to TNSW too: TNSW issues the agency a
@@ -274,11 +312,13 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	uploaded := upload(agencyFiles, officer, `{"filename":"cert.pdf","mime_type":"application/pdf","size":10}`)
 	assertStatus(t, uploaded, http.StatusOK)
 	var meta struct {
-		Key string `json:"key"`
+		Key       string `json:"key"`
+		UploadURL string `json:"upload_url"`
 	}
 	if err := json.NewDecoder(uploaded.Body).Decode(&meta); err != nil {
 		t.Fatal(err)
 	}
+	putFile(t, meta.UploadURL, "application/pdf", 10)
 	stored, err := agencyAccess.Resolve(officer, meta.Key, fileaccess.ScopeSubmit)
 	if err != nil {
 		t.Fatalf("the officer's upload reference: %v", err)
@@ -307,11 +347,35 @@ func upload(h *FileHandler, p *authn.Principal, body string) *httptest.ResponseR
 	return rec
 }
 
+// putFile uploads size bytes to uploadURL as contentType, as a client does with
+// the URL an upload returned.
+func putFile(t *testing.T, uploadURL, contentType string, size int) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPut, uploadURL, bytes.NewReader(make([]byte, size)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT upload URL: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("PUT upload URL status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
 func TestFileHandler_UploadReturnsAReference(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	// The content routes serve the upload URLs it returns.
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	stack, err := New(context.Background(), localConfig(t, srv.URL), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	stack.LocalContent.RegisterRoutes(mux)
 	access, _ := testFileAccess(t)
 	h := NewFileHandler(stack.Service, access)
 
@@ -347,6 +411,9 @@ func TestFileHandler_UploadReturnsAReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Until the file is uploaded there is nothing to open.
+	assertStatus(t, download(h, read, user("alice")), http.StatusNotFound)
+	putFile(t, body["upload_url"].(string), "application/pdf", 10)
 	assertDownloadURL(t, download(h, read, user("alice")))
 }
 
@@ -442,27 +509,43 @@ func TestFileHandler_DownloadBackendFailureIsInternal(t *testing.T) {
 // failingService is a Service whose backend fails every call.
 type failingService struct{ Service }
 
-func (failingService) DownloadURL(context.Context, string) (string, int64, error) {
-	return "", 0, errors.New("backend unavailable")
+func (failingService) DownloadURL(context.Context, string) (corestorage.Download, error) {
+	return corestorage.Download{}, errors.New("backend unavailable")
 }
 
-func TestDownloadOf_FileType(t *testing.T) {
+// A download says what storage says: the type the file was stored with and how
+// its URL is served. The key's extension only names a file the client saves,
+// so a filename that disagrees with the type changes neither.
+func TestDownloadOf_ReportsWhatStorageSays(t *testing.T) {
 	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	for _, tc := range []struct{ key, ext, mimeType string }{
-		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b.pdf", ".pdf", "application/pdf"},
-		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b.HTML", ".HTML", "text/html"},
-		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b.unknownext", ".unknownext", ""},
-		{"0f8e7c1a-2b3d-4e5f-8a9b-0c1d2e3f4a5b", "", ""},
+	for _, tc := range []struct {
+		name, filename, mimeType string
+		wantExt, wantDisposition string
+	}{
+		{name: "a PDF", filename: "a.pdf", mimeType: "application/pdf", wantExt: ".pdf", wantDisposition: drivers.DispositionInline},
+		{name: "XML", filename: "a.xml", mimeType: "text/xml", wantExt: ".xml", wantDisposition: drivers.DispositionAttachment},
+		{name: "generated HTML", filename: "a.HTML", mimeType: "text/html; charset=utf-8", wantExt: ".HTML", wantDisposition: drivers.DispositionAttachment},
+		{name: "XML named like a PDF", filename: "draft.pdf", mimeType: "text/xml", wantExt: ".pdf", wantDisposition: drivers.DispositionAttachment},
+		{name: "a PDF named like XML", filename: "report.xml", mimeType: "application/pdf", wantExt: ".xml", wantDisposition: drivers.DispositionInline},
+		{name: "an extension nothing maps to a type", filename: "a.unknownext", mimeType: "image/png", wantExt: ".unknownext", wantDisposition: drivers.DispositionInline},
+		{name: "no extension", filename: "a", mimeType: "image/png", wantExt: "", wantDisposition: drivers.DispositionInline},
 	} {
-		dl, err := downloadOf(context.Background(), stack.Service, tc.key)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.key, err)
-		}
-		if dl.Extension != tc.ext || dl.MimeType != tc.mimeType {
-			t.Errorf("%s: extension, mime_type = %q, %q; want %q, %q", tc.key, dl.Extension, dl.MimeType, tc.ext, tc.mimeType)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			meta, err := stack.Service.Save(context.Background(), tc.filename, tc.mimeType, strings.NewReader("data"), 4)
+			if err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			dl, err := downloadOf(context.Background(), stack.Service, meta.Key)
+			if err != nil {
+				t.Fatalf("downloadOf: %v", err)
+			}
+			if dl.Extension != tc.wantExt || dl.MimeType != tc.mimeType || dl.Disposition != tc.wantDisposition {
+				t.Errorf("extension, mime_type, disposition = %q, %q, %q; want %q, %q, %q",
+					dl.Extension, dl.MimeType, dl.Disposition, tc.wantExt, tc.mimeType, tc.wantDisposition)
+			}
+		})
 	}
 }

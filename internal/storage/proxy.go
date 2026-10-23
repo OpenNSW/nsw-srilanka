@@ -133,19 +133,26 @@ func (s *ProxyService) Save(ctx context.Context, filename, mime string, body io.
 
 // GetDownloadURL returns the owning service's time-limited download URL.
 func (s *ProxyService) GetDownloadURL(ctx context.Context, key string) (string, error) {
-	downloadURL, _, err := s.DownloadURL(ctx, key)
-	return downloadURL, err
+	dl, err := s.DownloadURL(ctx, key)
+	return dl.URL, err
 }
 
 // DownloadURL returns the owning service's time-limited download URL together
-// with the Unix time it expires at, as the owning service reported it.
-func (s *ProxyService) DownloadURL(ctx context.Context, key string) (string, int64, error) {
+// with the Unix time it expires at, the type of the file and how the URL
+// serves it, as the owning service reported them. An owning service that
+// reports no disposition leaves it empty.
+func (s *ProxyService) DownloadURL(ctx context.Context, key string) (corestorage.Download, error) {
 	dl, err := s.fileDownload(ctx, key)
-	return dl.DownloadURL, dl.ExpiresAt, err
+	return corestorage.Download{
+		URL:         dl.DownloadURL,
+		ExpiresAt:   dl.ExpiresAt,
+		ContentType: dl.MimeType,
+		Disposition: dl.Disposition,
+	}, err
 }
 
 // fileDownload returns the owning service's download of the file, with the
-// extension and type it gives for it, if any.
+// extension, type and disposition it gives for it, if any.
 func (s *ProxyService) fileDownload(ctx context.Context, key string) (fileDownload, error) {
 	var resp struct {
 		fileDownload

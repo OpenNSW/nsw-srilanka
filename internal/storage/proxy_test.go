@@ -166,6 +166,18 @@ func TestProxyHandler_UploadAndDownload(t *testing.T) {
 		t.Fatalf("Upload response = %+v (%v), want key and upload_url", meta, err)
 	}
 
+	// The owning service issues a download only for a file it holds.
+	put, _ := http.NewRequest(http.MethodPut, meta.UploadURL, strings.NewReader("0123456789"))
+	put.Header.Set("Content-Type", "application/pdf")
+	resp, err := http.DefaultClient.Do(put)
+	if err != nil {
+		t.Fatalf("PUT upload URL: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("PUT upload URL status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/storage/"+meta.Key, nil)
 	req.SetPathValue("key", meta.Key)
@@ -176,9 +188,15 @@ func TestProxyHandler_UploadAndDownload(t *testing.T) {
 	var dl struct {
 		DownloadURL string `json:"download_url"`
 		ExpiresAt   int64  `json:"expires_at"`
+		MimeType    string `json:"mime_type"`
+		Disposition string `json:"disposition"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&dl); err != nil || dl.DownloadURL == "" || dl.ExpiresAt <= time.Now().Unix() {
 		t.Fatalf("Download response = %+v (%v), want the owner's download_url and a future expires_at", dl, err)
+	}
+	// What the owning service says about the file is relayed as it said it.
+	if dl.MimeType != "application/pdf" || dl.Disposition != "inline" {
+		t.Errorf("Download response type, disposition = %q, %q; want application/pdf, inline", dl.MimeType, dl.Disposition)
 	}
 }
 
