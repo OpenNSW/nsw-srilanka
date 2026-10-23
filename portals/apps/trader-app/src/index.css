@@ -87,7 +87,8 @@
   /* Neutrals / text */
   --color-foreground: #0f172a;
   --color-foreground-muted: #475569;
-  --color-foreground-subtle: #94a3b8;
+  /* #66707f: the lightest grey that still reads at 4.5:1 on the page background. */
+  --color-foreground-subtle: #66707f;
 
   /* Neutrals / borders */
   --color-border: #e2e8f0;
@@ -131,9 +132,8 @@
  * tokens stay shared) plus the form-field fill, so every component built
  * on bg-primary/text-primary/border-primary-subtle/etc. — cards, buttons,
  * badges, gradients, and every JSONForms field — repaints automatically.
- * Keep these in step with the `accentColor` each scheme maps to in
- * services/colorSchemeContextCore.ts, so Radix's own components (which
- * don't read these Tailwind tokens) land on a matching hue.
+ * Radix's own components read them too: the accent block below derives
+ * Radix's accent scale from --color-primary.
  * ========================================================================= */
 
 /* Maritime Trade — navy & slate, a conventional customs/trade-portal look. */
@@ -164,6 +164,65 @@
   --color-primary-dark: #0a3f30;
   --color-field-bg: #eaf6f2;
   --color-field-bg-hover: #dceee8;
+}
+
+/* =========================================================================
+ * RADIX ACCENT = THE SCHEME'S BRAND. Radix ships only named palettes, so the
+ * accentColor a scheme picks ('blue' for Maritime's navy) is only the nearest
+ * hue, and its solid buttons failed contrast (white on Radix blue is 3.26:1;
+ * on Maritime's navy it is 10.36:1). Deriving the whole accent scale from
+ * --color-primary paints buttons, checkboxes, focus rings and every JSONForms
+ * control in the brand color, in every scheme. Components given their own
+ * color (color="red") keep that palette.
+ *
+ * `:root .radix-themes` outranks Radix's `[data-accent-color='…']` rule on
+ * the Theme root without !important; every Theme root (the app's and each
+ * dialog portal's) carries the class.
+ * ========================================================================= */
+:root .radix-themes {
+  --accent-1: color-mix(in srgb, var(--color-primary) 1%, white);
+  --accent-2: color-mix(in srgb, var(--color-primary) 3%, white);
+  --accent-3: color-mix(in srgb, var(--color-primary) 7%, white);
+  --accent-4: color-mix(in srgb, var(--color-primary) 11%, white);
+  --accent-5: color-mix(in srgb, var(--color-primary) 16%, white);
+  --accent-6: color-mix(in srgb, var(--color-primary) 22%, white);
+  --accent-7: color-mix(in srgb, var(--color-primary) 30%, white);
+  --accent-8: color-mix(in srgb, var(--color-primary) 45%, white);
+  --accent-9: var(--color-primary);
+  --accent-10: var(--color-primary-hover);
+  /* Text on the accent's own soft tints: the hover rung, for 4.5:1 in every scheme. */
+  --accent-11: var(--color-primary-hover);
+  --accent-12: var(--color-primary-dark);
+  --accent-a1: color-mix(in srgb, var(--color-primary) 1%, transparent);
+  --accent-a2: color-mix(in srgb, var(--color-primary) 3%, transparent);
+  --accent-a3: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  --accent-a4: color-mix(in srgb, var(--color-primary) 11%, transparent);
+  --accent-a5: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  --accent-a6: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  --accent-a7: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --accent-a8: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  --accent-a9: var(--color-primary);
+  --accent-a10: var(--color-primary-hover);
+  --accent-a11: var(--color-primary-hover);
+  --accent-a12: var(--color-primary-dark);
+  --accent-contrast: #ffffff;
+  --accent-surface: color-mix(in srgb, var(--color-primary) 4%, white);
+  --accent-indicator: var(--color-primary);
+  --accent-track: var(--color-primary);
+
+  /* Status text (soft badges, colored Text). Radix's step 11 for these hues
+   * reads at 3.6-4.3:1 on a soft badge over the page background; each is
+   * darkened just enough for 4.5:1 there, keeping its hue. */
+  --blue-11: #0b66b6;
+  --blue-a11: #0b66b6;
+  --orange-11: #b04300;
+  --orange-a11: #b04300;
+  --green-11: #1b734c;
+  --green-a11: #1b734c;
+  --red-11: #c1262b;
+  --red-a11: #c1262b;
+  --amber-11: #995a00;
+  --amber-a11: #995a00;
 }
 
 body {
