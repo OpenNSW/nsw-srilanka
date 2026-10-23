@@ -2,7 +2,6 @@ package consignment
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -69,18 +68,6 @@ func (m *MockWM) ResolveAdminIntervention(ctx context.Context, workflowID, runID
 	return args.Error(0)
 }
 
-// mockLoader is a simple loader for test artifacts.
-type mockLoader struct {
-	content map[string][]byte
-}
-
-func (m *mockLoader) Load(ctx context.Context, path string) ([]byte, error) {
-	if data, ok := m.content[path]; ok {
-		return data, nil
-	}
-	return nil, fmt.Errorf("artifact not found at path: %s", path)
-}
-
 // MockUserService implements user.Service for testing.
 type MockUserService struct {
 	mock.Mock
@@ -109,7 +96,7 @@ func (m *MockUserService) Health(ctx context.Context) error {
 
 // mustNewService builds a Service with testCatalogRoles, failing the test
 // immediately if construction errors.
-func mustNewService(t *testing.T, db *gorm.DB, artifactRegistry *artifact.Registry, chaService cha.Service, companyService company.Service, userService user.Service, taskStore TaskStore) *Service {
+func mustNewService(t *testing.T, db *gorm.DB, artifactRegistry *artifact.Set, chaService cha.Service, companyService company.Service, userService user.Service, taskStore TaskStore) *Service {
 	t.Helper()
 	svc, err := NewService(db, artifactRegistry, chaService, companyService, userService, taskStore, testCatalogRoles, nil)
 	if err != nil {

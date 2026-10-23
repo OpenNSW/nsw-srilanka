@@ -33,26 +33,28 @@ func (s *draftStore) WriteDraft(context.Context, string, string, int64, map[stri
 
 // The task manager bootstrap builds refuses a step that declares no authz rule.
 func TestTaskManagerOptions(t *testing.T) {
-	reg := artifact.NewRegistry(testutil.MemLoader{
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"no_rule","kind":"subtask_template","path":"no_rule.json"},{"id":"with_rule","kind":"subtask_template","path":"with_rule.json"}]}`),
 		"no_rule.json": []byte(`{"id": "no_rule", "task_type": "USER_INPUT", "output_namespace": "userform",
 			"draft": {"command": "save_as_draft"}}`),
 		"with_rule.json": []byte(`{"id": "with_rule", "task_type": "USER_INPUT", "output_namespace": "userform",
 			"draft": {"command": "save_as_draft"},
 			"extensions": [{"id": "authz", "phase": "PRE_RESUME", "properties": {"PENDING_USER": {"save_as_draft": ["trader"]}}}]}`),
 	})
-	reg.RegisterArtifact("no_rule", "subtask_template", "", "no_rule.json")
-	reg.RegisterArtifact("with_rule", "subtask_template", "", "with_rule.json")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	draft := func(t *testing.T, template string, ext extensions.TaskExtension) (bool, error) {
 		t.Helper()
-		db := &draftStore{record: store.TaskRecord{TaskID: "t1", ActiveStepID: "s1", State: "PENDING_USER", ActiveTaskTemplateID: template}}
+		db := &draftStore{record: store.TaskRecord{TaskID: "t1", ActiveStepID: "s1", State: "PENDING_USER", ActiveTaskTemplateID: template, ManifestVersion: 1}}
 		exts := extensions.NewRegistry()
 		if ext != nil {
 			if err := exts.Register("authz", ext); err != nil {
 				t.Fatal(err)
 			}
 		}
-		tm := orchestrator.NewTaskManager(db, reg, plugins.NewRegistry(), exts, nil, nil, nil, taskManagerOptions()...)
+		tm := orchestrator.NewTaskManager(db, set, plugins.NewRegistry(), exts, nil, nil, nil, taskManagerOptions()...)
 		err := tm.SaveDraft(context.Background(), "t1", "s1", map[string]any{"name": "Al"})
 		return db.drafted, err
 	}

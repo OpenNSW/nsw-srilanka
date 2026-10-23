@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
@@ -269,12 +268,7 @@ func TestConsignmentRouter_HandleCreateConsignment_Success(t *testing.T) {
 	mockWM := new(MockWM)
 	mockTaskStore := new(MockTaskStore)
 
-	loader := &mockLoader{content: make(map[string][]byte)}
-	reg := artifact.NewRegistry(loader)
-	loader.content["workflows/trade-export"] = []byte(`{"id":"trade-export","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export", "workflow", "", "workflows/trade-export")
-
-	svc := mustNewService(t, db, reg, nil, mockCompany, mockUser, mockTaskStore)
+	svc := mustNewService(t, db, newExportRegistry(), nil, mockCompany, mockUser, mockTaskStore)
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{}))
 	client, capture := nswaudit.NewWithCapture()
 	r := mustNewRouter(t, svc, nil, mockCompany, client)

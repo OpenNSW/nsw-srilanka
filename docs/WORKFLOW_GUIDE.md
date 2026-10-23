@@ -516,11 +516,17 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 
 ## 6. Development Workflow & Hot-Reloading
 
-1. **Parent Workflow Hot-Reload**:
-   - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
-2. **Form schemas and markdown templates**:
-   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `artifactLoader.type: local`). `html_template` documents are likewise fetched each time a document is generated.
-3. **Render configs**:
-   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
-4. **The manifest**:
-   - `manifest.json` is read once at startup. Adding a new template file means adding its row there **and** restarting the server.
+1. **Manifests are read at startup**:
+   - The server loads every `manifest_v<N>.json` once at startup, or `manifest.json` as version 1 where there are none (an artifacts repository checkout). New flows start on the highest one, or on `artifacts.manifestVersion` when it pins one. A new manifest takes effect for new flows on the next restart.
+2. **A flow keeps its manifest version**:
+   - Every flow records the manifest version it started on, and every task, form render and notification in it resolves through that version. Running flows never pick up a newer manifest; start a **fresh consignment** to see a change.
+3. **Files are still read on use**:
+   - Within a manifest version, files are fetched through the artifact loader when needed, so with `artifactLoader.type: local` an in-place edit shows up on the next request. That only holds for a local checkout: a release publishes each version as an immutable snapshot (see [Changing artifacts](#changing-artifacts)).
+4. **Render configs**:
+   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only**.
+
+### Changing artifacts
+
+The artifacts repo holds only the current state: edit its files and `manifest.json` in place. A release publishes that state to artifact storage as the next manifest version, an immutable `manifest_v<N>.json` whose rows point at copies of the files (see OpenNSW/one-trade-artifacts#243). After a restart new flows start on it, and running flows finish on the version they started on.
+
+Manifest versions must be contiguous: the server probes `manifest_v1.json` upward and stops at the first one missing. To roll back, set `artifacts.manifestVersion` to the last good version.

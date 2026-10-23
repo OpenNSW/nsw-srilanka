@@ -61,15 +61,15 @@ type StartRequest struct {
 
 // Service starts flows and records their completion.
 type Service struct {
-	repo             Repository
-	artifactRegistry *artifact.Registry
-	wm               workflow.Manager
+	repo      Repository
+	artifacts *artifact.Set
+	wm        workflow.Manager
 }
 
 // NewService creates a Service. The workflow manager is registered separately (see
 // RegisterWorkflowManager), since the manager's completion callback is this Service.
-func NewService(repo Repository, artifactRegistry *artifact.Registry) *Service {
-	return &Service{repo: repo, artifactRegistry: artifactRegistry}
+func NewService(repo Repository, artifacts *artifact.Set) *Service {
+	return &Service{repo: repo, artifacts: artifacts}
 }
 
 // RegisterWorkflowManager sets the manager flows are started on.
@@ -134,7 +134,7 @@ func (s *Service) prepare(ctx context.Context, req StartRequest) (Flow, workflow
 	if req.CaseID == "" || req.TemplateID == "" {
 		return Flow{}, def, fmt.Errorf("%w: case ID and template are required", ErrInvalidRequest)
 	}
-	def, err := workflowdef.Load(ctx, s.artifactRegistry, req.TemplateID)
+	def, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), req.TemplateID)
 	if err != nil {
 		if errors.Is(err, artifact.ErrNotFound) {
 			return Flow{}, def, fmt.Errorf("%w %q", ErrUnknownTemplate, req.TemplateID)
@@ -174,6 +174,9 @@ func (s *Service) start(ctx context.Context, f *Flow, def workflow.WorkflowDefin
 	// Every flow of a case shares the case ID as its root, so the engine files every
 	// task it spawns, at any depth, under the case.
 	vars[workflow.VarCaseID] = f.CaseID
+	// Every template the flow reaches, at any depth, resolves through the manifest
+	// version current now, the one its definition was loaded from.
+	vars[workflow.VarManifestVersion] = s.artifacts.Current()
 
 	if err := s.wm.StartWorkflow(ctx, f.WorkflowID, def, vars); err != nil {
 		return fmt.Errorf("caseflow: failed to start workflow %q: %w", f.WorkflowID, err)
