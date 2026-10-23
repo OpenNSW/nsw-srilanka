@@ -55,14 +55,14 @@ type InjectRequest struct {
 // Service starts one workflow per injected taskId, running the workflow the
 // taskCode's task_config names.
 type Service struct {
-	repo             Repository
-	artifactRegistry *artifact.Registry
-	wm               workflow.Manager
+	repo      Repository
+	artifacts *artifact.Set
+	wm        workflow.Manager
 }
 
 // NewService creates a Service.
-func NewService(repo Repository, artifactRegistry *artifact.Registry, wm workflow.Manager) *Service {
-	return &Service{repo: repo, artifactRegistry: artifactRegistry, wm: wm}
+func NewService(repo Repository, artifacts *artifact.Set, wm workflow.Manager) *Service {
+	return &Service{repo: repo, artifacts: artifacts, wm: wm}
 }
 
 // Inject records req and starts its workflow unless it has already started.
@@ -71,7 +71,7 @@ func NewService(repo Repository, artifactRegistry *artifact.Registry, wm workflo
 // engine, which returns the running execution instead of starting a second one.
 func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, error) {
 	// Resolved before anything is recorded, so an unknown taskCode leaves no rows.
-	cfg, err := taskconfigart.Load(ctx, s.artifactRegistry, req.TaskCode)
+	cfg, err := taskconfigart.Load(ctx, s.artifacts.CurrentRegistry(), req.TaskCode)
 	if err != nil {
 		if errors.Is(err, artifact.ErrNotFound) {
 			return nil, fmt.Errorf("%w %q", ErrUnknownTaskCode, req.TaskCode)
@@ -122,7 +122,7 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 // are seeded from the recorded row, not the current request, so a retried start runs
 // with the first payload and callback token.
 func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) error {
-	def, err := workflowdef.Load(ctx, s.artifactRegistry, workflowID)
+	def, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), workflowID)
 	if err != nil {
 		return fmt.Errorf("agency: failed to load workflow %q: %w", workflowID, err)
 	}
@@ -139,6 +139,9 @@ func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) err
 		"taskCode":      w.TaskCode,
 		"consignmentId": w.CaseID,
 		"notification":  notification,
+		// Every template the workflow reaches, at any depth, resolves through the
+		// manifest version current now, the one its definition was loaded from.
+		workflow.VarManifestVersion: s.artifacts.Current(),
 	}
 	// Seeded only when the caller sent one: a workflow that calls back by it then fails
 	// on the missing variable at the start, instead of calling back on an empty token.

@@ -24,9 +24,9 @@ type FileRefs interface {
 // active step in its current state.
 type CanAct func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error)
 
-// NamespaceOf returns the output namespace of the step template with the
-// given ID: the top-level key of task data its submissions are stored under.
-type NamespaceOf func(ctx context.Context, stepTemplateID string) (string, error)
+// NamespaceOf returns the output namespace of record's active step template:
+// the top-level key of task data its submissions are stored under.
+type NamespaceOf func(ctx context.Context, record store.TaskRecord) (string, error)
 
 // FileBinding swaps the file fields a task's render config declares (see
 // filefields) between stored values, which stay on the server, and the file
@@ -73,7 +73,7 @@ func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, p
 	if err != nil || len(paths) == 0 {
 		return err
 	}
-	namespace, err := b.namespaceOf(ctx, record.ActiveTaskTemplateID)
+	namespace, err := b.namespaceOf(ctx, record)
 	if err != nil {
 		return fmt.Errorf("tasks: output namespace of step template %q: %w", record.ActiveTaskTemplateID, err)
 	}

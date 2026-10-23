@@ -99,7 +99,8 @@ func (w *resumedWorkflow) CompleteActivation(context.Context, string, string, st
 // core's task manager with the extension registered as the app registers it.
 func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumedWorkflow) {
 	t.Helper()
-	reg := artifact.NewRegistry(testutil.MemLoader{
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"form-step","kind":"subtask_template","path":"step.json"},{"id":"the-form","kind":"generic_template","path":"form.json"}]}`),
 		"step.json": []byte(`{
 			"id": "form-step",
 			"task_type": "USER_INPUT",
@@ -116,8 +117,8 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 			"required": ["name"]
 		}}`),
 	})
-	reg.RegisterArtifact("form-step", steptemplate.Kind, "", "step.json")
-	reg.RegisterArtifact("the-form", generictemplate.Kind, "", "form.json")
+	require.NoError(t, err)
+	reg := set.CurrentRegistry()
 
 	extReg := extensions.NewRegistry()
 	formOf := func(ctx context.Context, id string) ([]byte, error) {
@@ -131,12 +132,12 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 	require.NoError(t, payloadschema.Register(extReg, formOf, namespaceOf))
 
 	db := &memTaskStore{record: store.TaskRecord{
-		TaskID: testTaskID, TaskWorkflowID: "task-wf", ActiveStepID: "step-1", ActiveTaskTemplateID: "form-step",
+		TaskID: testTaskID, TaskWorkflowID: "task-wf", ActiveStepID: "step-1", ActiveTaskTemplateID: "form-step", ManifestVersion: 1,
 		Seq: 4, State: "PENDING_USER", Data: map[string]any{"form": map[string]any{"reference": "R-1"}},
 	}}
 	wf := &resumedWorkflow{}
 	h := &HTTPHandler{
-		Manager:         orchestrator.NewTaskManager(db, reg, nil, extReg, wf, nil, nil),
+		Manager:         orchestrator.NewTaskManager(db, set, nil, extReg, wf, nil, nil),
 		Store:           db,
 		Files:           NewFileBinding(newFakeFileRefs(), nil),
 		MaxRequestBytes: 1024,

@@ -40,9 +40,9 @@ type CaseFlows interface {
 // internal/caseflow): its flows are started through flows, which also keeps the case's
 // state in step with them.
 type Service struct {
-	db               *gorm.DB
-	artifactRegistry *artifact.Registry
-	flows            CaseFlows
+	db        *gorm.DB
+	artifacts *artifact.Set
+	flows     CaseFlows
 	// wm is the parent workflow manager, read for engine status and admin resolution.
 	wm workflow.Manager
 	// taskWm is the workflow.Manager for the per-task ("micro") workflow runner — a separate
@@ -64,7 +64,7 @@ type Service struct {
 // may start on a consignment (Config.Flows).
 func NewService(
 	db *gorm.DB,
-	artifactRegistry *artifact.Registry,
+	artifacts *artifact.Set,
 	chaService cha.Service,
 	companyService company.Service,
 	userService user.Service,
@@ -76,14 +76,14 @@ func NewService(
 		return nil, err
 	}
 	return &Service{
-		flowOptions:      flowOptions,
-		db:               db,
-		artifactRegistry: artifactRegistry,
-		chaService:       chaService,
-		companyService:   companyService,
-		userService:      userService,
-		taskStore:        taskStore,
-		roles:            roles,
+		flowOptions:    flowOptions,
+		db:             db,
+		artifacts:      artifacts,
+		chaService:     chaService,
+		companyService: companyService,
+		userService:    userService,
+		taskStore:      taskStore,
+		roles:          roles,
 	}, nil
 }
 
@@ -144,7 +144,7 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	initialVars := map[string]any{"traderCompany": traderCompanyVars}
 
 	// Checked before anything is written, so an unknown template creates no consignment.
-	if _, err := workflowdef.Load(ctx, s.artifactRegistry, templateID); err != nil {
+	if _, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), templateID); err != nil {
 		return nil, fmt.Errorf("failed to get workflow template %q: %w", templateID, err)
 	}
 	if s.flows == nil {
@@ -314,7 +314,7 @@ func (s *Service) flowDTOs(ctx context.Context, consignmentID string) ([]FlowDTO
 // definition has none or cannot be loaded).
 func (s *Service) flowDTO(ctx context.Context, f caseflow.Flow) FlowDTO {
 	name := f.TemplateID
-	if def, err := workflowdef.Load(ctx, s.artifactRegistry, f.TemplateID); err == nil && def.Name != "" {
+	if def, err := workflowdef.Load(ctx, s.artifacts.CurrentRegistry(), f.TemplateID); err == nil && def.Name != "" {
 		name = def.Name
 	}
 	return FlowDTO{

@@ -167,8 +167,6 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, err
 	}
-	// Templates resolve through the current manifest version until flows record their own.
-	artifactRegistry := artifacts.CurrentRegistry()
 
 	chaService := cha.NewService(db)
 	companyService := company.NewService(db)
@@ -248,7 +246,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			},
 		}
 	}
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -277,7 +275,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		upstream = agencyCompletion(db)
 	} else {
-		consignmentService, err = consignment.NewService(db, artifactRegistry, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
+		consignmentService, err = consignment.NewService(db, artifacts, chaService, companyService, userProfileService, task.Store, globalCatalog.Roles, cfg.Consignment.Flows)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -300,7 +298,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to get sql.DB for caseflow: %w", err)
 		}
-		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifactRegistry)
+		flowService = caseflow.NewService(caseflow.NewRepository(sqlDB), artifacts)
 		if err := consignmentService.RegisterCaseFlows(flowService); err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -317,10 +315,15 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
-	pr.RegisterDefinitionHandler(func(templateID string) (workflow.WorkflowDefinition, error) {
-		def, err := workflowdef.Load(context.Background(), artifactRegistry, templateID)
+	pr.RegisterDefinitionHandler(func(manifestVersion int, templateID string) (workflow.WorkflowDefinition, error) {
+		ctx := context.Background()
+		reg, err := artifacts.Registry(ctx, manifestVersion)
 		if err != nil {
-			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in artifact registry: %w", templateID, err)
+			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q: %w", templateID, err)
+		}
+		def, err := workflowdef.Load(ctx, reg, templateID)
+		if err != nil {
+			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in manifest version %d: %w", templateID, manifestVersion, err)
 		}
 		return def, nil
 	})
@@ -438,8 +441,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
-	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
+	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts))
+	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// An agency uses task claims: every officer owns every injected workflow, so a
 	// claim shows the others who is working a task. TNSW does not: a step is already
@@ -547,7 +550,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
+		mountAgency(mux, db, artifacts, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
@@ -829,10 +832,35 @@ func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
 	return fileaccess.New(codec, cfg.TokenTTL())
 }
 
-// stepNamespace looks up a step template's output namespace in the artifact
-// registry.
-func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
+// stepNamespace looks up the output namespace of a task's active step template,
+// in the manifest version the task runs on.
+func stepNamespace(artifacts *artifact.Set) tasks.NamespaceOf {
+	return func(ctx context.Context, record store.TaskRecord) (string, error) {
+		reg, err := artifacts.Registry(ctx, record.ManifestVersion)
+		if err != nil {
+			return "", err
+		}
+		template, err := steptemplate.Load(ctx, reg, record.ActiveTaskTemplateID)
+		if err != nil {
+			return "", err
+		}
+		return template.OutputNamespace, nil
+	}
+}
+
+// contextStepNamespace returns the output namespace of a step template in the manifest
+// version the task manager puts on ctx (artifact.WithManifestVersion), for the
+// extensions that run while a step resumes.
+func contextStepNamespace(artifacts *artifact.Set) payloadschema.NamespaceOf {
 	return func(ctx context.Context, stepTemplateID string) (string, error) {
+		version, ok := artifact.ManifestVersionFrom(ctx)
+		if !ok {
+			return "", fmt.Errorf("step template %q: no artifact manifest version on the context", stepTemplateID)
+		}
+		reg, err := artifacts.Registry(ctx, version)
+		if err != nil {
+			return "", err
+		}
 		template, err := steptemplate.Load(ctx, reg, stepTemplateID)
 		if err != nil {
 			return "", err
@@ -849,12 +877,16 @@ func taskManagerOptions() []orchestrator.Option {
 }
 
 // stepCanAct decides whether a caller may act on a task's active step, by the
-// authz rules on its step template in the artifact registry. A task with no
-// active step template has nothing to act on.
-func stepCanAct(reg *artifact.Registry, ext *taskauthzext.Extension) tasks.CanAct {
+// authz rules on its step template, in the manifest version the task runs on.
+// A task with no active step template has nothing to act on.
+func stepCanAct(artifacts *artifact.Set, ext *taskauthzext.Extension) tasks.CanAct {
 	return func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
 		if record.ActiveTaskTemplateID == "" {
 			return false, nil
+		}
+		reg, err := artifacts.Registry(ctx, record.ManifestVersion)
+		if err != nil {
+			return false, fmt.Errorf("step template %q: %w", record.ActiveTaskTemplateID, err)
 		}
 		template, err := steptemplate.Load(ctx, reg, record.ActiveTaskTemplateID)
 		if err != nil {
@@ -864,30 +896,49 @@ func stepCanAct(reg *artifact.Registry, ext *taskauthzext.Extension) tasks.CanAc
 	}
 }
 
-// registryTemplateProvider adapts the artifact registry to uiprojector's
-// TemplateProvider contract. Generic templates (JSONForms schemas, markdown
-// bodies, etc.) are resolved through generictemplate.Load.
+// registryTemplateProvider adapts the artifact manifests to uiprojector's
+// TemplateProvider contract and the notify extension's loader. Generic templates
+// (JSONForms schemas, markdown bodies, etc.) are resolved through generictemplate.Load
+// in the manifest version of the task being rendered or completed, which the task
+// manager puts on ctx (artifact.WithManifestVersion). A call without one is a wiring
+// fault: falling back to the current version would change a form under an open task.
 type registryTemplateProvider struct {
-	reg *artifact.Registry
+	artifacts *artifact.Set
 }
 
 func (p registryTemplateProvider) GetTemplate(ctx context.Context, id string) ([]byte, error) {
-	raw, err := generictemplate.Load(ctx, p.reg, id)
+	version, ok := artifact.ManifestVersionFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("template %q: no artifact manifest version on the context", id)
+	}
+	reg, err := p.artifacts.Registry(ctx, version)
 	if err != nil {
-		return nil, fmt.Errorf("template %q not found: %w", id, err)
+		return nil, fmt.Errorf("template %q: %w", id, err)
+	}
+	raw, err := generictemplate.Load(ctx, reg, id)
+	if err != nil {
+		return nil, fmt.Errorf("template %q not found in manifest version %d: %w", id, version, err)
 	}
 	return []byte(raw), nil
 }
 
-// registryHTMLTemplates adapts the artifact registry to the HTML document
-// generator's HTMLTemplateSource, serving the latest version of each
-// html_template.
+// registryHTMLTemplates adapts the artifact manifests to the HTML document
+// generator's HTMLTemplateSource. Like registryTemplateProvider, it resolves each
+// html_template in the manifest version the task manager puts on ctx.
 type registryHTMLTemplates struct {
-	reg *artifact.Registry
+	artifacts *artifact.Set
 }
 
 func (p registryHTMLTemplates) HTMLTemplate(ctx context.Context, id string) ([]byte, error) {
-	return htmltemplate.Load(ctx, p.reg, id)
+	version, ok := artifact.ManifestVersionFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("html template %q: no artifact manifest version on the context", id)
+	}
+	reg, err := p.artifacts.Registry(ctx, version)
+	if err != nil {
+		return nil, fmt.Errorf("html template %q: %w", id, err)
+	}
+	return htmltemplate.Load(ctx, reg, id)
 }
 
 // initTask consolidates the task-orchestration engine registrations, remote
@@ -951,7 +1002,7 @@ func initTask(
 	companyService company.Service,
 	storageService nswstorage.Service,
 	ogaFiles taskplugins.OGAFiles,
-	artifactRegistry *artifact.Registry,
+	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
 	onTaskCompleted orchestrator.TaskCompletedCallback,
@@ -964,7 +1015,7 @@ func initTask(
 	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
-	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{reg: artifactRegistry}, storageService); err != nil {
+	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{artifacts: artifacts}, storageService); err != nil {
 		return nil, nil, err
 	}
 
@@ -972,7 +1023,7 @@ func initTask(
 
 	// Construct UI projectors and the renderer/zoneview assembler
 	projectors := append(uiprojector.DefaultProjectors(), taskrenderer.NewPaymentProjector(), taskrenderer.NewSLPAConsolidationProjector(), taskrenderer.NewSLPASundryProjector())
-	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{reg: artifactRegistry}, projectors)
+	uiAssembler, err := uiprojector.NewAssembler(registryTemplateProvider{artifacts: artifacts}, projectors)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)
 	}
@@ -1018,16 +1069,16 @@ func initTask(
 	}
 
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{reg: artifactRegistry}); err != nil {
+	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{artifacts: artifacts}); err != nil {
 		return nil, nil, fmt.Errorf("register notification extension: %w", err)
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
-	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{reg: artifactRegistry}.GetTemplate, payloadschema.NamespaceOf(stepNamespace(artifactRegistry))); err != nil {
+	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{artifacts: artifacts}.GetTemplate, contextStepNamespace(artifacts)); err != nil {
 		return nil, nil, fmt.Errorf("register payload schema extension: %w", err)
 	}
-	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer, taskManagerOptions()...)
+	tm = orchestrator.NewTaskManager(taskStore, artifacts, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer, taskManagerOptions()...)
 
 	if err := workflowRunner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start micro workflow worker: %w", err)

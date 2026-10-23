@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/OpenNSW/core/artifact"
+	"github.com/OpenNSW/core/artifact/testutil"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
@@ -459,12 +460,16 @@ func (f *caseFlowsSpy) StartFlow(_ context.Context, req caseflow.StartRequest) (
 	return &caseflow.Flow{WorkflowID: req.WorkflowID, CaseID: req.CaseID, TemplateID: req.TemplateID, Status: caseflow.StatusStarted}, nil
 }
 
-func newExportRegistry() *artifact.Registry {
-	loader := &mockLoader{content: make(map[string][]byte)}
-	reg := artifact.NewRegistry(loader)
-	loader.content["workflows/trade-export"] = []byte(`{"id":"trade-export","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export", "workflow", "", "workflows/trade-export")
-	return reg
+// newExportRegistry is a one-manifest artifact set holding the trade-export workflow.
+func newExportRegistry() *artifact.Set {
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"workflows/trade-export": []byte(`{"id":"trade-export","name":"Trade Export V1"}`),
+		"manifest_v1.json":       []byte(`{"artifacts":[{"id":"trade-export","kind":"workflow","path":"workflows/trade-export"}]}`),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return set
 }
 
 func TestConsignmentService_CreateAndStartConsignment_Success(t *testing.T) {
