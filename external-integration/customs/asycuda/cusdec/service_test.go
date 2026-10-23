@@ -422,7 +422,8 @@ func TestProcessCusdecIntegrationResult_UnlinkedDeclaration(t *testing.T) {
 }
 
 // The review task has not parked yet: the result is answered with an error that
-// is not "not found", so SLC Edge retries it (§2) until the task is there.
+// is not "not found", and nothing is recorded, so SLC Edge retries it (§2)
+// until the task is there.
 func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
 	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
 	completer := &mockTaskCompleter{}
@@ -435,7 +436,50 @@ func TestProcessCusdecIntegrationResult_ReviewNotParkedYet(t *testing.T) {
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	assert.False(t, repo.updateCalled, "the result must not be recorded while the step is unresumed")
+	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)
 	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// SLC Edge's retry of a result that arrived before the review task parked
+// resumes the task once it has: the first attempt recorded nothing, so the
+// retry is not taken for a duplicate.
+func TestProcessCusdecIntegrationResult_RetryAfterNotParkedYetCompletes(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	req := CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	}
+
+	err := NewWebhookService(repo, fakeTasks{}, completer).ProcessIntegrationResult(context.Background(), req)
+	require.Error(t, err)
+
+	completer.On("CompleteTaskStep", mock.Anything, "task-abc", "step-task-abc", mock.Anything).Return(nil)
+	err = NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer).
+		ProcessIntegrationResult(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, CusdecStatusIntegrated, repo.updatedDecl.Status)
+	completer.AssertExpectations(t)
+}
+
+// A review step that could not be completed leaves the declaration SUBMITTED,
+// so SLC Edge's retry tries the step again rather than being acknowledged.
+func TestProcessCusdecIntegrationResult_CompletionFailureLeavesTheStatus(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": submitted("edge-123")}}
+	completer := &mockTaskCompleter{}
+	completer.On("CompleteTaskStep", mock.Anything, "task-abc", "step-task-abc", mock.Anything).Return(errors.New("temporal: unavailable"))
+	service := NewWebhookService(repo, parkedOn(reviewTemplateID, "task-abc", "step-task-abc"), completer)
+
+	err := service.ProcessIntegrationResult(context.Background(), CusdecIntegrationResultRequest{
+		EdgeID: "edge-123", Integrated: true,
+		Payload: cusdecResultPayload{CusdecRef: DocumentReference{Year: "2026", Office: "COL", Serial: "C", Number: 1}},
+	})
+
+	require.Error(t, err)
+	assert.False(t, repo.updateCalled)
+	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)
 }
 
 // Tasks that could not be read leave the declaration's status as it was and
@@ -479,6 +523,8 @@ func TestProcessCusdecIntegrationResult_TaskStoreFailure(t *testing.T) {
 
 	require.ErrorIs(t, err, errTaskStore)
 	assert.NotErrorIs(t, err, ErrWorkflowNotFoundByEdgeID)
+	assert.False(t, repo.updateCalled, "the result must not be recorded while the step is unresumed")
+	assert.Equal(t, CusdecStatusSubmitted, repo.declsByEdgeID["edge-123"].Status)
 	completer.AssertNotCalled(t, "CompleteTaskStep", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 

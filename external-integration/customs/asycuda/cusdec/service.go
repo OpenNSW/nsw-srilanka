@@ -79,11 +79,19 @@ func (s *webhookService) ProcessIntegrationResult(ctx context.Context, req Cusde
 		return ErrDuplicateIntegrationResult
 	}
 
-	if err := s.recordIntegrationResult(ctx, decl, req); err != nil {
+	// The task is completed before the result is recorded, as events are: once
+	// recorded, SLC Edge's retry is a duplicate, so a lookup that fails or a task
+	// not parked yet must leave the declaration SUBMITTED for the retry to work.
+	task, err := s.findReviewTask(ctx, decl, req)
+	if err != nil {
 		return err
 	}
+	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, reviewPayload(req)); err != nil {
+		slog.ErrorContext(ctx, "failed to complete external review task step", "task_id", task.TaskID, "error", err)
+		return fmt.Errorf("complete the external review task %s: %w", task.TaskID, err)
+	}
 
-	if err := s.completeReviewTask(ctx, decl, req); err != nil {
+	if err := s.recordIntegrationResult(ctx, decl, req); err != nil {
 		return err
 	}
 
@@ -113,24 +121,29 @@ func (s *webhookService) recordIntegrationResult(ctx context.Context, decl *Cusd
 	return nil
 }
 
-func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDeclaration, req CusdecIntegrationResultRequest) error {
+// findReviewTask returns the review task the declaration's workflow parked.
+// Neither error is acknowledged: the declaration is still SUBMITTED, so SLC
+// Edge's retry of a 5xx (§2) finds the task once it can be read or has parked.
+func (s *webhookService) findReviewTask(ctx context.Context, decl *CusdecDeclaration, req CusdecIntegrationResultRequest) (parkedtask.Task, error) {
 	if decl.WorkflowID == "" {
-		return fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
+		return parkedtask.Task{}, fmt.Errorf("edgeId %s: %w", req.EdgeID, ErrWorkflowNotFoundByEdgeID)
 	}
 
 	task, ok, err := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, reviewTemplateID)
 	if err != nil {
-		// Whether the task is parked is not known, so this is not a duplicate
-		// to acknowledge: SLC Edge retries what it is answered with a 5xx (§2).
-		return fmt.Errorf("locate the external review task for workflow %s: %w", decl.WorkflowID, err)
+		return parkedtask.Task{}, fmt.Errorf("locate the external review task for workflow %s: %w", decl.WorkflowID, err)
 	}
 	if !ok {
 		slog.ErrorContext(ctx, "failed to locate suspended external review task", "workflow_id", decl.WorkflowID)
-		// Not a 404: the task may not have parked yet, and SLC Edge retries
-		// what it was answered with a 5xx (§2).
-		return fmt.Errorf("failed to locate suspended external review task for workflow %s", decl.WorkflowID)
+		// Not a 404: the task may not have parked yet.
+		return parkedtask.Task{}, fmt.Errorf("failed to locate suspended external review task for workflow %s", decl.WorkflowID)
 	}
+	return task, nil
+}
 
+// reviewPayload is what the review step is completed with: the assessment
+// when ASYCUDA integrated the declaration, its errors when it did not.
+func reviewPayload(req CusdecIntegrationResultRequest) map[string]any {
 	var payload map[string]any
 	if req.Integrated {
 		formattedRef := fmt.Sprintf("%s/%s/%s/%d",
@@ -166,13 +179,7 @@ func (s *webhookService) completeReviewTask(ctx context.Context, decl *CusdecDec
 			"rejection_reason": describeErrors(req.Errors),
 		}
 	}
-
-	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, payload); err != nil {
-		slog.ErrorContext(ctx, "failed to complete external review task step", "task_id", task.TaskID, "error", err)
-		return fmt.Errorf("failed to complete task step for task %s: %w", task.TaskID, err)
-	}
-
-	return nil
+	return payload
 }
 
 func (s *webhookService) ProcessEvent(ctx context.Context, req CusdecEventRequest) error {
