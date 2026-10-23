@@ -37,8 +37,8 @@ reload); rebuild them after a change with
 TNSW in compose reaches it at `host.docker.internal:8085`, through the `efc` entry
 its `services.docker.json` already has. To change a setting, edit `config.docker.yaml`
 and restart `efc-api`. `efc-api` loads its artifacts from a `one-trade-artifacts`
-clone next to this repo (`../one-trade-artifacts/efc-v2`); set
-`EFC_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `efc-v2` dir.
+clone next to this repo (`../one-trade-artifacts/efc`); set
+`EFC_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `efc` dir.
 
 ## Run natively
 
@@ -56,7 +56,7 @@ TNSW reaches it through its own `configs/services.json` entry `efc`
 (`http://localhost:8085`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
-(`../one-trade-artifacts/efc-v2`); change `artifactLoader.local.root` in
+(`../one-trade-artifacts/efc`); change `artifactLoader.local.root` in
 `config.yaml` to use another clone.
 
 For the officer UI, run the trader-app with the values in `portal-config.js`.

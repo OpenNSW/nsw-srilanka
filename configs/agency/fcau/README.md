@@ -47,8 +47,8 @@ reload); rebuild them after a change with
 TNSW in compose reaches it at `host.docker.internal:8082`, through the `fcau` entry
 its `services.docker.json` already has. To change a setting, edit `config.docker.yaml`
 and restart `fcau-api`. `fcau-api` loads its artifacts from a `one-trade-artifacts`
-clone next to this repo (`../one-trade-artifacts/fcau-v2`); set
-`FCAU_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `fcau-v2` dir.
+clone next to this repo (`../one-trade-artifacts/fcau`); set
+`FCAU_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `fcau` dir.
 
 ## Run natively
 
@@ -66,7 +66,7 @@ TNSW reaches it through its own `configs/services.json` entry `fcau`
 (`http://localhost:8082`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
-(`../one-trade-artifacts/fcau-v2`); change `artifactLoader.local.root` in
+(`../one-trade-artifacts/fcau`); change `artifactLoader.local.root` in
 `config.yaml` to use another clone.
 
 For the officer UI, run the trader-app with the values in `portal-config.js`.

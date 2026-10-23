@@ -94,20 +94,19 @@ temporal:
   port: 7233
   namespace: npqs
 
-# The npqs-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# The npqs folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
-# npqs-v2 dir to use that one.
+# npqs dir to use that one.
 artifactLoader:
   type: local
   local:
-    root: ../one-trade-artifacts/npqs-v2
-  # Or straight from GitHub (branch feat/npqs-v2-agency
-  # until it merges), with type: github:
+    root: ../one-trade-artifacts/npqs
+  # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
-  #   ref: feat/npqs-v2-agency
-  #   basePath: npqs-v2
+  #   ref: main
+  #   basePath: npqs
 
 refid:
   issuers:

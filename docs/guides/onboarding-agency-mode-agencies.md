@@ -124,7 +124,7 @@ nothing depends on it.
 ## Step 1: Author the agency's artifacts
 
 This is design work rather than operations, so it only outlines what has to exist.
-`cda-v2/` in `one-trade-artifacts` is a complete example to copy from.
+`cda/` in `one-trade-artifacts` is a complete example to copy from.
 
 In the agency's folder (for example `dea-v2/`), for each kind of review:
 

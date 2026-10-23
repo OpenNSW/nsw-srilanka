@@ -94,21 +94,20 @@ temporal:
   port: 7233
   namespace: fcau
 
-# The fcau-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# The fcau folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
-# fcau-v2 dir to use that one.
+# fcau dir to use that one.
 artifactLoader:
   type: local
   local:
-    root: ../one-trade-artifacts/fcau-v2
-  # Or straight from GitHub (branch feat/fcau-v2-agency
-  # until it merges), with type: github:
+    root: ../one-trade-artifacts/fcau
+  # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
-  #   ref: feat/fcau-v2-agency
-  #   basePath: fcau-v2
+  #   ref: main
+  #   basePath: fcau
 
-# The fcau-v2 artifacts use no REFID_GENERATOR tasks.
+# The fcau artifacts use no REFID_GENERATOR tasks.
 refid:
   issuers: []

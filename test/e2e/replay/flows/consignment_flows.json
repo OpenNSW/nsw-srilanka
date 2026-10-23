@@ -64,7 +64,7 @@
         "method": "POST",
         "path": "/api/v1/consignments/{{consignmentId}}/flows",
         "body": {
-          "templateId": "trade-export-v1",
+          "templateId": "trade-export",
           "inputs": { "payment": { "status": "PAID" } }
         },
         "expectStatus": 400
@@ -76,7 +76,7 @@
         "actor": "cha",
         "method": "POST",
         "path": "/api/v1/consignments/{{consignmentId}}/flows",
-        "body": { "templateId": "trade-export-v1" },
+        "body": { "templateId": "trade-export" },
         "expectStatus": 404
       }
     },
@@ -86,7 +86,7 @@
         "actor": "trader",
         "method": "POST",
         "path": "/api/v1/consignments/{{consignmentId}}/flows",
-        "body": { "templateId": "trade-export-v1" },
+        "body": { "templateId": "trade-export" },
         "expectStatus": 201,
         "extract": { "secondFlow": "workflowId" }
       }

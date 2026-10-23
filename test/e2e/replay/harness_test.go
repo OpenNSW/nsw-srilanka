@@ -113,7 +113,7 @@ func newHarness(t *testing.T) *harness {
 	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
 	// consignment_flows.json starts a flow on a consignment. The artifacts hold no other
 	// consignment-level workflow, so the export workflow stands in for one.
-	cfg.Consignment.Flows = []consignment.FlowOption{{TemplateID: "trade-export-v1", Label: "Another export flow"}}
+	cfg.Consignment.Flows = []consignment.FlowOption{{TemplateID: "trade-export", Label: "Another export flow"}}
 
 	// A controllable mock agency stands in for all external OGA services; all
 	// known agency service ids are pointed at it so EXTERNAL_REVIEW injects land

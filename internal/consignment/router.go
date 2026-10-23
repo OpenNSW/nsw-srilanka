@@ -83,7 +83,7 @@ func validateRoles(roles map[string]string) error {
 // TODO: Move default workflow template ID to configuration.
 // defaultExportWorkflowTemplateID is the top-level workflow started by default when
 // creating a consignment.
-const defaultExportWorkflowTemplateID = "trade-export-v1"
+const defaultExportWorkflowTemplateID = "trade-export"
 
 // HandleCreateConsignment handles POST /api/v1/consignments
 // Creates an export consignment and starts its workflow directly — no CHA company or HS code

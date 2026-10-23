@@ -94,22 +94,21 @@ temporal:
   port: 7233
   namespace: cda
 
-# The cda-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# The cda folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
-# cda-v2 dir to use that one.
+# cda dir to use that one.
 artifactLoader:
   type: local
   local:
-    root: ../one-trade-artifacts/cda-v2
-  # Or straight from GitHub (branch feat/add-cda-agency-config-to-workflows
-  # until it merges), with type: github:
+    root: ../one-trade-artifacts/cda
+  # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
-  #   ref: feat/add-cda-agency-config-to-workflows
-  #   basePath: cda-v2
+  #   ref: main
+  #   basePath: cda
 
-# Reference ID formats for the cda-v2 REFID_GENERATOR tasks, in the schema of
+# Reference ID formats for the cda REFID_GENERATOR tasks, in the schema of
 # github.com/OpenNSW/core/refid. The counters live in cda_db (refid_sequences)
 # and restart at 0001 each year, on the UTC calendar.
 refid:

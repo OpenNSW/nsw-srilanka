@@ -94,22 +94,21 @@ temporal:
   port: 7233
   namespace: sltb
 
-# The sltb-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# The sltb folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
-# sltb-v2 dir to use that one.
+# sltb dir to use that one.
 artifactLoader:
   type: local
   local:
-    root: ../one-trade-artifacts/sltb-v2
-  # Or straight from GitHub (branch feat/sltb-v2-agency
-  # until it merges), with type: github:
+    root: ../one-trade-artifacts/sltb
+  # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
-  #   ref: feat/sltb-v2-agency
-  #   basePath: sltb-v2
+  #   ref: main
+  #   basePath: sltb
 
-# The sltb-v2 sample tasks draw each sample's reference number here when they
+# The sltb sample tasks draw each sample's reference number here when they
 # open (REFID_GENERATOR). It restarts every year.
 refid:
   issuers:

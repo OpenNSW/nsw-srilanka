@@ -94,20 +94,20 @@ temporal:
   port: 7233
   namespace: efc
 
-# The efc-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# The efc folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
-# efc-v2 dir to use that one.
+# efc dir to use that one.
 artifactLoader:
   type: local
   local:
-    root: ../one-trade-artifacts/efc-v2
+    root: ../one-trade-artifacts/efc
   # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
   #   ref: main
-  #   basePath: efc-v2
+  #   basePath: efc
 
-# The efc-v2 artifacts use no REFID_GENERATOR tasks.
+# The efc artifacts use no REFID_GENERATOR tasks.
 refid:
   issuers: []

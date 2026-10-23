@@ -36,8 +36,8 @@ rebuild them after a change with `docker compose up -d --build cda-api cda-porta
 TNSW in compose reaches it at `host.docker.internal:8083`, through the `cda` entry its
 `services.docker.json` already has. To change a setting, edit `config.docker.yaml` and
 restart `cda-api`. `cda-api` loads its artifacts from a `one-trade-artifacts` clone
-next to this repo (`../one-trade-artifacts/cda-v2`); set `CDA_ARTIFACT_LOCAL_ROOT` in
-`.env` to use another clone's `cda-v2` dir.
+next to this repo (`../one-trade-artifacts/cda`); set `CDA_ARTIFACT_LOCAL_ROOT` in
+`.env` to use another clone's `cda` dir.
 
 ## Run natively
 
@@ -55,7 +55,7 @@ TNSW reaches it through its own `configs/services.json` entry `cda`
 (`http://localhost:8083`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
-(`../one-trade-artifacts/cda-v2`); change `artifactLoader.local.root` in `config.yaml`
+(`../one-trade-artifacts/cda`); change `artifactLoader.local.root` in `config.yaml`
 to use another clone.
 
 For the officer UI, run the trader-app with the values in `portal-config.js`.

@@ -134,7 +134,7 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 	consignmentID := uuid.NewString()
 	started := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
 	require.NoError(t, svc.RegisterCaseFlows(&caseFlowsSpy{flows: []caseflow.Flow{
-		{WorkflowID: consignmentID + ":trade-export-v1:u1", CaseID: consignmentID, TemplateID: "trade-export-v1", Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
+		{WorkflowID: consignmentID + ":trade-export:u1", CaseID: consignmentID, TemplateID: "trade-export", Status: caseflow.StatusCompleted, CreatedAt: started, UpdatedAt: started},
 		{WorkflowID: consignmentID + ":slpa_payment:u2", CaseID: consignmentID, TemplateID: "slpa_payment", Status: caseflow.StatusStarted, CreatedAt: started, UpdatedAt: started},
 	}}))
 
@@ -156,7 +156,7 @@ func TestConsignmentService_GetConsignmentByIDForAdmin(t *testing.T) {
 	// Each flow is named by its definition's name, else its template ID.
 	require.Len(t, result.Flows, 2)
 	assert.Equal(t, FlowDTO{
-		WorkflowID: consignmentID + ":trade-export-v1:u1", TemplateID: "trade-export-v1", TemplateName: "Trade Export V1",
+		WorkflowID: consignmentID + ":trade-export:u1", TemplateID: "trade-export", TemplateName: "Trade Export V1",
 		Status: "COMPLETED", CreatedAt: "2026-10-11T09:00:00Z", UpdatedAt: "2026-10-11T09:00:00Z",
 	}, result.Flows[0])
 	assert.Equal(t, "slpa_payment", result.Flows[1].TemplateName)
@@ -423,8 +423,8 @@ func (f *caseFlowsSpy) StartFlow(_ context.Context, req caseflow.StartRequest) (
 func newExportRegistry() *artifact.Registry {
 	loader := &mockLoader{content: make(map[string][]byte)}
 	reg := artifact.NewRegistry(loader)
-	loader.content["workflows/trade-export-v1"] = []byte(`{"id":"trade-export-v1","name":"Trade Export V1"}`)
-	reg.RegisterArtifact("trade-export-v1", "workflow", "", "workflows/trade-export-v1")
+	loader.content["workflows/trade-export"] = []byte(`{"id":"trade-export","name":"Trade Export V1"}`)
+	reg.RegisterArtifact("trade-export", "workflow", "", "workflows/trade-export")
 	return reg
 }
 
@@ -661,25 +661,25 @@ func TestConsignmentService_GetAgencySummary_CompanyNotFound(t *testing.T) {
 
 func TestTaskDisplayName(t *testing.T) {
 	// nil render config → template ID
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", nil))
+	assert.Equal(t, "trade-export", taskDisplayName("trade-export", nil))
 
 	// root-level title present → use title
 	rcRootTitle := json.RawMessage(`{"title":"My Root Title"}`)
-	assert.Equal(t, "My Root Title", taskDisplayName("trade-export-v1", rcRootTitle))
+	assert.Equal(t, "My Root Title", taskDisplayName("trade-export", rcRootTitle))
 
 	// root-level title empty → template ID
 	rcEmptyTitle := json.RawMessage(`{"title":""}`)
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcEmptyTitle))
+	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcEmptyTitle))
 
 	// root-level title missing → template ID
 	rcNoTitle := json.RawMessage("{}")
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcNoTitle))
+	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcNoTitle))
 
 	// JSON null render config → template ID
 	rcNull := json.RawMessage("null")
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rcNull))
+	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcNull))
 
 	// invalid JSON → template ID
 	rc4 := json.RawMessage(`invalid`)
-	assert.Equal(t, "trade-export-v1", taskDisplayName("trade-export-v1", rc4))
+	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rc4))
 }

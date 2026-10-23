@@ -30,7 +30,7 @@ paths:
         required: false
         description: |
           Ignored in production: the workflow template is always
-          `trade-export-v1`. Only honored when the deployment runs in dev
+          `trade-export`. Only honored when the deployment runs in dev
           mode, where `template_id` may name a `test-*` template for testing.
         content:
           application/json:
@@ -39,7 +39,7 @@ paths:
               properties:
                 template_id:
                   type: string
-                  description: Dev-mode only. Must equal `trade-export-v1` or start with `test-`.
+                  description: Dev-mode only. Must equal `trade-export` or start with `test-`.
                   example: "test-export-v1"
       responses:
         '201':

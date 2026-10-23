@@ -478,8 +478,8 @@ services:
     volumes:
       - ./configs:/app/configs:ro
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
-      # clone's cda-v2/ dir.
-      - ${CDA_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/cda-v2}:/app/artifacts:ro
+      # clone's cda/ dir.
+      - ${CDA_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/cda}:/app/artifacts:ro
     environment:
       # Every server setting lives in configs/agency/cda/config.docker.yaml (see
       # x-cda-config-env); what follows is only what the file cannot hold.
@@ -570,8 +570,8 @@ services:
     volumes:
       - ./configs:/app/configs:ro
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
-      # clone's efc-v2/ dir.
-      - ${EFC_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/efc-v2}:/app/artifacts:ro
+      # clone's efc/ dir.
+      - ${EFC_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/efc}:/app/artifacts:ro
     environment:
       # Every server setting lives in configs/agency/efc/config.docker.yaml (see
       # x-efc-config-env); what follows is only what the file cannot hold.
@@ -663,8 +663,8 @@ services:
     volumes:
       - ./configs:/app/configs:ro
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
-      # clone's npqs-v2/ dir.
-      - ${NPQS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/npqs-v2}:/app/artifacts:ro
+      # clone's npqs/ dir.
+      - ${NPQS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/npqs}:/app/artifacts:ro
     environment:
       # Every server setting lives in configs/agency/npqs/config.docker.yaml (see
       # x-npqs-config-env); what follows is only what the file cannot hold.
@@ -756,8 +756,8 @@ services:
     volumes:
       - ./configs:/app/configs:ro
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
-      # clone's sltb-v2/ dir.
-      - ${SLTB_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/sltb-v2}:/app/artifacts:ro
+      # clone's sltb/ dir.
+      - ${SLTB_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/sltb}:/app/artifacts:ro
     environment:
       # Every server setting lives in configs/agency/sltb/config.docker.yaml (see
       # x-sltb-config-env); what follows is only what the file cannot hold.
@@ -849,8 +849,8 @@ services:
     volumes:
       - ./configs:/app/configs:ro
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
-      # clone's fcau-v2/ dir.
-      - ${FCAU_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/fcau-v2}:/app/artifacts:ro
+      # clone's fcau/ dir.
+      - ${FCAU_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/fcau}:/app/artifacts:ro
     environment:
       # Every server setting lives in configs/agency/fcau/config.docker.yaml (see
       # x-fcau-config-env); what follows is only what the file cannot hold.

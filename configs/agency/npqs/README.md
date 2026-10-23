@@ -21,7 +21,7 @@ service, so officers open and upload the documents in TNSW's storage, calling
 TNSW as `NPQS_TO_NSW`. TNSW applies its own upload limits.
 
 The officer forms' searchable lists (importing countries, commodity names) are
-served from the `static_data` in `npqs-v2`, the same lists TNSW serves the trader.
+served from the `static_data` in `npqs`, the same lists TNSW serves the trader.
 
 NPQS generates application, lab sample, ePhyto, and re-export certificate references in
 `npqs_db`. Application sequences are scoped to office and UTC year; lab sample
@@ -59,8 +59,8 @@ reload); rebuild them after a change with
 TNSW in compose reaches it at `host.docker.internal:8081`, through the `npqs` entry
 its `services.docker.json` already has. To change a setting, edit `config.docker.yaml`
 and restart `npqs-api`. `npqs-api` loads its artifacts from a `one-trade-artifacts`
-clone next to this repo (`../one-trade-artifacts/npqs-v2`); set
-`NPQS_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `npqs-v2` dir.
+clone next to this repo (`../one-trade-artifacts/npqs`); set
+`NPQS_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `npqs` dir.
 
 ## Run natively
 
@@ -78,7 +78,7 @@ TNSW reaches it through its own `configs/services.json` entry `npqs`
 (`http://localhost:8081`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
-(`../one-trade-artifacts/npqs-v2`); change `artifactLoader.local.root` in
+(`../one-trade-artifacts/npqs`); change `artifactLoader.local.root` in
 `config.yaml` to use another clone.
 
 For the officer UI, run the trader-app with the values in `portal-config.js`.

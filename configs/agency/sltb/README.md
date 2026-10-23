@@ -43,8 +43,8 @@ reload); rebuild them after a change with
 TNSW in compose reaches it at `host.docker.internal:8086`, through the `sltb` entry
 its `services.docker.json` already has. To change a setting, edit `config.docker.yaml`
 and restart `sltb-api`. `sltb-api` loads its artifacts from a `one-trade-artifacts`
-clone next to this repo (`../one-trade-artifacts/sltb-v2`); set
-`SLTB_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `sltb-v2` dir.
+clone next to this repo (`../one-trade-artifacts/sltb`); set
+`SLTB_ARTIFACT_LOCAL_ROOT` in `.env` to use another clone's `sltb` dir.
 
 ## Run natively
 
@@ -62,7 +62,7 @@ TNSW reaches it through its own `configs/services.json` entry `sltb`
 (`http://localhost:8086`).
 
 It loads its artifacts from a `one-trade-artifacts` clone next to this repo
-(`../one-trade-artifacts/sltb-v2`); change `artifactLoader.local.root` in
+(`../one-trade-artifacts/sltb`); change `artifactLoader.local.root` in
 `config.yaml` to use another clone.
 
 For the officer UI, run the trader-app with the values in `portal-config.js`.
