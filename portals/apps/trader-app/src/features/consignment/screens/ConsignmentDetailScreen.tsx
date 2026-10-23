@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 import { CopyableId } from '@/components/CopyableId'
+import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
@@ -45,7 +46,9 @@ export function ConsignmentDetailScreen({
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const up = parent ?? { label: t('nav.consignments'), to: '/consignments' }
+  // An agency's officers work on cases: the same records, under their own name.
+  const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: '/consignments' }
+  const untitled = t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title')
   const backTo = up.to ?? '/consignments'
   const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(!!consignmentId)
@@ -242,7 +245,7 @@ export function ConsignmentDetailScreen({
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Breadcrumb items={[up, { label: t('consignments.detail.title') }]} />
+          <Breadcrumb items={[up, { label: untitled }]} />
         </div>
         <div className="bg-app-surface rounded-2xl shadow-md p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
@@ -256,7 +259,7 @@ export function ConsignmentDetailScreen({
           <div className="flex gap-3 justify-center">
             <Button variant="soft" onClick={() => void navigate(backTo)}>
               <ArrowLeftIcon />
-              {t('consignments.detail.backToList')}
+              {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
             </Button>
             {isLoadFailed && (
               <Button
@@ -281,7 +284,7 @@ export function ConsignmentDetailScreen({
   return (
     <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-10">
       <div className="flex items-center justify-between gap-4">
-        <Breadcrumb items={[up, { label: consignment.name || t('consignments.detail.title') }]} />
+        <Breadcrumb items={[up, { label: consignment.name || untitled }]} />
         <Tooltip content={t('consignments.detail.refresh')}>
           <IconButton
             type="button"
@@ -299,18 +302,22 @@ export function ConsignmentDetailScreen({
       <div className="mt-10 mb-8 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              {consignment.name || t('consignments.detail.title')}
-            </h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">{consignment.name || untitled}</h1>
             <Badge size="2" color={getStateColor(consignment.state)}>
               {formatState(consignment.state)}
             </Badge>
-            <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-              {consignment.flow}
-            </Badge>
+            {/* A case carries no flow. */}
+            {consignment.flow && (
+              <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
+                {consignment.flow}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground-muted">
-            <CopyableId label={t('consignments.detail.field.consignmentId')} id={consignment.id} />
+            <CopyableId
+              label={t(isAgencyMode ? 'cases.detail.field.caseId' : 'consignments.detail.field.consignmentId')}
+              id={consignment.id}
+            />
             <span>
               {t('consignments.detail.field.dateCreated')} {formatDateTime(consignment.createdAt)}
             </span>

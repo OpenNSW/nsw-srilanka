@@ -5,6 +5,7 @@ import { ClockIcon, LightningBoltIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentState, WorkflowNode } from '@/features/consignment/types'
 import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
+import { isAgencyMode } from '@/features/case/mode'
 import { TaskRow } from './TaskRow'
 
 function SectionHeading({ icon, title, count }: { icon: ReactNode; title: string; count: number }) {
@@ -51,7 +52,7 @@ export function ConsignmentTasks({
   const status = finished
     ? t('workflow.consignmentComplete')
     : groups.needsAction.length === 0
-      ? `${t('workflow.nothingNeeded')} ${t('workflow.newStepsAppear')}`
+      ? `${t('workflow.nothingNeeded')} ${t(isAgencyMode ? 'workflow.newStepsAppearCase' : 'workflow.newStepsAppear')}`
       : undefined
 
   return (
@@ -95,7 +96,11 @@ export function ConsignmentTasks({
             </ul>
           </section>
         )}
-        {!status && <p className="mt-6 text-sm text-foreground-muted">{t('workflow.newStepsAppear')}</p>}
+        {!status && (
+          <p className="mt-6 text-sm text-foreground-muted">
+            {t(isAgencyMode ? 'workflow.newStepsAppearCase' : 'workflow.newStepsAppear')}
+          </p>
+        )}
       </Tabs.Content>
 
       <Tabs.Content value="done" className="pt-5">

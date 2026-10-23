@@ -13,6 +13,7 @@ import type { ZoneView } from '@/features/zone/types'
 import { zoneWidthClass } from '@/features/zone/width'
 import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 import { humanizeStatus } from '@/utils/formatStatus'
+import { isAgencyMode } from '@/features/case/mode'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const NEXT_TASK_MAX_ATTEMPTS = 5
@@ -207,10 +208,12 @@ export function TaskDetailScreen() {
   // The task's configured name, or its type until the consignment has loaded.
   const title = nodeName(taskId) || humanizeStatus(zoneView.task_type)
   const nextTaskName = nodeName(nextTaskId)
-  const breadcrumb: BreadcrumbItem[] = [{ label: t('nav.consignments'), to: '/consignments' }]
+  const breadcrumb: BreadcrumbItem[] = [
+    { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: '/consignments' },
+  ]
   if (consignmentId) {
     breadcrumb.push({
-      label: current?.name || t('consignments.detail.title'),
+      label: current?.name || t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title'),
       to: `/consignments/${consignmentId}`,
     })
   }
@@ -327,7 +330,7 @@ export function TaskDetailScreen() {
             </Button>
           ) : (
             <Button size="3" variant="soft" onClick={goToTasks}>
-              {t('tasks.backToConsignment')}
+              {t(isAgencyMode ? 'tasks.backToCase' : 'tasks.backToConsignment')}
             </Button>
           )}
         </div>

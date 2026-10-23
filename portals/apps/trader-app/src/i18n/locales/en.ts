@@ -17,6 +17,7 @@ const en = {
     nav: {
       menu: 'Menu',
       consignments: 'Consignments',
+      cases: 'Cases',
       verifiedDocs: 'Verified Docs',
     },
 
@@ -31,6 +32,13 @@ const en = {
           id: 'Case',
           state: 'State',
           created: 'Created',
+        },
+      },
+      detail: {
+        title: 'Case',
+        backToList: 'Back to Cases',
+        field: {
+          caseId: 'Case ID',
         },
       },
     },
@@ -128,6 +136,7 @@ const en = {
       continueTo: 'Continue to {{name}}',
       continueToNext: 'Continue to next task',
       backToConsignment: 'Back to consignment',
+      backToCase: 'Back to case',
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
       unsaved: {
@@ -165,6 +174,7 @@ const en = {
       since: 'Since {{date}}',
       nothingNeeded: 'Nothing needs your action right now.',
       newStepsAppear: 'New steps appear here as your applications are reviewed.',
+      newStepsAppearCase: 'New steps appear here as the case progresses.',
       consignmentComplete: 'This consignment is complete.',
       noneDone: 'No tasks are finished yet.',
       status: {
