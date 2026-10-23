@@ -102,3 +102,31 @@ func TestStore_ReadsTheTasksOfTheCase(t *testing.T) {
 	assert.Equal(t, StateQueuedExternally, got[0].State)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+// FindInCase finds a parked task in any workflow of the case: a wait in a
+// branch of a parallel split has a workflow of its own.
+func TestFindInCase(t *testing.T) {
+	tasks := tasksOfCase{"case-1": {
+		{TaskID: "done", ActiveStepID: "s0", ParentWorkflowID: "wf-1", ActiveTaskTemplateID: "release", State: "COMPLETED"},
+		{TaskID: "other-template", ActiveStepID: "s1", ParentWorkflowID: "wf-1", ActiveTaskTemplateID: "review", State: StateQueuedExternally},
+		{TaskID: "in-branch", ActiveStepID: "s2", ParentWorkflowID: "wf-branch", ActiveTaskTemplateID: "release", State: StateQueuedExternally},
+	}}
+
+	got, ok, err := FindInCase(context.Background(), tasks, "case-1", "release")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, Task{TaskID: "in-branch", StepID: "s2"}, got)
+
+	for name, args := range map[string][2]string{
+		"another case":         {"case-2", "release"},
+		"no case recorded":     {"", "release"},
+		"nothing parked on it": {"case-1", "ack"},
+	} {
+		_, ok, err := FindInCase(context.Background(), tasks, args[0], args[1])
+		require.NoError(t, err, name)
+		assert.False(t, ok, name)
+	}
+
+	_, _, err = FindInCase(context.Background(), failingTasks{err: errors.New("down")}, "case-1", "release")
+	assert.Error(t, err)
+}

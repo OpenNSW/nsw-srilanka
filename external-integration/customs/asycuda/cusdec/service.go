@@ -264,18 +264,21 @@ func (s *webhookService) completeEventTaskAndMetadata(
 	payload map[string]any,
 	req CusdecEventRequest,
 ) error {
-	task, ok, err := parkedtask.Find(ctx, s.tasks, decl.CaseID, decl.WorkflowID, taskTemplateID)
+	// Looked for across the whole case, not only the workflow the declaration
+	// was dispatched from: the customs flow waits on export release in a branch
+	// of the parallel split after the CDNs, a child workflow of its own.
+	task, ok, err := parkedtask.FindInCase(ctx, s.tasks, decl.CaseID, taskTemplateID)
 	if err != nil {
 		// The status is left as it was: recording it would make SLC Edge's
 		// retry a duplicate, and the parked step would never be completed.
-		return fmt.Errorf("locate the %s task for workflow %s: %w", req.Event, decl.WorkflowID, err)
+		return fmt.Errorf("locate the %s task in case %s: %w", req.Event, decl.CaseID, err)
 	}
 	if !ok {
 		if decl.Status == targetStatus {
 			slog.InfoContext(ctx, "event task not found but CusDec status already updated", "edge_id", decl.EdgeID, "event", req.Event)
 			return nil
 		}
-		slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event, "workflow_id", decl.WorkflowID)
+		slog.WarnContext(ctx, "event task not found, recovering status update", "edge_id", decl.EdgeID, "event", req.Event, "case_id", decl.CaseID)
 		decl.Status = targetStatus
 		if updateErr := s.repo.Update(ctx, decl); updateErr != nil {
 			return fmt.Errorf("failed to update status during recovery: %w", updateErr)

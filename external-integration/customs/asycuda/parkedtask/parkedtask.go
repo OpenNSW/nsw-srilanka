@@ -1,9 +1,10 @@
 // Package parkedtask finds the task an SLC Edge callback answers: the one a
 // customs workflow parked on a template while ASYCUDA holds the next move.
 //
-// It reads tasks through core's task model, by the case and the workflow the
-// dispatch was made from, which the declaration or dispatch note recorded when
-// SLC Edge accepted it. Nothing here reads a task's data.
+// It reads tasks through core's task model, by the case and, for a wait in the
+// workflow the dispatch was made from, that workflow: the declaration or
+// dispatch note recorded both when SLC Edge accepted it. Nothing here reads a
+// task's data.
 package parkedtask
 
 import (
@@ -65,7 +66,32 @@ type Task struct {
 // An error means the tasks could not be read, so whether one is parked is not
 // known; false with no error means none is.
 func Find(ctx context.Context, tasks Tasks, caseID, workflowID, templateID string) (Task, bool, error) {
-	if caseID == "" || workflowID == "" {
+	if workflowID == "" {
+		return Task{}, false, nil
+	}
+	return find(ctx, tasks, caseID, func(rec store.TaskRecord) bool {
+		return rec.ParentWorkflowID == workflowID && rec.ActiveTaskTemplateID == templateID
+	})
+}
+
+// FindInCase returns a task of case caseID parked on templateID in any of the
+// case's workflows, and whether there is one. It is for a wait that runs in
+// another workflow than the dispatch did: a parallel split runs each branch as
+// a child workflow with an ID of its own, so a wait after the split never has
+// the dispatch step's workflow as its parent, while the case is shared by every
+// flow of the consignment at every level of nesting. Use it only for a
+// template a case parks on once at a time.
+//
+// The error and false mean what they do for Find.
+func FindInCase(ctx context.Context, tasks Tasks, caseID, templateID string) (Task, bool, error) {
+	return find(ctx, tasks, caseID, func(rec store.TaskRecord) bool {
+		return rec.ActiveTaskTemplateID == templateID
+	})
+}
+
+// find returns the first parked task of caseID that match accepts.
+func find(ctx context.Context, tasks Tasks, caseID string, match func(store.TaskRecord) bool) (Task, bool, error) {
+	if caseID == "" {
 		return Task{}, false, nil
 	}
 	records, err := tasks.TasksOfCase(ctx, caseID)
@@ -73,9 +99,7 @@ func Find(ctx context.Context, tasks Tasks, caseID, workflowID, templateID strin
 		return Task{}, false, err
 	}
 	for _, rec := range records {
-		if rec.ParentWorkflowID == workflowID &&
-			rec.ActiveTaskTemplateID == templateID &&
-			rec.State == StateQueuedExternally {
+		if rec.State == StateQueuedExternally && match(rec) {
 			return Task{TaskID: rec.TaskID, StepID: rec.ActiveStepID}, true, nil
 		}
 	}

@@ -94,6 +94,18 @@ func parkedOn(templateID, taskID, stepID string) fakeTasks {
 	}}
 }
 
+// parkedInBranch returns the tests' case with one task parked on templateID in
+// a branch of a parallel split: a child workflow of its own, so its parent is
+// never the workflow the declaration was dispatched from.
+func parkedInBranch(templateID, taskID, stepID string) fakeTasks {
+	return fakeTasks{testCaseID: {
+		{TaskID: "dispatch-task", ActiveStepID: "dispatch-step", ParentWorkflowID: testWorkflowID, CaseID: testCaseID,
+			ActiveTaskTemplateID: reviewTemplateID, State: "COMPLETED"},
+		{TaskID: taskID, ActiveStepID: stepID, ParentWorkflowID: "split-branch-wf", CaseID: testCaseID,
+			ActiveTaskTemplateID: templateID, State: "QUEUED_EXTERNALLY"},
+	}}
+}
+
 // submitted is the declaration as its dispatch left it: SLC Edge accepted it as
 // edgeID from the tests' workflow.
 func submitted(edgeID string) *CusdecDeclaration {
@@ -217,7 +229,7 @@ func TestProcessEvent_PaymentSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn("customs-wait-payment", "task-payment-123", "step-task-payment-123"), completer)
+	service := NewWebhookService(repo, parkedInBranch("customs-wait-payment", "task-payment-123", "step-task-payment-123"), completer)
 
 	req := CusdecEventRequest{
 		Event:     "PAYMENT_CONFIRMED",
@@ -318,7 +330,7 @@ func TestProcessEvent_WarrantingSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn("customs-wait-warranting", "task-warranting-123", "step-task-warranting-123"), completer)
+	service := NewWebhookService(repo, parkedInBranch("customs-wait-warranting", "task-warranting-123", "step-task-warranting-123"), completer)
 
 	req := CusdecEventRequest{
 		Event:     "WARRANTING_COMPLETED",
@@ -367,7 +379,7 @@ func TestProcessEvent_ReleaseSuccess(t *testing.T) {
 		},
 	}
 	completer := &mockTaskCompleter{}
-	service := NewWebhookService(repo, parkedOn("customs-wait-export-release", "task-release-123", "step-task-release-123"), completer)
+	service := NewWebhookService(repo, parkedInBranch("customs-wait-export-release", "task-release-123", "step-task-release-123"), completer)
 
 	req := CusdecEventRequest{
 		Event:     "EXPORT_RELEASED",
