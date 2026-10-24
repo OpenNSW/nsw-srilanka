@@ -61,7 +61,7 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			AuthorizedOfficer:      asString(uf["applicant_name"]),
 			PlaceOfIssue:           officeName(answerCode(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
-			DocDeclarations:        buildDocDeclarations(uf),
+			DocDeclarations:        buildDocDeclarations(uf, inputs),
 			Attachments:            buildAttachments(uf, inputs),
 			Consignment:            buildConsignment(uf, importISO, inputs["certificate_items"]),
 		},
@@ -271,7 +271,14 @@ func weightUnit(unit string) string {
 // Builders
 // ---------------------------------------------------------------------------
 
-func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
+// DateOfInspectionInput is the task input carrying the date the officer
+// inspected the consignment. It is the only source of the certificate's date of
+// inspection: the application's proposed_inspection_date only schedules the
+// inspection, so a certificate whose consignment was never inspected declares
+// no date rather than the one the trader asked for.
+const DateOfInspectionInput = "date_of_inspection"
+
+func buildDocDeclarations(uf map[string]any, inputs map[string]any) *spscert.DocDeclarations {
 	dd := &spscert.DocDeclarations{LanguageID: "en"}
 	if v := asString(uf["additional_declaration"]); v != "" {
 		dd.AdditionalDeclarations = []string{v}
@@ -279,7 +286,7 @@ func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
 	if v := asString(uf["import_permit_number"]); v != "" {
 		dd.ImportPermit = v
 	}
-	if v := asString(uf["proposed_inspection_date"]); v != "" {
+	if v := asString(inputs[DateOfInspectionInput]); v != "" {
 		dd.DateOfInspection = v
 	}
 	if v := asString(uf["distinguishing_marks"]); v != "" {

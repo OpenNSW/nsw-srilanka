@@ -799,3 +799,31 @@ func TestBuildInput_DeclaresEveryCommodityOfAReExport(t *testing.T) {
 		}
 	}
 }
+
+// The trader's proposed date only schedules the inspection: a certificate whose
+// consignment was not inspected declares no date at all.
+func TestBuildInput_DoesNotDeclareTheProposedInspectionDate(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":        sampleUserform(),
+		"certificate_id":  "PC-2026-000123",
+		"hub_destination": "LK2",
+	})
+
+	if dd := in.Certificate.DocDeclarations; dd != nil && dd.DateOfInspection != "" {
+		t.Errorf("DateOfInspection = %q, want none", dd.DateOfInspection)
+	}
+}
+
+func TestBuildInput_DeclaresTheDateTheConsignmentWasInspected(t *testing.T) {
+	in := BuildInput(map[string]any{
+		"userform":            sampleUserform(),
+		"certificate_id":      "PC-2026-000123",
+		"hub_destination":     "LK2",
+		DateOfInspectionInput: "2026-07-03",
+	})
+
+	dd := in.Certificate.DocDeclarations
+	if dd == nil || dd.DateOfInspection != "2026-07-03" {
+		t.Errorf("DocDeclarations = %+v, want the date of inspection 2026-07-03", dd)
+	}
+}
