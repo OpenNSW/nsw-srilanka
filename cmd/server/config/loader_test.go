@@ -26,6 +26,16 @@ func TestLoadFile_Empty(t *testing.T) {
 	}
 }
 
+func TestLoadFile_LegacyMetricsKept(t *testing.T) {
+	fc, err := loadFile(writeConfigFile(t, "metrics:\n  endpoint: http://otel-collector:4318/v1/metrics\n  serviceName: tnsw-api\n"))
+	if err != nil {
+		t.Fatalf("loadFile: %v", err)
+	}
+	if fc.Metrics["endpoint"] != "http://otel-collector:4318/v1/metrics" {
+		t.Fatalf("metrics section was dropped: %#v", fc.Metrics)
+	}
+}
+
 func TestLoadFile_RefIDOmitted(t *testing.T) {
 	fc, err := loadFile(writeConfigFile(t, "refid:\n  issuers: []\n"))
 	if err != nil {
