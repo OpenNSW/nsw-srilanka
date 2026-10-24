@@ -38,7 +38,10 @@ type Flow struct {
 	WorkflowID string `json:"workflowId"`
 	CaseID     string `json:"caseId"`
 	TemplateID string `json:"templateId"`
-	Status     Status `json:"status"`
+	// ManifestVersion is the artifact manifest version the flow resolves its templates
+	// through: the current one when the row was recorded. A retried start keeps it.
+	ManifestVersion int    `json:"manifestVersion"`
+	Status          Status `json:"status"`
 	// Payload is the variables the flow was first started with. Not echoed in
 	// responses: it may hold business data.
 	Payload   json.RawMessage `json:"-"`
@@ -53,7 +56,8 @@ type Repository interface {
 	// created after it.
 	EnsureCase(ctx context.Context, caseID string) error
 	// Record inserts the row for f.WorkflowID, and its case if new, on first sight and is
-	// a no-op afterwards, so the first payload is the one the workflow is started with.
+	// a no-op afterwards, so the first payload and manifest version are the ones the
+	// workflow is started with.
 	// A new flow reopens a case that had finished.
 	Record(ctx context.Context, f Flow) error
 	MarkStarted(ctx context.Context, workflowID string) error
@@ -103,8 +107,8 @@ func (r *repository) EnsureCase(ctx context.Context, caseID string) error {
 
 func (r *repository) Record(ctx context.Context, f Flow) error {
 	const insertFlow = `
-		INSERT INTO case_flows (workflow_id, case_id, template_id, status, payload, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, now(), now())
+		INSERT INTO case_flows (workflow_id, case_id, template_id, manifest_version, status, payload, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), now())
 		ON CONFLICT (workflow_id) DO NOTHING
 	`
 	// A nil payload is stored as NULL, not as an empty jsonb value.
@@ -124,7 +128,7 @@ func (r *repository) Record(ctx context.Context, f Flow) error {
 		// The reopen UPDATE alone would not: while the case reads IN_PROGRESS it matches no row
 		// and takes no lock. Dropping that foreign key, or reopening before the insert, would
 		// let the case be marked FINISHED with this flow still pending.
-		result, err := tx.ExecContext(ctx, insertFlow, f.WorkflowID, f.CaseID, f.TemplateID, StatusStarting, payload)
+		result, err := tx.ExecContext(ctx, insertFlow, f.WorkflowID, f.CaseID, f.TemplateID, f.ManifestVersion, StatusStarting, payload)
 		if err != nil {
 			return err
 		}
@@ -176,7 +180,7 @@ func (r *repository) MarkStarted(ctx context.Context, workflowID string) error {
 }
 
 const selectFlow = `
-	SELECT workflow_id, case_id, template_id, status, payload, created_at, updated_at
+	SELECT workflow_id, case_id, template_id, manifest_version, status, payload, created_at, updated_at
 	FROM case_flows
 `
 
@@ -188,7 +192,7 @@ type rowScanner interface {
 func scanFlow(row rowScanner) (Flow, error) {
 	var f Flow
 	var payload []byte
-	if err := row.Scan(&f.WorkflowID, &f.CaseID, &f.TemplateID, &f.Status, &payload, &f.CreatedAt, &f.UpdatedAt); err != nil {
+	if err := row.Scan(&f.WorkflowID, &f.CaseID, &f.TemplateID, &f.ManifestVersion, &f.Status, &payload, &f.CreatedAt, &f.UpdatedAt); err != nil {
 		return Flow{}, err
 	}
 	if payload != nil {
