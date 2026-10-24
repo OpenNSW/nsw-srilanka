@@ -8,6 +8,7 @@ import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '@/features
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
+import { LoadError } from '@/components/common/LoadError.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import { ROUTES } from '@/constants'
 
@@ -18,6 +19,8 @@ export function ConsignmentScreen() {
 
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const [page, setPage] = useState(0)
   const limit = 50
 
@@ -27,6 +30,7 @@ export function ConsignmentScreen() {
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState(false)
 
   const listRequestIdRef = useRef(0)
 
@@ -38,11 +42,13 @@ export function ConsignmentScreen() {
 
   const handleCreateConsignment = async () => {
     setCreating(true)
+    setCreateError(false)
     try {
       const response = await createConsignment()
       void navigate(ROUTES.CONSIGNMENT_DETAIL(response.id))
     } catch (error) {
       console.error('Failed to create consignment:', error)
+      setCreateError(true)
     } finally {
       setCreating(false)
     }
@@ -65,11 +71,16 @@ export function ConsignmentScreen() {
         }
         setConsignments(data.items || [])
         setTotalCount(data.total || 0)
+        setLoadFailed(false)
       } catch (error) {
         if (requestId !== listRequestIdRef.current) {
           return
         }
         console.error('Failed to fetch consignments:', error)
+        // A failure is not an empty list. Clear any rows from the previous page.
+        setConsignments([])
+        setTotalCount(0)
+        setLoadFailed(true)
       } finally {
         if (requestId === listRequestIdRef.current) {
           setLoading(false)
@@ -78,7 +89,7 @@ export function ConsignmentScreen() {
     }
 
     void fetchConsignments()
-  }, [page, stateFilter, tradeFlowFilter, debouncedSearchQuery])
+  }, [page, stateFilter, tradeFlowFilter, debouncedSearchQuery, retryCount])
 
   return (
     <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
@@ -91,11 +102,16 @@ export function ConsignmentScreen() {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col items-end gap-2">
           <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
             <PlusIcon />
             {creating ? t('consignments.list.creating') : t('consignments.list.create')}
           </Button>
+          {createError && (
+            <Text size="2" color="red">
+              {t('consignments.list.error.createFailed')}
+            </Text>
+          )}
         </div>
       </div>
 
@@ -160,7 +176,14 @@ export function ConsignmentScreen() {
               </Text>
             </div>
           )}
-          {consignments.length === 0 ? (
+          {loadFailed ? (
+            <div className="p-16">
+              <LoadError
+                message={t('consignments.list.error.loadFailed')}
+                onRetry={() => setRetryCount((n) => n + 1)}
+              />
+            </div>
+          ) : consignments.length === 0 ? (
             <div className="p-16 text-center">
               <Text size="3" color="gray">
                 {debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
