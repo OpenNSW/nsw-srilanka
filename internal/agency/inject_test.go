@@ -22,10 +22,13 @@ func (r recordingRepo) Record(context.Context, Workflow) error {
 }
 
 func TestInjectUnknownTaskCode(t *testing.T) {
-	reg := artifact.NewRegistry(testutil.MemLoader{})
-	svc := NewService(recordingRepo{t: t}, reg, nil)
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{"manifest_v1.json": []byte(`{"artifacts":[]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(recordingRepo{t: t}, set, nil)
 
-	_, err := svc.Inject(context.Background(), InjectRequest{TaskID: "t1", TaskCode: "nope", ConsignmentID: "C1"})
+	_, err = svc.Inject(context.Background(), InjectRequest{TaskID: "t1", TaskCode: "nope", ConsignmentID: "C1"})
 	if !errors.Is(err, ErrUnknownTaskCode) {
 		t.Fatalf("err = %v, want ErrUnknownTaskCode", err)
 	}
@@ -46,12 +49,11 @@ func (r storedRepo) Get(context.Context, string) (*Workflow, error) {
 }
 
 func TestInjectRepeatTaskID(t *testing.T) {
-	reg := artifact.NewRegistry(testutil.MemLoader{
-		"verify.json": []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
-		"letter.json": []byte(`{"schemaVersion":2,"taskCode":"letter","workflow":"letter_wf","meta":{"title":"Letter"}}`),
+	reg := testSet(t, testutil.MemLoader{
+		"verify.json":      []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
+		"letter.json":      []byte(`{"schemaVersion":2,"taskCode":"letter","workflow":"letter_wf","meta":{"title":"Letter"}}`),
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"verify","kind":"task_config","path":"verify.json"},{"id":"letter","kind":"task_config","path":"letter.json"}]}`),
 	})
-	reg.RegisterArtifact("verify", "task_config", "", "verify.json")
-	reg.RegisterArtifact("letter", "task_config", "", "letter.json")
 	row := Workflow{TaskID: "T1", TaskCode: "verify", CaseID: "C1", Status: StatusStarted}
 
 	// The workflow manager is nil: reaching the engine would panic, so these also
@@ -114,12 +116,11 @@ func (m *startCapture) StartWorkflow(_ context.Context, _ string, _ workflow.Wor
 }
 
 func TestInjectSeedsCallbackToken(t *testing.T) {
-	reg := artifact.NewRegistry(testutil.MemLoader{
-		"verify.json":    []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
-		"verify_wf.json": []byte(`{"id":"verify_wf","nodes":[],"edges":[]}`),
+	reg := testSet(t, testutil.MemLoader{
+		"verify.json":      []byte(`{"schemaVersion":2,"taskCode":"verify","workflow":"verify_wf","meta":{"title":"Verify"}}`),
+		"verify_wf.json":   []byte(`{"id":"verify_wf","nodes":[],"edges":[]}`),
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"verify","kind":"task_config","path":"verify.json"},{"id":"verify_wf","kind":"workflow","path":"verify_wf.json"}]}`),
 	})
-	reg.RegisterArtifact("verify", "task_config", "", "verify.json")
-	reg.RegisterArtifact("verify_wf", "workflow", "", "verify_wf.json")
 	req := InjectRequest{TaskID: "T1", TaskCode: "verify", ConsignmentID: "C1"}
 
 	t.Run("token is seeded from the recorded row", func(t *testing.T) {
@@ -146,6 +147,9 @@ func TestInjectSeedsCallbackToken(t *testing.T) {
 			if vars["callbackToken"] != "tok-1" {
 				t.Errorf("start %d: callbackToken = %v, want tok-1", i, vars["callbackToken"])
 			}
+			if vars[workflow.VarManifestVersion] != 1 {
+				t.Errorf("start %d: %s = %v, want the current manifest version 1", i, workflow.VarManifestVersion, vars[workflow.VarManifestVersion])
+			}
 		}
 	})
 
@@ -158,4 +162,14 @@ func TestInjectSeedsCallbackToken(t *testing.T) {
 			t.Errorf("callbackToken = %v, want unset", wm.vars[0]["callbackToken"])
 		}
 	})
+}
+
+// testSet loads files, which must include manifest_v1.json, as a one-manifest artifact set.
+func testSet(t *testing.T, files testutil.MemLoader) *artifact.Set {
+	t.Helper()
+	set, err := artifact.LoadSet(context.Background(), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
 }

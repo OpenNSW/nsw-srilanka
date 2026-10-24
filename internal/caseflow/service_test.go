@@ -12,14 +12,16 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 )
 
-func newRegistry() *artifact.Registry {
-	reg := artifact.NewRegistry(testutil.MemLoader{
-		"export.json": []byte(`{"id":"export","nodes":[],"edges":[]}`),
-		"notice.json": []byte(`{"id":"notice","nodes":[],"edges":[]}`),
+func newRegistry() *artifact.Set {
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"export.json":      []byte(`{"id":"export","nodes":[],"edges":[]}`),
+		"notice.json":      []byte(`{"id":"notice","nodes":[],"edges":[]}`),
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"export","kind":"workflow","path":"export.json"},{"id":"notice","kind":"workflow","path":"notice.json"}]}`),
 	})
-	reg.RegisterArtifact("export", "workflow", "", "export.json")
-	reg.RegisterArtifact("notice", "workflow", "", "notice.json")
-	return reg
+	if err != nil {
+		panic(err)
+	}
+	return set
 }
 
 // memRepo is an in-memory Repository with Record's first-sight semantics.
@@ -125,6 +127,9 @@ func TestStartFlowBuildsWorkflowID(t *testing.T) {
 	}
 	if got := wm.starts[0].vars[workflow.VarCaseID]; got != "C1" {
 		t.Errorf("%s = %v, want the case ID", workflow.VarCaseID, got)
+	}
+	if got := wm.starts[0].vars[workflow.VarManifestVersion]; got != 1 {
+		t.Errorf("%s = %v, want the current manifest version 1", workflow.VarManifestVersion, got)
 	}
 }
 

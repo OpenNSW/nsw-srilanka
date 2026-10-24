@@ -76,8 +76,9 @@ func userPrincipal(sub string) *authn.Principal {
 
 // namespaces returns a NamespaceOf over a fixed map, counting lookups.
 func namespaces(byTemplate map[string]string, calls *int) NamespaceOf {
-	return func(_ context.Context, id string) (string, error) {
+	return func(_ context.Context, record store.TaskRecord) (string, error) {
 		*calls++
+		id := record.ActiveTaskTemplateID
 		ns, ok := byTemplate[id]
 		if !ok {
 			return "", fmt.Errorf("no step template %q", id)
