@@ -177,6 +177,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
 		{TaskTypeCustomsCusdecRetrieve, NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},
 		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
+		{TaskTypeCustomsBoatNotePrefill, NewBoatNotePrefillPlugin(mgr)},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},
