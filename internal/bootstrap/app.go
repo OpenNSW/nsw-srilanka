@@ -687,6 +687,7 @@ func newAdminParkLogger(scope string) func(workflow.AdminParkPayload) error {
 			"node_id", payload.NodeID,
 			"node_type", payload.NodeType,
 			"task_template_id", payload.TaskTemplateID,
+			"manifest_version", payload.ManifestVersion,
 			"cause", payload.Cause,
 		)
 		return nil
