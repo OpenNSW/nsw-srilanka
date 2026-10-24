@@ -37,13 +37,13 @@ type TaskLister interface {
 type CaseHandler struct {
 	repo       CaseRepository
 	tasks      TaskLister
-	registry   *artifact.Registry // resolves each workflow's task_config for display
-	tokenRoles map[string]bool    // the token roles the catalog maps its roles to
+	artifacts  *artifact.Set   // resolves each workflow's task_config for display
+	tokenRoles map[string]bool // the token roles the catalog maps its roles to
 }
 
 // NewCaseHandler creates a CaseHandler. roles is the agency catalog's Roles map: an
 // officer holding the token role of any of its entries may use the case views.
-func NewCaseHandler(repo CaseRepository, tasks TaskLister, registry *artifact.Registry, roles map[string]string) *CaseHandler {
+func NewCaseHandler(repo CaseRepository, tasks TaskLister, artifacts *artifact.Set, roles map[string]string) *CaseHandler {
 	tokenRoles := make(map[string]bool, len(roles))
 	for _, tokenRole := range roles {
 		// An empty token role would match a caller whose roles hold an empty string.
@@ -51,7 +51,7 @@ func NewCaseHandler(repo CaseRepository, tasks TaskLister, registry *artifact.Re
 			tokenRoles[tokenRole] = true
 		}
 	}
-	return &CaseHandler{repo: repo, tasks: tasks, registry: registry, tokenRoles: tokenRoles}
+	return &CaseHandler{repo: repo, tasks: tasks, artifacts: artifacts, tokenRoles: tokenRoles}
 }
 
 // CaseSummary is one row of GET /api/v1/cases.
@@ -140,7 +140,7 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 
 	nodes := make([]WorkflowNode, 0)
 	for _, wf := range workflows {
-		meta := h.meta(r, wf.TaskCode)
+		meta := h.meta(r, wf)
 		for _, t := range h.tasks.GetAllTasks(ctx, wf.TaskID) {
 			if t.TaskType == "SYSTEM" {
 				continue
@@ -151,16 +151,19 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, CaseDetail{CaseSummary: toSummary(*c), WorkflowNodes: nodes})
 }
 
-// meta returns the display metadata of taskCode's task_config. A config that no
-// longer loads only costs the view its title and description, so it is logged and
-// the view falls back to the task's own render title.
-func (h *CaseHandler) meta(r *http.Request, taskCode string) taskconfig.TaskMeta {
-	cfg, err := taskconfigart.Load(r.Context(), h.registry, taskCode)
-	if err != nil {
-		slog.WarnContext(r.Context(), "agency: task config unavailable for case view", "taskCode", taskCode, "error", err)
-		return taskconfig.TaskMeta{}
+// meta returns the display metadata of wf's task_config, from the manifest version wf
+// runs on. A config that does not load only costs the view its title and description,
+// so it is logged and the view falls back to the task's own render title.
+func (h *CaseHandler) meta(r *http.Request, wf CaseWorkflow) taskconfig.TaskMeta {
+	reg, err := h.artifacts.Registry(r.Context(), wf.ManifestVersion)
+	if err == nil {
+		var cfg *taskconfig.TaskConfig
+		if cfg, err = taskconfigart.Load(r.Context(), reg, wf.TaskCode); err == nil {
+			return cfg.Meta
+		}
 	}
-	return cfg.Meta
+	slog.WarnContext(r.Context(), "agency: task config unavailable for case view", "taskCode", wf.TaskCode, "manifestVersion", wf.ManifestVersion, "error", err)
+	return taskconfig.TaskMeta{}
 }
 
 // requireCatalogRole writes the error response and returns false unless the caller is a
