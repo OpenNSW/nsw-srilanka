@@ -27,7 +27,6 @@ const en = {
         title: 'Cases',
         empty: 'No cases yet.',
         error: 'Could not load cases.',
-        retry: 'Try Again',
         table: {
           id: 'Case',
           state: 'State',
