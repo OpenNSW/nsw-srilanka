@@ -15,9 +15,13 @@ import (
 	"github.com/OpenNSW/core/storage/drivers"
 )
 
-// testUploadTypes and testMaxUploadBytes are the upload limits the test
-// configurations set.
-var testUploadTypes = []string{"application/pdf", "image/png"}
+// testUploadTypes, testInlineTypes and testMaxUploadBytes are the upload limits
+// and the types a download opens in the browser that the test configurations
+// set.
+var (
+	testUploadTypes = []string{"application/pdf", "image/png"}
+	testInlineTypes = corestorage.DefaultInlineTypes()
+)
 
 // testTokenKeyset is a valid storage.tokenKeyset, built rather than written
 // out so no key literal sits in the source.
@@ -40,6 +44,7 @@ func localConfig(t *testing.T, publicURL string) Config {
 			PresignTTLSeconds: 900,
 		},
 		AllowedUploadTypes: testUploadTypes,
+		InlineTypes:        testInlineTypes,
 		MaxUploadBytes:     testMaxUploadBytes,
 		TokenKeyset:        testTokenKeyset,
 	}
@@ -172,8 +177,8 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 		}
 	})
 
-	// The owning service enforces its own limits in proxy mode, so they are
-	// not read there.
+	// The owning service enforces its own limits and decides what opens in the
+	// browser in proxy mode, so neither is read there.
 	t.Run("proxy mode needs none", func(t *testing.T) {
 		cfg := Config{
 			Config: corestorage.Config{Type: TypeProxy},
@@ -189,6 +194,90 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 			t.Errorf("Validate() = %v, want nil", err)
 		}
 	})
+}
+
+func TestConfigValidate_InlineTypes(t *testing.T) {
+	tests := []struct {
+		name    string
+		inline  []string
+		upload  []string
+		wantErr string // empty: valid
+	}{
+		{name: "no types", inline: nil, wantErr: "storage.inlineTypes must list"},
+		{name: "empty entry", inline: []string{""}, wantErr: "storage.inlineTypes"},
+		{name: "no subtype", inline: []string{"pdf"}, wantErr: "storage.inlineTypes"},
+		{name: "parameters", inline: []string{"text/html; charset=utf-8"}, wantErr: "storage.inlineTypes"},
+		{name: "upper case", inline: []string{"Application/PDF"}, wantErr: "storage.inlineTypes"},
+		{name: "wildcard", inline: []string{"image/*"}, wantErr: "storage.inlineTypes"},
+		{name: "html opens in the browser and clients may upload it", inline: []string{"application/pdf", "text/html"}, upload: []string{"application/pdf", "text/html"}, wantErr: "text/html"},
+		{name: "html opens in the browser and no clients may upload it", inline: []string{"application/pdf", "text/html"}},
+		{name: "a default type clients may upload", inline: []string{"application/pdf"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := localConfig(t, "http://localhost:8080")
+			cfg.InlineTypes = tt.inline
+			if tt.upload != nil {
+				cfg.AllowedUploadTypes = tt.upload
+			}
+
+			err := cfg.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Errorf("Validate() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Validate() = %v, want an error containing %q", err, tt.wantErr)
+			}
+			// New refuses it the same way, instead of reaching core's panic.
+			if _, err := New(context.Background(), cfg, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("New() = %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// The backend opens in the browser the types the configuration lists and saves
+// every other file, whatever its name: a service that stores HTML it generates
+// itself lists text/html.
+func TestNew_AppliesConfiguredInlineTypes(t *testing.T) {
+	tests := []struct {
+		name   string
+		inline []string
+		file   string
+		mime   string
+		want   string
+	}{
+		{name: "default list opens a PDF", inline: testInlineTypes, file: "a.pdf", mime: "application/pdf", want: drivers.DispositionInline},
+		{name: "default list saves generated HTML", inline: testInlineTypes, file: "permit.html", mime: "text/html; charset=utf-8", want: drivers.DispositionAttachment},
+		{name: "default list saves XML", inline: testInlineTypes, file: "a.xml", mime: "text/xml", want: drivers.DispositionAttachment},
+		{name: "listed HTML opens", inline: append([]string{"text/html"}, testInlineTypes...), file: "permit.html", mime: "text/html; charset=utf-8", want: drivers.DispositionInline},
+		{name: "a type not listed is saved", inline: []string{"text/html"}, file: "a.pdf", mime: "application/pdf", want: drivers.DispositionAttachment},
+		{name: "the extension decides nothing", inline: testInlineTypes, file: "draft.pdf", mime: "text/xml", want: drivers.DispositionAttachment},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := localConfig(t, "http://localhost:8080")
+			cfg.InlineTypes = tt.inline
+			stack, err := New(context.Background(), cfg, nil)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			meta, err := stack.Service.Save(context.Background(), tt.file, tt.mime, strings.NewReader("data"), 4)
+			if err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			dl, err := stack.Service.DownloadURL(context.Background(), meta.Key)
+			if err != nil {
+				t.Fatalf("DownloadURL: %v", err)
+			}
+			if dl.Disposition != tt.want || dl.ContentType != tt.mime {
+				t.Errorf("DownloadURL = type %q, disposition %q; want %q, %q", dl.ContentType, dl.Disposition, tt.mime, tt.want)
+			}
+		})
+	}
 }
 
 // Every mode issues file tokens, so every mode needs the token settings.

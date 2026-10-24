@@ -72,6 +72,7 @@ storage:
     putSecret: test-put-secret
   presignTTLSeconds: 900
   allowedUploadTypes: [application/pdf, image/png]
+  inlineTypes: [application/pdf, image/png]
   maxUploadBytes: 1048576
   # A test key: 32 bytes of 0x07.
   tokenKeyset: "test:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
@@ -200,6 +201,7 @@ func validConfig() *Config {
 				PresignTTLSeconds: 900,
 			},
 			AllowedUploadTypes: []string{"application/pdf"},
+			InlineTypes:        []string{"application/pdf"},
 			MaxUploadBytes:     1 << 20,
 			// A test key: 32 bytes of 0x07.
 			TokenKeyset: "test:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
@@ -365,6 +367,7 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"storage.local.putSecret",
 		"storage.presignTTLSeconds",
 		"storage.allowedUploadTypes",
+		"storage.inlineTypes",
 		"storage.maxUploadBytes",
 		"storage.tokenKeyset",
 		"authn.jwksURL",
@@ -643,6 +646,9 @@ storage:
 	}
 	if got := cfg.Storage.AllowedUploadTypes; len(got) != 2 || got[0] != "application/pdf" || got[1] != "image/png" {
 		t.Errorf("Storage.AllowedUploadTypes = %v, want the file's list", got)
+	}
+	if got := cfg.Storage.InlineTypes; len(got) != 2 || got[0] != "application/pdf" || got[1] != "image/png" {
+		t.Errorf("Storage.InlineTypes = %v, want the file's list", got)
 	}
 	if cfg.Storage.MaxUploadBytes != 1048576 {
 		t.Errorf("Storage.MaxUploadBytes = %d, want 1048576", cfg.Storage.MaxUploadBytes)
