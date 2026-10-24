@@ -19,8 +19,8 @@ func splitCtx(inputs map[string]any) plugins.PluginContext {
 
 func TestCDNSplitBuilder_OneBranchPerContainer(t *testing.T) {
 	ctx := splitCtx(map[string]any{
-		"latest_container_count": float64(3),
-		"cusdec_ref":             "CBEX1/2026/E/1047",
+		"container_count": float64(3),
+		"cusdec_ref":      "CBEX1/2026/E/1047",
 	})
 	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
 
@@ -47,8 +47,8 @@ func TestCDNSplitBuilder_OneBranchPerContainer(t *testing.T) {
 // not count < 2. A single-container declaration must still raise its note.
 func TestCDNSplitBuilder_SingleContainerRaisesOneNote(t *testing.T) {
 	ctx := splitCtx(map[string]any{
-		"latest_container_count": float64(1),
-		"cusdec_ref":             "CBEX1/2026/E/1047",
+		"container_count": float64(1),
+		"cusdec_ref":      "CBEX1/2026/E/1047",
 	})
 	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
 
@@ -59,44 +59,13 @@ func TestCDNSplitBuilder_SingleContainerRaisesOneNote(t *testing.T) {
 	assert.Equal(t, "Container 1 of 1", payload["container_label"])
 }
 
-// The count retrieved from ASYCUDA World just before the split wins over the
-// declared one, so the branches follow an amendment.
-func TestCDNSplitBuilder_PrefersTheRetrievedCount(t *testing.T) {
-	ctx := splitCtx(map[string]any{
-		"container_count":        float64(3),
-		"latest_container_count": float64(2),
-		"cusdec_ref":             "CBEX1/2026/E/1047",
-	})
-	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
-
-	items := ctx.Record.Data["split_items"].([]map[string]any)
-	require.Len(t, items, 2)
-	assert.Equal(t, "Container 2 of 2", items[1]["payload"].(map[string]any)["container_label"])
-}
-
-// Without a retrieved count the split fails rather than falling back to the
-// declared count, which may be the one Customs amended.
-func TestCDNSplitBuilder_RequiresTheRetrievedCount(t *testing.T) {
-	for name, inputs := range map[string]map[string]any{
-		"not mapped": {"container_count": float64(3)},
-		"null":       {"container_count": float64(3), "latest_container_count": nil},
-	} {
-		t.Run(name, func(t *testing.T) {
-			ctx := splitCtx(inputs)
-			err := CDNSplitBuilderFunc(ctx, nil)
-			require.ErrorContains(t, err, "latest_container_count not found")
-			assert.Nil(t, ctx.Record.Data["split_items"])
-		})
-	}
-}
-
 func TestCDNSplitBuilder_RejectsUnusableCounts(t *testing.T) {
 	for name, inputs := range map[string]map[string]any{
 		"missing":       {},
-		"zero":          {"latest_container_count": float64(0)},
-		"negative":      {"latest_container_count": float64(-1)},
-		"not a number":  {"latest_container_count": "many"},
-		"above ceiling": {"latest_container_count": float64(maxContainersPerDeclaration + 1)},
+		"zero":          {"container_count": float64(0)},
+		"negative":      {"container_count": float64(-1)},
+		"not a number":  {"container_count": "many"},
+		"above ceiling": {"container_count": float64(maxContainersPerDeclaration + 1)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.Error(t, CDNSplitBuilderFunc(splitCtx(inputs), nil))
@@ -107,7 +76,7 @@ func TestCDNSplitBuilder_RejectsUnusableCounts(t *testing.T) {
 // The declaration reference is optional at split time: the dispatch step is
 // where its absence becomes a trader-facing error.
 func TestCDNSplitBuilder_AllowsMissingCusdecRef(t *testing.T) {
-	ctx := splitCtx(map[string]any{"latest_container_count": float64(1)})
+	ctx := splitCtx(map[string]any{"container_count": float64(1)})
 	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
 
 	items := ctx.Record.Data["split_items"].([]map[string]any)

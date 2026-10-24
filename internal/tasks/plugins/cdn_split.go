@@ -3,7 +3,6 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 )
@@ -24,11 +23,7 @@ const maxContainersPerDeclaration = 200
 //
 // One CDN covers exactly one container — Annex B's container block is a single
 // object — so the number of dispatch notes a consignment needs is the
-// declaration's numberOfContainers. Customs can amend a declaration after the
-// trader submits it, so the count retrieved from ASYCUDA World just before the
-// split (latest_container_count) is the one used. There is no fallback to the
-// count the trader declared: it may be the one Customs amended, and raising
-// notes for it would be wrong without any sign of it. Deriving the fan-out
+// numberOfContainers the trader declared on the CusDec. Deriving the fan-out
 // here rather than asking for it again means the two can never disagree.
 //
 // It is synchronous: it returns nil (not ErrSuspended) so the engine advances
@@ -73,21 +68,14 @@ func CDNSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error
 	return nil
 }
 
-// containerCount reads the container count retrieved from ASYCUDA World
-// (latest_container_count) from the task inputs. It is required: the workflow
-// maps it as required, so a retrieve that did not answer with a count parks the
-// consignment before this step runs. The count the trader declared
-// (container_count) is only compared with it, to log an amendment. Counts reach
-// this plugin as decoded JSON, so they are float64; int is accepted for a
-// caller that builds the inputs in Go rather than through a workflow.
+// containerCount reads the declared container count from the task inputs. The
+// form declares it as a number and the value reaches this plugin as decoded
+// JSON, so it is a float64; int is accepted for a caller that builds the inputs
+// in Go rather than through a workflow.
 func containerCount(inputs map[string]any) (int, error) {
-	raw, ok := inputs["latest_container_count"]
-	if !ok || raw == nil {
-		return 0, fmt.Errorf("cdn_split_builder: latest_container_count not found in inputs: the declaration retrieve did not answer with a container count")
-	}
-	if declared, found := inputs["container_count"]; found && fmt.Sprint(declared) != fmt.Sprint(raw) {
-		slog.Info("cdn_split_builder: the retrieved container count differs from the declared one",
-			"retrieved", raw, "declared", declared)
+	raw, ok := inputs["container_count"]
+	if !ok {
+		return 0, fmt.Errorf("cdn_split_builder: container_count not found in inputs")
 	}
 
 	var count int
@@ -97,7 +85,7 @@ func containerCount(inputs map[string]any) (int, error) {
 	case int:
 		count = v
 	default:
-		return 0, fmt.Errorf("cdn_split_builder: latest_container_count is not a number (got %T)", raw)
+		return 0, fmt.Errorf("cdn_split_builder: container_count is not a number (got %T)", raw)
 	}
 
 	// A containerised declaration that reached this step with no containers has
