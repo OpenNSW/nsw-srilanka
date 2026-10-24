@@ -2,6 +2,7 @@ package staticdata
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -9,12 +10,38 @@ import (
 	"github.com/OpenNSW/core/artifact/testutil"
 )
 
-func newTestRegistry(t *testing.T, id, version, path string, body []byte) *artifact.Registry {
+// newTestRegistry returns a one-manifest artifact set listing id at version.
+func newTestRegistry(t *testing.T, id, version, path string, body []byte) *artifact.Set {
 	t.Helper()
-	loader := testutil.MemLoader{path: body}
-	reg := artifact.NewRegistry(loader)
-	reg.RegisterArtifact(id, Kind, version, path)
-	return reg
+	manifest, err := json.Marshal(artifact.ManifestConfig{Artifacts: []artifact.ManifestRow{{ID: id, Kind: Kind, Version: version, Path: path}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{path: body, artifact.ManifestPath(1): manifest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
+}
+
+// A version an older manifest listed still resolves after a newer manifest stops listing
+// it: a form from a flow pinned to the older manifest still asks for it.
+func TestLoad_VersionListedOnlyByAnOlderManifest(t *testing.T) {
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"ports_1.json":     []byte(`{"data":["CMB"]}`),
+		"ports_2.json":     []byte(`{"data":["CMB","HRI"]}`),
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"ports","kind":"static_data","version":"1","path":"ports_1.json"}]}`),
+		"manifest_v2.json": []byte(`{"artifacts":[{"id":"ports","kind":"static_data","version":"2","path":"ports_2.json"}]}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for version, want := range map[string]string{"1": `{"data":["CMB"]}`, "2": `{"data":["CMB","HRI"]}`} {
+		raw, err := Load(context.Background(), set, "ports", version)
+		if err != nil || string(raw) != want {
+			t.Errorf("version %s: got %s, %v; want %s", version, raw, err, want)
+		}
+	}
 }
 
 func TestLoad_Success(t *testing.T) {

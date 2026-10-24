@@ -21,12 +21,12 @@ const cacheControlImmutable = "private, max-age=31536000, immutable"
 
 // Handler serves static JSON reference-data artifacts looked up by id and version.
 type Handler struct {
-	reg *artifact.Registry
+	artifacts *artifact.Set
 }
 
 // NewHandler creates a new static data HTTP handler.
-func NewHandler(reg *artifact.Registry) *Handler {
-	return &Handler{reg: reg}
+func NewHandler(artifacts *artifact.Set) *Handler {
+	return &Handler{artifacts: artifacts}
 }
 
 // HandleGet handles GET /api/v1/static-data/{id}?version=.
@@ -46,7 +46,7 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, err := Load(r.Context(), h.reg, id, version)
+	raw, err := Load(r.Context(), h.artifacts, id, version)
 	if err != nil {
 		writeLoadError(w, r, err, id, version)
 		return
@@ -67,7 +67,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request, id, versi
 	}
 	finalOffset, finalLimit := pagination.ResolvePaginationParams(offset, limit)
 
-	raw, err := Load(r.Context(), h.reg, id, version)
+	raw, err := Load(r.Context(), h.artifacts, id, version)
 	if err != nil {
 		writeLoadError(w, r, err, id, version)
 		return
