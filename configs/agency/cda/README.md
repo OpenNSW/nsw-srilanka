@@ -73,7 +73,7 @@ CDA for this deployment, on the `CDA API` resource server
 | ----------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
 | TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on CDA's parked steps, which `catalog.json` maps `tnsw` to |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`                                                                |
+| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`                                                                        |
 
 TNSW's `config.yaml` services entry `cda` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files CDA owns) with
 `resource=https://api.cda.nsw-agency.local` (see `configs/config*.example.yaml`).

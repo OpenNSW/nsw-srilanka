@@ -14,11 +14,10 @@ import (
 
 // OGAFiles hands an OGA the files in what it is sent as file tokens issued to
 // it, which it redeems on this deployment's storage route. A stored value
-// never leaves for an OGA as it is.
+// never leaves for an OGA as it is: a file another service owns is wrapped in a
+// token of this deployment's, never forwarded.
 //
-// Only the deployment that owns the files can issue them. A deployment whose
-// storage proxies to another service stores that service's tokens and sends
-// them back as they are: it uses the zero OGAFiles.
+// The zero OGAFiles sends values as they are, and is for tests.
 type OGAFiles struct {
 	// ClientFor returns the machine client the outbound service serviceID
 	// calls back as.

@@ -57,14 +57,18 @@ type uploadResponse struct {
 	MimeType  string `json:"mime_type"`
 }
 
-// Upload reserves a stored file and returns a reference to it for the caller,
-// with the URL to upload the file to. A user's reference can only be submitted,
-// as the value of a form's file field, so it never expires; a machine
-// client's, such as an agency proxying its own upload, opens the file too.
+// Upload reserves a stored file and returns a reference to it for the user,
+// with the URL to upload the file to. The reference can only be submitted, as
+// the value of a form's file field, so it never expires. Only users upload: a
+// machine client stores its files in its own storage.
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	if p.Kind != authn.KindUser {
+		httputil.Error(w, r, http.StatusForbidden, "only users upload files")
 		return
 	}
 	var req struct {
@@ -91,7 +95,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		h.writeServiceError(w, r, err, "failed to prepare upload", req.MimeType)
 		return
 	}
-	ref, err := h.refs.Issue(p, meta.Key, fileaccess.UploadScopes(p)...)
+	ref, err := h.refs.Issue(p, meta.Key, fileaccess.ScopeSubmit)
 	if err != nil {
 		httputil.InternalServerError(w, r, "storage: failed to issue a file reference", err)
 		return
@@ -166,20 +170,10 @@ type fileDownload struct {
 	Disposition string `json:"disposition,omitempty"`
 }
 
-// fileDownloader is a Service that describes the file behind a stored value
-// itself. ProxyService is one: what it stores is the owning service's
-// reference, so only the owning service knows the file it stands for.
-type fileDownloader interface {
-	fileDownload(ctx context.Context, key string) (fileDownload, error)
-}
-
-// downloadOf returns the download of the file stored under value. Unless svc
-// describes the file itself, value is a storage key, which core/storage
-// builds from the uploaded file's name to keep its extension.
+// downloadOf returns the download of the file stored under value, a storage
+// key, which core/storage builds from the uploaded file's name to keep its
+// extension.
 func downloadOf(ctx context.Context, svc Service, value string) (fileDownload, error) {
-	if d, ok := svc.(fileDownloader); ok {
-		return d.fileDownload(ctx, value)
-	}
 	dl, err := svc.DownloadURL(ctx, value)
 	if err != nil {
 		return fileDownload{}, err
@@ -193,8 +187,8 @@ func downloadOf(ctx context.Context, svc Service, value string) (fileDownload, e
 	}, nil
 }
 
-// writeServiceError answers a failed Service call the way core/storage's and
-// the proxy's own handlers do. mimeType is the type an upload asked for, named
+// writeServiceError answers a failed Service call the way core/storage's own
+// handler does. mimeType is the type an upload asked for, named
 // when it is refused so the uploader can see what their file was sent as; it
 // is empty for a download.
 func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback, mimeType string) {
@@ -221,13 +215,10 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-// isUpstreamFailure reports errors from a remote storage service, including
-// rejections that should be relayed. The HTTP handler maps the error's meaning
-// rather than inspecting which Service implementation returned it.
+// isUpstreamFailure reports errors from the service that owns a file.
 func isUpstreamFailure(err error) bool {
-	var rejection *RemoteRejection
 	var failure *upstreamFailure
-	return errors.As(err, &rejection) || errors.As(err, &failure)
+	return errors.As(err, &failure)
 }
 
 // formatSize writes a byte count the way core/storage's messages do.
@@ -238,20 +229,11 @@ func formatSize(n int64) string {
 	return fmt.Sprintf("%d bytes", n)
 }
 
-// writeUpstreamError relays a rejection of the request by the owning service
-// with its status and message; anything else — the owning service being
-// unreachable, failing, or refusing this service's credentials — is a
-// gateway failure the client cannot fix.
+// writeUpstreamError answers a failure of the service that owns a file, being
+// unreachable, failing, refusing this service's credentials or giving an
+// unusable answer, as a gateway failure the client cannot fix. The owner's
+// words are not relayed.
 func writeUpstreamError(w http.ResponseWriter, r *http.Request, err error, fallback string) {
-	var rejection *RemoteRejection
-	if errors.As(err, &rejection) {
-		message := rejection.Message
-		if message == "" {
-			message = fallback
-		}
-		httputil.Error(w, r, rejection.StatusCode, message)
-		return
-	}
-	slog.ErrorContext(r.Context(), "storage proxy request failed", "error", err)
+	slog.ErrorContext(r.Context(), "storage: the service that owns a file failed", "error", err)
 	httputil.Error(w, r, http.StatusBadGateway, fallback)
 }

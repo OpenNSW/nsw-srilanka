@@ -39,7 +39,7 @@ func newFileServices(ctx context.Context, storage nswstorage.Config, services []
 	if err != nil {
 		return nil, err
 	}
-	stack, err := nswstorage.New(ctx, storage, rm)
+	stack, err := nswstorage.New(ctx, storage)
 	if err != nil {
 		return nil, err
 	}
@@ -48,18 +48,15 @@ func newFileServices(ctx context.Context, storage nswstorage.Config, services []
 		return nil, fmt.Errorf("file tokens: %w", err)
 	}
 
-	// OGAs are sent file tokens issued to the machine client each calls back
-	// as. A deployment whose storage proxies to another service stores that
-	// service's tokens and sends them back as they are, so it issues none.
-	var oga taskplugins.OGAFiles
-	if !storage.IsProxy() {
-		oga = taskplugins.OGAFiles{
-			ClientFor: cat.ClientFor,
-			// An OGA opens a file it is sent; it never submits one back.
-			IssueForClient: func(clientID, value string) (string, error) {
-				return access.IssueForClient(clientID, value, fileaccess.ScopeRead)
-			},
-		}
+	// Every deployment issues the file tokens a peer is sent: the client each
+	// service calls back as is the one its clientToService entry names, and
+	// the token lets that client open the file and nothing more.
+	oga := taskplugins.OGAFiles{
+		ClientFor: cat.ClientFor,
+		// A peer opens a file it is sent; it never submits one back.
+		IssueForClient: func(clientID, value string) (string, error) {
+			return access.IssueForClient(clientID, value, fileaccess.ScopeRead)
+		},
 	}
 	return &fileServices{
 		Stack:  stack,

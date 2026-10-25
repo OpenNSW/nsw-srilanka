@@ -170,8 +170,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyService := company.NewService(db)
 	userProfileService := user.NewService(db)
 
-	// Outbound HTTP caller configurations. Set before storage, which in
-	// proxy mode reaches the service that owns the files through it.
+	// Outbound HTTP caller configurations. Set before storage, which opens the
+	// files other services own through it.
 	remoteManager := remote.NewManager()
 	if err := remoteManager.SetServices(cfg.Services...); err != nil {
 		_ = database.Close(db)
@@ -181,9 +181,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Storage is built here rather than alongside its HTTP handler further
 	// down: task plugins that attach uploaded files to an outbound call read
 	// through the files service, so it has to exist before the task stack
-	// (Stage 4). storage.type picks a backend of this deployment's own or a
-	// proxy onto the service that owns the files. The file tokens callers hold
-	// in place of stored file values are built with it.
+	// (Stage 4). Files are kept in the backend storage.type picks, and a file
+	// another service owns is opened through that service. The file tokens
+	// callers hold in place of stored file values are built with it.
 	files, err := newFileServices(ctx, cfg.Storage, cfg.Services, globalCatalog, remoteManager)
 	if err != nil {
 		_ = database.Close(db)

@@ -74,7 +74,7 @@ creates EFC for this deployment, on the `EFC API` resource server
 | --------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
 | TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on EFC's parked steps, which `catalog.json` maps `tnsw` to |
-| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                                                                        |
+| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read` on TNSW                                                                                                                |
 
 TNSW's `config.yaml` services entry `efc` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files EFC owns) with
 `resource=https://api.efc.nsw-agency.local` (see `configs/config*.example.yaml`).

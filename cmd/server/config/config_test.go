@@ -734,42 +734,30 @@ func TestConfigValidate_Otel(t *testing.T) {
 	}
 }
 
-func TestConfigValidate_StorageProxy(t *testing.T) {
+// A deployment stores the files uploaded to it itself, so the proxy storage type
+// is refused with what to set instead.
+func TestConfigValidate_StorageProxyIsRefused(t *testing.T) {
 	cfg := validConfig()
-	// Proxy mode validates the proxy settings, not the core/storage backend,
-	// which would reject "proxy" as an unknown backend type.
-	cfg.Storage = nswstorage.Config{
-		Config: storage.Config{Type: nswstorage.TypeProxy},
-		Proxy: nswstorage.ProxyConfig{
-			Service:      "files-api",
-			UploadPath:   nswstorage.DefaultProxyUploadPath,
-			DownloadPath: nswstorage.DefaultProxyDownloadPath,
-			DeletePath:   nswstorage.DefaultProxyDeletePath,
-		},
-		TokenKeyset: cfg.Storage.TokenKeyset,
-	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v, want nil for a complete proxy configuration", err)
-	}
-
-	cfg.Storage.Proxy.Service = ""
+	cfg.Storage.Type = "proxy"
 	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "storage.proxy.service") {
-		t.Errorf("expected storage.proxy.service error, got: %v", err)
+	if err == nil || !containsString(err.Error(), `storage.type "proxy" is not supported`) {
+		t.Fatalf("expected the proxy type to be refused, got: %v", err)
 	}
 }
 
-// Proxy mode has no default endpoint paths either: the owning service's are
-// stated in the file.
-func TestLoad_StorageProxyRequiresPaths(t *testing.T) {
-	_, err := loadYAML(t, configYAML(t, `
+// A storage.proxy block left in a file is ignored: only storage.type matters.
+func TestLoad_LeftoverStorageProxyBlockIsIgnored(t *testing.T) {
+	cfg, err := loadYAML(t, configYAML(t, `
 storage:
-  type: proxy
   proxy:
     service: files-api
+    uploadPath: /api/v1/storage
 `))
-	if err == nil || !containsString(err.Error(), "is required when storage.type is proxy") {
-		t.Fatalf("expected a missing storage.proxy path error, got: %v", err)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want the leftover block ignored", err)
+	}
+	if cfg.Storage.Type == "proxy" {
+		t.Fatalf("storage.type = %q", cfg.Storage.Type)
 	}
 }
 

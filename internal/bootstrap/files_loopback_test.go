@@ -351,3 +351,36 @@ func TestStoragePeers_Validates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, peers)
 }
+
+// A deployment that cannot be what it says fails to start: the proxy storage type
+// is refused, and every deployment issues the tokens its peers are sent.
+func TestNewFileServices_FailsClosed(t *testing.T) {
+	cat := &catalog.Catalog{Clients: map[string]string{"cda": "CDA_TO_NSW"}, ClientToService: map[string]string{"cda": "cda"}}
+	services := []remote.ServiceConfig{{ID: "cda", URL: "http://cda.example"}}
+	rm := remote.NewManager()
+	require.NoError(t, rm.SetServices(services...))
+	cfg := nswstorage.Config{
+		Config:             corestorage.Config{Type: corestorage.TypeLocal, PresignTTLSeconds: 900, Local: drivers.LocalConfig{BaseDir: t.TempDir(), PublicURL: "http://localhost:8080", PutSecret: "s"}},
+		AllowedUploadTypes: []string{"application/pdf"},
+		InlineTypes:        []string{"application/pdf"},
+		MaxUploadBytes:     1 << 20,
+		TokenKeyset:        "k1:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32)),
+	}
+
+	files, err := newFileServices(context.Background(), cfg, services, cat, rm)
+	require.NoError(t, err)
+	assert.NotNil(t, files.OGA.ClientFor)
+	assert.NotNil(t, files.OGA.IssueForClient)
+	client, ok := files.OGA.ClientFor("cda")
+	assert.True(t, ok)
+	assert.Equal(t, "CDA_TO_NSW", client)
+
+	proxy := cfg
+	proxy.Type = "proxy"
+	_, err = newFileServices(context.Background(), proxy, services, cat, rm)
+	assert.ErrorContains(t, err, `storage.type "proxy" is not supported`)
+
+	unregistered := &catalog.Catalog{Clients: map[string]string{"fcau": "FCAU_TO_NSW"}, ClientToService: map[string]string{"fcau": "fcau"}}
+	_, err = newFileServices(context.Background(), cfg, services, unregistered, rm)
+	assert.ErrorContains(t, err, `service "fcau" is not in the services registry`)
+}
