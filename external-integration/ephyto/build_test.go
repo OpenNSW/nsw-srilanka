@@ -58,15 +58,14 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 	defer func() { nowFunc = prev }()
 
 	in := BuildInput(map[string]any{
-		"userform":        sampleUserform(),
-		"certificate_id":  "PC-2026-000123",
-		"hub_destination": "LK2",
+		"userform":       sampleUserform(),
+		"certificate_id": "PC-2026-000123",
 	})
 
-	// Envelope routing uses the trader-selected Hub connection code (LK2 -> LK2);
-	// the certificate content carries the ISO alpha-2 code it represents (LK).
-	if in.SOAP.From != "LK2" || in.SOAP.To != "LK2" {
-		t.Errorf("routing = %q -> %q, want LK2 -> LK2", in.SOAP.From, in.SOAP.To)
+	// The envelope goes from Sri Lanka to the importing country the application
+	// names, both by ISO alpha-2 code.
+	if in.SOAP.From != "LK" || in.SOAP.To != "AD" {
+		t.Errorf("routing = %q -> %q, want LK -> AD", in.SOAP.From, in.SOAP.To)
 	}
 	if in.SOAP.CertificateType != 851 {
 		t.Errorf("CertificateType = %d, want 851 (export PC)", in.SOAP.CertificateType)
@@ -79,10 +78,8 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 	if c.Number != "PC-2026-000123" || c.IssueDateTime != "2026-07-03T10:30:00Z" {
 		t.Errorf("cert number/issue = %q / %q", c.Number, c.IssueDateTime)
 	}
-	// UAT pins the importer to LK2 (routing) / LK (ISO content), ignoring the
-	// trader's selected importing country.
-	if c.Consignment.ImportCountry != "LK" {
-		t.Errorf("import country = %q, want LK", c.Consignment.ImportCountry)
+	if c.Consignment.ImportCountry != "AD" {
+		t.Errorf("import country = %q, want AD", c.Consignment.ImportCountry)
 	}
 	if len(c.Consignment.Items) != 1 || len(c.Consignment.Items[0].TradeLines) != 1 {
 		t.Fatalf("expected 1 item with 1 trade line, got %+v", c.Consignment.Items)
@@ -110,7 +107,7 @@ func TestBuildInput_MapsAndBuildsValidSOAP(t *testing.T) { //nolint:gocyclo // e
 		t.Fatalf("BuildCertXML: %v", err)
 	}
 	soap := BuildDeliverSOAP(in, certXML)
-	for _, want := range []string{"ValidateAndDeliverEnvelope", "<hub:To>LK2</hub:To>", "Monstera deliciosa"} {
+	for _, want := range []string{"ValidateAndDeliverEnvelope", "<hub:From>LK</hub:From>", "<hub:To>AD</hub:To>", "Monstera deliciosa"} {
 		if !strings.Contains(soap, want) {
 			t.Errorf("SOAP missing %q", want)
 		}
@@ -144,9 +141,8 @@ func twoItemUserform() map[string]any {
 // (1, 2) is the kind of detail the Hub's schema validation would reject.
 func TestBuildInput_CertificateItemsExcludesDeselectedItem(t *testing.T) {
 	in := BuildInput(map[string]any{
-		"userform":        twoItemUserform(),
-		"certificate_id":  "PC-2026-000456",
-		"hub_destination": "LK2",
+		"userform":       twoItemUserform(),
+		"certificate_id": "PC-2026-000456",
 		"certificate_items": []any{
 			map[string]any{"id": "item-1", "include_in_certificate": true},
 			map[string]any{"id": "item-2", "include_in_certificate": false},
@@ -172,9 +168,8 @@ func TestBuildInput_CertificateItemsExcludesDeselectedItem(t *testing.T) {
 // unfiltered.
 func TestBuildInput_CertificateItemsAbsentIncludesAllCommodities(t *testing.T) {
 	in := BuildInput(map[string]any{
-		"userform":        twoItemUserform(),
-		"certificate_id":  "PC-2026-000789",
-		"hub_destination": "LK2",
+		"userform":       twoItemUserform(),
+		"certificate_id": "PC-2026-000789",
 	})
 
 	if len(in.Certificate.Consignment.Items) != 2 {
@@ -199,7 +194,7 @@ func TestBuildInput_AlwaysCarriesTheTransportMovement(t *testing.T) {
 			uf := sampleUserform()
 			uf["transport_mode"] = tc.formValue
 
-			in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1", "hub_destination": "LK2"})
+			in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
 
 			conveyances := in.Certificate.Consignment.MeansOfConveyance
 			if len(conveyances) != 1 {
@@ -214,7 +209,7 @@ func TestBuildInput_AlwaysCarriesTheTransportMovement(t *testing.T) {
 
 // The same, seen on the wire: the element the Hub asked for is in the XML.
 func TestBuildCertXML_EmitsTheTransportMovement(t *testing.T) {
-	in := BuildInput(map[string]any{"userform": sampleUserform(), "certificate_id": "PC-1", "hub_destination": "LK2"})
+	in := BuildInput(map[string]any{"userform": sampleUserform(), "certificate_id": "PC-1"})
 
 	body, err := BuildCertXML(in)
 	if err != nil {
@@ -244,7 +239,7 @@ func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
 	com["packages_description"] = map[string]any{"value": "CT", "label": "Carton"}
 	com["origin_country"] = map[string]any{"value": "IN", "label": "India"}
 
-	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1", "hub_destination": "LK2"})
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
 
 	c := in.Certificate
 	tl := c.Consignment.Items[0].TradeLines[0]
@@ -804,9 +799,8 @@ func TestBuildInput_DeclaresEveryCommodityOfAReExport(t *testing.T) {
 // consignment was not inspected declares no date at all.
 func TestBuildInput_DoesNotDeclareTheProposedInspectionDate(t *testing.T) {
 	in := BuildInput(map[string]any{
-		"userform":        sampleUserform(),
-		"certificate_id":  "PC-2026-000123",
-		"hub_destination": "LK2",
+		"userform":       sampleUserform(),
+		"certificate_id": "PC-2026-000123",
 	})
 
 	if dd := in.Certificate.DocDeclarations; dd != nil && dd.DateOfInspection != "" {
@@ -818,12 +812,33 @@ func TestBuildInput_DeclaresTheDateTheConsignmentWasInspected(t *testing.T) {
 	in := BuildInput(map[string]any{
 		"userform":            sampleUserform(),
 		"certificate_id":      "PC-2026-000123",
-		"hub_destination":     "LK2",
 		DateOfInspectionInput: "2026-07-03",
 	})
 
 	dd := in.Certificate.DocDeclarations
 	if dd == nil || dd.DateOfInspection != "2026-07-03" {
 		t.Errorf("DocDeclarations = %+v, want the date of inspection 2026-07-03", dd)
+	}
+}
+
+// The importing country is read as an ISO alpha-2 code however the application
+// stored it: a dropdown answer, a bare code, or the "Name - CODE" the form once
+// showed. Anything else is no country.
+func TestCountryCode(t *testing.T) {
+	for in, want := range map[any]string{
+		"AU":           "AU",
+		"au":           "AU",
+		"Andorra - AD": "AD",
+		"":             "",
+		"Australia":    "",
+		"LK2":          "",
+		nil:            "",
+	} {
+		if got := countryCode(in); got != want {
+			t.Errorf("countryCode(%v) = %q, want %q", in, got, want)
+		}
+	}
+	if got := countryCode(map[string]any{"value": "NZ", "label": "New Zealand"}); got != "NZ" {
+		t.Errorf("countryCode(dropdown answer) = %q, want NZ", got)
 	}
 }

@@ -29,25 +29,18 @@ func BuildInput(inputs map[string]any) spscert.Input {
 	if isReExport(uf) {
 		certType = "657" // Phytosanitary Certificate for Re-Export
 	}
-	// The Hub destination is a connection code (e.g. "LK2"), chosen by the trader
-	// on the submission form — not hardcoded here. In UAT the form offers only
-	// the LK2 test connection, so envelopes route LK2 -> LK2, but the routing is
-	// driven entirely by the selected value.
-	hubDest := asString(inputs["hub_destination"])
-	// The certificate content import country must be a valid ISO alpha-2 code
-	// (the Hub validates ImportSPSCountry.ID as ISO alpha-2), so the connection
-	// code "LK2" must not leak here. It is the ISO code the destination
-	// connection represents — LK for Sri Lanka's LK2 test instance.
-	importISO := isoFromHubConnection(hubDest)
+	// The certificate goes from Sri Lanka's NPPO to the importing country's. The
+	// Hub routes the envelope by ISO 3166-1 alpha-2 country code, and the importing
+	// country is the one the application names, so the same code is the
+	// certificate content's import country. An application that names none leaves
+	// it empty, and the envelope is refused (see HubInterpreter.BuildEnvelope).
+	importISO := countryCode(uf["importing_country"])
 
 	return spscert.Input{
 		SOAP: spscert.SOAPInput{
-			Operation: "ValidateAndDeliverEnvelope",
-			// Envelope routing uses the Hub connection code selected by the trader,
-			// not an ISO country code. NPQS only exchanges with its own IPPC Hub
-			// test connection, so the same code is both sender and recipient.
-			From:                  hubDest,
-			To:                    hubDest,
+			Operation:             "ValidateAndDeliverEnvelope",
+			From:                  exportNPPOCode,
+			To:                    importISO,
 			CertificateType:       certTypeCode(certType),
 			CertificateStatus:     certStatusIssued,
 			NPPOCertificateNumber: certID,
@@ -199,11 +192,8 @@ func validationBullets(items []hub.ValidationResult) []string {
 // ---------------------------------------------------------------------------
 
 const (
-	// exportNPPOCode is Sri Lanka's ISO 3166-1 alpha-2 code, used inside the
-	// SPSCertificate content (ExportSPSCountry / OriginSPSCountry, etc.). The Hub
-	// validates these against ISO alpha-2, so a Hub connection code like "LK2"
-	// must never leak here. Envelope routing (hub:From / hub:To) uses the
-	// connection code the trader selects on the form, not this value.
+	// exportNPPOCode is Sri Lanka's ISO 3166-1 alpha-2 code: the envelope's sender
+	// (hub:From) and the SPSCertificate content's export and origin country.
 	exportNPPOCode   = "LK"
 	certStatusIssued = 70 // Hub CertificateStatus for an issued certificate
 	// certStatusWithdrawn is the Hub CertificateStatus for a withdrawn
@@ -213,24 +203,24 @@ const (
 	issuingNPPO         = "National Plant Quarantine Service of Sri Lanka"
 )
 
-// isoFromHubConnection derives the ISO 3166-1 alpha-2 country code from a Hub
-// connection identifier by taking its leading letters (e.g. "LK2" -> "LK").
-// Hub connection codes are the ISO country code plus an instance suffix, so this
-// yields the code the SPSCertificate content requires. Anything that does not
-// resolve to a two-letter code falls back to the export NPPO country (LK).
-func isoFromHubConnection(conn string) string {
-	var letters []rune
-	for _, r := range strings.TrimSpace(conn) {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-			letters = append(letters, r)
-			continue
+// countryCode reads an importing country answer as its ISO 3166-1 alpha-2
+// code. A dropdown answer is { value, label } with the code as its value; an
+// older application holds the bare code, or the "Name - CODE" the form showed.
+// Anything that is not a two-letter code yields "".
+func countryCode(v any) string {
+	code := strings.TrimSpace(answerCode(v))
+	if i := strings.LastIndex(code, " - "); i >= 0 {
+		code = strings.TrimSpace(code[i+3:])
+	}
+	if len(code) != 2 {
+		return ""
+	}
+	for _, r := range code {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return ""
 		}
-		break
 	}
-	if len(letters) == 2 {
-		return strings.ToUpper(string(letters))
-	}
-	return exportNPPOCode
+	return strings.ToUpper(code)
 }
 
 func certTypeCode(typeCode string) int {

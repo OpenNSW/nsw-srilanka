@@ -79,7 +79,7 @@ func (i HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (
 		}
 		in := BuildInput(inputs)
 		if in.SOAP.To == "" {
-			return "", &buildError{"Please select a destination IPPC Hub connection before submitting."}
+			return "", &buildError{"The application names no importing country, so the certificate cannot be sent to the IPPC Hub."}
 		}
 		// The documents the trader said yes to travel inside the certificate,
 		// so their content is read before it is rendered.
@@ -97,7 +97,7 @@ func (i HubInterpreter) BuildEnvelope(operation string, inputs map[string]any) (
 		}
 		in := BuildInput(inputs)
 		if in.SOAP.To == "" {
-			return "", &buildError{"No IPPC Hub connection is recorded for the certificate, so it cannot be withdrawn."}
+			return "", &buildError{"The application names no importing country, so the certificate cannot be withdrawn on the IPPC Hub."}
 		}
 		withdrawn(&in)
 		certXML, err := BuildCertXML(in)

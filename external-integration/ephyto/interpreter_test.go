@@ -11,9 +11,8 @@ import (
 
 func submitInputs() map[string]any {
 	return map[string]any{
-		"userform":        sampleUserform(),
-		"certificate_id":  "LK-2026-000123",
-		"hub_destination": "LK2",
+		"userform":       sampleUserform(),
+		"certificate_id": "LK-2026-000123",
 		"certificate_items": []any{
 			map[string]any{"id": "item-1", "include_in_certificate": true},
 		},
@@ -30,13 +29,13 @@ func TestBuildEnvelope_SubmitBuildsDeliverSOAP(t *testing.T) {
 	}
 }
 
-func TestBuildEnvelope_SubmitWithoutDestinationIsBuildError(t *testing.T) {
+func TestBuildEnvelope_SubmitWithoutImportingCountryIsBuildError(t *testing.T) {
 	inputs := submitInputs()
-	delete(inputs, "hub_destination")
+	delete(inputs["userform"].(map[string]any), "importing_country")
 
 	_, err := HubInterpreter{}.BuildEnvelope(OpSubmit, inputs)
 	if err == nil {
-		t.Fatal("expected a build error for a missing destination")
+		t.Fatal("expected a build error for a missing importing country")
 	}
 
 	state, out := HubInterpreter{}.Interpret(OpSubmit, err, nil)
@@ -47,8 +46,8 @@ func TestBuildEnvelope_SubmitWithoutDestinationIsBuildError(t *testing.T) {
 		t.Errorf("submitted = %v, want false", out["submitted"])
 	}
 	msg, _ := out["error"].(string)
-	if !strings.Contains(msg, "could not be submitted") || !strings.Contains(msg, "destination IPPC Hub connection") {
-		t.Errorf("error prose = %q, want intro + destination guidance", msg)
+	if !strings.Contains(msg, "could not be submitted") || !strings.Contains(msg, "names no importing country") {
+		t.Errorf("error prose = %q, want intro + importing country guidance", msg)
 	}
 }
 
