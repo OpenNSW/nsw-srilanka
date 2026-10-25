@@ -12,5 +12,12 @@
     "sltb": "SLTB_TO_NSW",
     "slce": "SLCE_TO_NSW",
     "govpay": "GOVPAY_TO_NSW"
+  },
+  "clientToService": {
+    "cda": "cda",
+    "efc": "efc",
+    "fcau": "fcau",
+    "npqs": "npqs",
+    "sltb": "sltb"
   }
 }

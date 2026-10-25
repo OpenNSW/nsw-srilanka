@@ -210,6 +210,11 @@ officer. The catalog maps that client under `clients` as `tnsw` (for example
 `authz` names it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`. Without the
 mapping, TNSW's reply is refused with `403`.
 
+The catalog's `clientToService` maps a client in `clients` to the service it is, an entry of the
+deployment's `services` (for example `"tnsw": "tnsw"`). Only a listed client may send files, and
+the files it sends are stored as its service's. Each service it names must be in `services`, or
+the deployment refuses to start.
+
 A catalog that maps no role (for example one with only `clients`) still starts, but no
 officer can open cases or act on tasks: the server logs a warning at start. And without
 `authz` and `read.roles` on a task there is no role-based access control on it, since

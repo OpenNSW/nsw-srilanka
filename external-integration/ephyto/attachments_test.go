@@ -319,3 +319,45 @@ func TestResolveAttachments_RefusesWhatTheHubDoesNotAccept(t *testing.T) {
 		})
 	}
 }
+
+// A file another service owns is read through its reference, and goes out under a
+// name made from its label and type: the reference is a token, which must not
+// reach the Hub as a file name or into an error.
+func TestResolveAttachments_ForeignDocument(t *testing.T) {
+	const ref = "npqs:eyJhbGciOiJkaXIifQ..AAAA.BBBB.CCCC"
+	files := &stubFiles{content: map[string][]byte{ref: []byte("%PDF-1.7 certificate")}, contentType: "application/pdf"}
+
+	envelope, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("treatment_certificate", ref, true))
+	if err != nil {
+		t.Fatalf("BuildEnvelope: %v", err)
+	}
+	if !strings.Contains(envelope, `filename="Treatment_Certificate.pdf"`) || !strings.Contains(envelope, `mimeCode="application/pdf"`) {
+		t.Errorf("envelope lacks the name made from the label and the type:\n%s", envelope)
+	}
+	if strings.Contains(envelope, "eyJhbGci") || strings.Contains(envelope, "npqs:") {
+		t.Error("the reference leaked into the certificate")
+	}
+	if len(files.asked) != 1 || files.asked[0] != ref {
+		t.Errorf("asked %v, want the reference read once", files.asked)
+	}
+}
+
+func TestResolveAttachments_ForeignDocumentErrorsNameTheLabelOnly(t *testing.T) {
+	const ref = "npqs:eyJhbGciOiJkaXIifQ..AAAA.BBBB.CCCC"
+	tests := map[string]*stubFiles{
+		"unreadable":         {err: errors.New("no such object")},
+		"a type not allowed": {content: map[string][]byte{ref: []byte("x")}, contentType: "text/html"},
+		"oversized":          {content: map[string][]byte{ref: bytes.Repeat([]byte("a"), maxAttachmentBytes+1)}, contentType: "application/pdf"},
+	}
+	for name, files := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewHubInterpreter(files).BuildEnvelope(OpSubmit, sendingDocument("treatment_certificate", ref, true))
+			if err == nil {
+				t.Fatal("BuildEnvelope succeeded")
+			}
+			if !strings.Contains(err.Error(), "Treatment Certificate") || strings.Contains(err.Error(), "eyJhbGci") || strings.Contains(err.Error(), "npqs:") {
+				t.Errorf("err = %q, want the label and no reference", err)
+			}
+		})
+	}
+}

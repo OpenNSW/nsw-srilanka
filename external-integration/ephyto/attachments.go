@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -68,11 +69,11 @@ func resolveAttachments(files Files, in *spscert.Input) error {
 			}
 			content, contentType, err := readFile(files, a.Key)
 			if err != nil {
-				return fmt.Errorf("%s (%s): %w", a.ID, a.Filename, err)
+				return fmt.Errorf("%s: %w", describe(a), err)
 			}
 			if len(content) > maxAttachmentBytes {
-				return fmt.Errorf("%s (%s) is %s; the limit for a document sent with the certificate is %s",
-					a.ID, a.Filename, humanSize(len(content)), humanSize(maxAttachmentBytes))
+				return fmt.Errorf("%s is %s; the limit for a document sent with the certificate is %s",
+					describe(a), humanSize(len(content)), humanSize(maxAttachmentBytes))
 			}
 			a.Base64 = base64.StdEncoding.EncodeToString(content)
 			if a.MimeCode == "" {
@@ -89,10 +90,13 @@ func resolveAttachments(files Files, in *spscert.Input) error {
 		if a.Base64 != "" {
 			mime := canonicalHubMime(a.Filename, a.MimeCode)
 			if mime == "" {
-				return fmt.Errorf("%s (%s) is not a JPG, GIF, PNG or PDF, which is all the Hub accepts with a certificate",
-					a.ID, a.Filename)
+				return fmt.Errorf("%s is not a JPG, GIF, PNG or PDF, which is all the Hub accepts with a certificate",
+					describe(a))
 			}
 			a.MimeCode = mime
+			if a.Filename == "" {
+				a.Filename = nameFor(a.ID, mime)
+			}
 		}
 
 		// Every document counts towards the certificate's own ceiling,
@@ -104,6 +108,35 @@ func resolveAttachments(files Files, in *spscert.Input) error {
 		}
 	}
 	return nil
+}
+
+// describe names an attachment in an error: its label, and its file name when
+// it has one.
+func describe(a *spscert.Attachment) string {
+	if a.Filename == "" {
+		return a.ID
+	}
+	return a.ID + " (" + a.Filename + ")"
+}
+
+var nameUnsafe = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
+
+// mimeExtensions are the extensions the four types the Hub accepts are named by.
+var mimeExtensions = map[string]string{
+	"application/pdf": ".pdf",
+	"image/jpeg":      ".jpg",
+	"image/png":       ".png",
+	"image/gif":       ".gif",
+}
+
+// nameFor names a file that has no name of its own, from the label the receiving
+// NPPO reads and the type it was found to be.
+func nameFor(label, mime string) string {
+	base := strings.Trim(nameUnsafe.ReplaceAllString(strings.TrimSpace(label), "_"), "_")
+	if base == "" {
+		base = "attachment"
+	}
+	return base + mimeExtensions[mime]
 }
 
 // readFile pulls one document out of storage, under this package's own

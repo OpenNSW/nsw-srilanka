@@ -290,7 +290,7 @@ func TestSealRejects(t *testing.T) {
 		{"no scope", filetoken.Grant{Resource: "v", Holder: "h"}, 0},
 		{"an empty scope", filetoken.Grant{Resource: "v", Holder: "h", Scopes: []string{"read", ""}}, 0},
 		{"negative lifetime", filetoken.Grant{Resource: "v", Holder: "h", Scopes: read}, -time.Second},
-		{"a resource too long to open", filetoken.Grant{Resource: strings.Repeat("v", 2000), Holder: "h", Scopes: read}, 0},
+		{"a resource too long to open", filetoken.Grant{Resource: strings.Repeat("v", 3200), Holder: "h", Scopes: read}, 0},
 	}
 	for _, tc := range cases {
 		if _, err := codec.Seal(tc.grant, tc.lifetime); err == nil {
@@ -301,6 +301,24 @@ func TestSealRejects(t *testing.T) {
 
 // A token may carry another deployment's token as its value: an agency seals
 // the token TNSW gave it for one of its officers.
+func TestSealAtTheTokenLimit(t *testing.T) {
+	codec := newCodec(t, entry("k1", 1), newClock())
+	grant := func(n int) filetoken.Grant {
+		return filetoken.Grant{Resource: strings.Repeat("v", n), Holder: "h", Scopes: []string{"read"}}
+	}
+	// A foreign value at its longest, sealed for a user, fits.
+	token, err := codec.Seal(grant(2048+len("cda:")), time.Hour)
+	if err != nil {
+		t.Fatalf("Seal a 2 KB resource: %v", err)
+	}
+	if _, err := codec.Open(token); err != nil {
+		t.Fatalf("Open a token of %d bytes: %v", len(token), err)
+	}
+	if len(token) > 4096 {
+		t.Fatalf("token is %d bytes", len(token))
+	}
+}
+
 func TestSealNestedToken(t *testing.T) {
 	c := newClock()
 	tnsw := newCodec(t, entry("tnsw", 1), c)

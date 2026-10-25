@@ -37,6 +37,79 @@ func TestCatalog_Validate(t *testing.T) {
 	}
 }
 
+func TestCatalog_ClientToService(t *testing.T) {
+	tests := []struct {
+		name    string
+		catalog *Catalog
+		wantErr bool
+	}{
+		{name: "a listed client", catalog: &Catalog{
+			Clients:         map[string]string{"cda": "CDA_TO_NSW", "slpa": "SLPA_TO_NSW"},
+			ClientToService: map[string]string{"cda": "cda"},
+		}},
+		{name: "a service named differently", catalog: &Catalog{
+			Clients:         map[string]string{"cda": "CDA_TO_NSW"},
+			ClientToService: map[string]string{"cda": "cda-api"},
+		}},
+		{name: "none listed", catalog: &Catalog{Clients: map[string]string{"cda": "CDA_TO_NSW"}}},
+		{name: "not a client", catalog: &Catalog{
+			Clients:         map[string]string{"cda": "CDA_TO_NSW"},
+			ClientToService: map[string]string{"fcau": "fcau"},
+		}, wantErr: true},
+		{name: "empty service", catalog: &Catalog{
+			Clients:         map[string]string{"cda": "CDA_TO_NSW"},
+			ClientToService: map[string]string{"cda": ""},
+		}, wantErr: true},
+		{name: "two clients of one service", catalog: &Catalog{
+			Clients:         map[string]string{"cda": "CDA_TO_NSW", "cda2": "CDA_2_NSW"},
+			ClientToService: map[string]string{"cda": "cda", "cda2": "cda"},
+		}, wantErr: true},
+		{name: "one client id under two names", catalog: &Catalog{
+			Clients:         map[string]string{"cda": "CDA_TO_NSW", "cda2": "CDA_TO_NSW"},
+			ClientToService: map[string]string{"cda": "cda", "cda2": "cda2"},
+		}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.catalog.Validate(); (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCatalog_ServiceForAndClientFor(t *testing.T) {
+	c := &Catalog{
+		Clients:         map[string]string{"cda": "CDA_TO_NSW", "slpa": "SLPA_TO_NSW"},
+		ClientToService: map[string]string{"cda": "cda-api"},
+	}
+	if got, ok := c.ServiceFor("CDA_TO_NSW"); !ok || got != "cda-api" {
+		t.Errorf("ServiceFor(CDA_TO_NSW) = %q, %v", got, ok)
+	}
+	if got, ok := c.ClientFor("cda-api"); !ok || got != "CDA_TO_NSW" {
+		t.Errorf("ClientFor(cda-api) = %q, %v", got, ok)
+	}
+	// A logical name is not a client id or a service, and a client that is not
+	// listed is no service.
+	for _, id := range []string{"cda", "SLPA_TO_NSW", ""} {
+		if got, ok := c.ServiceFor(id); ok {
+			t.Errorf("ServiceFor(%q) = %q, true", id, got)
+		}
+	}
+	for _, service := range []string{"cda", "slpa", ""} {
+		if got, ok := c.ClientFor(service); ok {
+			t.Errorf("ClientFor(%q) = %q, true", service, got)
+		}
+	}
+	var nilCatalog *Catalog
+	if _, ok := nilCatalog.ServiceFor("CDA_TO_NSW"); ok {
+		t.Error("ServiceFor on a nil catalog found a service")
+	}
+	if _, ok := nilCatalog.ClientFor("cda"); ok {
+		t.Error("ClientFor on a nil catalog found a client")
+	}
+}
+
 func TestLoad(t *testing.T) {
 	dir := t.TempDir()
 

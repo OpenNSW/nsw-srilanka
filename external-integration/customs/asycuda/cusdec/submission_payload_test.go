@@ -366,6 +366,21 @@ func TestBuildPayload_AcceptsAMetadataSupportingDocument(t *testing.T) {
 	assert.NotContains(t, string(encoded), "fileBase64")
 }
 
+// A scanned document is read from this deployment's storage by its key, and the
+// key is what goes out as its name. A file another service owns has a token for
+// a reference, which is refused: it must not be sent to Customs.
+func TestBuildPayload_RefusesAFileAnotherServiceHolds(t *testing.T) {
+	form := minimalForm()
+	form["supportingDocuments"] = map[string]any{
+		"scannedDocuments": []any{map[string]any{"documentCode": "N380", "fileBase64": "cda:eyJhbGciOiJkaXIifQ..AAAA.BBBB.CCCC"}},
+	}
+
+	_, _, err := BuildPayload(form, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scanned document 1")
+	assert.NotContains(t, err.Error(), "eyJhbGci")
+}
+
 // A metadata row missing a reference field, or a scanned row missing its file
 // or code, would be rejected by the endpoint (400).
 func TestBuildPayload_RefusesAnIncompleteSupportingDocument(t *testing.T) {

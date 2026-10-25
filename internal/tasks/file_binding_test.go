@@ -22,6 +22,8 @@ import (
 type fakeFileRefs struct {
 	issued  map[string]fakeRef
 	expired map[string]bool
+	// services is what the catalog says each machine client is.
+	services map[string]string
 }
 
 type fakeRef struct {
@@ -68,6 +70,22 @@ func (f *fakeFileRefs) Resolve(p *authn.Principal, ref string, need fileaccess.S
 		return "", fileaccess.ErrExpired
 	}
 	return r.value, nil
+}
+
+// Accept is Resolve for submit, and for a machine client that is a service,
+// stores a reference it did not issue as that service's.
+func (f *fakeFileRefs) Accept(p *authn.Principal, ref string) (string, error) {
+	if _, issued := f.issued[ref]; issued {
+		return f.Resolve(p, ref, fileaccess.ScopeSubmit)
+	}
+	if p == nil || p.Kind != authn.KindClient {
+		return "", fileaccess.ErrInvalid
+	}
+	service, ok := f.services[p.ClientID]
+	if !ok {
+		return "", fileaccess.ErrNoService
+	}
+	return service + ":" + ref, nil
 }
 
 func userPrincipal(sub string) *authn.Principal {
@@ -206,6 +224,29 @@ func TestFileBinding_FromCallerRefusesValuesThatAreNotReferences(t *testing.T) {
 
 	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "k-raw"}, userPrincipal("alice"))
 	assert.ErrorIs(t, err, fileaccess.ErrInvalid)
+}
+
+// A machine client that is a service sends the other service's tokens, which
+// are stored as that service's files. A user cannot, and nor can a client that
+// is no service.
+func TestFileBinding_FromCallerTagsAServicesFiles(t *testing.T) {
+	refs := newFakeFileRefs()
+	refs.services = map[string]string{"CDA_TO_NSW": "cda"}
+	var calls int
+	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))
+	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
+	cda := &authn.Principal{Kind: authn.KindClient, ClientID: "CDA_TO_NSW"}
+
+	payload := map[string]any{"invoice": "peer-token"}
+	require.NoError(t, b.FromCaller(context.Background(), record, payload, cda))
+	assert.Equal(t, map[string]any{"invoice": "cda:peer-token"}, payload)
+
+	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "peer-token"}, userPrincipal("alice"))
+	assert.ErrorIs(t, err, fileaccess.ErrInvalid)
+
+	other := &authn.Principal{Kind: authn.KindClient, ClientID: "SLPA_TO_NSW"}
+	err = b.FromCaller(context.Background(), record, map[string]any{"invoice": "peer-token"}, other)
+	assert.ErrorIs(t, err, fileaccess.ErrNoService)
 }
 
 func TestFileBinding_FromCallerWithoutNamespaceOrFiles(t *testing.T) {

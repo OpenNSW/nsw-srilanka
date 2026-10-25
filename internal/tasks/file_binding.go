@@ -13,11 +13,11 @@ import (
 )
 
 // FileRefs issues the file references a caller sees in place of the stored
-// file values in task data, and resolves the ones a caller sends back.
+// file values in task data, and accepts the ones a caller sends back.
 // *fileaccess.Access satisfies it, and its errors are the ones returned.
 type FileRefs interface {
 	Issue(p *authn.Principal, value string, scopes ...fileaccess.Scope) (string, error)
-	Resolve(p *authn.Principal, ref string, need fileaccess.Scope) (string, error)
+	Accept(p *authn.Principal, ref string) (string, error)
 }
 
 // CanAct reports whether in, the caller, may run some command on record's
@@ -65,9 +65,11 @@ func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal, can
 
 // FromCaller replaces, in place, each declared file reference in payload, a
 // submission for record's active step, with the stored value it stands for.
-// Each must be a reference issued to p that can be submitted: the error is
-// fileaccess.ErrInvalid, fileaccess.ErrNotYours, fileaccess.ErrScope or
-// fileaccess.ErrExpired otherwise.
+// Each must be a reference issued to p that can be submitted, or, when p is a
+// machine client the catalog lists as a service, a token that service issued
+// (see fileaccess.Access.Accept): the error is fileaccess.ErrInvalid,
+// fileaccess.ErrNotYours, fileaccess.ErrScope, fileaccess.ErrExpired or
+// fileaccess.ErrNoService otherwise.
 func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, payload map[string]any, p *authn.Principal) error {
 	paths, err := filefields.Parse(record.RenderConfig)
 	if err != nil || len(paths) == 0 {
@@ -90,6 +92,6 @@ func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, p
 		}
 	}
 	return filefields.Replace(payload, inPayload, func(ref string) (string, error) {
-		return b.refs.Resolve(p, ref, fileaccess.ScopeSubmit)
+		return b.refs.Accept(p, ref)
 	})
 }

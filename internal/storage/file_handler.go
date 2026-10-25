@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"path"
 
@@ -15,6 +16,10 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
 )
 
+// maxUploadRequestBytes caps the upload request body: it carries only the
+// file's metadata, never its content.
+const maxUploadRequestBytes = 1 << 20
+
 // FileRefs issues the file references callers hold in place of stored values,
 // and resolves them back. *fileaccess.Access satisfies it, and its errors are
 // the ones FileHandler maps.
@@ -23,23 +28,23 @@ type FileRefs interface {
 	Resolve(p *authn.Principal, ref string, need fileaccess.Scope) (string, error)
 }
 
-// FileHandler serves the storage routes, in either mode: an upload returns a
-// file reference issued to the caller, and a download resolves one for the
-// caller before asking Service for the file. A stored value is never returned
-// to the caller, though a presigned upload URL may name it: it grants nothing
-// on its own.
+// FileHandler serves the storage routes: an upload returns a file reference
+// issued to the caller, and a download resolves one for the caller before
+// asking Files for the file, which may be another service's. A stored value is
+// never returned to the caller, though a presigned upload URL may name it: it
+// grants nothing on its own.
 //
 // Authentication is the route middleware's job; the handler only reads the
 // principal it attached.
 type FileHandler struct {
-	svc  Service
-	refs FileRefs
+	files *Files
+	refs  FileRefs
 }
 
-// NewFileHandler creates a FileHandler over svc, resolving references with
+// NewFileHandler creates a FileHandler over files, resolving references with
 // refs.
-func NewFileHandler(svc Service, refs FileRefs) *FileHandler {
-	return &FileHandler{svc: svc, refs: refs}
+func NewFileHandler(files *Files, refs FileRefs) *FileHandler {
+	return &FileHandler{files: files, refs: refs}
 }
 
 // uploadResponse is what an upload returns: the reference to keep for the
@@ -81,7 +86,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := h.svc.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
+	meta, err := h.files.own.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
 	if err != nil {
 		h.writeServiceError(w, r, err, "failed to prepare upload", req.MimeType)
 		return
@@ -133,7 +138,7 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dl, err := downloadOf(r.Context(), h.svc, value)
+	dl, err := h.files.locate(r.Context(), value)
 	if err != nil {
 		h.writeServiceError(w, r, err, "failed to generate access", "")
 		return
@@ -210,7 +215,7 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 		}
 		httputil.Error(w, r, http.StatusUnsupportedMediaType, message)
 	case isUpstreamFailure(err):
-		writeProxyError(w, r, err, fallback)
+		writeUpstreamError(w, r, err, fallback)
 	default:
 		httputil.InternalServerError(w, r, "storage: "+fallback, err)
 	}
@@ -231,4 +236,22 @@ func formatSize(n int64) string {
 		return fmt.Sprintf("%dMB", n>>20)
 	}
 	return fmt.Sprintf("%d bytes", n)
+}
+
+// writeUpstreamError relays a rejection of the request by the owning service
+// with its status and message; anything else — the owning service being
+// unreachable, failing, or refusing this service's credentials — is a
+// gateway failure the client cannot fix.
+func writeUpstreamError(w http.ResponseWriter, r *http.Request, err error, fallback string) {
+	var rejection *RemoteRejection
+	if errors.As(err, &rejection) {
+		message := rejection.Message
+		if message == "" {
+			message = fallback
+		}
+		httputil.Error(w, r, rejection.StatusCode, message)
+		return
+	}
+	slog.ErrorContext(r.Context(), "storage proxy request failed", "error", err)
+	httputil.Error(w, r, http.StatusBadGateway, fallback)
 }

@@ -18,6 +18,8 @@ import (
 
 const userTTL = time.Hour
 
+var newAccessTime = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+
 type clock struct{ t time.Time }
 
 func (c *clock) now() time.Time { return c.t }
@@ -26,7 +28,7 @@ func (c *clock) now() time.Time { return c.t }
 // clock it runs on.
 func newAccess(t *testing.T, b byte) (*fileaccess.Access, *clock) {
 	t.Helper()
-	c := &clock{t: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)}
+	c := &clock{t: newAccessTime}
 	ks, err := filetoken.ParseKeyset("k1:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{b}, 32)))
 	if err != nil {
 		t.Fatalf("ParseKeyset: %v", err)

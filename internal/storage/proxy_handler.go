@@ -2,16 +2,10 @@ package storage
 
 import (
 	"encoding/json"
-	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/OpenNSW/core/httputil"
 )
-
-// maxUploadRequestBytes caps the upload request body: it carries only the
-// file's metadata, never its content.
-const maxUploadRequestBytes = 1 << 20
 
 // ProxyHandler serves the storage API routes in proxy mode, with the same
 // request and response shapes as core/storage's HTTPHandler. File-level
@@ -57,7 +51,7 @@ func (h *ProxyHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	meta, err := h.svc.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
 	if err != nil {
-		writeProxyError(w, r, err, "failed to prepare upload")
+		writeUpstreamError(w, r, err, "failed to prepare upload")
 		return
 	}
 	httputil.JSON(w, http.StatusOK, meta)
@@ -75,7 +69,7 @@ func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 
 	dl, err := h.svc.DownloadURL(r.Context(), key)
 	if err != nil {
-		writeProxyError(w, r, err, "failed to generate access")
+		writeUpstreamError(w, r, err, "failed to generate access")
 		return
 	}
 	body := map[string]any{
@@ -100,26 +94,8 @@ func (h *ProxyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Delete(r.Context(), key); err != nil {
-		writeProxyError(w, r, err, "failed to delete file")
+		writeUpstreamError(w, r, err, "failed to delete file")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// writeProxyError relays a rejection of the request by the owning service
-// with its status and message; anything else — the owning service being
-// unreachable, failing, or refusing this service's credentials — is a
-// gateway failure the client cannot fix.
-func writeProxyError(w http.ResponseWriter, r *http.Request, err error, fallback string) {
-	var rejection *RemoteRejection
-	if errors.As(err, &rejection) {
-		message := rejection.Message
-		if message == "" {
-			message = fallback
-		}
-		httputil.Error(w, r, rejection.StatusCode, message)
-		return
-	}
-	slog.ErrorContext(r.Context(), "storage proxy request failed", "error", err)
-	httputil.Error(w, r, http.StatusBadGateway, fallback)
 }

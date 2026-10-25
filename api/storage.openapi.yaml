@@ -119,6 +119,11 @@ paths:
         `{key}` must be a file reference issued to the caller. A storage key
         grants nothing on its own.
 
+        A file another service owns is opened through that service: the
+        deployment asks the owner for the URL and returns it, when it is an
+        absolute http(s) URL. How the file opens is decided here, from the
+        type the owner reports and this deployment's `storage.inlineTypes`.
+
         Requires scope `nsw:storage:read`.
       operationId: getDownloadURL
       parameters:
@@ -160,7 +165,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: The file does not exist; storage holds none under the reference.
+          description: |
+            The file does not exist: this deployment's storage has no such
+            file, or the service that owns it says it has none.
           content:
             application/json:
               schema:
@@ -181,8 +188,11 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '502':
           description: |
-            Agency only. The deployment that stores the files failed, or
-            refused this deployment's credentials.
+            The file is another service's, and that service is unreachable,
+            refused this deployment's credentials, failed, gave an unusable
+            answer, or is not one of this deployment's storage peers. In an
+            agency that proxies its storage, the deployment that stores the
+            files failed or refused its credentials.
           content:
             application/json:
               schema:

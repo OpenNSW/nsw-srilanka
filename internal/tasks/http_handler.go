@@ -40,6 +40,7 @@ const (
 	errFileNotYours         = "a file in the submission was issued to someone else"
 	errFileExpired          = "a file in the submission has expired; refetch the task and submit again"
 	errFileScope            = "a file in the submission can't be submitted; refetch the task"
+	errFileSender           = "this client may not send files"
 	errFileShape            = "a file field in the submission does not have the shape the task declares"
 	errDraftNotEnabled      = "this step does not accept drafts"
 	errInvalidPayload       = "submission does not match the form"
@@ -422,6 +423,9 @@ func (h *HTTPHandler) resolveFiles(w http.ResponseWriter, r *http.Request, taskI
 		h.rejectFiles(w, r, taskID, http.StatusForbidden, errFileScope, "file_scope", auditAttrs...)
 	case errors.Is(err, fileaccess.ErrExpired):
 		h.rejectFiles(w, r, taskID, http.StatusGone, errFileExpired, "file_expired", auditAttrs...)
+	case errors.Is(err, fileaccess.ErrNoService):
+		slog.WarnContext(ctx, "tasks: a client the catalog lists as no service sent a file", "taskId", taskID, "stepId", stepID)
+		h.rejectFiles(w, r, taskID, http.StatusForbidden, errFileSender, "file_sender", auditAttrs...)
 	case errors.Is(err, filefields.ErrShape):
 		slog.WarnContext(ctx, "tasks: submission has a file field of the wrong shape", "taskId", taskID, "stepId", stepID, "error", err)
 		h.rejectFiles(w, r, taskID, http.StatusBadRequest, errFileShape, "file_shape", auditAttrs...)

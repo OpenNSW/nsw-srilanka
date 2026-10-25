@@ -57,8 +57,6 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
-	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
-	"github.com/OpenNSW/nsw-srilanka/internal/storage/filetoken"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
@@ -182,22 +180,18 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	// Storage is built here rather than alongside its HTTP handler further
 	// down: task plugins that attach uploaded files to an outbound call read
-	// through this service, so it has to exist before the task stack (Stage 4).
-	// storage.type picks a backend of this deployment's own or a proxy onto
-	// the service that owns the files.
-	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager)
+	// through the files service, so it has to exist before the task stack
+	// (Stage 4). storage.type picks a backend of this deployment's own or a
+	// proxy onto the service that owns the files. The file tokens callers hold
+	// in place of stored file values are built with it.
+	files, err := newFileServices(ctx, cfg.Storage, cfg.Services, globalCatalog, remoteManager)
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
+	storageStack, fileAccess := files.Stack, files.Access
 	if !attachAuditor(storageStack.Service, coreAuditor) {
 		unwiredAudit = append(unwiredAudit, "storage")
-	}
-	// The file tokens callers hold in place of stored file values.
-	fileAccess, err := newFileAccess(cfg.Storage)
-	if err != nil {
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to initialize file tokens: %w", err)
 	}
 
 	// -------------------------------------------------------------------
@@ -225,23 +219,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.CompleteActivation(context.Background(), parentWorkflowID, "", parentStepID, finalVariables)
 	}
 
-	// OGAs are sent file tokens issued to the machine client each calls back
-	// as. An agency doesn't own its files: what it stores are TNSW's tokens,
-	// which it sends back to TNSW as they are.
-	var ogaFiles taskplugins.OGAFiles
-	if !cfg.Storage.IsProxy() {
-		ogaFiles = taskplugins.OGAFiles{
-			ClientFor: func(serviceID string) (string, bool) {
-				clientID, ok := globalCatalog.Clients[serviceID]
-				return clientID, ok
-			},
-			// An OGA opens a file it is sent; it never submits one back.
-			IssueForClient: func(clientID, value string) (string, error) {
-				return fileAccess.IssueForClient(clientID, value, fileaccess.ScopeRead)
-			},
-		}
-	}
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, files.Files, files.OGA, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -427,7 +405,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
+	fileHandler := nswstorage.NewFileHandler(files.Files, fileAccess)
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
@@ -785,20 +763,6 @@ func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, work
 	return err
 }
 
-// newFileAccess builds the file tokens this deployment issues from its storage
-// settings.
-func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
-	keys, err := filetoken.ParseKeyset(cfg.TokenKeyset)
-	if err != nil {
-		return nil, fmt.Errorf("storage.tokenKeyset: %w", err)
-	}
-	codec, err := filetoken.NewCodec(keys, nil)
-	if err != nil {
-		return nil, err
-	}
-	return fileaccess.New(codec, cfg.TokenTTL())
-}
-
 // stepNamespace looks up a step template's output namespace in the artifact
 // registry.
 func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
@@ -920,6 +884,7 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
+	files taskplugins.FileFetcher,
 	ogaFiles taskplugins.OGAFiles,
 	artifactRegistry *artifact.Registry,
 	globalCatalog *catalog.Catalog,
@@ -928,7 +893,7 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, files, ogaFiles, taskplugins.CustomsSubmissions{
 		Declarations:  cusdec.NewDeclarationRepository(db),
 		DispatchNotes: cdn.NewDispatchNoteRepository(db),
 	}, cfg.Server.ServiceURL); err != nil {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileref"
 )
 
 // The SLC Edge CusDec submission payload, per Annex A of the ASYCUDA ↔ NSW
@@ -504,6 +505,14 @@ func buildScannedDoc(entry any, i int, forVerify bool) (doc SupportDoc, ok bool,
 	if key == "" || code == "" {
 		return SupportDoc{}, false, fmt.Errorf(
 			"customs: scanned document %d is missing its file or document code", i+1)
+	}
+
+	// FileName and storageKey are the key itself, which names a file this
+	// deployment stores. A reference to a file another service owns is a token:
+	// it is refused, since it must not reach Customs and names no file here.
+	if !fileref.Parse(key).IsOwn() {
+		return SupportDoc{}, false, fmt.Errorf(
+			"customs: scanned document %d is a file another service holds, which cannot be attached", i+1)
 	}
 
 	return SupportDoc{
