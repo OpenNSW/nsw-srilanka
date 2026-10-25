@@ -14,11 +14,13 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                         |
 | `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                         |
 
-CDA keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
-service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `CDA_TO_NSW`. TNSW applies its own upload limits.
+CDA stores the files its officers upload in its own storage (`storage.type: local`
+here; `s3` in a deployed environment), under its own token keyset. A file TNSW owns is
+opened through TNSW, which CDA calls as `CDA_TO_NSW` (services entry `tnsw`), and TNSW
+opens the files CDA owns through CDA's own storage API. `catalog.json`'s `clientToService`
+names `tnsw` as the one storage peer.
 
-The YAML's `services` list registers `tnsw` for storage and the workflows'
+The YAML's `services` list registers `tnsw`, for the files it owns and for the workflows'
 `notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
 
 ## Run with Docker Compose
@@ -67,13 +69,13 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 CDA for this deployment, on the `CDA API` resource server
 (`https://api.cda.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                              | Client               | Grant                                                                                                                               |
-| ----------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on CDA's parked steps, which `catalog.json` maps `tnsw` to |
-| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`                 |
+| Caller                              | Client               | Grant                                                                                                                                                                              |
+| ----------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `cda_officer`               | `OGA_PORTAL_APP_CDA` | `CDA Officer` role (via `CDA Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
+| TNSW injecting and replying         | `NSW_TO_CDA`         | `NswToCdaM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on CDA's parked steps, which `catalog.json` maps `tnsw` to |
+| CDA's decision callback and storage | `CDA_TO_NSW`         | `CdaToNswM2M` role: `nsw:task:write` on TNSW, which maps `cda` to it in its catalog, and `nsw:storage:read`/`write`                                                                |
 
-TNSW's `config.yaml` services entry `cda` requests `nsw:workflow:inject` and `nsw:task:write` with
+TNSW's `config.yaml` services entry `cda` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files CDA owns) with
 `resource=https://api.cda.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose

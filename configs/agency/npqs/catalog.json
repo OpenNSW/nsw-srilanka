@@ -4,5 +4,8 @@
   },
   "clients": {
     "tnsw": "NSW_TO_NPQS"
+  },
+  "clientToService": {
+    "tnsw": "tnsw"
   }
 }

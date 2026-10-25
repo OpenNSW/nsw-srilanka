@@ -4,5 +4,8 @@
   },
   "clients": {
     "tnsw": "NSW_TO_SLTB"
+  },
+  "clientToService": {
+    "tnsw": "tnsw"
   }
 }

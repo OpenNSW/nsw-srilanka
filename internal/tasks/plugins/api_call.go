@@ -206,14 +206,18 @@ func (passthroughInterpreter) Interpret(callErr error, resp map[string]any) (boo
 type APICallPlugin struct {
 	manager     *remote.Manager
 	interpreter Interpreter
+	files       OGAFiles
 }
 
-func NewAPICallPlugin(manager *remote.Manager) *APICallPlugin {
-	return &APICallPlugin{manager: manager, interpreter: passthroughInterpreter{}}
+// NewAPICallPlugin returns the plugin that sends a step's payload as it is. The
+// files it declares in the payload are sent as tokens for the service's client,
+// issued through files.
+func NewAPICallPlugin(manager *remote.Manager, files OGAFiles) *APICallPlugin {
+	return &APICallPlugin{manager: manager, interpreter: passthroughInterpreter{}, files: files}
 }
 
 func NewAPICallPluginWithInterpreter(manager *remote.Manager, interp Interpreter) *APICallPlugin {
-	p := NewAPICallPlugin(manager)
+	p := NewAPICallPlugin(manager, OGAFiles{})
 	if interp != nil {
 		p.interpreter = interp
 	}
@@ -271,6 +275,16 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		return err
 	}
 
+	// A step that sends its payload as it is sends the files it declares there as
+	// tokens for the service's client. Domain interpreters shape their own
+	// request, and read files themselves.
+	inputs := ctx.Inputs
+	if _, passthrough := p.interpreter.(passthroughInterpreter); passthrough {
+		if inputs, err = p.files.tokenizeInputs(ctx.Record.RenderConfig, ctx.Inputs, cfg.ServiceID); err != nil {
+			return fmt.Errorf("api_call: %w", nonRetryable(err))
+		}
+	}
+
 	// The state a render config keys on while the call is out. A flow that
 	// hands the declaration over moves straight from here to a step that waits
 	// on the receiving agency, so reporting it now means the panel for "with
@@ -289,9 +303,9 @@ func (p *APICallPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		req := remote.Request{
 			Method:  method,
 			Path:    path,
-			Query:   queryFor(p.interpreter, ctx.Inputs),
-			Body:    p.interpreter.BuildRequest(ctx.Inputs),
-			Headers: headersFor(p.interpreter, ctx.Inputs),
+			Query:   queryFor(p.interpreter, inputs),
+			Body:    p.interpreter.BuildRequest(inputs),
+			Headers: headersFor(p.interpreter, inputs),
 		}
 		callErr = p.manager.Call(ctx.Context, cfg.ServiceID, req, &resp)
 	}

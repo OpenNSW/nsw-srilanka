@@ -139,24 +139,26 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig, replyToken, callbackToken string) (string, map[string]any, error) {
 	// Only what the reply sends gets tokens, as a dispatch tokenizes only its
 	// submission: the payload input when there is one, else all the inputs.
-	root, data := "", any(ctx.Inputs)
-	if payload, ok := ctx.Inputs[replyPayloadInput]; ok {
-		if _, ok := payload.(map[string]any); !ok {
+	_, hasPayload := ctx.Inputs[replyPayloadInput]
+	if hasPayload {
+		if payload := ctx.Inputs[replyPayloadInput]; !isObject(payload) {
 			// The inputs are the same on every retry, so none can succeed.
 			return "", nil, temporal.NewNonRetryableApplicationError(
 				fmt.Sprintf("external_review: %s must be an object, got %T", replyPayloadInput, payload),
 				"InvalidReplyPayload", nil)
 		}
-		root, data = replyPayloadInput, payload
 	}
-	sent, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
+	sent, err := p.files.tokenizeInputs(ctx.Record.RenderConfig, ctx.Inputs, cfg.ServiceID)
 	if err != nil {
-		return "", nil, fmt.Errorf("external_review: %w", err)
+		return "", nil, fmt.Errorf("external_review: %w", nonRetryable(err))
 	}
-	// tokenize can return data itself, which is the step's own, so the reply
-	// gets a copy. All the inputs are non-nil here: they hold the replyToken.
-	payload := maps.Clone(sent.(map[string]any))
-	if root == "" {
+	// The reply gets a copy, since tokenizeInputs can return the step's own
+	// inputs. All of them are non-nil here: they hold the replyToken.
+	var payload map[string]any
+	if hasPayload {
+		payload = maps.Clone(sent[replyPayloadInput].(map[string]any))
+	} else {
+		payload = maps.Clone(sent)
 		delete(payload, replyTokenInput)
 	}
 	return replyRequest(cfg, payload, replyToken, callbackToken)
@@ -183,6 +185,11 @@ func replyRequest(cfg externalReviewConfig, payload map[string]any, replyToken, 
 func isConflict(err error) bool {
 	var re *remote.RemoteError
 	return errors.As(err, &re) && re.StatusCode == http.StatusConflict
+}
+
+func isObject(v any) bool {
+	_, ok := v.(map[string]any)
+	return ok
 }
 
 // replyTokenFrom returns the replyToken input, or "" when there is none. An empty

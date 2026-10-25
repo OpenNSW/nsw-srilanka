@@ -172,7 +172,7 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, ogaFiles)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
-		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
+		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr, ogaFiles)},
 		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files, customs.Declarations))},
 		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
 		{TaskTypeCustomsCusdecRetrieve, NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},

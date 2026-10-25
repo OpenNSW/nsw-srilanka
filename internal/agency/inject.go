@@ -6,6 +6,7 @@
 package agency
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,9 @@ import (
 	workflow "github.com/OpenNSW/core/workflow"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig/taskconfigart"
+	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 )
 
 // ScopeWorkflowInject gates POST /api/v1/inject. An inject starts one workflow (and
@@ -27,6 +31,8 @@ const ScopeWorkflowInject = "nsw:workflow:inject"
 
 const (
 	errInvalidBody        = "invalid request body"
+	errBodyTooLarge       = "request body too large"
+	errInvalidFiles       = "a file in the payload is not one this client may send"
 	errTaskIDRequired     = "taskId is required"
 	errTaskCodeRequired   = "taskCode is required"
 	errConsignmentIDReq   = "consignmentId is required"
@@ -36,6 +42,10 @@ const (
 // ErrUnknownTaskCode is returned by Inject when no task_config is registered for the
 // request's taskCode.
 var ErrUnknownTaskCode = errors.New("unknown task code")
+
+// ErrInvalidFiles is returned by Inject when a file the task config declares in the
+// payload is not one the caller may send.
+var ErrInvalidFiles = errors.New("a file in the payload is not one this client may send")
 
 // ErrConflict is returned by Inject when taskId is already recorded with a different
 // consignmentId or taskCode.
@@ -58,11 +68,37 @@ type Service struct {
 	repo             Repository
 	artifactRegistry *artifact.Registry
 	wm               workflow.Manager
+	files            FileAcceptor
+	maxBodyBytes     int64
+}
+
+// FileAcceptor decides what is stored for a file value the caller sent in a payload:
+// *fileaccess.Access satisfies it, and its errors are the ones Inject maps.
+type FileAcceptor interface {
+	Accept(p *authn.Principal, ref string) (string, error)
+}
+
+// Option configures a Service.
+type Option func(*Service)
+
+// WithFiles sets how the files a task config declares in an injected payload are
+// stored. Without it, a task config that declares files cannot be injected.
+func WithFiles(files FileAcceptor) Option {
+	return func(s *Service) { s.files = files }
+}
+
+// WithMaxBodyBytes limits the request body HandleInject reads.
+func WithMaxBodyBytes(n int64) Option {
+	return func(s *Service) { s.maxBodyBytes = n }
 }
 
 // NewService creates a Service.
-func NewService(repo Repository, artifactRegistry *artifact.Registry, wm workflow.Manager) *Service {
-	return &Service{repo: repo, artifactRegistry: artifactRegistry, wm: wm}
+func NewService(repo Repository, artifactRegistry *artifact.Registry, wm workflow.Manager, opts ...Option) *Service {
+	s := &Service{repo: repo, artifactRegistry: artifactRegistry, wm: wm}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Inject records req and starts its workflow unless it has already started.
@@ -79,13 +115,18 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 		return nil, fmt.Errorf("agency: failed to load task config %q: %w", req.TaskCode, err)
 	}
 
+	data, err := s.acceptFiles(ctx, cfg.Files, req.Data)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.repo.Record(ctx, Workflow{
 		TaskID:   req.TaskID,
 		TaskCode: req.TaskCode,
 		// Callers speak trade, so the case is keyed by their consignment id.
 		CaseID:        req.ConsignmentID,
 		CallbackToken: req.CallbackToken,
-		Payload:       req.Data,
+		Payload:       data,
 	}); err != nil {
 		return nil, fmt.Errorf("agency: failed to record workflow: %w", err)
 	}
@@ -116,6 +157,49 @@ func (s *Service) Inject(ctx context.Context, req InjectRequest) (*Workflow, err
 	}
 	w.Status = StatusStarted
 	return w, nil
+}
+
+// acceptFiles returns data with each file the task config declares at paths
+// replaced by what the caller's token for it is stored as (see FileAcceptor). The
+// payload is returned as it was sent when no file is declared.
+func (s *Service) acceptFiles(ctx context.Context, declared []string, data json.RawMessage) (json.RawMessage, error) {
+	if len(declared) == 0 || len(bytes.TrimSpace(data)) == 0 {
+		return data, nil
+	}
+	if s.files == nil {
+		return nil, errors.New("agency: the task config declares files, and no file acceptor is configured")
+	}
+	paths, err := filefields.ParseList(declared)
+	if err != nil {
+		return nil, fmt.Errorf("agency: %w", err)
+	}
+	// Numbers stay exact: they are kept as the text they were sent as.
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var payload any
+	if err := dec.Decode(&payload); err != nil {
+		return nil, fmt.Errorf("%w: the payload is not JSON", ErrInvalidFiles)
+	}
+	caller, _ := authn.FromContext(ctx)
+	err = filefields.Replace(payload, paths, func(ref string) (string, error) {
+		return s.files.Accept(caller, ref)
+	})
+	switch {
+	case err == nil:
+	case errors.Is(err, filefields.ErrShape), errors.Is(err, fileaccess.ErrInvalid), errors.Is(err, fileaccess.ErrNotYours),
+		errors.Is(err, fileaccess.ErrScope), errors.Is(err, fileaccess.ErrExpired), errors.Is(err, fileaccess.ErrNoService):
+		// The sender's value stays out of the error and the log.
+		return nil, ErrInvalidFiles
+	default:
+		return nil, fmt.Errorf("agency: failed to accept the payload's files: %w", err)
+	}
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(payload); err != nil {
+		return nil, fmt.Errorf("agency: failed to encode the payload: %w", err)
+	}
+	return bytes.TrimRight(out.Bytes(), "\n"), nil
 }
 
 // start loads workflowID and starts it with w.TaskID as the instance ID. Variables
@@ -152,10 +236,18 @@ func (s *Service) start(ctx context.Context, w *Workflow, workflowID string) err
 	return nil
 }
 
-// HandleInject handles POST /api/v1/inject. Response: Workflow.
+// HandleInject handles POST /api/v1/inject. Response: Workflow, without its payload.
 func (s *Service) HandleInject(w http.ResponseWriter, r *http.Request) {
+	if s.maxBodyBytes > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	}
 	var req InjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			httputil.Error(w, r, http.StatusRequestEntityTooLarge, errBodyTooLarge)
+			return
+		}
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidBody)
 		return
 	}
@@ -180,9 +272,15 @@ func (s *Service) HandleInject(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrConflict):
 			httputil.Error(w, r, http.StatusConflict, err.Error())
 			return
+		case errors.Is(err, ErrInvalidFiles):
+			httputil.Error(w, r, http.StatusBadRequest, errInvalidFiles)
+			return
 		}
 		httputil.InternalServerError(w, r, errFailedToInjectTask, err, "taskId", req.TaskID)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, wf)
+	// The recorded payload is the sender's; it is not sent back.
+	reply := *wf
+	reply.Payload = nil
+	httputil.JSON(w, http.StatusOK, reply)
 }

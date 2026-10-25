@@ -37,12 +37,14 @@ func mountAgency(
 	db *gorm.DB,
 	artifactRegistry *artifact.Registry,
 	wm workflow.Manager,
+	files agency.FileAcceptor,
+	maxBodyBytes int64,
 	tasks agency.TaskLister,
 	roles map[string]string,
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
-	svc := agency.NewService(agency.NewRepository(db), artifactRegistry, wm)
+	svc := agency.NewService(agency.NewRepository(db), artifactRegistry, wm, agency.WithFiles(files), agency.WithMaxBodyBytes(maxBodyBytes))
 	mux.Handle("POST /api/v1/inject", withAuth(withScope(agency.ScopeWorkflowInject)(http.HandlerFunc(svc.HandleInject))))
 
 	// ConsignmentRead is the read scope the portal's token already carries; the

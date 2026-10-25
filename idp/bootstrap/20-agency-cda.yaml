@@ -110,6 +110,7 @@ permissions:
     permissions:
       - nsw:task:write
       - nsw:workflow:inject
+      - nsw:storage:read
 assignments:
   - id: 01a13912-e0bf-7d20-9066-ad0591a1771b
     type: app
@@ -344,6 +345,7 @@ inboundAuthConfig:
       scopes:
         - nsw:workflow:inject
         - nsw:task:write
+        - nsw:storage:read
       userInfo:
         responseType: JSON
       scopeClaims:

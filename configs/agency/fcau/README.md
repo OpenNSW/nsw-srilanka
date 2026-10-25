@@ -14,9 +14,11 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `portal-config.js`     | Runtime config of the `fcau-portal` container: the trader-app in agency mode                                                                                           |
 | `branding.json`        | Branding for the `fcau-portal` container, as the FCAU officer portal had it in nsw-agency                                                                              |
 
-FCAU keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
-service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `FCAU_TO_NSW`. TNSW applies its own upload limits.
+FCAU stores the files its officers upload in its own storage (`storage.type: local`
+here; `s3` in a deployed environment), under its own token keyset. A file TNSW owns is
+opened through TNSW, which FCAU calls as `FCAU_TO_NSW` (services entry `tnsw`), and TNSW
+opens the files FCAU owns through FCAU's own storage API. `catalog.json`'s `clientToService`
+names `tnsw` as the one storage peer.
 
 One thing nsw-agency did for FCAU isn't here yet: a second round on the same
 TNSW step. A review sent back to the trader (`needs_more_info` on the application
@@ -28,7 +30,7 @@ The task configs nsw-agency had for `fcau_sample_assessment_v1`,
 `fcau_sample_decision_v1` and `fcau_sample_wait_v1` aren't carried over: no TNSW
 workflow sends those tasks.
 
-The YAML's `services` list registers `tnsw` for storage and the workflows'
+The YAML's `services` list registers `tnsw`, for the files it owns and for the workflows'
 `notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
 
 ## Run with Docker Compose
@@ -78,13 +80,13 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates FCAU for this deployment, on the `FCAU API` resource server
 (`https://api.fcau.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                                 |
-| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on FCAU's parked steps, which `catalog.json` maps `tnsw` to |
-| FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                          |
+| Caller                             | Client                | Grant                                                                                                                                                                                |
+| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
+| TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on FCAU's parked steps, which `catalog.json` maps `tnsw` to |
+| FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                                                                         |
 
-TNSW's `config.yaml` services entry `fcau` requests `nsw:workflow:inject` and `nsw:task:write` with
+TNSW's `config.yaml` services entry `fcau` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files FCAU owns) with
 `resource=https://api.fcau.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose
