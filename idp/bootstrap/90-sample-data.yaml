@@ -172,20 +172,6 @@ attributes:
 credentials:
   password: "{{ .SAMPLE_USER_PASSWORD }}"
 ---
-# File: slpa_officer.yaml
-resource_type: user
-id: 01a13912-df2f-7a94-8164-f7a6d448d9d7
-type: Government_User
-ouId: 01a13912-d30d-7e07-830d-b2d229c43a28
-attributes:
-  family_name: "Officer"
-  given_name: "SLPA"
-  phone_number: "+94771234564"
-  username: "slpa_officer"
-  email: "slpa_officer@government.dev"
-credentials:
-  password: "{{ .SAMPLE_USER_PASSWORD }}"
----
 # File: CHA.yaml
 resource_type: group
 id: 01a13912-d495-7400-b5bc-541433e05751
@@ -260,16 +246,6 @@ description: NPQS officers group
 ouId: 01a13912-d27c-78d7-ab13-e260c82ce84f
 members:
   - id: 01a13912-dbcc-7f79-8bb0-a303fb2a561f
-    type: user
----
-# File: OGA_Reviewers.yaml
-resource_type: group
-id: 01a13912-d402-7101-b83a-be6bc8297d96
-name: OGA Reviewers
-description: Government agency reviewers group
-ouId: 01a13912-d1aa-7deb-8259-1f32e1f7983b
-members:
-  - id: 01a13912-df2f-7a94-8164-f7a6d448d9d7
     type: user
 ---
 # File: SLTB_Officers.yaml

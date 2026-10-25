@@ -116,12 +116,12 @@ services:
         endpointParams:
           resource: https://api.cda.nsw-agency.local
   - id: slpa
-    url: http://host.docker.internal:8084
+    url: https://slpa-cms.example.com
     timeout: 60s
     auth:
       type: oauth2
       oauth2:
-        tokenURL: http://host.docker.internal:8084/api/nsw/v1/token
+        tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
         clientID: NSW_TO_SLPA_CLIENT_ID
         clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
   - id: efc
@@ -177,7 +177,6 @@ cors:
     - http://localhost:5174
     - http://localhost:5175
     - http://localhost:5176
-    - http://localhost:5177
     - http://localhost:5178
     - http://localhost:5179
   allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
