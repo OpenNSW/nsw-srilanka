@@ -210,11 +210,11 @@ storage:
   # when type is proxy. Unlike allowedUploadTypes it may list a type a browser
   # opens as a document: inlineTypes lists text/html, so an agency that
   # generates HTML documents and stores them here (HTML_DOCUMENT_GENERATOR)
-  # needs it granted. Only the clients named here, holding the
+  # needs it granted: NPQS does. Only the clients named here, holding the
   # nsw:storage:internalwrite scope, can store such a type.
-  # allowedInternalUploadTypes:
-  #   npqs:
-  #     - text/html
+  allowedInternalUploadTypes:
+    npqs:
+      - text/html
   # What a download opens in the browser; every other file is saved. MIME
   # types, compared exactly with the stored type. Not read when type is proxy:
   # the owning service applies its own. text/html is listed for the documents

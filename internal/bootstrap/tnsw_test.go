@@ -4,11 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	corestorage "github.com/OpenNSW/core/storage"
+	"gopkg.in/yaml.v3"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
@@ -103,5 +106,33 @@ func TestInternalUploadTypesByClient(t *testing.T) {
 	_, err = internalUploadTypesByClient(nswstorage.Config{AllowedInternalUploadTypes: map[string][]string{"nobody": {"text/html"}}}, cat)
 	if err == nil || !strings.Contains(err.Error(), `"nobody" is not a client in the catalog`) {
 		t.Errorf("an unknown client: %v, want an error naming it", err)
+	}
+}
+
+// The example configs grant NPQS text/html for the documents it generates, and
+// NPQS is a client in the example catalog.
+func TestExampleConfigs_GrantNPQSHTML(t *testing.T) {
+	cat, err := catalog.Load(filepath.Join("..", "..", "configs", "catalog.example.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"config.example.yaml", "config.docker.example.yaml"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "configs", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg struct {
+			Storage nswstorage.Config `yaml:"storage"`
+		}
+		if err := yaml.Unmarshal(raw, &cfg); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got, err := internalUploadTypesByClient(cfg.Storage, cat)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if want := []string{"text/html"}; !slices.Equal(got["NPQS_TO_NSW"], want) || len(got) != 1 {
+			t.Errorf("%s: types by client = %v, want NPQS_TO_NSW: %v", name, got, want)
+		}
 	}
 }
