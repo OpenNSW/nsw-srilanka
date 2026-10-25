@@ -119,7 +119,7 @@ func reservedKey(t *testing.T, svc Service) string {
 }
 
 func TestFileHandler_Download(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -180,61 +180,11 @@ func (failingRefs) Resolve(*authn.Principal, string, fileaccess.Scope) (string, 
 }
 
 func TestFileHandler_DownloadResolveFailure(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	assertStatus(t, download(handlerOf(stack.Service, failingRefs{}), "ref", user("alice")), http.StatusInternalServerError)
-}
-
-// In proxy mode the stored value is the owning service's own reference, and
-// its answers are relayed as the proxy's own handler relays them.
-func TestFileHandler_DownloadThroughProxy(t *testing.T) {
-	access, _ := testFileAccess(t)
-
-	t.Run("the holder's token", func(t *testing.T) {
-		stack := newProxyStack(t, ownerToken)
-		h := handlerOf(stack.Service, access)
-		token, err := access.Issue(user("alice"), storedKey(t, stack.Service), fileaccess.ScopeRead)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rec := download(h, token, user("alice"))
-		assertDownloadURL(t, rec)
-		// What the owning service says about the file is relayed as it said it.
-		var body map[string]any
-		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-			t.Fatal(err)
-		}
-		if body["mime_type"] != "application/pdf" || body["disposition"] != drivers.DispositionInline {
-			t.Errorf("mime_type, disposition = %v, %v; want application/pdf, %s", body["mime_type"], body["disposition"], drivers.DispositionInline)
-		}
-	})
-	t.Run("a file the owner does not hold", func(t *testing.T) {
-		stack := newProxyStack(t, ownerToken)
-		h := handlerOf(stack.Service, access)
-		token, err := access.Issue(user("alice"), reservedKey(t, stack.Service), fileaccess.ScopeRead)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertStatus(t, download(h, token, user("alice")), http.StatusNotFound)
-	})
-	t.Run("the owner's rejection is relayed", func(t *testing.T) {
-		h := handlerOf(newProxyStack(t, ownerToken).Service, access)
-		token, err := access.Issue(user("alice"), "not-a-key", fileaccess.ScopeRead)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertStatus(t, download(h, token, user("alice")), http.StatusBadRequest)
-	})
-	t.Run("the owner refusing credentials is a gateway failure", func(t *testing.T) {
-		h := handlerOf(newProxyStack(t, "wrong-token").Service, access)
-		token, err := access.Issue(user("alice"), "any-key", fileaccess.ScopeRead)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertStatus(t, download(h, token, user("alice")), http.StatusBadGateway)
-	})
 }
 
 // newFileAccess returns file tokens over its own one-key keyset filled with b.
@@ -253,87 +203,6 @@ func newFileAccess(t *testing.T, b byte) *fileaccess.Access {
 		t.Fatal(err)
 	}
 	return access
-}
-
-// An agency runs the same handler in proxy mode. What it stores is the token
-// TNSW gave it, which it hands its officer wrapped in a token of its own; the
-// officer's download resolves both, one at each end.
-func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
-	const agencyClient = "CDA_TO_NSW"
-	tnswAccess, agencyAccess := newFileAccess(t, 1), newFileAccess(t, 2)
-
-	// TNSW: its own backend, with the agency calling as its machine client.
-	mux := http.NewServeMux()
-	tnsw := httptest.NewServer(mux)
-	t.Cleanup(tnsw.Close)
-	driver, err := drivers.NewLocalFSDriver(t.TempDir(), tnsw.URL, "owner-secret", 15*time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tnswService := corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...))
-	tnswFiles := handlerOf(tnswService, tnswAccess)
-	asAgency := func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			client := &authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}
-			next(w, r.WithContext(authn.ContextWithPrincipal(r.Context(), client)))
-		}
-	}
-	mux.HandleFunc(UploadRoute, asAgency(tnswFiles.Upload))
-	mux.HandleFunc(DownloadRoute, asAgency(tnswFiles.Download))
-	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
-
-	key := storedKey(t, tnswService)
-	pushed, err := tnswAccess.IssueForClient(agencyClient, key, fileaccess.ScopeRead)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The agency: a proxy onto TNSW.
-	agencyService, err := NewProxyService(newRegistry(t, tnsw.URL, ownerToken), defaultProxyConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	agencyFiles := handlerOf(agencyService, agencyAccess)
-	officer := user("cda-officer")
-	officerToken, err := agencyAccess.Issue(officer, pushed, fileaccess.ScopeRead)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rec := download(agencyFiles, officerToken, officer)
-	assertDownloadURL(t, rec)
-	// Only TNSW knows the file behind what the agency stores; the agency
-	// relays what TNSW says it is.
-	assertFileType(t, rec, ".pdf", "application/pdf", drivers.DispositionInline)
-	assertStatus(t, download(agencyFiles, officerToken, user("another-officer")), http.StatusForbidden)
-
-	// An officer's own upload goes to TNSW too: TNSW issues the agency a
-	// token, and the agency wraps it for the officer.
-	uploaded := upload(agencyFiles, officer, `{"filename":"cert.pdf","mime_type":"application/pdf","size":10}`)
-	assertStatus(t, uploaded, http.StatusOK)
-	var meta struct {
-		Key       string `json:"key"`
-		UploadURL string `json:"upload_url"`
-	}
-	if err := json.NewDecoder(uploaded.Body).Decode(&meta); err != nil {
-		t.Fatal(err)
-	}
-	putFile(t, meta.UploadURL, "application/pdf", 10)
-	stored, err := agencyAccess.Resolve(officer, meta.Key, fileaccess.ScopeSubmit)
-	if err != nil {
-		t.Fatalf("the officer's upload reference: %v", err)
-	}
-	if _, err := tnswAccess.Resolve(&authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}, stored, fileaccess.ScopeRead); err != nil {
-		t.Fatalf("what the agency stores is not TNSW's token for it: %v", err)
-	}
-	// The upload reference itself can only be submitted. Once the form is
-	// saved, the officer reads the file with the reference the task gives.
-	assertStatus(t, download(agencyFiles, meta.Key, officer), http.StatusForbidden)
-	read, err := agencyAccess.Issue(officer, stored, fileaccess.ScopeRead)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertDownloadURL(t, download(agencyFiles, read, officer))
 }
 
 // upload calls h.Upload with body as p (no principal when p is nil).
@@ -371,7 +240,7 @@ func TestFileHandler_UploadReturnsAReference(t *testing.T) {
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	stack, err := New(context.Background(), localConfig(t, srv.URL), nil)
+	stack, err := New(context.Background(), localConfig(t, srv.URL))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -418,7 +287,7 @@ func TestFileHandler_UploadReturnsAReference(t *testing.T) {
 }
 
 func TestFileHandler_UploadRejects(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -455,46 +324,6 @@ func TestFileHandler_UploadRejects(t *testing.T) {
 	})
 }
 
-// In proxy mode the owning service's rejection is relayed, and its failure to
-// accept this service's credentials is a gateway failure.
-func TestFileHandler_UploadThroughProxy(t *testing.T) {
-	access, _ := testFileAccess(t)
-
-	h := handlerOf(newProxyStack(t, ownerToken).Service, access)
-	assertStatus(t, upload(h, user("alice"), `{"filename":"a.exe","mime_type":"application/x-msdownload","size":10}`), http.StatusUnsupportedMediaType)
-
-	h = handlerOf(newProxyStack(t, "wrong-token").Service, access)
-	assertStatus(t, upload(h, user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`), http.StatusBadGateway)
-}
-
-// An owning service that answers 200 with a response this service can't use
-// failed, as surely as one that answered 5xx: a gateway failure, not this
-// service's own (500).
-func TestFileHandler_DownloadOwnerBadResponseIsBadGateway(t *testing.T) {
-	access, _ := testFileAccess(t)
-	for name, body := range map[string]string{
-		"no download_url":       `{"expires_at": 1}`,
-		"relative download_url": `{"download_url": "/api/v1/storage/k/content", "expires_at": 1}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			owner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte(body))
-			}))
-			t.Cleanup(owner.Close)
-			svc, err := NewProxyService(newRegistry(t, owner.URL, ownerToken), defaultProxyConfig())
-			if err != nil {
-				t.Fatal(err)
-			}
-			token, err := access.Issue(user("alice"), "any-key", fileaccess.ScopeRead)
-			if err != nil {
-				t.Fatal(err)
-			}
-			assertStatus(t, download(handlerOf(svc, access), token, user("alice")), http.StatusBadGateway)
-		})
-	}
-}
-
 // A backend of this deployment's own failing is this service's error (500),
 // not a gateway's.
 func TestFileHandler_DownloadBackendFailureIsInternal(t *testing.T) {
@@ -517,7 +346,7 @@ func (failingService) DownloadURL(context.Context, string) (corestorage.Download
 // its URL is served. The key's extension only names a file the client saves,
 // so a filename that disagrees with the type changes neither.
 func TestDownloadOf_ReportsWhatStorageSays(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -554,4 +383,23 @@ func TestDownloadOf_ReportsWhatStorageSays(t *testing.T) {
 // file in it is its own.
 func handlerOf(svc Service, refs FileRefs) *FileHandler {
 	return NewFileHandler(NewFiles(svc, nil, nil, nil), refs)
+}
+
+// Only users upload. A machine client stores its files in its own storage, so a
+// reservation by one is refused before anything is reserved.
+func TestFileHandler_UploadRefusesMachineClients(t *testing.T) {
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	access, _ := testFileAccess(t)
+	h := handlerOf(stack.Service, access)
+	client := &authn.Principal{Kind: authn.KindClient, ClientID: "CDA_TO_NSW"}
+
+	rec := upload(h, client, `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`)
+
+	assertStatus(t, rec, http.StatusForbidden)
+	if strings.Contains(rec.Body.String(), "upload_url") {
+		t.Errorf("response %s reserved an upload", rec.Body.String())
+	}
 }

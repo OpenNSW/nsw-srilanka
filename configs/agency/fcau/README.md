@@ -84,7 +84,7 @@ creates FCAU for this deployment, on the `FCAU API` resource server
 | ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
 | TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on FCAU's parked steps, which `catalog.json` maps `tnsw` to |
-| FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                                                                         |
+| FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read` on TNSW                                                                                                                 |
 
 TNSW's `config.yaml` services entry `fcau` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files FCAU owns) with
 `resource=https://api.fcau.nsw-agency.local` (see `configs/config*.example.yaml`).

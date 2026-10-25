@@ -96,7 +96,7 @@ creates NPQS for this deployment, on the `NPQS API` resource server
 | ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
 | TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on NPQS's parked steps, which `catalog.json` maps `tnsw` to |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                                                                         |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read` on TNSW                                                                                                                 |
 
 TNSW's `config.yaml` services entry `npqs` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files NPQS owns) with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/config*.example.yaml`).

@@ -57,7 +57,7 @@ func TestNew_LocalContentUnderRoutePrefix(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	stack, err := New(context.Background(), localConfig(t, srv.URL), nil)
+	stack, err := New(context.Background(), localConfig(t, srv.URL))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestConfigValidate_LocalRoutePrefix(t *testing.T) {
 		t.Errorf("routePrefix /files: Validate() = %v, want an error naming storage.local.routePrefix", err)
 	}
 	// New refuses it too, rather than replacing it with RoutePrefix.
-	if _, err := New(context.Background(), cfg, nil); err == nil || !strings.Contains(err.Error(), "storage.local.routePrefix") {
+	if _, err := New(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "storage.local.routePrefix") {
 		t.Errorf("routePrefix /files: New() = %v, want an error naming storage.local.routePrefix", err)
 	}
 }
@@ -111,7 +111,7 @@ func TestConfigValidate_LocalRoutePrefix(t *testing.T) {
 // The backend enforces the upload limits from the configuration, not core's
 // defaults (any type, 32 MiB).
 func TestNew_AppliesConfiguredUploadLimits(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
+	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 			}
 			// New refuses it the same way, instead of reaching core's panic
 			// on a non-positive size.
-			if _, err := New(context.Background(), cfg, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+			if _, err := New(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("New() = %v, want an error containing %q", err, tt.wantErr)
 			}
 		})
@@ -177,21 +177,15 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 		}
 	})
 
-	// The owning service enforces its own limits and decides what opens in the
-	// browser in proxy mode, so neither is read there.
-	t.Run("proxy mode needs none", func(t *testing.T) {
-		cfg := Config{
-			Config: corestorage.Config{Type: TypeProxy},
-			Proxy: ProxyConfig{
-				Service:      "files-api",
-				UploadPath:   DefaultProxyUploadPath,
-				DownloadPath: DefaultProxyDownloadPath,
-				DeletePath:   DefaultProxyDeletePath,
-			},
-			TokenKeyset: testTokenKeyset,
+	t.Run("the proxy type is refused", func(t *testing.T) {
+		cfg := localConfig(t, "http://localhost:8080")
+		cfg.Type = "proxy"
+		want := `storage.type "proxy" is not supported`
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("Validate() = %v, want an error containing %q", err, want)
 		}
-		if err := cfg.Validate(); err != nil {
-			t.Errorf("Validate() = %v, want nil", err)
+		if _, err := New(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("New() = %v, want an error containing %q", err, want)
 		}
 	})
 }
@@ -232,7 +226,7 @@ func TestConfigValidate_InlineTypes(t *testing.T) {
 				t.Errorf("Validate() = %v, want an error containing %q", err, tt.wantErr)
 			}
 			// New refuses it the same way, instead of reaching core's panic.
-			if _, err := New(context.Background(), cfg, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+			if _, err := New(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("New() = %v, want an error containing %q", err, tt.wantErr)
 			}
 		})
@@ -261,7 +255,7 @@ func TestNew_AppliesConfiguredInlineTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := localConfig(t, "http://localhost:8080")
 			cfg.InlineTypes = tt.inline
-			stack, err := New(context.Background(), cfg, nil)
+			stack, err := New(context.Background(), cfg)
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
@@ -280,9 +274,8 @@ func TestNew_AppliesConfiguredInlineTypes(t *testing.T) {
 	}
 }
 
-// Every mode issues file tokens, so every mode needs the token settings.
+// A deployment issues file tokens, so it needs the token settings.
 func TestConfigValidate_FileTokens(t *testing.T) {
-	proxy := Config{Config: corestorage.Config{Type: TypeProxy}, Proxy: defaultProxyConfig()}
 	backend := localConfig(t, "http://localhost:8080")
 
 	tests := []struct {
@@ -300,23 +293,22 @@ func TestConfigValidate_FileTokens(t *testing.T) {
 		{name: "set TTL", keyset: testTokenKeyset, ttl: 600, wantTTL: 10 * time.Minute},
 	}
 	for _, tt := range tests {
-		for mode, cfg := range map[string]Config{"proxy": proxy, "backend": backend} {
-			t.Run(tt.name+" in "+mode+" mode", func(t *testing.T) {
-				cfg.TokenKeyset, cfg.TokenTTLSeconds = tt.keyset, tt.ttl
-				err := cfg.Validate()
-				if tt.wantErr != "" {
-					if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-						t.Errorf("Validate() = %v, want an error containing %q", err, tt.wantErr)
-					}
-					return
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := backend
+			cfg.TokenKeyset, cfg.TokenTTLSeconds = tt.keyset, tt.ttl
+			err := cfg.Validate()
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Errorf("Validate() = %v, want an error containing %q", err, tt.wantErr)
 				}
-				if err != nil {
-					t.Fatalf("Validate() = %v, want nil", err)
-				}
-				if got := cfg.TokenTTL(); got != tt.wantTTL {
-					t.Errorf("TokenTTL() = %v, want %v", got, tt.wantTTL)
-				}
-			})
-		}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+			if got := cfg.TokenTTL(); got != tt.wantTTL {
+				t.Errorf("TokenTTL() = %v, want %v", got, tt.wantTTL)
+			}
+		})
 	}
 }

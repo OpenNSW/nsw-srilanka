@@ -20,10 +20,9 @@ info:
     - A machine client's (an OGA's) works only for that client, and never
       expires.
 
-    An agency runs this API in front of the deployment that stores its files.
-    It relays that deployment's rejections with their status and message, and
-    answers 502 when that deployment fails or refuses the agency's
-    credentials.
+    Every deployment stores the files uploaded to it, and only its own users
+    upload. A file another service owns is opened through that service: the
+    download route asks the owner for the URL (see its operation).
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -48,7 +47,8 @@ paths:
         The allowed types and the size limit are the deployment's
         (`storage.allowedUploadTypes`, `storage.maxUploadBytes`).
 
-        Requires scope `nsw:storage:write`.
+        Requires scope `nsw:storage:write`, and a user: a machine client stores
+        its files in its own storage.
       operationId: reserveUpload
       requestBody:
         required: true
@@ -78,7 +78,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden. The bearer token lacks scope `nsw:storage:write`.
+          description: |
+            Forbidden. The bearer token lacks scope `nsw:storage:write`, or it
+            is a machine client's.
           content:
             application/json:
               schema:
@@ -91,14 +93,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal error reserving the upload or issuing its reference.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          description: |
-            Agency only. The deployment that stores the files failed, or
-            refused this deployment's credentials.
           content:
             application/json:
               schema:
@@ -190,9 +184,7 @@ paths:
           description: |
             The file is another service's, and that service is unreachable,
             refused this deployment's credentials, failed, gave an unusable
-            answer, or is not one of this deployment's storage peers. In an
-            agency that proxies its storage, the deployment that stores the
-            files failed or refused its credentials.
+            answer, or is not one of this deployment's storage peers.
           content:
             application/json:
               schema:

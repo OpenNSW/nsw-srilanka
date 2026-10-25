@@ -40,7 +40,7 @@ func TestRoutes(t *testing.T) {
 	}
 
 	// The local content routes go on the same mux in app.go.
-	stack, err := New(t.Context(), localConfig(t, "http://localhost:8080"), nil)
+	stack, err := New(t.Context(), localConfig(t, "http://localhost:8080"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

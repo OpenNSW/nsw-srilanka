@@ -74,7 +74,7 @@ func TestAccept_OwnTokens(t *testing.T) {
 	assertNotAccepted(t, a, user("bob"), upload, fileaccess.ErrNotYours)
 	assertNotAccepted(t, a, user("alice"), view, fileaccess.ErrScope)
 
-	// A client's own upload token is accepted back from that client.
+	// A token issued to a client that allows submit is accepted back from it.
 	clientUpload := issue(t, a, client("SLPA_TO_NSW"), "c.pdf")
 	assertAccepted(t, a, client("SLPA_TO_NSW"), clientUpload, "c.pdf")
 }

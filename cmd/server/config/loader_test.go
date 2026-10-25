@@ -281,7 +281,7 @@ func checkAgencyStorage(t *testing.T, cfg *Config) {
 	if cfg.Mode != ModeAgency {
 		t.Fatalf("mode = %q, want agency", cfg.Mode)
 	}
-	if cfg.Storage.IsProxy() || (cfg.Storage.Type != "local" && cfg.Storage.Type != "s3") {
+	if cfg.Storage.Type != "local" && cfg.Storage.Type != "s3" {
 		t.Errorf("storage.type = %q, want the deployment's own local or s3 backend", cfg.Storage.Type)
 	}
 	if cfg.Storage.Type == "local" && cfg.Storage.Local.PublicURL != cfg.Server.ServiceURL {

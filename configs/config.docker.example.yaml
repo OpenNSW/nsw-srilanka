@@ -191,12 +191,11 @@ cors:
   maxAge: 3600
 
 storage:
-  # local | s3 | proxy
+  # local | s3
   type: local
   # How long a presigned upload/download URL stays valid, in seconds.
   presignTTLSeconds: 900
-  # What clients may upload. Not read when type is proxy: the owning service
-  # applies its own. MIME types, compared exactly with the upload's.
+  # What clients may upload. MIME types, compared exactly with the upload's.
   allowedUploadTypes:
     - application/pdf
     - image/jpeg
@@ -211,8 +210,7 @@ storage:
     - text/xml
     - application/xml
   # What a download opens in the browser; every other file is saved. MIME
-  # types, compared exactly with the stored type. Not read when type is proxy:
-  # the owning service applies its own. text/html is listed for the documents
+  # types, compared exactly with the stored type. text/html is listed for the documents
   # this service generates and stores itself, and is never in
   # allowedUploadTypes: a type a browser interprets as a document runs script
   # from the origin it is served on, so startup fails when a type clients may
@@ -225,7 +223,7 @@ storage:
     - image/webp
     - text/plain
     - text/html
-  # Largest upload, in bytes (32 MiB). Not read when type is proxy.
+  # Largest upload, in bytes (32 MiB).
   maxUploadBytes: 33554432
   # Seals the file tokens clients hold in place of stored file keys:
   # comma-separated kid:key pairs, newest first, each key 32 random bytes in
@@ -253,16 +251,6 @@ storage:
   #   accessKey: "{{env:STORAGE_S3_ACCESS_KEY}}"
   #   secretKey: "{{env:STORAGE_S3_SECRET_KEY}}"
   #   publicURL: ""
-  # Only read when type is proxy. Serves storage from another service that owns
-  # the files, reached through the outbound services registry
-  # (services), which supplies its URL and authentication. All
-  # four are required in proxy mode; below are that service's usual storage
-  # routes, and {key} may appear anywhere in the download/delete paths.
-  # proxy:
-  #   service: ""
-  #   uploadPath: /api/v1/storage
-  #   downloadPath: /api/v1/storage/{key}
-  #   deletePath: /api/v1/storage/{key}
 
 authn:
   # The keys are fetched in-network; the issuer is the browser-facing host the
