@@ -53,7 +53,6 @@ services:
         scopes:
           - nsw:task:write
           - nsw:storage:read
-          - nsw:storage:write
         endpointParams:
           resource: https://api.nsw-srilanka.local
 
@@ -66,23 +65,52 @@ cors:
   allowCredentials: true
   maxAge: 3600
 
-# NPQS keeps no files of its own: it serves TNSW's storage, calling TNSW as
-# NPQS_TO_NSW (services entry tnsw), so officers open the documents
-# traders uploaded there. TNSW applies its own upload limits.
+# NPQS stores the files its officers upload in its own storage. A file TNSW
+# owns is opened through TNSW, which this deployment calls as NPQS_TO_NSW
+# (services entry tnsw).
 storage:
-  type: proxy
-  # Seals the file tokens officers hold in place of stored file keys (here,
-  # the tokens TNSW gives this agency): comma-separated kid:key pairs, newest
-  # first, each key 32 random bytes in base64. This agency's own, never TNSW's.
+  # local | s3
+  type: local
+  # How long a presigned upload/download URL stays valid, in seconds.
+  presignTTLSeconds: 900
+  # What officers may upload, as MIME types compared exactly with the upload's.
+  allowedUploadTypes:
+    - application/pdf
+    - image/jpeg
+    - image/png
+    - image/gif
+    - image/webp
+    # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls.
+    - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    # XML is data to download, not to display: it is not in inlineTypes.
+    - text/xml
+    - application/xml
+  # What a download opens in the browser; every other file is saved. text/html
+  # is for the documents this service generates, and is never uploadable.
+  inlineTypes:
+    - application/pdf
+    - image/png
+    - image/jpeg
+    - image/gif
+    - image/webp
+    - text/plain
+    - text/html
+  # Largest upload, in bytes (32 MiB).
+  maxUploadBytes: 33554432
+  # Seals the file tokens officers hold in place of stored file keys, and the
+  # tokens given to TNSW: comma-separated kid:key pairs, newest first, each key 32
+  # random bytes in base64. This agency's own, never TNSW's. Keep old keys: the
+  # tokens TNSW holds never expire.
   tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
   # How long the file tokens an officer reads with last, in seconds. Optional:
   # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
   tokenTTLSeconds: 3600
-  proxy:
-    service: "tnsw"
-    uploadPath: /api/v1/storage
-    downloadPath: /api/v1/storage/{key}
-    deletePath: /api/v1/storage/{key}
+  local:
+    baseDir: ./bucket/npqs
+    # The browser-facing URL presigned local URLs are built on: server.serviceURL.
+    publicURL: http://localhost:8081
+    # Signs presigned upload URLs.
+    putSecret: "{{env:STORAGE_LOCAL_PUT_SECRET}}"
 
 # Officers sign in through the NPQS portal client, and NSW injects and replies as NSW_TO_NPQS.
 # The audience is the NPQS API resource server in

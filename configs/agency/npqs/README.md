@@ -14,9 +14,11 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 | `portal-config.js`     | Runtime config of the `npqs-portal` container: the trader-app in agency mode                                                                                           |
 | `branding.json`        | Branding for the `npqs-portal` container, as the NPQS officer portal had it in nsw-agency                                                                              |
 
-NPQS keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
-service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `NPQS_TO_NSW`. TNSW applies its own upload limits.
+NPQS stores the files its officers upload in its own storage (`storage.type: local`
+here; `s3` in a deployed environment), under its own token keyset. A file TNSW owns is
+opened through TNSW, which NPQS calls as `NPQS_TO_NSW` (services entry `tnsw`), and TNSW
+opens the files NPQS owns through NPQS's own storage API. `catalog.json`'s `clientToService`
+names `tnsw` as the one storage peer.
 
 The officer forms' searchable lists (importing countries, commodity names) are
 served from the `static_data` in `npqs`, the same lists TNSW serves the trader.
@@ -40,7 +42,7 @@ Two things nsw-agency did for NPQS aren't here yet:
   treatment request review) reaches TNSW, but the trader's resubmission doesn't
   reach NPQS yet; see #600.
 
-The YAML's `services` list registers `tnsw` for storage and the workflows'
+The YAML's `services` list registers `tnsw`, for the files it owns and for the workflows'
 `notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
 
 ## Run with Docker Compose
@@ -90,13 +92,13 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates NPQS for this deployment, on the `NPQS API` resource server
 (`https://api.npqs.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                                 |
-| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps, which `catalog.json` maps `tnsw` to |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                          |
+| Caller                             | Client                | Grant                                                                                                                                                                                |
+| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                                                                 |
+| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, `nsw:storage:read` to open the agency's files, and `nsw:task:write` to reply on NPQS's parked steps, which `catalog.json` maps `tnsw` to |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                                                                         |
 
-TNSW's `config.yaml` services entry `npqs` requests `nsw:workflow:inject` and `nsw:task:write` with
+TNSW's `config.yaml` services entry `npqs` requests `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read` (to open files NPQS owns) with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/config*.example.yaml`).
 An IdP seeded before the move to `idp/bootstrap/` holds the same entities under other
 IDs, so `thunderid-setup` fails on it. Recreate the IdP volumes once (`docker compose

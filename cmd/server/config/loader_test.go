@@ -4,7 +4,14 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/OpenNSW/core/remote"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 )
 
 func writeConfigFile(t *testing.T, body string) string {
@@ -230,5 +237,85 @@ func TestLoad_AgencyModeNeedsNoSLPASecret(t *testing.T) {
 
 	if _, err := loadYAML(t, configYAML(t, "mode: tnsw\n", secret)); err == nil || !containsString(err.Error(), "slpa webhook") {
 		t.Fatalf("tnsw: expected the SLPA secret to be required, got: %v", err)
+	}
+}
+
+// Every committed agency config is a deployment that stores its own files and
+// reaches TNSW for the ones TNSW owns. Its catalog names TNSW as the one storage
+// peer, a service the config registers.
+func TestAgencyConfigs_Validate(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	paths, err := filepath.Glob(filepath.Join(root, "configs", "agency", "*", "config*.yaml"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no agency configs found: %v", err)
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, match := range regexp.MustCompile(`\{\{env:([A-Z0-9_]+)\}\}`).FindAllSubmatch(data, -1) {
+				t.Setenv(string(match[1]), "example-"+string(match[1]))
+			}
+			t.Setenv("STORAGE_TOKEN_KEYSET", "example:"+base64.StdEncoding.EncodeToString(make([]byte, 32)))
+			t.Setenv("APP_ENV", "development")
+
+			cfg, err := loadFile(path)
+			if err != nil {
+				t.Fatalf("does not load: %v", err)
+			}
+			// The artifacts are a clone of another repo, which need not exist here.
+			cfg.ArtifactLoader.Local.Root = t.TempDir()
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("does not validate: %v", err)
+			}
+			checkAgencyStorage(t, cfg)
+			checkAgencyTNSW(t, cfg, root)
+		})
+	}
+}
+
+func checkAgencyStorage(t *testing.T, cfg *Config) {
+	t.Helper()
+	if cfg.Mode != ModeAgency {
+		t.Fatalf("mode = %q, want agency", cfg.Mode)
+	}
+	if cfg.Storage.IsProxy() || (cfg.Storage.Type != "local" && cfg.Storage.Type != "s3") {
+		t.Errorf("storage.type = %q, want the deployment's own local or s3 backend", cfg.Storage.Type)
+	}
+	if cfg.Storage.Type == "local" && cfg.Storage.Local.PublicURL != cfg.Server.ServiceURL {
+		t.Errorf("storage.local.publicURL = %q, want server.serviceURL %q: it is where a browser reaches the presigned URLs", cfg.Storage.Local.PublicURL, cfg.Server.ServiceURL)
+	}
+}
+
+// checkAgencyTNSW checks the agency reaches TNSW, and that its catalog names TNSW
+// as the service it opens files through.
+func checkAgencyTNSW(t *testing.T, cfg *Config, root string) {
+	t.Helper()
+	var tnsw *remote.ServiceConfig
+	for i := range cfg.Services {
+		if cfg.Services[i].ID == "tnsw" {
+			tnsw = &cfg.Services[i]
+		}
+	}
+	if tnsw == nil {
+		t.Fatal("services does not register tnsw")
+	}
+	scopes := tnsw.Auth.OAuth2.Scopes
+	if !slices.Contains(scopes, "nsw:storage:read") || slices.Contains(scopes, "nsw:storage:write") {
+		t.Errorf("tnsw scopes = %v: it reads TNSW's files and never uploads to TNSW", scopes)
+	}
+
+	cat, err := catalog.Load(filepath.Join(root, strings.TrimPrefix(cfg.Server.CatalogConfigPath, "./")))
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	clientID, ok := cat.ClientFor("tnsw")
+	if !ok {
+		t.Fatal("catalog clientToService does not list tnsw")
+	}
+	if service, ok := cat.ServiceFor(clientID); !ok || service != "tnsw" {
+		t.Errorf("catalog ServiceFor(%q) = %q, %v, want tnsw", clientID, service, ok)
 	}
 }

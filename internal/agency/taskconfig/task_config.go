@@ -8,6 +8,8 @@ package taskconfig
 import (
 	"fmt"
 	"strings"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/filefields"
 )
 
 // CurrentSchemaVersion is the only schemaVersion Validate accepts: the workflow-bound
@@ -21,8 +23,13 @@ type TaskConfig struct {
 	SchemaVersion int    `json:"schemaVersion"`
 	TaskCode      string `json:"taskCode"`
 	// Workflow is the workflow artifact id started for this task code.
-	Workflow string   `json:"workflow"`
-	Meta     TaskMeta `json:"meta"`
+	Workflow string `json:"workflow"`
+	// Files lists the values in the injected data that are files, as paths into
+	// it in the syntax of a render config's files (see filefields). The sender's
+	// tokens at these paths are stored as its files; a file at any other path is
+	// not protected.
+	Files []string `json:"files,omitempty"`
+	Meta  TaskMeta `json:"meta"`
 }
 
 // TaskMeta is display metadata for a task code.
@@ -40,6 +47,9 @@ func (c *TaskConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.Workflow) == "" {
 		return fmt.Errorf("task config %q: workflow is required", c.TaskCode)
+	}
+	if _, err := filefields.ParseList(c.Files); err != nil {
+		return fmt.Errorf("task config %q: %w", c.TaskCode, err)
 	}
 	return nil
 }

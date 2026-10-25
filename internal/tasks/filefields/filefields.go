@@ -61,9 +61,16 @@ func Parse(renderConfig json.RawMessage) ([]Path, error) {
 	if err := json.Unmarshal(renderConfig, &decl); err != nil {
 		return nil, fmt.Errorf("filefields: decode files: %w", err)
 	}
-	paths := make([]Path, 0, len(decl.Files))
-	declared := make(map[string]bool, len(decl.Files))
-	for _, s := range decl.Files {
+	return ParseList(decl.Files)
+}
+
+// ParseList returns the file fields the paths list names, in order, with the
+// same rules as Parse: a path that does not parse, or is listed twice, is an
+// error.
+func ParseList(files []string) ([]Path, error) {
+	paths := make([]Path, 0, len(files))
+	declared := make(map[string]bool, len(files))
+	for _, s := range files {
 		p, err := parsePath(s)
 		if err != nil {
 			return nil, err

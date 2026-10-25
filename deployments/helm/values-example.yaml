@@ -191,6 +191,7 @@ backend:
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
+              - nsw:storage:read
             endpointParams:
               resource: https://api.npqs.nsw-agency.local
       - id: fcau
@@ -205,6 +206,7 @@ backend:
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
+              - nsw:storage:read
             endpointParams:
               resource: https://api.fcau.nsw-agency.local
       - id: cda
@@ -219,6 +221,7 @@ backend:
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
+              - nsw:storage:read
             endpointParams:
               resource: https://api.cda.nsw-agency.local
       - id: slpa
@@ -242,6 +245,7 @@ backend:
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
+              - nsw:storage:read
             endpointParams:
               resource: https://api.efc.nsw-agency.local
       - id: customs-asycuda
@@ -273,6 +277,7 @@ backend:
             scopes:
               - nsw:workflow:inject
               - nsw:task:write
+              - nsw:storage:read
             endpointParams:
               resource: https://api.sltb.nsw-agency.local
 

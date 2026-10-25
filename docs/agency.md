@@ -5,14 +5,15 @@ in `config.yaml`. The modes are exclusive: a deployment is one or the other, nev
 both. Both share the task engine, Temporal, renderers, plugins, storage and
 `/api/v1/tasks/{id}`. They differ at the edges:
 
-|                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                    |
-| -------------------- | ------------------------------------------------------- | ------------------------------------------ |
-| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
-| Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
-| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
-| Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
-| Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
-| Artifacts            | TNSW artifact root                                      | the agency's artifacts                     |
+|                      | TNSW (`mode: tnsw`)                                     | Agency (`mode: agency`)                     |
+| -------------------- | ------------------------------------------------------- | ------------------------------------------- |
+| Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)     |
+| Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow  |
+| Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`             |
+| Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)     |
+| Files                | own storage; a peer's files opened through it           | own storage; TNSW's files opened through it |
+| Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`               |
+| Artifacts            | TNSW artifact root                                      | the agency's artifacts                      |
 
 A missing or unknown `mode` stops the server at startup.
 
@@ -162,6 +163,12 @@ agency manifest under the task code as its id:
 }
 ```
 
+`files` is optional. It lists the paths in the injected `data` that hold files, in the syntax of a
+render config's `files` (`"documents[*].file"`). Each is a token the injecting service issued, and
+is stored as that service's file (see [Files](#files)). A file at a path that is not listed is not
+protected, so list every file the caller sends and declare the same paths under `submission` in the
+task's render config.
+
 This is `schemaVersion` 2, as defined by `schemas/taskconfig.v2.schema.json` in
 `one-trade-artifacts`; version 1 configs are rejected. It follows the sibling
 nsw-agency service's `task_config` (same kind name, lookup by manifest id, parsed and
@@ -219,6 +226,26 @@ A catalog that maps no role (for example one with only `clients`) still starts, 
 officer can open cases or act on tasks: the server logs a warning at start. And without
 `authz` and `read.roles` on a task there is no role-based access control on it, since
 every catalog role then owns it.
+
+## Files
+
+An agency stores the files its officers upload in its own storage (`storage.type` `local` or `s3`,
+with its own `tokenKeyset`). A stored value is either a bare key, which is this agency's file, or
+`<service>:<token>`, a file another service owns, where `<token>` is what that service issued to this
+agency's client. Opening such a file asks the service for its download URL through the `services`
+registry, so the service must hold `nsw:storage:read` for the client it is called as.
+
+- **Inbound.** The files a caller sends are stored as its service's: at the paths the task config's
+  `files` lists in an inject, and at the declared `files` of a parked step's render config on a
+  callback (a resubmission reply declares them under its own namespace, such as `resubmission.*`). The
+  service comes from the authenticated client through `clientToService` in the catalog, never from the
+  payload.
+- **Outbound.** A step that sends files to TNSW sends tokens issued for the client the catalog
+  maps `tnsw` to, with `read` only: `EXTERNAL_REVIEW` for the files in its submission or reply, and
+  an `AUTH_API_CALL` step for the files its `payload` input declares in the task's render config
+  (`payload.payload.certificate`). A step that would send a file to a service with no such client fails.
+- **Uploads.** Officers upload through this agency's own `POST /api/v1/storage`. The bucket's CORS
+  allows `PUT` from the officer portal, and `GET` from every portal that opens its files, TNSW's included.
 
 ## Cases
 

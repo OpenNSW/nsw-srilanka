@@ -41,6 +41,7 @@ flowchart LR
         tc["task_config<br/>dea_permit_review_v1 → workflow"]
         wf["Agency workflow<br/>officer review → notify_decision"]
         db[("dea_db")]
+        astore[("DEA storage")]
         ns["Temporal namespace: dea"]
         portal["Officer portal<br/>trader-app, APP_MODE: agency"]
     end
@@ -48,8 +49,8 @@ flowchart LR
     subgraph idp["ThunderID"]
         rs["Agency API (resource server)"]
         officer["Officers' group → officer role"]
-        n2a["TNSW-to-agency client → its role<br/>nsw:workflow:inject, nsw:task:write"]
-        a2n["Agency-to-TNSW client → its role<br/>nsw:task:write, nsw:storage:*"]
+        n2a["TNSW-to-agency client → its role<br/>nsw:workflow:inject, nsw:task:write,<br/>nsw:storage:read"]
+        a2n["Agency-to-TNSW client → its role<br/>nsw:task:write, nsw:storage:read"]
     end
 
     tflow -- "as the TNSW-to-agency client" --> inject
@@ -58,7 +59,9 @@ flowchart LR
     wf --- ns
     portal -- "officer token" --> agency
     wf -- "notify_decision, as the agency-to-TNSW client" --> tcb
-    portal -. "documents, proxied as the agency-to-TNSW client" .-> tstore
+    portal -- "uploads" --> astore
+    agency -. "TNSW's files, opened as the agency-to-TNSW client" .-> tstore
+    tnsw -. "the agency's files, opened as the TNSW-to-agency client" .-> astore
 ```
 
 - **The agency's API is a resource server of its own.** Officers' and TNSW's tokens for it
@@ -75,8 +78,10 @@ flowchart LR
   more information goes back and forth by reply tokens instead of a new inject, which is
   why the TNSW-to-agency client also needs `nsw:task:write`. See
   [docs/agency.md, Asking for more information](../agency.md#asking-for-more-information).
-- **The agency keeps no files.** Its storage proxies TNSW's as the agency-to-TNSW client,
-  so officers see the documents traders uploaded.
+- **The agency keeps its own files.** Officers' uploads go to the agency's own storage. TNSW's
+  files, which traders uploaded, are opened through TNSW as the agency-to-TNSW client, and TNSW
+  opens the agency's through the agency as the TNSW-to-agency client, which is why that client
+  also needs `nsw:storage:read`. See [docs/agency.md, Files](../agency.md#files).
 - **ThunderID generates the IDs, client IDs and secrets.** The configuration examples
   write `<portal client ID>`, `<agency-to-TNSW client ID>` and `<TNSW-to-agency client ID>`
   where a generated client ID goes.
@@ -244,10 +249,10 @@ local-dev equivalent, and shows every setting of the three applications.
 Create two more applications in the agency's OU, each a **Backend Service** (client
 credentials, client secret sent as HTTP Basic):
 
-| Application           | Example name     | Custom scopes                                                                     |
-| --------------------- | ---------------- | --------------------------------------------------------------------------------- |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write` |
-| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                           |
+| Application           | Example name     | Custom scopes                                                |
+| --------------------- | ---------------- | ------------------------------------------------------------ |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read` |
+| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`, `nsw:storage:read`  |
 
 For each, note the client ID from **Credentials**, and copy the client secret straight
 into its cluster Secret: the agency-to-TNSW client's into the agency's Secret (Step 4a),
@@ -264,8 +269,8 @@ Assignment**):
 | Role                         | Example name  | Permissions                                                                                                                               | Assigned to               |
 | ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:read`, `nsw:task:write` | The officers' group       |
-| TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:write`                                         | The agency-to-TNSW client |
+| TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`, `nsw:storage:read`                                                            | The TNSW-to-agency client |
+| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:task:write`                                                              | The agency-to-TNSW client |
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -315,10 +320,16 @@ DB="$DB" A2N="$A2N" KEYSET="$KEYSET" jq -n '{
 unset DB A2N KEYSET
 ```
 
-`storage-token-keyset` seals the file tokens officers hold in place of stored file keys.
-It is the agency's own, never TNSW's. To rotate it, put a new `kid:key` pair first and
+`storage-token-keyset` seals the file tokens officers hold in place of stored file keys, and
+the ones TNSW holds for the agency's files, which never expire. It is the agency's own, never
+TNSW's, and its old keys are kept for good. To rotate it, put a new `kid:key` pair first and
 keep the old ones, as for TNSW (see the
 [chart README](../../deployments/helm/lk-tnsw/README.md)).
+
+The agency's bucket is its own: create it with credentials only the agency holds, and set its
+CORS to allow `PUT` with `Content-Type` from the officer portal's origin, and `GET` from every
+portal that opens its files, which includes the TNSW portal, since traders open the files
+officers produced.
 
 Add the notification provider credentials the same way if the agency's workflows send
 email or SMS.
@@ -330,13 +341,18 @@ and in the Helm values below, the names, hosts and URLs are the examples; use yo
 
 `catalog.json`, mapping each role the agency's tasks name to its IdP role's name,
 **exactly** as created in Step 2f, and `tnsw` to the TNSW-to-agency client, whose
-replies the tasks' waiting steps accept:
+replies the tasks' waiting steps accept. `clientToService` says `tnsw` is the service the
+agency opens files through, an entry of `services` below:
 
 ```json
-{ "roles": { "officer": "DEA Officer" }, "clients": { "tnsw": "NSW_TO_DEA_M2M" } }
+{
+  "roles": { "officer": "DEA Officer" },
+  "clients": { "tnsw": "NSW_TO_DEA_M2M" },
+  "clientToService": { "tnsw": "tnsw" }
+}
 ```
 
-The agency's outbound `tnsw` service, used by `notify_decision` and storage,
+The agency's outbound `tnsw` service, used by `notify_decision` and to open TNSW's files,
 lives in `backend.config.services` in the Helm values below. Its OAuth2 secret is
 a `{{env:NAME}}` placeholder expanded while loading the YAML config.
 
@@ -398,7 +414,7 @@ backend:
             tokenURL: https://idp.example.com/oauth2/token
             clientID: "<agency-to-TNSW client ID>"
             clientSecret: "{{env:M2M_DEA_TO_NSW_SECRET}}"
-            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write"]
+            scopes: ["nsw:task:write", "nsw:storage:read"]
             endpointParams:
               resource: https://api.nsw-srilanka.local
     db:
@@ -416,16 +432,20 @@ backend:
       allowedHeaders: [Content-Type, Authorization]
       allowCredentials: true
       maxAge: 3600
-    # Documents live in TNSW; officers reach them through it as the agency-to-TNSW client.
+    # Officers' uploads live in the agency's own bucket. The chart has no volume by
+    # default, so a deployed agency uses S3 (or R2) with its own bucket and credentials.
     storage:
-      type: proxy
+      type: s3
+      presignTTLSeconds: 900
+      allowedUploadTypes: [application/pdf, image/jpeg, image/png]
+      inlineTypes: [application/pdf, image/jpeg, image/png]
+      maxUploadBytes: 33554432
       tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
       tokenTTLSeconds: 3600
-      proxy:
-        service: tnsw
-        uploadPath: /api/v1/storage
-        downloadPath: /api/v1/storage/{key}
-        deletePath: /api/v1/storage/{key}
+      s3:
+        endpoint: https://<account>.r2.cloudflarestorage.com
+        bucket: dea-storage
+        region: auto
     authn:
       jwksURL: "https://idp.example.com/oauth2/jwks"
       issuer: "https://idp.example.com"
@@ -509,7 +529,7 @@ IdP's JWKS.
    read -rs -p 'TNSW-to-agency client secret: ' SECRET; echo
    curl -s -u "<TNSW-to-agency client ID>:$SECRET" \
      --data-urlencode grant_type=client_credentials \
-     --data-urlencode 'scope=nsw:workflow:inject nsw:task:write' \
+     --data-urlencode 'scope=nsw:workflow:inject nsw:task:write nsw:storage:read' \
      --data-urlencode resource=https://api.dea.nsw-agency.local \
      https://idp.example.com/oauth2/token \
      | jq -r .access_token \
@@ -565,7 +585,7 @@ services:
         tokenURL: https://idp.example.com/oauth2/token
         clientID: "<TNSW-to-agency client ID>"
         clientSecret: "{{env:M2M_NSW_TO_DEA_SECRET}}"
-        scopes: ["nsw:workflow:inject", "nsw:task:write"]
+        scopes: ["nsw:workflow:inject", "nsw:task:write", "nsw:storage:read"]
         endpointParams:
           resource: https://api.dea.nsw-agency.local
 ```
@@ -646,7 +666,7 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the `catalog.json` name doesn't match the token's `roles`, or the officer isn't in the group                                                               |
 | Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                         |
 | Reply `403` `client … is not permitted`                 | The agency's `catalog.json` doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                        |
-| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                           |
+| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject`, `nsw:task:write` and `nsw:storage:read`                                                                       |
 | Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                                 |
 | Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                         |
 | Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                                      |

@@ -18,6 +18,16 @@ volumes:
     driver: local
   bucket_data:
     driver: local
+  cda_bucket:
+    driver: local
+  efc_bucket:
+    driver: local
+  fcau_bucket:
+    driver: local
+  npqs_bucket:
+    driver: local
+  sltb_bucket:
+    driver: local
 
 # The environment every service that reads the server's config file needs —
 # api, migrate and seed-companies all run on configs/config.docker.yaml (seeded
@@ -50,6 +60,7 @@ x-cda-config-env: &cda-config-env
   M2M_CDA_TO_NSW_SECRET: ${M2M_CDA_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   # Each deployment seals its own file tokens, so not TNSW's keyset.
+  STORAGE_LOCAL_PUT_SECRET: ${CDA_STORAGE_LOCAL_PUT_SECRET:-local-dev-cda-put-secret}
   STORAGE_TOKEN_KEYSET: ${CDA_STORAGE_TOKEN_KEYSET:-dev:Y2RhLWxvY2FsLWRldi1maWxlLXRva2VuLWtleS0wMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -60,6 +71,7 @@ x-efc-config-env: &efc-config-env
   CONFIG_PATH: configs/agency/efc/config.docker.yaml
   M2M_EFC_TO_NSW_SECRET: ${M2M_EFC_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_LOCAL_PUT_SECRET: ${EFC_STORAGE_LOCAL_PUT_SECRET:-local-dev-efc-put-secret}
   STORAGE_TOKEN_KEYSET: ${EFC_STORAGE_TOKEN_KEYSET:-dev:ZWZjLWxvY2FsLWRldi1maWxlLXRva2VuLWtleS0wMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -70,6 +82,7 @@ x-npqs-config-env: &npqs-config-env
   CONFIG_PATH: configs/agency/npqs/config.docker.yaml
   M2M_NPQS_TO_NSW_SECRET: ${M2M_NPQS_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_LOCAL_PUT_SECRET: ${NPQS_STORAGE_LOCAL_PUT_SECRET:-local-dev-npqs-put-secret}
   STORAGE_TOKEN_KEYSET: ${NPQS_STORAGE_TOKEN_KEYSET:-dev:bnBxcy1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -80,6 +93,7 @@ x-sltb-config-env: &sltb-config-env
   CONFIG_PATH: configs/agency/sltb/config.docker.yaml
   M2M_SLTB_TO_NSW_SECRET: ${M2M_SLTB_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_LOCAL_PUT_SECRET: ${SLTB_STORAGE_LOCAL_PUT_SECRET:-local-dev-sltb-put-secret}
   STORAGE_TOKEN_KEYSET: ${SLTB_STORAGE_TOKEN_KEYSET:-dev:c2x0Yi1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -90,6 +104,7 @@ x-fcau-config-env: &fcau-config-env
   CONFIG_PATH: configs/agency/fcau/config.docker.yaml
   M2M_FCAU_TO_NSW_SECRET: ${M2M_FCAU_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  STORAGE_LOCAL_PUT_SECRET: ${FCAU_STORAGE_LOCAL_PUT_SECRET:-local-dev-fcau-put-secret}
   STORAGE_TOKEN_KEYSET: ${FCAU_STORAGE_TOKEN_KEYSET:-dev:ZmNhdS1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   NOTIFICATION_EMAIL_TOKEN: ${NOTIFICATION_EMAIL_TOKEN:-replace-with-actual-token}
   NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
@@ -446,6 +461,7 @@ services:
       - "8083:8080"
     volumes:
       - ./configs:/app/configs:ro
+      - cda_bucket:/app/bucket
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
       # clone's cda/ dir.
       - ${CDA_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/cda}:/app/artifacts:ro
@@ -536,6 +552,7 @@ services:
       - "8085:8080"
     volumes:
       - ./configs:/app/configs:ro
+      - efc_bucket:/app/bucket
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
       # clone's efc/ dir.
       - ${EFC_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/efc}:/app/artifacts:ro
@@ -627,6 +644,7 @@ services:
       - "8081:8080"
     volumes:
       - ./configs:/app/configs:ro
+      - npqs_bucket:/app/bucket
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
       # clone's npqs/ dir.
       - ${NPQS_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/npqs}:/app/artifacts:ro
@@ -718,6 +736,7 @@ services:
       - "8086:8080"
     volumes:
       - ./configs:/app/configs:ro
+      - sltb_bucket:/app/bucket
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
       # clone's sltb/ dir.
       - ${SLTB_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/sltb}:/app/artifacts:ro
@@ -809,6 +828,7 @@ services:
       - "8082:8080"
     volumes:
       - ./configs:/app/configs:ro
+      - fcau_bucket:/app/bucket
       # For artifactLoader.type: local in config.docker.yaml — a one-trade-artifacts
       # clone's fcau/ dir.
       - ${FCAU_ARTIFACT_LOCAL_ROOT:-../one-trade-artifacts/fcau}:/app/artifacts:ro

@@ -511,7 +511,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
 	// routes, or the agency's inject and case routes. The shared routes above serve both.
 	if agencyMode {
-		mountAgency(mux, db, artifactRegistry, parentRunner, task.Store, globalCatalog.Roles, withAuth, withScope)
+		mountAgency(mux, db, artifactRegistry, parentRunner, fileAccess, cfg.Server.MaxRequestBytes, task.Store, globalCatalog.Roles, withAuth, withScope)
 	} else {
 		mountTNSW(mux, tnswHandlers{
 			consignment: consignmentRouter,
