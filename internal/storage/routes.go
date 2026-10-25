@@ -17,4 +17,10 @@ const (
 	UploadRoute = "POST /api/v1/storage"
 	// DownloadRoute returns a time-limited URL to download the file from.
 	DownloadRoute = "GET /api/v1/storage/{key}"
+
+	// InternalUploadRoute is UploadRoute for machine clients, which hold a
+	// different scope and may upload more types than users. It sits outside
+	// RoutePrefix: only TNSW serves it, and TestRoutes checks it mounts beside
+	// the routes above.
+	InternalUploadRoute = "POST /api/v1/internal/storage"
 )

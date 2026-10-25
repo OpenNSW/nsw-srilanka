@@ -37,6 +37,9 @@ const (
 	// Storage resource.
 	StorageRead  = "nsw:storage:read"
 	StorageWrite = "nsw:storage:write"
+	// StorageInternalWrite is the upload scope for machine clients, on the
+	// internal upload route; StorageWrite is for users.
+	StorageInternalWrite = "nsw:storage:internalwrite"
 
 	// SLCE webhook resource.
 	SLCEWebhooksWrite = "nsw:slce-webhooks:write"

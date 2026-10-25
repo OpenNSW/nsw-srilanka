@@ -60,6 +60,7 @@ func newOwningService(t *testing.T) *httptest.Server {
 	// rejection it relays is a real one.
 	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...)))
 	mux.HandleFunc(UploadRoute, h.Upload)
+	mux.HandleFunc(InternalUploadRoute, h.Upload)
 	mux.HandleFunc(DownloadRoute, h.Download)
 	// ProxyService keeps Delete as part of Service, though this application
 	// mounts no delete route.
@@ -87,6 +88,9 @@ func defaultProxyConfig() ProxyConfig {
 		UploadPath:   DefaultProxyUploadPath,
 		DownloadPath: DefaultProxyDownloadPath,
 		DeletePath:   DefaultProxyDeletePath,
+		// What this deployment's users may upload; the owning service decides
+		// what it accepts.
+		AllowedUploadTypes: []string{"application/pdf"},
 	}
 }
 

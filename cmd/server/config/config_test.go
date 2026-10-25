@@ -745,6 +745,8 @@ func TestConfigValidate_StorageProxy(t *testing.T) {
 			UploadPath:   nswstorage.DefaultProxyUploadPath,
 			DownloadPath: nswstorage.DefaultProxyDownloadPath,
 			DeletePath:   nswstorage.DefaultProxyDeletePath,
+
+			AllowedUploadTypes: []string{"application/pdf"},
 		},
 		TokenKeyset: cfg.Storage.TokenKeyset,
 	}

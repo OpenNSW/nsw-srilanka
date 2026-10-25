@@ -205,6 +205,16 @@ storage:
     # download saves it instead of opening it.
     - text/xml
     - application/xml
+  # What machine clients may upload on POST /api/v1/internal/storage beyond
+  # allowedUploadTypes, by the client's name in catalog.json (clients). Not read
+  # when type is proxy. Unlike allowedUploadTypes it may list a type a browser
+  # opens as a document: inlineTypes lists text/html, so an agency that
+  # generates HTML documents and stores them here (HTML_DOCUMENT_GENERATOR)
+  # needs it granted. Only the clients named here, holding the
+  # nsw:storage:internalwrite scope, can store such a type.
+  # allowedInternalUploadTypes:
+  #   npqs:
+  #     - text/html
   # What a download opens in the browser; every other file is saved. MIME
   # types, compared exactly with the stored type. Not read when type is proxy:
   # the owning service applies its own. text/html is listed for the documents
@@ -251,13 +261,19 @@ storage:
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
   # (services), which supplies its URL and authentication. All
-  # four are required in proxy mode; below are that service's usual storage
-  # routes, and {key} may appear anywhere in the download/delete paths.
+  # five are required in proxy mode; below are that service's usual storage
+  # routes (uploads go to its internal upload route, which takes the machine
+  # scope nsw:storage:internalwrite), and {key} may appear anywhere in the
+  # download/delete paths.
   # proxy:
   #   service: ""
-  #   uploadPath: /api/v1/storage
+  #   uploadPath: /api/v1/internal/storage
   #   downloadPath: /api/v1/storage/{key}
   #   deletePath: /api/v1/storage/{key}
+  #   # What this deployment's users may upload; anything else is refused with
+  #   # 415 before it is sent on. Never an HTML or SVG type.
+  #   allowedUploadTypes:
+  #     - application/pdf
 
 authn:
   jwksURL: http://localhost:8090/oauth2/jwks

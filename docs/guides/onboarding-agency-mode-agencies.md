@@ -244,10 +244,10 @@ local-dev equivalent, and shows every setting of the three applications.
 Create two more applications in the agency's OU, each a **Backend Service** (client
 credentials, client secret sent as HTTP Basic):
 
-| Application           | Example name     | Custom scopes                                                                     |
-| --------------------- | ---------------- | --------------------------------------------------------------------------------- |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write` |
-| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                           |
+| Application           | Example name     | Custom scopes                                                                             |
+| --------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:internalwrite` |
+| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                                   |
 
 For each, note the client ID from **Credentials**, and copy the client secret straight
 into its cluster Secret: the agency-to-TNSW client's into the agency's Secret (Step 4a),
@@ -265,7 +265,7 @@ Assignment**):
 | ---------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:read`, `nsw:task:write` | The officers' group       |
 | TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:write`                                         | The agency-to-TNSW client |
+| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:internalwrite`, `nsw:task:write`                                 | The agency-to-TNSW client |
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -398,7 +398,7 @@ backend:
             tokenURL: https://idp.example.com/oauth2/token
             clientID: "<agency-to-TNSW client ID>"
             clientSecret: "{{env:M2M_DEA_TO_NSW_SECRET}}"
-            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write"]
+            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:internalwrite"]
             endpointParams:
               resource: https://api.nsw-srilanka.local
     db:
@@ -417,15 +417,19 @@ backend:
       allowCredentials: true
       maxAge: 3600
     # Documents live in TNSW; officers reach them through it as the agency-to-TNSW client.
+    # Their uploads go to TNSW's internal upload route, which takes the machine scope.
     storage:
       type: proxy
       tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
       tokenTTLSeconds: 3600
       proxy:
         service: tnsw
-        uploadPath: /api/v1/storage
+        uploadPath: /api/v1/internal/storage
         downloadPath: /api/v1/storage/{key}
         deletePath: /api/v1/storage/{key}
+        # What officers may upload; anything else is refused before it is sent to TNSW.
+        # Never an HTML or SVG type.
+        allowedUploadTypes: [application/pdf, image/jpeg, image/png]
     authn:
       jwksURL: "https://idp.example.com/oauth2/jwks"
       issuer: "https://idp.example.com"

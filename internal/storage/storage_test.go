@@ -187,6 +187,8 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 				UploadPath:   DefaultProxyUploadPath,
 				DownloadPath: DefaultProxyDownloadPath,
 				DeletePath:   DefaultProxyDeletePath,
+
+				AllowedUploadTypes: []string{"application/pdf"},
 			},
 			TokenKeyset: testTokenKeyset,
 		}

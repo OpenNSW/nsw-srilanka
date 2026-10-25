@@ -16,7 +16,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 NPQS keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `NPQS_TO_NSW`. TNSW applies its own upload limits.
+TNSW as `NPQS_TO_NSW`. Uploads go to TNSW's internal upload route (`nsw:storage:internalwrite`); `storage.proxy.allowedUploadTypes` is what officers may upload.
 
 The officer forms' searchable lists (importing countries, commodity names) are
 served from the `static_data` in `npqs`, the same lists TNSW serves the trader.
@@ -94,7 +94,7 @@ creates NPQS for this deployment, on the `NPQS API` resource server
 | ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
 | TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps, which `catalog.json` maps `tnsw` to |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                          |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`internalwrite` on TNSW                                                  |
 
 TNSW's `config.yaml` services entry `npqs` requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/config*.example.yaml`).

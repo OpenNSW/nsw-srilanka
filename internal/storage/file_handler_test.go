@@ -271,14 +271,17 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 		t.Fatal(err)
 	}
 	tnswService := corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...))
-	tnswFiles := NewFileHandler(tnswService, tnswAccess)
+	tnswFiles := NewFileHandler(tnswService, tnswAccess, WithMachineUploads(newMachineUploads(driver, Config{
+		AllowedUploadTypes: testUploadTypes,
+		MaxUploadBytes:     1 << 20,
+	}, nil)))
 	asAgency := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			client := &authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}
 			next(w, r.WithContext(authn.ContextWithPrincipal(r.Context(), client)))
 		}
 	}
-	mux.HandleFunc(UploadRoute, asAgency(tnswFiles.Upload))
+	mux.HandleFunc(InternalUploadRoute, asAgency(tnswFiles.InternalUpload))
 	mux.HandleFunc(DownloadRoute, asAgency(tnswFiles.Download))
 	corestorage.NewLocalContentHandler(driver).RegisterRoutes(mux)
 

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,9 +25,10 @@ const KeyPlaceholder = "{key}"
 const DefaultTokenTTLSeconds = 3600
 
 // Default ProxyConfig endpoint paths: the storage routes this application
-// itself mounts, so a proxy onto another deployment of it needs none set.
+// itself mounts for a machine client, so a proxy onto another deployment of it
+// needs none set.
 const (
-	DefaultProxyUploadPath   = "/api/v1/storage"
+	DefaultProxyUploadPath   = "/api/v1/internal/storage"
 	DefaultProxyDownloadPath = "/api/v1/storage/" + KeyPlaceholder
 	DefaultProxyDeletePath   = "/api/v1/storage/" + KeyPlaceholder
 )
@@ -41,6 +43,14 @@ type Config struct {
 	// type is refused with 415. Required for the local and s3 backends; not
 	// read in proxy mode, where the owning service applies its own.
 	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
+	// AllowedInternalUploadTypes are the media types a machine client may
+	// upload on the internal upload route beyond AllowedUploadTypes, by the
+	// client's name in the global catalog's clients. Optional, and not read in
+	// proxy mode. Unlike AllowedUploadTypes it may list a type InlineTypes opens
+	// in the browser, such as text/html for a document an agency generates: the
+	// route is open only to machine clients, and only the clients named here can
+	// store such a type.
+	AllowedInternalUploadTypes map[string][]string `yaml:"allowedInternalUploadTypes"`
 	// InlineTypes are the media types a download opens in the browser; every
 	// other file is saved. Required for the local and s3 backends; not read in
 	// proxy mode, where the owning service applies its own. A type a browser
@@ -90,7 +100,10 @@ func (c Config) Validate() error {
 		return err
 	}
 	if c.IsProxy() {
-		return c.Proxy.Validate()
+		if err := c.Proxy.Validate(); err != nil {
+			return err
+		}
+		return c.Proxy.validateUploadTypes()
 	}
 	if err := c.validateBackend(); err != nil {
 		return err
@@ -140,6 +153,16 @@ func (c Config) validateBackend() error {
 	if err := corestorage.CheckUploadTypes(c.AllowedUploadTypes, c.InlineTypes); err != nil {
 		return fmt.Errorf("storage.allowedUploadTypes and storage.inlineTypes: %w", err)
 	}
+	for client, types := range c.AllowedInternalUploadTypes {
+		if strings.TrimSpace(client) == "" {
+			return fmt.Errorf("storage.allowedInternalUploadTypes: a client name is empty")
+		}
+		for _, t := range types {
+			if err := corestorage.ValidMediaType(t); err != nil {
+				return fmt.Errorf("storage.allowedInternalUploadTypes.%s: %w", client, err)
+			}
+		}
+	}
 	if c.MaxUploadBytes <= 0 {
 		return fmt.Errorf("storage.maxUploadBytes must be greater than zero, got %d", c.MaxUploadBytes)
 	}
@@ -160,7 +183,17 @@ type ProxyConfig struct {
 	DownloadPath string `yaml:"downloadPath"`
 	// DeletePath is its delete endpoint (DELETE). Must contain {key}.
 	DeletePath string `yaml:"deletePath"`
+	// AllowedUploadTypes are the MIME types this deployment's users may upload;
+	// any other is refused with 415 before the file is sent on. Required: the
+	// owning service accepts more from a machine client than from a user, so
+	// this is what keeps a user to the types they may upload. It does not
+	// apply to what this deployment generates and saves itself.
+	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
 }
+
+// browserExecutableTypes are media types a browser runs script from when it
+// opens them, and which a user therefore may not upload.
+var browserExecutableTypes = []string{"text/html", "application/xhtml+xml", "image/svg+xml"}
 
 // Validate reports whether the proxy configuration is usable.
 func (c ProxyConfig) Validate() error {
@@ -181,6 +214,23 @@ func (c ProxyConfig) Validate() error {
 	}
 	if !strings.Contains(c.DeletePath, KeyPlaceholder) {
 		return fmt.Errorf("storage.proxy.deletePath must contain %s", KeyPlaceholder)
+	}
+	return nil
+}
+
+// validateUploadTypes checks AllowedUploadTypes, which Config.Validate requires
+// but a ProxyService does not need to be built.
+func (c ProxyConfig) validateUploadTypes() error {
+	if len(c.AllowedUploadTypes) == 0 {
+		return fmt.Errorf("storage.proxy.allowedUploadTypes must list at least one MIME type")
+	}
+	for _, t := range c.AllowedUploadTypes {
+		if err := corestorage.ValidMediaType(t); err != nil {
+			return fmt.Errorf("storage.proxy.allowedUploadTypes: %w", err)
+		}
+		if slices.Contains(browserExecutableTypes, t) {
+			return fmt.Errorf("storage.proxy.allowedUploadTypes: %s runs script when a browser opens it and may not be uploaded by users", t)
+		}
 	}
 	return nil
 }

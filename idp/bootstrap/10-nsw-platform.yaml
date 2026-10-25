@@ -311,6 +311,9 @@ resources:
       - name: Write
         handle: write
         description: Write action
+      - name: Internal Write
+        handle: internalwrite
+        description: Internal Write action, for machine clients
   - name: SLCE Webhooks
     handle: slce-webhooks
     description: SLCE Webhooks resource
