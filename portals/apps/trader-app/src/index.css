@@ -449,6 +449,19 @@ body {
 [data-form-review] .rt-SelectTrigger[data-placeholder] .rt-SelectTriggerInner {
   visibility: hidden;
 }
+/* Except where the renderer says the answer was left empty ("Not
+ * provided", marked data-empty-answer): shown, muted and regular, so it
+ * reads differently from an answer. */
+[data-form-review] :is(.rt-TextFieldInput, .rt-TextAreaInput)[data-empty-answer]::placeholder {
+  color: var(--color-foreground-subtle) !important;
+  -webkit-text-fill-color: var(--color-foreground-subtle);
+  font-weight: 400;
+}
+[data-form-review] .rt-SelectTrigger[data-placeholder][data-empty-answer] .rt-SelectTriggerInner {
+  visibility: visible;
+  color: var(--color-foreground-subtle);
+  font-weight: 400;
+}
 [data-form-review] .rt-RadioGroupItem + .rt-Text {
   color: var(--color-foreground) !important;
 }
