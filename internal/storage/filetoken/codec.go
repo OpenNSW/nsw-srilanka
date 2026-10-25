@@ -26,9 +26,10 @@ import (
 const typ = "nsw-file+jwe"
 
 // maxTokenLength bounds what Open parses. A token carries one resource and
-// one holder, so a real one is well under a kilobyte, even when the resource
-// is itself a token from another deployment.
-const maxTokenLength = 2048
+// one holder. The resource is a bare key, or a service-prefixed token from
+// another deployment (up to 2048 characters), which seals into a token of
+// about 3 KB, so a token a user holds always fits.
+const maxTokenLength = 4096
 
 var (
 	// ErrInvalid means the token is not one this keyset sealed, or has been

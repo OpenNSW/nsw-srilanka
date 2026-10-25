@@ -891,6 +891,26 @@ func TestResolveFiles_StoresTheValues(t *testing.T) {
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
 }
 
+// A machine client that is no service may not send files: 403, audited as such.
+func TestResolveFiles_ClientThatIsNoServiceIsForbidden(t *testing.T) {
+	refs := newFakeFileRefs()
+	var calls int
+	auditor, capture := nswaudit.NewWithCapture()
+	h := &HTTPHandler{Audit: auditor, Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))}
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), &authn.Principal{Kind: authn.KindClient, ClientID: "SLPA_TO_NSW"}))
+	recorder := httptest.NewRecorder()
+
+	ok := h.resolveFiles(recorder, req, testTaskID, "step-1", map[string]any{"invoice": "peer-token"}, []any{"taskId", testTaskID, "stepId", "step-1"})
+
+	require.False(t, ok)
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errFileSender)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, "file_sender", recs[0].Metadata["error"])
+}
+
 // --- HandleSaveDraft -------------------------------------------------------
 
 // saveDraft puts body to the draft route as p. The handler has no task manager,

@@ -1,7 +1,7 @@
 // Package catalog holds the deployment's global catalog: the single source of
 // truth mapping the stable logical names used across configuration onto one
 // deployment's concrete identifiers — IdP token roles and OAuth2 client ids
-// today, further sections later.
+// today, further sections later — and says which service each machine client is.
 //
 // It is loaded once at bootstrap (configs/catalog.json, server.catalogConfigPath) and
 // handed to consumers as data; no consumer reads the file itself. Unknown
@@ -25,6 +25,12 @@ type Catalog struct {
 	// Clients maps a logical principal name ("fcau") to the OAuth2 client id
 	// presented by an M2M caller ("FCAU_TO_NSW").
 	Clients map[string]string `json:"clients"`
+	// ClientToService maps a client's logical name in clients ("cda") to the id
+	// of the service in config.yaml's services that client is ("cda"). It lists
+	// the deployment's storage peers: only a listed client may send files, the
+	// files it sends are stored as its service's, and a file sent to that
+	// service is issued for its client.
+	ClientToService map[string]string `json:"clientToService"`
 }
 
 // Load reads, parses, and validates the catalog file at path.
@@ -66,9 +72,42 @@ func RequireRoles(roles map[string]string, names ...string) error {
 	return nil
 }
 
+// ServiceFor returns the service the machine client clientID is, and whether
+// clientToService lists it.
+func (c *Catalog) ServiceFor(clientID string) (service string, ok bool) {
+	if c == nil || clientID == "" {
+		return "", false
+	}
+	for name, id := range c.Clients {
+		if id != clientID {
+			continue
+		}
+		if service, ok = c.ClientToService[name]; ok && service != "" {
+			return service, true
+		}
+	}
+	return "", false
+}
+
+// ClientFor returns the machine client id service calls this deployment as, and
+// whether clientToService lists it.
+func (c *Catalog) ClientFor(service string) (clientID string, ok bool) {
+	if c == nil || service == "" {
+		return "", false
+	}
+	for name, s := range c.ClientToService {
+		if s == service {
+			id := c.Clients[name]
+			return id, id != ""
+		}
+	}
+	return "", false
+}
+
 // Validate reports whether the catalog is internally consistent: it must define
-// at least one entry, and every logical name must map to a non-empty identifier.
-// Messages are unprefixed so Load can qualify them with the file path.
+// at least one entry, every logical name must map to a non-empty identifier, and
+// clientToService must name only clients, each of a service of its own. Messages are unprefixed so Load can
+// qualify them with the file path.
 func (c *Catalog) Validate() error {
 	if c == nil {
 		return errors.New("nil catalog")
@@ -85,6 +124,32 @@ func (c *Catalog) Validate() error {
 		if clientID == "" {
 			return fmt.Errorf("clients[%q] must map to a non-empty client id", name)
 		}
+	}
+	return c.validateClientToService()
+}
+
+// validateClientToService checks clientToService names only clients, each with a
+// service, and that no service or client id appears twice: both lookups, from a
+// client to its service and from a service to its client, must have one answer.
+func (c *Catalog) validateClientToService() error {
+	services := make(map[string]string, len(c.ClientToService))
+	clients := make(map[string]string, len(c.ClientToService))
+	for name, service := range c.ClientToService {
+		clientID, ok := c.Clients[name]
+		if !ok {
+			return fmt.Errorf("clientToService[%q] names a client that is not in clients", name)
+		}
+		if service == "" {
+			return fmt.Errorf("clientToService[%q] must map to a non-empty service id", name)
+		}
+		if other, dup := services[service]; dup {
+			return fmt.Errorf("clientToService maps both %q and %q to service %q", other, name, service)
+		}
+		services[service] = name
+		if other, dup := clients[clientID]; dup {
+			return fmt.Errorf("clients[%q] and clients[%q] are the same client id %q, so a file it sends has no one service", other, name, clientID)
+		}
+		clients[clientID] = name
 	}
 	return nil
 }

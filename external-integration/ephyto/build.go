@@ -10,6 +10,7 @@ import (
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto/hub"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/ephyto/spscert"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileref"
 )
 
 // nowFunc is overridable in tests; production uses the wall clock for the
@@ -804,7 +805,7 @@ func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attach
 			out = append(out, spscert.Attachment{
 				RelationshipTypeCode: attachmentRelationship,
 				ID:                   id,
-				Filename:             documentFilename(url),
+				Filename:             attachmentFilename(url),
 				Key:                  url,
 				Information:          asString(row["attachment_description"]),
 			})
@@ -831,7 +832,7 @@ func buildAttachments(uf map[string]any, inputs map[string]any) []spscert.Attach
 			out = append(out, spscert.Attachment{
 				RelationshipTypeCode: attachmentRelationship,
 				ID:                   documentLabel(name),
-				Filename:             documentFilename(url),
+				Filename:             attachmentFilename(url),
 				Key:                  url,
 			})
 		}
@@ -893,6 +894,16 @@ func saidYes(value any) bool {
 // certificate. "AWR" is reserved for a copy of the original certificate on a
 // re-export, which none of these are.
 const attachmentRelationship = "ZZZ"
+
+// attachmentFilename is the name an attachment goes out under before its content
+// is read. A file another service owns has none: its reference is a token, and
+// resolveAttachments names the file from its label and type once it has them.
+func attachmentFilename(ref string) string {
+	if !fileref.Parse(ref).IsOwn() {
+		return ""
+	}
+	return documentFilename(ref)
+}
 
 // documentFilename reduces an upload's storage key or URL to the file name a
 // reader would recognise, without the path or the query a signed URL carries.

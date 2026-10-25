@@ -124,7 +124,7 @@ func TestFileHandler_Download(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	access, now := testFileAccess(t)
-	h := NewFileHandler(stack.Service, access)
+	h := handlerOf(stack.Service, access)
 	key := storedKey(t, stack.Service)
 	token, err := access.Issue(user("alice"), key, fileaccess.ScopeRead)
 	if err != nil {
@@ -184,7 +184,7 @@ func TestFileHandler_DownloadResolveFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	assertStatus(t, download(NewFileHandler(stack.Service, failingRefs{}), "ref", user("alice")), http.StatusInternalServerError)
+	assertStatus(t, download(handlerOf(stack.Service, failingRefs{}), "ref", user("alice")), http.StatusInternalServerError)
 }
 
 // In proxy mode the stored value is the owning service's own reference, and
@@ -194,7 +194,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 
 	t.Run("the holder's token", func(t *testing.T) {
 		stack := newProxyStack(t, ownerToken)
-		h := NewFileHandler(stack.Service, access)
+		h := handlerOf(stack.Service, access)
 		token, err := access.Issue(user("alice"), storedKey(t, stack.Service), fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
@@ -212,7 +212,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 	})
 	t.Run("a file the owner does not hold", func(t *testing.T) {
 		stack := newProxyStack(t, ownerToken)
-		h := NewFileHandler(stack.Service, access)
+		h := handlerOf(stack.Service, access)
 		token, err := access.Issue(user("alice"), reservedKey(t, stack.Service), fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
@@ -220,7 +220,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 		assertStatus(t, download(h, token, user("alice")), http.StatusNotFound)
 	})
 	t.Run("the owner's rejection is relayed", func(t *testing.T) {
-		h := NewFileHandler(newProxyStack(t, ownerToken).Service, access)
+		h := handlerOf(newProxyStack(t, ownerToken).Service, access)
 		token, err := access.Issue(user("alice"), "not-a-key", fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
@@ -228,7 +228,7 @@ func TestFileHandler_DownloadThroughProxy(t *testing.T) {
 		assertStatus(t, download(h, token, user("alice")), http.StatusBadRequest)
 	})
 	t.Run("the owner refusing credentials is a gateway failure", func(t *testing.T) {
-		h := NewFileHandler(newProxyStack(t, "wrong-token").Service, access)
+		h := handlerOf(newProxyStack(t, "wrong-token").Service, access)
 		token, err := access.Issue(user("alice"), "any-key", fileaccess.ScopeRead)
 		if err != nil {
 			t.Fatal(err)
@@ -271,7 +271,7 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 		t.Fatal(err)
 	}
 	tnswService := corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...))
-	tnswFiles := NewFileHandler(tnswService, tnswAccess)
+	tnswFiles := handlerOf(tnswService, tnswAccess)
 	asAgency := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			client := &authn.Principal{Kind: authn.KindClient, ClientID: agencyClient}
@@ -293,7 +293,7 @@ func TestFileHandler_AgencyOfficerDownloadsThroughTNSW(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agencyFiles := NewFileHandler(agencyService, agencyAccess)
+	agencyFiles := handlerOf(agencyService, agencyAccess)
 	officer := user("cda-officer")
 	officerToken, err := agencyAccess.Issue(officer, pushed, fileaccess.ScopeRead)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestFileHandler_UploadReturnsAReference(t *testing.T) {
 	}
 	stack.LocalContent.RegisterRoutes(mux)
 	access, _ := testFileAccess(t)
-	h := NewFileHandler(stack.Service, access)
+	h := handlerOf(stack.Service, access)
 
 	rec := upload(h, user("alice"), `{"filename":"invoice.pdf","mime_type":"application/pdf","size":10}`)
 	assertStatus(t, rec, http.StatusOK)
@@ -423,7 +423,7 @@ func TestFileHandler_UploadRejects(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	access, _ := testFileAccess(t)
-	h := NewFileHandler(stack.Service, access)
+	h := handlerOf(stack.Service, access)
 
 	tests := []struct {
 		name, body  string
@@ -450,7 +450,7 @@ func TestFileHandler_UploadRejects(t *testing.T) {
 	}
 
 	t.Run("no reference can be issued", func(t *testing.T) {
-		rec := upload(NewFileHandler(stack.Service, failingRefs{}), user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`)
+		rec := upload(handlerOf(stack.Service, failingRefs{}), user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`)
 		assertStatus(t, rec, http.StatusInternalServerError)
 	})
 }
@@ -460,10 +460,10 @@ func TestFileHandler_UploadRejects(t *testing.T) {
 func TestFileHandler_UploadThroughProxy(t *testing.T) {
 	access, _ := testFileAccess(t)
 
-	h := NewFileHandler(newProxyStack(t, ownerToken).Service, access)
+	h := handlerOf(newProxyStack(t, ownerToken).Service, access)
 	assertStatus(t, upload(h, user("alice"), `{"filename":"a.exe","mime_type":"application/x-msdownload","size":10}`), http.StatusUnsupportedMediaType)
 
-	h = NewFileHandler(newProxyStack(t, "wrong-token").Service, access)
+	h = handlerOf(newProxyStack(t, "wrong-token").Service, access)
 	assertStatus(t, upload(h, user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`), http.StatusBadGateway)
 }
 
@@ -490,7 +490,7 @@ func TestFileHandler_DownloadOwnerBadResponseIsBadGateway(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertStatus(t, download(NewFileHandler(svc, access), token, user("alice")), http.StatusBadGateway)
+			assertStatus(t, download(handlerOf(svc, access), token, user("alice")), http.StatusBadGateway)
 		})
 	}
 }
@@ -503,7 +503,7 @@ func TestFileHandler_DownloadBackendFailureIsInternal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStatus(t, download(NewFileHandler(failingService{}, access), token, user("alice")), http.StatusInternalServerError)
+	assertStatus(t, download(handlerOf(failingService{}, access), token, user("alice")), http.StatusInternalServerError)
 }
 
 // failingService is a Service whose backend fails every call.
@@ -548,4 +548,10 @@ func TestDownloadOf_ReportsWhatStorageSays(t *testing.T) {
 			}
 		})
 	}
+}
+
+// handlerOf returns a FileHandler over svc, a deployment that has no peers: every
+// file in it is its own.
+func handlerOf(svc Service, refs FileRefs) *FileHandler {
+	return NewFileHandler(NewFiles(svc, nil, nil, nil), refs)
 }
