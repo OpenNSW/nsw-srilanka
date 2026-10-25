@@ -78,12 +78,17 @@ func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 		writeProxyError(w, r, err, "failed to generate access")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{
+	body := map[string]any{
 		"download_url": dl.URL,
 		"expires_at":   dl.ExpiresAt,
 		"mime_type":    dl.ContentType,
-		"disposition":  dl.Disposition,
-	})
+	}
+	// An owning service that says nothing about it leaves the field out, which a
+	// client reads as a file to save.
+	if dl.Disposition != "" {
+		body["disposition"] = dl.Disposition
+	}
+	httputil.JSON(w, http.StatusOK, body)
 }
 
 // Delete removes the file from the owning service.

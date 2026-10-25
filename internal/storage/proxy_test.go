@@ -200,6 +200,39 @@ func TestProxyHandler_UploadAndDownload(t *testing.T) {
 	}
 }
 
+// An owning service that says nothing about how the URL serves the file leaves the
+// field out of the response, which a client reads as a file to save.
+func TestProxyHandler_DownloadOmitsADispositionTheOwnerDoesNotGive(t *testing.T) {
+	owner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"download_url":"https://files.example/k","expires_at":4102444800}`))
+	}))
+	t.Cleanup(owner.Close)
+	svc, err := NewProxyService(newRegistry(t, owner.URL, ownerToken), defaultProxyConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/storage/any-key", nil)
+	req.SetPathValue("key", "any-key")
+	NewProxyHandler(svc).Download(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Download status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["disposition"]; ok {
+		t.Errorf("response %v carries a disposition the owner did not give", body)
+	}
+	if body["download_url"] != "https://files.example/k" {
+		t.Errorf("download_url = %v", body["download_url"])
+	}
+}
+
 // A request the owning service rejects is relayed with its status and message.
 func TestProxyHandler_RelaysOwnerRejection(t *testing.T) {
 	stack := newProxyStack(t, ownerToken)

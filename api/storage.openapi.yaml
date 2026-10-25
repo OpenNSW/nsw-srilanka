@@ -159,6 +159,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: The file does not exist; storage holds none under the reference.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '410':
           description: |
             `{key}` is a file reference that has expired. Refetch the task
