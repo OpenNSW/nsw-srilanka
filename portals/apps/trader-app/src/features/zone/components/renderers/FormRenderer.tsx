@@ -297,8 +297,9 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       {/* A stepper draws its own cards, and shows these actions in its footer
           next to Back and Continue instead of in a bar of their own. Continue
           refused on a step shows the field errors, as a refused submit does
-          on a single-page form. */}
-      <div className={stepper ? '' : 'p-6'}>
+          on a single-page form. A form with nothing to change is marked
+          data-form-review, so its values show as plain answers (index.css). */}
+      <div className={stepper ? '' : 'p-6'} data-form-review={interactive ? undefined : ''}>
         <FormStepsProvider
           onStepChange={({ last }) => setOnLastStep(last)}
           onInvalidStep={() => setShowErrors(true)}
