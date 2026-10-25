@@ -109,7 +109,12 @@ paths:
       summary: Get a download URL
       description: |
         Returns a time-limited URL to download the file `{key}` stands for,
-        and when the URL expires.
+        when the URL expires, the type the file was stored with, and whether a
+        browser opens the file (`disposition: inline`) or only saves it
+        (`attachment`). A client opens a file in a browser tab only when the
+        disposition is `inline`. The deployment decides it from the stored
+        type (`storage.inlineTypes`), and a file whose type is not listed is
+        served to be saved.
 
         `{key}` must be a file reference issued to the caller. A storage key
         grants nothing on its own.
@@ -150,6 +155,12 @@ paths:
             is a user's upload reference, which can only be submitted:
             refetch the task once the form is submitted or saved as a draft,
             for one that opens the file.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: The file does not exist; storage holds none under the reference.
           content:
             application/json:
               schema:
@@ -270,13 +281,20 @@ components:
           description: |
             The file's extension, with its dot, taken from the file as it was
             uploaded. Absent when the file has none. A reference does not say
-            what the file is, so this is how a client names a file it saves or
-            tells whether a browser can show it. The name it was uploaded under
-            is not kept.
+            what the file is, so this is how a client names a file it saves.
+            It is the uploader's choice and says nothing about the file's
+            type. The name it was uploaded under is not kept.
           example: .xlsx
         mime_type:
           type: string
-          description: |
-            The media type `extension` stands for, without parameters. Absent
-            when the extension is not one this service knows.
+          description: The media type the file was stored with.
           example: application/pdf
+        disposition:
+          type: string
+          enum: [inline, attachment]
+          description: |
+            How `download_url` serves the file: `inline` when a browser may
+            open it, `attachment` when it only saves it. Absent when the
+            service that holds the file does not say, which a client treats as
+            `attachment`.
+          example: inline

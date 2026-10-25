@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"mime"
 	"net/http"
 	"path"
 
@@ -143,19 +142,23 @@ func (h *FileHandler) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 // fileDownload is what a download returns: a time-limited URL to the file,
-// when it expires, and what the file is. The client holds only a reference,
-// so it has no other way to name a saved file it saves or to tell whether a
-// browser can show it. The name the file was uploaded under is not kept, so
-// only its extension is given; the storage key it comes from is not.
+// when it expires, and what the file is and how the URL serves it. The client
+// holds only a reference, so it has no other way to name a saved file it saves
+// or to tell whether a browser may open it. The name the file was uploaded
+// under is not kept, so only its extension is given; the storage key it comes
+// from is not.
 type fileDownload struct {
 	DownloadURL string `json:"download_url"`
 	ExpiresAt   int64  `json:"expires_at"`
 	// Extension is the file's, with its dot (".xlsx"), or empty when it has
-	// none.
+	// none. It names a file the client saves and tells nothing about its type.
 	Extension string `json:"extension,omitempty"`
-	// MimeType is the type the extension stands for, or empty when it is
-	// not known.
+	// MimeType is the type the file was stored with.
 	MimeType string `json:"mime_type,omitempty"`
+	// Disposition is how the URL serves the file: "inline" when a browser may
+	// open it, "attachment" when it only saves it. It is empty when the
+	// service that holds the file does not say.
+	Disposition string `json:"disposition,omitempty"`
 }
 
 // fileDownloader is a Service that describes the file behind a stored value
@@ -172,25 +175,17 @@ func downloadOf(ctx context.Context, svc Service, value string) (fileDownload, e
 	if d, ok := svc.(fileDownloader); ok {
 		return d.fileDownload(ctx, value)
 	}
-	downloadURL, expiresAt, err := svc.DownloadURL(ctx, value)
+	dl, err := svc.DownloadURL(ctx, value)
 	if err != nil {
 		return fileDownload{}, err
 	}
-	ext := path.Ext(value)
-	return fileDownload{DownloadURL: downloadURL, ExpiresAt: expiresAt, Extension: ext, MimeType: mimeTypeOf(ext)}, nil
-}
-
-// mimeTypeOf returns the media type ext stands for, without parameters, or
-// "" when it has none or it is not known.
-func mimeTypeOf(ext string) string {
-	if ext == "" {
-		return ""
-	}
-	mediaType, _, err := mime.ParseMediaType(mime.TypeByExtension(ext))
-	if err != nil {
-		return ""
-	}
-	return mediaType
+	return fileDownload{
+		DownloadURL: dl.URL,
+		ExpiresAt:   dl.ExpiresAt,
+		Extension:   path.Ext(value),
+		MimeType:    dl.ContentType,
+		Disposition: dl.Disposition,
+	}, nil
 }
 
 // writeServiceError answers a failed Service call the way core/storage's and
@@ -202,6 +197,8 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 	switch {
 	case errors.Is(err, corestorage.ErrInvalidKey):
 		httputil.Error(w, r, http.StatusBadRequest, "invalid key format")
+	case errors.Is(err, corestorage.ErrNotFound):
+		httputil.Error(w, r, http.StatusNotFound, "file not found")
 	case errors.Is(err, corestorage.ErrInvalidSize):
 		httputil.Error(w, r, http.StatusBadRequest, "size must be greater than 0")
 	case errors.As(err, &tooLarge):

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
+import { Badge, Spinner, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
+import { LoadError } from '@/components/common/LoadError.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
@@ -69,13 +70,8 @@ export function CaseListScreen() {
             </div>
           )}
           {failed ? (
-            <div className="p-16 flex flex-col items-center gap-4 text-center">
-              <Text size="3" color="red">
-                {t('cases.list.error')}
-              </Text>
-              <Button variant="soft" onClick={() => setRetryCount((n) => n + 1)} disabled={loading}>
-                {t('cases.list.retry')}
-              </Button>
+            <div className="p-16">
+              <LoadError message={t('cases.list.error')} onRetry={() => setRetryCount((n) => n + 1)} />
             </div>
           ) : cases.length === 0 ? (
             <div className="p-16 text-center">

@@ -27,7 +27,6 @@ const en = {
         title: 'Cases',
         empty: 'No cases yet.',
         error: 'Could not load cases.',
-        retry: 'Try Again',
         table: {
           id: 'Case',
           state: 'State',
@@ -49,6 +48,10 @@ const en = {
         title: 'Consignments',
         create: 'New Consignment',
         creating: 'Creating...',
+        error: {
+          loadFailed: 'Could not load consignments.',
+          createFailed: 'Could not create the consignment. Please try again.',
+        },
         searchPlaceholder: 'Search by Name, ID, or HS Code...',
         filter: {
           statePlaceholder: 'State',
