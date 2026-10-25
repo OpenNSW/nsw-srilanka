@@ -409,6 +409,15 @@ body {
   opacity: 1;
   cursor: default;
 }
+/* An empty read-only field keeps its placeholder muted, not full-strength
+ * like a value. */
+:is(.rt-TextFieldInput, .rt-TextAreaInput):disabled::placeholder {
+  color: var(--color-foreground-subtle) !important;
+  -webkit-text-fill-color: var(--color-foreground-subtle);
+}
+.rt-SelectTrigger.rt-variant-surface:disabled[data-placeholder] .rt-SelectTriggerInner {
+  color: var(--color-foreground-subtle);
+}
 
 /* A form with nothing to change (a stepper's review step, a submitted form,
  * or any read-only form section, which FormRenderer marks data-form-review)
@@ -435,6 +444,11 @@ body {
   color: transparent !important;
   -webkit-text-fill-color: transparent;
 }
+/* An empty select shows its placeholder ("Select an option") as the
+ * trigger's own text, which would read as the answer. */
+[data-form-review] .rt-SelectTrigger[data-placeholder] .rt-SelectTriggerInner {
+  visibility: hidden;
+}
 [data-form-review] .rt-RadioGroupItem + .rt-Text {
   color: var(--color-foreground) !important;
 }
@@ -445,7 +459,8 @@ body {
  * ones; a checkbox's own text is a label too, and stays as it is. */
 [data-form-review] label.rt-Text.rt-r-weight-bold {
   font-size: 13px;
-  font-weight: 400;
+  /* !important to beat the field-label rule's 600 below, which has it too. */
+  font-weight: 400 !important;
   color: var(--color-foreground-muted);
 }
 [data-form-review] label.rt-Text.rt-r-weight-bold > .rt-Text[data-accent-color='red'] {
