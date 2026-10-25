@@ -428,7 +428,7 @@ backend:
         downloadPath: /api/v1/storage/{key}
         deletePath: /api/v1/storage/{key}
         # What officers may upload; anything else is refused before it is sent to TNSW.
-        # Never an HTML or SVG type.
+        # List no HTML or SVG type.
         allowedUploadTypes: [application/pdf, image/jpeg, image/png]
     authn:
       jwksURL: "https://idp.example.com/oauth2/jwks"

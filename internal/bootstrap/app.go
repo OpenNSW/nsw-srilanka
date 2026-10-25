@@ -195,11 +195,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	storageAudited := attachAuditor(storageStack.Service, coreAuditor)
-	if m := storageStack.MachineUploads; m != nil {
-		storageAudited = attachAuditor(m.Service(), coreAuditor) && storageAudited
-	}
-	if !storageAudited {
+	if !attachAuditor(storageStack.Service, coreAuditor) {
 		unwiredAudit = append(unwiredAudit, "storage")
 	}
 	// The file tokens callers hold in place of stored file values.
@@ -436,7 +432,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess, fileHandlerOptions(cfg.Storage, storageStack)...)
+	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess,
+		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
@@ -797,34 +794,6 @@ func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, work
 
 // newFileAccess builds the file tokens this deployment issues from its storage
 // settings.
-// internalUploadTypesByClient turns storage.allowedInternalUploadTypes, keyed by
-// a client's name in the global catalog, into the types by client ID. A name the
-// catalog does not list is an error: the types would be granted to no one.
-func internalUploadTypesByClient(cfg nswstorage.Config, cat *catalog.Catalog) (map[string][]string, error) {
-	byClientID := make(map[string][]string, len(cfg.AllowedInternalUploadTypes))
-	for name, types := range cfg.AllowedInternalUploadTypes {
-		clientID, ok := cat.Clients[name]
-		if !ok {
-			return nil, fmt.Errorf("storage.allowedInternalUploadTypes: %q is not a client in the catalog", name)
-		}
-		byClientID[clientID] = types
-	}
-	return byClientID, nil
-}
-
-// fileHandlerOptions are the options the storage mode adds to the file handler:
-// the types a proxy sends on, or the uploads machine clients make.
-func fileHandlerOptions(cfg nswstorage.Config, stack *nswstorage.Stack) []nswstorage.FileHandlerOption {
-	var opts []nswstorage.FileHandlerOption
-	if cfg.IsProxy() {
-		opts = append(opts, nswstorage.WithUploadTypes(cfg.Proxy.AllowedUploadTypes))
-	}
-	if stack.MachineUploads != nil {
-		opts = append(opts, nswstorage.WithMachineUploads(stack.MachineUploads))
-	}
-	return opts
-}
-
 func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
 	keys, err := filetoken.ParseKeyset(cfg.TokenKeyset)
 	if err != nil {

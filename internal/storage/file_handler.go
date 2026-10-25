@@ -34,34 +34,32 @@ type FileRefs interface {
 type FileHandler struct {
 	svc  Service
 	refs FileRefs
+	// uploads prepares the uploads on the user route: svc unless an option
+	// says otherwise.
+	uploads Uploader
 	// machine prepares the uploads on the internal route. Nil when this
 	// deployment serves none.
 	machine Uploader
-	// uploadTypes limits what Upload sends on to svc. Nil when svc applies
-	// its own limits.
-	uploadTypes map[string]struct{}
 }
 
 // FileHandlerOption adjusts a FileHandler.
 type FileHandlerOption func(*FileHandler)
+
+// WithUploads prepares the uploads on the user route with u instead of the
+// Service.
+func WithUploads(u Uploader) FileHandlerOption {
+	return func(h *FileHandler) { h.uploads = u }
+}
 
 // WithMachineUploads enables InternalUpload, preparing its uploads with u.
 func WithMachineUploads(u Uploader) FileHandlerOption {
 	return func(h *FileHandler) { h.machine = u }
 }
 
-// WithUploadTypes limits Upload to the given media types, refusing any other
-// with 415 before the upload reaches the Service. It is for a Service that
-// applies no limits of its own, such as a proxy whose owning service accepts
-// more from this deployment than its users may upload.
-func WithUploadTypes(types []string) FileHandlerOption {
-	return func(h *FileHandler) { h.uploadTypes = typeSet(types) }
-}
-
 // NewFileHandler creates a FileHandler over svc, resolving references with
 // refs.
 func NewFileHandler(svc Service, refs FileRefs, opts ...FileHandlerOption) *FileHandler {
-	h := &FileHandler{svc: svc, refs: refs}
+	h := &FileHandler{svc: svc, refs: refs, uploads: svc}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -87,19 +85,19 @@ type uploadResponse struct {
 // with the URL to upload the file to. A user's reference can only be submitted,
 // as the value of a form's file field, so it never expires.
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	h.serveUpload(w, r, h.svc, h.uploadTypes)
+	h.serveUpload(w, r, h.uploads)
 }
 
 // InternalUpload is Upload for machine clients, such as an agency forwarding
 // its officers' files. Its reference opens the file as well as being
-// submittable. Which callers reach it is the route's scope: it checks neither
-// the kind of principal nor, itself, the type of file.
+// submittable. Which callers reach it is the route's scope: it does not check
+// the kind of principal.
 func (h *FileHandler) InternalUpload(w http.ResponseWriter, r *http.Request) {
-	h.serveUpload(w, r, h.machine, nil)
+	h.serveUpload(w, r, h.machine)
 }
 
-// serveUpload prepares an upload with up, limited to allowed when it is not nil.
-func (h *FileHandler) serveUpload(w http.ResponseWriter, r *http.Request, up Uploader, allowed map[string]struct{}) {
+// serveUpload prepares an upload with up and answers with a reference to it.
+func (h *FileHandler) serveUpload(w http.ResponseWriter, r *http.Request, up Uploader) {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, "authentication required")
@@ -124,10 +122,6 @@ func (h *FileHandler) serveUpload(w http.ResponseWriter, r *http.Request, up Upl
 		return
 	}
 
-	if allowed != nil && !inTypeSet(allowed, req.MimeType) {
-		h.writeServiceError(w, r, corestorage.ErrContentTypeNotAllowed, "failed to prepare upload", req.MimeType)
-		return
-	}
 	meta, err := up.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
 	if err != nil {
 		h.writeServiceError(w, r, err, "failed to prepare upload", req.MimeType)

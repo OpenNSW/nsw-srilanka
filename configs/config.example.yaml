@@ -271,7 +271,7 @@ storage:
   #   downloadPath: /api/v1/storage/{key}
   #   deletePath: /api/v1/storage/{key}
   #   # What this deployment's users may upload; anything else is refused with
-  #   # 415 before it is sent on. Never an HTML or SVG type.
+  #   # 415 before it is sent on. List no HTML or SVG type.
   #   allowedUploadTypes:
   #     - application/pdf
 

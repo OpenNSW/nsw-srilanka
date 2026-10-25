@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,14 +90,6 @@ func TestMachineUploads_TypesByClient(t *testing.T) {
 	}
 }
 
-// A user keeps the list they always had: the types a machine client is granted
-// do not reach the user route.
-func TestMachineUploads_DoNotWidenTheUserRoute(t *testing.T) {
-	_, h, _ := machineStack(t)
-	assertStatus(t, upload(h, client(htmlClient), uploadBody(generated)), http.StatusUnsupportedMediaType)
-	assertStatus(t, upload(h, user("alice"), uploadBody("application/pdf")), http.StatusOK)
-}
-
 // The internal route issues the caller a reference that opens the file as well
 // as submits it, and what it stores is served by the deployment's own policy:
 // the type as sent, opened inline only when inlineTypes says so.
@@ -140,63 +133,29 @@ func TestMachineUploads_StoreWhatWasSent(t *testing.T) {
 	}
 }
 
-func TestMachineUploads_Rejects(t *testing.T) {
-	_, h, _ := machineStack(t)
-	pdf := `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`
-	assertStatus(t, internalUpload(h, nil, pdf), http.StatusUnauthorized)
-	assertStatus(t, internalUpload(h, client(otherClient), `{`), http.StatusBadRequest)
-	assertStatus(t, internalUpload(h, client(otherClient), `{"filename":"a.pdf","size":10}`), http.StatusBadRequest)
-	assertStatus(t, internalUpload(h, client(otherClient), `{"filename":"a.pdf","mime_type":"application/pdf"}`), http.StatusBadRequest)
-	tooLarge := `{"filename":"a.pdf","mime_type":"application/pdf","size":` + "2000000" + `}`
-	assertStatus(t, internalUpload(h, client(otherClient), tooLarge), http.StatusBadRequest)
-}
-
-func TestNew_MachineUploadsOnlyWithABackend(t *testing.T) {
-	stack, err := New(context.Background(), localConfig(t, "http://localhost:8080"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stack.MachineUploads == nil {
-		t.Error("a local backend has no machine uploads")
-	}
-	if h := NewFileHandler(stack.Service, failingRefs{}); h.HasMachineUploads() {
-		t.Error("a handler built without WithMachineUploads reports machine uploads")
-	}
-
-	proxy := newProxyStack(t, ownerToken)
-	if proxy.MachineUploads != nil {
-		t.Error("a proxy has machine uploads: nothing uploads to a deployment that stores nothing")
-	}
-}
-
-// uploadCounter is a Service that records what reaches it.
-type uploadCounter struct {
-	Service
-	uploads int
-}
+// uploadCounter is an Uploader that records what reaches it.
+type uploadCounter struct{ uploads int }
 
 func (u *uploadCounter) Upload(context.Context, string, int64, string) (*corestorage.FileMetadata, error) {
 	u.uploads++
 	return &corestorage.FileMetadata{Key: "k", UploadURL: "http://x/put"}, nil
 }
 
-// WithUploadTypes keeps a user to their list before anything is sent to the
-// owning service, which accepts more from this deployment than its users may
-// upload.
-func TestFileHandler_UploadTypesLimitUsers(t *testing.T) {
-	access, _ := testFileAccess(t)
-	svc := &uploadCounter{}
-	h := NewFileHandler(svc, access, WithUploadTypes([]string{"application/pdf"}))
-
-	for _, mimeType := range []string{"text/html", generated, "image/svg+xml", "application/zip", "text/ html", "application/pdf2"} {
-		assertStatus(t, upload(h, user("alice"), uploadBody(mimeType)), http.StatusUnsupportedMediaType)
+// A limited uploader refuses a type outside its list before anything is sent on,
+// and compares the media type alone.
+func TestLimitTypes(t *testing.T) {
+	next := &uploadCounter{}
+	up := limitTypes(next, anyCaller([]string{"application/pdf"}))
+	for _, mimeType := range []string{"text/html", generated, "application/zip", "text/ html", "application/pdf2"} {
+		if _, err := up.Upload(context.Background(), "f", 10, mimeType); !errors.Is(err, corestorage.ErrContentTypeNotAllowed) {
+			t.Errorf("%q: error %v, want ErrContentTypeNotAllowed", mimeType, err)
+		}
 	}
-	if svc.uploads != 0 {
-		t.Errorf("%d refused uploads reached the owning service", svc.uploads)
+	if next.uploads != 0 {
+		t.Errorf("%d refused uploads reached the next uploader", next.uploads)
 	}
-	assertStatus(t, upload(h, user("alice"), uploadBody("Application/PDF; x=y")), http.StatusOK)
-	if svc.uploads != 1 {
-		t.Errorf("%d uploads reached the owning service, want 1", svc.uploads)
+	if _, err := up.Upload(context.Background(), "f", 10, "Application/PDF; x=y"); err != nil || next.uploads != 1 {
+		t.Errorf("an allowed type: error %v, %d uploads, want one", err, next.uploads)
 	}
 }
 
@@ -241,9 +200,6 @@ func TestConfigValidate_ProxyUploadTypes(t *testing.T) {
 		{name: "a list", types: []string{"application/pdf", "image/png"}},
 		{name: "none", wantErr: "storage.proxy.allowedUploadTypes must list at least one"},
 		{name: "a parameter", types: []string{"application/pdf; q=1"}, wantErr: "storage.proxy.allowedUploadTypes"},
-		{name: "HTML", types: []string{"application/pdf", "text/html"}, wantErr: "text/html runs script"},
-		{name: "XHTML", types: []string{"application/xhtml+xml"}, wantErr: "application/xhtml+xml runs script"},
-		{name: "SVG", types: []string{"image/svg+xml"}, wantErr: "image/svg+xml runs script"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

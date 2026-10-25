@@ -57,10 +57,13 @@ type Stack struct {
 	// with S3 the client talks to the bucket, and behind a proxy it talks to
 	// the owning service.
 	LocalContent *corestorage.LocalContentHandler
+	// Uploads prepares the uploads users make: Service itself, or in proxy
+	// mode Service limited to the types users of this deployment may upload.
+	Uploads Uploader
 	// MachineUploads prepares the uploads machine clients make on the
 	// internal upload route. Nil in proxy mode, where nothing uploads to this
 	// deployment.
-	MachineUploads *MachineUploads
+	MachineUploads Uploader
 }
 
 // Option adjusts the stack New builds.
@@ -89,7 +92,11 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 		if err != nil {
 			return nil, err
 		}
-		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
+		return &Stack{
+			Service: svc,
+			Handler: NewProxyHandler(svc),
+			Uploads: limitTypes(svc, anyCaller(cfg.Proxy.AllowedUploadTypes)),
+		}, nil
 	}
 
 	if err := cfg.validateBackend(); err != nil {
@@ -112,6 +119,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 	stack := &Stack{
 		Service:        svc,
 		Handler:        corestorage.NewHTTPHandler(svc),
+		Uploads:        svc,
 		MachineUploads: newMachineUploads(driver, cfg, o.internalUploadTypes),
 	}
 	if local, ok := driver.(*drivers.LocalFSDriver); ok {

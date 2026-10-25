@@ -39,7 +39,7 @@ func mountTNSW(
 ) {
 	// Uploads by machine clients, such as an agency forwarding its officers'
 	// files. Not served when this deployment has no storage of its own.
-	if h.files != nil && h.files.HasMachineUploads() {
+	if h.files.HasMachineUploads() {
 		mux.Handle(nswstorage.InternalUploadRoute, withAuth(withScope(scopes.StorageInternalWrite)(http.HandlerFunc(h.files.InternalUpload))))
 	}
 

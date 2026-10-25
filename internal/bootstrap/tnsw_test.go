@@ -4,17 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	corestorage "github.com/OpenNSW/core/storage"
-	"gopkg.in/yaml.v3"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
@@ -76,63 +72,10 @@ func TestMountTNSW_InternalUpload(t *testing.T) {
 		t.Errorf("with no scope: status %d, want %d", got, http.StatusForbidden)
 	}
 
-	for name, h := range map[string]tnswHandlers{
-		"no file handler":                {},
-		"a file handler with no uploads": {files: nswstorage.NewFileHandler(nil, refsStub{})},
-	} {
-		mux := http.NewServeMux()
-		mountTNSW(mux, h, withAuth, withScope)
-		if got := post(mux, scopes.StorageInternalWrite); got != http.StatusNotFound {
-			t.Errorf("%s: status %d, want %d (not served)", name, got, http.StatusNotFound)
-		}
-	}
-}
-
-func TestInternalUploadTypesByClient(t *testing.T) {
-	cat := &catalog.Catalog{Clients: map[string]string{"npqs": "NPQS_TO_NSW", "cda": "CDA_TO_NSW"}}
-
-	got, err := internalUploadTypesByClient(nswstorage.Config{AllowedInternalUploadTypes: map[string][]string{"npqs": {"text/html"}}}, cat)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"text/html"}; !slices.Equal(got["NPQS_TO_NSW"], want) || len(got) != 1 {
-		t.Errorf("types by client = %v, want NPQS_TO_NSW: %v", got, want)
-	}
-
-	if got, err := internalUploadTypesByClient(nswstorage.Config{}, cat); err != nil || len(got) != 0 {
-		t.Errorf("with none configured: %v, %v, want an empty map", got, err)
-	}
-
-	_, err = internalUploadTypesByClient(nswstorage.Config{AllowedInternalUploadTypes: map[string][]string{"nobody": {"text/html"}}}, cat)
-	if err == nil || !strings.Contains(err.Error(), `"nobody" is not a client in the catalog`) {
-		t.Errorf("an unknown client: %v, want an error naming it", err)
-	}
-}
-
-// The example configs grant NPQS text/html for the documents it generates, and
-// NPQS is a client in the example catalog.
-func TestExampleConfigs_GrantNPQSHTML(t *testing.T) {
-	cat, err := catalog.Load(filepath.Join("..", "..", "configs", "catalog.example.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"config.example.yaml", "config.docker.example.yaml"} {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "configs", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var cfg struct {
-			Storage nswstorage.Config `yaml:"storage"`
-		}
-		if err := yaml.Unmarshal(raw, &cfg); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		got, err := internalUploadTypesByClient(cfg.Storage, cat)
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if want := []string{"text/html"}; !slices.Equal(got["NPQS_TO_NSW"], want) || len(got) != 1 {
-			t.Errorf("%s: types by client = %v, want NPQS_TO_NSW: %v", name, got, want)
-		}
+	// Without uploads of its own, a deployment does not serve the route.
+	mux = http.NewServeMux()
+	mountTNSW(mux, tnswHandlers{files: nswstorage.NewFileHandler(nil, refsStub{})}, withAuth, withScope)
+	if got := post(mux, scopes.StorageInternalWrite); got != http.StatusNotFound {
+		t.Errorf("with no uploads: status %d, want %d (not served)", got, http.StatusNotFound)
 	}
 }

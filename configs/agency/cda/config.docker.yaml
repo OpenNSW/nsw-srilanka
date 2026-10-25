@@ -86,8 +86,8 @@ storage:
     deletePath: /api/v1/storage/{key}
     # What this agency's officers may upload; anything else is refused with
     # 415 before it is sent to TNSW, which accepts more from this agency's
-    # client than from users. Never an HTML or SVG type: a browser runs script
-    # from those, and startup refuses them.
+    # client than from users. List no HTML or SVG type: a browser runs script
+    # from those when TNSW serves them inline.
     allowedUploadTypes:
       - application/pdf
       - image/jpeg
