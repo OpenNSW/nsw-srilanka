@@ -68,7 +68,11 @@ export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease 
             </AlertDialog.Trigger>
             <AlertDialog.Content maxWidth="450px">
               <AlertDialog.Title>{t('tasks.claim.takeOverTitle')}</AlertDialog.Title>
-              <AlertDialog.Description size="2">{t('tasks.claim.takeOverConfirm', { name })}</AlertDialog.Description>
+              <AlertDialog.Description size="2">
+                {claim.holder.name
+                  ? t('tasks.claim.takeOverConfirm', { name: claim.holder.name })
+                  : t('tasks.claim.takeOverConfirmUnnamed')}
+              </AlertDialog.Description>
               <Flex gap="3" mt="4" justify="end">
                 <AlertDialog.Cancel>
                   <Button variant="soft" color="gray">

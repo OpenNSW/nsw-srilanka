@@ -164,6 +164,7 @@ const en = {
         takeOver: 'Take over',
         takeOverTitle: 'Take over this task?',
         takeOverConfirm: '{{name}} is working on this task. Take it over so that it shows you instead?',
+        takeOverConfirmUnnamed: 'Another user is working on this task. Take it over so that it shows you instead?',
         cancel: 'Cancel',
         error: {
           changed: 'The claim on this task just changed. It now shows who holds it.',
