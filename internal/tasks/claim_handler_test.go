@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/taskflow/orchestrator"
-	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
@@ -43,12 +42,11 @@ func (f *fakeClaimer) ReleaseTask(_ context.Context, taskID, holder string) erro
 }
 
 // claimHandler is a handler over the pending HS-code task, with claims sent to claimer
-// and audit events to auditor. CanAct admits every caller.
+// and audit events to auditor.
 func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, auditor *nswaudit.CaptureSink) *HTTPHandler {
 	t.Helper()
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
 	h.Claims = claimer
-	h.CanAct = fixedCanAct(true, nil, nil)
 	client := nswaudit.New()
 	client.RegisterSink(auditor)
 	h.Audit = client
@@ -187,115 +185,6 @@ func TestHandleClaimTask_ReadDenialIsAudited(t *testing.T) {
 	require.Len(t, auditor.Records(), 1)
 	assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
 	assert.Equal(t, "task read access denied", auditor.Records()[0].Metadata["error"])
-}
-
-// --- who may claim: the right to act -----------------------------------------
-
-// fixedCanAct is a CanAct that answers ok and err for any task, and counts its calls.
-func fixedCanAct(ok bool, err error, calls *int) CanAct {
-	return func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) {
-		if calls != nil {
-			*calls++
-		}
-		return ok, err
-	}
-}
-
-// Claiming follows CanAct, the rule that decides whether the caller can submit the
-// task's active step: a reader it refuses is refused (403, since they can see the
-// task), without CanAct nobody may claim, and a failure is an error, never a pass.
-func TestHandleClaimTask_RequiresTheRightToAct(t *testing.T) {
-	tests := []struct {
-		name       string
-		canAct     CanAct
-		wantStatus int
-		wantBody   string
-	}{
-		{"CanAct admits the caller", fixedCanAct(true, nil, nil), http.StatusNoContent, ""},
-		{"CanAct refuses the caller", fixedCanAct(false, nil, nil), http.StatusForbidden, errClaimNotPermitted},
-		{"no CanAct", nil, http.StatusForbidden, errClaimNotPermitted},
-		{"CanAct fails", fixedCanAct(false, errors.New("registry down"), nil), http.StatusInternalServerError, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			claimer := &fakeClaimer{}
-			h := claimHandler(t, pendingHSCodeTask(), claimer, &nswaudit.CaptureSink{})
-			h.CanAct = tt.canAct
-
-			recorder := sendClaim(h, opClaim, chaUser())
-
-			assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
-			assert.Contains(t, recorder.Body.String(), tt.wantBody)
-			if tt.wantStatus == http.StatusNoContent {
-				assert.Equal(t, []string{"claim:" + testTaskID + ":" + testUserID}, claimer.calls)
-			} else {
-				assert.Empty(t, claimer.calls, "the task manager must not be reached")
-			}
-		})
-	}
-}
-
-// CanAct is asked only about someone who can read the task: a non-reader is refused
-// first, as not found.
-func TestHandleClaimTask_RightToActCheckedAfterRead(t *testing.T) {
-	notOwner := ownerInput("CHA", "trader")
-	notOwner.UserID = testUserID
-	notOwner.Claims = taskauthz.ClaimsOptional
-	calls := 0
-	h := claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{})
-	h.CanAct = fixedCanAct(true, nil, &calls)
-
-	recorder := sendClaim(h, opClaim, &notOwner)
-
-	assert.Equal(t, http.StatusNotFound, recorder.Code)
-	assert.Zero(t, calls)
-}
-
-// A completed task has no step left to act on, so CanAct is not asked: the task
-// manager refuses the claim, and the caller is told the task is completed (409).
-func TestHandleClaimTask_CompletedTaskIsAConflict(t *testing.T) {
-	fetcher := pendingHSCodeTask()
-	fetcher.record.State = store.StateCompleted
-	calls := 0
-	claimer := &fakeClaimer{err: orchestrator.ErrTaskCompleted}
-	h := claimHandler(t, fetcher, claimer, &nswaudit.CaptureSink{})
-	h.CanAct = fixedCanAct(false, nil, &calls)
-
-	recorder := sendClaim(h, opClaim, chaUser())
-
-	assert.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
-	assert.Contains(t, recorder.Body.String(), errClaimTaskComplete)
-	assert.Zero(t, calls)
-}
-
-// A reader refused for not being able to act is audited as a refused claim.
-func TestHandleClaimTask_RefusalForNotActingIsAudited(t *testing.T) {
-	auditor := &nswaudit.CaptureSink{}
-	h := claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, auditor)
-	h.CanAct = fixedCanAct(false, nil, nil)
-
-	recorder := sendClaim(h, opClaim, chaUser())
-
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Len(t, auditor.Records(), 1)
-	assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
-	assert.Equal(t, "claim", auditor.Records()[0].Metadata["operation"])
-	assert.Equal(t, "caller may not act on the task", auditor.Records()[0].Metadata["error"])
-}
-
-// Release is not gated on the right to act, so a holder who has lost it can still let
-// go of their claim.
-func TestHandleReleaseTask_IsNotGatedOnTheRightToAct(t *testing.T) {
-	calls := 0
-	claimer := &fakeClaimer{}
-	h := claimHandler(t, pendingHSCodeTask(), claimer, &nswaudit.CaptureSink{})
-	h.CanAct = fixedCanAct(false, nil, &calls)
-
-	recorder := sendClaim(h, opRelease, chaUser())
-
-	assert.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
-	assert.Equal(t, []string{"release:" + testTaskID + ":" + testUserID}, claimer.calls)
-	assert.Zero(t, calls)
 }
 
 // Each error the task manager returns is answered with its status, and the refusals
