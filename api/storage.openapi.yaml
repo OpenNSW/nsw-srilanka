@@ -136,7 +136,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '415':
-          description: The file type is not allowed (`invalid or prohibited file type`).
+          description: 'The file type is not allowed ("invalid or prohibited file type: <mime_type>").'
           content:
             application/json:
               schema:

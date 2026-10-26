@@ -287,9 +287,13 @@ paths:
             `subinstId`/`serviceid` that does not match the reference's payee
             (the payment is not settled), a payee mapping lacking its ids, an
             unknown `gatewayId`, a deployment without `private_key` or
-            `webhook_client_id` configured, a database failure, or a failure
-            to advance the waiting workflow step after the payment was
-            recorded.
+            `webhook_client_id` configured, or a database failure.
+
+            Also a failure to advance the waiting workflow step after the
+            payment was recorded. A retry does not recover that one: the
+            payment is already recorded, so the retry answers `200` as for a
+            payment already settled, and the step is not resumed. It stays
+            parked for an admin to resolve.
           content:
             text/plain:
               schema:

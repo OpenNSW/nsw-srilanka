@@ -127,7 +127,7 @@ Don't retry these calls at the gateway: each sender has its own retry policy, an
 
 - **Auth:** a bearer token whose `client_id` must also be the one in `payment_methods.json` (`webhook_client_id`, `GOVPAY_TO_NSW` locally); any other client gets 401.
 - **Encryption:** every call carries a `TransactionKey` header, an RSA-encrypted AES key, and the values in the body are encrypted with it. The gateway can't inspect or validate the payload; pass the header and the body through unchanged.
-- **Responses:** `validate` answers 200, 404 for an unknown reference, 409 for one that can't be paid. `webhook` answers 200, including for a payment already settled, 404 and 422 as final, and 500 to be retried. `gatewayId` is `govpay`; any other value gets 500.
+- **Responses:** `validate` answers 200, 404 for an unknown reference and 409 for one that can't be paid, and also 400, 401, 403 and 500. `webhook` answers 200, including for a payment already settled. Its 400 (a body over 1 MiB or unreadable, or an unsupported payment status), 401 (another client, or a `TransactionKey` that is missing or won't decrypt), 403, 404 and 422 are final: the same call can't succeed, so it isn't retried. Only 500 is retried. A 500 after the payment was recorded, from a failure to resume the workflow step, isn't recovered by the retry: the retry answers 200 for the settled payment and the step stays parked. `gatewayId` is `govpay`; any other value gets 500.
 
 ## Cross-cutting behaviour
 
