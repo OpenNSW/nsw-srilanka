@@ -84,6 +84,7 @@ func (m *Middleware) resolve(ctx context.Context) (taskauthz.Input, bool) {
 			Kind:       taskauthz.KindUser,
 			Roles:      p.Roles,
 			OwnedRoles: m.ownedRolesFor(p.OUHandle),
+			UserID:     p.UserID,
 		}, true
 	default:
 		return taskauthz.Input{}, false

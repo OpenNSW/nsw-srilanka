@@ -431,7 +431,11 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
 	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, auditor, cfg.Server.MaxRequestBytes)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
+	// An agency uses task claims: every officer owns every injected workflow, so a
+	// claim shows the others who is working a task. TNSW does not: a step is already
+	// limited to the trader or CHA company that owns the consignment.
+	taskHandler.ClaimsEnabled = agencyMode
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -520,6 +524,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("POST /api/v1/tasks/{id}/steps/{stepId}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 	mux.Handle("PUT /api/v1/tasks/{id}/steps/{stepId}/draft", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleSaveDraft)))))
 	mux.Handle("POST /api/v1/callbacks/{token}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStepByToken)))))
+	mux.Handle("POST /api/v1/tasks/{id}/claim", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleClaimTask)))))
+	mux.Handle("POST /api/v1/tasks/{id}/release", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleReleaseTask)))))
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))
 
@@ -755,6 +761,21 @@ func (r caseOwnership) GetOwnership(ctx context.Context, caseID string) (string,
 // than at each call site.
 func taskCatalog(c *catalog.Catalog) taskauthz.Catalog {
 	return taskauthz.Catalog{Roles: c.Roles, Clients: c.Clients}
+}
+
+// userDisplayNames names a user by the email on their user record, the only name
+// the record holds. A user without a record has no name ("").
+type userDisplayNames struct{ svc user.Service }
+
+func (n userDisplayNames) GetDisplayName(ctx context.Context, userID string) (string, error) {
+	rec, err := n.svc.GetUser(ctx, userID)
+	if err != nil {
+		if errors.Is(err, user.ErrUserNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return rec.Email, nil
 }
 
 // companyIDResolver adapts the company service to authzgate.CompanyResolver. A

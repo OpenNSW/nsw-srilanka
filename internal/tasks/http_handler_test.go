@@ -26,7 +26,7 @@ import (
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, nil, v)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
@@ -124,7 +124,7 @@ func TestHandleCompleteTaskStepByToken_RequiresCommand(t *testing.T) {
 
 func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
 	client, capture := nswaudit.NewWithCapture()
-	handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, client, 1024)
+	handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, nil, client, 1024)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/steps/step-1", strings.NewReader(`{invalid`))
 	req.SetPathValue("id", "task-123")

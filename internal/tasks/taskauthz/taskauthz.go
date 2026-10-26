@@ -49,12 +49,17 @@ type OwnedRolesFunc func(ctx context.Context, caseID string) (map[string]bool, e
 
 // Input is the authorization context Layer 1 resolves and attaches for a Layer-2
 // evaluator to judge. It carries no domain detail — only the caller's kind, token
-// roles, client id, and a lazy ownership resolver.
+// roles, client or user id, and a lazy ownership resolver.
 type Input struct {
 	Kind       PrincipalKind
 	Roles      []string
 	ClientID   string
 	OwnedRoles OwnedRolesFunc
+
+	// UserID is the caller's internal user id (user_records.id). It is the holder a
+	// task claim is recorded under, so a user's claims follow them across logins and
+	// IdP changes. Empty for client principals.
+	UserID string
 }
 
 type ctxKey struct{}

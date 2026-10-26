@@ -51,12 +51,20 @@ type TaskFetcher interface {
 }
 
 type HTTPHandler struct {
-	Manager   *orchestrator.TaskManager
+	Manager *orchestrator.TaskManager
+	// Claims claims and releases tasks. NewHTTPHandler sets it to Manager.
+	Claims    TaskClaimer
 	Store     TaskFetcher
 	Assembler *zoneview.ZoneViewAssembler
 	// AuthzCatalog names the logical roles a reader may own the task's
 	// consignment in. HandleGetTask authorizes against it.
-	AuthzCatalog    taskauthz.Catalog
+	AuthzCatalog taskauthz.Catalog
+	// Users names a task's claim holder in the task view. When nil, the holder has
+	// no name.
+	Users UserService
+	// ClaimsEnabled turns task claims on for this deployment. When false, claim and
+	// release answer 404.
+	ClaimsEnabled   bool
 	Audit           nswaudit.Auditor
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
@@ -74,16 +82,19 @@ func NewHTTPHandler(
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
 	canAct CanAct,
+	users UserService,
 	audit nswaudit.Auditor,
 	maxRequestBytes int64,
 ) *HTTPHandler {
 	return &HTTPHandler{
 		Manager:         manager,
+		Claims:          manager,
 		Store:           store,
 		Assembler:       assembler,
 		AuthzCatalog:    authzCatalog,
 		Files:           files,
 		CanAct:          canAct,
+		Users:           users,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
@@ -92,7 +103,8 @@ func NewHTTPHandler(
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
 // caller: they must own the task's consignment in a role the task's render
 // config admits, and the claims resolved for them decide which sections of the
-// view they see.
+// view they see. Where claims are on, the response also says who holds the task's
+// claim.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -156,6 +168,9 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
 	}
+	// `claim` is the one place the view reports its claim. Core's own claimed_by and
+	// claimed_at would repeat it, and show the holder's internal user id.
+	zv.ClaimedBy, zv.ClaimedAt = "", nil
 
 	h.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventTask,
@@ -164,7 +179,13 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		TargetID:   taskID,
 		Failure:    false,
 	})
-	httputil.JSON(w, http.StatusOK, zv)
+	resp := taskResponse{ZoneView: zv}
+	if h.ClaimsEnabled {
+		// From the stored record, not the view: the view only swaps file values.
+		claim := h.claimOf(ctx, in, record)
+		resp.Claim = &claim
+	}
+	httputil.JSON(w, http.StatusOK, resp)
 }
 
 // canAct reports whether in may act on record's active step. A failure to

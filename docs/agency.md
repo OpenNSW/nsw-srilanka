@@ -9,6 +9,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
 | Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
+| Task claims          | off                                                     | on (a hint, never required)                |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
 | Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
@@ -147,6 +148,25 @@ for an admin, since no retry can succeed. Artifacts that are not wired for repli
 keep injecting: their resubmission is still a repeat inject, which the agency takes
 for a retry and does not deliver. How a step replies is in
 [`docs/WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md#task-types-configuration-traderinputjson--officerinputjson).
+
+## Claiming tasks
+
+An officer claims a task so the others can see who is working on it. A claim is a
+hint, not a lock: submitting a step never checks it.
+
+- `POST /api/v1/tasks/{id}/claim` claims the task for the caller. If another officer
+  holds the claim, the caller takes it over, for example when the holder is away. A
+  completed task can't be claimed (409).
+- `POST /api/v1/tasks/{id}/release` releases the caller's own claim.
+- `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `name` (their email
+  for now), `claimed_at` and `mine`.
+
+Any officer who can open the task may claim it; both routes need `nsw:task:write`.
+Claims, takeovers and releases are recorded in the audit trail as task updates. Claims
+are on in agency mode and off in TNSW, where the routes answer 404 and the task view
+has no `claim`. The claim is stored on the task row (`task_records_v2.claimed_by` and
+`claimed_at`, migration `000028`) and lasts across every step of the task. The full
+contract is in `api/tasks.openapi.yaml`.
 
 ## Task configs
 

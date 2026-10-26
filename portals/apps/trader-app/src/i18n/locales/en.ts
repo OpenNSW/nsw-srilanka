@@ -154,6 +154,26 @@ const en = {
         draftFailed: 'Failed to save the draft. Please try again.',
         staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
       },
+      claim: {
+        unclaimed: 'Unclaimed',
+        claimedByYou: 'Claimed by you',
+        claimedBy: 'Claimed by {{name}}',
+        anotherUser: 'another user',
+        claim: 'Claim',
+        release: 'Release',
+        takeOver: 'Take over',
+        takeOverTitle: 'Take over this task?',
+        takeOverConfirm: '{{name}} is working on this task. Take it over so that it shows you instead?',
+        takeOverConfirmUnnamed: 'Another user is working on this task. Take it over so that it shows you instead?',
+        cancel: 'Cancel',
+        error: {
+          changed: 'The claim on this task just changed. It now shows who holds it.',
+          completed: 'This task is completed and can no longer be claimed.',
+          notHolder: 'This task is claimed by another user, so you cannot release it.',
+          unavailable: 'Claiming is not available for this task.',
+          failed: 'Could not update the claim. Please try again.',
+        },
+      },
     },
 
     workflow: {

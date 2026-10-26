@@ -47,7 +47,7 @@ func (g *RoleGate) resolve(ctx context.Context) (taskauthz.Input, bool) {
 	case authn.KindClient:
 		return taskauthz.Input{Kind: taskauthz.KindClient, ClientID: p.ClientID}, true
 	case authn.KindUser:
-		return taskauthz.Input{Kind: taskauthz.KindUser, Roles: p.Roles, OwnedRoles: g.ownedRoles}, true
+		return taskauthz.Input{Kind: taskauthz.KindUser, Roles: p.Roles, OwnedRoles: g.ownedRoles, UserID: p.UserID}, true
 	default:
 		return taskauthz.Input{}, false
 	}

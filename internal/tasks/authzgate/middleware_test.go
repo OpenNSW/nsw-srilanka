@@ -246,3 +246,19 @@ func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
 func userCtx(ouHandle string, roles ...string) *authn.Principal {
 	return &authn.Principal{Kind: authn.KindUser, OUHandle: ouHandle, Roles: roles}
 }
+
+// A user carries their internal user id, the holder a claim is recorded under. A
+// client has none.
+func TestMiddleware_UserCarriesUserID(t *testing.T) {
+	mw := mustNewMiddleware(t, &fakeOwnership{}, &fakeCompany{})
+	p := userCtx("adam-pvt-ltd", "Trader")
+	p.UserID = "user-1"
+	in, ok := attachedInput(mw, p)
+	if !ok || in.UserID != "user-1" {
+		t.Errorf("user input = %+v, ok = %v; want UserID user-1", in, ok)
+	}
+	client, _ := attachedInput(mw, &authn.Principal{Kind: authn.KindClient, ClientID: "FCAU_TO_NSW"})
+	if client.UserID != "" {
+		t.Errorf("client input = %+v, want no user id", client)
+	}
+}

@@ -3,7 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { getZoneView, saveTaskStepDraft, submitTaskStep } from './service'
+import type { TFunction } from 'i18next'
+import { claimTask, getZoneView, releaseTask, saveTaskStepDraft, submitTaskStep } from './service'
+import { ClaimBanner } from './ClaimBanner'
 import { HttpError } from '@/services/http'
 import { getConsignment } from '@/features/consignment/service.ts'
 import type { Consignment, WorkflowNode } from '@/features/consignment/types'
@@ -30,6 +32,24 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
   })
   const successor = actionable.find((node) => node.depends_on?.includes(currentTaskId))
   return (successor ?? actionable[0])?.id
+}
+
+type ClaimOp = 'claim' | 'release'
+
+// claimErrorMessage explains a refused claim, takeover or release. refreshed is the
+// task as refetched after the refusal, which tells a completed task from a claim that
+// changed while it was being taken over (both are 409s).
+function claimErrorMessage(err: unknown, op: ClaimOp, refreshed: ZoneView | undefined, t: TFunction): string {
+  if (err instanceof HttpError) {
+    if (err.status === 409) {
+      return refreshed?.state === 'COMPLETED' ? t('tasks.claim.error.completed') : t('tasks.claim.error.changed')
+    }
+    // A refused release means another user holds the claim.
+    if (err.status === 403 && op === 'release') return t('tasks.claim.error.notHolder')
+    // The deployment does not use claims, or the task is gone.
+    if (err.status === 404) return t('tasks.claim.error.unavailable')
+  }
+  return t('tasks.claim.error.failed')
 }
 
 export function TaskDetailScreen() {
@@ -69,12 +89,15 @@ export function TaskDetailScreen() {
   const [submittedHere, setSubmittedHere] = useState(false)
   // The consignment, for the breadcrumb and the task names.
   const [consignment, setConsignment] = useState<Consignment | null>(null)
+  const [claimBusy, setClaimBusy] = useState(false)
+  const [claimError, setClaimError] = useState<string | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
     setSubmittedHere(false)
     setNextTaskId(undefined)
+    setClaimError(null)
   }
 
   const fetchTask = useCallback(async (): Promise<ZoneView | undefined> => {
@@ -92,6 +115,26 @@ export function TaskDetailScreen() {
       setRefreshing(false)
     }
   }, [taskId, t])
+
+  const changeClaim = async (op: ClaimOp) => {
+    if (!taskId) return
+    setClaimBusy(true)
+    setClaimError(null)
+    setSubmitError(null)
+    let failure: unknown
+    try {
+      await (op === 'claim' ? claimTask(taskId) : releaseTask(taskId))
+    } catch (err) {
+      failure = err
+      console.error(`TaskDetailScreen: failed to ${op} task:`, err)
+    }
+    // Refetch either way: the banner shows the claim as it is now, and every refusal
+    // means the claim changed since the view loaded. The form is left as it is: a
+    // claim never changes what the user may do, so what they typed is kept.
+    const zv = await fetchTask()
+    if (failure !== undefined) setClaimError(claimErrorMessage(failure, op, zv, t))
+    setClaimBusy(false)
+  }
 
   useEffect(() => {
     if (!taskId) return
@@ -249,6 +292,18 @@ export function TaskDetailScreen() {
               {submitError}
             </Text>
           </div>
+        </div>
+      )}
+      {zoneView.claim && (
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
+          <ClaimBanner
+            claim={zoneView.claim}
+            completed={zoneView.state === 'COMPLETED'}
+            busy={claimBusy}
+            error={claimError}
+            onClaim={() => void changeClaim('claim')}
+            onRelease={() => void changeClaim('release')}
+          />
         </div>
       )}
       <TraderZoneLayout

@@ -132,3 +132,17 @@ func TestRoleGateEligibility(t *testing.T) {
 		})
 	}
 }
+
+// A user carries their internal user id, the holder a claim is recorded under. A
+// client has none.
+func TestRoleGate_UserID(t *testing.T) {
+	gate := NewRoleGate(fakeRepo{}, []string{"officer"})
+	user, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindUser, UserID: "user-1", Roles: []string{"Officer"}})
+	if !ok || user.UserID != "user-1" {
+		t.Errorf("user input = %+v, ok = %v; want UserID user-1", user, ok)
+	}
+	client, ok := inputThrough(t, gate, &authn.Principal{Kind: authn.KindClient, ClientID: "NSW_TO_CDA"})
+	if !ok || client.UserID != "" {
+		t.Errorf("client input = %+v, ok = %v; want no user id", client, ok)
+	}
+}
