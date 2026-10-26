@@ -55,9 +55,6 @@ type taskClaim struct {
 	// Mine reports whether the caller holds the claim. It is decided here, from the
 	// caller's internal user id, so clients never compare ids or emails themselves.
 	Mine bool `json:"mine"`
-	// RequiredToSubmit reports whether this deployment requires the caller to hold
-	// the claim to submit a step (see taskauthz.Input.Claims).
-	RequiredToSubmit bool `json:"required_to_submit"`
 }
 
 // claimHolder is who holds a task's claim. It carries no user id: the server decides
@@ -70,9 +67,8 @@ type claimHolder struct {
 // claimOf describes record's claim as the caller (in) sees it.
 func (h *HTTPHandler) claimOf(ctx context.Context, in taskauthz.Input, record store.TaskRecord) taskClaim {
 	c := taskClaim{
-		ClaimedAt:        record.ClaimedAt,
-		Mine:             isClaimHolder(in, record),
-		RequiredToSubmit: in.Kind == taskauthz.KindUser && in.Claims == taskauthz.ClaimsRequired,
+		ClaimedAt: record.ClaimedAt,
+		Mine:      isClaimHolder(in, record),
 	}
 	if record.ClaimedBy == "" {
 		return c
@@ -119,8 +115,8 @@ type TaskClaimer interface {
 
 // HandleClaimTask claims a task for the calling user, so others can see who is
 // working on it. Claiming a task you already hold succeeds. Whether claims are used is
-// the deployment's policy (taskauthz.Input.Claims). Any user who can read the task may
-// claim it.
+// the deployment's choice (HTTPHandler.ClaimsEnabled). Any user who can read the task
+// may claim it.
 //
 //	POST /api/v1/tasks/{id}/claim
 //
@@ -197,7 +193,7 @@ func (h *HTTPHandler) claimant(w http.ResponseWriter, r *http.Request, taskID st
 		return in, false
 	}
 	// Answered before the task is read, so it cannot be used to probe task ids.
-	if in.Claims == taskauthz.ClaimsOff {
+	if !h.ClaimsEnabled {
 		httputil.Error(w, r, http.StatusNotFound, errClaimsOff)
 		return in, false
 	}

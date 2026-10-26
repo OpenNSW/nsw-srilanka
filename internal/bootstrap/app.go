@@ -439,6 +439,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
 	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
+	// An agency uses task claims: every officer owns every injected workflow, so a
+	// claim shows the others who is working a task. TNSW does not: a step is already
+	// limited to the trader or CHA company that owns the consignment.
+	taskHandler.ClaimsEnabled = agencyMode
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -448,9 +452,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if agencyMode {
 		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
 	} else {
-		// TNSW does not use task claims: a step is already limited to the trader or CHA
-		// company that owns the consignment.
-		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles, taskauthz.ClaimsOff)
+		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
 	}
 	if err != nil {
 		_ = stopParentRunner()

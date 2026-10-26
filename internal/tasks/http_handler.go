@@ -61,7 +61,10 @@ type HTTPHandler struct {
 	AuthzCatalog taskauthz.Catalog
 	// Users names a task's claim holder in the task view. When nil, the holder has
 	// no name.
-	Users           UserService
+	Users UserService
+	// ClaimsEnabled turns task claims on for this deployment. When false, claim and
+	// release answer 404.
+	ClaimsEnabled   bool
 	Audit           nswaudit.Auditor
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as

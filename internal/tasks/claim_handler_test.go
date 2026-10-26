@@ -47,6 +47,7 @@ func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, 
 	t.Helper()
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
 	h.Claims = claimer
+	h.ClaimsEnabled = true
 	client := nswaudit.New()
 	client.RegisterSink(auditor)
 	h.Audit = client
@@ -54,11 +55,10 @@ func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, 
 }
 
 // chaUser is a CHA user who owns the HS-code task's consignment, and so can read it,
-// in a deployment where claims are optional.
+// in a deployment that uses claims.
 func chaUser() *taskauthz.Input {
 	in := ownerInput("CHA", "cha")
 	in.UserID = testUserID
-	in.Claims = taskauthz.ClaimsOptional
 	return &in
 }
 
@@ -109,10 +109,8 @@ func TestHandleReleaseTask_ReleasesForTheCaller(t *testing.T) {
 func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 	client := &taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "FCAU_TO_NSW"}
 	noUserID := ownerInput("CHA", "cha")
-	noUserID.Claims = taskauthz.ClaimsOptional
 	notOwner := ownerInput("CHA", "trader") // a CHA token, but the company owns the consignment only as trader
 	notOwner.UserID = testUserID
-	notOwner.Claims = taskauthz.ClaimsOptional
 	// The trader-only read policy admits no CHA, so a CHA owner cannot read the task.
 	deniedByPolicy := chaUser()
 
@@ -150,11 +148,11 @@ func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 func TestHandleClaimTask_OffWhereTheDeploymentDoesNotUseClaims(t *testing.T) {
 	for _, op := range []string{opClaim, opRelease} {
 		t.Run(op, func(t *testing.T) {
-			in := chaUser()
-			in.Claims = taskauthz.ClaimsOff
 			fetcher, claimer, auditor := pendingHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{}
+			h := claimHandler(t, fetcher, claimer, auditor)
+			h.ClaimsEnabled = false
 
-			recorder := sendClaim(claimHandler(t, fetcher, claimer, auditor), op, in)
+			recorder := sendClaim(h, op, chaUser())
 
 			assert.Equal(t, http.StatusNotFound, recorder.Code, recorder.Body.String())
 			assert.Contains(t, recorder.Body.String(), errClaimsOff)
@@ -176,7 +174,6 @@ func traderOnlyTask() *fakeTaskFetcher {
 func TestHandleClaimTask_ReadDenialIsAudited(t *testing.T) {
 	notOwner := ownerInput("CHA", "trader")
 	notOwner.UserID = testUserID
-	notOwner.Claims = taskauthz.ClaimsOptional
 	auditor := &nswaudit.CaptureSink{}
 
 	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, auditor), opClaim, &notOwner)
@@ -230,13 +227,6 @@ func claimedHSCodeTask(holder string) *fakeTaskFetcher {
 	return f
 }
 
-// agencyUser is a user in a deployment that requires a claim to submit.
-func agencyUser() *taskauthz.Input {
-	in := chaUser()
-	in.Claims = taskauthz.ClaimsRequired
-	return in
-}
-
 // --- the claim on the task view ------------------------------------------------
 
 // fakeUserService names users from a map, or fails with err.
@@ -264,17 +254,15 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 	names := fakeUserService{names: map[string]string{testUserID: "me@example.com", "user-2": "other@example.com"}}
 
 	tests := []struct {
-		name         string
-		holder       string
-		in           *taskauthz.Input
-		wantHolder   *claimHolder
-		wantMine     bool
-		wantRequired bool
+		name       string
+		holder     string
+		in         *taskauthz.Input
+		wantHolder *claimHolder
+		wantMine   bool
 	}{
-		{"unclaimed", "", chaUser(), nil, false, false},
-		{"claimed by the caller", testUserID, chaUser(), &claimHolder{Name: "me@example.com"}, true, false},
-		{"claimed by another user", "user-2", chaUser(), &claimHolder{Name: "other@example.com"}, false, false},
-		{"claim required to submit", "", agencyUser(), nil, false, true},
+		{"unclaimed", "", chaUser(), nil, false},
+		{"claimed by the caller", testUserID, chaUser(), &claimHolder{Name: "me@example.com"}, true},
+		{"claimed by another user", "user-2", chaUser(), &claimHolder{Name: "other@example.com"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -289,7 +277,6 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 
 			assert.Equal(t, tt.wantHolder, got.Holder)
 			assert.Equal(t, tt.wantMine, got.Mine)
-			assert.Equal(t, tt.wantRequired, got.RequiredToSubmit)
 			if tt.holder != "" {
 				require.NotNil(t, got.ClaimedAt)
 				assert.True(t, got.ClaimedAt.Equal(at))

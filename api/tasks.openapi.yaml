@@ -8,11 +8,8 @@ info:
     derived from the caller's role-tied ownership of the task's consignment.
 
     A claim records which user is working a task. Any user who can read a
-    task may claim it. Whether claims are used, and
-    whether one is needed to submit a step, is the deployment's policy: an
-    agency requires a claim to submit, and TNSW does not use claims, so
-    claim and release answer 404 there. The task view's
-    `claim.required_to_submit` says which applies to the caller.
+    task may claim it. Claims are on in an agency and off in TNSW, where
+    claim and release answer 404.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -665,11 +662,9 @@ components:
     TaskClaim:
       type: object
       description: |
-        Who holds the task's claim, as the caller sees it. Always present, so
-        a client can tell whether it must claim the task before acting on it.
+        Who holds the task's claim, as the caller sees it.
       required:
         - mine
-        - required_to_submit
       properties:
         holder:
           $ref: '#/components/schemas/ClaimHolder'
@@ -682,12 +677,6 @@ components:
           description: |
             Whether the caller holds the claim. Decided by the server from the
             caller's identity; clients should not compare IDs or emails.
-        required_to_submit:
-          type: boolean
-          description: |
-            Whether this deployment requires the caller to hold the claim to
-            submit a step. When true and `mine` is false, submissions are
-            refused with 403.
 
     ClaimHolder:
       type: object
