@@ -37,8 +37,8 @@ type taskResponse struct {
 	Claim *taskClaim `json:"claim,omitempty"`
 }
 
-// taskClaim is the task's claim as the caller sees it. It is always present, so a
-// client can tell whether it must claim the task before acting on it.
+// taskClaim is the task's claim as the caller sees it. The task view carries it only
+// where claims are on.
 type taskClaim struct {
 	// Holder is who holds the claim; absent when the task is unclaimed.
 	Holder    *claimHolder `json:"holder,omitempty"`
