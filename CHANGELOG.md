@@ -78,14 +78,13 @@ Machine clients now upload on their own route, `POST /api/v1/internal/storage`, 
 ### Known issues
 
 - Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
-- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments, tasks and payments are audited; SLC Edge callbacks and the storage module's own events are not.
+- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
 - The API can authenticate to Temporal only with a client certificate, not with an API key.
 - `/health` does not check Temporal.
 - The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
 - The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
 - The Trader Portal is available in English only.
-- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as an empty list. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
-- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
 - A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
 
 ## [0.9.0] - 2026-10-23
