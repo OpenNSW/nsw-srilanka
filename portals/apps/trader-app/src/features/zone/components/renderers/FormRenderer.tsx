@@ -408,11 +408,16 @@ function HandleButton({
 }) {
   const { t, i18n } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
-  const disabled = submitting
-  let label = handleLabel(handle, i18n.resolvedLanguage ?? i18n.language, t)
-  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : t('tasks.submitting')
+  const label = handleLabel(handle, i18n.resolvedLanguage ?? i18n.language, t)
   return (
-    <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
+    <Button
+      onClick={() => onClick(handle)}
+      size="3"
+      variant={style.variant}
+      color={style.color}
+      disabled={submitting}
+      loading={pending}
+    >
       {label}
     </Button>
   )

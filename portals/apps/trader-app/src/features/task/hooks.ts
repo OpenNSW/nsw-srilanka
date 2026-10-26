@@ -7,7 +7,10 @@ import type { ConsignmentDetail } from '@/features/consignment/types'
 import type { ZoneView } from '@/features/zone/types'
 import { claimTask, getZoneView, releaseTask, saveTaskStepDraft, submitTaskStep } from './service'
 
-export const POST_SUBMIT_REFETCH_DELAY_MS = 1500
+// The next step starts asynchronously, so a single refetch is too early to call the
+// submit a failure. Poll until the step moves, then warn.
+export const SUBMIT_POLL_INTERVAL_MS = 1000
+export const SUBMIT_POLL_WARN_MS = 25_000
 
 export type ClaimOp = 'claim' | 'release'
 
@@ -15,7 +18,7 @@ export type ClaimOp = 'claim' | 'release'
 export type ClaimErrorKey = 'completed' | 'changed' | 'notHolder' | 'unavailable' | 'failed'
 
 // Why a draft save or a submission failed.
-export type ActionErrorKey = 'staleStep' | 'draftFailed' | 'submitFailed' | 'submitNotSent'
+export type ActionErrorKey = 'staleStep' | 'draftFailed' | 'submitFailed'
 
 export interface UseTaskResult {
   zoneView: ZoneView | null
@@ -34,6 +37,8 @@ export interface UseTaskResult {
   // True from a successful submission until the task has been refetched, so the step can't be
   // submitted twice while the backend advances.
   submitted: boolean
+  // True when the poll ended with the task still on this step in PENDING_USER.
+  stillProcessing: boolean
   actionError: ActionErrorKey | null
   claimBusy: boolean
   claimError: ClaimErrorKey | null
@@ -52,18 +57,31 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
 
   const [formEpoch, setFormEpoch] = useState(0)
   const [submitted, setSubmitted] = useState(false)
+  const [stillProcessing, setStillProcessing] = useState(false)
   const [actionError, setActionError] = useState<ActionErrorKey | null>(null)
   const [claimError, setClaimError] = useState<ClaimErrorKey | null>(null)
+  // A polled view, so a fetch that fails during the wait does not mark the query failed
+  // and replace the form with the load error. Null until a poll or a refetch publishes one.
+  const [freshView, setFreshView] = useState<ZoneView | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setSubmitted(false)
     setClaimError(null)
+    setFreshView(null)
+  }
+
+  const view = freshView ?? task.data
+
+  const publish = (zv: ZoneView | undefined) => {
+    if (zv) setFreshView(zv)
+    return zv
   }
 
   // Reloads the task and reseeds the form from what came back, not from what it mounted with.
   const reloadForm = async () => {
     const zv = await task.refetch()
+    publish(zv)
     setFormEpoch((n) => n + 1)
     return zv
   }
@@ -82,14 +100,15 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
     // Refetch either way: the banner shows the claim as it is now, and every refusal means the
     // claim changed since the view loaded. The form is left as it is: a claim never changes what
     // the user may do, so what they typed is kept.
-    const refreshed = await task.refetch()
+    const refreshed = publish(await task.refetch())
     if (failure !== undefined) setClaimError(claimErrorKey(failure, op, refreshed))
   })
 
   const saveDraft = useMutation(async (data: Record<string, unknown>) => {
-    const stepId = task.data?.step_id
+    const stepId = view?.step_id
     if (!taskId || !stepId) return
     setActionError(null)
+    setStillProcessing(false)
     try {
       // The step stays where it is, so the form stays mounted with what the user typed: the
       // server now holds the same values.
@@ -107,21 +126,37 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
   })
 
   const submit = useMutation(async (command: string, data: Record<string, unknown>) => {
-    const stepId = task.data?.step_id
+    const stepId = view?.step_id
     if (!taskId || !stepId) return
     setActionError(null)
+    setStillProcessing(false)
     try {
+      const beforeStepId = stepId
       await submitTaskStep(taskId, stepId, command, data)
+      // The promise stays pending until the poll below finishes, so the clicked
+      // button stays disabled and shows its spinner.
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
-      await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
-      // Safe to discard the on-screen values here: the submission that just succeeded carried them.
-      const zv = await reloadForm()
-      // A submit that leaves the task pending stored the answers but did not send
-      // the application. A rejection already explains itself through the task alert.
-      if (zv?.state === 'PENDING_USER' && !hasRejection(zv)) {
-        setActionError('submitNotSent')
+
+      const deadline = Date.now() + SUBMIT_POLL_WARN_MS
+      let latest: ZoneView | undefined
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, SUBMIT_POLL_INTERVAL_MS))
+        try {
+          latest = publish(await getZoneView(taskId))
+        } catch (err) {
+          console.error('useTask: failed to fetch task:', err)
+          continue
+        }
+        if (latest && stepAdvanced(beforeStepId, latest)) break
       }
+      // Reseed from what the poll returned, not from what the form mounted with.
+      // Safe to discard the on-screen values: the submission that just succeeded carried them.
+      setFormEpoch((n) => n + 1)
+      // Same step, still pending, after the wait: the hand-off has not shown up.
+      // That is not "not sent". A later trader step is also PENDING_USER, and a
+      // loop stays on this step, so say it is still processing.
+      if (!latest || !stepAdvanced(beforeStepId, latest)) setStillProcessing(true)
     } catch (err) {
       if (isConflict(err)) {
         // The task moved on since this view loaded (another tab, a callback). Show where it is
@@ -142,14 +177,17 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
   })
 
   return {
-    zoneView: task.data ?? null,
+    zoneView: view ?? null,
     consignment: consignment.data ?? null,
     loading: !!taskId && task.status === 'pending',
     error: task.error,
     refreshing: task.isFetching,
-    refetch: () => void task.refetch(),
+    refetch: () => {
+      void task.refetch().then(publish)
+    },
     formEpoch,
     submitted,
+    stillProcessing,
     actionError,
     claimBusy: claim.isPending,
     claimError,
@@ -159,10 +197,12 @@ export function useTask(taskId: string | undefined, consignmentId: string | unde
   }
 }
 
-function hasRejection(zv: ZoneView): boolean {
-  const variant = typeof zv.alert === 'object' ? zv.alert.variant : undefined
-  if (variant === 'error') return true
-  return zv.view.some((zone) => zone.id.toLowerCase().includes('reject'))
+// A hand-off has landed when the task leaves this step, or leaves PENDING_USER.
+// Staying on the same step in PENDING_USER is not proof the submit failed:
+// verify, save, and check-status loop there, and a trader step can hand off
+// to another trader step that is still PENDING_USER on a new step id.
+function stepAdvanced(beforeStepId: string | undefined, zv: ZoneView): boolean {
+  return zv.step_id !== beforeStepId || zv.state !== 'PENDING_USER'
 }
 
 function isConflict(err: unknown): boolean {
