@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
@@ -35,11 +35,17 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
   return (successor ?? actionable[0])?.id
 }
 
-// A hand-off has landed when the task leaves this step, or leaves PENDING_USER.
-// Staying on the same step in PENDING_USER is not proof the submit failed:
-// verify, save, and check-status loop there, and a trader step can hand off
-// to another trader step that is still PENDING_USER on a new step id.
-function stepAdvanced(beforeStepId: string | undefined, zv: ZoneView): boolean {
+// ADVANCING and STARTING_STEP are the gap between steps. Those views have
+// no buttons, so the poll keeps going until a step the trader can use.
+const TRANSIENT_STEP_STATES = new Set(['ADVANCING', 'STARTING_STEP'])
+
+// A hand-off has landed when the task leaves this step, or leaves PENDING_USER,
+// onto a view that is not still starting. Staying on the same step in
+// PENDING_USER is not proof the submit failed: verify, save, and check-status
+// loop there, and a trader step can hand off to another trader step that is
+// still PENDING_USER on a new step id.
+function stepSettled(beforeStepId: string | undefined, zv: ZoneView): boolean {
+  if (TRANSIENT_STEP_STATES.has(zv.state)) return false
   return zv.step_id !== beforeStepId || zv.state !== 'PENDING_USER'
 }
 
@@ -65,6 +71,9 @@ export function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitWarning, setSubmitWarning] = useState<string | null>(null)
+  // Latches a non-draft submit until its poll ends, then re-arms so a step
+  // that loops back to the same form can be submitted again.
+  const [hasSubmitted, setHasSubmitted] = useState(false)
   // Bumped once an action's refetch has landed, and mixed into the zone keys so
   // the form remounts against what came back. A form seeds its data on mount
   // and deliberately ignores later polls, which is what stops a background
@@ -81,9 +90,16 @@ export function TaskDetailScreen() {
   // The consignment, for the breadcrumb and the task names.
   const [consignment, setConsignment] = useState<Consignment | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
+  // Bumped when the task changes, and when a poll starts, so a poll for the
+  // task the trader left cannot write this screen.
+  const pollGeneration = useRef(0)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
+    pollGeneration.current += 1
+    setHasSubmitted(false)
     setSubmittedHere(false)
+    setSubmitError(null)
+    setSubmitWarning(null)
     setNextTaskId(undefined)
   }
 
@@ -275,6 +291,10 @@ export function TaskDetailScreen() {
         title={title}
         formEpoch={formEpoch}
         onSubmitForm={async (command, data, options) => {
+          // A second submit while the latch is on is rejected so the form
+          // does not mark it saved. The handler stays mounted: the clicked
+          // button keeps its label and spinner until the poll ends.
+          if (hasSubmitted) throw new Error('submit in progress')
           if (!taskId || !zoneView.step_id) return
           setSubmitError(null)
           setSubmitWarning(null)
@@ -298,11 +318,16 @@ export function TaskDetailScreen() {
             }
             return
           }
+          const generation = ++pollGeneration.current
+          const pollingTaskId = taskId
           try {
             const beforeStepId = zoneView.step_id
-            await submitTaskStep(taskId, zoneView.step_id, command, data)
-            // The promise stays pending until the poll below finishes, so
-            // the clicked button stays disabled and shows its spinner.
+            await submitTaskStep(pollingTaskId, zoneView.step_id, command, data)
+            if (pollGeneration.current !== generation) return
+            // Latch the action for the poll. The promise stays pending too,
+            // so the clicked button stays disabled, with its spinner beside
+            // its own label.
+            setHasSubmitted(true)
             setSubmittedHere(true)
             window.scrollTo({ top: 0, behavior: 'smooth' })
 
@@ -310,27 +335,35 @@ export function TaskDetailScreen() {
             let latest: ZoneView | undefined
             while (Date.now() < deadline) {
               await new Promise((resolve) => setTimeout(resolve, SUBMIT_POLL_INTERVAL_MS))
+              if (pollGeneration.current !== generation) return
               try {
-                latest = await getZoneView(taskId)
+                latest = await getZoneView(pollingTaskId)
               } catch (err) {
                 console.error('TaskDetailScreen: failed to fetch task:', err)
                 continue
               }
+              if (pollGeneration.current !== generation) return
+              // Hold a transient view. Publishing it would replace the form
+              // with a step that has no buttons.
+              if (!stepSettled(beforeStepId, latest)) continue
               setZoneView(latest)
-              if (stepAdvanced(beforeStepId, latest)) break
+              break
             }
-            // Reseed from what the refetch returned, not from what the
-            // form mounted with. Safe to discard the on-screen values
-            // here: the submission that just succeeded carried them.
-            setFormEpoch((n) => n + 1)
-            // Same step, still pending, after the wait: the hand-off has
-            // not shown up. That is not "not sent". A later trader step is
-            // also PENDING_USER, and a loop stays on this step, so say it
-            // is still processing.
-            if (!latest || !stepAdvanced(beforeStepId, latest)) {
+            if (pollGeneration.current !== generation) return
+            if (latest && stepSettled(beforeStepId, latest)) {
+              // Reseed from what the refetch returned, not from what the
+              // form mounted with. Safe to discard the on-screen values
+              // here: the submission that just succeeded carried them.
+              setFormEpoch((n) => n + 1)
+            } else {
+              // Same step, still pending, after the wait: the hand-off has
+              // not shown up. That is not "not sent". A later trader step is
+              // also PENDING_USER, and a loop stays on this step, so say it
+              // is still processing. Leave the form as it is.
               setSubmitWarning(t('tasks.stillProcessing'))
             }
           } catch (err) {
+            if (pollGeneration.current !== generation) throw err
             // Use a local error here rather than the screen-level `error`, which
             // would unmount the layout and discard the user's entered form data.
             if (err instanceof HttpError && err.status === 409) {
@@ -345,6 +378,12 @@ export function TaskDetailScreen() {
             console.error('TaskDetailScreen: failed to submit task step:', err)
             // Reject, so the form keeps treating its input as unsaved.
             throw err
+          } finally {
+            // Re-arm once this poll is the one still on screen. A loop
+            // (Check Status, Verify) comes back to the same form and needs
+            // its button. A task change already bumped the generation, so
+            // this must not clear a submit the trader started on the new task.
+            if (pollGeneration.current === generation) setHasSubmitted(false)
           }
         }}
       />

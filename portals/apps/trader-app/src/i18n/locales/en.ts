@@ -136,6 +136,7 @@ const en = {
       backToConsignment: 'Back to consignment',
       backToCase: 'Back to case',
       draftSaved: 'Draft saved',
+      savingDraft: 'Saving…',
       stillProcessing: 'Still processing. Check back shortly.',
       unsaved: {
         title: 'Leave without saving?',
