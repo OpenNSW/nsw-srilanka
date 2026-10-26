@@ -5,7 +5,7 @@ Helm chart for Sri Lanka's Trade National Single Window platform: the
 (`cmd/server`) and the **Trader Portal** frontend
 ([`portals/apps/trader-app`](../../../portals/apps/trader-app)), deployed
 together as one release with `backend`/`frontend` sections in values. Infra
-this stack depends on (Postgres, Temporal, Thunder ID, Argus) is deployed
+this stack depends on (Postgres, Temporal, Thunder ID) is deployed
 separately — the backend's config just points at their in-cluster Service
 names or external URLs.
 
@@ -149,7 +149,6 @@ kubectl create secret generic nsw-secrets \
   --from-literal=m2m-efc-secret=... \
   --from-literal=m2m-sltb-secret=... \
   --from-literal=m2m-asycuda-secret=... \
-  --from-literal=argus-api-key=... \
   --from-literal=notification-email-token=... \
   --from-literal=notification-sms-password=... \
   --from-literal=storage-token-keyset=...
@@ -178,6 +177,13 @@ entry in `payment_methods.json` points (`"private_key":
 reference; an inline PEM is refused. Without it the backend starts but answers
 every GovPay+ call with 500; a key that is set but unreadable stops the backend
 at startup.
+
+The govpay entry also maps every payee a fee is charged to (`org_id` and
+`service_id` in the PAYMENT step) to that environment's GovPay+
+sub-institution and service ids, under `payees` (shape in
+[`configs/payment_methods.example.json`](../../../configs/payment_methods.example.json)).
+A mapping missing either id stops the backend at startup; a fee whose payee is
+not mapped fails its PAYMENT step.
 
 `backend.env` exposes each `nsw-secrets` key to the server as an env var, and
 `backend.config` references it by placeholder (see below). See

@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/OpenNSW/core/artifact"
@@ -22,10 +23,12 @@ import (
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
+	sharedaudit "github.com/OpenNSW/core/shared/audit"
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
+	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
 	"github.com/OpenNSW/core/temporal"
 	"github.com/OpenNSW/core/trace"
@@ -35,6 +38,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -44,13 +48,13 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
 	"github.com/OpenNSW/nsw-srilanka/internal/htmltemplate"
-	"github.com/OpenNSW/nsw-srilanka/internal/metrics"
 	nswpayment "github.com/OpenNSW/nsw-srilanka/internal/payment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
@@ -59,13 +63,14 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/authzgate"
 	taskauthzext "github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/authz"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/notify"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	taskplugins "github.com/OpenNSW/nsw-srilanka/internal/tasks/plugins"
 	taskrenderer "github.com/OpenNSW/nsw-srilanka/internal/tasks/renderer"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/systemcaller"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+	"github.com/OpenNSW/nsw-srilanka/internal/telemetry"
 	"github.com/OpenNSW/nsw-srilanka/internal/trade"
 	"github.com/OpenNSW/nsw-srilanka/internal/version"
-
-	"github.com/LSFLK/argus/pkg/audit"
 
 	"go.temporal.io/sdk/client"
 	"gorm.io/gorm"
@@ -132,7 +137,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 
 	paymentRepo := payment.NewPaymentRepository(db)
 	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
-		"govpay": govpay.NewGovPayGatewayFactory(govpay.NewRepositoryIdentityResolver(paymentRepo)),
+		govpay.MethodID: govpay.NewGovPayGateway,
 	})
 	if err != nil {
 		_ = database.Close(db)
@@ -146,6 +151,16 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, err
 	}
 	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
+	// Built before payment and storage are handed to the task stack. Workers
+	// can emit events as soon as those services exist, so the auditor has to
+	// be attached here rather than after the task manager starts.
+	auditor := nswaudit.New()
+	auditor.RegisterSink(nswaudit.NewLogSink(nil))
+	coreAuditor := nswaudit.NewCoreAdapter(auditor)
+	var unwiredAudit []string
+	if !attachAuditor(paymentService, coreAuditor) {
+		unwiredAudit = append(unwiredAudit, "payment")
+	}
 
 	artifactRegistry, err := initArtifactRegistry(ctx, cfg)
 	if err != nil {
@@ -157,12 +172,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	companyService := company.NewService(db)
 	userProfileService := user.NewService(db)
 
-	// Outbound HTTP caller configurations. Loaded before storage, which in
+	// Outbound HTTP caller configurations. Set before storage, which in
 	// proxy mode reaches the service that owns the files through it.
 	remoteManager := remote.NewManager()
-	if err := remoteManager.LoadServices(cfg.Server.ServicesConfigPath); err != nil {
+	if err := remoteManager.SetServices(cfg.Services...); err != nil {
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to load remote services from %s: %w", cfg.Server.ServicesConfigPath, err)
+		return nil, fmt.Errorf("failed to configure remote services: %w", err)
 	}
 
 	// Storage is built here rather than alongside its HTTP handler further
@@ -170,10 +185,18 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// through this service, so it has to exist before the task stack (Stage 4).
 	// storage.type picks a backend of this deployment's own or a proxy onto
 	// the service that owns the files.
-	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager)
+	internalUploadTypes, err := internalUploadTypesByClient(cfg.Storage, globalCatalog)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, err
+	}
+	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager, nswstorage.WithInternalUploadTypes(internalUploadTypes))
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
+	}
+	if !attachAuditor(storageStack.Service, coreAuditor) {
+		unwiredAudit = append(unwiredAudit, "storage")
 	}
 	// The file tokens callers hold in place of stored file values.
 	fileAccess, err := newFileAccess(cfg.Storage)
@@ -207,22 +230,38 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return parentRunner.CompleteActivation(context.Background(), parentWorkflowID, "", parentStepID, finalVariables)
 	}
 
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
+	// OGAs are sent file tokens issued to the machine client each calls back
+	// as. An agency doesn't own its files: what it stores are TNSW's tokens,
+	// which it sends back to TNSW as they are.
+	var ogaFiles taskplugins.OGAFiles
+	if !cfg.Storage.IsProxy() {
+		ogaFiles = taskplugins.OGAFiles{
+			ClientFor: func(serviceID string) (string, bool) {
+				clientID, ok := globalCatalog.Clients[serviceID]
+				return clientID, ok
+			},
+			// An OGA opens a file it is sent; it never submits one back.
+			IssueForClient: func(clientID, value string) (string, error) {
+				return fileAccess.IssueForClient(clientID, value, fileaccess.ScopeRead)
+			},
+		}
+	}
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifactRegistry, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
 		return nil, err
 	}
 	tm := task.Manager
-	paymentService.SetTaskCompleter(tm)
+	// The payment service and the webhook handlers below complete steps on their
+	// own authority, so they reach the task manager as the system principal. The
+	// payment service also names no command, so its completer names the step's.
+	systemTasks := systemcaller.New(tm)
+	paymentService.SetTaskCompleter(nswpayment.NewTaskCompleter(systemTasks))
 
 	// -------------------------------------------------------------------
 	// Stage 5: Consignment Service & Workflow Parent Runner
 	// -------------------------------------------------------------------
-	auditClient := audit.NewClient(cfg.Audit.ClientConfig())
-	audit.InitializeGlobalAudit(auditClient)
-	recorder := nswaudit.NewRecorder(auditClient)
-
 	// The mode decides what starts parent workflows: consignments in TNSW, injects in
 	// an agency (see agency.go). An agency builds none of the consignment stack, whose
 	// constructors require the trader and CHA roles an agency catalog does not map.
@@ -243,7 +282,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to build consignment service: %w", err)
 		}
-		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, recorder, globalCatalog.Roles)
+		consignmentRouter, err = consignment.NewRouter(consignmentService, chaService, companyService, auditor, globalCatalog.Roles)
 		if err != nil {
 			_ = stopTask()
 			temporalClient.Close()
@@ -348,12 +387,21 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	if !agencyMode {
 		// ASYCUDA webhook stack.
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
-		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, db, tm)
+		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, db, tm)
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
+
+		// TEMPORARY debugging code (see asycuda/debug_forward.go): copy every SLC
+		// Edge callback to the slce-debug-forward service when config.yaml has one.
+		for _, svc := range cfg.Services {
+			if svc.ID == asycuda.DebugForwardServiceID {
+				slceHandler.DebugForward = remoteManager
+				slog.Warn("slce debug forward is ON: every SLC Edge callback is copied to another deployment", "url", svc.URL)
+			}
+		}
 
 		// SLPA webhook stack. SLPA signs its calls with a shared secret rather than
 		// presenting an IdP token, so this handler owns its own authentication and
@@ -366,8 +414,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		// its own secret is missing (see the services registry), and a missing
 		// secret is a deployment fault worth stopping for either way.
 		slpaHandler, err = slpawebhook.NewHandler(
-			slpawebhook.NewOrderEvents(db, tm),
-			slpawebhook.NewInvoiceEvents(db, tm),
+			slpawebhook.NewOrderEvents(db, systemTasks),
+			slpawebhook.NewInvoiceEvents(db, systemTasks),
 			cfg.Integrations.SLPAWebhook(),
 		)
 		if err != nil {
@@ -384,14 +432,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	storageHandler := storageStack.Handler
-	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
+	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess,
+		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles,
-		tasks.ClaimDeps{Users: userDisplayNames{svc: userProfileService}, Actors: stepActors(artifactRegistry)},
-		recorder, cfg.Server.MaxRequestBytes)
+	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -480,6 +527,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// reads it. Public routes (local-dev storage) are below.
 	mux.Handle("GET /api/v1/tasks/{id}", withAuth(withScope(scopes.TaskRead)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleGetTask)))))
 	mux.Handle("POST /api/v1/tasks/{id}/steps/{stepId}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
+	mux.Handle("PUT /api/v1/tasks/{id}/steps/{stepId}/draft", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleSaveDraft)))))
 	mux.Handle("POST /api/v1/callbacks/{token}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStepByToken)))))
 	mux.Handle("POST /api/v1/tasks/{id}/claim", withAuth(withScope(scopes.TaskClaim)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleClaimTask)))))
 	mux.Handle("POST /api/v1/tasks/{id}/release", withAuth(withScope(scopes.TaskRelease)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleReleaseTask)))))
@@ -489,7 +537,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("GET /api/v1/users/me", withAuth(withScope(scopes.ProfileRead)(http.HandlerFunc(profileHandler.HandleGetProfile))))
 
 	// Storage
-	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(storageHandler.Upload))))
+	mux.Handle(nswstorage.UploadRoute, withAuth(withScope(scopes.StorageWrite)(http.HandlerFunc(fileHandler.Upload))))
 	mux.Handle(nswstorage.DownloadRoute, withAuth(withScope(scopes.StorageRead)(http.HandlerFunc(fileHandler.Download))))
 
 	// Mode-specific routes: TNSW's consignment, CHA/company, payment and webhook
@@ -504,6 +552,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			payment:     paymentHandler,
 			slce:        slceHandler,
 			slpa:        slpaHandler,
+			files:       fileHandler,
 		}, withAuth, withScope)
 	}
 
@@ -516,35 +565,31 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// OTLP metrics when metrics.endpoint is set; otherwise a no-op wrap.
-	httpMetrics, err := metrics.Start(ctx, cfg.Metrics)
+	// OTLP metrics/logs/traces when otel.endpoint is set; otherwise a no-op.
+	tel, err := telemetry.Start(ctx, cfg.Otel)
 	if err != nil {
 		_ = stopParentRunner()
 		_ = stopTask()
 		temporalClient.Close()
 		_ = authnManager.Close()
 		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to start http metrics: %w", err)
+		return nil, fmt.Errorf("failed to start telemetry: %w", err)
 	}
-	handler := cors.CORS(&cfg.CORS)(trace.TraceMiddleware(httpMetrics.Handler("tnsw-api", mux)))
+	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
+	// Security log reads slog.Default after that, so its line is on the same
+	// stream. It sits inside trace middleware so the line carries the trace
+	// id, and outside CORS so a preflight is logged too. Authentication
+	// attaches the principal on a child request; the log reads it back from
+	// authn.RequestCaller.
+	configureLogging(cfg, os.Stdout, tel.SlogHandler())
+	for _, name := range unwiredAudit {
+		slog.Warn(name + " audit is not wired: service has no WithAuditor")
+	}
+	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", mux))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
 		var closeErrs []error
-
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := httpMetrics.Shutdown(shutdownCtx); err != nil {
-			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down http metrics: %w", err))
-		}
-		cancel()
-
-		if auditClient != nil && auditClient.IsEnabled() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := auditClient.Close(shutdownCtx); err != nil {
-				closeErrs = append(closeErrs, fmt.Errorf("failed to close audit client: %w", err))
-			}
-			cancel()
-		}
 
 		if err := stopParentRunner(); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to stop parent runner: %w", err))
@@ -559,6 +604,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		if err := database.Close(db); err != nil {
 			closeErrs = append(closeErrs, fmt.Errorf("failed to close database: %w", err))
 		}
+
+		// Last, so logs emitted while the rest of the process shuts down are
+		// still exported.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to shut down telemetry: %w", err))
+		}
+		cancel()
 
 		return errors.Join(closeErrs...)
 	}
@@ -749,6 +802,15 @@ func (r companyIDResolver) CompanyIDByOUHandle(ctx context.Context, ouHandle str
 	return rec.ID, nil
 }
 
+// caseFlowStarter opens flows on a case for the SLC Edge webhooks, which name
+// the flow themselves (a §6.5.4 or §7.6 amendment opens one per amendment).
+type caseFlowStarter struct{ flows *caseflow.Service }
+
+func (c caseFlowStarter) StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error {
+	_, err := c.flows.StartFlow(ctx, caseflow.StartRequest{CaseID: caseID, TemplateID: templateID, WorkflowID: workflowID, Vars: vars})
+	return err
+}
+
 // newFileAccess builds the file tokens this deployment issues from its storage
 // settings.
 func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
@@ -775,15 +837,26 @@ func stepNamespace(reg *artifact.Registry) tasks.NamespaceOf {
 	}
 }
 
-// stepActors looks up who may act on a step template: the names its authz extension
-// allows, and whether it declares one. Claiming a task follows that rule.
-func stepActors(reg *artifact.Registry) tasks.StepActors {
-	return func(ctx context.Context, stepTemplateID string) ([]string, bool, error) {
-		template, err := steptemplate.Load(ctx, reg, stepTemplateID)
-		if err != nil {
-			return nil, false, err
+// taskManagerOptions makes the task manager refuse to complete or draft a step whose
+// template declares no authz extension, so a step that forgets its rule is closed to
+// everyone rather than open to anyone.
+func taskManagerOptions() []orchestrator.Option {
+	return []orchestrator.Option{orchestrator.WithRequiredPreResumeExtensions(taskauthzext.ExtAuthz)}
+}
+
+// stepCanAct decides whether a caller may act on a task's active step, by the
+// authz rules on its step template in the artifact registry. A task with no
+// active step template has nothing to act on.
+func stepCanAct(reg *artifact.Registry, ext *taskauthzext.Extension) tasks.CanAct {
+	return func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
+		if record.ActiveTaskTemplateID == "" {
+			return false, nil
 		}
-		return taskauthzext.ActingNames(template.Extensions)
+		template, err := steptemplate.Load(ctx, reg, record.ActiveTaskTemplateID)
+		if err != nil {
+			return false, fmt.Errorf("step template %q: %w", record.ActiveTaskTemplateID, err)
+		}
+		return ext.MayActOnStep(ctx, &record, in, template)
 	}
 }
 
@@ -850,6 +923,21 @@ func registerFlowPlugins(reg *plugins.Registry, db *gorm.DB, companyService comp
 	return nil
 }
 
+// attachAuditor calls WithAuditor when the service has it. Released payment
+// and storage do not. The call sits next to construction, before the task
+// stack starts workers that would race a later assignment. The caller logs a
+// miss after logging is configured, so the warning reaches stdout and OTLP.
+func attachAuditor(svc any, auditor sharedaudit.Auditor) bool {
+	setter, ok := svc.(interface {
+		WithAuditor(a sharedaudit.Auditor)
+	})
+	if !ok {
+		return false
+	}
+	setter.WithAuditor(auditor)
+	return true
+}
+
 func initTask(
 	db *gorm.DB,
 	temporalClient client.Client,
@@ -858,6 +946,7 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
+	ogaFiles taskplugins.OGAFiles,
 	artifactRegistry *artifact.Registry,
 	globalCatalog *catalog.Catalog,
 	cfg *config.Config,
@@ -865,7 +954,10 @@ func initTask(
 ) (*taskStack, func() error, error) {
 	// Instantiate flow plugins registry
 	pluginsRegistry := plugins.NewRegistry()
-	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, cfg.Server.ServiceURL); err != nil {
+	if err := taskplugins.Register(pluginsRegistry, remoteManager, paymentService, storageService, ogaFiles, taskplugins.CustomsSubmissions{
+		Declarations:  cusdec.NewDeclarationRepository(db),
+		DispatchNotes: cdn.NewDispatchNoteRepository(db),
+	}, cfg.Server.ServiceURL); err != nil {
 		return nil, nil, fmt.Errorf("failed to register task plugins: %w", err)
 	}
 	if err := registerFlowPlugins(pluginsRegistry, db, companyService, refIDs, registryHTMLTemplates{reg: artifactRegistry}, storageService); err != nil {
@@ -928,7 +1020,10 @@ func initTask(
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
-	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer)
+	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{reg: artifactRegistry}.GetTemplate, payloadschema.NamespaceOf(stepNamespace(artifactRegistry))); err != nil {
+		return nil, nil, fmt.Errorf("register payload schema extension: %w", err)
+	}
+	tm = orchestrator.NewTaskManager(taskStore, artifactRegistry, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer, taskManagerOptions()...)
 
 	if err := workflowRunner.StartWorker(); err != nil {
 		return nil, nil, fmt.Errorf("failed to start micro workflow worker: %w", err)

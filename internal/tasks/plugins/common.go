@@ -11,7 +11,7 @@ import (
 
 // Package plugins hosts taskv2's dispatching plugins. Outbound calls are
 // routed through remote.Manager so service base URLs, auth, and timeouts
-// live in services.json rather than in template configs — template configs
+// live in config.yaml's services list — template configs
 // specify only service_id + path.
 
 // dispatchHelper bundles outbound HTTP behaviour shared by plugins in this

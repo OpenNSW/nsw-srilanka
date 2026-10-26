@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Button, Badge, Spinner, Text } from '@radix-ui/themes'
+import { Button, Badge, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import { ActionListView } from '@/features/consignment/components/WorkflowViewer'
+import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
+import { CopyableId } from '@/components/CopyableId'
+import { isAgencyMode } from '@/features/case/mode'
+import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
 import { StartFlowButtons } from '@/features/consignment/components/StartFlowButtons'
 import type { ConsignmentDetail } from '@/features/consignment/types.ts'
 import { getConsignment } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
-import { CONTENT_TOP_PX } from '@/components/Layout'
+import { ROUTES } from '@/constants'
 
 type ConsignmentErrorKey = 'idRequired' | 'notFound' | 'loadFailed'
 
@@ -28,10 +31,9 @@ interface ConsignmentDetailScreenProps {
   // getConsignmentForAdmin (features/admin/service.ts) to reuse this screen for the
   // ConsignmentAdminRead-gated admin view instead.
   fetcher?: (consignmentId: string) => Promise<ConsignmentDetail | null>
-  // Where the back/back-to-list buttons navigate. Defaults to the trader/CHA consignments list.
-  backTo?: string
-  // Accessible label for the back button. Defaults to matching the trader/CHA backTo default.
-  backLabel?: string
+  // The page above this one, first in the breadcrumb and where the error state's
+  // buttons go. Defaults to the trader/CHA consignments list.
+  parent?: BreadcrumbItem
   // Whether to offer the consignment's startableFlows. The admin view, whose callers cannot
   // start flows, turns it off.
   canStartFlows?: boolean
@@ -39,13 +41,16 @@ interface ConsignmentDetailScreenProps {
 
 export function ConsignmentDetailScreen({
   fetcher = getConsignment,
-  backTo = '/consignments',
-  backLabel = 'Back to consignments list',
+  parent,
   canStartFlows = true,
 }: ConsignmentDetailScreenProps = {}) {
   const { consignmentId } = useParams<{ consignmentId: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
+  // An agency's officers work on cases: the same records, under their own name.
+  const up = parent ?? { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS }
+  const untitled = t(isAgencyMode ? 'cases.detail.title' : 'consignments.detail.title')
+  const backTo = up.to ?? ROUTES.CONSIGNMENTS
   const [consignment, setConsignment] = useState<ConsignmentDetail | null>(null)
   const [loading, setLoading] = useState(!!consignmentId)
   const [refreshing, setRefreshing] = useState(false)
@@ -241,10 +246,7 @@ export function ConsignmentDetailScreen({
     return (
       <div className="p-6">
         <div className="mb-6">
-          <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)}>
-            <ArrowLeftIcon />
-            {t('consignments.detail.back')}
-          </Button>
+          <Breadcrumb items={[up, { label: untitled }]} />
         </div>
         <div className="bg-app-surface rounded-2xl shadow-md p-8 text-center">
           <Text size="5" color="red" weight="medium" className="block mb-2">
@@ -258,7 +260,7 @@ export function ConsignmentDetailScreen({
           <div className="flex gap-3 justify-center">
             <Button variant="soft" onClick={() => void navigate(backTo)}>
               <ArrowLeftIcon />
-              {t('consignments.detail.backToList')}
+              {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
             </Button>
             {isLoadFailed && (
               <Button
@@ -281,63 +283,57 @@ export function ConsignmentDetailScreen({
   const workflowNodes = consignment.workflowNodes || []
 
   return (
-    <div
-      style={{ height: `calc(100vh - ${CONTENT_TOP_PX}px)` }}
-      className="p-4 md:p-6 max-w-5xl mx-auto w-full flex flex-col"
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <Button variant="ghost" color="gray" onClick={() => void navigate(backTo)} aria-label={backLabel}>
-          <ArrowLeftIcon />
-          {t('consignments.detail.back')}
-        </Button>
-        <Button
-          variant="soft"
-          color="blue"
-          size="2"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="cursor-pointer"
-        >
-          <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
-          {t('consignments.detail.refresh')}
-        </Button>
+    <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-6 pb-10">
+      <div className="flex items-center justify-between gap-4">
+        <Breadcrumb items={[up, { label: consignment.name || untitled }]} />
+        <Tooltip content={t('consignments.detail.refresh')}>
+          <IconButton
+            type="button"
+            variant="soft"
+            color="gray"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            aria-label={t('consignments.detail.refresh')}
+          >
+            <ReloadIcon className={refreshing ? 'animate-spin' : ''} />
+          </IconButton>
+        </Tooltip>
       </div>
 
-      <div className="mb-3 mt-2 flex items-center gap-3">
-        <h1 className="text-xl font-semibold text-foreground">{consignment.name || t('consignments.detail.title')}</h1>
-        <Badge size="2" color={getStateColor(consignment.state)}>
-          {formatState(consignment.state)}
-        </Badge>
-        <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-          {consignment.flow}
-        </Badge>
-        {canStartFlows && (
-          <div className="ml-auto">
-            <StartFlowButtons
-              consignmentId={consignment.id}
-              flows={consignment.startableFlows ?? []}
-              onStarted={handleFlowStarted}
-            />
+      <div className="mt-10 mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">{consignment.name || untitled}</h1>
+            <Badge size="2" color={getStateColor(consignment.state)}>
+              {formatState(consignment.state)}
+            </Badge>
+            {/* A case carries no flow. */}
+            {consignment.flow && (
+              <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
+                {consignment.flow}
+              </Badge>
+            )}
           </div>
+          <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground-muted">
+            <CopyableId
+              label={t(isAgencyMode ? 'cases.detail.field.caseId' : 'consignments.detail.field.consignmentId')}
+              id={consignment.id}
+            />
+            <span>
+              {t('consignments.detail.field.dateCreated')} {formatDateTime(consignment.createdAt)}
+            </span>
+          </p>
+        </div>
+        {canStartFlows && (
+          <StartFlowButtons
+            consignmentId={consignment.id}
+            flows={consignment.startableFlows ?? []}
+            onStarted={handleFlowStarted}
+          />
         )}
       </div>
 
-      <div className="mb-4 md:mb-6 flex items-start gap-10">
-        <div>
-          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">
-            {t('consignments.detail.field.consignmentId')}
-          </p>
-          <p className="text-xs font-mono text-foreground-muted">{consignment.id}</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-foreground-subtle mb-0.5">
-            {t('consignments.detail.field.dateCreated')}
-          </p>
-          <p className="text-xs text-foreground-muted">{formatDateTime(consignment.createdAt)}</p>
-        </div>
-      </div>
-
-      <div className="bg-app-surface rounded-2xl shadow-md flex flex-col flex-1 min-h-0 relative">
+      <div className="bg-app-surface rounded-2xl shadow-md relative">
         {refreshing && (
           <div className="absolute inset-0 bg-app-surface/80 backdrop-blur-sm z-20 flex items-center justify-center rounded-lg">
             <div className="flex items-center gap-3 bg-app-surface px-6 py-4 rounded-xl shadow-lg">
@@ -349,20 +345,16 @@ export function ConsignmentDetailScreen({
           </div>
         )}
 
-        <div className="p-4 flex-1 flex flex-col min-h-0">
+        <div className="p-4 sm:p-6">
           {workflowNodes.length > 0 ? (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <ActionListView
-                className="flex-1 min-h-0"
-                steps={workflowNodes}
-                consignmentId={consignmentId!}
-                onRefresh={handleRefresh}
-                refreshing={refreshing}
-                consignmentState={consignment.state}
-              />
-            </div>
+            <ConsignmentTasks
+              key={`${consignment.id}-${consignment.state}`}
+              steps={workflowNodes}
+              consignmentId={consignmentId!}
+              consignmentState={consignment.state}
+            />
           ) : (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <Text size="4" color="gray" weight="medium" className="block mb-2">
                   {t('consignments.detail.noWorkflow.title')}

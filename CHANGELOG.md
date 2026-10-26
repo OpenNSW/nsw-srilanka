@@ -6,6 +6,373 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-23
+
+This release changes how a deployment is configured and audited. Outbound services move into `config.yaml`, where `services` is now required; Argus is gone, so audit records go to the log; and the agency bundles and the default consignment flow lose their version labels, so the image version and the artifacts pin must change in the same deployment. One migration runs. The consignment list now follows the roles in the token, and TNSW opens a flow on the case when Customs amends a declaration or a dispatch note. The Trader Portal groups a consignment's tasks into Active and Done tabs, titles each task page after its step, and serves agency cases under `/cases`.
+
+### Upgrade notes
+
+#### Change the image version and the artifacts pin together ([#864](https://github.com/OpenNSW/nsw-srilanka/pull/864), [#817](https://github.com/OpenNSW/nsw-srilanka/pull/817), [#822](https://github.com/OpenNSW/nsw-srilanka/pull/822))
+
+- Move the image or chart version and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. This build reads the agency bundles as `cda`, `efc`, `fcau`, `npqs` and `sltb`, and the default consignment flow as `trade-export`. The pinned artifacts ([one-trade-artifacts#242](https://github.com/OpenNSW/one-trade-artifacts/pull/242)) name them that way, and 0.8.0 can't find them.
+- Wherever an agency's `artifactLoader` names its folder (the local `root`, or the S3 or R2 `prefix`), drop the `-v2`: `cda-v2` becomes `cda`, and so on. Before the next sync of the artifacts to an object store, clear its old `cda/`, `efc/`, `fcau/`, `npqs/` and `sltb/` prefixes, which still hold the v1 agency files that [one-trade-artifacts#216](https://github.com/OpenNSW/one-trade-artifacts/pull/216) removed.
+- Consignments and cases started before this release name the flow `trade-export-v1` and the old task codes, which the new artifacts no longer have. They do not carry over: let them finish before you upgrade, or discard them.
+
+#### Declare the outbound services in `config.yaml` ([#859](https://github.com/OpenNSW/nsw-srilanka/pull/859))
+
+- `services` is now required in `config.yaml` (Helm: `backend.config.services`), for TNSW and for each agency. The server stops at startup with an empty list. The services file, `services.json`, and the `server.servicesConfigPath` key are no longer read. Copy the list from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.9.0/configs/config.example.yaml) or [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.9.0/deployments/helm/values-example.yaml), and move each entry across. `id`, `url`, `timeout` and `auth.type` keep their names. The rest change:
+
+  | `services.json`                               | `config.yaml`                                   |
+  | --------------------------------------------- | ----------------------------------------------- |
+  | `auth.options.token_url`                      | `auth.oauth2.tokenURL`                          |
+  | `auth.options.client_id`                      | `auth.oauth2.clientID`                          |
+  | `auth.options.client_secret`, as `env:NAME`   | `auth.oauth2.clientSecret`, as `"{{env:NAME}}"` |
+  | `auth.options.scopes`                         | `auth.oauth2.scopes`                            |
+  | `auth.options.endpoint_params`                | `auth.oauth2.endpointParams`                    |
+  | `auth.options.insecure_skip_tls_verify`       | `auth.oauth2.insecureSkipTLSVerify`             |
+  | `tls.client_cert_file`, `tls.client_key_file` | `tls.clientCertFile`, `tls.clientKeyFile`       |
+
+  A bearer or API key service uses `auth.bearer` or `auth.apiKey` in place of `auth.oauth2`.
+
+- A secret is a quoted `"{{env:NAME}}"` or `"{{file:/path}}"` placeholder, and an unset one stops the process. Supply those variables or mounted files to every process that reads the YAML, including the database migration and seed jobs under Docker Compose. With Helm, the database migration reads its own database-only config, so it needs none of them.
+- `insecureSkipTLSVerify` still needs `APP_ENV=development`.
+
+#### Remove Argus and the `audit` section ([#854](https://github.com/OpenNSW/nsw-srilanka/pull/854), [#847](https://github.com/OpenNSW/nsw-srilanka/pull/847))
+
+- Remove the `audit:` section from `config.yaml`, and `ARGUS_API_KEY` from the environment and from the Helm values (the `argus-api-key` key of `nsw-secrets`). The API no longer builds an Argus client, and Argus is no longer a dependency. A leftover `audit:` section is ignored, but a leftover `"{{env:ARGUS_API_KEY}}"` placeholder stops startup once nothing sets the variable, because placeholders are resolved before the file is decoded.
+- Audit records are now structured log lines with `category=audit`, on the log stream of the API: filter that stream for them. They are written at `info`, so `server.logLevel` of `warn` or `error` drops them, and startup logs that once. Keep `info` or `debug` wherever you need the audit trail.
+
+#### The consignment list follows the roles in the token ([#876](https://github.com/OpenNSW/nsw-srilanka/pull/876))
+
+- Remove `IDP_ROLE_CLAIM_NAME`, `IDP_TRADER_ROLE_NAME`, `IDP_CHA_ROLE_NAME` and `IDP_NSW_ADMIN_ROLE_NAME` from the Trader Portal's `frontend.config` or `config.js`. A key left in is ignored. Keep the `role` scope in `IDP_SCOPES`, because the backend reads the roles from the token.
+- Every signed-in user now reaches the portal, and the backend decides what they see. `GET /api/v1/consignments` returns the consignments where the caller's company is the trader (trader catalog role), the CHA (CHA catalog role), or either (both roles). A user with neither role gets a 403, which the portal shows as an empty list, in place of the unauthorized screen. A `?role=` sent by an old client is ignored.
+- `POST /api/v1/consignments` now requires the trader catalog role. A CHA-only user who could create a consignment before now gets a 403.
+- A user with both roles sees one combined list, with a Role column, in place of the role switcher.
+
+#### Migration ([#814](https://github.com/OpenNSW/nsw-srilanka/pull/814))
+
+- `000027_slce_link_dispatches_to_workflows` runs before the API starts, after `000025` and `000026`; the Helm hook and Docker Compose run it. Use the 0.9.0 `tnsw-migrate` image. It adds `case_id` and `workflow_id` columns to `cusdec_declarations` and `dispatch_notes`, fills them once from the task data, and adds a row for any dispatch still waiting for its first callback, so declarations and dispatch notes already in progress keep receiving their SLC Edge callbacks. It also drops two indexes. Rolling back drops the columns and recreates the indexes.
+
+#### Keep the SLC Edge debug forward off in production ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+
+- This release includes a development aid that copies every SLC Edge callback to another deployment, for debugging. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Leave that entry out in production, and remove it if you added one. The aid is temporary and will be removed before production use.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`28b4037`](https://github.com/OpenNSW/one-trade-artifacts/commit/28b40374c271802077adf5bb4ded97d8d172f06a) (23 October 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
+  - [one-trade-artifacts#242](https://github.com/OpenNSW/one-trade-artifacts/pull/242): the bundles and the trade flow without version labels ([#864](https://github.com/OpenNSW/nsw-srilanka/pull/864));
+  - [one-trade-artifacts#210](https://github.com/OpenNSW/one-trade-artifacts/pull/210): the `customs-cusdec-amended` flow ([#817](https://github.com/OpenNSW/nsw-srilanka/pull/817)). Without the flow, an amended declaration is answered with a 500 and SLC Edge retries it;
+  - [one-trade-artifacts#215](https://github.com/OpenNSW/one-trade-artifacts/pull/215): the `customs-cdn-amended` flow ([#822](https://github.com/OpenNSW/nsw-srilanka/pull/822)). The same holds for an amended dispatch note.
+- It also lists `payload_schema` on every step where a person fills in a form ([one-trade-artifacts#256](https://github.com/OpenNSW/one-trade-artifacts/pull/256)), so a submission that breaks its form's schema now gets a 400 on each of them. This build holds dates to the limits a form sets from a sibling date.
+
+#### Local Docker Compose ([#864](https://github.com/OpenNSW/nsw-srilanka/pull/864), [#859](https://github.com/OpenNSW/nsw-srilanka/pull/859), [#854](https://github.com/OpenNSW/nsw-srilanka/pull/854))
+
+- Pull one-trade-artifacts, then drop the `-v2` from any `CDA_ARTIFACT_LOCAL_ROOT`, `EFC_ARTIFACT_LOCAL_ROOT`, `FCAU_ARTIFACT_LOCAL_ROOT`, `NPQS_ARTIFACT_LOCAL_ROOT` or `SLTB_ARTIFACT_LOCAL_ROOT` in your `.env`.
+- `make setup` doesn't overwrite an existing `configs/config.yaml` or `configs/config.docker.yaml`, so update them from the examples: add the `services` list, and remove `server.servicesConfigPath` and the `audit:` section. A leftover `"{{env:ARGUS_API_KEY}}"` stops startup, because Compose no longer sets that variable. The `configs/services*.json` files are no longer read.
+- Remove `ARGUS_PORT` and `ARGUS_API_KEY` from your `.env`. `docker compose up` no longer builds or starts Argus.
+- Remove the four `IDP_*_ROLE` keys from your `portals/apps/trader-app/public/config.js`.
+
+### Added
+
+- **Amended declarations and dispatch notes.** When Customs amends a registered declaration (`CUSDEC_AMENDED`) or a dispatch note, TNSW opens a new flow on its case, seeded with the amended data, for the trader to review and acknowledge. Without the flow template in the artifacts, the amendment is answered with a 500 and SLC Edge retries it. ([#817](https://github.com/OpenNSW/nsw-srilanka/pull/817), [#822](https://github.com/OpenNSW/nsw-srilanka/pull/822))
+- **Date limits in form validation.** The `payload_schema` check enforces a date's minimum and maximum when the limit is read from another date in the form, such as "can't be later than the sailing date", as the Trader Portal does. ([#862](https://github.com/OpenNSW/nsw-srilanka/pull/862))
+- **More audit events.** Successful reads and denied list requests are recorded, a file-resolution denial keeps the command or the draft flag, and a step with no `authz` rule is recorded as `step_not_guarded`. ([#586](https://github.com/OpenNSW/nsw-srilanka/pull/586), [#854](https://github.com/OpenNSW/nsw-srilanka/pull/854))
+- **Tasks in Active and Done tabs.** The consignment page groups a consignment's tasks by state. Active holds the tasks that need action, each with its Continue button, then the ones waiting on others with the date they were sent. Done holds finished tasks, newest first, with when each was completed and a View link. A finished consignment opens on Done. This replaces the Action Required and In Review list and the Process History toggle. ([#879](https://github.com/OpenNSW/nsw-srilanka/pull/879))
+
+### Changed
+
+- Audit records go to the log instead of Argus. See the upgrade notes. ([#847](https://github.com/OpenNSW/nsw-srilanka/pull/847), [#854](https://github.com/OpenNSW/nsw-srilanka/pull/854))
+- A declaration or dispatch note records its case and workflow when SLC Edge accepts it, and a callback reads the waiting task through the task store by those, instead of searching task data. ([#814](https://github.com/OpenNSW/nsw-srilanka/pull/814))
+- The consignment list shows the caller's role on each row, and each listed consignment carries `callerRoles`. ([#876](https://github.com/OpenNSW/nsw-srilanka/pull/876))
+- In agency mode (`APP_MODE: "agency"`) the portal says Cases instead of Consignments, and serves them at `/cases`, `/cases/:id` and `/cases/:id/tasks/:taskId` in place of the paths under `/consignments`, so update any saved or shared link to an agency portal page. An agency case shows no empty EXPORT or IMPORT badge. ([#879](https://github.com/OpenNSW/nsw-srilanka/pull/879))
+
+### Fixed
+
+- A refused upload names its file type in the 415, such as `invalid or prohibited file type: application/vnd.ms-excel`. ([#858](https://github.com/OpenNSW/nsw-srilanka/pull/858))
+- The Trader Portal's task page is titled after its step, with a breadcrumb, and the consignment page has the same header: the name, the consignment ID with a copy button, and the date created. ([#861](https://github.com/OpenNSW/nsw-srilanka/pull/861), [#868](https://github.com/OpenNSW/nsw-srilanka/pull/868))
+- The Trader Portal's buttons, checkboxes, focus rings and form controls use the color scheme's brand color, and its status badges and grey labels now reach a 4.5:1 text contrast. The main button was a bright blue at 3.26:1. ([#880](https://github.com/OpenNSW/nsw-srilanka/pull/880))
+
+### Security
+
+- Creating a consignment requires the trader role in the API. Until now any signed-in user could create one, and hiding the button in the portal was the only guard. ([#876](https://github.com/OpenNSW/nsw-srilanka/pull/876))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments, tasks and payments are audited; SLC Edge callbacks and the storage module's own events are not.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as an empty list. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+
+## [0.8.0] - 2026-10-22
+
+This release refuses any task step whose workflow artifact declares no `authz` rule, so the artifacts pin and each agency's catalog must move with it. It also renames the `metrics` config section to `otel` and exports logs and traces as well as metrics, can connect to Temporal over TLS and mutual TLS, logs every HTTP request as a security event, and resumes the CusDec export release step that never resumed before. No migrations run.
+
+### Upgrade notes
+
+#### Move the artifacts pin with this release ([#848](https://github.com/OpenNSW/nsw-srilanka/pull/848))
+
+- This build refuses every action on a task step that declares no `authz` rule, and no setting turns that off. Only one-trade-artifacts from [one-trade-artifacts#227](https://github.com/OpenNSW/one-trade-artifacts/pull/227) on declare one on every step. Upgrade TNSW and each agency with those artifacts, in the same deployment as the image or chart version.
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`e98cce1`](https://github.com/OpenNSW/one-trade-artifacts/commit/e98cce1b84c4a515086b8742419e9cb171d6ea51) (22 October 2026), for TNSW and for each agency. It holds:
+  - [one-trade-artifacts#227](https://github.com/OpenNSW/one-trade-artifacts/pull/227): a rule on every step, and `read.roles` on every TNSW task. The rules apply to tasks already in progress. `read.roles` applies only to tasks started after the move.
+  - [one-trade-artifacts#228](https://github.com/OpenNSW/one-trade-artifacts/pull/228): the FCAU item ID and the SLPA eCDN container number stop being read-only, ahead of the read-only check ([#843](https://github.com/OpenNSW/nsw-srilanka/pull/843)).
+  - [one-trade-artifacts#209](https://github.com/OpenNSW/one-trade-artifacts/pull/209): the KCFN recommendation letter becomes a list of files. A KCFN case already past the issue-letter step fails at upload-docs, so finish or restart those cases before you upgrade.
+  - [one-trade-artifacts#230](https://github.com/OpenNSW/one-trade-artifacts/pull/230) and [#231](https://github.com/OpenNSW/one-trade-artifacts/pull/231): SLTB's lab test report is uploaded and verified at the Export Division, and the final decision no longer issues a tea export certificate. Applications already past lab testing finish on the workflow version they started on.
+  - Form fixes for CusDec, CDN, NPQS, FCAU and CDA ([#223](https://github.com/OpenNSW/one-trade-artifacts/pull/223), [#233](https://github.com/OpenNSW/one-trade-artifacts/pull/233), [#234](https://github.com/OpenNSW/one-trade-artifacts/pull/234), [#235](https://github.com/OpenNSW/one-trade-artifacts/pull/235), [#236](https://github.com/OpenNSW/one-trade-artifacts/pull/236), [#160](https://github.com/OpenNSW/one-trade-artifacts/pull/160), [#218](https://github.com/OpenNSW/one-trade-artifacts/pull/218), [#237](https://github.com/OpenNSW/one-trade-artifacts/pull/237)).
+- For local development, pull your artifacts checkout or move its ref past one-trade-artifacts#227. An older one refuses every step.
+
+#### Map TNSW's client in each agency's catalog ([#845](https://github.com/OpenNSW/nsw-srilanka/pull/845))
+
+- Add `"clients": { "tnsw": "<client>" }` to each agency's `catalog.json`, naming the client TNSW calls that agency as (for example `NSW_TO_SLTB`). [`configs/agency/catalog.example.json`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.8.0/configs/agency/catalog.example.json) shows the entry. Without it, the pinned artifacts' rules refuse TNSW's replies to the agency steps that wait for them. The clients already exist, so the IdP needs no change.
+
+#### Rename `metrics` to `otel` in `config.yaml` ([#671](https://github.com/OpenNSW/nsw-srilanka/pull/671))
+
+- Rename the `metrics` section of `backend.config` to `otel`. The API ignores the old key without an error, so a deployment that keeps it stops exporting.
+- `otel.endpoint` is now the OTLP/HTTP base URL, such as `http://otel-collector:4318`, and the API appends `/v1/metrics`, `/v1/logs` and `/v1/traces` to it. An old endpoint ending in `/v1/metrics` still works: the suffix is stripped.
+- The example auth header moves from `METRICS_AUTH_HEADER` to `OTEL_AUTH_HEADER`, read from an optional `otel-auth-header` Secret. [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.8.0/deployments/helm/values-example.yaml) shows the Secret, the `backend.env` entry and the `otel` block. A deployment with export off needs no change.
+
+#### Temporal over TLS (optional) ([#846](https://github.com/OpenNSW/nsw-srilanka/pull/846))
+
+- Nothing changes unless you set `temporal.tls`. To connect to a Temporal server that requires TLS or client certificates:
+  1. Create a `temporal-client-tls` Secret with `ca.crt`, `tls.crt` and `tls.key`. A cert-manager `Certificate` Secret has these keys.
+  2. Mount it at `/certs/temporal` through `backend.volumes` and `backend.volumeMounts`.
+  3. Set `caFile`, `certFile` and `keyFile` under `temporal.tls` in `backend.config`. Also set `serverName` if the server's certificate doesn't name `temporal.host`.
+- The files are read once at startup, so restart the backend after the certificate is renewed.
+
+### Added
+
+- **Logs and traces over OTLP.** With `otel` configured, the API exports logs and traces as well as metrics, for example to OpenObserve. ([#671](https://github.com/OpenNSW/nsw-srilanka/pull/671))
+- **Temporal over TLS and mutual TLS**, configured under `temporal.tls`. ([#846](https://github.com/OpenNSW/nsw-srilanka/pull/846))
+- **A security log of every HTTP request.** Every request except `GET /health` adds one info line to the process log, with `category=security`: the caller, the time, a text request body of up to 4 KiB, and the response. ([#844](https://github.com/OpenNSW/nsw-srilanka/pull/844))
+- **Read-only values are enforced.** On a step that lists the `payload_schema` extension, a submission or draft that changes a value the schema marks `readOnly` is refused. The pinned artifacts list the extension on the NPQS application step only. ([#843](https://github.com/OpenNSW/nsw-srilanka/pull/843))
+
+### Changed
+
+- A task step with no `authz` rule refuses every caller instead of letting anyone act. See the upgrade notes. ([#848](https://github.com/OpenNSW/nsw-srilanka/pull/848))
+- An agency's `catalog.json` can map `tnsw` under `clients`, so its rules can name TNSW. ([#845](https://github.com/OpenNSW/nsw-srilanka/pull/845))
+- The Trader Portal's top bar fits small screens, and the notifications bell, which did nothing, is hidden. ([#842](https://github.com/OpenNSW/nsw-srilanka/pull/842))
+
+### Fixed
+
+- An `EXPORT_RELEASED` event from Customs now resumes the "Wait on Export Release" step. That step runs in a parallel branch, and before this fix the event never reached it. Payment and warranting events are looked up the same way. A declaration whose release was already lost to this bug is `RELEASED`, so Customs resending the event changes nothing; complete its waiting step by hand. ([#849](https://github.com/OpenNSW/nsw-srilanka/pull/849))
+- The ePhyto certificate sent to the IPPC Hub carries the codes of the NPQS application's dropdown answers again. Since 0.7.0's artifacts, those answers have been stored with their labels. ([#695](https://github.com/OpenNSW/nsw-srilanka/pull/695))
+
+### Security
+
+- The security log records request bodies and responses, and responses can carry personal data such as email addresses and phone numbers. Signed URLs and other credential fields are redacted. Restrict who can read the API's logs, and expect more log volume. ([#844](https://github.com/OpenNSW/nsw-srilanka/pull/844))
+- Every task step now says who may act on it, and a step without a rule is closed rather than open. ([#848](https://github.com/OpenNSW/nsw-srilanka/pull/848))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+
+## [0.7.0] - 2026-10-22
+
+This release identifies each fee by the organization and service it pays, and reads the GovPay+ ids for them from `payment_methods.json`. It also settles a GovPay+ update that carries no status, matches SLC Edge callbacks by `edge_id` only, validates task form submissions against their JSON Schema, and shows long application forms in the Trader Portal one step at a time. Two migrations run, `payment_methods.json` needs a `payees` block, and the image version and the artifacts pin must change in the same deployment.
+
+### Upgrade notes
+
+#### Change the image version and the artifacts pin together ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834), [#821](https://github.com/OpenNSW/nsw-srilanka/pull/821))
+
+- Move the image or chart version and `artifactLoader.github.ref` in one deployment. This build needs artifacts that name each fee's payee: with older ones, every PAYMENT step fails asking for `org_id` and `service_id`. The pinned artifacts, in turn, need this build: they enable the `payload_schema` check on the NPQS application step, which 0.6.0 rejects every submission on, and they carry no `gateway_metadata`, which 0.6.0 reads for payments.
+
+#### Map the GovPay+ ids in `payment_methods.json` ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834))
+
+- Add a `payees` block to the `govpay` method, with this environment's GovPay+ sub-institution and service ids: one entry per organization, with its `subinst_id` under `defaults` and a `service_id` for each fee under `services`. [`configs/payment_methods.example.json`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.7.0/configs/payment_methods.example.json) maps the seven current fees (FCAU `app_fee`, NPQS `certificate_fee` and `treatment_fee`, SLTB `levy_fee` and `lab_fee`, CDA `app_fee` and `kcfn_fee`). The ids differ per environment, so use your own.
+- The backend refuses to start if a mapping lacks `subinst_id` or `service_id`. A fee whose payee isn't mapped fails its PAYMENT step, naming the payee. A GovPay+ call that carries other ids than the payee's mapping gets a 404, like an unknown reference.
+- A PAYMENT step uses its `selected_method` if that method maps the payee, and otherwise the only method that does. With several and no selection it fails, listing them: there is no fallback to `govpay`.
+- Agencies need no change: their `payment_methods.json` has no methods.
+
+#### Migrations
+
+Two migrations run before the API starts; the Helm hook and Docker Compose run them. Use the 0.7.0 `tnsw-migrate` image.
+
+- `000025_slce_edgeid_only` ([#813](https://github.com/OpenNSW/nsw-srilanka/pull/813)) renames the `edgeId` key to `edge_id` in the customs data (`cig` and `cig_cdn`) of `task_records_v2`, and drops the two indexes that served it. SLC Edge callbacks now find the waiting task by `edge_id` only, so a task already waiting needs this rename. Rolling back recreates the indexes but does not rename the key back.
+- `000026_payment_payee` ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834)) adds `org_id` and `service_id` to `payment_transactions`, and fills them in for existing payments from the GovPay+ ids or task code they stored. A pending payment for any of the seven current fees keeps working; any other pending payment can no longer be presented or settled. Rolling back drops the columns.
+
+#### Catalogs can't define `system` ([#824](https://github.com/OpenNSW/nsw-srilanka/pull/824))
+
+- Remove any role or client named `system` from TNSW's `catalog.json` and from each agency's. The API now refuses to start with one, because `system` is reserved for the service's own completions. The example catalogs have none.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`b7798b9`](https://github.com/OpenNSW/one-trade-artifacts/commit/b7798b98e5b419fa6d3884abc6ac6a57deb07391) (21 October 2026). It holds every artifact change this release depends on:
+  - [one-trade-artifacts#225](https://github.com/OpenNSW/one-trade-artifacts/pull/225): each PAYMENT step names its payee ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834));
+  - [one-trade-artifacts#201](https://github.com/OpenNSW/one-trade-artifacts/pull/201): the GovPay+ ids leave the PAYMENT steps ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834));
+  - [one-trade-artifacts#208](https://github.com/OpenNSW/one-trade-artifacts/pull/208): the previous SLC Edge attempt's id is read from where it is stored ([#813](https://github.com/OpenNSW/nsw-srilanka/pull/813));
+  - [one-trade-artifacts#220](https://github.com/OpenNSW/one-trade-artifacts/pull/220): server-side validation of the NPQS application ([#821](https://github.com/OpenNSW/nsw-srilanka/pull/821));
+  - [one-trade-artifacts#203](https://github.com/OpenNSW/one-trade-artifacts/pull/203): the long application forms split into steps ([#805](https://github.com/OpenNSW/nsw-srilanka/pull/805)).
+- It also holds the FCAU per-item inspection ([one-trade-artifacts#226](https://github.com/OpenNSW/one-trade-artifacts/pull/226)), which has no compatibility with FCAU applications already in progress. Let them finish before you upgrade.
+
+#### Local Docker Compose ([#827](https://github.com/OpenNSW/nsw-srilanka/pull/827), [#834](https://github.com/OpenNSW/nsw-srilanka/pull/834))
+
+- The local IdP now serves plain HTTP, and is published on `127.0.0.1` only. Your git-ignored copies keep the old settings, so update them by hand:
+  - `idp/.env`: `PUBLIC_URL`, `PORT` and `HOSTNAME` are no longer read and can be removed.
+  - `configs/config*.yaml`, `configs/services*.json` and `portals/apps/trader-app/public/config.js`: change the IdP URLs (`localhost:8090`, `thunderid:8090`) to `http://`, and remove the insecure-TLS flags.
+  - Run `docker compose up` so `thunderid-setup` re-imports the Console with `http://` redirect URIs. The token issuer becomes `http://localhost:8090`, so sign in again.
+- To pay fees on the local stack, copy the `payees` block of `configs/payment_methods.example.json` into your git-ignored `configs/payment_methods.json`.
+
+### Added
+
+- **Form validation on the server.** A step template can list the `payload_schema` extension, with the form's id as its `form` property. A submission is then checked against that form's JSON Schema, so a call that skips the browser is held to the same rules as the Trader Portal. An invalid payload gets a 400 with a fixed message, and the failing fields are logged at warn level. Draft saves are not checked. Nothing is validated until a step lists the extension: the pinned artifacts list it on the NPQS application step. ([#821](https://github.com/OpenNSW/nsw-srilanka/pull/821))
+- **A reserved `system` principal.** The payment service, the CusDec and CDN webhooks, and the SLPA order and invoice events complete task steps as `system`, and a payment step's completion carries the command `submit`. A step's `authz` rule can now admit them by naming it, such as `"QUEUED_EXTERNALLY": { "submit": ["system"] }`. No request can act as `system`. ([#824](https://github.com/OpenNSW/nsw-srilanka/pull/824), [#825](https://github.com/OpenNSW/nsw-srilanka/pull/825))
+- **Stepper forms.** The Trader Portal shows a form whose `Categorization` has `options.variant: "stepper"` one step at a time, with Submit on the last, review step. The pinned artifacts split the long application forms this way. ([#805](https://github.com/OpenNSW/nsw-srilanka/pull/805))
+
+### Changed
+
+- Fees are identified by the organization and service they pay (`org_id` and `service_id` in the PAYMENT step) instead of a task code, and the GovPay+ ids are mapped in `payment_methods.json`. See the upgrade notes. ([#834](https://github.com/OpenNSW/nsw-srilanka/pull/834))
+- The Trader Portal's form controls use `@opennsw/jsonforms-renderers` 0.16. Removing a list item or an uploaded file asks first, and the Remove button of an upload moves into a More actions menu next to View and Download. A list configured with `options.display: "cards"` shows each item as a card that opens in a dialog, with optional running totals above it; the pinned artifacts configure cards on the CusDec, NPQS, CDA, SLPA eCDN and FCAU application forms. ([#840](https://github.com/OpenNSW/nsw-srilanka/pull/840))
+
+### Fixed
+
+- A GovPay+ update that carries no status settles the payment. The update carries back only the returned parameters (`refNo`, `amount` and `currency`), so it used to be rejected as an unsupported status and the payment stayed unsettled. The amount and currency are still checked against the recorded ones. ([#831](https://github.com/OpenNSW/nsw-srilanka/pull/831))
+- A saved form's files are named and opened correctly. `GET /api/v1/storage/{ref}` now also returns the file's `extension` and `mime_type`, which the 0.16 renderers use for the download name and the View button. An agency relays them once TNSW runs this version too. ([#835](https://github.com/OpenNSW/nsw-srilanka/pull/835))
+- On a task page, the footer no longer covers the form's action bar. ([#839](https://github.com/OpenNSW/nsw-srilanka/pull/839))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- On the CDA application form, an `.xls` upload to the DC bags field is named `DC BAGS DETAILS _1.xlsx.xls`, because the artifact's `x-file.fileName` ends in `.xlsx` while the field also accepts `.xls`. Only the displayed and downloaded name is affected. The fix is in the artifact, not in TNSW.
+
+## [0.6.0] - 2026-10-20
+
+This release lets an agency's review show the officer what they reviewed while it waits for a trader's resubmission, and has the Trader Portal warn before a form with unsaved answers is left. Deploy it on TNSW and on every agency before, or together with, moving the artifacts pin.
+
+### Upgrade notes
+
+#### Reply steps send only a `payload` input ([#804](https://github.com/OpenNSW/nsw-srilanka/pull/804))
+
+- Deploy 0.6.0 on TNSW and on each agency (CDA, EFC, FCAU, NPQS and SLTB) before, or together with, the artifacts that use it. With an older build, a "needs more info" reply reaches TNSW with its fields nested under `payload`, and TNSW's step parks for an admin.
+- No config, migration or IdP change.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`9beaf5f`](https://github.com/OpenNSW/one-trade-artifacts/commit/9beaf5f471a6c7bfefac4a018a0294ecc0c0eb21) (20 October 2026). It holds the artifact change this release depends on, [one-trade-artifacts#202](https://github.com/OpenNSW/one-trade-artifacts/pull/202): the agency reviews that map their reply as a `payload` input ([#804](https://github.com/OpenNSW/nsw-srilanka/pull/804)).
+
+### Added
+
+- **Reply payload.** A reply step (an `EXTERNAL_REVIEW` step with a `replyToken`) that has a `payload` input now sends only that input, plus its `callbackToken`, as `AUTH_API_CALL` sends its `payload` input. A `payload` that is not an object fails the step. Without a `payload` input, a reply sends all its inputs except `replyToken`, as before, and dispatches are unchanged. The pinned artifacts use it in the CDA, EFC, FCAU, NPQS and SLTB reviews that wait for a resubmission, so the officer sees the submission they reviewed and their own review form, read-only, next to the waiting status. ([#804](https://github.com/OpenNSW/nsw-srilanka/pull/804))
+
+### Fixed
+
+- The Trader Portal asks "Leave without saving?" before a form with unsaved answers is left, whether by in-app navigation, reload or closing the tab. Forms with a Save as Draft button also save a draft every 30 seconds while answers are unsaved. Forms without one get the warning but are not saved automatically. ([#801](https://github.com/OpenNSW/nsw-srilanka/pull/801))
+- Keyboard and screen reader users can open a consignment from the Consignments list: the name and ID cell is now a link. ([#789](https://github.com/OpenNSW/nsw-srilanka/pull/789))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- On the CDA application form, an `.xls` upload to the DC bags field is named `DC BAGS DETAILS _1.xlsx.xls`, because the artifact's `x-file.fileName` ends in `.xlsx` while the field also accepts `.xls`. Only the displayed and downloaded name is affected. The fix is in the artifact, not in TNSW.
+
+## [0.5.0] - 2026-10-19
+
+This release lets a trader save an application as a draft: the form is saved without being submitted, and picked up again later with its values and files in place, so a long application no longer has to be finished in one sitting. It also enforces file tokens: a raw storage key no longer opens or submits a file, uploads return a token, and OGAs are sent tokens issued to their client instead of keys. Alongside these come certificate withdrawal on the IPPC ePhyto Hub, file links in Markdown, and a corrected CusDec valuation and remittance mapping. Deploy it with the pinned artifacts below: they add the Save as Draft buttons and declare every task's file fields, which the token enforcement depends on.
+
+### Upgrade notes
+
+#### File tokens are enforced ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628), [#627](https://github.com/OpenNSW/nsw-srilanka/pull/627), [#626](https://github.com/OpenNSW/nsw-srilanka/pull/626), [#697](https://github.com/OpenNSW/nsw-srilanka/pull/697))
+
+- `GET /api/v1/storage/{key}` now answers 403 to anything but a token issued to the caller, raw keys included, for users and machine clients alike. Both task submit routes refuse a declared file field that holds anything but a token (400).
+- Deploy with the artifacts pinned below, which declare each task's file fields ([one-trade-artifacts#143](https://github.com/OpenNSW/one-trade-artifacts/pull/143)). Tasks started before their `render.json` declared `files` still hold raw keys, so their files no longer open.
+- In TNSW's `catalog.json`, every service an `EXTERNAL_REVIEW` step pushes files to needs its machine client under `clients`. Add `"efc": "EFC_TO_NSW"`, as [`catalog.example.json`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.5.0/configs/catalog.example.json) now does. A step that would send a file to a service with no client fails instead of sending it.
+- Agencies running this codebase (CDA, EFC, FCAU, NPQS and SLTB) need no change: they store the tokens TNSW sends and pass them back. An OGA on its own legacy service now receives tokens where it received keys. It must open them on `GET /api/v1/storage/{token}` as the client its catalog entry names, such as `FCAU_TO_NSW`; the raw keys of older pushes are refused.
+- `POST /api/v1/storage` returns a token as `key`, and no longer returns `id`. A user's upload token can only be submitted as a form's file value and does not expire; it can't open the file (403), so the file opens once the form is saved and the task is read again. A machine client's upload token can also open the file.
+- File tokens issued before the upgrade carry no scopes. For up to `storage.tokenTTLSeconds` after it, opening or submitting one gets a 403 that tells the user to reload the task.
+
+#### Accept XML uploads ([#811](https://github.com/OpenNSW/nsw-srilanka/pull/811))
+
+- Add `text/xml` and `application/xml` to `storage.allowedUploadTypes` in TNSW's `config.yaml` (Helm: `backend.config.storage.allowedUploadTypes`), as [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.5.0/deployments/helm/values-example.yaml) does. The SLTB application in the pinned artifacts requires a draft CusDec `.xml` file ([one-trade-artifacts#204](https://github.com/OpenNSW/one-trade-artifacts/pull/204)), which is refused with a 415 without them.
+- XML is accepted to download, not to display. The list is not read when `storage.type` is `proxy`, so agencies need no change.
+
+#### CusDec valuation and remittance ([#700](https://github.com/OpenNSW/nsw-srilanka/pull/700))
+
+- This version reads `valuation.totalAmountInvoiced` and `financial.remittanceCurrencyCode` from the CusDec form in [one-trade-artifacts#183](https://github.com/OpenNSW/one-trade-artifacts/pull/183), included in the pin below. With an older form, Box 22 goes out as 0 and the remittance has no currency.
+- A CusDec draft saved on the old form needs both new fields filled in before it is submitted.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`a32169c`](https://github.com/OpenNSW/one-trade-artifacts/commit/a32169c35bff59b6c7f137e02d4dcd7c305bdcc1) (19 October 2026). It holds every artifact change this release depends on:
+  - [one-trade-artifacts#143](https://github.com/OpenNSW/one-trade-artifacts/pull/143): each task's declared file fields, and `files:` links in Markdown ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628), [#629](https://github.com/OpenNSW/nsw-srilanka/pull/629));
+  - [one-trade-artifacts#193](https://github.com/OpenNSW/one-trade-artifacts/pull/193): Save as Draft on application forms ([#707](https://github.com/OpenNSW/nsw-srilanka/pull/707));
+  - [one-trade-artifacts#184](https://github.com/OpenNSW/one-trade-artifacts/pull/184): the NPQS certificate withdrawal ([#701](https://github.com/OpenNSW/nsw-srilanka/pull/701));
+  - [one-trade-artifacts#183](https://github.com/OpenNSW/one-trade-artifacts/pull/183): the CusDec form ([#700](https://github.com/OpenNSW/nsw-srilanka/pull/700));
+  - [one-trade-artifacts#204](https://github.com/OpenNSW/one-trade-artifacts/pull/204): the SLTB draft CusDec XML upload ([#811](https://github.com/OpenNSW/nsw-srilanka/pull/811)).
+- Change the image version and `artifactLoader.github.ref` in the same deployment. A deployment that follows a moving ref such as `main` must deploy this release first, because the artifacts call routes and operations it adds.
+
+### Added
+
+- **Drafts.** A trader can save an application with Save as Draft and come back to it later; nothing is submitted until they submit. Any step can be saved this way on `PUT /api/v1/tasks/{id}/steps/{stepId}/draft`: its file fields are resolved as a submission's are, and the step and the task's version stay as they are. The pinned artifacts add the button to the application forms ([one-trade-artifacts#193](https://github.com/OpenNSW/one-trade-artifacts/pull/193)). ([#707](https://github.com/OpenNSW/nsw-srilanka/pull/707))
+- **Certificate withdrawal on the IPPC ePhyto Hub.** The NPQS ePhyto step can withdraw a certificate it delivered, through a new `withdraw` operation. ([#701](https://github.com/OpenNSW/nsw-srilanka/pull/701))
+- **File links in Markdown.** A Markdown template can link to one of the task's files as `[label](files:{{.namespace.field}})`, and the Trader Portal opens it through the storage route. ([#629](https://github.com/OpenNSW/nsw-srilanka/pull/629))
+
+### Changed
+
+- A reader of a task gets file tokens that can be submitted back only when they may act on its active step, by the step's `authz` rules. Anyone else gets tokens that only open the files. ([#698](https://github.com/OpenNSW/nsw-srilanka/pull/698))
+- The CusDec sent to verify carries no files. ([#700](https://github.com/OpenNSW/nsw-srilanka/pull/700))
+
+### Fixed
+
+- CusDec Box 22 (total amount invoiced) and the remittance currency are mapped from the form. ([#700](https://github.com/OpenNSW/nsw-srilanka/pull/700))
+- The Trader Portal shows "In Progress" in one color, and a task waiting for input as "In Progress" rather than "Pending User". ([#791](https://github.com/OpenNSW/nsw-srilanka/pull/791))
+
+### Security
+
+- A raw storage key no longer opens or submits a file: every file is reached through a token issued to its caller, with explicit scopes, `read` to open and `submit` to send it back. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628), [#697](https://github.com/OpenNSW/nsw-srilanka/pull/697))
+- OGAs receive tokens issued to their machine client that open a file but can't submit it, instead of storage keys. ([#626](https://github.com/OpenNSW/nsw-srilanka/pull/626))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit logging drops events it cannot deliver.
+  - With no `audit` section in `config.yaml`, the API runs without audit.
+  - While Argus is unreachable, events are retried, then dropped with an error in the log.
+  - Once the in-memory queue of 100 events is full, requests that record audit events wait for space, so an Argus outage can slow consignment and task requests.
+- The API connects to Temporal without TLS or an API key, so Temporal must be reachable over a private network.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- Files of tasks started before their `render.json` declared `files` no longer open: those tasks hold raw storage keys, which are refused. ([#628](https://github.com/OpenNSW/nsw-srilanka/pull/628))
+- On the CDA application form, an `.xls` upload to the DC bags field is named `DC BAGS DETAILS _1.xlsx.xls`, because the artifact's `x-file.fileName` ends in `.xlsx` while the field also accepts `.xls`. Only the displayed and downloaded name is affected. The fix is in the artifact, not in TNSW.
+
 ## [0.4.0] - 2026-10-16
 
 This release gives every deployment a file-token key set, delivers a trader's resubmission to the agency step that is waiting for it, and lets an agency catalog map roles besides `officer`. It also adds HTML document generation for workflows and reference formats for SLTB and NPQS, and stops checking a client ID allow list when it validates tokens. Every deployment needs one new secret, and TNSW's client for each agency needs one more scope.
@@ -425,7 +792,12 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.1.0...v0.2.0

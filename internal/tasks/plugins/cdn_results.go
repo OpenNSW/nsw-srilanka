@@ -11,6 +11,10 @@ import (
 // SPLIT_TASK's per-container results back into single workflow variables.
 const TaskTypeCDNResultsCollector = "CDN_RESULTS_COLLECTOR"
 
+// cdnAckStatusCancelled is the ack_status a branch finishes with when Customs
+// cancelled its dispatch note (§7.7) instead of acknowledging it.
+const cdnAckStatusCancelled = "CANCELLED"
+
 // CDNResultsCollectorFunc reduces the aggregated output of the per-container CDN
 // fan-out into the variables the steps after it read.
 //
@@ -27,7 +31,8 @@ const TaskTypeCDNResultsCollector = "CDN_RESULTS_COLLECTOR"
 //     and failed branches are omitted: the form locks the CDN string and
 //     requires it, so a blank row would either force the trader to invent a
 //     number Customs never registered, or block submit once the field is
-//     read-only.
+//     read-only. A note Customs cancelled is omitted too: its container will
+//     not be dispatched under it, and no other note can be raised for it.
 //   - cdn_userform / cdn_number: the first accepted note, so the
 //     acknowledgement step can keep the single-note input it was built for.
 func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error {
@@ -39,12 +44,24 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 	var (
 		numbers []any
 		firstOK map[string]any
+		// firstLive is the first branch Customs did not cancel, for the
+		// fallback below.
+		firstLive map[string]any
 	)
 	containers := make([]map[string]any, 0, len(branches))
 
 	for _, branch := range branches {
+		// A branch whose note Customs cancelled finished without an
+		// acknowledgment, and its note must not be quoted downstream.
+		if status, _ := branch["ack_status"].(string); status == cdnAckStatusCancelled {
+			continue
+		}
+
 		userform, _ := branch["userform"].(map[string]any)
 		cig, _ := branch["cig_cdn"].(map[string]any)
+		if firstLive == nil {
+			firstLive = userform
+		}
 
 		accepted, _ := cig["accepted"].(bool)
 
@@ -65,10 +82,16 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 	}
 
 	// COLLECT_ALL lets a branch finish rejected, so there may be no accepted
-	// note at all. Falling back to the first branch keeps the downstream steps
-	// populated with something the trader recognizes rather than nothing.
+	// note at all. Falling back to the first branch Customs did not cancel keeps
+	// the downstream steps populated with something the trader recognizes. A
+	// cancelled note is never quoted, so with every note cancelled the form is
+	// empty: not nil, which a required mapping would read as missing and park the
+	// consignment on.
+	if firstOK == nil {
+		firstOK = firstLive
+	}
 	if firstOK == nil && len(branches) > 0 {
-		firstOK, _ = branches[0]["userform"].(map[string]any)
+		firstOK = map[string]any{}
 	}
 
 	if ctx.Record == nil {

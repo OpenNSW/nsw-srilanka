@@ -11,7 +11,7 @@ import (
 // HUB RESPONSE PARSING
 //
 // Transport (mTLS, timeouts, endpoint) lives in core/remote — the Hub is a
-// registered service in services.json and the generic SOAP-call plugin posts
+// registered service in config.yaml's services list and the generic SOAP-call plugin posts
 // the envelopes. This package owns what is Hub-specific: building the SOAP
 // envelopes (soap.go) and parsing the Hub's responses (this file).
 //

@@ -13,6 +13,18 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
 
+/* How far content starts below the top of the window, clear of the TopBar:
+ * the 64 px bar flush with the top below 1024 px, and floating 12 px in (plus
+ * 12 px under it) from 1024 px up. */
+:root {
+  --app-top-offset: 64px;
+}
+@media (min-width: 64rem) {
+  :root {
+    --app-top-offset: 88px;
+  }
+}
+
 @theme {
   /* =========================================================================
    * COLOR TOKENS — lean semantic set. Each role has 3 rungs:
@@ -61,21 +73,25 @@
    * avoid a name collision with Radix Themes' own --color-background and
    * --color-surface variables (defined on .radix-themes), which were
    * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted. */
-  --color-app-bg: #f3f2fa;
+  /* A near-neutral grey, so the white cards stand out without a third tint. */
+  --color-app-bg: #f5f6f8;
   --color-app-surface: #ffffff;
   --color-app-surface-muted: #f1f5f9;
 
-  /* Form fields — a filled, borderless treatment (vs. a bordered white box)
-   * reads as current-generation rather than early-2010s forms. Used by the
-   * Radix TextField/Select/TextArea override below, which is what every
-   * JSONForms field renders through. */
-  --color-field-bg: #f2f1fa;
-  --color-field-bg-hover: #eae8f7;
+  /* Form fields. An editable field is white with a visible border (3.4:1 on
+   * white, over the 3:1 a control's edge needs); a read-only one is flat grey
+   * with no border, so the two can't be confused. Used by the Radix
+   * TextField/Select/TextArea override below, which is what every JSONForms
+   * field renders through. */
+  --color-field-border: #868c98;
+  --color-field-border-hover: #646a76;
+  --color-field-readonly-bg: #f1f2f4;
 
   /* Neutrals / text */
   --color-foreground: #0f172a;
   --color-foreground-muted: #475569;
-  --color-foreground-subtle: #94a3b8;
+  /* #66707f: the lightest grey that still reads at 4.5:1 on the page background. */
+  --color-foreground-subtle: #66707f;
 
   /* Neutrals / borders */
   --color-border: #e2e8f0;
@@ -116,12 +132,11 @@
  * COLOR SCHEMES — alternates to the "Modern" default above, switched at
  * runtime via ColorSchemeProvider setting `data-theme` on <html>. Each
  * block only needs to redefine the brand rungs (all the semantic/neutral
- * tokens stay shared) plus the form-field fill, so every component built
- * on bg-primary/text-primary/border-primary-subtle/etc. — cards, buttons,
- * badges, gradients, and every JSONForms field — repaints automatically.
- * Keep these in step with the `accentColor` each scheme maps to in
- * services/colorSchemeContextCore.ts, so Radix's own components (which
- * don't read these Tailwind tokens) land on a matching hue.
+ * tokens stay shared), so every component built on bg-primary/text-primary/
+ * border-primary-subtle/etc. — cards, buttons, badges, gradients, and every
+ * JSONForms field's focus ring — repaints automatically.
+ * Radix's own components read them too: the accent block below derives
+ * Radix's accent scale from --color-primary.
  * ========================================================================= */
 
 /* Maritime Trade — navy & slate, a conventional customs/trade-portal look. */
@@ -130,8 +145,6 @@
   --color-primary: #1e3a8a;
   --color-primary-hover: #16306f;
   --color-primary-dark: #0f2547;
-  --color-field-bg: #eef2fa;
-  --color-field-bg-hover: #e3e9f5;
 }
 
 /* Ceylon Regal — maroon & gold, echoing the national flag's lion panel. */
@@ -140,8 +153,6 @@
   --color-primary: #7a2430;
   --color-primary-hover: #641d27;
   --color-primary-dark: #3c1116;
-  --color-field-bg: #f7ecea;
-  --color-field-bg-hover: #f0dfdc;
 }
 
 /* Emerald Trade — deep teal-green. */
@@ -150,8 +161,65 @@
   --color-primary: #0f6a52;
   --color-primary-hover: #0c5843;
   --color-primary-dark: #0a3f30;
-  --color-field-bg: #eaf6f2;
-  --color-field-bg-hover: #dceee8;
+}
+
+/* =========================================================================
+ * RADIX ACCENT = THE SCHEME'S BRAND. Radix ships only named palettes, so the
+ * accentColor a scheme picks ('blue' for Maritime's navy) is only the nearest
+ * hue, and its solid buttons failed contrast (white on Radix blue is 3.26:1;
+ * on Maritime's navy it is 10.36:1). Deriving the whole accent scale from
+ * --color-primary paints buttons, checkboxes, focus rings and every JSONForms
+ * control in the brand color, in every scheme. Components given their own
+ * color (color="red") keep that palette.
+ *
+ * `:root .radix-themes` outranks Radix's `[data-accent-color='…']` rule on
+ * the Theme root without !important; every Theme root (the app's and each
+ * dialog portal's) carries the class.
+ * ========================================================================= */
+:root .radix-themes {
+  --accent-1: color-mix(in srgb, var(--color-primary) 1%, white);
+  --accent-2: color-mix(in srgb, var(--color-primary) 3%, white);
+  --accent-3: color-mix(in srgb, var(--color-primary) 7%, white);
+  --accent-4: color-mix(in srgb, var(--color-primary) 11%, white);
+  --accent-5: color-mix(in srgb, var(--color-primary) 16%, white);
+  --accent-6: color-mix(in srgb, var(--color-primary) 22%, white);
+  --accent-7: color-mix(in srgb, var(--color-primary) 30%, white);
+  --accent-8: color-mix(in srgb, var(--color-primary) 45%, white);
+  --accent-9: var(--color-primary);
+  --accent-10: var(--color-primary-hover);
+  /* Text on the accent's own soft tints: the hover rung, for 4.5:1 in every scheme. */
+  --accent-11: var(--color-primary-hover);
+  --accent-12: var(--color-primary-dark);
+  --accent-a1: color-mix(in srgb, var(--color-primary) 1%, transparent);
+  --accent-a2: color-mix(in srgb, var(--color-primary) 3%, transparent);
+  --accent-a3: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  --accent-a4: color-mix(in srgb, var(--color-primary) 11%, transparent);
+  --accent-a5: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  --accent-a6: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  --accent-a7: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --accent-a8: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  --accent-a9: var(--color-primary);
+  --accent-a10: var(--color-primary-hover);
+  --accent-a11: var(--color-primary-hover);
+  --accent-a12: var(--color-primary-dark);
+  --accent-contrast: #ffffff;
+  --accent-surface: color-mix(in srgb, var(--color-primary) 4%, white);
+  --accent-indicator: var(--color-primary);
+  --accent-track: var(--color-primary);
+
+  /* Status text (soft badges, colored Text). Radix's step 11 for these hues
+   * reads at 3.6-4.3:1 on a soft badge over the page background; each is
+   * darkened just enough for 4.5:1 there, keeping its hue. */
+  --blue-11: #0b66b6;
+  --blue-a11: #0b66b6;
+  --orange-11: #b04300;
+  --orange-a11: #b04300;
+  --green-11: #1b734c;
+  --green-a11: #1b734c;
+  --red-11: #c1262b;
+  --red-a11: #c1262b;
+  --amber-11: #995a00;
+  --amber-a11: #995a00;
 }
 
 body {
@@ -279,53 +347,160 @@ body {
  * the bundle isn't something this file controls. It only guards the
  * specific properties below, scoped to the exact classes Radix renders.
  * ========================================================================= */
+/* Editable: white, with a grey border that darkens on hover. */
 .rt-TextFieldRoot.rt-variant-surface,
 .rt-SelectTrigger.rt-variant-surface,
 .rt-TextAreaRoot.rt-variant-surface {
-  background-color: var(--color-field-bg) !important;
-  box-shadow: inset 0 0 0 1px transparent !important;
-  transition:
-    background-color 120ms ease,
-    box-shadow 120ms ease;
+  background-color: var(--color-app-surface) !important;
+  box-shadow: inset 0 0 0 1px var(--color-field-border) !important;
+  transition: box-shadow 120ms ease;
 }
 
 .rt-TextFieldRoot.rt-variant-surface:hover,
 .rt-SelectTrigger.rt-variant-surface:hover,
 .rt-TextAreaRoot.rt-variant-surface:hover {
-  background-color: var(--color-field-bg-hover) !important;
+  box-shadow: inset 0 0 0 1px var(--color-field-border-hover) !important;
 }
 
+/* Focused: the brand border and a soft ring of it. */
 .rt-TextFieldRoot.rt-variant-surface:focus-within,
 .rt-TextAreaRoot.rt-variant-surface:focus-within,
 .rt-SelectTrigger.rt-variant-surface:focus-visible,
 .rt-SelectTrigger.rt-variant-surface[data-state='open'] {
-  background-color: var(--color-app-surface) !important;
   box-shadow:
-    0 0 0 4px var(--color-primary-subtle),
-    inset 0 0 0 1.5px var(--color-primary) !important;
+    0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent),
+    inset 0 0 0 1px var(--color-primary) !important;
 }
 
-/* Read-only / disabled fields recede instead of sharing the editable fill.
- * JSONForms renders both in the same screen at once (e.g. a reviewer sees
- * the applicant's already-submitted fields as read-only alongside the ones
- * they can still act on), so the two need a visually obvious difference —
- * otherwise nothing distinguishes "you can type here" from "you can't".
- * Ordered after the hover/focus rules above so it wins that tie: a
- * read-only (not disabled) field can still receive browser focus, and
- * without this ordering it would light up with the editable focus ring. */
-.rt-TextFieldRoot.rt-variant-surface:has(.rt-TextFieldInput:disabled, .rt-TextFieldInput:read-only),
-.rt-TextAreaRoot.rt-variant-surface:has(.rt-TextAreaInput:disabled, .rt-TextAreaInput:read-only),
+/* Invalid: the renderer gives a field with an error color="red". */
+.rt-TextFieldRoot.rt-variant-surface[data-accent-color='red'],
+.rt-SelectTrigger.rt-variant-surface[data-accent-color='red'],
+.rt-TextAreaRoot.rt-variant-surface[data-accent-color='red'] {
+  box-shadow: inset 0 0 0 1px var(--color-error) !important;
+}
+.rt-TextFieldRoot.rt-variant-surface[data-accent-color='red']:focus-within,
+.rt-TextAreaRoot.rt-variant-surface[data-accent-color='red']:focus-within,
+.rt-SelectTrigger.rt-variant-surface[data-accent-color='red']:focus-visible {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--color-error) 25%, transparent),
+    inset 0 0 0 1px var(--color-error) !important;
+}
+
+/* Read-only (the renderer disables a field it won't let the user change;
+ * an input that is only readOnly, like a closed multi-select, is editable):
+ * flat grey, no border, its value still in full-strength text. A form can
+ * show these next to editable fields (a value filled from an earlier step),
+ * so they must never look like a field to type in. Ordered after the hover
+ * and focus rules so it wins their tie. */
+.rt-TextFieldRoot.rt-variant-surface:has(.rt-TextFieldInput:disabled),
+.rt-TextAreaRoot.rt-variant-surface:has(.rt-TextAreaInput:disabled),
 .rt-SelectTrigger.rt-variant-surface:disabled {
-  background-color: var(--color-app-surface-muted) !important;
+  background-color: var(--color-field-readonly-bg) !important;
+  /* Radix tints a disabled field with a background-image gradient too. */
+  background-image: none !important;
   box-shadow: none !important;
-  cursor: not-allowed;
+  cursor: default;
 }
 .rt-TextFieldInput:disabled,
-.rt-TextFieldInput:read-only,
 .rt-TextAreaInput:disabled,
-.rt-TextAreaInput:read-only {
+.rt-SelectTrigger.rt-variant-surface:disabled {
+  color: var(--color-foreground) !important;
+  -webkit-text-fill-color: var(--color-foreground);
+  opacity: 1;
+  cursor: default;
+}
+/* An empty read-only field keeps its placeholder muted, not full-strength
+ * like a value. */
+:is(.rt-TextFieldInput, .rt-TextAreaInput):disabled::placeholder {
   color: var(--color-foreground-subtle) !important;
-  cursor: not-allowed;
+  -webkit-text-fill-color: var(--color-foreground-subtle);
+}
+.rt-SelectTrigger.rt-variant-surface:disabled[data-placeholder] .rt-SelectTriggerInner {
+  color: var(--color-foreground-subtle);
+}
+
+/* A form with nothing to change (a stepper's review step, a submitted form,
+ * or any read-only form section, which FormRenderer marks data-form-review)
+ * shows each value as plain text under its label, not in a box. An empty
+ * field's placeholder would read as an answer, so it is hidden. */
+/* Listed as the read-only rules above are, plus the marker, so it outranks
+ * them (both use !important; the more specific one wins). */
+[data-form-review] :is(.rt-TextFieldRoot, .rt-TextAreaRoot, .rt-SelectTrigger).rt-variant-surface,
+[data-form-review] .rt-TextFieldRoot.rt-variant-surface:has(.rt-TextFieldInput:disabled),
+[data-form-review] .rt-TextAreaRoot.rt-variant-surface:has(.rt-TextAreaInput:disabled),
+[data-form-review] .rt-SelectTrigger.rt-variant-surface:disabled {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  --text-field-padding: 0px;
+  --text-area-padding-x: 0px;
+  --text-area-padding-y: 0px;
+  padding-inline: 0 !important;
+}
+[data-form-review] .rt-SelectIcon {
+  display: none;
+}
+[data-form-review] :is(.rt-TextFieldInput, .rt-TextAreaInput)::placeholder {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+}
+/* An empty select shows its placeholder ("Select an option") as the
+ * trigger's own text, which would read as the answer. */
+[data-form-review] .rt-SelectTrigger[data-placeholder] .rt-SelectTriggerInner {
+  visibility: hidden;
+}
+/* Except where the renderer says the answer was left empty ("Not
+ * provided", marked data-empty-answer): shown, muted and regular, so it
+ * reads differently from an answer. */
+[data-form-review] :is(.rt-TextFieldInput, .rt-TextAreaInput)[data-empty-answer]::placeholder {
+  color: var(--color-foreground-subtle) !important;
+  -webkit-text-fill-color: var(--color-foreground-subtle);
+  font-weight: 400;
+}
+[data-form-review] .rt-SelectTrigger[data-placeholder][data-empty-answer] .rt-SelectTriggerInner {
+  visibility: visible;
+  color: var(--color-foreground-subtle);
+  font-weight: 400;
+}
+[data-form-review] .rt-RadioGroupItem + .rt-Text {
+  color: var(--color-foreground) !important;
+}
+
+/* Reading a review: a quiet label right above a prominent answer, more room
+ * between answers than within one, and none of the form's own furniture
+ * (required asterisks, hints, a field's end icon). Field labels are the bold
+ * ones; a checkbox's own text is a label too, and stays as it is. */
+[data-form-review] label.rt-Text.rt-r-weight-bold {
+  font-size: 13px;
+  /* !important to beat the field-label rule's 600 below, which has it too. */
+  font-weight: 400 !important;
+  color: var(--color-foreground-muted);
+}
+[data-form-review] label.rt-Text.rt-r-weight-bold > .rt-Text[data-accent-color='red'] {
+  display: none;
+}
+[data-form-review] :is(.rt-TextFieldRoot, .rt-TextAreaRoot, .rt-SelectTrigger).rt-variant-surface {
+  height: auto !important;
+  min-height: 0 !important;
+}
+[data-form-review] :is(.rt-TextFieldInput, .rt-TextAreaInput, .rt-SelectTrigger) {
+  font-size: 15px !important;
+  font-weight: 500;
+  padding-block: 2px;
+}
+[data-form-review] .rt-TextFieldSlot {
+  display: none;
+}
+[data-form-review]
+  :is(.rt-TextFieldRoot, .rt-TextAreaRoot, .rt-SelectTrigger, div:has(> .rt-TextFieldRoot))
+  ~ .rt-Text[data-accent-color='gray'] {
+  display: none;
+}
+
+/* A stepper form's step list sticks, and a new step scrolls, this far below
+ * the top of the viewport: clear of the fixed TopBar (top-3 + h-16 = 76px). */
+:root {
+  --form-steps-offset: var(--app-top-offset);
 }
 
 .rt-TextFieldRoot.rt-r-size-2 {

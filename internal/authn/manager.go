@@ -51,6 +51,12 @@ func (m *Manager) RequireAuthMiddleware() func(http.Handler) http.Handler {
 func attachPrincipal(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if p := principalFromAuthContext(coreauthn.GetAuthContext(r.Context())); p != nil {
+			// Record the HTTP caller on the outer observer's slot before the
+			// child context is built. ContextWithPrincipal does not do this:
+			// a later principal must not overwrite who called.
+			if slot := RequestCallerFrom(r.Context()); slot != nil {
+				slot.Principal = p
+			}
 			r = r.WithContext(ContextWithPrincipal(r.Context(), p))
 		}
 		next.ServeHTTP(w, r)

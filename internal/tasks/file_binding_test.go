@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/OpenNSW/core/taskflow/store"
@@ -16,13 +17,20 @@ import (
 )
 
 // fakeFileRefs issues references "ref1", "ref2", ... and resolves each only
-// for the caller it was issued to, with fileaccess's errors.
+// for the caller it was issued to and for the scopes it was issued with, with
+// fileaccess's errors.
 type fakeFileRefs struct {
 	issued  map[string]fakeRef
 	expired map[string]bool
 }
 
-type fakeRef struct{ holder, value string }
+type fakeRef struct {
+	holder, value string
+	scopes        []fileaccess.Scope
+}
+
+// readSubmit are the scopes of a reference a reader who can act is given.
+var readSubmit = []fileaccess.Scope{fileaccess.ScopeRead, fileaccess.ScopeSubmit}
 
 func newFakeFileRefs() *fakeFileRefs {
 	return &fakeFileRefs{issued: map[string]fakeRef{}, expired: map[string]bool{}}
@@ -35,22 +43,27 @@ func holder(p *authn.Principal) string {
 	return string(p.Kind) + ":" + p.Subject()
 }
 
-func (f *fakeFileRefs) IssueFor(p *authn.Principal, value string) (string, error) {
+func (f *fakeFileRefs) Issue(p *authn.Principal, value string, scopes ...fileaccess.Scope) (string, error) {
 	if holder(p) == "" {
 		return "", errors.New("no caller")
 	}
+	if len(scopes) == 0 {
+		return "", errors.New("no scope")
+	}
 	ref := fmt.Sprintf("ref%d", len(f.issued)+1)
-	f.issued[ref] = fakeRef{holder: holder(p), value: value}
+	f.issued[ref] = fakeRef{holder: holder(p), value: value, scopes: scopes}
 	return ref, nil
 }
 
-func (f *fakeFileRefs) Resolve(p *authn.Principal, ref string) (string, error) {
+func (f *fakeFileRefs) Resolve(p *authn.Principal, ref string, need fileaccess.Scope) (string, error) {
 	r, ok := f.issued[ref]
 	switch {
 	case !ok:
 		return "", fileaccess.ErrInvalid
 	case r.holder != holder(p):
 		return "", fileaccess.ErrNotYours
+	case !slices.Contains(r.scopes, need):
+		return "", fileaccess.ErrScope
 	case f.expired[ref]:
 		return "", fileaccess.ErrExpired
 	}
@@ -97,7 +110,7 @@ func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 	}
 	stored := record.DeepCopy()
 
-	view, err := b.ForReader(record, userPrincipal("alice"))
+	view, err := b.ForReader(record, userPrincipal("alice"), true)
 	require.NoError(t, err)
 
 	assert.Equal(t, decodeMap(t, `{
@@ -105,19 +118,32 @@ func TestFileBinding_ForReaderGivesReferences(t *testing.T) {
 		"review": {}
 	}`), view.Data)
 	assert.Equal(t, stored, record, "the record itself must not change")
+	assert.Equal(t, readSubmit, refs.issued["ref1"].scopes)
 
-	value, err := refs.Resolve(userPrincipal("alice"), "ref2")
+	value, err := refs.Resolve(userPrincipal("alice"), "ref2", fileaccess.ScopeRead)
 	require.NoError(t, err)
 	assert.Equal(t, "k-doc", value)
-	_, err = refs.Resolve(userPrincipal("bob"), "ref2")
+	_, err = refs.Resolve(userPrincipal("bob"), "ref2", fileaccess.ScopeRead)
 	assert.ErrorIs(t, err, fileaccess.ErrNotYours)
+}
+
+// A reader who can't act on the step can open the task's files but not
+// submit them.
+func TestFileBinding_ForReaderWhoCannotAct(t *testing.T) {
+	refs := newFakeFileRefs()
+	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), Data: decodeMap(t, `{"form": {"invoice": "k-invoice"}}`)}
+
+	view, err := NewFileBinding(refs, nil).ForReader(record, userPrincipal("alice"), false)
+	require.NoError(t, err)
+	assert.Equal(t, decodeMap(t, `{"form": {"invoice": "ref1"}}`), view.Data)
+	assert.Equal(t, []fileaccess.Scope{fileaccess.ScopeRead}, refs.issued["ref1"].scopes)
 }
 
 func TestFileBinding_ForReaderWithoutFiles(t *testing.T) {
 	b := NewFileBinding(newFakeFileRefs(), nil)
 	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"id":"x:render"}`), Data: decodeMap(t, `{"form":{"invoice":"k"}}`)}
 
-	view, err := b.ForReader(record, userPrincipal("alice"))
+	view, err := b.ForReader(record, userPrincipal("alice"), false)
 	require.NoError(t, err)
 	assert.Equal(t, record, view)
 }
@@ -126,15 +152,15 @@ func TestFileBinding_ForReaderRejectsABadDeclaration(t *testing.T) {
 	b := NewFileBinding(newFakeFileRefs(), nil)
 	record := store.TaskRecord{RenderConfig: json.RawMessage(`{"files":["form.docs[0]"]}`), Data: decodeMap(t, `{}`)}
 
-	_, err := b.ForReader(record, userPrincipal("alice"))
+	_, err := b.ForReader(record, userPrincipal("alice"), false)
 	assert.Error(t, err)
 }
 
 func TestFileBinding_FromCallerResolvesTheStepsFields(t *testing.T) {
 	refs := newFakeFileRefs()
 	alice := userPrincipal("alice")
-	invoice, _ := refs.IssueFor(alice, "k-invoice")
-	doc, _ := refs.IssueFor(alice, "k-doc")
+	invoice, _ := refs.Issue(alice, "k-invoice", readSubmit...)
+	doc, _ := refs.Issue(alice, "k-doc", readSubmit...)
 	var calls int
 	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))
 	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
@@ -154,9 +180,10 @@ func TestFileBinding_FromCallerResolvesTheStepsFields(t *testing.T) {
 
 func TestFileBinding_FromCallerRefuses(t *testing.T) {
 	refs := newFakeFileRefs()
-	alicesRef, _ := refs.IssueFor(userPrincipal("alice"), "k")
-	expiredRef, _ := refs.IssueFor(userPrincipal("bob"), "k")
+	alicesRef, _ := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
+	expiredRef, _ := refs.Issue(userPrincipal("bob"), "k", readSubmit...)
 	refs.expired[expiredRef] = true
+	readOnlyRef, _ := refs.Issue(userPrincipal("bob"), "k", fileaccess.ScopeRead)
 	var calls int
 	b := NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))
 	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
@@ -166,23 +193,24 @@ func TestFileBinding_FromCallerRefuses(t *testing.T) {
 
 	err = b.FromCaller(context.Background(), record, map[string]any{"invoice": expiredRef}, userPrincipal("bob"))
 	assert.ErrorIs(t, err, fileaccess.ErrExpired)
+
+	err = b.FromCaller(context.Background(), record, map[string]any{"invoice": readOnlyRef}, userPrincipal("bob"))
+	assert.ErrorIs(t, err, fileaccess.ErrScope)
 }
 
-// Until every caller sends file tokens, a value that is not one is stored as
-// sent.
-func TestFileBinding_FromCallerKeepsValuesThatAreNotReferences(t *testing.T) {
+// A raw storage key, or anything else that is not a reference, is not stored.
+func TestFileBinding_FromCallerRefusesValuesThatAreNotReferences(t *testing.T) {
 	var calls int
 	b := NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls))
 	record := store.TaskRecord{RenderConfig: json.RawMessage(filesRenderConfig), ActiveTaskTemplateID: "form-step"}
-	payload := map[string]any{"invoice": "k-raw"}
 
-	require.NoError(t, b.FromCaller(context.Background(), record, payload, userPrincipal("alice")))
-	assert.Equal(t, map[string]any{"invoice": "k-raw"}, payload)
+	err := b.FromCaller(context.Background(), record, map[string]any{"invoice": "k-raw"}, userPrincipal("alice"))
+	assert.ErrorIs(t, err, fileaccess.ErrInvalid)
 }
 
 func TestFileBinding_FromCallerWithoutNamespaceOrFiles(t *testing.T) {
 	refs := newFakeFileRefs()
-	ref, _ := refs.IssueFor(userPrincipal("alice"), "k")
+	ref, _ := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
 
 	// Core stores nothing from a step without a namespace, so nothing is resolved.
 	var calls int

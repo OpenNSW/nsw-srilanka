@@ -26,7 +26,7 @@ db:
       maxConnLifetimeSeconds: 3600
 
 server:
-  # 8081 is where TNSW's services.json already points its "npqs" service.
+  # 8081 is where TNSW's services list in config.yaml points its "npqs" service.
   port: 8081
   logLevel: debug
   serviceURL: http://localhost:8081
@@ -35,10 +35,28 @@ server:
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  # services.json: "tnsw", where notify_decision posts the decision back.
-  servicesConfigPath: ./configs/agency/npqs/services.json
   paymentMethodsConfigPath: ./configs/agency/npqs/payment_methods.json
   catalogConfigPath: ./configs/agency/npqs/catalog.json
+
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
+services:
+  - id: tnsw
+    url: http://localhost:8080
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://localhost:8090/oauth2/token
+        clientID: NPQS_TO_NSW
+        clientSecret: "{{env:M2M_NPQS_TO_NSW_SECRET}}"
+        scopes:
+          - nsw:task:write
+          - nsw:storage:read
+          - nsw:storage:write
+          - nsw:storage:internalwrite
+        endpointParams:
+          resource: https://api.nsw-srilanka.local
 
 # The NPQS portal (the trader-app in agency mode).
 cors:
@@ -50,31 +68,47 @@ cors:
   maxAge: 3600
 
 # NPQS keeps no files of its own: it serves TNSW's storage, calling TNSW as
-# NPQS_TO_NSW (services.json, service tnsw), so officers open the documents
-# traders uploaded there. TNSW applies its own upload limits.
+# NPQS_TO_NSW (services entry tnsw), so officers open the documents
+# traders uploaded there. Officers' uploads go to TNSW's upload route
+# (scope nsw:storage:write), so TNSW checks them like a trader's. The files this
+# agency generates itself go to TNSW's internal upload route (scope
+# nsw:storage:internalwrite), which accepts the types TNSW grants this client.
 storage:
   type: proxy
   # Seals the file tokens officers hold in place of stored file keys (here,
   # the tokens TNSW gives this agency): comma-separated kid:key pairs, newest
   # first, each key 32 random bytes in base64. This agency's own, never TNSW's.
   tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-  # How long an officer's file token lasts, in seconds. Optional: 3600 when unset.
+  # How long the file tokens an officer reads with last, in seconds. Optional:
+  # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
   tokenTTLSeconds: 3600
   proxy:
     service: "tnsw"
     uploadPath: /api/v1/storage
+    internalUploadPath: /api/v1/internal/storage
     downloadPath: /api/v1/storage/{key}
     deletePath: /api/v1/storage/{key}
+    # What this agency's officers may upload; anything else is refused with
+    # 415 before it is sent to TNSW. Each is compared exactly with the upload's
+    # type, as TNSW compares it, and TNSW's own list decides what it accepts.
+    allowedUploadTypes:
+      - application/pdf
+      - image/jpeg
+      - image/png
+      - image/gif
+      - image/webp
+      # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls.
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - text/xml
+      - application/xml
 
 # Officers sign in through the NPQS portal client, and NSW injects and replies as NSW_TO_NPQS.
 # The audience is the NPQS API resource server in
 # idp/bootstrap/20-agency-npqs.yaml.
 authn:
-  jwksURL: https://localhost:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://localhost:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.npqs.nsw-agency.local
-  # Only honored when APP_ENV=development.
-  insecureSkipTLSVerify: true
 
 # Placeholder providers.
 notification:
@@ -95,20 +129,19 @@ temporal:
   port: 7233
   namespace: npqs
 
-# The npqs-v2 folder of a one-trade-artifacts clone next to this repo, relative
+# The npqs folder of a one-trade-artifacts clone next to this repo, relative
 # to where the server runs (the repo root). Point root at another clone's
-# npqs-v2 dir to use that one.
+# npqs dir to use that one.
 artifactLoader:
   type: local
   local:
-    root: ../one-trade-artifacts/npqs-v2
-  # Or straight from GitHub (branch feat/npqs-v2-agency
-  # until it merges), with type: github:
+    root: ../one-trade-artifacts/npqs
+  # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
-  #   ref: feat/npqs-v2-agency
-  #   basePath: npqs-v2
+  #   ref: main
+  #   basePath: npqs
 
 refid:
   issuers:

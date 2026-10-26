@@ -12,7 +12,7 @@ function getExtraQueryParams(name: string): Record<string, string> {
 }
 
 export const userManager = createUserManager({
-  authority: getEnv('IDP_BASE_URL', 'https://localhost:8090'),
+  authority: getEnv('IDP_BASE_URL', 'http://localhost:8090'),
   clientId: getEnv('IDP_CLIENT_ID', 'TRADER_PORTAL_APP'),
   redirectUri: APP_URL,
   scopes: parseScopes(getEnv('IDP_SCOPES')) ?? ['openid', 'profile', 'email', 'group', 'role'],

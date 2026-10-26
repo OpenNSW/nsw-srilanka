@@ -274,8 +274,12 @@ Like the rest of `render.json`, `files` is snapshotted when the task starts, so 
 
 The backend never hands a declared value to a caller as it is stored:
 
-- `GET /api/v1/tasks/{id}` replaces each one with a **file reference** issued to the reader. `GET /api/v1/storage/{ref}` accepts it from that reader only, for `storage.tokenTTLSeconds` (an hour by default), and refuses anyone else's with a `403` and an expired one with a `410`.
-- A submission must send each declared field back as a reference issued to the submitter, and the value it stands for is what gets stored. Someone else's reference is refused with a `403`, an expired one with a `410`. For now, a value that is not a reference is still stored as sent.
+Each reference names who it was issued to and lists its **scopes**, what it allows: `read` (open the file on `GET /api/v1/storage/{ref}`) and `submit` (send it back in a submission or a draft).
+
+- An upload (`POST /api/v1/storage`) returns a file reference issued to the uploader as its `key`, which is what a form's file field holds. A user's has `submit` only: it can't open the file (`403`), so it never expires, and once the form is submitted or saved as a draft, the task's view gives a reference that opens it. A machine client's, such as an agency forwarding its officer's upload, has `read` and `submit`, since the agency opens the file with it.
+- `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state (a step without one is refused to everyone). It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default). Anything else is refused with a `403`, a raw storage key included, and an expired reference with a `410`.
+- A submission, or a draft (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`), must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`, and a value that is not a reference at all, such as a raw storage key, with a `400`.
+- An `EXTERNAL_REVIEW` step, whether it dispatches a review or replies on the OGA's parked step, sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 
@@ -335,7 +339,7 @@ Declares if the task is completed by the applicant (`USER_INPUT`) or another age
 
 An `EXTERNAL_REVIEW` step sends `{taskCode, taskId, callbackToken, consignmentId, serviceUrl, data}` in a POST to the service's `path` and parks in `QUEUED_EXTERNALLY`. The reviewer calls back on `POST {serviceUrl}/{callbackToken}` (`/api/v1/callbacks/{token}`) with `{"command": "...", "payload": {...}}`. The token is opaque: it names this one step, so a callback that arrives after the task has moved on gets `409` instead of completing a later step, and it is also the key the reviewer uses to recognize a repeated dispatch. A re-dispatch of the same task (e.g. after an amendment) carries a new token.
 
-The step **replies** instead of dispatching when its inputs carry a `replyToken`: the token a step on the other side parked on and handed over. It then sends a POST with `{"command": "<reply_command>", "payload": {...}}` to that service's `/api/v1/callbacks/{replyToken}` and parks, as for a dispatch. The payload is the step's mapped inputs plus `callbackToken`, this step's own token, for the other side to answer on. `reply_command` in `plugin_properties` is required to reply, and `path` only to dispatch. An empty `replyToken` dispatches, so the first round, which has none, goes through `path` as before. A `409` on a reply (the other step is no longer waiting) fails the step without retries, which parks it for an admin; other failures are retried. This is how a review asks for more information and gets the resubmission back on the same task (see `docs/agency.md`):
+The step **replies** instead of dispatching when its inputs carry a `replyToken`: the token a step on the other side parked on and handed over. It then sends a POST with `{"command": "<reply_command>", "payload": {...}}` to that service's `/api/v1/callbacks/{replyToken}` and parks, as for a dispatch. The payload is the step's mapped inputs plus `callbackToken`, this step's own token, for the other side to answer on. If the step has a `payload` input (named as in `AUTH_API_CALL`), the reply sends only that one, plus `callbackToken`; the step's other inputs then stay on it for its page to show, as the submission an officer reviewed does while they wait for the resubmission. `payload` must be an object: anything else, `null` included, fails the step without retries, which parks it for an admin. An optional mapping to it whose variable is missing leaves the input out, so the reply sends all the inputs. Only `payload` is sent, so the reply's files are declared under it in `files` (e.g. `payload.invoice`), as a dispatch's are under `submission`. `reply_command` in `plugin_properties` is required to reply, and `path` only to dispatch. An empty `replyToken` dispatches, so the first round, which has none, goes through `path` as before. A `409` on a reply (the other step is no longer waiting) fails the step without retries, which parks it for an admin; other failures are retried. This is how a review asks for more information and gets the resubmission back on the same task (see `docs/agency.md`):
 
 ```json
 "input_mapping":  { "userform": "submission", "agency_token?": "replyToken" },
@@ -455,10 +459,10 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
 ```json
 {
   "plugin_properties": {
-    "task_code": "cda_app_fee_payment_v1",
+    "org_id": "cda",
+    "service_id": "app_fee",
     "amount": "2000.00",
     "currency": "LKR",
-    "gateway_metadata": { "govpay_subinst_id": "004", "govpay_service_id": "001" },
     "reference": {
       "issuer": "CDA",
       "id_type": "fee_payment_ref",
@@ -470,6 +474,21 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
 ```
 
 In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
+
+`org_id` and `service_id` name the payee: who the fee is paid to and for what. They are the same in every environment. What a gateway needs to collect the fee, such as GovPay's sub-institution and service ids, differs per environment, so each payment method maps payees to its own ids under `payees` in `configs/payment_methods.json`:
+
+```json
+"payees": {
+  "cda": {
+    "defaults": { "subinst_id": "004" },
+    "services": { "app_fee": { "service_id": "001" } }
+  }
+}
+```
+
+A service's entry is merged over its org's `defaults`. The GovPay method needs both `subinst_id` and `service_id`, and the backend refuses to start if a mapping lacks either. For where the ids come from and a checklist for adding a fee, see the [GovPay+ gateway README](../external-integration/payment/govpay/README.md).
+
+The payment method is the step's `selected_method` input. It must be a method that maps the payee; with no selection, the only such method is used, and with several the step fails asking for one. A payee no method maps fails the step, naming the payee to add.
 
 ### JSONForm Schemas (`*_jsonform.json`)
 

@@ -124,7 +124,7 @@ nothing depends on it.
 ## Step 1: Author the agency's artifacts
 
 This is design work rather than operations, so it only outlines what has to exist.
-`cda-v2/` in `one-trade-artifacts` is a complete example to copy from.
+`cda/` in `one-trade-artifacts` is a complete example to copy from.
 
 In the agency's folder (for example `dea-v2/`), for each kind of review:
 
@@ -244,10 +244,10 @@ local-dev equivalent, and shows every setting of the three applications.
 Create two more applications in the agency's OU, each a **Backend Service** (client
 credentials, client secret sent as HTTP Basic):
 
-| Application           | Example name     | Custom scopes                                                                     |
-| --------------------- | ---------------- | --------------------------------------------------------------------------------- |
-| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write` |
-| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                           |
+| Application           | Example name     | Custom scopes                                                                                                  |
+| --------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Agency-to-TNSW client | `DEA_TO_NSW_M2M` | `nsw:task:write`, `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:storage:internalwrite` |
+| TNSW-to-agency client | `NSW_TO_DEA_M2M` | `nsw:workflow:inject`, `nsw:task:write`                                                                        |
 
 For each, note the client ID from **Credentials**, and copy the client secret straight
 into its cluster Secret: the agency-to-TNSW client's into the agency's Secret (Step 4a),
@@ -265,7 +265,7 @@ Assignment**):
 | ---------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Officer role                 | `DEA Officer` | On the agency API: `nsw:consignment:read`, `nsw:profile:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:claim`, `nsw:task:read`, `nsw:task:release`, `nsw:task:write` | The officers' group       |
 | TNSW-to-agency client's role | `NswToDeaM2M` | On the agency API: `nsw:workflow:inject`, `nsw:task:write`                                                                                                                      | The TNSW-to-agency client |
-| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:task:write`                                                                               | The agency-to-TNSW client |
+| Agency-to-TNSW client's role | `DeaToNswM2M` | On the NSW API: `nsw:consignment:read`, `nsw:storage:read`, `nsw:storage:write`, `nsw:storage:internalwrite`, `nsw:task:write`                                                  | The agency-to-TNSW client |
 
 The officer role's name is repeated in the agency's configuration in Step 4, and must
 match there exactly. If the agency's tasks name more roles than `officer`, create one
@@ -325,40 +325,20 @@ email or SMS.
 
 ### 4b. The JSON configs
 
-The image ships only templates, so mount the agency's three files at `/app/configs`. Here
+The image ships only templates, so mount the agency's two files at `/app/configs`. Here
 and in the Helm values below, the names, hosts and URLs are the examples; use yours.
 
 `catalog.json`, mapping each role the agency's tasks name to its IdP role's name,
-**exactly** as created in Step 2f:
+**exactly** as created in Step 2f, and `tnsw` to the TNSW-to-agency client, whose
+replies the tasks' waiting steps accept:
 
 ```json
-{ "roles": { "officer": "DEA Officer" } }
+{ "roles": { "officer": "DEA Officer" }, "clients": { "tnsw": "NSW_TO_DEA_M2M" } }
 ```
 
-`services.json`, `tnsw` being where `notify_decision` and storage go:
-
-```json
-{
-  "version": "1.0",
-  "services": [
-    {
-      "id": "tnsw",
-      "url": "https://nsw-api.example.com",
-      "timeout": "30s",
-      "auth": {
-        "type": "oauth2",
-        "options": {
-          "token_url": "https://idp.example.com/oauth2/token",
-          "client_id": "<agency-to-TNSW client ID>",
-          "client_secret": "env:M2M_DEA_TO_NSW_SECRET",
-          "scopes": ["nsw:task:write", "nsw:storage:read", "nsw:storage:write"],
-          "endpoint_params": { "resource": "https://api.nsw-srilanka.local" }
-        }
-      }
-    }
-  ]
-}
-```
+The agency's outbound `tnsw` service, used by `notify_decision` and storage,
+lives in `backend.config.services` in the Helm values below. Its OAuth2 secret is
+a `{{env:NAME}}` placeholder expanded while loading the YAML config.
 
 `payment_methods.json`, empty, since an agency takes no payments but the server loads it:
 
@@ -368,7 +348,7 @@ and in the Helm values below, the names, hosts and URLs are the examples; use yo
 
 ```sh
 kubectl create configmap dea-configs -n dea \
-  --from-file=catalog.json --from-file=services.json --from-file=payment_methods.json
+  --from-file=catalog.json --from-file=payment_methods.json
 ```
 
 ### 4c. Values
@@ -406,9 +386,21 @@ backend:
       readTimeout: 15s
       writeTimeout: 30s
       idleTimeout: 60s
-      servicesConfigPath: configs/services.json
       paymentMethodsConfigPath: configs/payment_methods.json
       catalogConfigPath: configs/catalog.json
+    services:
+      - id: tnsw
+        url: https://nsw-api.example.com
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://idp.example.com/oauth2/token
+            clientID: "<agency-to-TNSW client ID>"
+            clientSecret: "{{env:M2M_DEA_TO_NSW_SECRET}}"
+            scopes: ["nsw:task:write", "nsw:storage:read", "nsw:storage:write", "nsw:storage:internalwrite"]
+            endpointParams:
+              resource: https://api.nsw-srilanka.local
     db:
       driver: postgres
       postgres:
@@ -425,6 +417,9 @@ backend:
       allowCredentials: true
       maxAge: 3600
     # Documents live in TNSW; officers reach them through it as the agency-to-TNSW client.
+    # Officers' uploads go to TNSW's upload route (nsw:storage:write), so TNSW checks them like
+    # a trader's. The files the agency generates itself (a generated document, say) go to its
+    # internal upload route (nsw:storage:internalwrite).
     storage:
       type: proxy
       tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
@@ -432,8 +427,12 @@ backend:
       proxy:
         service: tnsw
         uploadPath: /api/v1/storage
+        internalUploadPath: /api/v1/internal/storage
         downloadPath: /api/v1/storage/{key}
         deletePath: /api/v1/storage/{key}
+        # What officers may upload; anything else is refused before it is sent to TNSW,
+        # whose own list decides what it accepts. Compared exactly with the upload's type.
+        allowedUploadTypes: [application/pdf, image/jpeg, image/png]
     authn:
       jwksURL: "https://idp.example.com/oauth2/jwks"
       issuer: "https://idp.example.com"
@@ -473,11 +472,6 @@ frontend:
     IDP_CLIENT_ID: "<portal client ID>"
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.dea.nsw-agency.local"
     IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:task:claim,nsw:task:release,nsw:storage:read,nsw:storage:write,nsw:profile:read"
-    IDP_ROLE_CLAIM_NAME: "roles"
-    # The officer role's name. Officers sign in as the app's "Trader" role; see docs/agency.md, UI.
-    IDP_TRADER_ROLE_NAME: "DEA Officer"
-    IDP_CHA_ROLE_NAME: "CHA"
-    IDP_NSW_ADMIN_ROLE_NAME: "NSW Admin"
     SHOW_AUTOFILL_BUTTON: "false"
   branding:
     systemName: "DEA"
@@ -494,12 +488,11 @@ These values must agree, or officers and TNSW get `401`:
 | `backend.config.authn.audience`                         | the API identifier (Step 2b) |
 | `resource=` in `frontend.config.IDP_EXTRA_QUERY_PARAMS` | the same identifier          |
 
-And these, or officers are signed in but can't act: the portal says they have no role, or
-their calls get `403`:
+And this, or officers are signed in but their calls get `403`:
 
-| This                                               | must equal                        |
-| -------------------------------------------------- | --------------------------------- |
-| `IDP_TRADER_ROLE_NAME` and the `catalog.json` role | the officer role's name (Step 2f) |
+| This                    | must equal                        |
+| ----------------------- | --------------------------------- |
+| the `catalog.json` role | the officer role's name (Step 2f) |
 
 ### 4d. Install
 
@@ -514,8 +507,8 @@ IdP's JWKS.
 ## Step 5: Verify the agency on its own
 
 1. An officer signs in at the portal URL. The portal shows an empty case list.
-   If sign-in loops or the app says the user has no role, check the role name and
-   `IDP_TRADER_ROLE_NAME`.
+   If the case list fails with `403`, check the officer role's name in the IdP and in
+   `catalog.json`.
 2. TNSW can get a token for the agency. From a machine that has the TNSW-to-agency
    client's secret, with your client ID, API identifier and IdP host:
 
@@ -564,25 +557,24 @@ backend:
 
 ### 6b. TNSW's configuration
 
-In TNSW's `services.json`, add the agency as a service, with the handle as its `id`, like the
-`cda` entry in [`configs/services.example.json`](../../configs/services.example.json):
+In TNSW's `config.yaml` (or `backend.config` in Helm values), add the agency to
+`services`, with the handle as its `id`, like the `cda` entry in
+[`configs/config.example.yaml`](../../configs/config.example.yaml):
 
-```json
-{
-  "id": "dea",
-  "url": "https://dea-api.example.com",
-  "timeout": "30s",
-  "auth": {
-    "type": "oauth2",
-    "options": {
-      "token_url": "https://idp.example.com/oauth2/token",
-      "client_id": "<TNSW-to-agency client ID>",
-      "client_secret": "env:M2M_NSW_TO_DEA_SECRET",
-      "scopes": ["nsw:workflow:inject", "nsw:task:write"],
-      "endpoint_params": { "resource": "https://api.dea.nsw-agency.local" }
-    }
-  }
-}
+```yaml
+services:
+  - id: dea
+    url: https://dea-api.example.com
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: https://idp.example.com/oauth2/token
+        clientID: "<TNSW-to-agency client ID>"
+        clientSecret: "{{env:M2M_NSW_TO_DEA_SECRET}}"
+        scopes: ["nsw:workflow:inject", "nsw:task:write"]
+        endpointParams:
+          resource: https://api.dea.nsw-agency.local
 ```
 
 In TNSW's `catalog.json`, map the handle to the agency-to-TNSW client under `clients`, so
@@ -598,7 +590,7 @@ Then roll out:
 helm upgrade lk-tnsw ./deployments/helm/lk-tnsw -n tnsw -f <your-values>.yaml
 ```
 
-If `services.json` and `catalog.json` come from a ConfigMap outside the chart, update it
+If `catalog.json` comes from a ConfigMap outside the chart, update it
 first, then `kubectl rollout restart deployment/<backend> -n tnsw`.
 
 ### 6c. The trade-flow step
@@ -628,7 +620,7 @@ In `one-trade-artifacts`, under `tnsw/`, the step that hands work to the agency 
 }
 ```
 
-- `service_id` is the `services.json` `id`, and `task_code` the agency's manifest id from
+- `service_id` is the `config.yaml` services `id`, and `task_code` the agency's manifest id from
   Step 1.
 - The `authz` extension lists, per command, the catalog names allowed to send it: the
   commands the agency's `notify_decision` sends. Without it, any client TNSW accepts could
@@ -645,7 +637,7 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Add a role                                | A role and group in ThunderID (Step 2f), the agency's `catalog.json`, and the tasks' `authz` and `read.roles` (Step 1)     |
 | Add a kind of review                      | A task config and workflow (Step 1), the TNSW step (Step 6c), then move both deployments' artifact `ref`                   |
 | Add a portal URL                          | Add it to the portal application's redirect URIs in the console, to the agency's `cors`, and to ThunderID's CORS (Step 2g) |
-| Change the officer role's name            | The IdP role, the agency's `catalog.json` and `IDP_TRADER_ROLE_NAME` together                                              |
+| Change the officer role's name            | The IdP role and the agency's `catalog.json` together                                                                      |
 | Rotate the agency-to-TNSW client's secret | **Regenerate Client Secret** in the console (Step 2e), update the agency's Secret, then restart the agency backend         |
 | Rotate the TNSW-to-agency client's secret | **Regenerate Client Secret** in the console (Step 2e), update TNSW's Secret, then restart the TNSW backend                 |
 | Upgrade                                   | `helm upgrade <release> …` with the same chart version as TNSW. Migrations are shared, so keep the two on the same release |
@@ -659,8 +651,9 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                                 |
 | Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                          |
 | Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the `catalog.json` name doesn't match the token's `roles`, or the officer isn't in the group                                                               |
-| Inject `401`                                            | TNSW's `services.json` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                                        |
-| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `services.json` entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                                  |
+| Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                         |
+| Reply `403` `client … is not permitted`                 | The agency's `catalog.json` doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                        |
+| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                           |
 | Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                                 |
 | Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                         |
 | Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                                      |

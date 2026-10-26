@@ -61,6 +61,25 @@ func TestCDNResultsCollector_FlattensEveryBranch(t *testing.T) {
 
 // COLLECT_ALL lets a container's note fail without abandoning the others, so
 // the first *accepted* note is the one downstream steps act on.
+// A note Customs cancelled (§7.7) is registered but will not carry its
+// container, so it is neither collected nor quoted as the consignment's note.
+func TestCDNResultsCollector_SkipsCancelledNotes(t *testing.T) {
+	cancelled := branch("CDN-1", "edge-1", true)
+	cancelled["ack_status"] = "CANCELLED"
+	acknowledged := branch("CDN-2", "edge-2", true)
+	acknowledged["ack_status"] = "ACKNOWLEDGED"
+
+	ctx := splitCtx(map[string]any{"cdn_results": []any{cancelled, acknowledged}})
+	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
+
+	d := ctx.Record.Data
+	assert.Equal(t, []any{"CDN-2"}, d["cdn_numbers"])
+	require.Len(t, d["containers"], 1, "a cancelled note must not occupy a boat-note row")
+	assert.Equal(t, "CDN-2", d["containers"].([]map[string]any)[0]["cdn_number"])
+	assert.Equal(t, "CDN-2", d["cdn_number"])
+	assert.Equal(t, "CDN-2", d["cdn_userform"].(map[string]any)["registeredCdnNumber"])
+}
+
 func TestCDNResultsCollector_SkipsRejectedForFirstNote(t *testing.T) {
 	ctx := splitCtx(map[string]any{"cdn_results": []any{
 		branch("CDN-1", "edge-1", false),
@@ -117,4 +136,23 @@ func TestCDNResultsCollector_RejectsUnusableInput(t *testing.T) {
 	assert.Error(t, CDNResultsCollectorFunc(splitCtx(map[string]any{}), nil))
 	assert.Error(t, CDNResultsCollectorFunc(splitCtx(map[string]any{"cdn_results": "nope"}), nil))
 	assert.Error(t, CDNResultsCollectorFunc(splitCtx(map[string]any{"cdn_results": []any{"nope"}}), nil))
+}
+
+// With no accepted note, the fallback form must not be a cancelled note's: a
+// cancelled note is never quoted downstream.
+func TestCDNResultsCollector_FallbackSkipsCancelledNotes(t *testing.T) {
+	cancelled := branch("CDN-1", "edge-1", false)
+	cancelled["ack_status"] = "CANCELLED"
+
+	ctx := splitCtx(map[string]any{"cdn_results": []any{cancelled, branch("CDN-2", "edge-2", false)}})
+	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
+	assert.Equal(t, "CDN-2", ctx.Record.Data["cdn_userform"].(map[string]any)["registeredCdnNumber"])
+
+	// One container, and its note cancelled: nothing to quote, but still a form.
+	only := branch("CDN-1", "edge-1", true)
+	only["ack_status"] = "CANCELLED"
+	ctx = splitCtx(map[string]any{"cdn_results": []any{only}})
+	require.NoError(t, CDNResultsCollectorFunc(ctx, nil))
+	assert.Equal(t, map[string]any{}, ctx.Record.Data["cdn_userform"])
+	assert.Equal(t, "", ctx.Record.Data["cdn_number"])
 }

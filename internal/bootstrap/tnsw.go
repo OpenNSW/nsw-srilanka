@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
+	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
 
 // tnswHandlers are the handlers behind TNSW's own routes.
@@ -24,9 +25,10 @@ type tnswHandlers struct {
 	payment     *payment.HTTPHandler
 	slce        *asycuda.Handler
 	slpa        *slpawebhook.Handler
+	files       *nswstorage.FileHandler
 }
 
-// mountTNSW registers TNSW's own routes: consignments and their admin views, the
+// mountTNSW registers TNSW's own routes: machine uploads, consignments and their admin views, the
 // trader portal's CHA/company lookups, and the payment, customs and port callbacks.
 // The routes both modes serve are registered in Build.
 func mountTNSW(
@@ -35,6 +37,12 @@ func mountTNSW(
 	withAuth func(http.Handler) http.Handler,
 	withScope func(string) func(http.Handler) http.Handler,
 ) {
+	// Uploads by machine clients, such as an agency forwarding its officers'
+	// files. Not served when this deployment has no storage of its own.
+	if h.files.HasMachineUploads() {
+		mux.Handle(nswstorage.InternalUploadRoute, withAuth(withScope(scopes.StorageInternalWrite)(http.HandlerFunc(h.files.InternalUpload))))
+	}
+
 	mux.Handle("GET /api/v1/chas", withAuth(withScope(scopes.CHARead)(http.HandlerFunc(h.cha.HandleGetCHAs))))
 	mux.Handle("GET /api/v1/companies", withAuth(withScope(scopes.CompanyRead)(http.HandlerFunc(h.company.HandleGetCompanies))))
 	mux.Handle("POST /api/v1/consignments", withAuth(withScope(scopes.ConsignmentWrite)(http.HandlerFunc(h.consignment.HandleCreateConsignment))))

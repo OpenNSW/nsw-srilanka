@@ -1,17 +1,10 @@
 import { Outlet } from 'react-router-dom'
 import { TopBar } from './TopBar'
 
-// The TopBar floats free of the viewport edge (see its own component)
-// rather than sitting flush against it. GAP_PX is the margin that
-// separates it from the edges; CONTENT_TOP_PX derives from it plus the
-// bar's own height so the two stay in lockstep without duplicating magic
-// numbers wherever content needs to clear the bar.
-const GAP_PX = 12
-const TOPBAR_HEIGHT_PX = 64
-// Exported so screens that manage their own scroll container (rather than relying on
-// <main>'s own height above) can clear the bar by the same amount instead of hardcoding it.
-export const CONTENT_TOP_PX = TOPBAR_HEIGHT_PX + GAP_PX * 2
-
+// Content clears the fixed TopBar by --app-top-offset (index.css), which
+// follows the bar's own position: flush with the top on small screens,
+// floating from 1024 px up. Screens that manage their own scroll container
+// clear it by the same variable.
 export function Layout() {
   return (
     <div className="min-h-screen bg-app-bg">
@@ -19,8 +12,8 @@ export function Layout() {
 
       <main
         style={{
-          marginTop: `${CONTENT_TOP_PX}px`,
-          minHeight: `calc(100vh - ${CONTENT_TOP_PX}px)`,
+          marginTop: 'var(--app-top-offset)',
+          minHeight: 'calc(100vh - var(--app-top-offset))',
         }}
         className="bg-app-bg pb-16 sm:pb-8"
       >

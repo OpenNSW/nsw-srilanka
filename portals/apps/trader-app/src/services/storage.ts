@@ -16,6 +16,8 @@ interface UploadMetadataResponse {
 interface DownloadMetadataResponse {
   download_url: string
   expires_at: number
+  extension?: string
+  mime_type?: string
 }
 
 export interface UploadResponse {
@@ -50,7 +52,16 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
   return { key: metadata.key, name: metadata.name }
 }
 
-export async function getDownloadUrl(key: string): Promise<{ url: string; expiresAt: number }> {
+export interface DownloadUrlResponse {
+  url: string
+  expiresAt: number
+  // A saved file is held by an opaque reference, so these are the only way
+  // to name a file the user saves or tell whether a browser can show it.
+  extension?: string
+  mimeType?: string
+}
+
+export async function getDownloadUrl(key: string): Promise<DownloadUrlResponse> {
   const { data } = await http.request<DownloadMetadataResponse>({
     url: `${API_BASE_URL}/api/v1/storage/${key}`,
     attachToken: true,
@@ -60,5 +71,5 @@ export async function getDownloadUrl(key: string): Promise<{ url: string; expire
     ? new URL(data.download_url, API_BASE_URL).toString()
     : data.download_url
 
-  return { url, expiresAt: data.expires_at }
+  return { url, expiresAt: data.expires_at, extension: data.extension, mimeType: data.mime_type }
 }

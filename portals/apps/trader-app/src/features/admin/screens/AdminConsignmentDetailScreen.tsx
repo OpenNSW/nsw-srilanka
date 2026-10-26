@@ -12,8 +12,7 @@ export function AdminConsignmentDetailScreen() {
   return (
     <ConsignmentDetailScreen
       fetcher={getConsignmentForAdmin}
-      backTo={`/admin/consignments/${consignmentId}`}
-      backLabel="Back to engine status"
+      parent={{ label: 'Engine status', to: `/admin/consignments/${consignmentId}` }}
       canStartFlows={false}
     />
   )

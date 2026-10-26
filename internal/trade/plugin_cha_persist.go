@@ -14,7 +14,7 @@ import (
 // CHAPersistPlugin is a synchronous SYSTEM-task plugin that writes the CHA company selected
 // during trade_1_cha_selection back onto the consignment row (cha_company_id).
 //
-// Direct-start consignments (e.g. trade-export-v1) are created with a nil CHA company, and
+// Direct-start consignments (e.g. trade-export) are created with a nil CHA company, and
 // CHA selection happens inside the workflow as the traderinput.cha_company_id/trade.cha_company_id
 // workflow variable — never persisted to the consignments table. Without this write-back, the
 // existing CHA-role visibility filter (which queries consignments by cha_company_id) would

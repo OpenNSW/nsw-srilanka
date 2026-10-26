@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema } from '@jsonforms/core'
-import { radixRenderers } from '@opennsw/jsonforms-renderers'
-import { Button, Callout } from '@radix-ui/themes'
-import { ExclamationTriangleIcon } from '@radix-ui/react-icons'
+import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
+import { Button, Callout, Text } from '@radix-ui/themes'
+import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { Handle, ZoneRendererProps } from '@/features/zone/types'
+import type { Handle, ZoneAction, ZoneRendererProps } from '@/features/zone/types'
+import { useReportUnsaved } from '@/features/zone/unsavedChanges'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
 import { createFormErrorTranslator, formAjv } from './formAjv'
@@ -42,6 +43,13 @@ function seedWithDefaults(
 // non-empty (see its own comment, further down).
 const EMPTY_ADDITIONAL_ERRORS: RequiredFieldError[] = []
 
+// How long the "Draft saved" note stays next to the buttons.
+const DRAFT_SAVED_NOTE_MS = 3000
+
+// How long a form with a draft_action handle holds unsaved input before it
+// saves a draft by itself.
+const AUTOSAVE_DRAFT_MS = 30_000
+
 // AJV-shaped error so JsonForms maps it onto the missing control. `message`
 // must stay "is a required property" — the radix renderers rewrite that
 // exact string to "<label> is required".
@@ -63,16 +71,18 @@ type Props = ZoneRendererProps<'FORM'> & {
   // gating is internal — disabled handles cannot fire. The form is
   // editable iff both handles and onAction are provided; otherwise it
   // renders read-only.
-  onAction?: (command: string, data: Record<string, unknown>) => Promise<void>
+  onAction?: ZoneAction
 }
 
 // FORM_ELEMENT_CATALOG is this renderer's published list of interactive
 // element identifiers and their visual treatment. Handles reference these by
 // name via Handle.element; unknown identifiers fall back to a plain solid
-// button so the action still dispatches.
+// button so the action still dispatches. draft_action saves the form as a
+// draft of the step, partial or not, without completing it.
 const FORM_ELEMENT_CATALOG: Record<string, { variant: 'solid' | 'outline'; color?: 'red' }> = {
   primary_action: { variant: 'solid' },
   secondary_action: { variant: 'outline' },
+  draft_action: { variant: 'outline' },
   danger_action: { variant: 'solid', color: 'red' },
 }
 
@@ -82,8 +92,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   // consumed only as the initial seed: TraderZoneLayout keys Zone by task
   // state, so a state transition unmounts this component and the next mount
   // re-seeds from the fresh payload. Same-state background polls intentionally
-  // do *not* clobber in-flight edits — there is no server-side draft to merge
-  // back in, so re-syncing payload.data would silently destroy user input.
+  // do *not* clobber in-flight edits — re-syncing payload.data would silently
+  // destroy input the user has not saved (as a draft or a submission) yet.
   const [data, setData] = useState<Record<string, unknown>>(() => seedWithDefaults(payload.schema, payload.data))
   // What actually gets handed to <JsonForms data={...}> — NOT the same as
   // `data` above, and not updated on every onChange either (see the
@@ -99,7 +109,17 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const [dataSeed, setDataSeed] = useState<Record<string, unknown>>(data)
   const [errors, setErrors] = useState<unknown[]>([])
   const [submitting, setSubmitting] = useState(false)
+  // The command of the handle in flight, so only its button says so.
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null)
+  // When the last draft save succeeded; null hides the "Draft saved" note.
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null)
   const [showErrors, setShowErrors] = useState(false)
+  // formDataKey of the data as last saved (a draft or a submission), or as
+  // JsonForms first reported it on mount: it emits once on mount, after
+  // applying its own defaults, so that settled first emit, not the raw seed,
+  // is what counts as "nothing typed yet". null until then.
+  const [savedKey, setSavedKey] = useState<string | null>(null)
+  const dataKey = useMemo(() => formDataKey(data), [data])
 
   const requiredErrors = useMemo(() => collectRequiredErrors(payload.schema, data), [payload.schema, data])
   // JsonForms merges additionalErrors with native AJV errors. Absent keys
@@ -176,6 +196,17 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
   const isValid = errors.length === 0 && requiredErrors.length === 0
   const interactive = (handles?.length ?? 0) > 0 && onAction !== undefined
   const showAutoFill = interactive && getBooleanEnv('SHOW_AUTOFILL_BUTTON', false)
+  // A stepper form (a Categorization with options.variant "stepper") offers
+  // the handles that need a complete form only on its last step, the review
+  // step; the renderer reports the step through FormStepsProvider. Any other
+  // form is on its last step from the start.
+  const stepper = isStepperUiSchema(payload.uiSchema)
+  const [onLastStep, setOnLastStep] = useState(() => !stepper)
+  const shownHandles = (handles ?? []).filter((h) => onLastStep || acceptsPartialForm(h))
+  const draftHandle = interactive ? handles?.find((h) => h.element === 'draft_action') : undefined
+  const unsaved = interactive && savedKey !== null && dataKey !== savedKey
+  // The screen asks before the user leaves with unsaved input.
+  useReportUnsaved(unsaved)
 
   const handleAutoFill = () => {
     const next = autoFillForm(payload.schema, data) as Record<string, unknown>
@@ -187,10 +218,8 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const handleAction = (h: Handle) => {
     if (!onAction) return
-    // secondary_action handles (e.g. drafts) accept a partial form.
-    // primary_action and danger_action handles require valid data.
-    const skipRequired = h.element === 'secondary_action'
-    if (!skipRequired && !isValid) {
+    const draft = h.element === 'draft_action'
+    if (!acceptsPartialForm(h) && !isValid) {
       // Flipping showErrors changes validationMode, a dependency of
       // JsonForms's own resync effect (see EMPTY_ADDITIONAL_ERRORS above) —
       // but the lastFed check above already catches dataSeed up to data on
@@ -200,12 +229,62 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
       return
     }
     setSubmitting(true)
-    void onAction(h.command, data).finally(() => setSubmitting(false))
+    setPendingCommand(h.command)
+    setDraftSavedAt(null)
+    // What was sent, not what is on screen once it lands: input typed while
+    // the request was in flight is still unsaved.
+    const sentKey = dataKey
+    void onAction(h.command, data, { draft })
+      // A failed action rejects; the caller has already shown why.
+      .then(() => {
+        setSavedKey(sentKey)
+        if (draft) setDraftSavedAt(Date.now())
+      })
+      .catch(() => {})
+      .finally(() => {
+        setSubmitting(false)
+        setPendingCommand(null)
+      })
   }
+
+  // Autosave: a form that can save a draft does so once its input has stayed
+  // unsaved for AUTOSAVE_DRAFT_MS. A save (manual or not) clears the timer, as
+  // does any action in flight; one that fails leaves the input unsaved, so the
+  // timer starts again.
+  const autosaveDraft = useEffectEvent(() => {
+    if (draftHandle) handleAction(draftHandle)
+  })
+  const canAutosave = draftHandle !== undefined
+  useEffect(() => {
+    if (!unsaved || submitting || !canAutosave) return
+    const timer = setTimeout(autosaveDraft, AUTOSAVE_DRAFT_MS)
+    return () => clearTimeout(timer)
+  }, [unsaved, submitting, canAutosave])
+
+  // The "Draft saved" note next to the buttons fades after a few seconds.
+  useEffect(() => {
+    if (draftSavedAt === null) return
+    const timer = setTimeout(() => setDraftSavedAt(null), DRAFT_SAVED_NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [draftSavedAt])
+
+  const actions = interactive ? (
+    <FormActions
+      handles={shownHandles}
+      onAction={handleAction}
+      onAutoFill={showAutoFill ? handleAutoFill : undefined}
+      submitting={submitting}
+      pendingCommand={pendingCommand}
+      draftSaved={draftSavedAt !== null}
+      inBar={!stepper}
+    />
+  ) : undefined
 
   return (
     <>
-      {interactive && showErrors && requiredErrors.length > 0 && (
+      {/* A stepper lists what is missing on each step itself; the form-wide
+          note would stay on screen on steps that are already complete. */}
+      {interactive && showErrors && requiredErrors.length > 0 && onLastStep && (
         <div className="px-6 pt-6">
           <Callout.Root color="red">
             <Callout.Icon>
@@ -215,61 +294,90 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
           </Callout.Root>
         </div>
       )}
-      <div className="p-6">
-        <JsonForms
-          schema={payload.schema}
-          uischema={payload.uiSchema}
-          data={dataSeed}
-          ajv={ajv}
-          renderers={radixRenderers}
-          readonly={!interactive}
-          additionalErrors={stableAdditionalErrors}
-          validationMode={validationMode}
-          i18n={formI18n}
-          onChange={({ data, errors }) => {
-            const next = (data ?? {}) as Record<string, unknown>
-            setData(next)
-            setErrors(errors ?? [])
-          }}
-        />
+      {/* A stepper draws its own cards, and shows these actions in its footer
+          next to Back and Continue instead of in a bar of their own. Continue
+          refused on a step shows the field errors, as a refused submit does
+          on a single-page form. A form with nothing to change is marked
+          data-form-review, so its values show as plain answers (index.css). */}
+      <div className={stepper ? '' : 'p-6'} data-form-review={interactive ? undefined : ''}>
+        <FormStepsProvider
+          onStepChange={({ last }) => setOnLastStep(last)}
+          onInvalidStep={() => setShowErrors(true)}
+          actions={stepper ? actions : undefined}
+        >
+          <JsonForms
+            schema={payload.schema}
+            uischema={payload.uiSchema}
+            data={dataSeed}
+            ajv={ajv}
+            renderers={radixRenderers}
+            readonly={!interactive}
+            additionalErrors={stableAdditionalErrors}
+            validationMode={validationMode}
+            i18n={formI18n}
+            onChange={({ data, errors }) => {
+              const next = (data ?? {}) as Record<string, unknown>
+              setData(next)
+              setSavedKey((prev) => prev ?? formDataKey(next))
+              setErrors(errors ?? [])
+            }}
+          />
+        </FormStepsProvider>
       </div>
-      {interactive && (
-        <FormActionBar
-          handles={handles ?? []}
-          onAction={handleAction}
-          onAutoFill={showAutoFill ? handleAutoFill : undefined}
-          submitting={submitting}
-        />
+      {actions && !stepper && (
+        <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-[0_-8px_20px_-8px_rgba(0,0,0,0.08)]">
+          <div className="px-6 py-4 flex items-center gap-3">{actions}</div>
+        </div>
       )}
     </>
   )
 }
 
-function FormActionBar({
+// The form's buttons: the demo auto-fill, then the handles. In a bar of their
+// own, a spacer pushes the handles to the right; a stepper's footer already
+// has one, after Back.
+function FormActions({
   handles,
   onAction,
   onAutoFill,
   submitting,
+  pendingCommand,
+  draftSaved,
+  inBar,
 }: {
   handles: Handle[]
   onAction: (h: Handle) => void
   onAutoFill?: () => void
   submitting: boolean
+  pendingCommand: string | null
+  draftSaved: boolean
+  inBar: boolean
 }) {
+  const { t } = useTranslation()
   return (
-    <div className="sticky bottom-0 bg-app-surface/95 backdrop-blur rounded-b-2xl shadow-[0_-8px_20px_-8px_rgba(0,0,0,0.08)]">
-      <div className="px-6 py-4 flex items-center gap-3">
-        {onAutoFill && (
-          <Button type="button" variant="soft" color="purple" size="3" onClick={onAutoFill} disabled={submitting}>
-            Demo - Auto Fill
-          </Button>
-        )}
-        <div className="flex-1" />
-        {handles.map((h) => (
-          <HandleButton key={h.command} handle={h} onClick={onAction} submitting={submitting} />
-        ))}
-      </div>
-    </div>
+    <>
+      {onAutoFill && (
+        <Button type="button" variant="soft" color="purple" size="3" onClick={onAutoFill} disabled={submitting}>
+          Demo - Auto Fill
+        </Button>
+      )}
+      {inBar && <div className="flex-1" />}
+      {draftSaved && (
+        <Text size="2" color="green" role="status" className="inline-flex items-center gap-1">
+          <CheckIcon />
+          {t('tasks.draftSaved')}
+        </Text>
+      )}
+      {handles.map((h) => (
+        <HandleButton
+          key={h.command}
+          handle={h}
+          onClick={onAction}
+          submitting={submitting}
+          pending={pendingCommand === h.command}
+        />
+      ))}
+    </>
   )
 }
 
@@ -277,17 +385,36 @@ function HandleButton({
   handle,
   onClick,
   submitting,
+  pending,
 }: {
   handle: Handle
   onClick: (h: Handle) => void
   submitting: boolean
+  // pending is set on the button whose action is in flight; the others are
+  // only disabled.
+  pending: boolean
 }) {
+  const { t } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
   const disabled = submitting
+  let label = handle.label
+  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : 'Submitting...'
   return (
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
-      {submitting ? 'Submitting...' : handle.label}
+      {label}
     </Button>
+  )
+}
+
+// A content key for form data, to tell whether it changed since it was last
+// saved. Object keys are sorted, so the order JsonForms happens to write
+// fields in does not count as a change; undefined values drop out, the same
+// as a cleared field that was never set.
+function formDataKey(data: unknown): string {
+  return JSON.stringify(data, (_key, value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : value,
   )
 }
 
@@ -367,4 +494,10 @@ function isEmpty(value: unknown): boolean {
   if (typeof value === 'string' && value.trim() === '') return true
   if (Array.isArray(value) && value.length === 0) return true
   return false
+}
+
+// draft_action and secondary_action handles accept a partial form;
+// primary_action, danger_action and unknown elements require valid data.
+function acceptsPartialForm(h: Handle): boolean {
+  return h.element === 'draft_action' || h.element === 'secondary_action'
 }

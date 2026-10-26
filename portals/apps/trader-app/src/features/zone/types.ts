@@ -33,6 +33,16 @@ export type Handle = {
   element?: string
 }
 
+// ZoneAction dispatches a handle a zone's renderer activated, with the data it
+// gathered. draft is set when the renderer's element saves a draft of the step
+// rather than completing it (a FORM zone's 'draft_action'); the caller then
+// stores the data without moving the task on, and command is not sent.
+export type ZoneAction = (
+  command: string,
+  data: Record<string, unknown>,
+  options?: { draft?: boolean },
+) => Promise<void>
+
 // id is the section key from the task's render config. unique within a view.
 type ZoneComponentBase = {
   id: string

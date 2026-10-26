@@ -41,7 +41,8 @@ A full `docker compose up` runs three IdP services in order:
    secrets, and the Direct Auth Secret), then runs the in-process bootstrap over the
    declarative documents in `/opt/thunderid/bootstrap/` — the image's own defaults
    plus every document in [`bootstrap/`](bootstrap/) — and exits.
-3. **`thunderid`** — the long-running server (listens on `https://localhost:8090`).
+3. **`thunderid`** — the long-running server (listens on `http://localhost:8090`:
+   plain HTTP, set by `server.http_only` in [`deployment.yaml`](deployment.yaml)).
 
 Everything the platform needs locally (OUs, user types, resource servers, roles,
 groups, portals, M2M clients, sample users) exists once `thunderid-setup` finishes.
@@ -60,8 +61,6 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    ```bash
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=your-secure-password
-   PUBLIC_URL=https://localhost:8090
-   PORT=8090
    ```
 
    `ADMIN_PASSWORD` is load-bearing, not cosmetic: the bootstrap has no default for
@@ -69,7 +68,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
    with `docker compose logs thunderid-setup`.
 
    Both `deployment.yaml` and the declarative documents under `bootstrap/` are
-   templated from these vars — `{{.PUBLIC_URL}}` ← `PUBLIC_URL`. Two things to watch:
+   templated from these vars — `{{.SMTP_HOST}}` ← `SMTP_HOST`. Two things to watch:
 
    - An unset variable is a **hard error**, so every placeholder needs a value.
    - Substitution runs over the whole file including comments, so never write
@@ -77,6 +76,11 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
 
    The CORS allow-list is the `cors` server config in
    [`bootstrap/10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml), not an env var.
+
+   The server address (`server.public_url`, `port`, `http_only`) is not an env var
+   either: it is written literally in [`deployment.yaml`](deployment.yaml). `setup.sh`
+   reads that block with grep, which does not resolve placeholders, to build the
+   Console's redirect URIs.
 
 3. Start the IdP:
 
@@ -86,7 +90,7 @@ groups, portals, M2M clients, sample users) exists once `thunderid-setup` finish
 
 ### Developer Console Access
 
-Once running, open the developer console at `https://localhost:8090/console`:
+Once running, open the developer console at `http://localhost:8090/console`:
 
 - **Credentials**: the `ADMIN_USERNAME` / `ADMIN_PASSWORD` values from your `.env`
   (`idp/.env.example` ships `admin` / `1234` for local dev)
@@ -185,7 +189,7 @@ without passwords; strip and fix those before committing.
 To add an agency run by this backend in agency mode, copy one of the
 `20-agency-*.yaml` files, change the handle, names and port, and give every document a
 new `id` (and update the references to it). Then add its port to the `cors` server
-config, and its clients to the backends' catalog and `services.json`.
+config, and its clients to the backends' catalog and `config.yaml` services.
 
 ### Management token (local dev)
 
@@ -193,11 +197,11 @@ The management API, the console's API, and `POST /import` need a `system`-scoped
 token. Locally, mint one from `admin-cli`:
 
 ```bash
-TOKEN=$(curl -k -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
+TOKEN=$(curl -s -u "ADMIN_CLI:${ADMIN_CLI_SECRET:-1234}" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials" -d "scope=system" \
   -d "resource=https://localhost:8090/mcp" \
-  https://localhost:8090/oauth2/token | jq -r .access_token)
+  http://localhost:8090/oauth2/token | jq -r .access_token)
 ```
 
 The `resource` parameter is **required** here: `system` is a permission scope, so the
@@ -248,15 +252,15 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 Each protected backend is registered as a **resource server** whose `identifier`
 becomes the access-token **audience** (`aud`):
 
-| `identifier` (= token `aud`)        | Backend                                                                | Scopes (`<resource>:<action>`)                                                                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`               | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write}` |
-| `https://api.nsw-agency.local`      | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                              |
-| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`      |
-| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`      |
-| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`      |
-| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`      |
-| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`      |
+| `identifier` (= token `aud`)        | Backend                                                                | Scopes (`<resource>:<action>`)                                                                                                                          |
+| ----------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`               | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,internalwrite}` |
+| `https://api.nsw-agency.local`      | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                                            |
+| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
+| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write,claim,release}`, `nsw:profile:read`, `nsw:storage:{read,write}`                    |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -273,20 +277,20 @@ becomes the access-token **audience** (`aud`):
 >   is set in `configs/agency/cda/config.yaml` and `configs/agency/cda/config.docker.yaml`. Its
 >   callers request it as `resource=`: the CDA portal in
 >   `configs/agency/cda/portal-config.js`, and TNSW's `cda` entry in
->   `configs/services*.example.json`. Changing the identifier means changing all of these
->   (and any existing local `configs/services*.json`).
+>   `configs/config*.example.yaml`. Changing the identifier means changing all of these
+>   (and any existing local `configs/config*.yaml`).
 > - **EFC** (`efc-api`): the `EFC API` identifier,
 >   `https://api.efc.nsw-agency.local`, in the same places under
->   `configs/agency/efc/` and TNSW's `efc` entry in `configs/services*.example.json`.
+>   `configs/agency/efc/` and TNSW's `efc` entry in `configs/config*.example.yaml`.
 > - **NPQS** (`npqs-api`): the `NPQS API` identifier, `https://api.npqs.nsw-agency.local`,
 >   in the same places under `configs/agency/npqs/` and TNSW's `npqs` entry in
->   `configs/services*.example.json`.
+>   `configs/config*.example.yaml`.
 > - **SLTB** (`sltb-api`): the `SLTB API` identifier, `https://api.sltb.nsw-agency.local`,
 >   in the same places under `configs/agency/sltb/` and TNSW's `sltb` entry in
->   `configs/services*.example.json`.
+>   `configs/config*.example.yaml`.
 > - **FCAU** (`fcau-api`): the `FCAU API` identifier, `https://api.fcau.nsw-agency.local`,
 >   in the same places under `configs/agency/fcau/` and TNSW's `fcau` entry in
->   `configs/services*.example.json`.
+>   `configs/config*.example.yaml`.
 
 Scopes are namespaced (`nsw:*` / `agency:*`). The CDA, EFC, NPQS, SLTB and FCAU APIs reuse `nsw:*` names, since they
 are the same backend; that is safe because every caller names its target with `resource`
@@ -354,30 +358,32 @@ gets a hard `invalid_target` at the token endpoint, naming the problem.
 
 So every permission-bearing caller sends `resource`:
 
-| Caller                       | Sends `resource` | Where it is configured                              | Token `aud`                         |
-| ---------------------------- | ---------------- | --------------------------------------------------- | ----------------------------------- |
-| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`)   | `https://api.nsw-srilanka.local`    |
-| OGA portal users             | AGENCY_API       | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency | `https://api.nsw-agency.local`      |
-| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency            | `https://api.nsw-srilanka.local`    |
-| `NSW_TO_*` M2M               | AGENCY_API       | `endpoint_params` in `configs/services*.json`       | `https://api.nsw-agency.local`      |
-| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                             | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | _Management token_ above                            | `https://localhost:8090/mcp`        |
-| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                | app `defaultAudience` / `client_id` |
+| Caller                       | Sends `resource` | Where it is configured                                            | Token `aud`                         |
+| ---------------------------- | ---------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`)                 | `https://api.nsw-srilanka.local`    |
+| OGA portal users             | AGENCY_API       | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency               | `https://api.nsw-agency.local`      |
+| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency                          | `https://api.nsw-srilanka.local`    |
+| `NSW_TO_*` M2M               | AGENCY_API       | `services[].auth.oauth2.endpointParams` in `configs/config*.yaml` | `https://api.nsw-agency.local`      |
+| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                                           | `https://api.nsw-srilanka.local`    |
+| `admin-cli` management token | System RS        | _Management token_ above                                          | `https://localhost:8090/mcp`        |
+| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                              | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the
 whole session: the IdP records the value on the authorization code and reuses the bound
 audience on refresh, so `automaticSilentRenew` needs no extra handling.
 
 **M2M clients** send it in the token request body, as RFC 6749 §3.2 requires. In
-`configs/services*.json` that is the `endpoint_params` field of
-`github.com/OpenNSW/core/remote` (v0.6.0+); nsw-agency uses `NSW_TOKEN_PARAMS`, which it
-passes to `clientcredentials.Config.EndpointParams`. Both take the same query-string shape
-as the SPA variable, so one syntax covers every caller:
+`configs/config*.yaml`, set `services[].auth.oauth2.endpointParams`:
 
-```json
-"token_url": "https://thunderid:8090/oauth2/token",
-"endpoint_params": { "resource": "https://api.nsw-agency.local" }
+```yaml
+tokenURL: http://thunderid:8090/oauth2/token
+endpointParams:
+  resource: https://api.nsw-agency.local
 ```
+
+Each parameter accepts a string or a list of strings. The separate nsw-agency
+application uses `NSW_TOKEN_PARAMS`, passed to
+`clientcredentials.Config.EndpointParams`.
 
 > Earlier revisions appended `?resource=…` to `token_url` instead. That worked only
 > because the token endpoint calls `r.ParseForm()`, which merges the URL query into the

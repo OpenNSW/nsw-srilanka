@@ -124,16 +124,17 @@ func sampleForm() map[string]any {
 		},
 		"financial": map[string]any{
 			"bankCode": "6010", "bankReference": "RemRefTest",
-			"remittanceAmount": float64(1500), "paymentTermsCode": "10",
-			"deferredPayment": "DiffPaymentString",
+			"remittanceAmount": float64(1500), "remittanceCurrencyCode": "USD",
+			"paymentTermsCode": "10",
+			"deferredPayment":  "DiffPaymentString",
 		},
 		"valuation": map[string]any{
-			"invoiceAmount":   map[string]any{"amount": float64(1500), "currencyCode": "USD"},
-			"externalFreight": map[string]any{"amount": float64(100), "currencyCode": "USD"},
-			"internalFreight": map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"insurance":       map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"otherCosts":      map[string]any{"amount": float64(0), "currencyCode": "USD"},
-			"deductions":      map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"totalAmountInvoiced": map[string]any{"amount": float64(1500), "currencyCode": "USD"},
+			"externalFreight":     map[string]any{"amount": float64(100), "currencyCode": "USD"},
+			"internalFreight":     map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"insurance":           map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"otherCosts":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
+			"deductions":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
 		},
 		"packages": map[string]any{"totalPackages": float64(10)},
 		"items": []any{map[string]any{
@@ -205,19 +206,20 @@ func TestBuildPayload_CarriesEveryAnnexAField(t *testing.T) {
 	assert.NotContains(t, remittance, "amount", "the pre-v1.6 spelling is gone")
 	value := remittance["remittanceValue"].(map[string]any)
 	assert.Equal(t, float64(1500), value["value"])
-	assert.Equal(t, "USD", value["currencyID"], "the declaration's currency carries to the remittance")
+	assert.Equal(t, "USD", value["currencyID"], "the remittance carries its own currency")
 }
 
+// chargeAmount (Box 22) is read from totalAmountInvoiced.
 func TestBuildPayload_HeaderValuationMapsTotalCustomsValuation(t *testing.T) {
 	form := minimalForm()
 	form["valuation"] = map[string]any{
-		"invoiceAmount":    map[string]any{"amount": float64(2400), "currencyCode": "USD"},
-		"externalFreight":  map[string]any{"amount": float64(100), "currencyCode": "USD"},
-		"internalFreight":  map[string]any{"amount": float64(0), "currencyCode": "USD"},
-		"insurance":        map[string]any{"amount": float64(0), "currencyCode": "USD"},
-		"otherCosts":       map[string]any{"amount": float64(0), "currencyCode": "USD"},
-		"deductions":       map[string]any{"amount": float64(0), "currencyCode": "USD"},
-		"totalGrossWeight": float64(1500),
+		"totalAmountInvoiced": map[string]any{"amount": float64(2400), "currencyCode": "USD"},
+		"externalFreight":     map[string]any{"amount": float64(100), "currencyCode": "USD"},
+		"internalFreight":     map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"insurance":           map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"otherCosts":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"deductions":          map[string]any{"amount": float64(0), "currencyCode": "USD"},
+		"totalGrossWeight":    float64(1500),
 	}
 
 	sub, _, err := BuildPayload(form, "")
@@ -270,17 +272,18 @@ func TestBuildPayload_ItemCustomsValueMapsFromInvoiceAmount(t *testing.T) {
 	assertZeroAmount(t, customsValue["deductions"])
 }
 
-// Remittance currency comes from valuation.invoiceAmount.currencyCode. The
-// form no longer collects invoiceCurrencyCode, so the mapping must not depend
-// on that deleted field.
-func TestBuildPayload_RemittanceUsesInvoiceAmountCurrency(t *testing.T) {
+// Remittance currency comes from financial.remittanceCurrencyCode, not from the
+// Box 22 total invoiced currency: they are different boxes and may differ, so
+// the two currencies here are deliberately different.
+func TestBuildPayload_RemittanceUsesItsOwnCurrency(t *testing.T) {
 	form := minimalForm()
 	form["financial"] = map[string]any{
 		"bankCode": "6010", "bankReference": "RemRefTest",
-		"remittanceAmount": float64(1500), "paymentTermsCode": "10",
+		"remittanceAmount": float64(1500), "remittanceCurrencyCode": "EUR",
+		"paymentTermsCode": "10",
 	}
 	form["valuation"] = map[string]any{
-		"invoiceAmount": map[string]any{"amount": float64(2400), "currencyCode": "USD"},
+		"totalAmountInvoiced": map[string]any{"amount": float64(2400), "currencyCode": "USD"},
 	}
 
 	sub, _, err := BuildPayload(form, "")
@@ -293,7 +296,7 @@ func TestBuildPayload_RemittanceUsesInvoiceAmountCurrency(t *testing.T) {
 	require.NoError(t, json.Unmarshal(encoded, &wire))
 
 	remittance := wire["remittances"].([]any)[0].(map[string]any)
-	assertAmount(t, remittance["remittanceValue"], 1500, "USD")
+	assertAmount(t, remittance["remittanceValue"], 1500, "EUR")
 }
 
 func assertAmount(t *testing.T, raw any, value float64, currency string) {

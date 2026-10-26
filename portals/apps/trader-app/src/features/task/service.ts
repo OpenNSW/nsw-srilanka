@@ -25,6 +25,21 @@ export async function submitTaskStep(
   })
 }
 
+// saveTaskStepDraft stores payload as a draft of the step without completing it.
+// The task's state, step and version stay as they are.
+export async function saveTaskStepDraft(
+  taskId: string,
+  stepId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}/draft`,
+    method: 'PUT',
+    data: { payload },
+    attachToken: true,
+  })
+}
+
 // claimTask claims the task for the signed-in user: POST /claim (204). A 409 means
 // another user holds it or the task is completed; a 403, that the user may not act on
 // the task; a 404, that the deployment does not use claims. Refetch the task either way.

@@ -58,6 +58,25 @@ func TestAttachPrincipal(t *testing.T) {
 		}
 	})
 
+	// The security log sits outside the mux, and the principal is attached on a
+	// child request. The slot is how that outer log still learns who called.
+	t.Run("records the caller for an outer observer", func(t *testing.T) {
+		slot := &RequestCaller{}
+		next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r = r.WithContext(WithRequestCaller(r.Context(), slot))
+		r = r.WithContext(context.WithValue(r.Context(), coreauthn.AuthContextKey, &coreauthn.AuthContext{
+			Client: &coreauthn.ClientContext{ClientID: "FCAU_TO_NSW"},
+		}))
+
+		attachPrincipal(next).ServeHTTP(httptest.NewRecorder(), r)
+
+		if slot.Principal == nil || slot.Principal.Kind != KindClient || slot.Principal.ClientID != "FCAU_TO_NSW" {
+			t.Fatalf("slot principal = %#v", slot.Principal)
+		}
+	})
+
 	// Without a core auth context there is nothing to convert; the request must
 	// proceed unattached so downstream checks deny it, not panic.
 	t.Run("passes through an unauthenticated request", func(t *testing.T) {

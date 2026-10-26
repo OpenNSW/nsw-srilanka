@@ -264,6 +264,11 @@ type CusdecDeclaration struct {
 	CusdecSerial string          `json:"cusdec_serial" gorm:"column:cusdec_serial;index:idx_cusdec_ref"`
 	CusdecNumber int             `json:"cusdec_number" gorm:"column:cusdec_number;index:idx_cusdec_ref"`
 	Errors       json.RawMessage `json:"errors" gorm:"type:jsonb"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	// CaseID and WorkflowID name the case and the workflow the dispatch was
+	// made from, recorded when SLC Edge accepted it. A callback resumes the
+	// task that workflow parked, found through the task store by these.
+	CaseID     string    `json:"case_id" gorm:"column:case_id"`
+	WorkflowID string    `json:"workflow_id" gorm:"column:workflow_id"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }

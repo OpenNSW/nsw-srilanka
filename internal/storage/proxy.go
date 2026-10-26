@@ -64,15 +64,21 @@ func NewProxyService(caller ServiceCaller, cfg ProxyConfig) (*ProxyService, erro
 }
 
 // Upload asks the owning service to allocate a key for the file and presign
-// an upload URL for it.
+// an upload URL for it, on the endpoint it serves users on.
 func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, mime string) (*corestorage.FileMetadata, error) {
+	return s.reserve(ctx, s.cfg.UploadPath, filename, size, mime)
+}
+
+// reserve asks the owning service, on path, to allocate a key for the file and
+// presign an upload URL for it.
+func (s *ProxyService) reserve(ctx context.Context, path, filename string, size int64, mime string) (*corestorage.FileMetadata, error) {
 	var resp struct {
 		corestorage.FileMetadata
 		Error string `json:"error"`
 	}
 	err := s.caller.Call(ctx, s.cfg.Service, remote.Request{
 		Method: http.MethodPost,
-		Path:   s.cfg.UploadPath,
+		Path:   path,
 		Body: remote.JSONBody{V: map[string]any{
 			"filename":  filename,
 			"mime_type": mime,
@@ -92,11 +98,12 @@ func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, 
 	return &meta, nil
 }
 
-// Save stores content on the owning service: it allocates the key there, as
-// Upload does, then puts the content to the presigned URL itself. The owning
-// service decides which MIME types it accepts.
+// Save stores content this deployment generated on the owning service: it
+// allocates the key on the endpoint for such content, as Upload does for a
+// user's file, then puts the content to the presigned URL itself. The owning
+// service decides which MIME types that endpoint accepts.
 func (s *ProxyService) Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error) {
-	meta, err := s.Upload(ctx, filename, size, mime)
+	meta, err := s.reserve(ctx, s.cfg.InternalUploadPath, filename, size, mime)
 	if err != nil {
 		return nil, err
 	}
@@ -133,32 +140,45 @@ func (s *ProxyService) Save(ctx context.Context, filename, mime string, body io.
 
 // GetDownloadURL returns the owning service's time-limited download URL.
 func (s *ProxyService) GetDownloadURL(ctx context.Context, key string) (string, error) {
-	downloadURL, _, err := s.DownloadURL(ctx, key)
-	return downloadURL, err
+	dl, err := s.DownloadURL(ctx, key)
+	return dl.URL, err
 }
 
 // DownloadURL returns the owning service's time-limited download URL together
-// with the Unix time it expires at, as the owning service reported it.
-func (s *ProxyService) DownloadURL(ctx context.Context, key string) (string, int64, error) {
+// with the Unix time it expires at, the type of the file and how the URL
+// serves it, as the owning service reported them. An owning service that
+// reports no disposition leaves it empty.
+func (s *ProxyService) DownloadURL(ctx context.Context, key string) (corestorage.Download, error) {
+	dl, err := s.fileDownload(ctx, key)
+	return corestorage.Download{
+		URL:         dl.DownloadURL,
+		ExpiresAt:   dl.ExpiresAt,
+		ContentType: dl.MimeType,
+		Disposition: dl.Disposition,
+	}, err
+}
+
+// fileDownload returns the owning service's download of the file, with the
+// extension, type and disposition it gives for it, if any.
+func (s *ProxyService) fileDownload(ctx context.Context, key string) (fileDownload, error) {
 	var resp struct {
-		DownloadURL string `json:"download_url"`
-		ExpiresAt   int64  `json:"expires_at"`
-		Error       string `json:"error"`
+		fileDownload
+		Error string `json:"error"`
 	}
 	err := s.caller.Call(ctx, s.cfg.Service, remote.Request{
 		Method: http.MethodGet,
 		Path:   keyPath(s.cfg.DownloadPath, key),
 	}, &resp)
 	if err != nil {
-		return "", 0, remoteFailure("get download URL", err, resp.Error)
+		return fileDownload{}, remoteFailure("get download URL", err, resp.Error)
 	}
 	if resp.DownloadURL == "" {
-		return "", 0, wrapUpstreamFailure("get download URL", errors.New("response missing download_url"))
+		return fileDownload{}, wrapUpstreamFailure("get download URL", errors.New("response missing download_url"))
 	}
 	if err := requireAbsoluteURL(resp.DownloadURL); err != nil {
-		return "", 0, wrapUpstreamFailure("validate download URL", err)
+		return fileDownload{}, wrapUpstreamFailure("validate download URL", err)
 	}
-	return resp.DownloadURL, resp.ExpiresAt, nil
+	return resp.fileDownload, nil
 }
 
 // Download streams the file from the owning service via its download URL.

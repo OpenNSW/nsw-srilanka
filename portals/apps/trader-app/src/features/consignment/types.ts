@@ -91,12 +91,16 @@ export interface ConsignmentItem {
   hsCode: HSCodeDetails
 }
 
+export type CallerRole = 'trader' | 'cha'
+
 export interface ConsignmentSummary {
   id: string
   name?: string
   flow: TradeFlow
   traderId: string
   chaId?: string
+  // The roles the signed-in user acts in on this consignment.
+  callerRoles: CallerRole[]
   state: ConsignmentState
   items: ConsignmentItem[]
   createdAt: string

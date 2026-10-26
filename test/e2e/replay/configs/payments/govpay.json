@@ -7,8 +7,8 @@
     "scopes": ["nsw:payment-webhooks:validate", "nsw:payment-webhooks:process"]
   },
   "identityFields": {
-    "subinstId": "govpay_subinst_id",
-    "serviceid": "govpay_service_id"
+    "subinstId": "subinst_id",
+    "serviceid": "service_id"
   },
   "privateKeyField": "private_key"
 }
