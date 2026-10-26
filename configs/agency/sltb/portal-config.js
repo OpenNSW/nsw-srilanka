@@ -8,7 +8,7 @@ window.__APP_CONFIG__ = {
   IDP_EXTRA_QUERY_PARAMS: 'resource=https://api.sltb.nsw-agency.local',
   APP_URL: 'http://localhost:5179',
   IDP_SCOPES:
-    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:task:claim,nsw:task:release,nsw:storage:read,nsw:storage:write,nsw:profile:read',
+    'openid,profile,email,group,role,ou,nsw:consignment:read,nsw:task:read,nsw:task:write,nsw:storage:read,nsw:storage:write,nsw:profile:read',
   SHOW_AUTOFILL_BUTTON: 'false',
   APP_MODE: 'agency',
 }

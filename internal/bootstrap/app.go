@@ -531,8 +531,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	mux.Handle("POST /api/v1/tasks/{id}/steps/{stepId}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStep)))))
 	mux.Handle("PUT /api/v1/tasks/{id}/steps/{stepId}/draft", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleSaveDraft)))))
 	mux.Handle("POST /api/v1/callbacks/{token}", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleCompleteTaskStepByToken)))))
-	mux.Handle("POST /api/v1/tasks/{id}/claim", withAuth(withScope(scopes.TaskClaim)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleClaimTask)))))
-	mux.Handle("POST /api/v1/tasks/{id}/release", withAuth(withScope(scopes.TaskRelease)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleReleaseTask)))))
+	mux.Handle("POST /api/v1/tasks/{id}/claim", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleClaimTask)))))
+	mux.Handle("POST /api/v1/tasks/{id}/release", withAuth(withScope(scopes.TaskWrite)(taskAuthzGate.Handler(http.HandlerFunc(taskHandler.HandleReleaseTask)))))
 
 	mux.Handle("GET /api/v1/static-data/{id}", withAuth(withScope(scopes.TaskRead)(http.HandlerFunc(staticDataHandler.HandleGet))))
 

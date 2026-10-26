@@ -390,7 +390,7 @@ paths:
 
         The task view changes with the claim, so refetch the task afterwards.
 
-        Requires scope `nsw:task:claim`.
+        Requires scope `nsw:task:write`.
       operationId: claimTask
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -411,7 +411,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            The bearer token lacks scope `nsw:task:claim`, or the caller is a
+            The bearer token lacks scope `nsw:task:write`, or the caller is a
             client (only users can claim tasks).
           content:
             application/json:
@@ -448,9 +448,9 @@ paths:
         Releases the calling user's claim on the task. Releasing a task nobody
         holds succeeds, so a repeated release is harmless. A completed task's
         claim can still be released. Only a user who can read the task may
-        release it, whether or not they may still act on it.
+        release it.
 
-        Requires scope `nsw:task:release`.
+        Requires scope `nsw:task:write`.
       operationId: releaseTask
       parameters:
         - $ref: '#/components/parameters/TaskID'
@@ -472,7 +472,7 @@ paths:
         '403':
           description: |
             Another user holds the claim, the bearer token lacks scope
-            `nsw:task:release`, or the caller is a client.
+            `nsw:task:write`, or the caller is a client.
           content:
             application/json:
               schema:

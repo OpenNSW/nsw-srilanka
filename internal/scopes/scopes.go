@@ -25,12 +25,6 @@ const (
 	// Task resource.
 	TaskRead  = "nsw:task:read"
 	TaskWrite = "nsw:task:write"
-	// TaskClaim and TaskRelease are kept apart from TaskWrite so that machine clients,
-	// which hold TaskWrite to complete steps by callback, cannot claim or release a
-	// task: a claim says which person is working it. Grant them together, or a user
-	// can create a claim they cannot release.
-	TaskClaim   = "nsw:task:claim"
-	TaskRelease = "nsw:task:release"
 
 	// Reference data (read-only).
 	HSCodeRead  = "nsw:hscode:read"
