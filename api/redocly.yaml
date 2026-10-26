@@ -1,0 +1,39 @@
+# Rules for `make api-lint` and the OpenAPI job in docs-ci.yml.
+extends:
+  - recommended
+rules:
+  # The repository has no licence file to point info.license at.
+  info-license: off
+  # Each spec's servers are the local Docker Compose stack: real hosts differ
+  # per deployment. This rule flags localhost.
+  no-server-example.com: off
+  no-server-trailing-slash: error
+  no-empty-servers: error
+  operation-operationId-unique: error
+  operation-4xx-response: warn
+  security-defined: error
+  # Every operation says which scope it needs, where it runs and who calls it.
+  rule/operation-x-required-scope:
+    subject:
+      type: Operation
+      property: x-required-scope
+    assertions:
+      defined: true
+    message: Every operation needs x-required-scope (a scope, or null for a public route).
+    severity: error
+  rule/operation-x-deployment-modes:
+    subject:
+      type: Operation
+      property: x-deployment-modes
+    assertions:
+      defined: true
+    message: Every operation needs x-deployment-modes ([tnsw], [agency] or [tnsw, agency]).
+    severity: error
+  rule/operation-x-callers:
+    subject:
+      type: Operation
+      property: x-callers
+    assertions:
+      defined: true
+    message: Every operation needs x-callers.
+    severity: error

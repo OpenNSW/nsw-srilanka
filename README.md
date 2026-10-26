@@ -23,6 +23,7 @@ nsw-srilanka/
 │   ├── customs/                          #   Customs declaration integration (ASYCUDA)
 │   ├── ephyto/                           #   IPPC ePhyto Hub client
 │   └── slpa/                             #   Sri Lanka Ports Authority (CMS, gate pass, consolidation, invoicing…)
+├── api/                                    # OpenAPI specs for every route (`make api-docs` serves them in Swagger UI)
 ├── test/e2e/replay/                       # End-to-end replay tests (config-driven harness, mock agency/gateway)
 ├── migrations/                            # PostgreSQL migration files (up/down SQL)
 ├── portals/                                # Trader Portal frontend (React/Vite monorepo)
@@ -46,6 +47,8 @@ nsw-srilanka/
 The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which files to load at startup.
 
 For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
+
+The HTTP API is specified in [`api/`](api/): run `make api-docs` and open <http://localhost:8088> to browse it in Swagger UI. To put the backends behind an API gateway, see [api-gateway.md](docs/api-gateway.md).
 
 ---
 

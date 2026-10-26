@@ -8,20 +8,74 @@ info:
     gateways a deployment registers. This deployment registers exactly one
     gateway, `govpay` (`external-integration/payment/govpay`), so this
     document fixes `gatewayId` to that value and describes GovPay+'s own
-    presentment/update wire contract.
+    presentment/update wire contract. Both routes are mounted only in TNSW
+    mode (`mode: tnsw`); an agency deployment does not serve them.
 
     GovPay+ posts the same request envelope (`transactionID`, `subinstId`,
     `serviceid`, `serviceName`, `data[]`) to both endpoints. Field-name
     casing varies across GovPay+ environments — `transactionId`, `suinstId`,
     `serviceId`/`serviced` are also accepted — the schemas below show the
-    primary spelling.
+    primary spelling. `transactionID` may also arrive as a JSON number.
+
+    ## Encryption
+
+    Every call is encrypted to this GO's RSA key (`config.private_key` in
+    the `govpay` entry of `payment_methods.json`):
+
+    - GovPay+ generates a fresh 32-byte AES transaction key per call,
+      encrypts it with RSA-OAEP (SHA-256, MGF1-SHA-256) to this GO's
+      2048-bit public key, and sends it base64-encoded in the
+      `TransactionKey` header.
+    - Each `data[]` item's `seq`, `paramName` and `value` is encrypted
+      separately with AES-256-CBC, PKCS7 padding, and sent as base64. The
+      AES key is SHA-256 of the transaction key and the IV its first 16
+      bytes. The envelope fields (`transactionID`, `subinstId`, `serviceid`,
+      `serviceName`) travel in clear.
+    - A 200 response echoes the envelope in clear and encrypts every string
+      field of each `presentmentData`/`paymentData` object with the same
+      key. Error responses are never encrypted.
+
+    The request body is read as JSON whatever its `Content-Type`, and is
+    limited to 1 MiB.
+
+    ## Authentication
 
     Both routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation, **and** the token's OAuth2
-    client must match this deployment's configured GovPay+ webhook client —
-    scopes are held per client, not per gateway, so this pins the caller to
-    the one entitled to act as GovPay+ for this deployment.
+    client must match this deployment's configured GovPay+ webhook client
+    (`config.webhook_client_id`, `GOVPAY_TO_NSW` locally) — scopes are held
+    per client, not per gateway, so this pins the caller to the one entitled
+    to act as GovPay+ for this deployment. A `TransactionKey` this GO cannot
+    decrypt is also refused as an unverified caller. Nothing else about the
+    caller is checked: there is no signature header and no source-IP check in
+    the code, so any IP allowlist for GovPay+ belongs at the API gateway.
+
+    The posted `subinstId`/`serviceid` are not authentication; they are
+    compared, ignoring case and surrounding space, with the GovPay+ ids the
+    reference's payee is mapped to.
+
+    ## Responses and retries
+
+    The two middleware layers in front of the handler answer 401/403 with
+    the JSON `AuthError` body; the handler itself answers its own errors
+    with `text/plain` bodies, except the GovPay+ presentment envelopes
+    (`GovPayErrorEnvelope`). A 500 is the one status meant to be retried;
+    400, 401, 403, 404 and 422 are permanent for the same request.
+
+    Every response carries an `X-Trace-ID` header. An inbound `X-Trace-ID`,
+    `X-Correlation-ID` or `X-Request-ID` (in that order) is used as the trace
+    id when present.
   version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose (TNSW API)
+
+tags:
+  - name: GovPay+ callbacks
+    description: |
+      Presentment (validate) and update (webhook) calls GovPay+ makes to
+      TNSW. Mounted in TNSW mode only.
 
 security:
   - BearerAuth: []
@@ -29,32 +83,49 @@ security:
 paths:
   /api/v1/payments/{gatewayId}/validate:
     post:
+      tags:
+        - GovPay+ callbacks
       summary: GovPay+ presentment — validate a payment reference
       description: |
         Called by GovPay+ when a payer enters a reference number in their
         banking app, to check whether it is valid and payable and to fetch
-        the fields to display. `data[]` must contain exactly one item named
-        `refNo` (alphanumeric, ≤20 characters).
+        the fields to display. After decryption, `data[]` must contain
+        exactly one item, named `refNo`, whose value is 1–20 printable ASCII
+        characters.
+
+        The 200 response's `presentmentData` lists, in order: the reference
+        number (`label`, returned as `refNo`, `isPaymentReference`), the
+        amount (`textBox`, `decimal`, returned as `amount`,
+        `isPaymentAmount`) and, when the transaction has one, the currency
+        (`label`, returned as `currency`). GovPay+ posts the returned
+        parameters back on the webhook.
 
         Requires scope `nsw:payment-webhooks:validate`.
       operationId: govpayValidateReference
+      x-required-scope: nsw:payment-webhooks:validate
+      x-deployment-modes: [tnsw]
+      x-callers: [govpay]
       parameters:
         - $ref: '#/components/parameters/GatewayID'
+        - $ref: '#/components/parameters/TransactionKey'
       requestBody:
         required: true
+        description: At most 1 MiB. Read as JSON whatever its `Content-Type`.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/PresentmentRequest'
             example:
-              transactionID: "GP-TXN-000123"
-              subinstId: "SLC01"
-              serviceid: "IMPORT_PERMIT"
+              transactionID: "GP000123"
+              subinstId: "004"
+              serviceid: "001"
               serviceName: "Import Permit Fee"
               data:
-                - seq: "1"
-                  paramName: "refNo"
-                  value: "NSW20260001"
+                # seq "1", paramName "refNo", value "NSW20260001", encrypted
+                # under the transaction key 0123456789abcdef0123456789abcdef.
+                - seq: "4tgPaUXON+zCVQy8Qw5v7A=="
+                  paramName: "h+h5+MWiIIaJxdgtJPy31A=="
+                  value: "BVT/f2sI3ha4LGCNTXoC6g=="
       responses:
         '200':
           description: The reference is valid and payable; returns the fields GovPay+ should render.
@@ -63,104 +134,135 @@ paths:
               schema:
                 $ref: '#/components/schemas/PresentmentResponse'
         '400':
-          description: Malformed request envelope (missing `transactionID`, `subinstId`, `serviceid`, or an invalid `data[]`).
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: "gateway ID is required in URL"
-        '401':
-          description: |
-            Missing/invalid bearer token, or the caller's authenticated
-            OAuth2 client does not match the configured GovPay+ webhook
-            client.
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: "unauthorized"
-        '404':
-          description: Unknown reference number, or one registered under a different `subinstId`/`serviceid`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GovPayErrorEnvelope'
-        '409':
-          description: The reference exists but is not payable (already settled or expired).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GovPayErrorEnvelope'
-        '500':
-          description: |
-            Internal error, including a payee whose GovPay+ mapping in
-            payment_methods.json lacks `subinst_id` or `service_id`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GovPayErrorEnvelope'
-
-  /api/v1/payments/{gatewayId}/webhook:
-    post:
-      summary: GovPay+ update — notify a completed payment
-      description: |
-        Called by GovPay+ once a payer has completed payment against a
-        reference. `data[]` carries back the parameters the presentment
-        response marked as returned: `refno`/`refNo` (required), `amount` and
-        `currency`. `paymentmethod`, `gatewaytransactionid` and `timestamp` are
-        read when present. The call itself records the payment as successful;
-        its `amount` and `currency` must match the recorded ones.
-
-        Requires scope `nsw:payment-webhooks:process`.
-      operationId: govpayWebhook
-      parameters:
-        - $ref: '#/components/parameters/GatewayID'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateRequest'
-            example:
-              transactionID: "GP-TXN-000123"
-              subinstId: "SLC01"
-              serviceid: "IMPORT_PERMIT"
-              serviceName: "Import Permit Fee"
-              data:
-                - seq: "1"
-                  paramName: "refNo"
-                  value: "NSW20260001"
-                - seq: "2"
-                  paramName: "amount"
-                  value: "15000.00"
-                - seq: "3"
-                  paramName: "currency"
-                  value: "LKR"
-      responses:
-        '200':
-          description: The payment was recorded; returns the acknowledgement receipt.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UpdateResponse'
-        '400':
-          description: |
-            The request body is missing, too large or unreadable.
+          description: The request body is over 1 MiB or could not be read.
           content:
             text/plain:
               schema:
                 type: string
                 example: "request body too large or unreadable"
         '401':
+          $ref: '#/components/responses/GovPayUnauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
           description: |
-            Missing/invalid bearer token, or the caller's authenticated
-            OAuth2 client does not match the configured GovPay+ webhook
-            client.
+            Unknown reference number, one issued for another gateway, or one
+            registered under a different `subinstId`/`serviceid` — all three
+            get the same answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovPayErrorEnvelope'
+              example:
+                error: "invalid_reference"
+                message: "invalid reference number"
+        '409':
+          description: The reference exists but is not payable (already settled or expired).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovPayErrorEnvelope'
+              example:
+                error: "not_payable"
+                message: "payment already completed, expired, or otherwise not payable for this reference number"
+        '500':
+          description: |
+            Either body:
+
+            - `application/json` (`GovPayErrorEnvelope`, `configuration_error`):
+              the reference's payee has a GovPay+ mapping in
+              payment_methods.json that lacks `subinst_id` or `service_id`.
+            - `text/plain` `internal server error`: anything else, including
+              a malformed or invalid envelope (a missing or ill-formed
+              `transactionID`, `subinstId`, `serviceid` or `serviceName`), a
+              `data[]` that does not decrypt or is not exactly one valid
+              `refNo`, an unknown `gatewayId`, a deployment without
+              `private_key` or `webhook_client_id` configured, a payee that
+              cannot be resolved, or a database failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovPayErrorEnvelope'
+              example:
+                error: "configuration_error"
+                message: "this service is not configured for GovPay payments"
+            text/plain:
+              schema:
+                type: string
+                example: "internal server error"
+
+  /api/v1/payments/{gatewayId}/webhook:
+    post:
+      tags:
+        - GovPay+ callbacks
+      summary: GovPay+ update — notify a completed payment
+      description: |
+        Called by GovPay+ once a payer has completed payment against a
+        reference. After decryption, `data[]` carries back the parameters
+        the presentment response marked as returned: `refNo` (required,
+        1–20 printable ASCII characters), `amount` and `currency`.
+        `paymentmethod`, `gatewaytransactionid` and `timestamp` are read when
+        present; `gatewaytransactionid` defaults to `transactionID`.
+        Parameter names are matched ignoring case.
+
+        The call itself records the payment as successful; its `amount` and
+        `currency` must match the recorded ones, and its
+        `subinstId`/`serviceid` the ids the reference's payee is mapped to.
+        A repeat call for a reference already settled answers 200 with the
+        acknowledgement and changes nothing.
+
+        Requires scope `nsw:payment-webhooks:process`.
+      operationId: govpayWebhook
+      x-required-scope: nsw:payment-webhooks:process
+      x-deployment-modes: [tnsw]
+      x-callers: [govpay]
+      parameters:
+        - $ref: '#/components/parameters/GatewayID'
+        - $ref: '#/components/parameters/TransactionKey'
+      requestBody:
+        required: true
+        description: At most 1 MiB. Read as JSON whatever its `Content-Type`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequest'
+            example:
+              transactionID: "GP000123"
+              subinstId: "004"
+              serviceid: "001"
+              serviceName: "Import Permit Fee"
+              data:
+                # refNo NSW20260001, amount 15000.00, currency LKR, encrypted
+                # under the transaction key 0123456789abcdef0123456789abcdef.
+                - seq: "4tgPaUXON+zCVQy8Qw5v7A=="
+                  paramName: "h+h5+MWiIIaJxdgtJPy31A=="
+                  value: "BVT/f2sI3ha4LGCNTXoC6g=="
+                - seq: "Uv4Du2B3ehREx0jL2ef0Cw=="
+                  paramName: "Juvr6cgDAvk4Bk60gkxr4Q=="
+                  value: "rIFz5CbnolPeOCgrgqpnvQ=="
+                - seq: "mpV0RDNtcklemh3whBrFeQ=="
+                  paramName: "04IQ2dyyhRC9K4vpwZiB6g=="
+                  value: "xs1kkHA+cvrMR2p4IXrDYA=="
+      responses:
+        '200':
+          description: |
+            The payment was recorded, or had been already; returns the
+            acknowledgement receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+        '400':
+          description: The request body is over 1 MiB or could not be read.
           content:
             text/plain:
               schema:
                 type: string
-                example: "unauthorized"
+                example: "request body too large or unreadable"
+        '401':
+          $ref: '#/components/responses/GovPayUnauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No transaction matches the reference number. Permanent — GovPay+ should not retry.
           content:
@@ -169,14 +271,29 @@ paths:
                 type: string
                 example: "unknown payment reference"
         '422':
-          description: The notified amount/currency does not match the transaction on file; never marked paid.
+          description: |
+            The notified amount/currency does not match the transaction on
+            file, or is missing; never marked paid. Permanent.
           content:
             text/plain:
               schema:
                 type: string
                 example: "payment amount mismatch"
         '500':
-          description: Internal error processing the notification.
+          description: |
+            Treated as transient, so GovPay+ may retry. Includes a malformed
+            or invalid envelope or `data[]` (one that does not decrypt, a
+            missing or invalid `refNo`, an `amount` that is not a decimal), a
+            `subinstId`/`serviceid` that does not match the reference's payee
+            (the payment is not settled), a payee mapping lacking its ids, an
+            unknown `gatewayId`, a deployment without `private_key` or
+            `webhook_client_id` configured, or a database failure.
+
+            Also a failure to advance the waiting workflow step after the
+            payment was recorded. A retry does not recover that one: the
+            payment is already recorded, so the retry answers `200` as for a
+            payment already settled, and the step is not resumed. It stays
+            parked for an admin to resolve.
           content:
             text/plain:
               schema:
@@ -189,167 +306,213 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        A JWT access token issued by the deployment's ThunderID IdP, sent as
+        `Authorization: Bearer <token>`. `internal/authn` (over
+        `core/authn`) checks an RS256/RS384/RS512 signature against the IdP's
+        JWKS (by the token's `kid`), the configured issuer (`iss`) and
+        audience (`aud`), and requires `exp` (30 s leeway), `client_id`, and
+        a `grant_type` claim of `authorization_code` (a user) or
+        `client_credentials` (a machine client). The scope is read from the
+        space-delimited `scope` claim.
+
+        GovPay+ must use a `client_credentials` token for its own client: a
+        user token, or one for any other client, is refused with 401 even
+        when it carries the scope.
 
   parameters:
     GatewayID:
       name: gatewayId
       in: path
       required: true
+      description: The registered payment gateway. Any other value answers 500.
       schema:
         type: string
         enum: [govpay]
+    TransactionKey:
+      name: TransactionKey
+      in: header
+      required: true
+      description: |
+        This call's 32-byte AES transaction key, RSA-OAEP (SHA-256)
+        encrypted to this GO's public key, in base64. Missing, or not
+        decryptable with this GO's private key, answers 401.
+      schema:
+        type: string
+        format: byte
+
+  responses:
+    GovPayUnauthorized:
+      description: |
+        Either body:
+
+        - `application/json` (`AuthError`), from the authentication
+          middleware: the `Authorization` header is missing, malformed, or
+          its token fails validation.
+        - `text/plain` `unauthorized`, from the handler: the token is not a
+          machine-client token for the configured GovPay+ webhook client, or
+          the `TransactionKey` header is missing or does not decrypt.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+          examples:
+            missing:
+              value:
+                error: "unauthorized"
+                message: "authentication required"
+            invalid:
+              value:
+                error: "unauthorized"
+                message: "invalid authentication token"
+        text/plain:
+          schema:
+            type: string
+            example: "unauthorized"
+    Forbidden:
+      description: The token lacks the operation's scope (`core/authz`).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthError'
+          example:
+            error: "forbidden"
+            message: "insufficient scope"
 
   schemas:
-    GovPayParam:
+    AuthError:
       type: object
-      required:
-        - paramName
-        - value
-      properties:
-        seq:
-          type: string
-        paramName:
-          type: string
-        value:
-          description: String or number, depending on the field.
-          oneOf:
-            - type: string
-            - type: number
-
-    PresentmentDataItem:
-      type: object
-      description: The single `data[]` item required for presentment — named `refNo`, alphanumeric, ≤20 characters.
-      required:
-        - paramName
-        - value
-      properties:
-        seq:
-          type: string
-        paramName:
-          type: string
-          enum: [refNo]
-        value:
-          type: string
-          pattern: '^[A-Za-z0-9]{1,20}$'
-
-    PresentmentRequest:
-      type: object
-      description: The common GovPay+ request envelope, posted for presentment (validate).
-      required:
-        - data
-      allOf:
-        - anyOf:
-            - required: [transactionID]
-            - required: [transactionId]
-        - anyOf:
-            - required: [subinstId]
-            - required: [suinstId]
-        - anyOf:
-            - required: [serviceid]
-            - required: [serviceId]
-            - required: [serviced]
-      properties:
-        transactionID:
-          type: string
-        transactionId:
-          type: string
-          description: Alias for `transactionID` accepted by some GovPay+ environments.
-        subinstId:
-          type: string
-          pattern: '\S'
-          description: Sub-institution ID this reference must be registered under.
-        suinstId:
-          type: string
-          pattern: '\S'
-          description: Alias for `subinstId` accepted by some GovPay+ environments.
-        serviceid:
-          type: string
-          pattern: '\S'
-          description: Service ID this reference must be registered under.
-        serviceId:
-          type: string
-          pattern: '\S'
-          description: Alias for `serviceid` accepted by some GovPay+ environments.
-        serviced:
-          type: string
-          pattern: '\S'
-          description: Alias for `serviceid` accepted by some GovPay+ environments.
-        serviceName:
-          type: string
-        data:
-          type: array
-          description: Exactly one item, named `refNo`.
-          minItems: 1
-          maxItems: 1
-          items:
-            $ref: '#/components/schemas/PresentmentDataItem'
-
-    UpdateRequest:
-      type: object
-      description: The common GovPay+ request envelope, posted for update (webhook).
-      required:
-        - data
-      allOf:
-        - anyOf:
-            - required: [transactionID]
-            - required: [transactionId]
-        - anyOf:
-            - required: [subinstId]
-            - required: [suinstId]
-        - anyOf:
-            - required: [serviceid]
-            - required: [serviceId]
-            - required: [serviced]
-        - properties:
-            data:
-              not:
-                items:
-                  not:
-                    properties:
-                      paramName:
-                        enum: [refno, refNo]
-                    required: [paramName]
-      properties:
-        transactionID:
-          type: string
-        transactionId:
-          type: string
-          description: Alias for `transactionID` accepted by some GovPay+ environments.
-        subinstId:
-          type: string
-          pattern: '\S'
-        suinstId:
-          type: string
-          pattern: '\S'
-          description: Alias for `subinstId` accepted by some GovPay+ environments.
-        serviceid:
-          type: string
-          pattern: '\S'
-        serviceId:
-          type: string
-          pattern: '\S'
-          description: Alias for `serviceid` accepted by some GovPay+ environments.
-        serviced:
-          type: string
-          pattern: '\S'
-          description: Alias for `serviceid` accepted by some GovPay+ environments.
-        serviceName:
-          type: string
-        data:
-          type: array
-          minItems: 1
-          description: Must include one item named `refno`/`refNo`.
-          items:
-            $ref: '#/components/schemas/GovPayParam'
-
-    GovPayErrorEnvelope:
-      type: object
+      description: |
+        The body the authentication (`core/authn`) and scope
+        (`core/authz`) middleware answer with.
       required:
         - error
         - message
       properties:
         error:
           type: string
+          enum: [unauthorized, forbidden]
+        message:
+          type: string
+          example: "authentication required"
+
+    GovPayParam:
+      type: object
+      description: |
+        One `data[]` item. Each field is a base64 AES-256-CBC ciphertext
+        (see Encryption). Once decrypted, `seq` must be 1–2 digits, and
+        `paramName` and `value` 1–50 printable ASCII characters.
+      required:
+        - seq
+        - paramName
+        - value
+      properties:
+        seq:
+          type: string
+          format: byte
+        paramName:
+          type: string
+          format: byte
+        value:
+          type: string
+          format: byte
+
+    GovPayEnvelope:
+      type: object
+      description: The common GovPay+ request envelope, posted to both endpoints.
+      required:
+        - serviceName
+        - data
+      allOf:
+        - anyOf:
+            - required: [transactionID]
+            - required: [transactionId]
+        - anyOf:
+            - required: [subinstId]
+            - required: [suinstId]
+        - anyOf:
+            - required: [serviceid]
+            - required: [serviceId]
+            - required: [serviced]
+      properties:
+        transactionID:
+          description: GovPay+'s transaction id; 1–20 letters and digits. A string or a JSON number.
+          oneOf:
+            - type: string
+              pattern: '^[A-Za-z0-9]{1,20}$'
+            - type: integer
+        transactionId:
+          description: Alias for `transactionID` accepted by some GovPay+ environments.
+          oneOf:
+            - type: string
+              pattern: '^[A-Za-z0-9]{1,20}$'
+            - type: integer
+        subinstId:
+          type: string
+          pattern: '^[0-9]{1,3}$'
+          description: Sub-institution ID this reference must be registered under.
+        suinstId:
+          type: string
+          pattern: '^[0-9]{1,3}$'
+          description: Alias for `subinstId` accepted by some GovPay+ environments.
+        serviceid:
+          type: string
+          pattern: '^[0-9]{1,3}$'
+          description: Service ID this reference must be registered under.
+        serviceId:
+          type: string
+          pattern: '^[0-9]{1,3}$'
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviced:
+          type: string
+          pattern: '^[0-9]{1,3}$'
+          description: Alias for `serviceid` accepted by some GovPay+ environments.
+        serviceName:
+          type: string
+          maxLength: 50
+          pattern: '^[ -~]*\S[ -~]*$'
+          description: 1–50 printable ASCII characters.
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/GovPayParam'
+
+    PresentmentRequest:
+      description: |
+        The envelope, posted for presentment (validate). Once decrypted,
+        `data[]` must be exactly one item named `refNo`.
+      allOf:
+        - $ref: '#/components/schemas/GovPayEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              minItems: 1
+              maxItems: 1
+
+    UpdateRequest:
+      description: |
+        The envelope, posted for update (webhook). Once decrypted, `data[]`
+        must include one item named `refNo` (any case), and should include
+        `amount` and `currency`.
+      allOf:
+        - $ref: '#/components/schemas/GovPayEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              minItems: 1
+
+    GovPayErrorEnvelope:
+      type: object
+      description: GovPay+'s error envelope. Never encrypted.
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          enum: [invalid_reference, not_payable, configuration_error]
           example: "not_payable"
         message:
           type: string
@@ -357,68 +520,85 @@ components:
 
     PresentmentObject:
       type: object
-      description: One renderable field in a presentment response.
+      description: |
+        One renderable field in a presentment response. Every property is a
+        string holding a base64 AES-256-CBC ciphertext (see Encryption); the
+        plaintext is shown in each description. `objData` and `tableData`
+        are never sent.
       required:
         - objType
         - seq
         - id
         - placeholder
+        - initialValue
         - datatype
+        - maxLength
+        - selectionType
+        - mask
+        - notNull
+        - enabled
+        - returned
+        - rows
+        - cols
+        - returnedParam
+        - isPaymentReference
+        - isPaymentAmount
+        - returnedValue
       properties:
         objType:
           type: string
-          example: "label"
+          description: '`label` or `textBox`.'
         seq:
           type: string
+          description: Position, from `1`.
         id:
           type: string
+          description: Seven digits derived from `seq`, such as `0010001`.
         placeholder:
           type: string
+          description: '`Reference Number`, `Amount To Be Paid` or `Currency`.'
         initialValue:
-          description: String or number.
-          oneOf:
-            - type: string
-            - type: number
+          type: string
+          description: The reference number, the amount, or the currency code.
         datatype:
           type: string
-          example: "decimal"
+          description: '`text` or `decimal`.'
         maxLength:
-          type: integer
+          type: string
+          description: '`20`, `13` or `8`.'
         selectionType:
           type: string
-          example: "SINGLE"
+          description: Always `SINGLE`.
         mask:
           type: string
+          description: Always empty.
         notNull:
           type: string
-          example: "true"
+          description: Always `true`.
         enabled:
           type: string
-          example: "true"
+          description: Always `false`.
         returned:
           type: string
-          example: "true"
+          description: Always `true`.
         rows:
-          type: integer
+          type: string
+          description: Always `1`.
         cols:
-          type: integer
+          type: string
+          description: Always `1`.
         returnedParam:
           type: string
+          description: '`refNo`, `amount` or `currency`: the name GovPay+ returns the value under on the webhook.'
         isPaymentReference:
-          type: boolean
-        isPaymentAmount:
-          type: boolean
-        returnValue:
           type: string
-        objData:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              data:
-                type: string
+          description: '`true` for the reference number, otherwise `false`.'
+        isPaymentAmount:
+          type: string
+          description: '`true` for the amount, otherwise `false`.'
+        returnedValue:
+          type: string
+          description: Always empty.
 
     PresentmentResponse:
       type: object
@@ -426,17 +606,22 @@ components:
         - transactionID
         - subinstId
         - serviceid
+        - serviceName
         - message
         - presentmentData
       properties:
         transactionID:
           type: string
+          description: Echoed from the request, in clear.
         subinstId:
           type: string
+          description: Echoed from the request, in clear.
         serviceid:
           type: string
+          description: Echoed from the request, in clear.
         serviceName:
           type: string
+          description: Echoed from the request, in clear.
         message:
           type: string
           example: "Success"
@@ -447,50 +632,78 @@ components:
 
     PaymentItem:
       type: object
-      description: One field in an update-response receipt — echoes a submitted data[] item, or the appended receipt number/status.
+      description: |
+        One field in an update-response receipt — echoes a submitted
+        `data[]` item, or the appended receipt number or status. Every
+        property is a string holding a base64 AES-256-CBC ciphertext (see
+        Encryption); the plaintext is shown in each description.
+        `tableData` is never sent.
       required:
         - objType
         - seq
         - id
         - placeholder
+        - initialValue
         - datatype
+        - maxLength
+        - selectionType
+        - mask
+        - notNull
+        - enabled
+        - returned
+        - rows
+        - cols
+        - returnedParam
+        - returnedValue
       properties:
         objType:
           type: string
-          example: "label"
+          description: Always `label`.
         seq:
           type: string
+          description: The submitted item's `seq`, or the next position for the appended items.
         id:
           type: string
+          description: Seven digits derived from the position, such as `0010001`.
         placeholder:
           type: string
+          description: The submitted `paramName`, `Receipt Number` or `Status`.
         initialValue:
-          description: String or number.
-          oneOf:
-            - type: string
-            - type: number
+          type: string
+          description: The submitted value, `REC-<transactionID>`, or `Payment recorded`.
         datatype:
           type: string
+          description: Always `text`.
         maxLength:
-          type: integer
+          type: string
+          description: Always `50`.
         selectionType:
           type: string
+          description: Always `SINGLE`.
         mask:
           type: string
+          description: Always empty.
         notNull:
           type: string
+          description: Always `true`.
         enabled:
           type: string
+          description: Always `false`.
         returned:
           type: string
+          description: Always `false`.
         rows:
-          type: integer
+          type: string
+          description: Always `1`.
         cols:
-          type: integer
+          type: string
+          description: Always `1`.
         returnedParam:
           type: string
-        returnValue:
+          description: Always empty.
+        returnedValue:
           type: string
+          description: Always empty.
 
     UpdateResponse:
       type: object
@@ -498,17 +711,22 @@ components:
         - transactionID
         - subinstId
         - serviceid
+        - serviceName
         - message
         - paymentData
       properties:
         transactionID:
           type: string
+          description: Echoed from the request, in clear.
         subinstId:
           type: string
+          description: Echoed from the request, in clear.
         serviceid:
           type: string
+          description: Echoed from the request, in clear.
         serviceName:
           type: string
+          description: Echoed from the request, in clear.
         message:
           type: string
           example: "Success"
