@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/temporal"
+	"gopkg.in/yaml.v3"
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
@@ -42,6 +43,10 @@ type Config struct {
 	Temporal     temporal.Config     `yaml:"temporal"`
 	Otel         telemetry.Config    `yaml:"otel"`
 	Integrations integrations.Config `yaml:"integrations"`
+
+	// metricsSection is set when config.yaml still has a top-level metrics
+	// key, including an empty or null value. The section was renamed to otel.
+	metricsSection bool `yaml:"-"`
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
 
@@ -113,8 +118,8 @@ func (s ServerConfig) Validate() error {
 // configs/config.yaml) and validates it. The file is mandatory. Settings the
 // server can't run without are checked by Validate, so one left out fails
 // here, at startup, rather than when it is first used. Optional settings left
-// out take Go's zero value (false, 0, empty), and unrecognised keys are
-// ignored.
+// out take Go's zero value (false, 0, empty). A metrics section is rejected.
+// Other unrecognised keys are ignored.
 //
 // The server reads only two env vars itself: CONFIG_PATH and APP_ENV. Every
 // other setting is in the config file. A secret may still come from the
@@ -134,6 +139,34 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// UnmarshalYAML records a leftover metrics key, then decodes the document.
+// An empty or null value still counts: only the key's presence matters.
+func (c *Config) UnmarshalYAML(node *yaml.Node) error {
+	type plain Config
+	var raw plain
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	*c = Config(raw)
+	c.metricsSection = mappingHasKey(node, "metrics")
+	return nil
+}
+
+func mappingHasKey(node *yaml.Node, key string) bool {
+	if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
+		node = node.Content[0]
+	}
+	if node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
 }
 
 // loadFile decodes config.yaml at path, resolving its placeholders. It does
@@ -200,6 +233,9 @@ func (c *Config) Validate() error {
 // validateAuxiliary checks the remaining config sections. Kept separate so
 // Validate stays under the gocyclo limit.
 func (c *Config) validateAuxiliary() error {
+	if c.metricsSection {
+		return fmt.Errorf("config section \"metrics\" was renamed to \"otel\"")
+	}
 	if err := c.Temporal.Validate(); err != nil {
 		return fmt.Errorf("invalid temporal configuration: %w", err)
 	}
