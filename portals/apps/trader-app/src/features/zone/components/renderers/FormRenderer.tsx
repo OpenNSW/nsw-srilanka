@@ -394,14 +394,17 @@ function HandleButton({
   // only disabled.
   pending: boolean
 }) {
-  const { t } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
-  const disabled = submitting
-  let label = handle.label
-  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : 'Submitting...'
   return (
-    <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
-      {label}
+    <Button
+      onClick={() => onClick(handle)}
+      size="3"
+      variant={style.variant}
+      color={style.color}
+      disabled={submitting}
+      loading={pending}
+    >
+      {handle.label}
     </Button>
   )
 }

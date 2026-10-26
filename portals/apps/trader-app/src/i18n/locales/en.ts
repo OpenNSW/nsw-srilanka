@@ -136,7 +136,7 @@ const en = {
       backToConsignment: 'Back to consignment',
       backToCase: 'Back to case',
       draftSaved: 'Draft saved',
-      savingDraft: 'Saving…',
+      stillProcessing: 'Still processing. Check back shortly.',
       unsaved: {
         title: 'Leave without saving?',
         description: 'Your answers on this form have not been saved. If you leave now, they will be lost.',
@@ -151,7 +151,6 @@ const en = {
         fetchFailed: 'Failed to fetch task details.',
         notFound: 'Task not found.',
         submitFailed: 'Failed to submit task. Please try again.',
-        submitNotSent: 'We saved your answers, but the application was not sent. Try again, or contact support.',
         draftFailed: 'Failed to save the draft. Please try again.',
         staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
       },
