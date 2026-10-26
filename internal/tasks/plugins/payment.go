@@ -22,10 +22,10 @@ type PaymentPlugin struct {
 	paymentService payment.PaymentService
 }
 
-// referenceLifetime is how long a payment reference stays payable. A reference
-// does not expire: the trader can pay it until it is settled. core/payment
-// requires an expiry in the future, so it is set far enough ahead never to be
-// reached.
+// referenceLifetime is how long a payment reference stays payable: a year, so the
+// trader is not held to paying it within a day. A reference that never expired
+// would also never pick up a change to the fee it was issued for, so this is a
+// stopgap until checkouts follow such changes (#899).
 const referenceLifetime = 365 * 24 * time.Hour
 
 // NewPaymentPlugin creates a new PaymentPlugin.

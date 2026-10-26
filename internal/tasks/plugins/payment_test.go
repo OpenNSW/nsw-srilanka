@@ -185,17 +185,16 @@ func TestPaymentPlugin_Execute_FallsBackToConfiguredAmountWhenNoInput(t *testing
 		"expected the configured amount to reach the gateway, got %s", svc.lastReq.Amount)
 }
 
-// A payment reference does not expire: the checkout asks for an expiry so far
-// ahead that the reference stays payable until it is settled.
-func TestPaymentPlugin_Execute_ReferenceDoesNotExpire(t *testing.T) {
+// A payment reference stays payable for a year, not a day.
+func TestPaymentPlugin_Execute_ReferenceStaysPayableForAYear(t *testing.T) {
 	svc := &fakePaymentService{resp: &payment.CreateCheckoutResponse{SessionID: "session-1", ReferenceNumber: "TNSW-1", Type: payment.FlowTypeRedirect}}
 	p := NewPaymentPlugin(svc)
 
 	err := p.Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
 
 	require.ErrorIs(t, err, ErrSuspended)
-	assert.True(t, svc.lastReq.ExpiresAt.After(time.Now().AddDate(50, 0, 0)),
-		"expected the reference never to expire, got an expiry of %s", svc.lastReq.ExpiresAt)
+	assert.WithinDuration(t, time.Now().Add(365*24*time.Hour), svc.lastReq.ExpiresAt, time.Minute,
+		"expected the reference to stay payable for a year")
 }
 
 // The checkout carries the token for the step that dispatched it, so the
