@@ -85,7 +85,9 @@ export function LoginScreen() {
 
           <h1 className="hidden lg:block text-3xl font-bold text-foreground leading-tight mb-5">{systemName}</h1>
 
-          <p className="text-md text-foreground-muted leading-relaxed text-center lg:text-left">{description}</p>
+          <p className="text-md text-foreground-muted leading-relaxed text-center lg:text-left whitespace-pre-line">
+            {description}
+          </p>
 
           {partnerLogos && partnerLogos.some((logo) => logo.url) && (
             <div className="flex flex-row flex-wrap items-center justify-center lg:justify-start gap-4 mt-5">
