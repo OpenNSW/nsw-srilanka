@@ -181,15 +181,8 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 	// browser in proxy mode, so neither is read there.
 	t.Run("proxy mode needs none", func(t *testing.T) {
 		cfg := Config{
-			Config: corestorage.Config{Type: TypeProxy},
-			Proxy: ProxyConfig{
-				Service:            "files-api",
-				UploadPath:         DefaultProxyUploadPath,
-				InternalUploadPath: DefaultProxyInternalUploadPath,
-				DownloadPath:       DefaultProxyDownloadPath,
-				DeletePath:         DefaultProxyDeletePath,
-				AllowedUploadTypes: []string{"application/pdf"},
-			},
+			Config:      corestorage.Config{Type: TypeProxy},
+			Proxy:       defaultProxyConfig(),
 			TokenKeyset: testTokenKeyset,
 		}
 		if err := cfg.Validate(); err != nil {

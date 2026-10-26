@@ -28,4 +28,11 @@ func TestInternalUploadTypesByClient(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `"nobody" is not a client in the catalog`) {
 		t.Errorf("an unknown client: %v, want an error naming it", err)
 	}
+
+	// A proxy serves no internal upload route, so it reads none.
+	proxy := nswstorage.Config{AllowedInternalUploadTypes: map[string][]string{"nobody": {"text/html"}}}
+	proxy.Type = nswstorage.TypeProxy
+	if got, err := internalUploadTypesByClient(proxy, cat); err != nil || len(got) != 0 {
+		t.Errorf("in proxy mode: %v, %v, want an empty map", got, err)
+	}
 }

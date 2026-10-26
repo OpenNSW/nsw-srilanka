@@ -142,11 +142,11 @@ func (u *uploadCounter) Upload(context.Context, string, int64, string) (*coresto
 }
 
 // A limited uploader refuses a type outside its list before anything is sent on,
-// and compares the media type alone.
+// and a fixed list is compared with the whole string, as the owning service does.
 func TestLimitTypes(t *testing.T) {
 	next := &uploadCounter{}
 	up := limitTypes(next, anyCaller([]string{"application/pdf"}))
-	for _, mimeType := range []string{"text/html", generated, "application/zip", "text/ html", "application/pdf2"} {
+	for _, mimeType := range []string{"text/html", generated, "application/zip", "text/ html", "application/pdf2", "Application/PDF", "application/pdf; q=1"} {
 		if _, err := up.Upload(context.Background(), "f", 10, mimeType); !errors.Is(err, corestorage.ErrContentTypeNotAllowed) {
 			t.Errorf("%q: error %v, want ErrContentTypeNotAllowed", mimeType, err)
 		}
@@ -154,7 +154,7 @@ func TestLimitTypes(t *testing.T) {
 	if next.uploads != 0 {
 		t.Errorf("%d refused uploads reached the next uploader", next.uploads)
 	}
-	if _, err := up.Upload(context.Background(), "f", 10, "Application/PDF; x=y"); err != nil || next.uploads != 1 {
+	if _, err := up.Upload(context.Background(), "f", 10, "application/pdf"); err != nil || next.uploads != 1 {
 		t.Errorf("an allowed type: error %v, %d uploads, want one", err, next.uploads)
 	}
 }

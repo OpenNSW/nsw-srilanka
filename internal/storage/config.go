@@ -23,15 +23,6 @@ const KeyPlaceholder = "{key}"
 // when storage.tokenTTLSeconds is unset: one hour.
 const DefaultTokenTTLSeconds = 3600
 
-// Default ProxyConfig endpoint paths: the storage routes this application
-// itself mounts, so a proxy onto another deployment of it needs none set.
-const (
-	DefaultProxyUploadPath         = "/api/v1/storage"
-	DefaultProxyInternalUploadPath = "/api/v1/internal/storage"
-	DefaultProxyDownloadPath       = "/api/v1/storage/" + KeyPlaceholder
-	DefaultProxyDeletePath         = "/api/v1/storage/" + KeyPlaceholder
-)
-
 // Config is the storage configuration. Type (storage.type) selects either
 // TypeProxy, which uses Proxy, or a core/storage backend, which uses the
 // embedded core/storage settings. Those are inlined, so in config.yaml they sit
@@ -185,11 +176,11 @@ type ProxyConfig struct {
 	// DeletePath is its delete endpoint (DELETE). Must contain {key}.
 	DeletePath string `yaml:"deletePath"`
 	// AllowedUploadTypes are the MIME types this deployment's users may upload;
-	// any other is refused with 415 before the file is sent on. Required: the
-	// owning service checks the upload too, but this deployment states what its
-	// own users may send. It does not apply to what this deployment generates
-	// and saves itself. List no type a browser opens as a document, such as
-	// text/html: the owning service may serve it inline.
+	// any other is refused with 415 before the file is sent on. Each is compared
+	// exactly with the upload's type, as the owning service compares it, and the
+	// owning service's own list decides what it accepts. Required: this
+	// deployment states what its own users may send. It does not apply to what
+	// this deployment generates and saves itself.
 	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
 }
 

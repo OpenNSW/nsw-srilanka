@@ -89,8 +89,8 @@ storage:
     downloadPath: /api/v1/storage/{key}
     deletePath: /api/v1/storage/{key}
     # What this agency's officers may upload; anything else is refused with
-    # 415 before it is sent to TNSW, which checks it as well. List no HTML or
-    # SVG type: a browser runs script from those when TNSW serves them inline.
+    # 415 before it is sent to TNSW. Each is compared exactly with the upload's
+    # type, as TNSW compares it, and TNSW's own list decides what it accepts.
     allowedUploadTypes:
       - application/pdf
       - image/jpeg

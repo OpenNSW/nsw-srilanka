@@ -17,13 +17,12 @@ type Uploader interface {
 	Upload(ctx context.Context, filename string, size int64, mime string) (*corestorage.FileMetadata, error)
 }
 
-// typePolicy decides whether the caller in ctx may upload a media type.
-type typePolicy func(ctx context.Context, mediaType string) bool
+// typePolicy decides whether the caller in ctx may upload a file of the type
+// the upload names, as sent.
+type typePolicy func(ctx context.Context, mimeType string) bool
 
-// limitedUploader refuses an upload whose media type the policy does not allow,
-// with corestorage.ErrContentTypeNotAllowed, before next sees it. The media type
-// is compared without its parameters and case, so "text/html; charset=utf-8"
-// is text/html; next still gets the type as sent.
+// limitedUploader refuses an upload whose type the policy does not allow, with
+// corestorage.ErrContentTypeNotAllowed, before next sees it.
 type limitedUploader struct {
 	next   Uploader
 	allows typePolicy
@@ -34,31 +33,36 @@ func limitTypes(next Uploader, allows typePolicy) Uploader {
 }
 
 func (u limitedUploader) Upload(ctx context.Context, filename string, size int64, mimeType string) (*corestorage.FileMetadata, error) {
-	mt, ok := mediaType(mimeType)
-	if !ok || !u.allows(ctx, mt) {
+	if !u.allows(ctx, mimeType) {
 		return nil, fmt.Errorf("%w: %q", corestorage.ErrContentTypeNotAllowed, mimeType)
 	}
 	return u.next.Upload(ctx, filename, size, mimeType)
 }
 
-// anyCaller allows exactly the given media types, whoever calls.
+// anyCaller allows exactly the given types, whoever calls, comparing the whole
+// string as core/storage does.
 func anyCaller(types []string) typePolicy {
 	set := typeSet(types)
-	return func(_ context.Context, mt string) bool {
-		_, ok := set[mt]
+	return func(_ context.Context, mimeType string) bool {
+		_, ok := set[mimeType]
 		return ok
 	}
 }
 
 // machineClient allows base to every caller, and to a machine client the extra
-// types granted to its client ID as well.
+// types granted to its client ID as well. It compares the media type alone,
+// without parameters and case, so "text/html; charset=utf-8" is text/html.
 func machineClient(base []string, extra map[string][]string) typePolicy {
 	allowed := typeSet(base)
 	extras := make(map[string]map[string]struct{}, len(extra))
 	for clientID, types := range extra {
 		extras[clientID] = typeSet(types)
 	}
-	return func(ctx context.Context, mt string) bool {
+	return func(ctx context.Context, mimeType string) bool {
+		mt, ok := mediaType(mimeType)
+		if !ok {
+			return false
+		}
 		if _, ok := allowed[mt]; ok {
 			return true
 		}
@@ -71,17 +75,19 @@ func machineClient(base []string, extra map[string][]string) typePolicy {
 	}
 }
 
-// logged records the uploads an Uploader prepares for a machine client.
+// logged records the uploads an Uploader prepares for a machine client, and
+// those it refuses or fails.
 type logged struct{ next Uploader }
 
 func (l logged) Upload(ctx context.Context, filename string, size int64, mimeType string) (*corestorage.FileMetadata, error) {
 	meta, err := l.next.Upload(ctx, filename, size, mimeType)
-	if err != nil {
-		return nil, err
-	}
 	var clientID string
 	if p, ok := authn.FromContext(ctx); ok {
 		clientID = p.ClientID
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "storage: machine upload not prepared", "client_id", clientID, "mime_type", mimeType, "size", size, "error", err)
+		return nil, err
 	}
 	slog.InfoContext(ctx, "storage: machine upload prepared", "client_id", clientID, "mime_type", mimeType, "size", size)
 	return meta, nil

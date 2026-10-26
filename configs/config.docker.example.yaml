@@ -275,8 +275,8 @@ storage:
   #   downloadPath: /api/v1/storage/{key}
   #   deletePath: /api/v1/storage/{key}
   #   # What this deployment's users may upload; any other type is refused with
-  #   # 415 before it is sent on, and the owning service checks it as well. List
-  #   # no type a browser opens as a document, such as text/html.
+  #   # 415 before it is sent on. Each is compared exactly with the upload's type,
+  #   # as the owning service compares it, which decides what it accepts.
   #   allowedUploadTypes:
   #     - application/pdf
 

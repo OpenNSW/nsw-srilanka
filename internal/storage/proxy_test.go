@@ -86,10 +86,10 @@ func newRegistry(t *testing.T, url, token string) *remote.Manager {
 func defaultProxyConfig() ProxyConfig {
 	return ProxyConfig{
 		Service:            "files-api",
-		UploadPath:         DefaultProxyUploadPath,
-		InternalUploadPath: DefaultProxyInternalUploadPath,
-		DownloadPath:       DefaultProxyDownloadPath,
-		DeletePath:         DefaultProxyDeletePath,
+		UploadPath:         "/api/v1/storage",
+		InternalUploadPath: "/api/v1/internal/storage",
+		DownloadPath:       "/api/v1/storage/{key}",
+		DeletePath:         "/api/v1/storage/{key}",
 		AllowedUploadTypes: []string{"application/pdf"},
 	}
 }
