@@ -1,5 +1,6 @@
 import { createContext } from 'react'
 import type { ThemeProps } from '@radix-ui/themes'
+import { getBooleanEnv } from '@/runtimeConfig'
 
 // The named Radix palette nearest each scheme's --color-primary. Radix's
 // accent scale itself is derived from --color-primary in index.css (the
@@ -55,3 +56,10 @@ export interface ColorSchemeContextType {
 }
 
 export const ColorSchemeContext = createContext<ColorSchemeContextType | undefined>(undefined)
+
+// The scheme switcher is a demo control: a deployment shows it in the footer
+// only with SHOW_COLOR_SCHEME_SWITCHER set to 'true'. Without it, every
+// visitor gets the default scheme, whatever an earlier visit chose.
+export function showColorSchemeSwitcher(): boolean {
+  return getBooleanEnv('SHOW_COLOR_SCHEME_SWITCHER')
+}
