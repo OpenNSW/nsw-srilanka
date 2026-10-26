@@ -18,6 +18,7 @@ interface DownloadMetadataResponse {
   expires_at: number
   extension?: string
   mime_type?: string
+  disposition?: 'inline' | 'attachment'
 }
 
 export interface UploadResponse {
@@ -59,6 +60,9 @@ export interface DownloadUrlResponse {
   // to name a file the user saves or tell whether a browser can show it.
   extension?: string
   mimeType?: string
+  // How the URL serves the file. The renderer's View opens a saved file in a
+  // tab only when it is "inline", and downloads it otherwise.
+  disposition?: 'inline' | 'attachment'
 }
 
 export async function getDownloadUrl(key: string): Promise<DownloadUrlResponse> {
@@ -71,5 +75,11 @@ export async function getDownloadUrl(key: string): Promise<DownloadUrlResponse> 
     ? new URL(data.download_url, API_BASE_URL).toString()
     : data.download_url
 
-  return { url, expiresAt: data.expires_at, extension: data.extension, mimeType: data.mime_type }
+  return {
+    url,
+    expiresAt: data.expires_at,
+    extension: data.extension,
+    mimeType: data.mime_type,
+    disposition: data.disposition,
+  }
 }

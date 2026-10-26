@@ -9,6 +9,10 @@ export const UIConfigSchema = z.object({
     favicon: z.string().optional(),
     portalName: z.string().optional(),
     description: z.string().optional(),
+    // Optional. Rendered as its own paragraph under description on the login
+    // screen, and emphasised. A deployment can use this or a newline in
+    // description; omitting it leaves the login copy unchanged.
+    tagline: z.string().optional(),
     heroImageUrl: z.string().optional(),
     partnerLogos: z.array(z.object({ url: z.string(), alt: z.string() })).optional(),
     // key selects a known footer page — its visible label is translated in
