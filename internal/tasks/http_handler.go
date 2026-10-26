@@ -103,8 +103,8 @@ func NewHTTPHandler(
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
 // caller: they must own the task's consignment in a role the task's render
 // config admits, and the claims resolved for them decide which sections of the
-// view they see. The response also says who holds the task's claim, and the claim
-// facts (ClaimFactMine etc.) are passed to the renderer with the role claims.
+// view they see. Where claims are on, the response also says who holds the task's
+// claim.
 //
 //	GET /api/v1/tasks/{id}
 func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
@@ -163,8 +163,7 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The claim comes from the stored record: the view only swaps file values.
-	zv, err := h.Assembler.Assemble(ctx, view, withClaimFacts(claims, in, record))
+	zv, err := h.Assembler.Assemble(ctx, view, claims)
 	if err != nil {
 		httputil.InternalServerError(w, r, "tasks: failed to assemble zone view", err, "taskId", taskID)
 		return
@@ -180,7 +179,13 @@ func (h *HTTPHandler) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 		TargetID:   taskID,
 		Failure:    false,
 	})
-	httputil.JSON(w, http.StatusOK, taskResponse{ZoneView: zv, Claim: h.claimOf(ctx, in, record)})
+	resp := taskResponse{ZoneView: zv}
+	if h.ClaimsEnabled {
+		// From the stored record, not the view: the view only swaps file values.
+		claim := h.claimOf(ctx, in, record)
+		resp.Claim = &claim
+	}
+	httputil.JSON(w, http.StatusOK, resp)
 }
 
 // canAct reports whether in may act on record's active step. A failure to

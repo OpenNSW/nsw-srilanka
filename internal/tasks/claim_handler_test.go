@@ -271,9 +271,11 @@ func TestHandleGetTask_ShowsTheClaim(t *testing.T) {
 				fetcher.record.ClaimedAt = &at
 			}
 			h := getTaskHandler(t, fetcher, &stubTemplates{})
+			h.ClaimsEnabled = true
 			h.Users = names
 
 			got := viewTask(t, h, tt.in).Claim
+			require.NotNil(t, got)
 
 			assert.Equal(t, tt.wantHolder, got.Holder)
 			assert.Equal(t, tt.wantMine, got.Mine)
@@ -294,6 +296,7 @@ func TestHandleGetTask_ClaimIsReportedOnlyUnderClaim(t *testing.T) {
 	fetcher := claimedHSCodeTask("user-secret-2")
 	fetcher.record.ClaimedAt = &at
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
+	h.ClaimsEnabled = true
 	h.Users = fakeUserService{names: map[string]string{"user-secret-2": "other@example.com"}}
 
 	recorder := getTask(t, h, chaUser())
@@ -316,41 +319,29 @@ func TestHandleGetTask_ClaimHolderNameIsBestEffort(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := getTaskHandler(t, claimedHSCodeTask("user-2"), &stubTemplates{})
+			h.ClaimsEnabled = true
 			h.Users = users
 
 			got := viewTask(t, h, chaUser()).Claim
+			require.NotNil(t, got)
 
 			assert.Equal(t, &claimHolder{}, got.Holder)
 		})
 	}
 }
 
-// claimGatedRenderConfig shows one section per claim fact, so the view shows which
-// fact was true for the caller.
-const claimGatedRenderConfig = `{
-  "read": { "roles": ["cha"] },
-  "sections": {
-    "mine":  { "templateId": "t", "projector": "MARKDOWN", "visibleWhen": { "requireClaim": "claim:mine" } },
-    "other": { "templateId": "t", "projector": "MARKDOWN", "visibleWhen": { "requireClaim": "claim:other" } },
-    "none":  { "templateId": "t", "projector": "MARKDOWN", "visibleWhen": { "requireClaim": "claim:none" } }
-  }
-}`
+// Where the deployment does not use claims, the task view carries no claim, not even
+// a stored one, so a client shows no claim controls.
+func TestHandleGetTask_NoClaimWhereClaimsAreOff(t *testing.T) {
+	h := getTaskHandler(t, claimedHSCodeTask("user-2"), &stubTemplates{})
 
-// Exactly one claim fact is true, so a render config can show each caller the
-// section that fits who holds the claim.
-func TestHandleGetTask_ClaimFactsGateSections(t *testing.T) {
-	for holder, want := range map[string]string{"": "none", testUserID: "mine", "user-2": "other"} {
-		t.Run(want, func(t *testing.T) {
-			fetcher := claimedHSCodeTask(holder)
-			fetcher.record.RenderConfig = json.RawMessage(claimGatedRenderConfig)
+	recorder := getTask(t, h, chaUser())
 
-			resp := viewTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), chaUser())
-
-			view := decodeSlots(t, resp.ZoneView)
-			assert.Len(t, view, 1, "view = %v", view)
-			assert.Contains(t, view, want)
-		})
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var body map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	assert.NotContains(t, body, "claim")
+	assert.NotContains(t, body, "claimed_by")
 }
 
 // The other user's id is not revealed in the conflict response.

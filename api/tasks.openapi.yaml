@@ -38,9 +38,8 @@ paths:
         expires after the deployment's `storage.tokenTTLSeconds`; refetch
         the task for fresh ones.
 
-        The response says who holds the task's claim (`claim`). Sections of
-        the view can depend on it: the render config can gate a section on
-        the facts `claim:mine`, `claim:other` and `claim:none`.
+        Where claims are on, the response says who holds the task's claim
+        (`claim`).
 
         Requires scope `nsw:task:read`.
       operationId: getTask
@@ -649,12 +648,12 @@ components:
           format: date-time
 
     TaskResponse:
-      description: The task's zone view plus its claim, as the caller sees it.
+      description: |
+        The task's zone view plus its claim, as the caller sees it. `claim` is
+        present only where claims are on.
       allOf:
         - $ref: '#/components/schemas/ZoneView'
         - type: object
-          required:
-            - claim
           properties:
             claim:
               $ref: '#/components/schemas/TaskClaim'

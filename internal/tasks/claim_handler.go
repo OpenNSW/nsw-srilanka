@@ -24,15 +24,6 @@ const (
 	errClaimsOff         = "task claims are not used in this deployment"
 )
 
-// Claim facts passed to the renderer with the caller's role claims, so a render
-// config can show or hide a section by who holds the task's claim, e.g.
-// "visibleWhen": {"requireClaim": "claim:mine"}. Exactly one is true on every read.
-const (
-	ClaimFactMine  = "claim:mine"  // the caller holds the claim
-	ClaimFactOther = "claim:other" // another user holds it
-	ClaimFactNone  = "claim:none"  // nobody holds it
-)
-
 // UserService resolves a user's id to the name shown for them, such as a claim holder's.
 type UserService interface {
 	// GetDisplayName returns the name to show for userID, or "" when there is none.
@@ -40,10 +31,10 @@ type UserService interface {
 }
 
 // taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
-// and who holds the task's claim, as seen by the caller.
+// and, where claims are on, who holds the task's claim, as seen by the caller.
 type taskResponse struct {
 	zoneview.ZoneView
-	Claim taskClaim `json:"claim"`
+	Claim *taskClaim `json:"claim,omitempty"`
 }
 
 // taskClaim is the task's claim as the caller sees it. It is always present, so a
@@ -84,20 +75,6 @@ func (h *HTTPHandler) claimOf(ctx context.Context, in taskauthz.Input, record st
 		c.Holder.Name = name
 	}
 	return c
-}
-
-// withClaimFacts returns the caller's role claims with the claim facts added, for
-// the renderer.
-func withClaimFacts(claims map[string]bool, in taskauthz.Input, record store.TaskRecord) map[string]bool {
-	out := make(map[string]bool, len(claims)+3)
-	for k, v := range claims {
-		out[k] = v
-	}
-	mine := isClaimHolder(in, record)
-	out[ClaimFactMine] = mine
-	out[ClaimFactOther] = record.ClaimedBy != "" && !mine
-	out[ClaimFactNone] = record.ClaimedBy == ""
-	return out
 }
 
 // isClaimHolder reports whether the caller holds record's claim. A caller without a
