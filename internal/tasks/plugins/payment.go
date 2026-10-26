@@ -22,6 +22,12 @@ type PaymentPlugin struct {
 	paymentService payment.PaymentService
 }
 
+// referenceLifetime is how long a payment reference stays payable: a year, so the
+// trader is not held to paying it within a day. A reference that never expired
+// would also never pick up a change to the fee it was issued for, so this is a
+// stopgap until checkouts follow such changes (#899).
+const referenceLifetime = 365 * 24 * time.Hour
+
 // NewPaymentPlugin creates a new PaymentPlugin.
 func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
 	return &PaymentPlugin{
@@ -122,7 +128,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 		Payee:         payee,
 		Amount:        amount,
 		Currency:      currency,
-		ExpiresAt:     time.Now().Add(24 * time.Hour), // Aligned with typical TTL
+		ExpiresAt:     time.Now().Add(referenceLifetime),
 		Metadata:      buildPaymentMetadata(ctx.Record.TaskID, selectedMethod, referenceMetadata),
 		CallbackToken: callbackToken,
 	})
