@@ -9,11 +9,11 @@ info:
 
     A claim records which user is working a task. A user may claim a task
     they can read and may act on, by the rule that governs submitting its
-    active step. Whether claims are used, and whether one is needed to
-    submit a step, is the deployment's policy: an agency requires a claim to
-    submit, and TNSW does not use claims, so claim and release answer 404
-    there. The task view's `claim.required_to_submit` says which applies to
-    the caller.
+    active step in the task's current state. Whether claims are used, and
+    whether one is needed to submit a step, is the deployment's policy: an
+    agency requires a claim to submit, and TNSW does not use claims, so
+    claim and release answer 404 there. The task view's
+    `claim.required_to_submit` says which applies to the caller.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
@@ -438,7 +438,7 @@ paths:
           description: |
             The bearer token lacks scope `nsw:task:claim`, the caller is a
             client (only users can claim tasks), or the caller can read the
-            task but may not act on it.
+            task but may not act on its active step in its current state.
           content:
             application/json:
               schema:

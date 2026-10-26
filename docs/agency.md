@@ -158,7 +158,7 @@ before acting on it, and the task shows everyone who holds it:
 - `POST /api/v1/tasks/{id}/claim` claims the task for the caller. Claiming a task you
   already hold succeeds. Another officer's claim is a 409. An officer who can open the
   task but may not act on it, because the active step's `authz` rule names no role they
-  hold, gets a 403.
+  hold for the task's current state, gets a 403.
 - `POST /api/v1/tasks/{id}/release` releases it. Only the holder can release (403
   otherwise), whether or not they can still act on the task; releasing a task nobody
   holds succeeds.
@@ -177,11 +177,12 @@ with `claim` but not `release` could create a claim nobody can release. Claims a
 releases, and their refusals, are recorded in the audit trail as task updates. The full
 contract is in `api/tasks.openapi.yaml`.
 
-Who may claim follows who may act. The active step's `authz` rule (see
-[Roles per task](#roles-per-task)) names the roles that may run its commands, in any
-state, and an officer may claim the task when they hold and own one of them. A step
-that declares no rule is not role-restricted on writes either, so there, and before
-the task has an active step, the read check is all there is.
+Who may claim follows who may act. An officer may claim a task when the active step's
+`authz` rule (see [Roles per task](#roles-per-task)) names a role they hold and own for
+the task's current state. This is the same check that decides whether they can submit
+the step. So nobody can claim a task while it waits on another party, such as an
+external system, or before it has an active step. A step that declares no rule can't
+be claimed either, since it can't be submitted. Claiming a completed task is a 409.
 
 Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
 `claimed_at`, added by migration `000028`). The claim lasts until its holder releases
