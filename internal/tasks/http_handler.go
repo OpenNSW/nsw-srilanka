@@ -202,8 +202,7 @@ func (h *HTTPHandler) canAct(ctx context.Context, record store.TaskRecord, in ta
 //
 // {stepId} is the step being completed: the step_id the task view reported. Core
 // completes only that step, so a submission for a step the task has since left is
-// rejected (409) instead of applied to a later one. Where the deployment requires a
-// claim to submit, a user who does not hold the task's claim is refused (403).
+// rejected (409) instead of applied to a later one.
 func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Request) {
 	// TODO: retrieve the authenticated context and validate it against the
 	// task's ownership bounds before completing the step.
@@ -217,9 +216,6 @@ func (h *HTTPHandler) HandleCompleteTaskStep(w http.ResponseWriter, r *http.Requ
 	if stepID == "" {
 		slog.ErrorContext(r.Context(), "tasks: missing step id in request", "taskId", taskID)
 		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
-		return
-	}
-	if !h.requireClaim(w, r, taskID, "taskId", taskID, "stepId", stepID) {
 		return
 	}
 
@@ -255,10 +251,6 @@ func (h *HTTPHandler) HandleCompleteTaskStepByToken(w http.ResponseWriter, r *ht
 		slog.WarnContext(r.Context(), "tasks: invalid callback token", "error", err)
 		h.auditTaskUpdate(r.Context(), "", true, taskAuditMeta(http.StatusBadRequest, "invalid_callback_token"))
 		httputil.Error(w, r, http.StatusBadRequest, errInvalidCallbackToken)
-		return
-	}
-	// Meant for clients, which need no claim, but a user can call it too.
-	if !h.requireClaim(w, r, taskID, "taskId", taskID, "stepId", stepID) {
 		return
 	}
 

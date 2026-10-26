@@ -21,7 +21,6 @@ const (
 	errClaimHeld         = "this task is claimed by another user; refetch it to see who"
 	errClaimTaskComplete = "this task is completed and can no longer be claimed"
 	errNotClaimHolder    = "this task is claimed by another user"
-	errClaimRequired     = "claim this task before acting on it"
 	errClaimsOff         = "task claims are not used in this deployment"
 	errClaimNotPermitted = "you may not act on this task, so you cannot claim it"
 )
@@ -286,71 +285,9 @@ func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record s
 	}
 }
 
-// requireClaim enforces the deployment's claim policy on a step submission. When
-// the caller is a user and the deployment requires a claim to submit
-// (taskauthz.ClaimsRequired), they must hold the task's claim; otherwise
-// it answers 403 (404 for a missing task) and returns false. It returns true when
-// the submission may go ahead.
-//
-// Clients are never held to it: they complete steps by callback token and cannot
-// hold a claim. Users are held to it on the callback route as well, because a
-// callback token is not signed and a user who can see a task's step can build one.
-//
-// The check and the submission are separate calls, so a holder who releases the
-// claim while their submission is in flight can still have it accepted. The
-// workflow accepts only one submission per step, so the step is never completed
-// twice. This is safe only because nobody but the holder can release a claim: a
-// forced or supervisor release would let another user take the claim between the
-// check and the submission, and would need the check fenced with the submission
-// (see core taskflow's integration guide).
-//
-// It is enforced here, not in the authz extension: the extension runs only for steps
-// that declare it, and a claim requirement has to hold for every step. Who holds the
-// claim is told only to someone who could open the task. Anyone else gets the same
-// denial the authz extension gives. Every refusal is audited as a refused submission.
-func (h *HTTPHandler) requireClaim(w http.ResponseWriter, r *http.Request, taskID string, logAttrs ...any) bool {
-	ctx := r.Context()
-	in, ok := taskauthz.InputFromContext(ctx)
-	if !ok || in.Kind != taskauthz.KindUser || in.Claims != taskauthz.ClaimsRequired {
-		return true
-	}
-
-	record, ok := h.Store.GetTask(ctx, taskID)
-	switch {
-	case !ok:
-		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
-		return false
-	case isClaimHolder(in, record):
-		return true
-	}
-
-	// Only a refusal gets here, so a holder's submission costs no read check.
-	canRead, err := h.readable(ctx, in, record)
-	if err != nil {
-		httputil.InternalServerError(w, r, "tasks: failed to resolve read access", err, logAttrs...)
-		return false
-	}
-	switch {
-	case !canRead:
-		slog.InfoContext(ctx, "tasks: submission refused: no read access", logAttrs...)
-		h.auditClaim(ctx, taskID, "submit", "task read access denied")
-		httputil.Error(w, r, http.StatusForbidden, errForbiddenTaskAction)
-	case record.ClaimedBy == "":
-		slog.InfoContext(ctx, "tasks: submission refused: task not claimed", logAttrs...)
-		h.auditClaim(ctx, taskID, "submit", "task is not claimed")
-		httputil.Error(w, r, http.StatusForbidden, errClaimRequired)
-	default:
-		slog.InfoContext(ctx, "tasks: submission refused: task claimed by another user", logAttrs...)
-		h.auditClaim(ctx, taskID, "submit", "task is claimed by another user")
-		httputil.Error(w, r, http.StatusForbidden, errNotClaimHolder)
-	}
-	return false
-}
-
-// auditClaim records a claim or release of a task, or a submission refused for want
-// of its claim (op "submit"). failure is the reason it was refused, or "" when it was
-// applied. The audit trail has no claim action of its own, so all are updates to the
-// task, told apart by the operation.
+// auditClaim records a claim or release of a task. failure is the reason it was
+// refused, or "" when it was applied. The audit trail has no claim action of its
+// own, so both are updates to the task, told apart by the operation.
 func (h *HTTPHandler) auditClaim(ctx context.Context, taskID, op, failure string) {
 	metadata := map[string]any{"operation": op}
 	if failure != "" {

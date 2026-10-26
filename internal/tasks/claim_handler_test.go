@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -334,7 +332,7 @@ func TestHandleClaimTask_MapsManagerErrors(t *testing.T) {
 	}
 }
 
-// --- the claim policy on step submissions ------------------------------------
+// --- tasks with a claim --------------------------------------------------------
 
 // claimedHSCodeTask is the pending HS-code task, claimed by holder ("" for unclaimed).
 func claimedHSCodeTask(holder string) *fakeTaskFetcher {
@@ -343,146 +341,11 @@ func claimedHSCodeTask(holder string) *fakeTaskFetcher {
 	return f
 }
 
-// submitForClaimPolicy submits a step of the test task as in, through the portal route or,
-// with byToken, the callback route. The body has no command: a submission the claim
-// check lets through is then rejected by body validation (400) before it reaches the
-// task manager, which these handlers do not have.
-func submitForClaimPolicy(t *testing.T, h *HTTPHandler, in *taskauthz.Input, byToken bool) *httptest.ResponseRecorder {
-	t.Helper()
-	h.MaxRequestBytes = 1024
-	recorder := httptest.NewRecorder()
-	if byToken {
-		token, err := callbacktoken.Encode("6aad0417-9a6d-4407-9509-2e51d8fcae99", "ca7ed707-1dba-43ca-94bf-10eddf00df3c")
-		require.NoError(t, err)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/"+token, strings.NewReader(`{}`))
-		req.SetPathValue("token", token)
-		if in != nil {
-			req = req.WithContext(taskauthz.WithInput(req.Context(), *in))
-		}
-		h.HandleCompleteTaskStepByToken(recorder, req)
-		return recorder
-	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", strings.NewReader(`{}`))
-	req.SetPathValue("id", testTaskID)
-	req.SetPathValue("stepId", "step-1")
-	if in != nil {
-		req = req.WithContext(taskauthz.WithInput(req.Context(), *in))
-	}
-	h.HandleCompleteTaskStep(recorder, req)
-	return recorder
-}
-
 // agencyUser is a user in a deployment that requires a claim to submit.
 func agencyUser() *taskauthz.Input {
 	in := chaUser()
 	in.Claims = taskauthz.ClaimsRequired
 	return in
-}
-
-func TestSubmitStep_ClaimPolicy(t *testing.T) {
-	client := &taskauthz.Input{Kind: taskauthz.KindClient, ClientID: "NSW_TO_CDA", Claims: taskauthz.ClaimsRequired}
-
-	tests := []struct {
-		name       string
-		fetcher    *fakeTaskFetcher
-		in         *taskauthz.Input
-		wantStatus int
-		wantBody   string
-	}{
-		{"holder may submit", claimedHSCodeTask(testUserID), agencyUser(), http.StatusBadRequest, errInvalidRequestBody},
-		{"unclaimed task is refused", claimedHSCodeTask(""), agencyUser(), http.StatusForbidden, errClaimRequired},
-		{"another user's claim is refused", claimedHSCodeTask("user-2"), agencyUser(), http.StatusForbidden, errNotClaimHolder},
-		{"missing task", &fakeTaskFetcher{}, agencyUser(), http.StatusNotFound, errTaskNotFound},
-		{"no claim needed where the deployment does not require one", claimedHSCodeTask(""), chaUser(), http.StatusBadRequest, errInvalidRequestBody},
-		{"a client never needs a claim", claimedHSCodeTask("user-2"), client, http.StatusBadRequest, errInvalidRequestBody},
-	}
-	for _, tt := range tests {
-		for _, byToken := range []bool{false, true} {
-			name := tt.name + " (portal route)"
-			if byToken {
-				name = tt.name + " (callback route)"
-			}
-			t.Run(name, func(t *testing.T) {
-				recorder := submitForClaimPolicy(t, getTaskHandler(t, tt.fetcher, &stubTemplates{}), tt.in, byToken)
-
-				assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
-				assert.Contains(t, recorder.Body.String(), tt.wantBody)
-			})
-		}
-	}
-}
-
-// Who holds the claim is told only to someone who could open the task. A user the
-// task's read policy excludes gets the authz extension's denial, with no word about
-// the claim, on both routes.
-func TestSubmitStep_ClaimStateIsNotToldToANonReader(t *testing.T) {
-	for _, holder := range []string{"", "user-2"} {
-		for _, byToken := range []bool{false, true} {
-			t.Run(fmt.Sprintf("holder %q, by token %v", holder, byToken), func(t *testing.T) {
-				fetcher := traderOnlyTask() // admits no CHA, so agencyUser cannot read it
-				fetcher.record.ClaimedBy = holder
-
-				recorder := submitForClaimPolicy(t, getTaskHandler(t, fetcher, &stubTemplates{}), agencyUser(), byToken)
-
-				assert.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
-				assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
-				assert.NotContains(t, strings.ToLower(recorder.Body.String()), "claim")
-			})
-		}
-	}
-}
-
-// A submission refused for want of the claim is audited, with the reason.
-func TestSubmitStep_ClaimRefusalIsAudited(t *testing.T) {
-	tests := []struct {
-		name    string
-		fetcher *fakeTaskFetcher
-		reason  string
-	}{
-		{"unclaimed", claimedHSCodeTask(""), "task is not claimed"},
-		{"claimed by another user", claimedHSCodeTask("user-2"), "task is claimed by another user"},
-		{"cannot read the task", traderOnlyTask(), "task read access denied"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client, auditor := nswaudit.NewWithCapture()
-			h := getTaskHandler(t, tt.fetcher, &stubTemplates{})
-			h.Audit = client
-
-			recorder := submitForClaimPolicy(t, h, agencyUser(), false)
-
-			require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
-			require.Len(t, auditor.Records(), 1)
-			e := auditor.Records()[0]
-			assert.Equal(t, nswaudit.StatusFailure, e.Status)
-			assert.Equal(t, "submit", e.Metadata["operation"])
-			assert.Equal(t, tt.reason, e.Metadata["error"])
-		})
-	}
-}
-
-// A user with no internal user id never matches a claim, not even an unclaimed task's
-// empty holder.
-func TestSubmitStep_UserWithoutUserIDNeverHoldsTheClaim(t *testing.T) {
-	in := agencyUser()
-	in.UserID = ""
-
-	recorder := submitForClaimPolicy(t, getTaskHandler(t, claimedHSCodeTask(""), &stubTemplates{}), in, false)
-
-	assert.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
-}
-
-// Where no claim is required the task is not even read: the policy check costs
-// nothing in TNSW.
-func TestSubmitStep_NoLookupWhenNoClaimIsRequired(t *testing.T) {
-	for _, policy := range []taskauthz.ClaimPolicy{taskauthz.ClaimsOff, taskauthz.ClaimsOptional} {
-		in := chaUser()
-		in.Claims = policy
-		fetcher := claimedHSCodeTask("")
-		submitForClaimPolicy(t, getTaskHandler(t, fetcher, &stubTemplates{}), in, false)
-
-		assert.Zero(t, fetcher.calls, "policy %v", policy)
-	}
 }
 
 // --- the claim on the task view ------------------------------------------------
