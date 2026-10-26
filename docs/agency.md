@@ -184,7 +184,7 @@ that declares no rule is not role-restricted on writes either, so there, and bef
 the task has an active step, the read check is all there is.
 
 Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
-`claimed_at`, added by migration `000025`). The claim lasts until its holder releases
+`claimed_at`, added by migration `000028`). The claim lasts until its holder releases
 it: across every step of the task, and after the task completes, as a record of who
 worked on it. There is no expiry and no forced release yet, so an officer who leaves
 keeps their claims.
