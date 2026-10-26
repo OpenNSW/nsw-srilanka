@@ -16,7 +16,7 @@ import (
 // notes listed against it, the declarant and exporter codes, and the
 // consignment's container rows, and records the prefill under its output
 // namespace. It retrieves only the dispatch notes, and a failed retrieve still
-// completes the step.
+// completes the step, with the prefill not reported as retrieved.
 func TestBoatNotePrefill_RecordsThePrefill(t *testing.T) {
 	var sent []map[string]any
 	plugin := &BoatNotePrefillPlugin{post: func(_ context.Context, serviceID, path string, body any) (map[string]any, error) {
@@ -33,7 +33,7 @@ func TestBoatNotePrefill_RecordsThePrefill(t *testing.T) {
 		Inputs: map[string]any{
 			"declaration": map[string]any{"generalSegment": map[string]any{"transportVesselName": "EVER GIVEN"}},
 			"cdn_refs": []any{
-				map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": float64(1), "status": "ACKNOWLEDGED"},
+				map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": float64(1), "status": "Registered"},
 			},
 			"userform": map[string]any{"traders": map[string]any{
 				"declarant": map[string]any{"code": "D0012345"},
@@ -56,7 +56,7 @@ func TestBoatNotePrefill_RecordsThePrefill(t *testing.T) {
 			"vessel":     "EVER GIVEN",
 			"containers": []map[string]any{{"cdn_number": "CBEX1/2026/C/1"}},
 		},
-		"retrieved": true,
+		"retrieved": false,
 	}, ctx.Record.Data["boat_note_prefill"])
 }
 

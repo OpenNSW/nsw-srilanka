@@ -32,8 +32,9 @@ type Input struct {
 	Fallback      []map[string]any
 }
 
-// Result is the prefilled boat note form, and whether it was built from the
-// retrieved declaration. Form always carries a containers array.
+// Result is the prefilled boat note form, and whether it was built from what
+// Customs holds: the retrieved declaration and, when it lists dispatch notes, at
+// least one of them. Form always carries a containers array.
 type Result struct {
 	Form      map[string]any
 	Retrieved bool
@@ -64,14 +65,16 @@ func Prefill(ctx context.Context, call Caller, in Input) Result {
 
 	notes := make([]map[string]any, 0, len(refs))
 	rows := make([]map[string]any, 0, len(refs))
+	retrieved := false
 	for _, r := range refs {
 		note := retrieveCDN(ctx, call, r, in)
+		retrieved = retrieved || note != nil
 		notes = append(notes, note)
 		rows = append(rows, containerRow(r.String(), note))
 	}
 	form["containers"] = rows
 	dispatchFields(form, notes)
-	return Result{Form: form, Retrieved: true}
+	return Result{Form: form, Retrieved: retrieved}
 }
 
 // retrieveCDN fetches one dispatch note (§7.8). The company code must match the
@@ -175,19 +178,24 @@ func containerRow(number string, note map[string]any) map[string]any {
 	return row
 }
 
+// cancelledStatus is ASYCUDA World's status for a cancelled dispatch note
+// (§7.7), the only one listed against a declaration that is not live: a note
+// whose integration failed is never registered, so it is never listed (§7.2).
+const cancelledStatus = "Cancelled"
+
 // activeCDNRefs reads the dispatch notes listed against the declaration
 // (cdnRefs), leaving out any Customs cancelled.
 func activeCDNRefs(cdnRefs []map[string]any) []document.Reference {
 	var refs []document.Reference
 	for _, r := range cdnRefs {
-		if strings.Contains(strings.ToLower(document.Str(r, "status")), "cancel") {
+		if strings.EqualFold(document.Str(r, "status"), cancelledStatus) {
 			continue
 		}
-		n, ok := document.Float(r["number"])
-		if !ok {
+		n, err := document.WholeNumber(r["number"])
+		if err != nil {
 			continue
 		}
-		ref := document.Reference{Office: document.Text(r, "office"), Year: document.Text(r, "year"), Serial: document.Text(r, "serial"), Number: int(n)}
+		ref := document.Reference{Office: document.Text(r, "office"), Year: document.Text(r, "year"), Serial: document.Text(r, "serial"), Number: n}
 		if ref.IsValid() {
 			refs = append(refs, ref)
 		}

@@ -65,7 +65,9 @@ const declaration = `{
 		"cdnRefs": [
 			{"office": "CBEX1", "year": "2026", "serial": "C", "number": 1, "status": "Registered"},
 			{"office": "CBEX1", "year": "2026", "serial": "C", "number": 2, "status": "Cancelled"},
-			{"office": "CBEX1", "year": "2026", "serial": "C", "number": 3, "status": "Registered"}
+			{"office": "CBEX1", "year": "2026", "serial": "C", "number": 3, "status": "Registered"},
+			{"office": "CBEX1", "year": "2026", "serial": "C", "number": 4.5, "status": "Registered"},
+			{"office": "CBEX1", "year": "2026", "serial": "C", "number": 5, "status": "CANCELLED"}
 		]
 	}
 }`
@@ -157,6 +159,16 @@ func TestPrefill_ANoteNotRetrievedKeepsItsRow(t *testing.T) {
 
 	require.Len(t, got.Form["containers"], 2)
 	assert.Equal(t, map[string]any{"cdn_number": "CBEX1/2026/C/3"}, got.Form["containers"].([]map[string]any)[1])
+	assert.True(t, got.Retrieved, "one of the notes was retrieved")
+}
+
+// When no listed dispatch note can be retrieved, the rows carry only their
+// numbers, and the form is not reported as built from what Customs holds.
+func TestPrefill_NoNoteRetrievedIsNotRetrieved(t *testing.T) {
+	got := Prefill(context.Background(), &fakeEdge{}, retrievedInput(t, declaration))
+
+	require.Len(t, got.Form["containers"], 2)
+	assert.False(t, got.Retrieved)
 }
 
 // Without a retrieved declaration (the retrieve failed, or answered without
