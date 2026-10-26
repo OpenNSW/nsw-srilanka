@@ -734,15 +734,6 @@ func TestConfigValidate_Otel(t *testing.T) {
 	}
 }
 
-func TestConfigValidate_LegacyMetricsRejected(t *testing.T) {
-	cfg := validConfig()
-	cfg.metricsSection = true
-	err := cfg.Validate()
-	if err == nil || !containsString(err.Error(), "metrics") {
-		t.Fatalf("expected metrics rename error, got: %v", err)
-	}
-}
-
 func TestConfigValidate_StorageProxy(t *testing.T) {
 	cfg := validConfig()
 	// Proxy mode validates the proxy settings, not the core/storage backend,

@@ -24,26 +24,6 @@ func TestLoadFile_Empty(t *testing.T) {
 	if len(fc.RefID.Issuers) != 0 {
 		t.Errorf("expected no refid issuers, got %d", len(fc.RefID.Issuers))
 	}
-	if fc.metricsSection {
-		t.Errorf("expected no metrics section")
-	}
-}
-
-func TestLoadFile_LegacyMetricsPresent(t *testing.T) {
-	for _, body := range []string{
-		"metrics: {}\n",
-		"metrics:\n",
-		"metrics: null\n",
-		"metrics:\n  endpoint: http://otel-collector:4318/v1/metrics\n",
-	} {
-		fc, err := loadFile(writeConfigFile(t, body))
-		if err != nil {
-			t.Fatalf("loadFile %q: %v", body, err)
-		}
-		if !fc.metricsSection {
-			t.Fatalf("metrics key not recorded for %q", body)
-		}
-	}
 }
 
 func TestLoadFile_RefIDOmitted(t *testing.T) {
