@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/OpenNSW/core/taskflow/orchestrator"
+	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
@@ -25,19 +26,28 @@ const (
 	opRelease = "release"
 )
 
-// fakeClaimer records the claim calls that reach it and returns err.
+// fakeClaimer records the claim calls that reach it and returns err, or claimErr or
+// releaseErr from that call when set.
 type fakeClaimer struct {
-	err   error
-	calls []string // "claim:<task>:<holder>" or "release:<task>:<holder>"
+	err        error
+	claimErr   error
+	releaseErr error
+	calls      []string // "claim:<task>:<holder>" or "release:<task>:<holder>"
 }
 
 func (f *fakeClaimer) ClaimTask(_ context.Context, taskID, holder string) error {
 	f.calls = append(f.calls, "claim:"+taskID+":"+holder)
+	if f.claimErr != nil {
+		return f.claimErr
+	}
 	return f.err
 }
 
 func (f *fakeClaimer) ReleaseTask(_ context.Context, taskID, holder string) error {
 	f.calls = append(f.calls, "release:"+taskID+":"+holder)
+	if f.releaseErr != nil {
+		return f.releaseErr
+	}
 	return f.err
 }
 
@@ -195,7 +205,7 @@ func TestHandleClaimTask_MapsManagerErrors(t *testing.T) {
 		wantBody   string
 		wantAudit  bool
 	}{
-		{"claim held by another user", opClaim, &orchestrator.ClaimHeldError{Holder: "user-2"}, http.StatusConflict, errClaimHeld, true},
+		{"claim taken meanwhile", opClaim, &orchestrator.ClaimHeldError{Holder: "user-2"}, http.StatusConflict, errClaimChanged, true},
 		{"claim on a completed task", opClaim, orchestrator.ErrTaskCompleted, http.StatusConflict, errClaimTaskComplete, true},
 		{"release by another user", opRelease, orchestrator.ErrNotClaimHolder, http.StatusForbidden, errNotClaimHolder, true},
 		{"task gone", opClaim, orchestrator.ErrTaskNotFound, http.StatusNotFound, errTaskNotFound, false},
@@ -214,6 +224,86 @@ func TestHandleClaimTask_MapsManagerErrors(t *testing.T) {
 			} else {
 				assert.Empty(t, auditor.Records())
 			}
+		})
+	}
+}
+
+// --- takeover ---------------------------------------------------------------
+
+// Claiming a task another user holds takes it over: their claim is released, then the
+// caller claims it, and the audit trail records whose claim was taken over.
+func TestHandleClaimTask_TakesOverAnotherUsersClaim(t *testing.T) {
+	claimer, auditor := &fakeClaimer{}, &nswaudit.CaptureSink{}
+	recorder := sendClaim(claimHandler(t, claimedHSCodeTask("user-2"), claimer, auditor), opClaim, chaUser())
+
+	require.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
+	assert.Equal(t, []string{"release:" + testTaskID + ":user-2", "claim:" + testTaskID + ":" + testUserID}, claimer.calls)
+	require.Len(t, auditor.Records(), 1)
+	e := auditor.Records()[0]
+	assert.Equal(t, nswaudit.StatusSuccess, e.Status)
+	assert.Equal(t, "takeover", e.Metadata["operation"])
+	assert.Equal(t, "user-2", e.Metadata["previous_holder"])
+}
+
+// Claiming a task you already hold is a plain claim, not a takeover.
+func TestHandleClaimTask_OwnClaimIsNotTakenOver(t *testing.T) {
+	claimer, auditor := &fakeClaimer{}, &nswaudit.CaptureSink{}
+	recorder := sendClaim(claimHandler(t, claimedHSCodeTask(testUserID), claimer, auditor), opClaim, chaUser())
+
+	require.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
+	assert.Equal(t, []string{"claim:" + testTaskID + ":" + testUserID}, claimer.calls)
+	require.Len(t, auditor.Records(), 1)
+	assert.Equal(t, "claim", auditor.Records()[0].Metadata["operation"])
+	assert.NotContains(t, auditor.Records()[0].Metadata, "previous_holder")
+}
+
+// A completed task keeps its claim as the record of who worked it: it is refused
+// before the holder's claim could be released.
+func TestHandleClaimTask_CompletedTaskIsNotTakenOver(t *testing.T) {
+	fetcher := claimedHSCodeTask("user-2")
+	fetcher.record.State = store.StateCompleted
+	claimer, auditor := &fakeClaimer{}, &nswaudit.CaptureSink{}
+
+	recorder := sendClaim(claimHandler(t, fetcher, claimer, auditor), opClaim, chaUser())
+
+	assert.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), errClaimTaskComplete)
+	assert.Empty(t, claimer.calls, "the task manager must not be reached")
+	require.Len(t, auditor.Records(), 1)
+	assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
+}
+
+// When the claim changes while it is being taken over, the caller is told to refetch:
+// either the holder's claim was no longer theirs to release, or someone else claimed
+// the task between the release and the claim.
+func TestHandleClaimTask_TakeoverRace(t *testing.T) {
+	tests := []struct {
+		name      string
+		claimer   *fakeClaimer
+		wantCalls []string
+	}{
+		{
+			"the claim moved before the release",
+			&fakeClaimer{releaseErr: orchestrator.ErrNotClaimHolder},
+			[]string{"release:" + testTaskID + ":user-2"},
+		},
+		{
+			"someone claimed between the release and the claim",
+			&fakeClaimer{claimErr: &orchestrator.ClaimHeldError{Holder: "user-3"}},
+			[]string{"release:" + testTaskID + ":user-2", "claim:" + testTaskID + ":" + testUserID},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auditor := &nswaudit.CaptureSink{}
+			recorder := sendClaim(claimHandler(t, claimedHSCodeTask("user-2"), tt.claimer, auditor), opClaim, chaUser())
+
+			assert.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), errClaimChanged)
+			assert.Equal(t, tt.wantCalls, tt.claimer.calls)
+			require.Len(t, auditor.Records(), 1)
+			assert.Equal(t, "takeover", auditor.Records()[0].Metadata["operation"])
+			assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
 		})
 	}
 }

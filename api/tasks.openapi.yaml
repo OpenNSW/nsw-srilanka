@@ -383,10 +383,13 @@ paths:
       summary: Claim a task
       description: |
         Claims the task for the calling user, so others can see who is working
-        on it. Claiming a task you already hold succeeds and keeps the original
-        claim time. Only a user who can read the task may claim it; anyone else
-        gets the same 404 as for a missing task. The claim lasts until its
-        holder releases it, including after the task completes.
+        on it. A claim is a hint, not a lock: submitting a step never checks
+        it. Claiming a task you already hold succeeds and keeps the original
+        claim time. If another user holds the claim, the caller takes it over:
+        the holder's claim is released and the caller's recorded. Only a user
+        who can read the task may claim it; anyone else gets the same 404 as
+        for a missing task. The claim lasts until its holder releases it or
+        someone takes it over, including after the task completes.
 
         The task view changes with the claim, so refetch the task afterwards.
 
@@ -428,8 +431,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: |
-            Another user holds the claim (refetch the task to see who), or the
-            task is completed and can no longer be claimed.
+            The task is completed and can no longer be claimed or taken over,
+            or the claim changed while it was being taken over (refetch the
+            task and try again).
           content:
             application/json:
               schema:
@@ -448,7 +452,8 @@ paths:
         Releases the calling user's claim on the task. Releasing a task nobody
         holds succeeds, so a repeated release is harmless. A completed task's
         claim can still be released. Only a user who can read the task may
-        release it.
+        release it. Nobody releases another user's claim: they claim the task
+        to take it over.
 
         Requires scope `nsw:task:write`.
       operationId: releaseTask
