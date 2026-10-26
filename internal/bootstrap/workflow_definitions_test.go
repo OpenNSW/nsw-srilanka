@@ -15,14 +15,14 @@ func nonRetryable(err error) bool {
 	return temporal.GetDefaultFailureConverter().ErrorToFailure(err).GetApplicationFailureInfo().GetNonRetryable()
 }
 
-func TestSplitDefinitionLoader(t *testing.T) {
+func TestWorkflowDefinitionLoader(t *testing.T) {
 	reg := artifact.NewRegistry(testutil.MemLoader{
 		"wf_branch.json":  []byte(`{"id": "branch", "name": "Branch", "version": 1, "nodes": []}`),
 		"wf_invalid.json": []byte(`{`),
 	})
 	reg.RegisterArtifact("branch", "workflow", "", "wf_branch.json")
 	reg.RegisterArtifact("invalid", "workflow", "", "wf_invalid.json")
-	load := splitDefinitionLoader(reg)
+	load := workflowDefinitionLoader(reg)
 
 	def, err := load("branch")
 	require.NoError(t, err)

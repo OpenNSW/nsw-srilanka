@@ -12,13 +12,13 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-// splitDefinitionLoader returns the handler a SPLIT_TASK calls to load each
-// branch's workflow from reg. A workflow that isn't there or doesn't parse is
-// returned as a non-retryable error, so the split parks for an admin at once
-// instead of retrying a load that can't succeed. The handler's error goes to
-// Temporal as it is, so it carries the verdict itself; a loader I/O error stays
-// retryable.
-func splitDefinitionLoader(reg *artifact.Registry) func(templateID string) (workflow.WorkflowDefinition, error) {
+// workflowDefinitionLoader returns the definition handler the workflow engine
+// calls to load a workflow by id from reg (RegisterDefinitionHandler). A
+// workflow that isn't there or doesn't parse is returned as a non-retryable
+// error, so the node that asked for it parks for an admin at once instead of
+// retrying a load that can't succeed. The handler's error goes to Temporal as
+// it is, so it carries the verdict itself; a loader I/O error stays retryable.
+func workflowDefinitionLoader(reg *artifact.Registry) func(templateID string) (workflow.WorkflowDefinition, error) {
 	return func(templateID string) (workflow.WorkflowDefinition, error) {
 		def, err := workflowdef.Load(context.Background(), reg, templateID)
 		if err == nil {

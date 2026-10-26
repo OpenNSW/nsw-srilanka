@@ -314,7 +314,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
-	pr.RegisterDefinitionHandler(splitDefinitionLoader(artifactRegistry))
+	pr.RegisterDefinitionHandler(workflowDefinitionLoader(artifactRegistry))
 	parentRunner = pr
 
 	if !agencyMode {
