@@ -36,17 +36,18 @@ func (r Reference) String() string {
 // ParseReference splits the office/year/serial/number display form of a
 // registered reference back into its four elements (§4.1). That display form
 // is what the integration results write into the workflow, so it is what every
-// later step works from. Its errors are worded for the trader.
+// later step works from. Each error completes the sentence "The …." the cdn
+// package shows the trader.
 func ParseReference(s string) (Reference, error) {
 	parts := strings.Split(strings.TrimSpace(s), "/")
 	if len(parts) != 4 {
 		return Reference{}, fmt.Errorf(
-			"The customs declaration reference %q is not in the expected office/year/serial/number form.", s)
+			"customs declaration reference %q is not in the expected office/year/serial/number form", s)
 	}
 	number, err := strconv.Atoi(strings.TrimSpace(parts[3]))
 	if err != nil {
 		return Reference{}, fmt.Errorf(
-			"The customs declaration reference %q does not end in a declaration number.", s)
+			"customs declaration reference %q does not end in a declaration number", s)
 	}
 	ref := Reference{
 		Office: strings.TrimSpace(parts[0]),
@@ -55,7 +56,7 @@ func ParseReference(s string) (Reference, error) {
 		Number: number,
 	}
 	if !ref.IsValid() {
-		return Reference{}, fmt.Errorf("The customs declaration reference %q is incomplete.", s)
+		return Reference{}, fmt.Errorf("customs declaration reference %q is incomplete", s)
 	}
 	return ref, nil
 }

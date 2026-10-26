@@ -213,7 +213,7 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 func ParseDocumentReference(s string) (DocumentReference, error) {
 	ref, err := document.ParseReference(s)
 	if err != nil {
-		return DocumentReference{}, &buildError{err.Error()}
+		return DocumentReference{}, &buildError{"The " + err.Error() + "."}
 	}
 	return ref, nil
 }
