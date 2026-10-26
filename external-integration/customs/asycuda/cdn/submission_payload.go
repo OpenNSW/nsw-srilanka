@@ -1,11 +1,12 @@
 package cdn
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
 
 // The SLC Edge CDN submission payload, per Annex B of the ASYCUDA ↔ NSW
@@ -96,11 +97,11 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error
 		return Submission{}, &buildError{"The dispatch note form could not be read."}
 	}
 
-	shipper := nested(form, "shipper")
-	consignee := nested(form, "consignee")
-	transport := nested(form, "transport")
-	goods := nested(form, "goods")
-	container := nested(form, "container")
+	shipper := document.Nested(form, "shipper")
+	consignee := document.Nested(form, "consignee")
+	transport := document.Nested(form, "transport")
+	goods := document.Nested(form, "goods")
+	container := document.Nested(form, "container")
 
 	refs, err := buildCusDecRefs(form)
 	if err != nil {
@@ -109,43 +110,43 @@ func BuildPayload(form map[string]any, previousEdgeID string) (Submission, error
 
 	sub := Submission{
 		Properties: Properties{Submitter: submitterChannel},
-		OfficeCode: str(form, "officeCode"),
+		OfficeCode: document.Str(form, "officeCode"),
 		Shipper: Party{
-			ID:          str(shipper, "id"),
-			Name:        str(shipper, "name"),
-			Address:     str(shipper, "address"),
-			CountryCode: str(shipper, "countryCode"),
+			ID:          document.Str(shipper, "id"),
+			Name:        document.Str(shipper, "name"),
+			Address:     document.Str(shipper, "address"),
+			CountryCode: document.Str(shipper, "countryCode"),
 		},
 		Consignee: Party{
-			ID:          str(consignee, "id"),
-			Name:        str(consignee, "name"),
-			Address:     str(consignee, "address"),
-			CountryCode: str(consignee, "countryCode"),
+			ID:          document.Str(consignee, "id"),
+			Name:        document.Str(consignee, "name"),
+			Address:     document.Str(consignee, "address"),
+			CountryCode: document.Str(consignee, "countryCode"),
 		},
-		VoyageNumber:       str(transport, "voyageNumber"),
-		VoyageDateAsString: str(transport, "voyageDate"),
-		Vessel:             str(transport, "vessel"),
-		VesselOpCode:       str(transport, "vesselOpCode"),
-		ContOpCode:         str(transport, "contOpCode"),
-		DriverName:         str(transport, "driverName"),
-		LorryRegNo:         str(transport, "lorryRegNo"),
-		TrailerRegNo:       str(transport, "trailerRegNo"),
-		LocationOfGoods:    str(transport, "locationOfGoods"),
-		PlaceOfLoading:     str(transport, "placeOfLoading"),
-		PlaceOfDischarge:   str(transport, "placeOfDischarge"),
+		VoyageNumber:       document.Str(transport, "voyageNumber"),
+		VoyageDateAsString: document.Str(transport, "voyageDate"),
+		Vessel:             document.Str(transport, "vessel"),
+		VesselOpCode:       document.Str(transport, "vesselOpCode"),
+		ContOpCode:         document.Str(transport, "contOpCode"),
+		DriverName:         document.Str(transport, "driverName"),
+		LorryRegNo:         document.Str(transport, "lorryRegNo"),
+		TrailerRegNo:       document.Str(transport, "trailerRegNo"),
+		LocationOfGoods:    document.Str(transport, "locationOfGoods"),
+		PlaceOfLoading:     document.Str(transport, "placeOfLoading"),
+		PlaceOfDischarge:   document.Str(transport, "placeOfDischarge"),
 
-		GoodsDescription: str(goods, "description"),
+		GoodsDescription: document.Str(goods, "description"),
 		PackageNumber:    integer(goods, "packageNumber"),
-		PackageType:      str(goods, "packageType"),
+		PackageType:      document.Str(goods, "packageType"),
 		GrossWeight:      number(goods, "grossWeight"),
 		Volume:           number(goods, "volume"),
-		BOL:              str(goods, "bol"),
+		BOL:              document.Str(goods, "bol"),
 		TempRequired:     number(goods, "tempRequired"),
 
-		ContainerNumber: str(container, "number"),
-		ContainerType:   str(container, "type"),
-		SealNo:          str(container, "sealNo"),
-		ContainerMark:   str(container, "mark"),
+		ContainerNumber: document.Str(container, "number"),
+		ContainerType:   document.Str(container, "type"),
+		SealNo:          document.Str(container, "sealNo"),
+		ContainerMark:   document.Str(container, "mark"),
 
 		CusDecRefs: refs,
 	}
@@ -167,7 +168,7 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 	raw := form["cusDecRefs"]
 	if raw == nil {
 		// Single-reference forms carry the string directly.
-		if s := str(form, "cusdecRef"); s != "" {
+		if s := document.Str(form, "cusdecRef"); s != "" {
 			ref, err := ParseDocumentReference(s)
 			if err != nil {
 				return nil, err
@@ -193,9 +194,9 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 			refs = append(refs, ref)
 		case map[string]any:
 			refs = append(refs, DocumentReference{
-				Office: str(v, "office"),
-				Year:   str(v, "year"),
-				Serial: str(v, "serial"),
+				Office: document.Str(v, "office"),
+				Year:   document.Str(v, "year"),
+				Serial: document.Str(v, "serial"),
 				Number: integer(v, "number"),
 			})
 		default:
@@ -210,27 +211,9 @@ func buildCusDecRefs(form map[string]any) ([]DocumentReference, error) {
 // display form is what the CusDec integration result writes into the workflow,
 // so it is what every downstream step — including this one — has to work from.
 func ParseDocumentReference(s string) (DocumentReference, error) {
-	parts := strings.Split(strings.TrimSpace(s), "/")
-	if len(parts) != 4 {
-		return DocumentReference{}, &buildError{fmt.Sprintf(
-			"The customs declaration reference %q is not in the expected office/year/serial/number form.", s)}
-	}
-
-	number, err := strconv.Atoi(strings.TrimSpace(parts[3]))
+	ref, err := document.ParseReference(s)
 	if err != nil {
-		return DocumentReference{}, &buildError{fmt.Sprintf(
-			"The customs declaration reference %q does not end in a declaration number.", s)}
-	}
-
-	ref := DocumentReference{
-		Office: strings.TrimSpace(parts[0]),
-		Year:   strings.TrimSpace(parts[1]),
-		Serial: strings.TrimSpace(parts[2]),
-		Number: number,
-	}
-	if !ref.IsValid() {
-		return DocumentReference{}, &buildError{fmt.Sprintf(
-			"The customs declaration reference %q is incomplete.", s)}
+		return DocumentReference{}, &buildError{"The " + err.Error() + "."}
 	}
 	return ref, nil
 }
@@ -240,16 +223,6 @@ func ParseDocumentReference(s string) (DocumentReference, error) {
 // The form arrives as decoded JSON, so every value is any and every number is
 // float64. These read through that without the caller repeating type
 // assertions, returning the zero value for anything absent or the wrong shape.
-
-func nested(m map[string]any, key string) map[string]any {
-	v, _ := m[key].(map[string]any)
-	return v
-}
-
-func str(m map[string]any, key string) string {
-	v, _ := m[key].(string)
-	return strings.TrimSpace(v)
-}
 
 func number(m map[string]any, key string) float64 {
 	switch n := m[key].(type) {
