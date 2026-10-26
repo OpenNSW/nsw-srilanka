@@ -9,7 +9,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 | -------------------- | ------------------------------------------------------- | ------------------------------------------ |
 | Workflow starts from | `POST /api/v1/consignments` (trader)                    | `POST /api/v1/inject` (external system)    |
 | Task ownership       | trader/CHA company owns the consignment                 | any catalog role, on any injected workflow |
-| Task claims          | not used                                                | required to submit                         |
+| Task claims          | off                                                     | on (a hint, never required)                |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
 | Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
@@ -151,82 +151,22 @@ for a retry and does not deliver. How a step replies is in
 
 ## Claiming tasks
 
-Every user holding a catalog role owns every injected workflow, so ownership alone
-cannot stop two of them from working on the same task. An officer claims a task
-before acting on it, and the task shows everyone who holds it:
+An officer claims a task so the others can see who is working on it. A claim is a
+hint, not a lock: submitting a step never checks it.
 
-- `POST /api/v1/tasks/{id}/claim` claims the task for the caller. Claiming a task you
-  already hold succeeds. Another officer's claim is a 409. An officer who can open the
-  task but may not act on it, because the active step's `authz` rule names no role they
-  hold for the task's current state, gets a 403.
-- `POST /api/v1/tasks/{id}/release` releases it. Only the holder can release (403
-  otherwise), whether or not they can still act on the task; releasing a task nobody
-  holds succeeds.
-- Submitting a step, `POST /api/v1/tasks/{id}/steps/{stepId}`, needs the claim. Without
-  it the submission is a 403 ("claim this task before acting on it"). Every officer
-  can still open the task.
+- `POST /api/v1/tasks/{id}/claim` claims the task for the caller. If another officer
+  holds the claim, the caller takes it over, for example when the holder is away. A
+  completed task can't be claimed (409).
+- `POST /api/v1/tasks/{id}/release` releases the caller's own claim.
 - `GET /api/v1/tasks/{id}` returns a `claim` object: the holder's `name` (their email
-  for now), `claimed_at`, `mine` and `required_to_submit`. It carries no user ID: use
-  `mine` to tell whether the caller holds the claim.
+  for now), `claimed_at` and `mine`.
 
-Claim and release need the `nsw:task:claim` and `nsw:task:release` scopes, which only
-the agency's officer role and portal app hold (`idp/bootstrap/20-agency-*.yaml`). They
-are kept apart from `nsw:task:write`, which the machine clients hold to answer on
-callback tokens. Grant the two together: only the holder can release a claim, so a user
-with `claim` but not `release` could create a claim nobody can release. Claims and
-releases, and their refusals, are recorded in the audit trail as task updates. The full
+Any officer who can open the task may claim it; both routes need `nsw:task:write`.
+Claims, takeovers and releases are recorded in the audit trail as task updates. Claims
+are on in agency mode and off in TNSW, where the routes answer 404 and the task view
+has no `claim`. The claim is stored on the task row (`task_records_v2.claimed_by` and
+`claimed_at`, migration `000028`) and lasts across every step of the task. The full
 contract is in `api/tasks.openapi.yaml`.
-
-Who may claim follows who may act. An officer may claim a task when the active step's
-`authz` rule (see [Roles per task](#roles-per-task)) names a role they hold and own for
-the task's current state. This is the same check that decides whether they can submit
-the step. So nobody can claim a task while it waits on another party, such as an
-external system, or before it has an active step. A step that declares no rule can't
-be claimed either, since it can't be submitted. Claiming a completed task is a 409.
-
-Core taskflow stores the claim on the task row (`task_records_v2.claimed_by` and
-`claimed_at`, added by migration `000028`). The claim lasts until its holder releases
-it: across every step of the task, and after the task completes, as a record of who
-worked on it. There is no expiry and no forced release yet, so an officer who leaves
-keeps their claims.
-
-Because a claim covers every step, **a task that requires a claim should let one role
-act on all of its steps.** If step 1 names `officer` and step 2 names `reviewer`, an
-officer's claim stays on the task at step 2: the reviewer cannot submit without the
-claim, the officer cannot act on step 2, and only the officer can release. Hand work
-between roles by ending the task and starting another, or have the holder release the
-claim once their step is done.
-
-The policy is set by the task authz gate, not by core, as `taskauthz.Input.Claims` (a
-`taskauthz.ClaimPolicy`). `agency.RoleGate` gives every user `ClaimsRequired`,
-whichever catalog role they act in. TNSW's gate gives `ClaimsOff`, and so does any gate
-that sets nothing: claim and release answer 404 there, and the task view reports
-`required_to_submit: false` and no holder. `ClaimsOptional` lets users claim without
-needing a claim to submit, for a deployment that wants to show who is on a task, or to
-roll claims out before requiring them. Each gate takes its policy when it is built (see
-`internal/bootstrap`). Clients complete steps by callback token and never need a claim.
-A user who calls the callback route is held to the claim like on the portal's route,
-because the token is not signed.
-
-### Claims in render configs
-
-The renderer gets three claim facts with the caller's role facts: `claim:mine`,
-`claim:other` and `claim:none`, exactly one of them true. A section can depend on
-them, for example to show the officer's form actions only to the holder:
-
-```json
-"visibleWhen": { "states": ["PENDING_USER"], "requireClaim": "claim:mine" }
-```
-
-The server refuses a submission without the claim either way; hiding the actions
-just keeps the screen honest.
-
-### Needs more information
-
-A claim belongs to one task. To keep it across a "needs more information" round,
-model the round as a loop inside the task's own workflow (the `review_workflow.json`
-of the task), so the same task waits for the resubmission. A loop in the parent
-workflow starts a new task, and a new task starts unclaimed.
 
 ## Task configs
 
