@@ -18,7 +18,7 @@ export function LoginScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { systemName, appName, logoUrl, description, heroImageUrl, partnerLogos } = appConfig.branding
+  const { systemName, appName, logoUrl, description, tagline, heroImageUrl, partnerLogos } = appConfig.branding
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-app-surface lg:overflow-hidden overflow-y-auto">
@@ -88,6 +88,11 @@ export function LoginScreen() {
           <p className="text-md text-foreground-muted leading-relaxed text-center lg:text-left whitespace-pre-line">
             {description}
           </p>
+          {tagline?.trim() && (
+            <p className="text-md font-medium text-foreground leading-relaxed text-center lg:text-left mt-4">
+              {tagline}
+            </p>
+          )}
 
           {partnerLogos && partnerLogos.some((logo) => logo.url) && (
             <div className="flex flex-row flex-wrap items-center justify-center lg:justify-start gap-4 mt-5">
