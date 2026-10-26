@@ -71,26 +71,43 @@ func TestRetrieveInterpreter_ReadsTheCusDecSpelling(t *testing.T) {
 	assert.Equal(t, 2, out[RetrieveCountKey])
 }
 
-// Any answer without a usable count leaves nothing captured, so the count the
-// trader declared stands.
-func TestRetrieveInterpreter_WithoutAUsableCountCapturesNone(t *testing.T) {
+// An answer without a declaration is rejected, and only the reason is captured:
+// a rejected answer's capture is logged.
+func TestRetrieveInterpreter_WithoutADeclarationCapturesOnlyTheReason(t *testing.T) {
 	for name, tc := range map[string]struct {
 		callErr error
 		resp    map[string]any
 	}{
-		"call failed":        {callErr: errors.New("404 Not Found"), resp: map[string]any{"error": "not found"}},
-		"no declaration":     {resp: map[string]any{"payload": map[string]any{}}},
-		"no container count": {resp: retrieved(t, `{"containerFlag": false}`)},
-		"zero containers":    {resp: retrieved(t, `{"numberOfContainers": 0}`)},
-		"fractional count":   {resp: retrieved(t, `{"numberOfContainers": 2.5}`)},
-		"not a number":       {resp: retrieved(t, `{"numberOfContainers": "many"}`)},
+		"call failed":    {callErr: errors.New("404 Not Found"), resp: map[string]any{"error": "not found"}},
+		"no declaration": {resp: map[string]any{"payload": map[string]any{}}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			accepted, out := NewRetrieveInterpreter().Interpret(tc.callErr, tc.resp)
 
 			assert.False(t, accepted)
-			assert.NotContains(t, out, RetrieveCountKey)
+			assert.Len(t, out, 1, "only the reason is captured")
 			assert.NotEmpty(t, out["error"])
+		})
+	}
+}
+
+// A declaration without a usable count is still captured, for the boat note,
+// without a count: the CDN split requires one, so it parks the consignment. The
+// answer is accepted, so the declaration it carries is never logged.
+func TestRetrieveInterpreter_WithoutAUsableCountCapturesTheDeclaration(t *testing.T) {
+	for name, generalSegment := range map[string]string{
+		"no container count": `{"containerFlag": false}`,
+		"zero containers":    `{"numberOfContainers": 0}`,
+		"fractional count":   `{"numberOfContainers": 2.5}`,
+		"not a number":       `{"numberOfContainers": "many"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			accepted, out := NewRetrieveInterpreter().Interpret(nil, retrieved(t, generalSegment))
+
+			assert.True(t, accepted)
+			assert.NotContains(t, out, RetrieveCountKey)
+			assert.NotContains(t, out, "error")
+			assert.NotNil(t, out[RetrieveDeclarationKey])
 		})
 	}
 }

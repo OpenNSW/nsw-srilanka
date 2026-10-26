@@ -2,6 +2,7 @@ package cusdec
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/OpenNSW/core/remote"
 
@@ -16,10 +17,14 @@ import (
 // consignment reads the container count from it before opening one dispatch
 // note branch per container.
 //
-// An answer that does not carry a usable count is not accepted, and nothing is
-// captured for it: the step still completes, and the branches fall back to the
-// count the trader declared. Retrieve is read-only (§2.2), so a missed answer
-// costs a check, not a declaration.
+// An answer that carries the declaration is accepted, and the declaration and
+// the dispatch notes listed against it are captured for the steps after it.
+// The container count is captured only when it is usable; the CDN split maps it
+// as required, so a declaration without one parks the consignment there. An
+// answer without a declaration is not accepted, and only the reason is
+// captured: the API-call plugin logs what a rejected answer captured, and the
+// declaration holds personal data. Retrieve is read-only (§2.2), so a missed
+// answer costs a check, not a declaration.
 type RetrieveInterpreter struct{}
 
 // NewRetrieveInterpreter returns the retrieve interpreter.
@@ -57,9 +62,10 @@ func (RetrieveInterpreter) BuildRequest(inputs map[string]any) remote.Body {
 }
 
 // Interpret captures the retrieved declaration, the dispatch notes listed
-// against it, and its current container count. The answer is accepted only with
-// a usable count, which is what the CDN split needs; a declaration without one
-// is still captured, with the reason under "error".
+// against it, and its container count when the count is usable. Only an answer
+// without a declaration is rejected, with nothing but the reason captured, so
+// the declaration never reaches the log a rejection writes. A count that is not
+// usable is logged by its reason alone.
 func (RetrieveInterpreter) Interpret(callErr error, resp map[string]any) (bool, map[string]any) {
 	if callErr != nil {
 		return false, map[string]any{"error": "the declaration could not be retrieved: " + callErr.Error()}
@@ -74,8 +80,8 @@ func (RetrieveInterpreter) Interpret(callErr error, resp map[string]any) (bool, 
 	}
 	count, err := containerCount(decl)
 	if err != nil {
-		out["error"] = err.Error()
-		return false, out
+		slog.Warn("cusdec retrieve: no usable container count", "error", err)
+		return true, out
 	}
 	out[RetrieveCountKey] = count
 	return true, out
