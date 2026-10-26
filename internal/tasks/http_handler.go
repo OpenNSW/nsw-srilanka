@@ -79,7 +79,7 @@ func NewHTTPHandler(
 	authzCatalog taskauthz.Catalog,
 	files *FileBinding,
 	canAct CanAct,
-	claims ClaimDeps,
+	users UserService,
 	audit nswaudit.Auditor,
 	maxRequestBytes int64,
 ) *HTTPHandler {
@@ -91,7 +91,7 @@ func NewHTTPHandler(
 		AuthzCatalog:    authzCatalog,
 		Files:           files,
 		CanAct:          canAct,
-		Users:           claims.Users,
+		Users:           users,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}

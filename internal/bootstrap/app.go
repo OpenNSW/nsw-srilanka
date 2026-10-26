@@ -432,9 +432,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
 	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
-	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct,
-		tasks.ClaimDeps{Users: userDisplayNames{svc: userProfileService}},
-		auditor, cfg.Server.MaxRequestBytes)
+	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a

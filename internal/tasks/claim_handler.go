@@ -41,12 +41,6 @@ type UserService interface {
 	GetDisplayName(ctx context.Context, userID string) (string, error)
 }
 
-// ClaimDeps are what the claim routes and the task view need beyond the task manager.
-// Users may be nil, and then a holder has no name.
-type ClaimDeps struct {
-	Users UserService
-}
-
 // taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
 // and who holds the task's claim, as seen by the caller.
 type taskResponse struct {
