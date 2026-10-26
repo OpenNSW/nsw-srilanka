@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
 import type { JsonSchema } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
-import { Button, Callout, Text } from '@radix-ui/themes'
+import { Button, Callout, Spinner, Text } from '@radix-ui/themes'
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { Handle, ZoneAction, ZoneRendererProps } from '@/features/zone/types'
@@ -396,11 +396,13 @@ function HandleButton({
 }) {
   const { t } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
-  const disabled = submitting
-  let label = handle.label
-  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : 'Submitting...'
+  // Radix `loading` replaces the label with a spinner. Keep the label and
+  // put the spinner beside it. A draft says "Saving…"; a submit keeps its
+  // own label.
+  const label = pending && handle.element === 'draft_action' ? t('tasks.savingDraft') : handle.label
   return (
-    <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
+    <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={submitting}>
+      {pending && <Spinner />}
       {label}
     </Button>
   )

@@ -137,6 +137,7 @@ const en = {
       backToCase: 'Back to case',
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
+      stillProcessing: 'Still processing. Check back shortly.',
       unsaved: {
         title: 'Leave without saving?',
         description: 'Your answers on this form have not been saved. If you leave now, they will be lost.',
