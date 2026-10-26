@@ -2,6 +2,7 @@ package trade
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/OpenNSW/core/taskflow/plugins"
 )
@@ -18,6 +19,10 @@ import (
 // plugins.TaskPlugin via NewGenericExecutorPlugin. It has the same shape
 // as TaskPlugin.Execute, so any plain function can be registered without
 // writing a dedicated plugin struct.
+//
+// It computes from the step's data and configuration alone, with no I/O, so
+// an error it returns comes back on every retry: the plugin marks it
+// plugins.Permanent and the step parks for an admin at once.
 type ExecutorFunc func(ctx plugins.PluginContext, config json.RawMessage) error
 
 // genericExecutorPlugin adapts an ExecutorFunc to plugins.TaskPlugin —
@@ -35,5 +40,9 @@ func NewGenericExecutorPlugin(fn ExecutorFunc) plugins.TaskPlugin {
 }
 
 func (p *genericExecutorPlugin) Execute(ctx plugins.PluginContext, config json.RawMessage) error {
-	return p.fn(ctx, config)
+	err := p.fn(ctx, config)
+	if err == nil || errors.Is(err, plugins.ErrSuspended) || plugins.IsPermanent(err) {
+		return err
+	}
+	return plugins.Permanent(plugins.ErrorTypeInput, err)
 }

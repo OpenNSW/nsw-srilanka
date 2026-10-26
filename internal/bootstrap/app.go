@@ -14,7 +14,6 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/generictemplate"
 	"github.com/OpenNSW/core/artifact/adapter/steptemplate"
-	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
 	"github.com/OpenNSW/core/artifact/loaders"
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
@@ -315,13 +314,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to wire parent runner: %w", err)
 	}
-	pr.RegisterDefinitionHandler(func(templateID string) (workflow.WorkflowDefinition, error) {
-		def, err := workflowdef.Load(context.Background(), artifactRegistry, templateID)
-		if err != nil {
-			return workflow.WorkflowDefinition{}, fmt.Errorf("workflow definition %q not found in artifact registry: %w", templateID, err)
-		}
-		return def, nil
-	})
+	pr.RegisterDefinitionHandler(splitDefinitionLoader(artifactRegistry))
 	parentRunner = pr
 
 	if !agencyMode {
@@ -966,8 +959,7 @@ func initTask(
 		if tm == nil {
 			return nil, fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		res, err := tm.StartTaskStep(context.Background(), payload)
-		return res, keepNonRetryable(err)
+		return tm.StartTaskStep(context.Background(), payload)
 	}
 
 	microCompletionHandler := func(completion workflow.WorkflowCompletion) error {

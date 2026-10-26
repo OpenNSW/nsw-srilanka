@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/htmlgen"
 	corestorage "github.com/OpenNSW/core/storage"
 )
@@ -77,21 +78,25 @@ type htmlDocumentGeneratorConfig struct {
 func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg htmlDocumentGeneratorConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
-		return fmt.Errorf("html_document_generator: invalid config: %w", err)
+		return configError(fmt.Errorf("html_document_generator: invalid config: %w", err))
 	}
 	if strings.TrimSpace(cfg.TemplateID) == "" {
-		return errors.New("html_document_generator: plugin_properties.template_id is required")
+		return configError(errors.New("html_document_generator: plugin_properties.template_id is required"))
 	}
 	if ctx.OutputNamespace == "" {
-		return errors.New("html_document_generator: output_namespace is required to hold the document's storage key")
+		return configError(errors.New("html_document_generator: output_namespace is required to hold the document's storage key"))
 	}
 	if ctx.Record == nil {
-		return errors.New("html_document_generator: task record is nil")
+		return inputError(errors.New("html_document_generator: task record is nil"))
 	}
 
 	tmpl, err := p.templates.HTMLTemplate(ctx.Context, cfg.TemplateID)
 	if err != nil {
-		return fmt.Errorf("html_document_generator: load template %q: %w", cfg.TemplateID, err)
+		err = fmt.Errorf("html_document_generator: load template %q: %w", cfg.TemplateID, err)
+		if errors.Is(err, artifact.ErrNotFound) || errors.Is(err, artifact.ErrInvalid) {
+			return configError(err)
+		}
+		return err
 	}
 
 	// Inputs go to htmlgen as JSON, which it decodes with UseNumber, so a
@@ -101,11 +106,11 @@ func (p *HTMLDocumentGeneratorPlugin) Execute(ctx pluginContext, configRaw json.
 	// quantities with decimal.
 	data, err := json.Marshal(ctx.Inputs)
 	if err != nil {
-		return fmt.Errorf("html_document_generator: encode inputs: %w", err)
+		return inputError(fmt.Errorf("html_document_generator: encode inputs: %w", err))
 	}
 	doc, err := htmlgen.Generate(ctx.Context, tmpl, data)
 	if err != nil {
-		return fmt.Errorf("html_document_generator: render template %q: %w", cfg.TemplateID, err)
+		return inputError(fmt.Errorf("html_document_generator: render template %q: %w", cfg.TemplateID, err))
 	}
 
 	// Every run stores what it rendered, including a Temporal retry and a

@@ -3,7 +3,6 @@ package plugins
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/temporal"
 )
 
 const (
@@ -220,12 +218,11 @@ func TestExternalReview_ReplyToStaleStepIsNotRetried(t *testing.T) {
 	err := p.Execute(reviewContext(map[string]any{"replyToken": "tok_x"}),
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
 
-	// Wrapped as core wraps a plugin error, so the engine still finds it.
+	// Wrapped as core wraps a plugin error, so the orchestrator still finds it.
 	err = fmt.Errorf("plugin execution failed: %w", err)
-	var appErr *temporal.ApplicationError
-	require.ErrorAs(t, err, &appErr)
-	assert.True(t, appErr.NonRetryable())
-	assert.Equal(t, "StaleReplyToken", appErr.Type())
+	errType, permanent := plugins.PermanentType(err)
+	assert.True(t, permanent)
+	assert.Equal(t, "StaleReplyToken", errType)
 }
 
 func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
@@ -236,10 +233,9 @@ func TestExternalReview_ReplyPayloadNotAnObjectIsNotRetried(t *testing.T) {
 		json.RawMessage(`{"service_id": "agency", "reply_command": "submit"}`))
 
 	err = fmt.Errorf("plugin execution failed: %w", err)
-	var appErr *temporal.ApplicationError
-	require.ErrorAs(t, err, &appErr)
-	assert.True(t, appErr.NonRetryable())
-	assert.Equal(t, "InvalidReplyPayload", appErr.Type())
+	errType, permanent := plugins.PermanentType(err)
+	assert.True(t, permanent)
+	assert.Equal(t, "InvalidReplyPayload", errType)
 }
 
 func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
@@ -251,8 +247,21 @@ func TestExternalReview_FailedReplyIsRetried(t *testing.T) {
 
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrSuspended)
-	var appErr *temporal.ApplicationError
-	assert.False(t, errors.As(err, &appErr), "only a 409 stops the retries")
+	assert.False(t, plugins.IsPermanent(err), "a 503 may clear, so the step is retried")
+}
+
+// A dispatch the agency refuses with a 4xx can't succeed on a retry, so the step
+// parks at once.
+func TestExternalReview_RefusedDispatchIsNotRetried(t *testing.T) {
+	mgr, _ := newReviewService(t, http.StatusBadRequest)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+
+	err := p.Execute(reviewContext(map[string]any{}),
+		json.RawMessage(`{"service_id": "agency", "path": "/api/v1/inject"}`))
+
+	errType, permanent := plugins.PermanentType(err)
+	assert.True(t, permanent, "err = %v", err)
+	assert.Equal(t, plugins.ErrorTypeRejected, errType)
 }
 
 func TestExternalReview_ConfigErrors(t *testing.T) {
