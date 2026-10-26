@@ -467,6 +467,53 @@ func TestFileHandler_UploadThroughProxy(t *testing.T) {
 	assertStatus(t, upload(h, user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`), http.StatusBadGateway)
 }
 
+// The user upload route matches the file name's extension to the type, on a
+// deployment that stores files and in proxy mode before the owning service is
+// asked.
+func TestFileHandler_UploadExtension(t *testing.T) {
+	const mismatch = `{"filename":"setup.exe","mime_type":"application/pdf","size":10}`
+	const want = "the file name's extension (.exe) does not match its type (application/pdf)"
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	stack, err := New(context.Background(), localConfig(t, srv.URL), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	stack.LocalContent.RegisterRoutes(mux)
+	access, _ := testFileAccess(t)
+	h := NewFileHandler(stack.Service, access, WithUploads(stack.Uploads))
+
+	rec := upload(h, user("alice"), mismatch)
+	assertStatus(t, rec, http.StatusBadRequest)
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("body %s, want it to say %q", rec.Body.String(), want)
+	}
+
+	// A name without an extension is stored, and named, with its type's.
+	rec = upload(h, user("alice"), `{"filename":"scan","mime_type":"application/pdf","size":10}`)
+	assertStatus(t, rec, http.StatusOK)
+	var body struct {
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := access.Resolve(user("alice"), body.Key, fileaccess.ScopeSubmit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body.Name != "scan.pdf" || !strings.HasSuffix(stored, ".pdf") {
+		t.Errorf("named %q and stored as %q, want both to end in .pdf", body.Name, stored)
+	}
+
+	proxy := newProxyStack(t, ownerToken)
+	proxied := NewFileHandler(proxy.Service, access, WithUploads(proxy.Uploads))
+	assertStatus(t, upload(proxied, user("alice"), mismatch), http.StatusBadRequest)
+}
+
 // An owning service that answers 200 with a response this service can't use
 // failed, as surely as one that answered 5xx: a gateway failure, not this
 // service's own (500).

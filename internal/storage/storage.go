@@ -58,7 +58,8 @@ type Stack struct {
 	// the owning service.
 	LocalContent *corestorage.LocalContentHandler
 	// Uploads prepares the uploads users make: Service itself, or in proxy
-	// mode Service limited to the types in storage.proxy.allowedUploadTypes.
+	// mode Service limited to the types in storage.proxy.allowedUploadTypes,
+	// either way with the file name's extension matched to the type.
 	Uploads Uploader
 	// MachineUploads prepares the uploads machine clients make on the
 	// internal upload route. Nil in proxy mode, where nothing uploads to this
@@ -95,7 +96,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 		return &Stack{
 			Service: svc,
 			Handler: NewProxyHandler(svc),
-			Uploads: limitTypes(svc, anyCaller(cfg.Proxy.AllowedUploadTypes)),
+			Uploads: limitTypes(matchExtension(svc), anyCaller(cfg.Proxy.AllowedUploadTypes)),
 		}, nil
 	}
 
@@ -119,7 +120,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 	stack := &Stack{
 		Service:        svc,
 		Handler:        corestorage.NewHTTPHandler(svc),
-		Uploads:        svc,
+		Uploads:        matchExtension(svc),
 		MachineUploads: newMachineUploads(driver, cfg, o.internalUploadTypes),
 	}
 	if local, ok := driver.(*drivers.LocalFSDriver); ok {

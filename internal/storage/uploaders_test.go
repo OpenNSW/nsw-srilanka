@@ -159,6 +159,75 @@ func TestLimitTypes(t *testing.T) {
 	}
 }
 
+// nameRecorder is an Uploader that records the file name it is sent.
+type nameRecorder struct {
+	uploads  int
+	filename string
+}
+
+func (u *nameRecorder) Upload(_ context.Context, filename string, _ int64, _ string) (*corestorage.FileMetadata, error) {
+	u.uploads++
+	u.filename = filename
+	return &corestorage.FileMetadata{Key: "k", Name: filename, UploadURL: "http://x/put"}, nil
+}
+
+// An upload's file name must end in an extension of its type, and one with no
+// extension is given its type's, so a stored file is never downloaded under an
+// extension that says it is something else.
+func TestMatchExtension(t *testing.T) {
+	const sheet = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	passed := []struct {
+		name, filename, mimeType, want string
+	}{
+		{"the type's extension", "report.pdf", "application/pdf", "report.pdf"},
+		{"in capitals", "REPORT.PDF", "Application/PDF", "REPORT.PDF"},
+		{"one of the type's several", "photo.jpeg", "image/jpeg", "photo.jpeg"},
+		{"a type sent with parameters", "page.html", "text/html; charset=utf-8", "page.html"},
+		{"XML as text/xml", "data.xml", "text/xml", "data.xml"},
+		{"XML as application/xml", "data.xml", "application/xml", "data.xml"},
+		{"no extension, given the type's", "report", "application/pdf", "report.pdf"},
+		{"no extension, given a spreadsheet's", "report", sheet, "report.xlsx"},
+		{"a type with no known extension, unchecked", "file.bin", "application/x-no-extension", "file.bin"},
+		{"a type with no known extension and a name with none", "file", "application/x-no-extension", "file"},
+	}
+	for _, tt := range passed {
+		t.Run(tt.name, func(t *testing.T) {
+			next := &nameRecorder{}
+			if _, err := matchExtension(next).Upload(context.Background(), tt.filename, 10, tt.mimeType); err != nil {
+				t.Fatalf("Upload: %v", err)
+			}
+			if next.filename != tt.want {
+				t.Errorf("sent on as %q, want %q", next.filename, tt.want)
+			}
+		})
+	}
+
+	refused := []struct {
+		name, filename, mimeType, wantExt, wantType string
+	}{
+		{"a program sent as a PDF", "setup.exe", "application/pdf", ".exe", "application/pdf"},
+		{"a PDF's name sent as a spreadsheet", "sheet.pdf", sheet, ".pdf", sheet},
+		{"a name ending in a dot", "report.", "application/pdf", ".", "application/pdf"},
+		{"a type sent with parameters", "page.pdf", "text/html; charset=utf-8", ".pdf", "text/html"},
+	}
+	for _, tt := range refused {
+		t.Run(tt.name, func(t *testing.T) {
+			next := &nameRecorder{}
+			_, err := matchExtension(next).Upload(context.Background(), tt.filename, 10, tt.mimeType)
+			var mismatch *ExtensionMismatchError
+			if !errors.As(err, &mismatch) {
+				t.Fatalf("Upload: error %v, want an ExtensionMismatchError", err)
+			}
+			if mismatch.Extension != tt.wantExt || mismatch.MediaType != tt.wantType {
+				t.Errorf("mismatch %+v, want extension %q and type %q", *mismatch, tt.wantExt, tt.wantType)
+			}
+			if next.uploads != 0 {
+				t.Error("a refused upload reached the next uploader")
+			}
+		})
+	}
+}
+
 func TestConfigValidate_InternalUploadTypes(t *testing.T) {
 	tests := []struct {
 		name    string

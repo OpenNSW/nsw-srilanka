@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"mime"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	corestorage "github.com/OpenNSW/core/storage"
 
@@ -37,6 +40,60 @@ func (u limitedUploader) Upload(ctx context.Context, filename string, size int64
 		return nil, fmt.Errorf("%w: %q", corestorage.ErrContentTypeNotAllowed, mimeType)
 	}
 	return u.next.Upload(ctx, filename, size, mimeType)
+}
+
+// ExtensionMismatchError refuses an upload whose file name ends in an extension
+// its type does not have, such as "invoice.exe" sent as application/pdf: the
+// stored file keeps the name's extension, and is downloaded under it.
+type ExtensionMismatchError struct {
+	// Extension is the file name's, with its dot, as sent.
+	Extension string
+	// MediaType is the upload's type, without parameters.
+	MediaType string
+}
+
+func (e *ExtensionMismatchError) Error() string {
+	return fmt.Sprintf("storage: file name extension %q does not match type %q", e.Extension, e.MediaType)
+}
+
+// extensionMatched makes an upload's file name agree with its type before next
+// sees it: a name without an extension is given its type's first, and one with
+// an extension its type does not have is refused with an
+// *ExtensionMismatchError. A type with no known extensions is passed on
+// unchecked; which types may be uploaded at all is the type lists' to decide.
+type extensionMatched struct {
+	next Uploader
+}
+
+func matchExtension(next Uploader) Uploader {
+	return extensionMatched{next: next}
+}
+
+func (u extensionMatched) Upload(ctx context.Context, filename string, size int64, mimeType string) (*corestorage.FileMetadata, error) {
+	if mt, ok := mediaType(mimeType); ok {
+		if exts := extensionsOf(mt); len(exts) > 0 {
+			// The extension core/storage keeps in the key it builds from
+			// the name.
+			switch ext := filepath.Ext(filename); {
+			case ext == "":
+				filename += exts[0]
+			case !slices.Contains(exts, strings.ToLower(ext)):
+				return nil, &ExtensionMismatchError{Extension: ext, MediaType: mt}
+			}
+		}
+	}
+	return u.next.Upload(ctx, filename, size, mimeType)
+}
+
+// extensionsOf returns the file extensions of mt, a media type, lower case with
+// their dot, as Go's mime package knows them, plus .xml for application/xml,
+// which its built-in table gives to text/xml only.
+func extensionsOf(mt string) []string {
+	exts, _ := mime.ExtensionsByType(mt)
+	if mt == "application/xml" && !slices.Contains(exts, ".xml") {
+		exts = append(exts, ".xml")
+	}
+	return exts
 }
 
 // anyCaller allows exactly the given types, whoever calls, comparing the whole
