@@ -10,6 +10,17 @@ export interface ActionErrorApi {
   clearActionError: (id?: number) => void
 }
 
+export interface ActionToast {
+  id: number
+  message: string
+}
+
+interface ActionErrorStore {
+  api: ActionErrorApi
+  subscribe: (listener: () => void) => () => void
+  getSnapshot: () => ActionToast | null
+}
+
 export const ActionErrorContext = createContext<ActionErrorApi | null>(null)
 
 export function useActionError(): ActionErrorApi {
@@ -18,4 +29,37 @@ export function useActionError(): ActionErrorApi {
     throw new Error('useActionError must be used within ActionErrorProvider')
   }
   return value
+}
+
+// One store per provider. Showing a toast notifies only the toast, not the
+// screens, and a call works as soon as the provider has rendered.
+export function createActionErrorStore(): ActionErrorStore {
+  let toast: ActionToast | null = null
+  let nextId = 0
+  const listeners = new Set<() => void>()
+  const emit = () => {
+    listeners.forEach((listener) => listener())
+  }
+
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    getSnapshot: () => toast,
+    api: {
+      showActionError: (message) => {
+        nextId += 1
+        toast = { id: nextId, message }
+        emit()
+        return nextId
+      },
+      clearActionError: (id) => {
+        if (!toast) return
+        if (id !== undefined && toast.id !== id) return
+        toast = null
+        emit()
+      },
+    },
+  }
 }

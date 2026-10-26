@@ -27,6 +27,16 @@ function isStaleTaskStep(err: unknown): boolean {
   return err instanceof HttpError && err.status === 409
 }
 
+// Quiet while the next task is still being looked up. The last failure is the one the trader sees.
+function consignmentLoadWillRetry(findNext: boolean, attempt: number, maxAttempts: number): boolean {
+  return findNext && attempt < maxAttempts
+}
+
+// A consignment already on screen stays up; the failure is a toast. A blank screen gets Try Again.
+function consignmentAlreadyShown(shownId: string | undefined, requestedId: string): boolean {
+  return shownId === requestedId
+}
+
 function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
   const actionable = nodes.filter((node) => {
     if (node.id === currentTaskId) return false
@@ -81,6 +91,9 @@ export function TaskDetailScreen() {
   const shownConsignmentIdRef = useRef<string | undefined>(undefined)
   // The toast raised for a failed reload of a consignment already on screen.
   const consignmentFailureToast = useRef<number | null>(null)
+  // True once this task's form is on screen, so a later reload failure can toast
+  // instead of replacing the form.
+  const taskOnScreenRef = useRef(false)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   const [prevConsignmentId, setPrevConsignmentId] = useState(consignmentId)
   if (taskId !== prevTaskId) {
@@ -103,12 +116,16 @@ export function TaskDetailScreen() {
       setZoneView(zv)
       return zv
     } catch (err) {
-      setError(t('tasks.error.fetchFailed'))
       console.error('TaskDetailScreen: failed to fetch task:', err)
+      if (taskOnScreenRef.current) {
+        showActionError(t('tasks.error.fetchFailed'))
+      } else {
+        setError(t('tasks.error.fetchFailed'))
+      }
     } finally {
       setRefreshing(false)
     }
-  }, [taskId, t])
+  }, [taskId, t, showActionError])
 
   // A 409 means the step moved on: show that, and replace the form with the
   // task's current state. Anything else keeps the form and says the action failed.
@@ -152,7 +169,8 @@ export function TaskDetailScreen() {
 
   useEffect(() => {
     shownConsignmentIdRef.current = consignment?.id === consignmentId ? consignmentId : undefined
-  }, [consignment, consignmentId])
+    taskOnScreenRef.current = zoneView?.task_id === taskId
+  }, [consignment, consignmentId, zoneView, taskId])
 
   useEffect(() => {
     consignmentFailureToast.current = null
@@ -187,11 +205,8 @@ export function TaskDetailScreen() {
       } catch (err) {
         if (cancelled) return
         console.error('TaskDetailScreen: failed to load consignment:', err)
-        // Retries while looking for the next task stay quiet. The last failure
-        // is a page error when nothing is on screen, and a toast when it is.
-        const retriesLeft = findNext && attempt < maxAttempts
-        if (!retriesLeft) {
-          if (shownConsignmentIdRef.current === consignmentId) {
+        if (!consignmentLoadWillRetry(findNext, attempt, maxAttempts)) {
+          if (consignmentAlreadyShown(shownConsignmentIdRef.current, consignmentId)) {
             consignmentFailureToast.current = showActionError(t('consignments.detail.error.loadFailed'))
           } else {
             setConsignmentLoadFailed(true)
