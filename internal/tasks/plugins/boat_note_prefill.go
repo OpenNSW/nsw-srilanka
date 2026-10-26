@@ -9,12 +9,15 @@ import (
 
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/boatnote"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
 
 // TaskTypeCustomsBoatNotePrefill prefills the boat note application from what
-// Sri Lanka Customs holds for the consignment: the declaration retrieved from
-// SLC Edge (§6.7) and each Cargo Dispatch Note registered against it (§7.8). It
-// is synchronous and never fails the step: what cannot be retrieved is left for
+// Sri Lanka Customs holds for the consignment: the declaration, as the
+// CUSTOMS_CUSDEC_RETRIEVE step before it captured it (§6.7), and each Cargo
+// Dispatch Note registered against it, which this step retrieves (§7.8). It is
+// synchronous and never fails the step: what cannot be retrieved is left for
 // the trader to fill, with one container row per dispatch note the consignment
 // registered, as before.
 const TaskTypeCustomsBoatNotePrefill = "CUSTOMS_BOAT_NOTE_PREFILL"
@@ -43,10 +46,11 @@ type boatNotePrefillConfig struct {
 	ServiceID string `json:"service_id"`
 }
 
-// Execute builds the prefill from the task inputs — cusdec_ref, the declaration
-// form's traders (for the declarant and exporter codes), and the containers the
-// consignment registered — and records it under the output namespace as
-// userform, with retrieved saying whether it came from the declaration.
+// Execute builds the prefill from the task inputs — the retrieved declaration
+// and its cdn_refs, the declaration form (for the declarant and exporter codes),
+// and the containers the consignment registered — and records it under the
+// output namespace as userform, with retrieved saying whether it came from the
+// declaration.
 func (p *BoatNotePrefillPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) error {
 	var cfg boatNotePrefillConfig
 	if err := json.Unmarshal(configRaw, &cfg); err != nil {
@@ -62,12 +66,12 @@ func (p *BoatNotePrefillPlugin) Execute(ctx pluginContext, configRaw json.RawMes
 		return fmt.Errorf("boat_note_prefill: an output namespace is required")
 	}
 
-	traders := asMap(asMap(ctx.Inputs["userform"])["traders"])
-	cusdecRef, _ := ctx.Inputs["cusdec_ref"].(string)
+	declarant, company := document.TraderCodes(asMap(ctx.Inputs[cusdec.RetrieveFormKey]))
 	result := boatnote.Prefill(ctx.Context, serviceCaller{post: p.post, serviceID: cfg.ServiceID}, boatnote.Input{
-		CusdecRef:     cusdecRef,
-		DeclarantCode: stringOf(asMap(traders["declarant"])["code"]),
-		CompanyCode:   stringOf(asMap(traders["exporter"])["code"]),
+		Declaration:   asMap(ctx.Inputs[cusdec.RetrieveDeclarationKey]),
+		CDNRefs:       rows(ctx.Inputs[cusdec.RetrieveCDNRefsKey]),
+		DeclarantCode: declarant,
+		CompanyCode:   company,
 		Fallback:      rows(ctx.Inputs["containers"]),
 	})
 
@@ -95,11 +99,6 @@ func (c serviceCaller) Post(ctx context.Context, path string, body any) (map[str
 func asMap(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
-}
-
-func stringOf(v any) string {
-	s, _ := v.(string)
-	return s
 }
 
 // rows reads a container rows array, as decoded JSON ([]any) or as built in Go.

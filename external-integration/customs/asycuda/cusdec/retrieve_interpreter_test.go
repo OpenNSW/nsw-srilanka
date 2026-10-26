@@ -53,7 +53,11 @@ func TestRetrieveInterpreter_CapturesTheCurrentContainerCount(t *testing.T) {
 	accepted, out := NewRetrieveInterpreter().Interpret(nil, retrieved(t, `{"containerFlag": true, "numberOfContainers": 4}`))
 
 	assert.True(t, accepted)
-	assert.Equal(t, map[string]any{RetrieveCountKey: 4}, out)
+	assert.Equal(t, 4, out[RetrieveCountKey])
+	// The declaration and its dispatch notes are captured too, for a later step
+	// to read without retrieving the declaration again.
+	assert.Equal(t, map[string]any{"generalSegment": map[string]any{"containerFlag": true, "numberOfContainers": float64(4)}}, out[RetrieveDeclarationKey])
+	assert.Equal(t, []map[string]any{}, out[RetrieveCDNRefsKey])
 }
 
 // The amendment notification spells the declaration cusDec; that is read too.

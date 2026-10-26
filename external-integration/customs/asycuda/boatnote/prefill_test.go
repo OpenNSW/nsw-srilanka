@@ -8,15 +8,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
 
-// fakeEdge answers each retrieve from a canned body, keyed by path and, for a
-// dispatch note, its number. It records the bodies it was sent.
+// fakeEdge answers each dispatch note retrieve from a canned body, keyed by the
+// note's number. It records the bodies it was sent.
 type fakeEdge struct {
-	declaration string
-	declErr     error
-	notes       map[float64]string
-	sent        []map[string]any
+	notes map[float64]string
+	sent  []map[string]any
 }
 
 func (f *fakeEdge) Post(_ context.Context, path string, body any) (map[string]any, error) {
@@ -26,19 +26,13 @@ func (f *fakeEdge) Post(_ context.Context, path string, body any) (map[string]an
 	sent["_path"] = path
 	f.sent = append(f.sent, sent)
 
-	var answer string
-	switch path {
-	case DeclarationRetrievePath:
-		if f.declErr != nil {
-			return nil, f.declErr
-		}
-		answer = f.declaration
-	case CDNRetrievePath:
-		n, _ := sent["cdnRef"].(map[string]any)["number"].(float64)
-		var ok bool
-		if answer, ok = f.notes[n]; !ok {
-			return nil, errors.New("404 Not Found")
-		}
+	if path != CDNRetrievePath {
+		return nil, errors.New("unexpected path " + path)
+	}
+	n, _ := sent["cdnRef"].(map[string]any)["number"].(float64)
+	answer, ok := f.notes[n]
+	if !ok {
+		return nil, errors.New("404 Not Found")
 	}
 	var resp map[string]any
 	if err := json.Unmarshal([]byte(answer), &resp); err != nil {
@@ -85,9 +79,15 @@ func note(container, seal, mark string, volume float64) string {
 	return string(raw)
 }
 
-func input() Input {
+// retrievedInput is the prefill input for a declaration retrieve answer, read
+// the way the CUSTOMS_CUSDEC_RETRIEVE step captures it.
+func retrievedInput(t *testing.T, answer string) Input {
+	t.Helper()
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal([]byte(answer), &resp))
 	return Input{
-		CusdecRef:     "CBEX1/2026/E/59",
+		Declaration:   document.RetrievedDeclaration(resp),
+		CDNRefs:       document.RetrievedCDNRefs(resp),
 		DeclarantCode: "D0012345",
 		CompanyCode:   "900000000001",
 		Fallback:      []map[string]any{{"cdn_number": "CBEX1/2026/C/1"}},
@@ -97,12 +97,12 @@ func input() Input {
 // The boat note is filled from the declaration and the dispatch notes Customs
 // holds against it: one container row per note that is not cancelled.
 func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
-	edge := &fakeEdge{declaration: declaration, notes: map[float64]string{
+	edge := &fakeEdge{notes: map[float64]string{
 		1: note("MSCU8492019", "894077", "MSCU-849201-9", 32.5),
 		3: note("MSCU1111111", "894100", "MSCU-111111-1", 30),
 	}}
 
-	got := Prefill(context.Background(), edge, input())
+	got := Prefill(context.Background(), edge, retrievedInput(t, declaration))
 
 	require.True(t, got.Retrieved)
 	assert.Equal(t, []map[string]any{
@@ -131,68 +131,57 @@ func TestPrefill_FillsTheBoatNoteFromCustoms(t *testing.T) {
 	}
 }
 
-// The retrieves name the declaration and each dispatch note by reference, with
-// the codes the declaration was made under.
-func TestPrefill_SendsTheReferencesAndCodes(t *testing.T) {
-	edge := &fakeEdge{declaration: declaration, notes: map[float64]string{}}
+// Only the dispatch notes are retrieved, each by reference with the codes the
+// declaration was made under: the declaration comes already retrieved.
+func TestPrefill_RetrievesOnlyTheDispatchNotes(t *testing.T) {
+	edge := &fakeEdge{notes: map[float64]string{}}
 
-	Prefill(context.Background(), edge, input())
+	Prefill(context.Background(), edge, retrievedInput(t, declaration))
 
-	require.Len(t, edge.sent, 3, "the declaration, then the two notes that are not cancelled")
-	assert.Equal(t, map[string]any{
-		"_path":         DeclarationRetrievePath,
-		"cusDecRef":     map[string]any{"office": "CBEX1", "year": "2026", "serial": "E", "number": float64(59)},
-		"declarantCode": "D0012345",
-		"companyCode":   "900000000001",
-	}, edge.sent[0])
-	assert.Equal(t, CDNRetrievePath, edge.sent[1]["_path"])
-	assert.Equal(t, map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": float64(3)}, edge.sent[2]["cdnRef"])
-	assert.Equal(t, "900000000001", edge.sent[2]["companyCode"])
+	require.Len(t, edge.sent, 2, "the two notes that are not cancelled, and no declaration")
+	for _, sent := range edge.sent {
+		assert.Equal(t, CDNRetrievePath, sent["_path"])
+		assert.Equal(t, "D0012345", sent["declarantCode"])
+		assert.Equal(t, "900000000001", sent["companyCode"])
+	}
+	assert.Equal(t, map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": float64(1)}, edge.sent[0]["cdnRef"])
+	assert.Equal(t, map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": float64(3)}, edge.sent[1]["cdnRef"])
 }
 
 // A dispatch note that cannot be retrieved keeps its row, with only its number,
 // so the rows still match the notes Customs holds.
 func TestPrefill_ANoteNotRetrievedKeepsItsRow(t *testing.T) {
-	edge := &fakeEdge{declaration: declaration, notes: map[float64]string{1: note("MSCU8492019", "894077", "M", 0)}}
+	edge := &fakeEdge{notes: map[float64]string{1: note("MSCU8492019", "894077", "M", 0)}}
 
-	got := Prefill(context.Background(), edge, input())
+	got := Prefill(context.Background(), edge, retrievedInput(t, declaration))
 
 	require.Len(t, got.Form["containers"], 2)
 	assert.Equal(t, map[string]any{"cdn_number": "CBEX1/2026/C/3"}, got.Form["containers"].([]map[string]any)[1])
 }
 
-// Without the declaration, the boat note is as before: one row per dispatch note
-// the consignment registered, and nothing else filled.
+// Without a retrieved declaration (the retrieve failed, or answered without
+// one), the boat note is as before: one row per dispatch note the consignment
+// registered, and nothing else filled. Nothing is retrieved.
 func TestPrefill_FallsBackWithoutTheDeclaration(t *testing.T) {
-	for name, tc := range map[string]struct {
-		edge *fakeEdge
-		in   func(Input) Input
-	}{
-		"retrieve failed":      {edge: &fakeEdge{declErr: errors.New("503 Service Unavailable")}},
-		"no declaration":       {edge: &fakeEdge{declaration: `{"payload": {}}`}},
-		"unreadable reference": {edge: &fakeEdge{declaration: declaration}, in: func(i Input) Input { i.CusdecRef = "CBEX1-59"; return i }},
-	} {
-		t.Run(name, func(t *testing.T) {
-			in := input()
-			if tc.in != nil {
-				in = tc.in(in)
-			}
-			got := Prefill(context.Background(), tc.edge, in)
+	edge := &fakeEdge{}
+	in := retrievedInput(t, `{"payload": {}}`)
 
-			assert.False(t, got.Retrieved)
-			assert.Equal(t, map[string]any{"containers": in.Fallback}, got.Form)
-		})
-	}
+	got := Prefill(context.Background(), edge, in)
+
+	assert.False(t, got.Retrieved)
+	assert.Equal(t, map[string]any{"containers": in.Fallback}, got.Form)
+	assert.Empty(t, edge.sent)
 }
 
 // A declaration that lists no dispatch notes still fills its own fields, with the
 // consignment's rows.
 func TestPrefill_NoNotesListedKeepsTheConsignmentRows(t *testing.T) {
-	edge := &fakeEdge{declaration: `{"payload": {"cusdec": {"generalSegment": {"transportVesselName": "EVER GIVEN"}}, "cdnRefs": []}}`}
+	edge := &fakeEdge{}
 
-	got := Prefill(context.Background(), edge, input())
+	got := Prefill(context.Background(), edge,
+		retrievedInput(t, `{"payload": {"cusdec": {"generalSegment": {"transportVesselName": "EVER GIVEN"}}, "cdnRefs": []}}`))
 
 	assert.True(t, got.Retrieved)
 	assert.Equal(t, "EVER GIVEN", got.Form["vessel"])
-	assert.Equal(t, input().Fallback, got.Form["containers"])
+	assert.Equal(t, retrievedInput(t, declaration).Fallback, got.Form["containers"])
 }

@@ -5,32 +5,28 @@ package boatnote
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"math"
-	"strconv"
 	"strings"
 
-	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
 
-// SLC Edge's retrieve endpoints (§6.7, §7.8).
-const (
-	DeclarationRetrievePath = "/api/declaration/v1/retrieve"
-	CDNRetrievePath         = "/api/cdn/v1/retrieve"
-)
+// CDNRetrievePath is SLC Edge's dispatch note retrieve endpoint (§7.8).
+const CDNRetrievePath = "/api/cdn/v1/retrieve"
 
 // Caller posts a JSON body to an SLC Edge path and returns the decoded answer.
 type Caller interface {
 	Post(ctx context.Context, path string, body any) (map[string]any, error)
 }
 
-// Input is what the prefill is built from: the declaration's registered
-// reference (office/year/serial/number), the codes it was declared under, and
-// the container rows to fall back to — one per dispatch note the consignment
-// registered.
+// Input is what the prefill is built from: the declaration as the declaration
+// retrieve (§6.7) captured it, with the dispatch notes listed against it
+// (cdnRefs); the codes it was declared under, which the dispatch note retrieve
+// matches; and the container rows to fall back to, one per dispatch note the
+// consignment registered.
 type Input struct {
-	CusdecRef     string
+	Declaration   map[string]any
+	CDNRefs       []map[string]any
 	DeclarantCode string
 	CompanyCode   string
 	Fallback      []map[string]any
@@ -43,46 +39,25 @@ type Result struct {
 	Retrieved bool
 }
 
-// Prefill retrieves the declaration and the dispatch notes registered against
-// it, and maps them onto the boat note form: one container row per dispatch note
-// that is not cancelled, so the containers on the boat note match the ones
-// Customs holds.
+// Prefill maps the retrieved declaration, and each dispatch note listed against
+// it that is not cancelled, onto the boat note form: one container row per
+// note, so the containers on the boat note match the ones Customs holds. It
+// retrieves the dispatch notes (§7.8); the declaration comes already retrieved.
 //
-// Nothing here fails the step. A declaration that cannot be retrieved leaves
-// the trader the fallback rows and the form to fill, as before; a dispatch note
-// that cannot be retrieved keeps its row with only its number.
+// Nothing here fails the step. Without a declaration the trader gets the
+// fallback rows and the form to fill, as before; a dispatch note that cannot be
+// retrieved keeps its row with only its number.
 func Prefill(ctx context.Context, call Caller, in Input) Result {
-	fallback := Result{Form: map[string]any{"containers": rowsOrEmpty(in.Fallback)}}
-
-	ref, err := cdn.ParseDocumentReference(in.CusdecRef)
-	if err != nil {
-		slog.WarnContext(ctx, "boat note prefill: declaration reference unreadable; using the consignment's dispatch notes",
-			"cusdec_ref", in.CusdecRef, "error", err)
-		return fallback
-	}
-	resp, err := call.Post(ctx, DeclarationRetrievePath, map[string]any{
-		"cusDecRef":     ref,
-		"declarantCode": in.DeclarantCode,
-		"companyCode":   in.CompanyCode,
-	})
-	if err != nil {
-		slog.WarnContext(ctx, "boat note prefill: declaration not retrieved; using the consignment's dispatch notes",
-			"cusdec_ref", in.CusdecRef, "error", err)
-		return fallback
-	}
-	decl := firstObject(resp, "cusdec", "cusDec")
-	if decl == nil {
-		slog.WarnContext(ctx, "boat note prefill: retrieve answer carries no declaration; using the consignment's dispatch notes",
-			"cusdec_ref", in.CusdecRef)
-		return fallback
+	if in.Declaration == nil {
+		slog.WarnContext(ctx, "boat note prefill: no retrieved declaration; using the consignment's dispatch notes")
+		return Result{Form: map[string]any{"containers": rowsOrEmpty(in.Fallback)}}
 	}
 
-	form := declarationFields(decl)
+	form := declarationFields(in.Declaration)
 
-	refs := activeCDNRefs(resp)
+	refs := activeCDNRefs(in.CDNRefs)
 	if len(refs) == 0 {
-		slog.WarnContext(ctx, "boat note prefill: declaration lists no active dispatch notes; using the consignment's",
-			"cusdec_ref", in.CusdecRef)
+		slog.WarnContext(ctx, "boat note prefill: declaration lists no active dispatch notes; using the consignment's")
 		form["containers"] = rowsOrEmpty(in.Fallback)
 		return Result{Form: form, Retrieved: true}
 	}
@@ -90,10 +65,9 @@ func Prefill(ctx context.Context, call Caller, in Input) Result {
 	notes := make([]map[string]any, 0, len(refs))
 	rows := make([]map[string]any, 0, len(refs))
 	for _, r := range refs {
-		number := fmt.Sprintf("%s/%s/%s/%d", r.Office, r.Year, r.Serial, r.Number)
 		note := retrieveCDN(ctx, call, r, in)
 		notes = append(notes, note)
-		rows = append(rows, containerRow(number, note))
+		rows = append(rows, containerRow(r.String(), note))
 	}
 	form["containers"] = rows
 	dispatchFields(form, notes)
@@ -103,7 +77,7 @@ func Prefill(ctx context.Context, call Caller, in Input) Result {
 // retrieveCDN fetches one dispatch note (§7.8). The company code must match the
 // note's shipper or consignee; the exporter's code is the shipper's. A note that
 // cannot be retrieved is returned empty.
-func retrieveCDN(ctx context.Context, call Caller, ref cdn.DocumentReference, in Input) map[string]any {
+func retrieveCDN(ctx context.Context, call Caller, ref document.Reference, in Input) map[string]any {
 	resp, err := call.Post(ctx, CDNRetrievePath, map[string]any{
 		"cdnRef":        ref,
 		"declarantCode": in.DeclarantCode,
@@ -114,39 +88,39 @@ func retrieveCDN(ctx context.Context, call Caller, ref cdn.DocumentReference, in
 			"cdn_ref", ref, "error", err)
 		return nil
 	}
-	return firstObject(resp, "cdn")
+	return document.FirstObject(resp, "cdn")
 }
 
 // declarationFields maps the declaration (Annex A) onto the boat note.
 func declarationFields(decl map[string]any) map[string]any {
-	base := nested(decl, "baseGeneralSegment")
-	general := nested(decl, "generalSegment")
-	exporter := nested(base, "exporter")
-	importer := nested(base, "importer")
+	base := document.Nested(decl, "baseGeneralSegment")
+	general := document.Nested(decl, "generalSegment")
+	exporter := document.Nested(base, "exporter")
+	importer := document.Nested(base, "importer")
 
 	form := map[string]any{}
 	setString(form, "shipper", party(exporter))
 	setString(form, "consignee", party(importer))
-	setString(form, "exporters_registration_no", str(exporter, "id"))
-	setString(form, "vessel", str(general, "transportVesselName"))
-	setString(form, "voyage_no_date", str(general, "transportVoyageName"))
-	setString(form, "port_of_discharge", str(general, "placeOfDischarge"))
-	if n, ok := num(general["numberOfPackages"]); ok {
-		form["number_of_packages"] = formatNumber(n)
+	setString(form, "exporters_registration_no", document.Text(exporter, "id"))
+	setString(form, "vessel", document.Text(general, "transportVesselName"))
+	setString(form, "voyage_no_date", document.Text(general, "transportVoyageName"))
+	setString(form, "port_of_discharge", document.Text(general, "placeOfDischarge"))
+	if n, ok := document.Float(general["numberOfPackages"]); ok {
+		form["number_of_packages"] = document.FormatNumber(n)
 	}
 
 	var descriptions, classifications []string
 	var gross, net float64
 	var hasGross, hasNet bool
-	for _, item := range objects(decl["goodsShipments"]) {
-		commodity := nested(item, "commodity")
-		descriptions = appendUnique(descriptions, str(commodity, "commercialDescription"))
-		classifications = appendUnique(classifications, str(commodity, "classification"))
-		measure := nested(commodity, "goodsMeasure")
-		if v, ok := num(nested(measure, "grossMassMeasure")["value"]); ok {
+	for _, item := range document.Objects(decl["goodsShipments"]) {
+		commodity := document.Nested(item, "commodity")
+		descriptions = appendUnique(descriptions, document.Text(commodity, "commercialDescription"))
+		classifications = appendUnique(classifications, document.Text(commodity, "classification"))
+		measure := document.Nested(commodity, "goodsMeasure")
+		if v, ok := document.Float(document.Nested(measure, "grossMassMeasure")["value"]); ok {
 			gross, hasGross = gross+v, true
 		}
-		if v, ok := num(nested(measure, "netWeightMeasure")["value"]); ok {
+		if v, ok := document.Float(document.Nested(measure, "netWeightMeasure")["value"]); ok {
 			net, hasNet = net+v, true
 		}
 	}
@@ -174,16 +148,16 @@ func dispatchFields(form map[string]any, notes []map[string]any) {
 		if n == nil {
 			continue
 		}
-		if voyage := strings.Join(nonEmpty(str(n, "voyageNumber"), str(n, "voyageDateAsString")), " / "); voyage != "" && !voyageFromNote {
+		if voyage := strings.Join(nonEmpty(document.Text(n, "voyageNumber"), document.Text(n, "voyageDateAsString")), " / "); voyage != "" && !voyageFromNote {
 			form["voyage_no_date"], voyageFromNote = voyage, true
 		}
-		setIfAbsent(form, "vessel", str(n, "vessel"))
-		setIfAbsent(form, "port_of_loading", str(n, "placeOfLoading"))
-		setIfAbsent(form, "port_of_discharge", str(n, "placeOfDischarge"))
-		setIfAbsent(form, "vessel_op_code", str(n, "vesselOpCode"))
-		setIfAbsent(form, "cont_op_code", str(n, "contOpCode"))
-		marks = appendUnique(marks, firstNonEmpty(str(n, "containerMark"), str(n, "containerNumber")))
-		if v, ok := num(n["volume"]); ok {
+		setIfAbsent(form, "vessel", document.Text(n, "vessel"))
+		setIfAbsent(form, "port_of_loading", document.Text(n, "placeOfLoading"))
+		setIfAbsent(form, "port_of_discharge", document.Text(n, "placeOfDischarge"))
+		setIfAbsent(form, "vessel_op_code", document.Text(n, "vesselOpCode"))
+		setIfAbsent(form, "cont_op_code", document.Text(n, "contOpCode"))
+		marks = appendUnique(marks, firstNonEmpty(document.Text(n, "containerMark"), document.Text(n, "containerNumber")))
+		if v, ok := document.Float(n["volume"]); ok {
 			cube, hasCube = cube+v, true
 		}
 	}
@@ -196,28 +170,24 @@ func dispatchFields(form map[string]any, notes []map[string]any) {
 // containerRow is one boat note container row for a dispatch note.
 func containerRow(number string, note map[string]any) map[string]any {
 	row := map[string]any{"cdn_number": number}
-	setString(row, "container_number", str(note, "containerNumber"))
-	setString(row, "customs_seal_no", str(note, "sealNo"))
+	setString(row, "container_number", document.Text(note, "containerNumber"))
+	setString(row, "customs_seal_no", document.Text(note, "sealNo"))
 	return row
 }
 
-// activeCDNRefs lists the dispatch notes the retrieve answer registers against
-// the declaration (cdnRefs), leaving out any Customs cancelled.
-func activeCDNRefs(resp map[string]any) []cdn.DocumentReference {
-	raw, ok := nested(resp, "payload")["cdnRefs"]
-	if !ok {
-		raw = resp["cdnRefs"]
-	}
-	var refs []cdn.DocumentReference
-	for _, r := range objects(raw) {
-		if strings.Contains(strings.ToLower(str(r, "status")), "cancel") {
+// activeCDNRefs reads the dispatch notes listed against the declaration
+// (cdnRefs), leaving out any Customs cancelled.
+func activeCDNRefs(cdnRefs []map[string]any) []document.Reference {
+	var refs []document.Reference
+	for _, r := range cdnRefs {
+		if strings.Contains(strings.ToLower(document.Str(r, "status")), "cancel") {
 			continue
 		}
-		n, ok := num(r["number"])
+		n, ok := document.Float(r["number"])
 		if !ok {
 			continue
 		}
-		ref := cdn.DocumentReference{Office: str(r, "office"), Year: str(r, "year"), Serial: str(r, "serial"), Number: int(n)}
+		ref := document.Reference{Office: document.Text(r, "office"), Year: document.Text(r, "year"), Serial: document.Text(r, "serial"), Number: int(n)}
 		if ref.IsValid() {
 			refs = append(refs, ref)
 		}
@@ -225,21 +195,8 @@ func activeCDNRefs(resp map[string]any) []cdn.DocumentReference {
 	return refs
 }
 
-// firstObject finds the named object in a retrieve answer, which the
-// specification shows under payload but not consistently (§6.7, §7.8).
-func firstObject(resp map[string]any, keys ...string) map[string]any {
-	for _, holder := range []map[string]any{nested(resp, "payload"), resp} {
-		for _, key := range keys {
-			if obj, ok := holder[key].(map[string]any); ok && len(obj) > 0 {
-				return obj
-			}
-		}
-	}
-	return nil
-}
-
 func party(p map[string]any) string {
-	return strings.Join(nonEmpty(str(p, "name"), str(p, "address")), ", ")
+	return strings.Join(nonEmpty(document.Text(p, "name"), document.Text(p, "address")), ", ")
 }
 
 func rowsOrEmpty(rows []map[string]any) []map[string]any {
@@ -247,54 +204,6 @@ func rowsOrEmpty(rows []map[string]any) []map[string]any {
 		return []map[string]any{}
 	}
 	return rows
-}
-
-func nested(m map[string]any, key string) map[string]any {
-	v, _ := m[key].(map[string]any)
-	return v
-}
-
-func str(m map[string]any, key string) string {
-	switch v := m[key].(type) {
-	case string:
-		return strings.TrimSpace(v)
-	case float64:
-		return formatNumber(v)
-	default:
-		return ""
-	}
-}
-
-func num(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case int:
-		return float64(n), true
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
-		return f, err == nil
-	default:
-		return 0, false
-	}
-}
-
-func formatNumber(f float64) string {
-	if f == math.Trunc(f) {
-		return strconv.FormatInt(int64(f), 10)
-	}
-	return strconv.FormatFloat(f, 'f', -1, 64)
-}
-
-func objects(v any) []map[string]any {
-	list, _ := v.([]any)
-	out := make([]map[string]any, 0, len(list))
-	for _, item := range list {
-		if m, ok := item.(map[string]any); ok {
-			out = append(out, m)
-		}
-	}
-	return out
 }
 
 func setString(m map[string]any, key, value string) {

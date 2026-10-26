@@ -4,20 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
 
-// DocumentReference represents an ASYCUDA document reference (cdnRef or cusDecRef).
-type DocumentReference struct {
-	Year   string `json:"year"`
-	Office string `json:"office"`
-	Serial string `json:"serial"`
-	Number int    `json:"number"`
-}
-
-// IsValid reports whether all fields of the reference are populated and valid.
-func (r DocumentReference) IsValid() bool {
-	return r.Year != "" && r.Office != "" && r.Serial != "" && r.Number > 0
-}
+// DocumentReference is the registered reference of a document (§4.1).
+type DocumentReference = document.Reference
 
 // DispatchNoteStatus represents the lifecycle state of a Cargo Dispatch Note.
 type DispatchNoteStatus string

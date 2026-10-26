@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The plugin reads the declaration reference, the declarant and exporter codes,
-// and the consignment's container rows from its inputs, and records the prefill
-// under its output namespace. A failed retrieve still completes the step.
+// The plugin reads the declaration the retrieve step captured and the dispatch
+// notes listed against it, the declarant and exporter codes, and the
+// consignment's container rows, and records the prefill under its output
+// namespace. It retrieves only the dispatch notes, and a failed retrieve still
+// completes the step.
 func TestBoatNotePrefill_RecordsThePrefill(t *testing.T) {
 	var sent []map[string]any
 	plugin := &BoatNotePrefillPlugin{post: func(_ context.Context, serviceID, path string, body any) (map[string]any, error) {
@@ -29,7 +31,10 @@ func TestBoatNotePrefill_RecordsThePrefill(t *testing.T) {
 		Context: context.Background(),
 		Record:  &store.TaskRecord{TaskID: "task-1", Data: map[string]any{}},
 		Inputs: map[string]any{
-			"cusdec_ref": "CBEX1/2026/E/59",
+			"declaration": map[string]any{"generalSegment": map[string]any{"transportVesselName": "EVER GIVEN"}},
+			"cdn_refs": []any{
+				map[string]any{"office": "CBEX1", "year": "2026", "serial": "C", "number": float64(1), "status": "ACKNOWLEDGED"},
+			},
 			"userform": map[string]any{"traders": map[string]any{
 				"declarant": map[string]any{"code": "D0012345"},
 				"exporter":  map[string]any{"code": "900000000001"},
@@ -41,13 +46,17 @@ func TestBoatNotePrefill_RecordsThePrefill(t *testing.T) {
 
 	require.NoError(t, plugin.Execute(ctx, json.RawMessage(`{"service_id": "customs-asycuda"}`)))
 
-	require.Len(t, sent, 1)
+	require.Len(t, sent, 1, "only the dispatch note is retrieved; the declaration comes from the retrieve step")
 	assert.Equal(t, "customs-asycuda", sent[0]["_service"])
+	assert.Equal(t, "/api/cdn/v1/retrieve", sent[0]["_path"])
 	assert.Equal(t, "D0012345", sent[0]["declarantCode"])
 	assert.Equal(t, "900000000001", sent[0]["companyCode"])
 	assert.Equal(t, map[string]any{
-		"userform":  map[string]any{"containers": []map[string]any{{"cdn_number": "CBEX1/2026/C/1"}}},
-		"retrieved": false,
+		"userform": map[string]any{
+			"vessel":     "EVER GIVEN",
+			"containers": []map[string]any{{"cdn_number": "CBEX1/2026/C/1"}},
+		},
+		"retrieved": true,
 	}, ctx.Record.Data["boat_note_prefill"])
 }
 

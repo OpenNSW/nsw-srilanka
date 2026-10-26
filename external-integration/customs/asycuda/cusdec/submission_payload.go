@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/nswid"
+
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 )
 
 // The SLC Edge CusDec submission payload, per Annex A of the ASYCUDA ↔ NSW
@@ -218,17 +220,17 @@ func buildDeclaration(form map[string]any, previousEdgeID string, forVerify bool
 		return Submission{}, nil, fmt.Errorf("customs: empty declaration form")
 	}
 
-	ident := nested(form, "identification")
-	traders := nested(form, "traders")
-	general := nested(form, "generalInfo")
-	transport := nested(form, "transport")
-	financial := nested(form, "financial")
-	valuation := nested(form, "valuation")
-	packages := nested(form, "packages")
+	ident := document.Nested(form, "identification")
+	traders := document.Nested(form, "traders")
+	general := document.Nested(form, "generalInfo")
+	transport := document.Nested(form, "transport")
+	financial := document.Nested(form, "financial")
+	valuation := document.Nested(form, "valuation")
+	packages := document.Nested(form, "packages")
 
-	exporter := nested(traders, "exporter")
-	consignee := nested(traders, "consignee")
-	declarant := nested(traders, "declarant")
+	exporter := document.Nested(traders, "exporter")
+	consignee := document.Nested(traders, "consignee")
+	declarant := document.Nested(traders, "declarant")
 
 	items, err := buildItems(form)
 	if err != nil {
@@ -243,50 +245,50 @@ func buildDeclaration(form map[string]any, previousEdgeID string, forVerify bool
 	sub := Submission{
 		Properties: Properties{Submitter: submitterChannel},
 		BaseGeneralSegment: BaseSegment{
-			DeclarationType:      str(ident, "declarationType"),
-			DeclarationProcedure: str(ident, "generalProcedureCode"),
+			DeclarationType:      document.Str(ident, "declarationType"),
+			DeclarationProcedure: document.Str(ident, "generalProcedureCode"),
 			DeclarationMode:      declarationModeElectronic,
-			OfficeCode:           str(ident, "officeCode"),
-			ManifestRegNumber:    str(ident, "manifestRegNumber"),
+			OfficeCode:           document.Str(ident, "officeCode"),
+			ManifestRegNumber:    document.Str(ident, "manifestRegNumber"),
 			// The form collects the consignee, which is the importer in an
 			// export declaration.
 			Importer: Party{
-				ID:          str(consignee, "code"),
-				Name:        str(consignee, "name"),
-				Address:     str(consignee, "address"),
-				CountryCode: str(consignee, "countryCode"),
+				ID:          document.Str(consignee, "code"),
+				Name:        document.Str(consignee, "name"),
+				Address:     document.Str(consignee, "address"),
+				CountryCode: document.Str(consignee, "countryCode"),
 			},
 			Exporter: Party{
-				ID:          str(exporter, "code"),
-				Name:        str(exporter, "name"),
-				Address:     str(exporter, "address"),
-				CountryCode: str(exporter, "countryCode"),
+				ID:          document.Str(exporter, "code"),
+				Name:        document.Str(exporter, "name"),
+				Address:     document.Str(exporter, "address"),
+				CountryCode: document.Str(exporter, "countryCode"),
 			},
-			DeclarantCode: str(declarant, "code"),
+			DeclarantCode: document.Str(declarant, "code"),
 		},
 		GeneralSegment: GeneralSeg{
 			// Annex A defines this as the count of goodsShipments[], so it is
 			// derived rather than collected — the two cannot disagree.
 			NumberOfItems:                  len(items),
 			NumberOfPackages:               integer(packages, "totalPackages"),
-			CountryOfExportCode:            str(general, "exportCountryCode"),
-			CountryOfDestination:           str(general, "destinationCountryCode"),
-			CountryFirstDestination:        str(general, "countryOfFirstDestination"),
-			TransportVesselName:            str(transport, "vesselName"),
-			TransportVesselNameNationality: str(transport, "transportNationality"),
-			TransportVoyageName:            str(transport, "voyageNo"),
-			TransportVoyageNameNationality: str(transport, "voyageNationality"),
-			DeliveryTerms:                  str(transport, "deliveryTermsCode"),
-			DeliveryTermsPlace:             str(transport, "deliveryTermsPlace"),
-			ModeOfTransportAtBorder:        str(transport, "modeOfTransport"),
-			PlaceOfDischarge:               str(transport, "placeOfDischargeCode"),
-			BorderOffice:                   str(transport, "borderOfficeCode"),
+			CountryOfExportCode:            document.Str(general, "exportCountryCode"),
+			CountryOfDestination:           document.Str(general, "destinationCountryCode"),
+			CountryFirstDestination:        document.Str(general, "countryOfFirstDestination"),
+			TransportVesselName:            document.Str(transport, "vesselName"),
+			TransportVesselNameNationality: document.Str(transport, "transportNationality"),
+			TransportVoyageName:            document.Str(transport, "voyageNo"),
+			TransportVoyageNameNationality: document.Str(transport, "voyageNationality"),
+			DeliveryTerms:                  document.Str(transport, "deliveryTermsCode"),
+			DeliveryTermsPlace:             document.Str(transport, "deliveryTermsPlace"),
+			ModeOfTransportAtBorder:        document.Str(transport, "modeOfTransport"),
+			PlaceOfDischarge:               document.Str(transport, "placeOfDischargeCode"),
+			BorderOffice:                   document.Str(transport, "borderOfficeCode"),
 			TotalCustomsValuation:          buildDeclarationValuation(valuation),
 			ContainerFlag:                  boolean(transport, "containerized"),
 			NumberOfContainers:             integer(form, "containerCount"),
-			WarehouseCode:                  str(transport, "warehouseCode"),
+			WarehouseCode:                  document.Str(transport, "warehouseCode"),
 			WarehouseDelay:                 integer(transport, "warehouseDelay"),
-			DeferredPayment:                str(financial, "deferredPayment"),
+			DeferredPayment:                document.Str(financial, "deferredPayment"),
 		},
 		GoodsShipments:      items,
 		Remittances:         buildRemittances(financial),
@@ -306,16 +308,16 @@ func buildDeclaration(form map[string]any, previousEdgeID string, forVerify bool
 // field, totalAmountInvoiced.
 func buildDeclarationValuation(v map[string]any) Valuation {
 	section := func(key string) Amount {
-		s := nested(v, key)
+		s := document.Nested(v, key)
 		val := number(s, "amount")
 		if val == 0 {
 			return Amount{Value: 0}
 		}
-		return Amount{Value: val, CurrencyID: str(s, "currencyCode")}
+		return Amount{Value: val, CurrencyID: document.Str(s, "currencyCode")}
 	}
-	invoice := nested(v, "totalAmountInvoiced")
+	invoice := document.Nested(v, "totalAmountInvoiced")
 	return Valuation{
-		ChargeAmount:    Amount{Value: number(invoice, "amount"), CurrencyID: str(invoice, "currencyCode")},
+		ChargeAmount:    Amount{Value: number(invoice, "amount"), CurrencyID: document.Str(invoice, "currencyCode")},
 		ExternalFreight: section("externalFreight"),
 		InternalFreight: section("internalFreight"),
 		Insurance:       section("insurance"),
@@ -329,9 +331,9 @@ func buildDeclarationValuation(v map[string]any) Valuation {
 // invoiceAmount on the line, so chargeAmount is filled and the other five
 // costs travel as {"value":0}.
 func buildItemValuation(v map[string]any) Valuation {
-	invoice := nested(v, "invoiceAmount")
+	invoice := document.Nested(v, "invoiceAmount")
 	return Valuation{
-		ChargeAmount: Amount{Value: number(invoice, "amount"), CurrencyID: str(invoice, "currencyCode")},
+		ChargeAmount: Amount{Value: number(invoice, "amount"), CurrencyID: document.Str(invoice, "currencyCode")},
 	}
 }
 
@@ -348,11 +350,11 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 			return nil, fmt.Errorf("customs: item %d is not an object", i+1)
 		}
 
-		tarif := nested(m, "tarification")
-		goods := nested(m, "goodsDescription")
-		val := nested(m, "valuation")
-		pkg := nested(m, "packages")
-		supp := nested(tarif, "supplementaryUnit")
+		tarif := document.Nested(m, "tarification")
+		goods := document.Nested(m, "goodsDescription")
+		val := document.Nested(m, "valuation")
+		pkg := document.Nested(m, "packages")
+		supp := document.Nested(tarif, "supplementaryUnit")
 
 		itemValuation := buildItemValuation(val)
 
@@ -363,32 +365,32 @@ func buildItems(form map[string]any) ([]GoodsItem, error) {
 			SequenceNumeric: i + 1,
 			CustomsValue:    itemValuation,
 			Commodity: Commodity{
-				CommercialDescription:  str(goods, "commercialDescription"),
-				CommercialDescription1: str(goods, "commercialDescription1"),
-				CommodityDescription:   str(goods, "description"),
-				Classification:         str(tarif, "hsCode"),
+				CommercialDescription:  document.Str(goods, "commercialDescription"),
+				CommercialDescription1: document.Str(goods, "commercialDescription1"),
+				CommodityDescription:   document.Str(goods, "description"),
+				Classification:         document.Str(tarif, "hsCode"),
 				GoodsMeasure: GoodsMeasure{
 					GrossMassMeasure: Measure{Value: number(val, "grossWeight"), UnitCode: massUnit},
 					NetWeightMeasure: Measure{Value: number(val, "netWeight"), UnitCode: massUnit},
 					TariffQuantity: Measure{
 						Value:    number(supp, "quantity"),
-						UnitCode: str(supp, "code"),
+						UnitCode: document.Str(supp, "code"),
 					},
 				},
 			},
 			GovernmentProcedure: GovernmentProcedure{
-				ExtendedProcedure: str(tarif, "extendedProcedureCode"),
-				NationalProcedure: str(tarif, "nationalProcedureCode"),
+				ExtendedProcedure: document.Str(tarif, "extendedProcedureCode"),
+				NationalProcedure: document.Str(tarif, "nationalProcedureCode"),
 			},
-			CountryOfOriginCode: str(goods, "originCountryCode"),
-			GoodsPreference:     str(tarif, "preferenceCode"),
+			CountryOfOriginCode: document.Str(goods, "originCountryCode"),
+			GoodsPreference:     document.Str(tarif, "preferenceCode"),
 			ItemPackage: Measure{
 				Value:    float64(integer(pkg, "quantity")),
-				UnitCode: str(pkg, "kindCode"),
+				UnitCode: document.Str(pkg, "kindCode"),
 			},
-			Bol:             str(m, "bol"),
-			BolSplit:        str(m, "bolSplit"),
-			MarksAndNumbers: str(m, "marksAndNumbers"),
+			Bol:             document.Str(m, "bol"),
+			BolSplit:        document.Str(m, "bolSplit"),
+			MarksAndNumbers: document.Str(m, "marksAndNumbers"),
 		})
 	}
 	return items, nil
@@ -400,11 +402,11 @@ const massUnit = "KG"
 
 func buildRemittances(financial map[string]any) []Remittance {
 	amount := number(financial, "remittanceAmount")
-	currency := str(financial, "remittanceCurrencyCode")
+	currency := document.Str(financial, "remittanceCurrencyCode")
 	r := Remittance{
-		BankCode:       str(financial, "bankCode"),
-		Reference:      str(financial, "bankReference"),
-		TermsOfPayment: str(financial, "paymentTermsCode"),
+		BankCode:       document.Str(financial, "bankCode"),
+		Reference:      document.Str(financial, "bankReference"),
+		TermsOfPayment: document.Str(financial, "paymentTermsCode"),
 	}
 	// AmountType pairs the value with its currency (§4.3). The remittance has
 	// its own currency, financial.remittanceCurrencyCode; it is not the Box 22
@@ -446,7 +448,7 @@ func buildRemittances(financial map[string]any) []Remittance {
 // here would send Customs an empty declaration; sending the entry lets it
 // answer with the field-level reason a verify exists to get.
 func buildSupportDocs(form map[string]any, forVerify bool) ([]SupportDoc, error) {
-	group := nested(form, "supportingDocuments")
+	group := document.Nested(form, "supportingDocuments")
 	if len(group) == 0 {
 		return nil, nil
 	}
@@ -496,8 +498,8 @@ func buildScannedDoc(entry any, i int, forVerify bool) (doc SupportDoc, ok bool,
 		return SupportDoc{}, false, fmt.Errorf("customs: scanned document %d is not an object", i+1)
 	}
 
-	key := strings.TrimSpace(str(m, "fileBase64"))
-	code := str(m, "documentCode")
+	key := strings.TrimSpace(document.Str(m, "fileBase64"))
+	code := document.Str(m, "documentCode")
 	if forVerify {
 		return SupportDoc{SequenceNumber: 0, DocumentCode: code}, true, nil
 	}
@@ -528,10 +530,10 @@ func buildMetaDoc(entry any, i int, forVerify bool) (doc SupportDoc, ok bool, er
 
 	doc = SupportDoc{
 		SequenceNumber: i + 1,
-		DocumentCode:   str(m, "documentCode"),
-		ItemSequence:   str(m, "itemSequence"),
-		DocumentID:     strings.TrimSpace(str(m, "documentId")),
-		DateAsString:   formatDMY(str(m, "dateAsString")),
+		DocumentCode:   document.Str(m, "documentCode"),
+		ItemSequence:   document.Str(m, "itemSequence"),
+		DocumentID:     strings.TrimSpace(document.Str(m, "documentId")),
+		DateAsString:   formatDMY(document.Str(m, "dateAsString")),
 	}
 
 	// A metadata document stands in for bytes held elsewhere, so it must carry
@@ -581,16 +583,6 @@ func formatDMY(v string) string {
 // The form arrives as decoded JSON, so every value is any and every number is
 // float64. These read through that without the caller repeating type
 // assertions, returning the zero value for anything absent or the wrong shape.
-
-func nested(m map[string]any, key string) map[string]any {
-	v, _ := m[key].(map[string]any)
-	return v
-}
-
-func str(m map[string]any, key string) string {
-	v, _ := m[key].(string)
-	return strings.TrimSpace(v)
-}
 
 func number(m map[string]any, key string) float64 {
 	switch n := m[key].(type) {
