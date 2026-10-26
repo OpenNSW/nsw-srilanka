@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useMatch } from 'react-router-dom'
 import { appConfig } from '@/config'
 import { ROUTES } from '@/constants'
@@ -67,9 +67,15 @@ export function Footer() {
         })}
       </div>
       <div className="flex items-center gap-5 text-foreground">
-        <a href="https://github.com/OpenNSW" target="_blank" rel="noreferrer" className="hover:underline">
-          {t('common.poweredBy')}
-        </a>
+        <span>
+          <Trans
+            i18nKey="common.poweredBy"
+            components={[
+              <a href="https://github.com/opennsw" target="_blank" rel="noreferrer" className="hover:underline" />,
+              <a href="https://opensource.lk/" target="_blank" rel="noreferrer" className="hover:underline" />,
+            ]}
+          />
+        </span>
         {version && <span>{version}</span>}
         {/* Demo-only control, shown only when the deployment opts in with
             SHOW_COLOR_SCHEME_SWITCHER, and hidden below sm: the footer's
