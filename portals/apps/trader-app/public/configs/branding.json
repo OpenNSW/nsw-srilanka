@@ -1,12 +1,13 @@
 {
   "branding": {
-    "systemName": "NSW",
+    "systemName": "National Single Window for Trade - Sri Lanka",
     "appName": "Trader Portal",
     "logoUrl": "",
     "systemLogoUrl": "",
     "favicon": "",
     "portalName": "Trader Portal",
-    "description": "A unified digital platform enabling seamless and secure trade facilitation services.",
+    "description": "A joint initiative of the Ministry of Finance, Planning and Economic Development, the Ministry of Digital Economy, and GovTech Sri Lanka (Pvt) Ltd.",
+    "tagline": "An integrated platform to enhance trade competitiveness through digital transformation.",
     "heroImageUrl": "",
     "partnerLogos": [{ "url": "", "alt": "" }],
     "footerLinks": [],
