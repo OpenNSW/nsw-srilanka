@@ -20,10 +20,13 @@ type Props = {
 }
 
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0, title }: Props) {
+  const { t } = useTranslation()
+  const alert: Alert | undefined =
+    task.alert ?? (task.state === 'ON_HOLD' ? { variant: 'warning', message: t('tasks.onHoldBanner') } : undefined)
   return (
     <div className={`${zoneWidthClass(task)} mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8`}>
       <Header task={task} title={title} />
-      {task.alert !== undefined && <AlertBanner alert={task.alert} />}
+      {alert !== undefined && <AlertBanner alert={alert} />}
       {task.view.map((component) => (
         <Zone
           key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}

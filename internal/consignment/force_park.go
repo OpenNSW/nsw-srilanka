@@ -75,8 +75,8 @@ func (s *Service) ForceParkTaskNode(ctx context.Context, workflowID, stepID, rea
 // taskWorkflowID is a TASK node's task_workflow_id and stepID is the step's step_id from that task
 // workflow's engine status. It returns the step's node ID, for the caller's audit record.
 //
-// While the step is parked the task still shows the step's own state, and a submission for it is
-// rejected as stale.
+// While the step is parked the task is placed ON_HOLD (via the task workflow's AdminParkHandler),
+// hiding interactive controls and refusing submissions or drafts as stale.
 func (s *Service) ForceParkTaskWorkflowStep(ctx context.Context, taskWorkflowID, stepID, reason string) (nodeID string, err error) {
 	return forceParkStep(ctx, s.taskWm, taskWorkflowID, stepID, reason, nil)
 }
