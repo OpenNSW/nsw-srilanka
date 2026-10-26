@@ -32,8 +32,8 @@ type EngineNodeDTO struct {
 	Status         string `json:"status"`
 	LastError      string `json:"last_error,omitempty"`
 	// ParkCategory says why a node in AWAITING_ADMIN parked (INPUT_MAPPING, OUTPUT_MAPPING,
-	// TASK_FAILURE, GATEWAY_CONDITION, SPLIT_DATA, CHILD_FAILURE, DEFINITION_ERROR or UNKNOWN), so
-	// the UI can guide an admin without parsing LastError.
+	// TASK_FAILURE, GATEWAY_CONDITION, SPLIT_DATA, CHILD_FAILURE, DEFINITION_ERROR, ADMIN_FORCED or
+	// UNKNOWN), so the UI can guide an admin without parsing LastError.
 	ParkCategory string `json:"park_category,omitempty"`
 	// InputMapping and OutputMapping are the node's mappings, set only while it is parked. In
 	// InputMapping the key is the workflow variable read (a trailing "?" marks it optional) and
@@ -213,18 +213,15 @@ func (s *Service) attachTaskWorkflowIDs(ctx context.Context, instance *workflow.
 		return
 	}
 
-	byNodeID := make(map[string]string, len(nodes))
+	byTaskID := make(map[string]string, len(nodes))
 	for _, rec := range s.taskStore.GetAllTasks(ctx, caseID) {
 		if rec.TaskWorkflowID != "" {
-			byNodeID[rec.TaskID] = rec.TaskWorkflowID
+			byTaskID[rec.TaskID] = rec.TaskWorkflowID
 		}
 	}
 	for i := range nodes {
-		if nodes[i].Type != string(workflow.NodeTypeTask) {
-			continue
-		}
-		if taskWorkflowID, ok := byNodeID[nodes[i].ID]; ok {
-			nodes[i].TaskWorkflowID = taskWorkflowID
+		if nodes[i].Type == string(workflow.NodeTypeTask) {
+			nodes[i].TaskWorkflowID = byTaskID[nodes[i].StepID]
 		}
 	}
 }

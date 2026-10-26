@@ -52,7 +52,9 @@ type Service struct {
 	companyService company.Service
 	userService    user.Service
 	taskStore      TaskStore
-	roles          map[string]string // logical name ("trader"/"cha") -> IdP token role
+	// tasks closes a task from outside its workflow for ForceParkTaskNode.
+	tasks TaskCanceller
+	roles map[string]string // logical name ("trader"/"cha") -> IdP token role
 	// flowOptions are the flows a trader or CHA may start on a consignment (Config.Flows).
 	flowOptions []FlowOption
 }
@@ -587,6 +589,8 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 			nodeState = WorkflowNodeStateFailed
 		case "QUEUED_EXTERNALLY":
 			nodeState = WorkflowNodeStateQueuedExternally
+		case store.StateCancelled:
+			nodeState = WorkflowNodeStateCancelled
 		default:
 			// PENDING_USER and any other active orchestrator state: the trader
 			// still has to act (including after an officer send-back).

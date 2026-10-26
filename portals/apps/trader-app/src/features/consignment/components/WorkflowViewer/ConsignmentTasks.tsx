@@ -39,7 +39,9 @@ export function ConsignmentTasks({
 
   const groups = useMemo(() => {
     const visible = steps.filter((step) => isTraderVisibleNodeType(step.workflowNodeTemplate.type))
-    const done = visible.filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED').sort(newestFirst)
+    const done = visible
+      .filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED')
+      .sort(newestFirst)
     const waiting = visible.filter((s) => s.state === 'QUEUED_EXTERNALLY').sort(newestFirst)
     const placed = new Set([...done, ...waiting].map((s) => s.id))
     return { needsAction: visible.filter((s) => !placed.has(s.id)), waiting, done }

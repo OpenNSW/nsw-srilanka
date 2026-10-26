@@ -74,6 +74,9 @@ func (s *memTaskStore) WriteRenderState(context.Context, string, string, int64, 
 func (s *memTaskStore) CompleteTask(context.Context, string, int64) (int64, error) {
 	panic("not used")
 }
+func (s *memTaskStore) CancelTask(context.Context, string) (int64, error) {
+	panic("not used")
+}
 func (s *memTaskStore) ClaimTask(context.Context, string, string, time.Time) (int64, error) {
 	panic("not used")
 }

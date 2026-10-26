@@ -12,6 +12,7 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons'
 import {
+  forceParkNode,
   getConsignmentForAdmin,
   getTaskWorkflowEngineStatus,
   getWorkflowEngineStatus,
@@ -704,6 +705,11 @@ const PARK_CATEGORY_INFO: Record<ParkCategory, { label: string; color: 'amber' |
     color: 'red',
     hint: "The workflow definition itself is invalid, so setting variables won't fix it.",
   },
+  ADMIN_FORCED: {
+    label: 'Force-parked by admin',
+    color: 'amber',
+    hint: 'An admin force-parked this waiting step. Complete with the outcome to move on, Retry to run it again, or Abort.',
+  },
   UNKNOWN: {
     label: 'Unclassified',
     color: 'gray',
@@ -1225,6 +1231,109 @@ function ErrorCell({ message }: { message: string }) {
   )
 }
 
+// What force-parking does at each level, as the dialog explains it (see forceParkNode).
+const FORCE_PARK_INFO: Record<AdminWorkflowKind, { description: string; next: string }> = {
+  workflow: {
+    description:
+      "The node's whole task is closed, so the trader or officer cannot submit it, and the node parks for you to resolve. This can't be undone.",
+    next: 'Then resolve it: RETRY with a variables patch to start a new task, COMPLETE with the outcome to move on, or ABORT to fail the workflow.',
+  },
+  task: {
+    description:
+      'Only this step parks; the task stays open. While it is parked, a submission for the step is rejected.',
+    next: 'Then resolve it: COMPLETE with the variables the step would have produced lets the task carry on as if its callback had arrived; RETRY runs the step again; ABORT fails the task.',
+  },
+}
+
+// Force-parks one RUNNING TASK node (see NodeRow's "Force park" button) after the admin gives a
+// reason. It changes a live workflow with no undo, so this is an AlertDialog like the resolve
+// confirmation. It stays open on an error so the admin can read it and try again.
+function ForceParkDialog({
+  open,
+  onOpenChange,
+  workflowId,
+  workflowKind,
+  nodeId,
+  stepId,
+  onParked,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workflowId: string
+  workflowKind: AdminWorkflowKind
+  nodeId: string
+  stepId: string
+  onParked: () => void
+}) {
+  const info = FORCE_PARK_INFO[workflowKind]
+  const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    setSubmitting(true)
+    setError(null)
+    try {
+      await forceParkNode(workflowId, stepId, reason, workflowKind)
+      setReason('')
+      onOpenChange(false)
+      onParked()
+    } catch (err) {
+      console.error('Failed to force-park node:', err)
+      setError(err instanceof Error ? err.message : 'Failed to force-park node.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AlertDialog.Root open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+      <AlertDialog.Content maxWidth="480px">
+        <AlertDialog.Title className="mb-3">
+          {workflowKind === 'task' ? 'Force park step' : 'Force park node'}
+        </AlertDialog.Title>
+        <AlertDialog.Description size="2" className="mb-4">
+          {info.description}
+        </AlertDialog.Description>
+
+        <div className="flex flex-wrap gap-4 mb-4 p-3 bg-app-surface-muted rounded">
+          <IdentityField label="Workflow" id={workflowId} />
+          <IdentityField label="Node" id={nodeId} />
+        </div>
+
+        <Text as="p" size="2" color="gray" className="mb-4">
+          {info.next}
+        </Text>
+
+        <TextArea
+          aria-label="Reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          placeholder="Why are you force-parking this node? (required)"
+        />
+
+        {error && (
+          <Text as="p" size="2" color="red" className="mt-3">
+            {error}
+          </Text>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <AlertDialog.Cancel>
+            <Button variant="soft" color="gray" disabled={submitting}>
+              Cancel
+            </Button>
+          </AlertDialog.Cancel>
+          <Button color="amber" disabled={!reason.trim() || submitting} onClick={() => void submit()}>
+            {submitting ? 'Force parking…' : 'Force park'}
+          </Button>
+        </div>
+      </AlertDialog.Content>
+    </AlertDialog.Root>
+  )
+}
+
 // One engine node's row. A native engine child (SPLIT_TASK/BATCH_SPLIT/PARALLEL_SPLIT) gets a
 // full-width expandable branch below, since those are rare and structurally significant. A TASK
 // node's own task workflow (task_workflow_id) is common — nearly every TASK node that has
@@ -1267,6 +1376,10 @@ function NodeRow({
 }) {
   const childIds = node.child_workflow_ids ?? []
   const taskBranch = useExpandableWorkflow(node.task_workflow_id ?? '', 'task', expandSignal)
+  const [forceParkOpen, setForceParkOpen] = useState(false)
+  // Only a TASK node that is waiting can be force-parked: on a consignment workflow that closes its
+  // task, in a task workflow it parks just that step (see forceParkNode).
+  const canForcePark = node.type === 'TASK' && node.status === 'RUNNING' && !!node.step_id
 
   // Indentation lives only on the Node cell's own padding, never on the grid row/container
   // itself — the grid's own column tracks (Type/Status/Updated/Last error) are fixed-width, so
@@ -1333,6 +1446,22 @@ function NodeRow({
             >
               Resolve
             </Button>
+          )}
+          {canForcePark && (
+            <>
+              <Button variant="soft" color="gray" size="1" onClick={() => setForceParkOpen(true)}>
+                Force park
+              </Button>
+              <ForceParkDialog
+                open={forceParkOpen}
+                onOpenChange={setForceParkOpen}
+                workflowId={workflowId}
+                workflowKind={workflowKind}
+                nodeId={node.id}
+                stepId={node.step_id ?? ''}
+                onParked={onRefresh}
+              />
+            </>
           )}
         </div>
         <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>

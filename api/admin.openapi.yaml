@@ -281,6 +281,107 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/admin/workflows/{id}/steps/{stepId}/force-park:
+    post:
+      summary: "[Admin] Force a waiting TASK node into admin park"
+      description: |
+        Moves a TASK node that is waiting on its task into `AWAITING_ADMIN`,
+        so it can then be resolved with
+        `POST /api/v1/admin/workflows/{id}/steps/{stepId}/resolve` like any
+        parked node. Use it for a node that is healthy but has to be
+        overridden: for example a wait for a Customs event that happened
+        offline and will never be notified (`COMPLETE` with the outcome), or a
+        task whose inputs are out of date (`RETRY` with a patch).
+
+        The node's task is closed first. Its record moves to `CANCELLED`, so
+        the trader or officer sees it closed and cannot submit it, and
+        its task workflow is terminated. The node then parks with
+        `park_category` `TASK_FAILURE` and a `last_error` naming
+        `AdminForcedPark` and the reason. `RETRY` afterwards starts a new task
+        under a new step.
+
+        `{id}` is the flow or a child-branch workflow instance containing the
+        node, as for resolve. `{stepId}` is the node's `EngineNodeDTO.step_id`
+        while it is `RUNNING`. A request that failed part way can be sent
+        again.
+
+        To override one step and let the task carry on, for example a wait
+        for a callback that will never come, force-park that step instead
+        with `POST /api/v1/admin/task/{id}/steps/{stepId}/force-park`.
+
+        Requires scope `nsw:consignment:adminwrite`.
+      operationId: forceParkTaskNode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: >-
+            The ID of the flow or child-branch workflow instance containing the
+            node (see above).
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          required: true
+          description: The waiting node's current step (`EngineNodeDTO.step_id`).
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForceParkRequest'
+      responses:
+        '204':
+          description: >-
+            The task was closed and the node's step failed. The node parks as
+            soon as the workflow processes it; fetch the engine status to
+            resolve it.
+        '400':
+          description: >-
+            Missing workflow or step ID; an invalid request body (malformed
+            JSON, an unknown field, or anything after the JSON value); a
+            missing or blank `reason`; or a node that is not a TASK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. No usable principal on the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No workflow execution exists for `{id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            No TASK node in this workflow is waiting on its task under
+            `{stepId}`: the step never existed here or is over, the node is
+            already parked, its task has completed, or its task has not been
+            created yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/admin/task/{id}/steps/{stepId}/resolve:
     post:
       summary: "[Admin] Resolve a node parked inside a task workflow"
@@ -376,6 +477,94 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/admin/task/{id}/steps/{stepId}/force-park:
+    post:
+      summary: "[Admin] Force a waiting step of a task workflow into admin park"
+      description: |
+        Moves one step of a task workflow that is waiting, such as a wait for
+        an external callback, into `AWAITING_ADMIN`. The task stays open. It
+        is then resolved through
+        `POST /api/v1/admin/task/{id}/steps/{stepId}/resolve`: `COMPLETE` with
+        a patch of the variables the step would have produced lets the task
+        carry on as if the callback had arrived, and the task then ends
+        normally and reports to its parent. `RETRY` runs the step again.
+
+        While the step is parked, the task still shows the step's own state,
+        and a submission for it is rejected.
+
+        `{id}` is the task workflow's own ID (`EngineNodeDTO.task_workflow_id`
+        on the TASK node that started it), and `{stepId}` is the step's
+        `EngineNodeDTO.step_id` from that task workflow's engine status, while
+        it is `RUNNING`.
+
+        Requires scope `nsw:consignment:adminwrite`.
+      operationId: forceParkTaskWorkflowStep
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The task workflow's own ID.
+          schema:
+            type: string
+        - name: stepId
+          in: path
+          required: true
+          description: The waiting step's current step ID (`EngineNodeDTO.step_id`).
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForceParkRequest'
+      responses:
+        '204':
+          description: >-
+            The step was failed. It parks as soon as the task workflow
+            processes it; fetch the task workflow's engine status to resolve it.
+        '400':
+          description: >-
+            Missing workflow or step ID; an invalid request body (malformed
+            JSON, an unknown field, or anything after the JSON value); a
+            missing or blank `reason`; or a node that is not a TASK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized. No usable principal on the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:consignment:adminwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No task workflow execution exists for `{id}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            No step in this task workflow is waiting under `{stepId}`: the step
+            never existed here or is over, or it is already parked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -425,7 +614,10 @@ components:
 
     WorkflowNodeState:
       type: string
-      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED]
+      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED, CANCELLED]
+      description: >-
+        `CANCELLED` is a task an admin closed by force-parking its node; it
+        cannot be submitted.
 
     WorkflowNodeTemplateResponseDTO:
       type: object
@@ -610,6 +802,7 @@ components:
             - SPLIT_DATA
             - CHILD_FAILURE
             - DEFINITION_ERROR
+            - ADMIN_FORCED
             - UNKNOWN
           description: |
             Why a node in `AWAITING_ADMIN` parked, set together with
@@ -628,6 +821,7 @@ components:
             - `CHILD_FAILURE`: a spawned child workflow failed.
             - `DEFINITION_ERROR`: the workflow definition itself is invalid, so
               no variable fixes it.
+            - `ADMIN_FORCED`: an admin proactively parked a waiting step.
             - `UNKNOWN`: the error was not categorized.
         input_mapping:
           type: object
@@ -728,6 +922,21 @@ components:
           description: >-
             The expression evaluated against `global_variables`, verbatim.
             Absent for an edge with no condition.
+
+    ForceParkRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: >-
+            Why the admin is doing this. Required, and must not be blank. It is
+            recorded in the audit log and in the parked node's `last_error`,
+            and, when a task is closed, as its task workflow's termination
+            reason.
 
     ResolveAdminInterventionRequest:
       type: object

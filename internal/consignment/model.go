@@ -172,6 +172,7 @@ const (
 	WorkflowNodeStateQueuedExternally WorkflowNodeState = "QUEUED_EXTERNALLY" // Submitted; waiting on an agency officer
 	WorkflowNodeStateCompleted        WorkflowNodeState = "COMPLETED"         // Node has been completed
 	WorkflowNodeStateFailed           WorkflowNodeState = "FAILED"            // Node has failed
+	WorkflowNodeStateCancelled        WorkflowNodeState = "CANCELLED"         // An admin closed this task (force-parked its node)
 )
 
 // WorkflowNodeTemplateResponseDTO represents workflow node template details in the response.

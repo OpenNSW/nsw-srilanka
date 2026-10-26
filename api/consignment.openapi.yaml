@@ -357,7 +357,10 @@ components:
 
     WorkflowNodeState:
       type: string
-      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED]
+      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED, CANCELLED]
+      description: >-
+        `CANCELLED` is a task an admin closed by force-parking its node; it
+        cannot be submitted.
 
     SummaryDTO:
       type: object

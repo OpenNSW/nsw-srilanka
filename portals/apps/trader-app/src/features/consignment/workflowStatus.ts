@@ -2,7 +2,7 @@ import type { WorkflowNodeState } from '@/features/consignment/types'
 
 export const WORKFLOW_STATUS_I18N_KEYS: Record<
   WorkflowNodeState,
-  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'awaitingFeedback'
+  'completed' | 'ready' | 'inProgress' | 'locked' | 'failed' | 'awaitingFeedback' | 'cancelled'
 > = {
   COMPLETED: 'completed',
   READY: 'ready',
@@ -10,6 +10,7 @@ export const WORKFLOW_STATUS_I18N_KEYS: Record<
   QUEUED_EXTERNALLY: 'awaitingFeedback',
   LOCKED: 'locked',
   FAILED: 'failed',
+  CANCELLED: 'cancelled',
 }
 
 type WorkflowStatusI18nKey = `workflow.status.${(typeof WORKFLOW_STATUS_I18N_KEYS)[WorkflowNodeState]}`

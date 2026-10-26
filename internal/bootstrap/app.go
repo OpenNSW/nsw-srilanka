@@ -347,6 +347,13 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
 		}
+		if err := consignmentService.RegisterTaskCanceller(tm); err != nil {
+			_ = stopParentRunner()
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register task canceller with consignment service: %w", err)
+		}
 	}
 
 	// -------------------------------------------------------------------
@@ -704,11 +711,11 @@ func wireParentRunner(c client.Client, namespace string, activator parentTaskAct
 		return nil, nil, fmt.Errorf("parent task activator cannot be nil")
 	}
 
-	onActivation := func(payload workflow.TaskPayload) (map[string]any, error) {
-		return activator.StartTask(context.Background(), payload)
+	onActivation := func(ctx context.Context, payload workflow.TaskPayload) (map[string]any, error) {
+		return activator.StartTask(ctx, payload)
 	}
 
-	onCompletion := func(completion workflow.WorkflowCompletion) error {
+	onCompletion := func(_ context.Context, completion workflow.WorkflowCompletion) error {
 		log.Printf("\n[Parent Workflow] Completed. Final state: %v\n", completion.FinalVariables)
 		if upstream != nil {
 			if err := upstream.CompletionHandler(completion.WorkflowID, completion.FinalVariables); err != nil {
@@ -1032,21 +1039,21 @@ func initTask(
 	// Handlers for events on the per-task (micro) sub-workflows running on
 	// MICRO_WORKFLOW_QUEUE. Nodes inside a task workflow activate subtasks
 	// via tm.StartTaskStep, which dispatches to the matching plugin.
-	microActivationHandler := func(payload workflow.TaskPayload) (map[string]any, error) {
+	microActivationHandler := func(ctx context.Context, payload workflow.TaskPayload) (map[string]any, error) {
 		log.Printf("\n[Micro Workflow] Step activated: node=%s template=%s\n", payload.NodeID, payload.TaskTemplateID)
 		if tm == nil {
 			return nil, fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		res, err := tm.StartTaskStep(context.Background(), payload)
+		res, err := tm.StartTaskStep(ctx, payload)
 		return res, keepNonRetryable(err)
 	}
 
-	microCompletionHandler := func(completion workflow.WorkflowCompletion) error {
+	microCompletionHandler := func(ctx context.Context, completion workflow.WorkflowCompletion) error {
 		log.Printf("\n[Micro Workflow] Completed. Final state: %v\n", completion.FinalVariables)
 		if tm == nil {
 			return fmt.Errorf("task manager is not initialized (misconfiguration)")
 		}
-		return tm.HandleTaskCompletion(context.Background(), completion)
+		return tm.HandleTaskCompletion(ctx, completion)
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
