@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
@@ -17,9 +17,12 @@ import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
 import { LoadError } from '@/components/common/LoadError.tsx'
 
-const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const NEXT_TASK_MAX_ATTEMPTS = 5
 const NEXT_TASK_RETRY_MS = 1000
+// The next step starts asynchronously. Wait for it, then say if a submit
+// is still on the step that was sent.
+const SUBMIT_POLL_INTERVAL_MS = 1000
+const SUBMIT_POLL_DEADLINE_MS = 25_000
 const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
 
 function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
@@ -30,6 +33,12 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
   })
   const successor = actionable.find((node) => node.depends_on?.includes(currentTaskId))
   return (successor ?? actionable[0])?.id
+}
+
+// A hand-off has landed when the task leaves this step, or leaves PENDING_USER.
+// The next trader step is also PENDING_USER, on a new step id.
+function stepAdvanced(beforeStepId: string | undefined, zv: ZoneView): boolean {
+  return zv.step_id !== beforeStepId || zv.state !== 'PENDING_USER'
 }
 
 export function TaskDetailScreen() {
@@ -53,7 +62,8 @@ export function TaskDetailScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [hasSubmitted, setHasSubmitted] = useState(false)
+  // The step a submit did not leave. Cleared once a later read shows it moved.
+  const notSentStepId = useRef<string | undefined>(undefined)
   // Bumped once an action's refetch has landed, and mixed into the zone keys so
   // the form remounts against what came back. A form seeds its data on mount
   // and deliberately ignores later polls, which is what stops a background
@@ -72,7 +82,8 @@ export function TaskDetailScreen() {
   const [prevTaskId, setPrevTaskId] = useState(taskId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
-    setHasSubmitted(false)
+    setSubmitError(null)
+    notSentStepId.current = undefined
     setSubmittedHere(false)
     setNextTaskId(undefined)
   }
@@ -84,6 +95,10 @@ export function TaskDetailScreen() {
     try {
       const zv = await getZoneView(taskId)
       setZoneView(zv)
+      if (notSentStepId.current && stepAdvanced(notSentStepId.current, zv)) {
+        notSentStepId.current = undefined
+        setSubmitError(null)
+      }
       return zv
     } catch (err) {
       setError(t('tasks.error.fetchFailed'))
@@ -255,71 +270,79 @@ export function TaskDetailScreen() {
         task={zoneView}
         title={title}
         formEpoch={formEpoch}
-        onSubmitForm={
-          hasSubmitted
-            ? undefined
-            : async (command, data, options) => {
-                if (!taskId || !zoneView.step_id) return
-                setSubmitError(null)
-                if (options?.draft) {
-                  try {
-                    // The step stays where it is, so the form stays mounted with
-                    // what the user typed: the server now holds the same values.
-                    // The form shows "Draft saved" next to its buttons.
-                    await saveTaskStepDraft(taskId, zoneView.step_id, data)
-                  } catch (err) {
-                    if (err instanceof HttpError && err.status === 409) {
-                      setSubmitError(t('tasks.error.staleStep'))
-                      await fetchTask()
-                      setFormEpoch((n) => n + 1)
-                    } else {
-                      setSubmitError(t('tasks.error.draftFailed'))
-                    }
-                    console.error('TaskDetailScreen: failed to save draft:', err)
-                    // Reject, so the form does not say the draft was saved.
-                    throw err
-                  }
-                  return
-                }
-                try {
-                  await submitTaskStep(taskId, zoneView.step_id, command, data)
-                  // Latch the action off during the transition window so the step
-                  // can't be double-submitted while the backend advances.
-                  setHasSubmitted(true)
-                  setSubmittedHere(true)
-                  window.scrollTo({ top: 0, behavior: 'smooth' })
-
-                  await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
-                  await fetchTask()
-                  // Reseed from what the refetch returned, not from what the
-                  // form mounted with. Safe to discard the on-screen values
-                  // here: the submission that just succeeded carried them.
-                  setFormEpoch((n) => n + 1)
-                } catch (err) {
-                  // Use a local error here rather than the screen-level `error`, which
-                  // would unmount the layout and discard the user's entered form data.
-                  if (err instanceof HttpError && err.status === 409) {
-                    // The task moved on since this view loaded (another tab, a callback).
-                    // Show where it is now rather than retrying against the old step.
-                    setSubmitError(t('tasks.error.staleStep'))
-                    await fetchTask()
-                    setFormEpoch((n) => n + 1)
-                  } else {
-                    setSubmitError(t('tasks.error.submitFailed'))
-                  }
-                  console.error('TaskDetailScreen: failed to submit task step:', err)
-                  // Reject, so the form keeps treating its input as unsaved.
-                  throw err
-                } finally {
-                  // Re-arm the action once the task has settled. Looping steps (e.g.
-                  // the ePhyto "Check Status" poll) re-enter the same state, so the
-                  // button must return; terminal states expose no handles and stay
-                  // buttonless regardless. Without this reset the button vanishes
-                  // after one click until a hard refresh.
-                  setHasSubmitted(false)
-                }
+        onSubmitForm={async (command, data, options) => {
+          if (!taskId || !zoneView.step_id) return
+          setSubmitError(null)
+          notSentStepId.current = undefined
+          if (options?.draft) {
+            try {
+              // The step stays where it is, so the form stays mounted with
+              // what the user typed: the server now holds the same values.
+              // The form shows "Draft saved" next to its buttons.
+              await saveTaskStepDraft(taskId, zoneView.step_id, data)
+            } catch (err) {
+              if (err instanceof HttpError && err.status === 409) {
+                setSubmitError(t('tasks.error.staleStep'))
+                await fetchTask()
+                setFormEpoch((n) => n + 1)
+              } else {
+                setSubmitError(t('tasks.error.draftFailed'))
               }
-        }
+              console.error('TaskDetailScreen: failed to save draft:', err)
+              // Reject, so the form does not say the draft was saved.
+              throw err
+            }
+            return
+          }
+          try {
+            const beforeStepId = zoneView.step_id
+            await submitTaskStep(taskId, zoneView.step_id, command, data)
+            // The promise stays pending until the poll finishes, so the
+            // clicked button stays disabled and cannot be sent twice.
+            setSubmittedHere(true)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+
+            const deadline = Date.now() + SUBMIT_POLL_DEADLINE_MS
+            let latest: ZoneView | undefined
+            while (Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, SUBMIT_POLL_INTERVAL_MS))
+              try {
+                latest = await getZoneView(taskId)
+              } catch (err) {
+                console.error('TaskDetailScreen: failed to fetch task:', err)
+                continue
+              }
+              setZoneView(latest)
+              if (stepAdvanced(beforeStepId, latest)) break
+            }
+            // Reseed from what the refetch returned, not from what the
+            // form mounted with. Safe to discard the on-screen values
+            // here: the submission that just succeeded carried them.
+            setFormEpoch((n) => n + 1)
+            // Still this step, still with the trader: the answers were
+            // stored and the application was not sent. Other commands,
+            // such as verify, may stay on this step on purpose.
+            if (command === 'submit' && latest && !stepAdvanced(beforeStepId, latest)) {
+              notSentStepId.current = beforeStepId
+              setSubmitError(t('tasks.error.submitNotSent'))
+            }
+          } catch (err) {
+            // Use a local error here rather than the screen-level `error`, which
+            // would unmount the layout and discard the user's entered form data.
+            if (err instanceof HttpError && err.status === 409) {
+              // The task moved on since this view loaded (another tab, a callback).
+              // Show where it is now rather than retrying against the old step.
+              setSubmitError(t('tasks.error.staleStep'))
+              await fetchTask()
+              setFormEpoch((n) => n + 1)
+            } else {
+              setSubmitError(t('tasks.error.submitFailed'))
+            }
+            console.error('TaskDetailScreen: failed to submit task step:', err)
+            // Reject, so the form keeps treating its input as unsaved.
+            throw err
+          }
+        }}
       />
       {zoneView.state === 'COMPLETED' && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
