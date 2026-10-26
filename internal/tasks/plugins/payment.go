@@ -26,7 +26,7 @@ type PaymentPlugin struct {
 // does not expire: the trader can pay it until it is settled. core/payment
 // requires an expiry in the future, so it is set far enough ahead never to be
 // reached.
-const referenceLifetime = 100 * 365 * 24 * time.Hour
+const referenceLifetime = 365 * 24 * time.Hour
 
 // NewPaymentPlugin creates a new PaymentPlugin.
 func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
