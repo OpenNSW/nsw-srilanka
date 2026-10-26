@@ -180,7 +180,7 @@ This release changes how a deployment is configured and audited. Outbound servic
 ### Known issues
 
 - Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
-- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments, tasks and payments are audited; SLC Edge callbacks and the storage module's own events are not.
+- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
 - The API can authenticate to Temporal only with a client certificate, not with an API key.
 - `/health` does not check Temporal.
 - The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
