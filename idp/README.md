@@ -129,7 +129,6 @@ Ours, all **local-dev only** (see _UAT / production_ below):
 | [`03-nsw-resources.yaml`](bootstrap/03-nsw-resources.yaml)       | The `admin-cli` machine client (`ADMIN_CLI`, secret `ADMIN_CLI_SECRET`) and the `NSW Admin CLI` role granting it `system`, for a management token                |
 | [`10-nsw-platform.yaml`](bootstrap/10-nsw-platform.yaml)         | User types, the Government Organization and Private Sector OUs, NSW API, `Trader`/`CHA`/`NSW Admin` roles and groups, `TraderApp`, SLCE and GovPay clients, CORS |
 | `20-agency-<handle>.yaml` (`cda`, `efc`, `fcau`, `npqs`, `sltb`) | One agency each: its OU and API resource server, `<A> Officer` role and `<A> Officers` group, portal app, `<A>_TO_NSW` and `NSW_TO_<A>` clients and roles        |
-| [`20-agency-slpa.yaml`](bootstrap/20-agency-slpa.yaml)           | SLPA, still on the legacy shared `Agency API` resource server with `OGA Reviewer(s)` and `NswM2M`                                                                |
 | [`90-sample-data.yaml`](bootstrap/90-sample-data.yaml)           | Sample company OUs (ADAM, EDWARD), the sample users, and their group memberships                                                                                 |
 
 Each file names what it needs: the platform file references nothing of ours, each agency
@@ -231,16 +230,13 @@ walks through creating its resources in the console.
 | NPQSPortalApp | `OGA_PORTAL_APP_NPQS` | <http://localhost:5174> |
 | FCAUPortalApp | `OGA_PORTAL_APP_FCAU` | <http://localhost:5175> |
 | CDAPortalApp  | `OGA_PORTAL_APP_CDA`  | <http://localhost:5176> |
-| SLPAPortalApp | `OGA_PORTAL_APP_SLPA` | <http://localhost:5177> |
 | EfcPortalApp  | `OGA_PORTAL_APP_EFC`  | <http://localhost:5178> |
 | SLTBPortalApp | `OGA_PORTAL_APP_SLTB` | <http://localhost:5179> |
 
 M2M (client-credentials) apps (auth method: `client_secret_basic`):
 
 - **OGA → NSW** (`aud=NSW_API`, each with its own `<Agency>ToNswM2M` role, e.g.
-  `CdaToNswM2M`): `NPQS_TO_NSW`, `FCAU_TO_NSW`, `CDA_TO_NSW`, `SLPA_TO_NSW`,
-  `EFC_TO_NSW`, `SLTB_TO_NSW`.
-- **NSW → OGA** (`aud=AGENCY_API`, `NswM2M` role): `NSW_TO_SLPA`.
+  `CdaToNswM2M`): `NPQS_TO_NSW`, `FCAU_TO_NSW`, `CDA_TO_NSW`, `EFC_TO_NSW`, `SLTB_TO_NSW`.
 - **NSW → CDA** (`aud=https://api.cda.nsw-agency.local`, `NswToCdaM2M` role): `NSW_TO_CDA`.
 - **NSW → EFC** (`aud=https://api.efc.nsw-agency.local`, `NswToEfcM2M` role): `NSW_TO_EFC`.
 - **NSW → NPQS** (`aud=https://api.npqs.nsw-agency.local`, `NswToNpqsM2M` role): `NSW_TO_NPQS`.
@@ -252,15 +248,14 @@ M2M (client-credentials) apps (auth method: `client_secret_basic`):
 Each protected backend is registered as a **resource server** whose `identifier`
 becomes the access-token **audience** (`aud`):
 
-| `identifier` (= token `aud`)        | Backend                                                                | Scopes (`<resource>:<action>`)                                                                                                                          |
-| ----------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`               | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,internalwrite}` |
-| `https://api.nsw-agency.local`      | [OpenNSW/nsw-agency](https://github.com/OpenNSW/nsw-agency) `backend/` | `agency:application:{read,review,feedback,inject}`, `agency:consignment:read`, `agency:storage:{read,write}`                                            |
-| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)       | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
-| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`)     | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
+| `identifier` (= token `aud`)        | Backend                                                            | Scopes (`<resource>:<action>`)                                                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://api.nsw-srilanka.local`    | [OpenNSW/nsw](https://github.com/OpenNSW/nsw) `backend/`           | `nsw:consignment:{read,write,adminread,adminwrite}`, `nsw:task:{read,write}`, `nsw:{hscode,company,cha}:read`, `nsw:storage:{read,write,internalwrite}` |
+| `https://api.cda.nsw-agency.local`  | this backend as CDA (`mode: agency`, `cda-api` in `compose.yml`)   | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
+| `https://api.efc.nsw-agency.local`  | this backend as EFC (`mode: agency`, `efc-api` in `compose.yml`)   | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
+| `https://api.npqs.nsw-agency.local` | this backend as NPQS (`mode: agency`, `npqs-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
+| `https://api.sltb.nsw-agency.local` | this backend as SLTB (`mode: agency`, `sltb-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
+| `https://api.fcau.nsw-agency.local` | this backend as FCAU (`mode: agency`, `fcau-api` in `compose.yml`) | `nsw:workflow:inject`, `nsw:consignment:read`, `nsw:task:{read,write}`, `nsw:profile:read`, `nsw:storage:{read,write}`                                  |
 
 > **Identifiers must be absolute URIs, and they are opaque** — nothing ever
 > dereferences them; they exist to be matched and to be written into `aud`. The URI
@@ -305,8 +300,6 @@ scopes via a role:
 | TraderApp users        | `Trader` / `CHA` role (via group) → `NSW_API` scopes                                                          |
 | NSW admin users        | `NSW Admin` role (via `NSW Admins` group) → `nsw:consignment:adminread`, `nsw:consignment:adminwrite`         |
 | `*_TO_NSW` M2M clients | **`<Agency>ToNswM2M` role assigned to the application** (`type: app`) → `NSW_API` scopes                      |
-| OGA portal users       | `OGA Reviewer` role (via `OGA Reviewers` group) → `AGENCY_API` scopes                                         |
-| `NSW_TO_*` M2M clients | **`NswM2M` role assigned to the application** (`type: app`) → `agency:application:inject`                     |
 | CDA portal users       | `CDA Officer` role (via `CDA Officers` group) → CDA API scopes                                                |
 | `NSW_TO_CDA`           | **`NswToCdaM2M` role assigned to the application** → `nsw:workflow:inject`, `nsw:task:write` on the CDA API   |
 | EFC portal users       | `EFC Officer` role (via `EFC Officers` group) → EFC API scopes                                                |
@@ -358,15 +351,13 @@ gets a hard `invalid_target` at the token endpoint, naming the problem.
 
 So every permission-bearing caller sends `resource`:
 
-| Caller                       | Sends `resource` | Where it is configured                                            | Token `aud`                         |
-| ---------------------------- | ---------------- | ----------------------------------------------------------------- | ----------------------------------- |
-| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`)                 | `https://api.nsw-srilanka.local`    |
-| OGA portal users             | AGENCY_API       | `VITE_IDP_EXTRA_QUERY_PARAMS` in OpenNSW/nsw-agency               | `https://api.nsw-agency.local`      |
-| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency                          | `https://api.nsw-srilanka.local`    |
-| `NSW_TO_*` M2M               | AGENCY_API       | `services[].auth.oauth2.endpointParams` in `configs/config*.yaml` | `https://api.nsw-agency.local`      |
-| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                                           | `https://api.nsw-srilanka.local`    |
-| `admin-cli` management token | System RS        | _Management token_ above                                          | `https://localhost:8090/mcp`        |
-| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound                              | app `defaultAudience` / `client_id` |
+| Caller                       | Sends `resource` | Where it is configured                            | Token `aud`                         |
+| ---------------------------- | ---------------- | ------------------------------------------------- | ----------------------------------- |
+| TraderApp users              | NSW_API          | `IDP_EXTRA_QUERY_PARAMS` (SPA `extraQueryParams`) | `https://api.nsw-srilanka.local`    |
+| `*_TO_NSW` M2M               | NSW_API          | `NSW_TOKEN_PARAMS` in OpenNSW/nsw-agency          | `https://api.nsw-srilanka.local`    |
+| `SLCE_TO_NSW` webhook        | NSW_API          | ⚠️ external — see below                           | `https://api.nsw-srilanka.local`    |
+| `admin-cli` management token | System RS        | _Management token_ above                          | `https://localhost:8090/mcp`        |
+| `customs-asycuda`            | n/a              | requests no scopes, so stays unbound              | app `defaultAudience` / `client_id` |
 
 **SPAs** send it on `/authorize` via oidc-client-ts `extraQueryParams`. That covers the
 whole session: the IdP records the value on the authorization code and reuses the bound
@@ -378,7 +369,7 @@ audience on refresh, so `automaticSilentRenew` needs no extra handling.
 ```yaml
 tokenURL: http://thunderid:8090/oauth2/token
 endpointParams:
-  resource: https://api.nsw-agency.local
+  resource: https://api.cda.nsw-agency.local
 ```
 
 Each parameter accepts a string or a list of strings. The separate nsw-agency

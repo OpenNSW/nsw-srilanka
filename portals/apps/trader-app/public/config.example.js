@@ -16,6 +16,8 @@ window.__APP_CONFIG__ = {
   // ID-token claim holding the roles (an array), and the role names in it. For an
   // IdP that models roles as groups, set the claim to 'groups' and use the group names.
   SHOW_AUTOFILL_BUTTON: 'true',
+  // Shows the demo color-scheme picker in the footer. Off unless 'true'.
+  SHOW_COLOR_SCHEME_SWITCHER: 'true',
   // 'tnsw' (default) lists consignments; 'agency' lists an agency's cases instead.
   APP_MODE: 'tnsw',
 }

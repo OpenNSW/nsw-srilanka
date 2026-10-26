@@ -1,8 +1,8 @@
 {
   "branding": {
-    "systemName": "National Single Window for Trade - Sri Lanka",
+    "systemName": "National Single Window for Trade",
     "appName": "Trader Portal",
-    "logoUrl": "",
+    "logoUrl": "/branding/one-trade-logo.png",
     "systemLogoUrl": "",
     "favicon": "",
     "portalName": "Trader Portal",
@@ -10,7 +10,6 @@
     "tagline": "An integrated platform to enhance trade competitiveness through digital transformation.",
     "heroImageUrl": "",
     "partnerLogos": [{ "url": "", "alt": "" }],
-    "footerLinks": [],
-    "copyrightNotice": "© 2026 Trader Portal. All rights reserved."
+    "footerLinks": []
   }
 }

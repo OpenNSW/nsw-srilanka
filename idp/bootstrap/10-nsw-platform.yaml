@@ -471,7 +471,7 @@ assignments:
 # File: cors.yaml
 resource_type: server_config
 name: cors
-value: {"allowedOrigins":["http://localhost:5173","https://localhost:5173","http://localhost:5174","https://localhost:5174","http://localhost:5175","https://localhost:5175","http://localhost:5176","https://localhost:5176","http://localhost:5177","https://localhost:5177","http://localhost:5178","https://localhost:5178","http://localhost:5179","https://localhost:5179"]}
+value: {"allowedOrigins":["http://localhost:5173","https://localhost:5173","http://localhost:5174","https://localhost:5174","http://localhost:5175","https://localhost:5175","http://localhost:5176","https://localhost:5176","http://localhost:5178","https://localhost:5178","http://localhost:5179","https://localhost:5179"]}
 ---
 # File: Admin_User.yaml
 resource_type: user_type

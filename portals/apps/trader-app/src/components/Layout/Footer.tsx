@@ -1,7 +1,8 @@
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useMatch } from 'react-router-dom'
 import { appConfig } from '@/config'
 import { ROUTES } from '@/constants'
+import { showColorSchemeSwitcher } from '@/services/colorSchemeContextCore'
 import { ColorSchemeSwitcher } from './ColorSchemeSwitcher'
 
 // Deliberately tiny — a thin white bar, not a full government footer. Fixed
@@ -21,7 +22,9 @@ export function Footer() {
   const { t } = useTranslation()
   const onTaskPage = useMatch(ROUTES.TASK_FORM_PATTERN) !== null
   const footerLinks = appConfig.branding.footerLinks ?? []
-  const version = (import.meta.env.VITE_APP_VERSION as string | undefined) || 'dev'
+  // Set only by a release image build (see the Dockerfile); a local or
+  // untagged build shows no version rather than a placeholder.
+  const version = import.meta.env.VITE_APP_VERSION as string | undefined
   const copyrightNotice = appConfig.branding.copyrightNotice
 
   // Only a footerLinks entry whose key matches one of this fixed, known set
@@ -43,7 +46,7 @@ export function Footer() {
 
   return (
     <footer
-      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0`}
+      className={`${onTaskPage ? 'relative' : 'fixed inset-x-0 bottom-0'} z-30 flex h-16 flex-col items-center justify-center gap-1 bg-app-surface px-4 py-1.5 text-xs sm:h-8 sm:text-base sm:flex-row sm:justify-between sm:gap-4 sm:px-6 sm:py-0`}
     >
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
         {footerLinks.map((link) => {
@@ -64,16 +67,25 @@ export function Footer() {
         })}
       </div>
       <div className="flex items-center gap-5 text-foreground">
-        <a href="https://github.com/OpenNSW" target="_blank" rel="noreferrer" className="hover:underline">
-          {t('common.poweredBy')}
-        </a>
-        <span>{version}</span>
-        {/* Demo-only control, hidden below sm: the footer's mobile layout is a
-            fixed-height stack (see the height contract above) with no room
-            for a fourth row. */}
-        <div className="hidden sm:block">
-          <ColorSchemeSwitcher />
-        </div>
+        <span>
+          <Trans
+            i18nKey="common.poweredBy"
+            components={[
+              <a href="https://github.com/opennsw" target="_blank" rel="noreferrer" className="hover:underline" />,
+              <a href="https://opensource.lk/" target="_blank" rel="noreferrer" className="hover:underline" />,
+            ]}
+          />
+        </span>
+        {version && <span>{version}</span>}
+        {/* Demo-only control, shown only when the deployment opts in with
+            SHOW_COLOR_SCHEME_SWITCHER, and hidden below sm: the footer's
+            mobile layout is a fixed-height stack (see the height contract
+            above) with no room for a fourth row. */}
+        {showColorSchemeSwitcher() && (
+          <div className="hidden sm:block">
+            <ColorSchemeSwitcher />
+          </div>
+        )}
       </div>
       {/* Last in DOM order so it's bottom-most when the footer stacks on narrow screens; at sm+
           it's taken out of the row's flow and centered independently of the two groups above. */}

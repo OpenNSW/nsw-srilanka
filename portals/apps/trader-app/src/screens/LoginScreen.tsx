@@ -50,7 +50,7 @@ export function LoginScreen() {
         </div>
 
         {/* Centered Authentication Card */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 lg:pl-[12%]">
           {auth.error && hasUrlError && (
             <div className="bg-error-subtle p-4 mb-6 rounded-xl shadow-sm">
               <p className="text-sm text-error-strong font-semibold">{t('auth.login.errorTitle')}</p>
@@ -79,20 +79,25 @@ export function LoginScreen() {
       </div>
 
       {/* Identity & Branding */}
-      <div className="lg:order-first w-full lg:w-[40%] flex flex-col justify-center px-8 lg:pl-36 lg:pr-6 pt-12 pb-16 sm:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-[calc(100vh-2rem)]">
-        <div className="max-w-md mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
-          {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-32 mb-5 object-contain" />}
+      <div className="lg:order-first w-full lg:w-1/2 flex flex-col justify-center px-8 lg:pl-[7.5vw] lg:pr-6 pt-12 pb-16 sm:pb-8 lg:pt-0 relative z-10 bg-app-surface lg:min-h-[calc(100vh-2rem)]">
+        <div className="max-w-2xl mx-auto lg:mx-0 flex flex-col justify-center items-center lg:justify-start lg:items-start">
+          {logoUrl && <img src={logoUrl} alt={appName} className="hidden lg:block h-36 mb-7 object-contain" />}
 
-          <h1 className="hidden lg:block text-3xl font-bold text-foreground leading-tight mb-5">{systemName}</h1>
+          <h1 className="hidden lg:block text-4xl xl:text-5xl font-extrabold tracking-tight text-foreground leading-tight mb-7">
+            {systemName}
+          </h1>
 
-          <p className="text-md text-foreground-muted leading-relaxed text-center lg:text-left whitespace-pre-line">
+          {/* The tagline, when set, leads under the heading and the description
+              follows below a rule, as the smaller print. */}
+          {tagline?.trim() && (
+            <>
+              <p className="text-xl xl:text-2xl text-foreground leading-snug text-center lg:text-left">{tagline}</p>
+              {description && <hr className="w-full border-border my-6" />}
+            </>
+          )}
+          <p className="text-base text-foreground-muted leading-relaxed text-center lg:text-left whitespace-pre-line">
             {description}
           </p>
-          {tagline?.trim() && (
-            <p className="text-md font-medium text-foreground leading-relaxed text-center lg:text-left mt-4">
-              {tagline}
-            </p>
-          )}
 
           {partnerLogos && partnerLogos.some((logo) => logo.url) && (
             <div className="flex flex-row flex-wrap items-center justify-center lg:justify-start gap-4 mt-5">

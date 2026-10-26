@@ -6,6 +6,87 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-26
+
+This release changes how files are stored and opened. Every deployment that stores files must set `storage.inlineTypes`, machine clients get their own upload route and scope, and each agency's storage settings gain two required keys. The upgrade has a set order: the IdP first, then TNSW, then each agency, one at a time. It also sends ePhyto certificates from LK to the importing country, with replacement certificates and a date of inspection; raises Customs dispatch notes for the containers on the latest declaration, ends the branch of a cancelled note and fills in the boat note from Customs' data; and keeps a payment reference payable for a year. The image version and the artifacts pin must change in the same deployment.
+
+### Upgrade notes
+
+#### Upgrade in this order: the IdP, then TNSW, then each agency ([#893](https://github.com/OpenNSW/nsw-srilanka/pull/893), [#881](https://github.com/OpenNSW/nsw-srilanka/pull/881), [#898](https://github.com/OpenNSW/nsw-srilanka/pull/898))
+
+Machine clients now upload on their own route, `POST /api/v1/internal/storage`, with their own scope, `nsw:storage:internalwrite`, and an agency relays what TNSW reports about a file. So the deployments depend on each other. Finish each step before you start the next. Every step is safe on its own: officers' uploads keep working throughout. An agency that moves before the IdP grant or before TNSW fails to store the files it generates, and a missing scope can fail its token request. Until TNSW is upgraded, View downloads every saved file for an agency's officers.
+
+1. **The IdP, first.** Add the `internalwrite` action to the `storage` resource of the NSW API, and grant `nsw:storage:internalwrite` to the `<Agency>ToNswM2M` role and to the requestable scopes of the `<AGENCY>_TO_NSW_M2M` app of each agency (CDA, EFC, FCAU, NPQS and SLTB). Keep `nsw:storage:write`: officers' uploads still use it. A live IdP does not read `idp/bootstrap/`, so change it by hand.
+2. **TNSW, second.** Deploy the 0.10.0 image and the pinned artifacts in the same deployment (see below). Set `storage.inlineTypes`, which is required (see below). Set `storage.allowedInternalUploadTypes` to the extra types an agency's own files may have, such as `npqs: [text/html]` for NPQS, which generates HTML documents, and add any other agency that does. Each name must be a client in `catalog.json`, or startup fails. The new route is live, and `POST /api/v1/storage` is unchanged.
+3. **Each agency, last and one at a time.** Deploy the 0.10.0 image and the pinned artifacts in the same deployment. In its `config.yaml`, add `storage.proxy.internalUploadPath: /api/v1/internal/storage` (startup fails without it) and keep `uploadPath: /api/v1/storage`. Add `nsw:storage:internalwrite` to the scopes of the `tnsw` service, next to `nsw:storage:write`. Set `storage.proxy.allowedUploadTypes` (startup fails without it) to what officers may upload, for example TNSW's `allowedUploadTypes`, and no HTML or SVG type. Then restart the agency so it fetches its token again.
+
+#### Change the image version and the artifacts pin together ([#882](https://github.com/OpenNSW/nsw-srilanka/pull/882), [#710](https://github.com/OpenNSW/nsw-srilanka/pull/710), [#894](https://github.com/OpenNSW/nsw-srilanka/pull/894), [#838](https://github.com/OpenNSW/nsw-srilanka/pull/838), [#883](https://github.com/OpenNSW/nsw-srilanka/pull/883))
+
+- Move the image or chart version and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. This build adds the task types and ePhyto behavior that the pinned artifacts use, and 0.9.0 can't run them: the `CUSTOMS_CUSDEC_RETRIEVE` task type and the step that fills in the boat note fail as an unknown task type, and an ePhyto submission would go out with no From and no To, because the new artifacts no longer send the `hub_destination` the old build addresses it by.
+- A deployment that moves the image alone still runs. Its ePhyto certificates carry no Date of Inspection until the artifacts arrive.
+
+#### Set `storage.inlineTypes` ([#881](https://github.com/OpenNSW/nsw-srilanka/pull/881), [#898](https://github.com/OpenNSW/nsw-srilanka/pull/898))
+
+- Add `storage.inlineTypes` to the `config.yaml` (Helm: `backend.config.storage`) of every deployment that uses the `local` or `s3` backend, or startup fails. Copy it from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.10.0/configs/config.example.yaml). It lists the media types that a download opens in the browser; every other file is saved. Keep `text/html` in it, or the documents TNSW generates are saved instead of opened.
+- Startup refuses a configuration in which a type that clients may upload (`allowedUploadTypes`) is also in `inlineTypes`, unless it is PDF, PNG, JPEG, GIF, WebP or plain text. A browser would run script in an HTML file from the origin it is served on, so `text/html` stays out of `allowedUploadTypes`.
+- Agencies in proxy mode set nothing: they relay what TNSW reports. A download of a file that is not in the bucket is now a 404. S3 needs no new permission.
+- The Trader Portal and the agency portals now treat a saved file as one to download unless the backend reports `disposition: inline`. That is why TNSW is upgraded before the agencies.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`aced4ec`](https://github.com/OpenNSW/one-trade-artifacts/commit/aced4ec7e08be89b6a775dcc2fbb4765b7bf8e2a) (26 October 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
+  - [one-trade-artifacts#258](https://github.com/OpenNSW/one-trade-artifacts/pull/258): the NPQS certificate flow, which maps `date_of_inspection` ([#882](https://github.com/OpenNSW/nsw-srilanka/pull/882));
+  - [one-trade-artifacts#194](https://github.com/OpenNSW/one-trade-artifacts/pull/194): the replacement of an issued NPQS certificate ([#710](https://github.com/OpenNSW/nsw-srilanka/pull/710));
+  - [one-trade-artifacts#267](https://github.com/OpenNSW/one-trade-artifacts/pull/267): the ePhyto certificate sent to the importing country ([#894](https://github.com/OpenNSW/nsw-srilanka/pull/894));
+  - [one-trade-artifacts#219](https://github.com/OpenNSW/one-trade-artifacts/pull/219): the acknowledgment step that tells the trader Customs cancelled a dispatch note ([#829](https://github.com/OpenNSW/nsw-srilanka/pull/829));
+  - [one-trade-artifacts#229](https://github.com/OpenNSW/one-trade-artifacts/pull/229): the dispatch note branches sized from the latest declaration ([#838](https://github.com/OpenNSW/nsw-srilanka/pull/838));
+  - [one-trade-artifacts#260](https://github.com/OpenNSW/one-trade-artifacts/pull/260): the boat note filled in from Customs ([#883](https://github.com/OpenNSW/nsw-srilanka/pull/883)).
+- The fees in the pinned artifacts are the same seven as in 0.9.0, so `payment_methods.json` needs no change.
+- It also changes how NPQS numbers a certificate ([one-trade-artifacts#266](https://github.com/OpenNSW/one-trade-artifacts/pull/266)): the officer no longer types a certificate number, and every certificate gets the generated reference as its number. The change spans the `npqs` and `tnsw` bundles, so move TNSW and the NPQS agency to this pin together.
+
+#### Local Docker Compose ([#881](https://github.com/OpenNSW/nsw-srilanka/pull/881), [#893](https://github.com/OpenNSW/nsw-srilanka/pull/893), [#892](https://github.com/OpenNSW/nsw-srilanka/pull/892))
+
+- `make setup` doesn't overwrite an existing `configs/config.yaml` or `configs/config.docker.yaml`, so add `storage.inlineTypes` and `storage.allowedInternalUploadTypes` to them from the examples.
+- The local IdP bootstrap no longer holds SLPA's entities: the SLPA OU, the `Agency API` resource server, the `OGA Reviewer` and `NswM2M` roles, the `OGA Reviewers` group, the SLPA portal app, the `SLPA_TO_NSW` and `NSW_TO_SLPA` clients and the `slpa_officer` user. SLPA calls TNSW on `POST /webhooks/slpa`, signed with an HMAC, and TNSW calls SLPA's own OAuth2 server, so nothing used them. Run `docker compose down` and remove the `thunderid-*` volumes to drop them, and remove the `slpa` client from a `configs/catalog.json` copied from the example. In `configs/config.docker.yaml`, the `slpa` service now points at the same placeholder host as in `config.example.yaml`, in place of a local mock.
+
+### Added
+
+- **An internal upload route for machine clients.** `POST /api/v1/internal/storage` takes the files a deployment generates itself, such as the HTML documents an agency's `HTML_DOCUMENT_GENERATOR` stores, and needs the scope `nsw:storage:internalwrite`. It accepts `allowedUploadTypes` plus the extra types granted to the calling client in `storage.allowedInternalUploadTypes`. An agency's officers keep uploading on `POST /api/v1/storage`, so TNSW checks their uploads like a trader's. ([#893](https://github.com/OpenNSW/nsw-srilanka/pull/893))
+- **ePhyto certificates from LK to the importing country.** Each certificate is addressed from `LK` to the importing country the application names, by its ISO code. Before, every certificate went `LK2` to `LK2`, and its import country always read `LK`. ([#894](https://github.com/OpenNSW/nsw-srilanka/pull/894))
+- **Replacement ePhyto certificates, and a date of inspection.** TNSW can send a replacement certificate to the IPPC Hub, naming the certificate it replaces. The certificate's Date of Inspection now comes from a `date_of_inspection` task input, which the NPQS workflow fills with the date the officer recorded at the inspection, and not from the proposed date. ([#710](https://github.com/OpenNSW/nsw-srilanka/pull/710), [#882](https://github.com/OpenNSW/nsw-srilanka/pull/882))
+- **Dispatch notes for the containers on the latest declaration.** A new `CUSTOMS_CUSDEC_RETRIEVE` task type fetches the declaration as it stands in ASYCUDA World, so the export flow raises one dispatch note per container Customs holds, after Customs has amended the declaration. It uses the existing `customs-asycuda` service. ([#838](https://github.com/OpenNSW/nsw-srilanka/pull/838))
+- **Cancelled dispatch notes.** When Customs cancels a dispatch note (`CDN_CANCELLED`), TNSW marks it cancelled and ends that container's branch. The other containers and the declaration carry on. ([#829](https://github.com/OpenNSW/nsw-srilanka/pull/829))
+- **A boat note filled in from Customs.** Before the boat note application opens, TNSW retrieves the declaration and each dispatch note, and fills in the boat note with one container row for each dispatch note Customs holds that is not cancelled. ([#883](https://github.com/OpenNSW/nsw-srilanka/pull/883))
+- **A login tagline.** The Trader Portal's login page can show its branding text as separate paragraphs, from `frontend.branding` alone: a blank line in `description` starts a new paragraph, or `tagline` shows a second, emphasized paragraph under it. A deployment that sets neither looks the same as before. ([#895](https://github.com/OpenNSW/nsw-srilanka/pull/895))
+
+### Changed
+
+- A download reports the type and disposition that storage holds. `GET /api/v1/storage/{ref}` returns `mime_type` and `disposition` (`inline` or `attachment`) from storage, and no longer guesses the type from the extension, which now only names a saved file. See the upgrade notes. ([#881](https://github.com/OpenNSW/nsw-srilanka/pull/881))
+- A payment reference stays payable for a year instead of a day. A reference that was not paid within a day used to be refused as not payable and could no longer be settled. References created before the upgrade keep their one-day expiry. ([#897](https://github.com/OpenNSW/nsw-srilanka/pull/897))
+- The Trader Portal's form controls use `@opennsw/jsonforms-renderers` 0.17, which opens a saved file in the browser only when its `disposition` is `inline`. ([#898](https://github.com/OpenNSW/nsw-srilanka/pull/898))
+
+### Fixed
+
+- A failed consignment list shows an error with Try Again, where it used to look like a trader with no consignments. A failed task load does the same, and a failed create shows its error next to the button. ([#869](https://github.com/OpenNSW/nsw-srilanka/pull/869))
+- Editable and read-only form fields are easier to tell apart, in the Trader Portal and in the agency portals. ([#887](https://github.com/OpenNSW/nsw-srilanka/pull/887))
+
+### Security
+
+- A file opens in the browser only when its type is in `storage.inlineTypes`. Startup refuses a configuration in which a type that clients may upload is also listed there, because a browser runs script in such a file from the origin it is served on. ([#881](https://github.com/OpenNSW/nsw-srilanka/pull/881))
+- An agency's officers' uploads are checked against TNSW's upload types like a trader's. Only a machine client that holds `nsw:storage:internalwrite` and is named in `storage.allowedInternalUploadTypes` can store a type a browser opens as a document, such as HTML. ([#893](https://github.com/OpenNSW/nsw-srilanka/pull/893))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal is available in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+
 ## [0.9.0] - 2026-10-23
 
 This release changes how a deployment is configured and audited. Outbound services move into `config.yaml`, where `services` is now required; Argus is gone, so audit records go to the log; and the agency bundles and the default consignment flow lose their version labels, so the image version and the artifacts pin must change in the same deployment. One migration runs. The consignment list now follows the roles in the token, and TNSW opens a flow on the case when Customs amends a declaration or a dispatch note. The Trader Portal groups a consignment's tasks into Active and Done tabs, titles each task page after its step, and serves agency cases under `/cases`.
@@ -99,7 +180,7 @@ This release changes how a deployment is configured and audited. Outbound servic
 ### Known issues
 
 - Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
-- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments, tasks and payments are audited; SLC Edge callbacks and the storage module's own events are not.
+- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
 - The API can authenticate to Temporal only with a client certificate, not with an API key.
 - `/health` does not check Temporal.
 - The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
@@ -792,7 +873,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.6.0...v0.7.0
