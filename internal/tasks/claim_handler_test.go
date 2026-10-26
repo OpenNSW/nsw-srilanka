@@ -13,6 +13,7 @@ import (
 
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
+	"github.com/OpenNSW/core/taskflow/store"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
@@ -44,11 +45,12 @@ func (f *fakeClaimer) ReleaseTask(_ context.Context, taskID, holder string) erro
 }
 
 // claimHandler is a handler over the pending HS-code task, with claims sent to claimer
-// and audit events to auditor.
+// and audit events to auditor. CanAct admits every caller.
 func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, auditor *nswaudit.CaptureSink) *HTTPHandler {
 	t.Helper()
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
 	h.Claims = claimer
+	h.CanAct = fixedCanAct(true, nil, nil)
 	client := nswaudit.New()
 	client.RegisterSink(auditor)
 	h.Audit = client
@@ -191,50 +193,36 @@ func TestHandleClaimTask_ReadDenialIsAudited(t *testing.T) {
 
 // --- who may claim: the right to act -----------------------------------------
 
-const testStepTemplateID = "step-tmpl"
-
-// fixedActors is a StepActors that answers names, declared and err for any step, and
-// counts its lookups.
-func fixedActors(names []string, declared bool, err error, lookups *int) StepActors {
-	return func(context.Context, string) ([]string, bool, error) {
-		if lookups != nil {
-			*lookups++
+// fixedCanAct is a CanAct that answers ok and err for any task, and counts its calls.
+func fixedCanAct(ok bool, err error, calls *int) CanAct {
+	return func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) {
+		if calls != nil {
+			*calls++
 		}
-		return names, declared, err
+		return ok, err
 	}
 }
 
-// activeHSCodeTask is the pending HS-code task at a step running testStepTemplateID.
-func activeHSCodeTask() *fakeTaskFetcher {
-	f := pendingHSCodeTask()
-	f.record.ActiveTaskTemplateID = testStepTemplateID
-	return f
-}
-
-// Claiming follows the rule that governs submitting the task's active step: a reader
-// it leaves out is refused (403, since they can see the task), a step without a rule
-// is not role-restricted, and a failed lookup is an error, never a pass.
+// Claiming follows CanAct, the rule that decides whether the caller can submit the
+// task's active step: a reader it refuses is refused (403, since they can see the
+// task), without CanAct nobody may claim, and a failure is an error, never a pass.
 func TestHandleClaimTask_RequiresTheRightToAct(t *testing.T) {
 	tests := []struct {
 		name       string
-		fetcher    *fakeTaskFetcher
-		actors     StepActors
+		canAct     CanAct
 		wantStatus int
 		wantBody   string
 	}{
-		{"the rule names the caller's role", activeHSCodeTask(), fixedActors([]string{"cha", "fcau"}, true, nil, nil), http.StatusNoContent, ""},
-		{"the rule names another role", activeHSCodeTask(), fixedActors([]string{"trader"}, true, nil, nil), http.StatusForbidden, errClaimNotPermitted},
-		{"the rule names nobody", activeHSCodeTask(), fixedActors(nil, true, nil, nil), http.StatusForbidden, errClaimNotPermitted},
-		{"the step declares no rule", activeHSCodeTask(), fixedActors(nil, false, nil, nil), http.StatusNoContent, ""},
-		{"no way to look up the rule", activeHSCodeTask(), nil, http.StatusNoContent, ""},
-		{"no active step", pendingHSCodeTask(), fixedActors([]string{"trader"}, true, nil, nil), http.StatusNoContent, ""},
-		{"the lookup fails", activeHSCodeTask(), fixedActors(nil, false, errors.New("registry down"), nil), http.StatusInternalServerError, ""},
+		{"CanAct admits the caller", fixedCanAct(true, nil, nil), http.StatusNoContent, ""},
+		{"CanAct refuses the caller", fixedCanAct(false, nil, nil), http.StatusForbidden, errClaimNotPermitted},
+		{"no CanAct", nil, http.StatusForbidden, errClaimNotPermitted},
+		{"CanAct fails", fixedCanAct(false, errors.New("registry down"), nil), http.StatusInternalServerError, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			claimer := &fakeClaimer{}
-			h := claimHandler(t, tt.fetcher, claimer, &nswaudit.CaptureSink{})
-			h.StepActors = tt.actors
+			h := claimHandler(t, pendingHSCodeTask(), claimer, &nswaudit.CaptureSink{})
+			h.CanAct = tt.canAct
 
 			recorder := sendClaim(h, opClaim, chaUser())
 
@@ -249,27 +237,44 @@ func TestHandleClaimTask_RequiresTheRightToAct(t *testing.T) {
 	}
 }
 
-// The rule is looked up only for someone who can read the task: a non-reader is
-// refused first, as not found.
+// CanAct is asked only about someone who can read the task: a non-reader is refused
+// first, as not found.
 func TestHandleClaimTask_RightToActCheckedAfterRead(t *testing.T) {
 	notOwner := ownerInput("CHA", "trader")
 	notOwner.UserID = testUserID
 	notOwner.Claims = taskauthz.ClaimsOptional
-	lookups := 0
-	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{})
-	h.StepActors = fixedActors([]string{"cha"}, true, nil, &lookups)
+	calls := 0
+	h := claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{})
+	h.CanAct = fixedCanAct(true, nil, &calls)
 
 	recorder := sendClaim(h, opClaim, &notOwner)
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
-	assert.Zero(t, lookups)
+	assert.Zero(t, calls)
+}
+
+// A completed task has no step left to act on, so CanAct is not asked: the task
+// manager refuses the claim, and the caller is told the task is completed (409).
+func TestHandleClaimTask_CompletedTaskIsAConflict(t *testing.T) {
+	fetcher := pendingHSCodeTask()
+	fetcher.record.State = store.StateCompleted
+	calls := 0
+	claimer := &fakeClaimer{err: orchestrator.ErrTaskCompleted}
+	h := claimHandler(t, fetcher, claimer, &nswaudit.CaptureSink{})
+	h.CanAct = fixedCanAct(false, nil, &calls)
+
+	recorder := sendClaim(h, opClaim, chaUser())
+
+	assert.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), errClaimTaskComplete)
+	assert.Zero(t, calls)
 }
 
 // A reader refused for not being able to act is audited as a refused claim.
 func TestHandleClaimTask_RefusalForNotActingIsAudited(t *testing.T) {
 	auditor := &nswaudit.CaptureSink{}
-	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, auditor)
-	h.StepActors = fixedActors([]string{"trader"}, true, nil, nil)
+	h := claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, auditor)
+	h.CanAct = fixedCanAct(false, nil, nil)
 
 	recorder := sendClaim(h, opClaim, chaUser())
 
@@ -283,16 +288,16 @@ func TestHandleClaimTask_RefusalForNotActingIsAudited(t *testing.T) {
 // Release is not gated on the right to act, so a holder who has lost it can still let
 // go of their claim.
 func TestHandleReleaseTask_IsNotGatedOnTheRightToAct(t *testing.T) {
-	lookups := 0
+	calls := 0
 	claimer := &fakeClaimer{}
-	h := claimHandler(t, activeHSCodeTask(), claimer, &nswaudit.CaptureSink{})
-	h.StepActors = fixedActors([]string{"trader"}, true, nil, &lookups)
+	h := claimHandler(t, pendingHSCodeTask(), claimer, &nswaudit.CaptureSink{})
+	h.CanAct = fixedCanAct(false, nil, &calls)
 
 	recorder := sendClaim(h, opRelease, chaUser())
 
 	assert.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
 	assert.Equal(t, []string{"release:" + testTaskID + ":" + testUserID}, claimer.calls)
-	assert.Zero(t, lookups)
+	assert.Zero(t, calls)
 }
 
 // Each error the task manager returns is answered with its status, and the refusals

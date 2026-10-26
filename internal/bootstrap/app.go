@@ -433,7 +433,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
 	canAct := stepCanAct(artifactRegistry, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct,
-		tasks.ClaimDeps{Users: userDisplayNames{svc: userProfileService}, Actors: stepActors(artifactRegistry)},
+		tasks.ClaimDeps{Users: userDisplayNames{svc: userProfileService}},
 		auditor, cfg.Server.MaxRequestBytes)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
@@ -852,18 +852,6 @@ func stepCanAct(reg *artifact.Registry, ext *taskauthzext.Extension) tasks.CanAc
 			return false, fmt.Errorf("step template %q: %w", record.ActiveTaskTemplateID, err)
 		}
 		return ext.MayActOnStep(ctx, &record, in, template)
-	}
-}
-
-// stepActors looks up who may act on a step template: the names its authz extension
-// allows, and whether it declares one. Claiming a task follows that rule.
-func stepActors(reg *artifact.Registry) tasks.StepActors {
-	return func(ctx context.Context, stepTemplateID string) ([]string, bool, error) {
-		template, err := steptemplate.Load(ctx, reg, stepTemplateID)
-		if err != nil {
-			return nil, false, err
-		}
-		return taskauthzext.ActingNames(template.Extensions)
 	}
 }
 

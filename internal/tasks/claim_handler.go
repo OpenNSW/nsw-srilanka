@@ -41,18 +41,10 @@ type UserService interface {
 	GetDisplayName(ctx context.Context, userID string) (string, error)
 }
 
-// StepActors returns the logical names that may act on the step template
-// stepTemplateID, from the authz rule it declares, and whether it declares one. A step
-// that declares none is not role-restricted on writes. Claiming a task follows the
-// same rule as submitting a step.
-type StepActors func(ctx context.Context, stepTemplateID string) (names []string, declared bool, err error)
-
 // ClaimDeps are what the claim routes and the task view need beyond the task manager.
-// Either may be nil: without Users a holder has no name, and without Actors the read
-// check alone decides who may claim.
+// Users may be nil, and then a holder has no name.
 type ClaimDeps struct {
-	Users  UserService
-	Actors StepActors
+	Users UserService
 }
 
 // taskResponse is the task view served by GET /api/v1/tasks/{id}: core's zone view
@@ -164,26 +156,18 @@ func (h *HTTPHandler) HandleReleaseTask(w http.ResponseWriter, r *http.Request) 
 // claimGate decides whether a user who may read a task may also claim or release it.
 type claimGate func(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error)
 
-// mayClaim reports whether in may claim record: they must be able to act on the
-// task's active step, by the same rule that governs a submission (the step's authz
-// extension). A step that declares no rule is not role-restricted on writes, so the
-// read check that came before is all there is.
+// mayClaim reports whether in may claim record: CanAct must admit them to the task's
+// active step in its current state, the same rule that decides whether they can
+// submit. Without CanAct nobody may. A completed task is let through so the task
+// manager refuses its claim as a conflict, not as a missing right to act.
 func (h *HTTPHandler) mayClaim(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error) {
-	if h.StepActors == nil || record.ActiveTaskTemplateID == "" {
+	if record.State == store.StateCompleted {
 		return true, nil
 	}
-	names, declared, err := h.StepActors(ctx, record.ActiveTaskTemplateID)
-	if err != nil {
-		return false, err
+	if h.CanAct == nil {
+		return false, nil
 	}
-	if !declared {
-		return true, nil
-	}
-	eligible, err := h.AuthzCatalog.Eligible(ctx, in, record.CaseID, names)
-	if err != nil {
-		return false, err
-	}
-	return eligible.Any(names), nil
+	return h.CanAct(ctx, record, in)
 }
 
 // handleClaim runs a claim or release (op names it in logs and the audit trail) for

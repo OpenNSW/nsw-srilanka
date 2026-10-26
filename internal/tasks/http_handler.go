@@ -61,10 +61,7 @@ type HTTPHandler struct {
 	AuthzCatalog taskauthz.Catalog
 	// Users names a task's claim holder in the task view. When nil, the holder has
 	// no name.
-	Users UserService
-	// StepActors says who may act on a task's active step, and so who may claim the
-	// task. When nil, anyone who can read a task may claim it.
-	StepActors      StepActors
+	Users           UserService
 	Audit           nswaudit.Auditor
 	MaxRequestBytes int64
 	// Files swaps the task's declared file fields: stored values out as
@@ -95,7 +92,6 @@ func NewHTTPHandler(
 		Files:           files,
 		CanAct:          canAct,
 		Users:           claims.Users,
-		StepActors:      claims.Actors,
 		Audit:           audit,
 		MaxRequestBytes: maxRequestBytes,
 	}
