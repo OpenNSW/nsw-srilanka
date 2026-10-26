@@ -134,6 +134,7 @@ permissions:
       - nsw:consignment:read
       - nsw:storage:read
       - nsw:storage:write
+      - nsw:storage:internalwrite
       - nsw:task:write
 assignments:
   - id: 01a13912-e66f-7d35-b722-1dda19c2f501
@@ -301,6 +302,7 @@ inboundAuthConfig:
         - nsw:consignment:read
         - nsw:storage:read
         - nsw:storage:write
+        - nsw:storage:internalwrite
       userInfo:
         responseType: JSON
       scopeClaims:

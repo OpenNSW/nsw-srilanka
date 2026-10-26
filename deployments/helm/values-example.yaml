@@ -336,6 +336,16 @@ backend:
         # download saves it instead of opening it.
         - text/xml
         - application/xml
+      # What machine clients may upload on POST /api/v1/internal/storage beyond
+      # allowedUploadTypes, by the client's name in the catalog's clients. Not
+      # read when type is proxy. Unlike allowedUploadTypes it may list a type a
+      # browser opens as a document, such as text/html for the documents an
+      # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
+      # is for files a deployment generates itself); only the clients named,
+      # holding nsw:storage:internalwrite, can store it.
+      allowedInternalUploadTypes:
+        npqs:
+          - text/html
       # What a download opens in the browser; every other file is saved. MIME
       # types, compared exactly with the stored type. Not read when type is
       # proxy: the owning service applies its own. text/html is listed for the

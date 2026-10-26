@@ -54,6 +54,7 @@ services:
           - nsw:task:write
           - nsw:storage:read
           - nsw:storage:write
+          - nsw:storage:internalwrite
         endpointParams:
           resource: https://api.nsw-srilanka.local
 
@@ -68,7 +69,10 @@ cors:
 
 # NPQS keeps no files of its own: it serves TNSW's storage, calling TNSW as
 # NPQS_TO_NSW (services entry tnsw), so officers open the documents
-# traders uploaded there. TNSW applies its own upload limits.
+# traders uploaded there. Officers' uploads go to TNSW's upload route
+# (scope nsw:storage:write), so TNSW checks them like a trader's. The files this
+# agency generates itself go to TNSW's internal upload route (scope
+# nsw:storage:internalwrite), which accepts the types TNSW grants this client.
 storage:
   type: proxy
   # Seals the file tokens officers hold in place of stored file keys (here,
@@ -81,8 +85,22 @@ storage:
   proxy:
     service: "tnsw"
     uploadPath: /api/v1/storage
+    internalUploadPath: /api/v1/internal/storage
     downloadPath: /api/v1/storage/{key}
     deletePath: /api/v1/storage/{key}
+    # What this agency's officers may upload; anything else is refused with
+    # 415 before it is sent to TNSW. Each is compared exactly with the upload's
+    # type, as TNSW compares it, and TNSW's own list decides what it accepts.
+    allowedUploadTypes:
+      - application/pdf
+      - image/jpeg
+      - image/png
+      - image/gif
+      - image/webp
+      # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls.
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - text/xml
+      - application/xml
 
 # Officers sign in through the NPQS portal client, and NSW injects and replies as NSW_TO_NPQS.
 # The audience is the NPQS API resource server in

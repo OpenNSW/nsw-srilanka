@@ -185,7 +185,12 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// through this service, so it has to exist before the task stack (Stage 4).
 	// storage.type picks a backend of this deployment's own or a proxy onto
 	// the service that owns the files.
-	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager)
+	internalUploadTypes, err := internalUploadTypesByClient(cfg.Storage, globalCatalog)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, err
+	}
+	storageStack, err := nswstorage.New(ctx, cfg.Storage, remoteManager, nswstorage.WithInternalUploadTypes(internalUploadTypes))
 	if err != nil {
 		_ = database.Close(db)
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
@@ -427,7 +432,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// The storage service behind this handler is built in Stage 2 — task
 	// plugins that attach uploaded files to an outbound call read through the
 	// service, so it has to exist before the task stack (Stage 4).
-	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess)
+	fileHandler := nswstorage.NewFileHandler(storageStack.Service, fileAccess,
+		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
 	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifactRegistry))
@@ -546,6 +552,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			payment:     paymentHandler,
 			slce:        slceHandler,
 			slpa:        slpaHandler,
+			files:       fileHandler,
 		}, withAuth, withScope)
 	}
 

@@ -39,6 +39,8 @@ func TestRoutes(t *testing.T) {
 		mount(t, mux, pattern)
 	}
 
+	checkInternalRoute(t, mux)
+
 	// The local content routes go on the same mux in app.go.
 	stack, err := New(t.Context(), localConfig(t, "http://localhost:8080"), nil)
 	if err != nil {
@@ -59,6 +61,7 @@ func TestRoutes(t *testing.T) {
 		method, target, wantPattern string
 	}{
 		{http.MethodPost, "/api/v1/storage", UploadRoute},
+		{http.MethodPost, "/api/v1/internal/storage", InternalUploadRoute},
 		{http.MethodGet, path.Join("/api/v1/storage", file), DownloadRoute},
 		{http.MethodPut, path.Join("/api/v1/storage", file, "content"), "PUT /api/v1/storage/{key}/content"},
 		{http.MethodGet, path.Join("/api/v1/storage", file, "content"), "GET /api/v1/storage/{key}/content"},
@@ -74,6 +77,21 @@ func TestRoutes(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("DELETE %s: status %d, want %d", path.Join("/api/v1/storage", file), rec.Code, http.StatusMethodNotAllowed)
 	}
+}
+
+// checkInternalRoute checks the internal upload route is TNSW's alone: a clean
+// POST path outside RoutePrefix, where no wildcard route can claim it, that
+// mounts on mux.
+func checkInternalRoute(t *testing.T, mux *http.ServeMux) {
+	t.Helper()
+	method, p, _ := strings.Cut(InternalUploadRoute, " ")
+	if method != http.MethodPost || p != "/api/v1/internal/storage" || path.Clean(p) != p {
+		t.Errorf("route %q, want POST /api/v1/internal/storage", InternalUploadRoute)
+	}
+	if underPrefix(p, RoutePrefix) {
+		t.Errorf("route %q is under RoutePrefix %q", InternalUploadRoute, RoutePrefix)
+	}
+	mount(t, mux, InternalUploadRoute)
 }
 
 // mount registers pattern on mux, failing the test instead of panicking when

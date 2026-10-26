@@ -34,12 +34,41 @@ type FileRefs interface {
 type FileHandler struct {
 	svc  Service
 	refs FileRefs
+	// uploads prepares the uploads on the user route: svc unless an option
+	// says otherwise.
+	uploads Uploader
+	// machine prepares the uploads on the internal route. Nil when this
+	// deployment serves none.
+	machine Uploader
+}
+
+// FileHandlerOption adjusts a FileHandler.
+type FileHandlerOption func(*FileHandler)
+
+// WithUploads prepares the uploads on the user route with u instead of the
+// Service.
+func WithUploads(u Uploader) FileHandlerOption {
+	return func(h *FileHandler) { h.uploads = u }
+}
+
+// WithMachineUploads enables InternalUpload, preparing its uploads with u.
+func WithMachineUploads(u Uploader) FileHandlerOption {
+	return func(h *FileHandler) { h.machine = u }
 }
 
 // NewFileHandler creates a FileHandler over svc, resolving references with
 // refs.
-func NewFileHandler(svc Service, refs FileRefs) *FileHandler {
-	return &FileHandler{svc: svc, refs: refs}
+func NewFileHandler(svc Service, refs FileRefs, opts ...FileHandlerOption) *FileHandler {
+	h := &FileHandler{svc: svc, refs: refs, uploads: svc}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// HasMachineUploads reports whether InternalUpload can serve requests.
+func (h *FileHandler) HasMachineUploads() bool {
+	return h.machine != nil
 }
 
 // uploadResponse is what an upload returns: the reference to keep for the
@@ -55,8 +84,21 @@ type uploadResponse struct {
 // Upload reserves a stored file and returns a reference to it for the caller,
 // with the URL to upload the file to. A user's reference can only be submitted,
 // as the value of a form's file field, so it never expires; a machine
-// client's, such as an agency proxying its own upload, opens the file too.
+// client's, such as an agency proxying its officer's upload, opens the file too.
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
+	h.serveUpload(w, r, h.uploads)
+}
+
+// InternalUpload is Upload for the files a machine client generates and stores
+// itself, such as an agency's documents, which may be of types users may not
+// upload. Its reference opens the file as well as being submittable. Which
+// callers reach it is the route's scope: it does not check the kind of principal.
+func (h *FileHandler) InternalUpload(w http.ResponseWriter, r *http.Request) {
+	h.serveUpload(w, r, h.machine)
+}
+
+// serveUpload prepares an upload with up and answers with a reference to it.
+func (h *FileHandler) serveUpload(w http.ResponseWriter, r *http.Request, up Uploader) {
 	p, ok := authn.FromContext(r.Context())
 	if !ok {
 		httputil.Error(w, r, http.StatusUnauthorized, "authentication required")
@@ -81,7 +123,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := h.svc.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
+	meta, err := up.Upload(r.Context(), req.Filename, req.Size, req.MimeType)
 	if err != nil {
 		h.writeServiceError(w, r, err, "failed to prepare upload", req.MimeType)
 		return

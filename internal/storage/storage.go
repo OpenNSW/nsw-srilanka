@@ -57,18 +57,46 @@ type Stack struct {
 	// with S3 the client talks to the bucket, and behind a proxy it talks to
 	// the owning service.
 	LocalContent *corestorage.LocalContentHandler
+	// Uploads prepares the uploads users make: Service itself, or in proxy
+	// mode Service limited to the types in storage.proxy.allowedUploadTypes.
+	Uploads Uploader
+	// MachineUploads prepares the uploads machine clients make on the
+	// internal upload route. Nil in proxy mode, where nothing uploads to this
+	// deployment.
+	MachineUploads Uploader
+}
+
+// Option adjusts the stack New builds.
+type Option func(*options)
+
+type options struct {
+	internalUploadTypes map[string][]string
+}
+
+// WithInternalUploadTypes sets the media types, beyond storage.allowedUploadTypes,
+// each machine client may upload on the internal upload route, by client ID.
+func WithInternalUploadTypes(byClientID map[string][]string) Option {
+	return func(o *options) { o.internalUploadTypes = byClientID }
 }
 
 // New builds the storage stack for cfg.Type: a proxy onto another service
 // when it is TypeProxy, otherwise the core/storage backend it names. caller
 // reaches the owning service and is only used in proxy mode.
-func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) {
+func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) (*Stack, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if cfg.IsProxy() {
 		svc, err := NewProxyService(caller, cfg.Proxy)
 		if err != nil {
 			return nil, err
 		}
-		return &Stack{Service: svc, Handler: NewProxyHandler(svc)}, nil
+		return &Stack{
+			Service: svc,
+			Handler: NewProxyHandler(svc),
+			Uploads: limitTypes(svc, anyCaller(cfg.Proxy.AllowedUploadTypes)),
+		}, nil
 	}
 
 	if err := cfg.validateBackend(); err != nil {
@@ -88,7 +116,12 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller) (*Stack, error) 
 		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
 	)
 
-	stack := &Stack{Service: svc, Handler: corestorage.NewHTTPHandler(svc)}
+	stack := &Stack{
+		Service:        svc,
+		Handler:        corestorage.NewHTTPHandler(svc),
+		Uploads:        svc,
+		MachineUploads: newMachineUploads(driver, cfg, o.internalUploadTypes),
+	}
 	if local, ok := driver.(*drivers.LocalFSDriver); ok {
 		stack.LocalContent = corestorage.NewLocalContentHandler(local)
 	}

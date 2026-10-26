@@ -25,6 +25,12 @@ info:
     answers 502 when that deployment fails or refuses the agency's
     credentials.
 
+    Files users upload, and an agency's officers through its proxy, are
+    reserved on `POST /api/v1/storage`, with scope `nsw:storage:write`. A
+    machine client stores the files it generates itself, such as an agency's
+    documents, on `POST /api/v1/internal/storage` on TNSW, with scope
+    `nsw:storage:internalwrite`.
+
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
     carrying the scope named on each operation. Every error response uses the
     shared `ErrorResponse` envelope (`{"error": "...", "correlationId": "..."}`).
@@ -46,7 +52,8 @@ paths:
         2. Keep `key` as the file's value, for example in a form's file field.
 
         The allowed types and the size limit are the deployment's
-        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`).
+        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`). A machine
+        client's own generated files use `POST /api/v1/internal/storage`.
 
         Requires scope `nsw:storage:write`.
       operationId: reserveUpload
@@ -99,6 +106,70 @@ paths:
           description: |
             Agency only. The deployment that stores the files failed, or
             refused this deployment's credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/internal/storage:
+    post:
+      summary: Reserve an upload as a machine client
+      description: |
+        `POST /api/v1/storage` for the files a machine client generates and
+        stores itself, such as an agency's documents. The request and response
+        are the same; the file reference returned is issued to the calling client and
+        opens the file as well as being submittable.
+
+        The allowed types are `storage.allowedUploadTypes` plus the types
+        `storage.allowedInternalUploadTypes` grants the calling client, which
+        may include a type a browser opens as a document, such as
+        `text/html`. The media type is compared with parameters and case
+        ignored. The size limit is `storage.maxUploadBytes`. Served by TNSW
+        only.
+
+        Requires scope `nsw:storage:internalwrite`.
+      operationId: reserveInternalUpload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadRequest'
+      responses:
+        '200':
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: |
+            Malformed JSON, a missing `filename` or `mime_type`, a `size` that
+            is not positive, or a file over the size limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. The bearer token lacks scope `nsw:storage:internalwrite`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: The file type is not one the calling client may upload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error reserving the upload or issuing its reference.
           content:
             application/json:
               schema:

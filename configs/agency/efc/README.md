@@ -16,7 +16,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 EFC keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `EFC_TO_NSW`. TNSW applies its own upload limits.
+TNSW as `EFC_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`), and the files this agency generates to its internal upload route (`nsw:storage:internalwrite`). `storage.proxy.allowedUploadTypes` is what its officers may upload.
 
 The YAML's `services` list registers `tnsw` for storage and the workflows'
 `notify_decision` callbacks (`POST /api/v1/callbacks/{callbackToken}`).
@@ -72,7 +72,7 @@ creates EFC for this deployment, on the `EFC API` resource server
 | --------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
 | TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on EFC's parked steps, which `catalog.json` maps `tnsw` to |
-| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write` on TNSW                                                         |
+| EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                         |
 
 TNSW's `config.yaml` services entry `efc` requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.efc.nsw-agency.local` (see `configs/config*.example.yaml`).

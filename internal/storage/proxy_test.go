@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,7 @@ func newOwningService(t *testing.T) *httptest.Server {
 	// rejection it relays is a real one.
 	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...)))
 	mux.HandleFunc(UploadRoute, h.Upload)
+	mux.HandleFunc(InternalUploadRoute, h.Upload)
 	mux.HandleFunc(DownloadRoute, h.Download)
 	// ProxyService keeps Delete as part of Service, though this application
 	// mounts no delete route.
@@ -83,10 +85,12 @@ func newRegistry(t *testing.T, url, token string) *remote.Manager {
 
 func defaultProxyConfig() ProxyConfig {
 	return ProxyConfig{
-		Service:      "files-api",
-		UploadPath:   DefaultProxyUploadPath,
-		DownloadPath: DefaultProxyDownloadPath,
-		DeletePath:   DefaultProxyDeletePath,
+		Service:            "files-api",
+		UploadPath:         "/api/v1/storage",
+		InternalUploadPath: "/api/v1/internal/storage",
+		DownloadPath:       "/api/v1/storage/{key}",
+		DeletePath:         "/api/v1/storage/{key}",
+		AllowedUploadTypes: []string{"application/pdf"},
 	}
 }
 
@@ -305,10 +309,12 @@ func TestNew_ProxyModeHasNoLocalContent(t *testing.T) {
 
 func TestProxyConfigValidate(t *testing.T) {
 	cases := map[string]func(*ProxyConfig){
-		"missing service":           func(c *ProxyConfig) { c.Service = "" },
-		"missing upload path":       func(c *ProxyConfig) { c.UploadPath = "" },
-		"download path without key": func(c *ProxyConfig) { c.DownloadPath = "/api/v1/storage" },
-		"delete path without key":   func(c *ProxyConfig) { c.DeletePath = "/api/v1/storage" },
+		"missing service":              func(c *ProxyConfig) { c.Service = "" },
+		"missing upload path":          func(c *ProxyConfig) { c.UploadPath = "" },
+		"missing internal upload path": func(c *ProxyConfig) { c.InternalUploadPath = "" },
+		"missing upload types":         func(c *ProxyConfig) { c.AllowedUploadTypes = nil },
+		"download path without key":    func(c *ProxyConfig) { c.DownloadPath = "/api/v1/storage" },
+		"delete path without key":      func(c *ProxyConfig) { c.DeletePath = "/api/v1/storage" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -460,5 +466,38 @@ func TestProxyService_DownloadFailuresAreUpstream(t *testing.T) {
 				t.Fatalf("Download: err = %v, want an upstream failure", err)
 			}
 		})
+	}
+}
+
+// A user's file is reserved on the owning service's upload endpoint, and a file
+// this deployment generates on its internal one.
+func TestProxy_UploadAndSaveUseTheirOwnEndpoints(t *testing.T) {
+	var hits []string
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	reserve := func(name string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			hits = append(hits, name)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"key":"k.pdf","name":"f","upload_url":"` + srv.URL + `/put","mime_type":"application/pdf"}`))
+		}
+	}
+	mux.HandleFunc(UploadRoute, reserve("upload"))
+	mux.HandleFunc(InternalUploadRoute, reserve("internal"))
+	mux.HandleFunc("PUT /put", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+
+	svc, err := NewProxyService(newRegistry(t, srv.URL, ownerToken), defaultProxyConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Upload(context.Background(), "f.pdf", 3, "application/pdf"); err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	if _, err := svc.Save(context.Background(), "f.pdf", "application/pdf", strings.NewReader("abc"), 3); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if want := []string{"upload", "internal"}; !slices.Equal(hits, want) {
+		t.Errorf("endpoints hit = %v, want %v", hits, want)
 	}
 }

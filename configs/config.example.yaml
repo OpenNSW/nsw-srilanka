@@ -205,6 +205,17 @@ storage:
     # download saves it instead of opening it.
     - text/xml
     - application/xml
+  # What machine clients may upload on POST /api/v1/internal/storage beyond
+  # allowedUploadTypes, by the client's name in catalog.json (clients). That
+  # route is for the files a deployment generates itself, such as the documents
+  # an agency's HTML_DOCUMENT_GENERATOR stores here. Not read when type is
+  # proxy. Unlike allowedUploadTypes it may list a type a browser opens as a
+  # document: inlineTypes lists text/html, so an agency that generates HTML
+  # needs it granted: NPQS does. Only the clients named here, holding the
+  # nsw:storage:internalwrite scope, can store such a type.
+  allowedInternalUploadTypes:
+    npqs:
+      - text/html
   # What a download opens in the browser; every other file is saved. MIME
   # types, compared exactly with the stored type. Not read when type is proxy:
   # the owning service applies its own. text/html is listed for the documents
@@ -250,14 +261,24 @@ storage:
   #   publicURL: ""
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
-  # (services), which supplies its URL and authentication. All
-  # four are required in proxy mode; below are that service's usual storage
-  # routes, and {key} may appear anywhere in the download/delete paths.
+  # (services), which supplies its URL and authentication. All of the settings
+  # below are required in proxy mode; the paths are that service's usual storage
+  # routes, and {key} may appear anywhere in the download/delete paths. Users'
+  # uploads go to uploadPath (scope nsw:storage:write). The files this
+  # deployment generates go to internalUploadPath (scope
+  # nsw:storage:internalwrite), which accepts what the owning service grants
+  # this deployment's client.
   # proxy:
   #   service: ""
   #   uploadPath: /api/v1/storage
+  #   internalUploadPath: /api/v1/internal/storage
   #   downloadPath: /api/v1/storage/{key}
   #   deletePath: /api/v1/storage/{key}
+  #   # What this deployment's users may upload; any other type is refused with
+  #   # 415 before it is sent on. Each is compared exactly with the upload's type,
+  #   # as the owning service compares it, which decides what it accepts.
+  #   allowedUploadTypes:
+  #     - application/pdf
 
 authn:
   jwksURL: http://localhost:8090/oauth2/jwks
