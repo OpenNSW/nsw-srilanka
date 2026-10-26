@@ -16,7 +16,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 NPQS keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `NPQS_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`), and the files this agency generates to its internal upload route (`nsw:storage:internalwrite`).
+TNSW as `NPQS_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`), and the files this agency generates to its internal upload route (`nsw:storage:internalwrite`). `storage.proxy.allowedUploadTypes` is what its officers may upload.
 
 The officer forms' searchable lists (importing countries, commodity names) are
 served from the `static_data` in `npqs`, the same lists TNSW serves the trader.

@@ -90,6 +90,7 @@ func defaultProxyConfig() ProxyConfig {
 		InternalUploadPath: DefaultProxyInternalUploadPath,
 		DownloadPath:       DefaultProxyDownloadPath,
 		DeletePath:         DefaultProxyDeletePath,
+		AllowedUploadTypes: []string{"application/pdf"},
 	}
 }
 
@@ -311,6 +312,7 @@ func TestProxyConfigValidate(t *testing.T) {
 		"missing service":              func(c *ProxyConfig) { c.Service = "" },
 		"missing upload path":          func(c *ProxyConfig) { c.UploadPath = "" },
 		"missing internal upload path": func(c *ProxyConfig) { c.InternalUploadPath = "" },
+		"missing upload types":         func(c *ProxyConfig) { c.AllowedUploadTypes = nil },
 		"download path without key":    func(c *ProxyConfig) { c.DownloadPath = "/api/v1/storage" },
 		"delete path without key":      func(c *ProxyConfig) { c.DeletePath = "/api/v1/storage" },
 	}

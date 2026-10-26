@@ -261,7 +261,8 @@ storage:
   #   publicURL: ""
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
-  # (services), which supplies its URL and authentication. Five paths are required in proxy mode; below are that service's usual storage
+  # (services), which supplies its URL and authentication. All of the settings
+  # below are required in proxy mode; the paths are that service's usual storage
   # routes, and {key} may appear anywhere in the download/delete paths. Users'
   # uploads go to uploadPath (scope nsw:storage:write). The files this
   # deployment generates go to internalUploadPath (scope
@@ -273,8 +274,9 @@ storage:
   #   internalUploadPath: /api/v1/internal/storage
   #   downloadPath: /api/v1/storage/{key}
   #   deletePath: /api/v1/storage/{key}
-  #   # Optional. When set, a user's upload of any other type is refused with
-  #   # 415 before it is sent on; the owning service checks it either way.
+  #   # What this deployment's users may upload; any other type is refused with
+  #   # 415 before it is sent on, and the owning service checks it as well. List
+  #   # no type a browser opens as a document, such as text/html.
   #   allowedUploadTypes:
   #     - application/pdf
 

@@ -198,7 +198,7 @@ func TestConfigValidate_ProxyUploadTypes(t *testing.T) {
 		wantErr string
 	}{
 		{name: "a list", types: []string{"application/pdf", "image/png"}},
-		{name: "none"},
+		{name: "none", wantErr: "storage.proxy.allowedUploadTypes must list at least one"},
 		{name: "a parameter", types: []string{"application/pdf; q=1"}, wantErr: "storage.proxy.allowedUploadTypes"},
 	}
 	for _, tt := range tests {

@@ -88,6 +88,19 @@ storage:
     internalUploadPath: /api/v1/internal/storage
     downloadPath: /api/v1/storage/{key}
     deletePath: /api/v1/storage/{key}
+    # What this agency's officers may upload; anything else is refused with
+    # 415 before it is sent to TNSW, which checks it as well. List no HTML or
+    # SVG type: a browser runs script from those when TNSW serves them inline.
+    allowedUploadTypes:
+      - application/pdf
+      - image/jpeg
+      - image/png
+      - image/gif
+      - image/webp
+      # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls.
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - text/xml
+      - application/xml
 
 # Officers sign in through the SLTB portal client, and NSW injects and replies as NSW_TO_SLTB.
 # The audience is the SLTB API resource server in

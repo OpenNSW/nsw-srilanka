@@ -16,7 +16,7 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 FCAU keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
-TNSW as `FCAU_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`), and the files this agency generates to its internal upload route (`nsw:storage:internalwrite`).
+TNSW as `FCAU_TO_NSW`. Officers' uploads go to TNSW's upload route (`nsw:storage:write`), and the files this agency generates to its internal upload route (`nsw:storage:internalwrite`). `storage.proxy.allowedUploadTypes` is what its officers may upload.
 
 One thing nsw-agency did for FCAU isn't here yet: a second round on the same
 TNSW step. A review sent back to the trader (`needs_more_info` on the application

@@ -184,10 +184,12 @@ type ProxyConfig struct {
 	DownloadPath string `yaml:"downloadPath"`
 	// DeletePath is its delete endpoint (DELETE). Must contain {key}.
 	DeletePath string `yaml:"deletePath"`
-	// AllowedUploadTypes are the MIME types this deployment's users may upload.
-	// Optional: when set, any other type is refused with 415 before the file is
-	// sent on, and the owning service applies its own list either way. It does
-	// not apply to what this deployment generates and saves itself.
+	// AllowedUploadTypes are the MIME types this deployment's users may upload;
+	// any other is refused with 415 before the file is sent on. Required: the
+	// owning service checks the upload too, but this deployment states what its
+	// own users may send. It does not apply to what this deployment generates
+	// and saves itself. List no type a browser opens as a document, such as
+	// text/html: the owning service may serve it inline.
 	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
 }
 
@@ -211,6 +213,9 @@ func (c ProxyConfig) Validate() error {
 	}
 	if !strings.Contains(c.DeletePath, KeyPlaceholder) {
 		return fmt.Errorf("storage.proxy.deletePath must contain %s", KeyPlaceholder)
+	}
+	if len(c.AllowedUploadTypes) == 0 {
+		return fmt.Errorf("storage.proxy.allowedUploadTypes must list at least one MIME type")
 	}
 	for _, t := range c.AllowedUploadTypes {
 		if err := corestorage.ValidMediaType(t); err != nil {
