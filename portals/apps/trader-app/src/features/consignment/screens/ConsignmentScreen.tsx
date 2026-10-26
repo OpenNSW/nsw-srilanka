@@ -8,6 +8,7 @@ import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '@/features
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
+import { useActionError } from '@/components/common/actionError'
 import { LoadError } from '@/components/common/LoadError.tsx'
 import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import { ROUTES } from '@/constants'
@@ -15,6 +16,7 @@ import { ROUTES } from '@/constants'
 export function ConsignmentScreen() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { showActionError, clearActionError } = useActionError()
   const [consignments, setConsignments] = useState<ConsignmentSummary[]>([])
 
   const [totalCount, setTotalCount] = useState(0)
@@ -30,7 +32,6 @@ export function ConsignmentScreen() {
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
   const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState(false)
 
   const listRequestIdRef = useRef(0)
 
@@ -42,13 +43,13 @@ export function ConsignmentScreen() {
 
   const handleCreateConsignment = async () => {
     setCreating(true)
-    setCreateError(false)
+    clearActionError()
     try {
       const response = await createConsignment()
       void navigate(ROUTES.CONSIGNMENT_DETAIL(response.id))
     } catch (error) {
       console.error('Failed to create consignment:', error)
-      setCreateError(true)
+      showActionError(t('consignments.list.error.createFailed'))
     } finally {
       setCreating(false)
     }
@@ -102,17 +103,10 @@ export function ConsignmentScreen() {
             </span>
           )}
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-            <PlusIcon />
-            {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-          </Button>
-          {createError && (
-            <Text size="2" color="red">
-              {t('consignments.list.error.createFailed')}
-            </Text>
-          )}
-        </div>
+        <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+          <PlusIcon />
+          {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+        </Button>
       </div>
 
       <div className="rounded-2xl bg-app-surface shadow-md overflow-hidden">

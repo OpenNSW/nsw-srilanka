@@ -4,6 +4,7 @@ import { Button, Badge, IconButton, Spinner, Text, Tooltip } from '@radix-ui/the
 import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
+import { LoadError } from '@/components/common/LoadError.tsx'
 import { CopyableId } from '@/components/CopyableId'
 import { isAgencyMode } from '@/features/case/mode'
 import { ConsignmentTasks } from '@/features/consignment/components/WorkflowViewer'
@@ -242,6 +243,18 @@ export function ConsignmentDetailScreen({
         : errorKey === 'idRequired'
           ? t('consignments.detail.error.idRequired')
           : t('consignments.detail.error.notFound')
+    const backToList = (
+      <Button type="button" variant="soft" color="gray" onClick={() => void navigate(backTo)}>
+        <ArrowLeftIcon />
+        {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
+      </Button>
+    )
+    const retryLoad = () => {
+      fetchConsignmentRef.current = fetchConsignment
+      setLoading(true)
+      setError(null)
+      void fetchConsignment('initial')
+    }
 
     return (
       <div className="p-6">
@@ -249,32 +262,24 @@ export function ConsignmentDetailScreen({
           <Breadcrumb items={[up, { label: untitled }]} />
         </div>
         <div className="bg-app-surface rounded-2xl shadow-md p-8 text-center">
-          <Text size="5" color="red" weight="medium" className="block mb-2">
-            {errorTitle}
-          </Text>
-          <Text size="2" color="gray" className="block mb-6">
-            {isLoadFailed
-              ? t('consignments.detail.error.loadFailedDescription')
-              : t('consignments.detail.error.notFoundDescription')}
-          </Text>
-          <div className="flex gap-3 justify-center">
-            <Button variant="soft" onClick={() => void navigate(backTo)}>
-              <ArrowLeftIcon />
-              {t(isAgencyMode ? 'cases.detail.backToList' : 'consignments.detail.backToList')}
-            </Button>
-            {isLoadFailed && (
-              <Button
-                onClick={() => {
-                  fetchConsignmentRef.current = fetchConsignment
-                  setLoading(true)
-                  setError(null)
-                  void fetchConsignment('initial')
-                }}
-              >
-                {t('consignments.detail.tryAgain')}
-              </Button>
-            )}
-          </div>
+          {isLoadFailed ? (
+            <LoadError
+              message={errorTitle}
+              description={t('consignments.detail.error.loadFailedDescription')}
+              onRetry={retryLoad}
+              secondary={backToList}
+            />
+          ) : (
+            <>
+              <Text size="5" color="red" weight="medium" className="block mb-2">
+                {errorTitle}
+              </Text>
+              <Text size="2" color="gray" className="mb-6 block">
+                {t('consignments.detail.error.notFoundDescription')}
+              </Text>
+              {backToList}
+            </>
+          )}
         </div>
       </div>
     )

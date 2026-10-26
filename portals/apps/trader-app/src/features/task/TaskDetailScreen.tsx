@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
 import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
@@ -15,12 +15,17 @@ import { Breadcrumb, type BreadcrumbItem } from '@/components/Breadcrumb'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { isAgencyMode } from '@/features/case/mode'
 import { ROUTES } from '@/constants'
+import { useActionError } from '@/components/common/actionError'
 import { LoadError } from '@/components/common/LoadError.tsx'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
 const NEXT_TASK_MAX_ATTEMPTS = 5
 const NEXT_TASK_RETRY_MS = 1000
 const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
+
+function isStaleTaskStep(err: unknown): boolean {
+  return err instanceof HttpError && err.status === 409
+}
 
 function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
   const actionable = nodes.filter((node) => {
@@ -47,12 +52,14 @@ export function TaskDetailScreen() {
     void navigate(ROUTES.TASK_FORM(consignmentId, nextId))
   }
   const { t } = useTranslation()
+  const { showActionError, clearActionError } = useActionError()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
   const [retryCount, setRetryCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [consignmentLoadFailed, setConsignmentLoadFailed] = useState(false)
+  const [consignmentRetry, setConsignmentRetry] = useState(0)
   const [hasSubmitted, setHasSubmitted] = useState(false)
   // Bumped once an action's refetch has landed, and mixed into the zone keys so
   // the form remounts against what came back. A form seeds its data on mount
@@ -69,12 +76,22 @@ export function TaskDetailScreen() {
   const [submittedHere, setSubmittedHere] = useState(false)
   // The consignment, for the breadcrumb and the task names.
   const [consignment, setConsignment] = useState<Consignment | null>(null)
+  // The id on screen, read from the consignment effect without subscribing it
+  // to every consignment update.
+  const shownConsignmentIdRef = useRef<string | undefined>(undefined)
+  // The toast raised for a failed reload of a consignment already on screen.
+  const consignmentFailureToast = useRef<number | null>(null)
   const [prevTaskId, setPrevTaskId] = useState(taskId)
+  const [prevConsignmentId, setPrevConsignmentId] = useState(consignmentId)
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
     setSubmittedHere(false)
     setNextTaskId(undefined)
+  }
+  if (consignmentId !== prevConsignmentId) {
+    setPrevConsignmentId(consignmentId)
+    setConsignmentLoadFailed(false)
   }
 
   const fetchTask = useCallback(async (): Promise<ZoneView | undefined> => {
@@ -92,6 +109,21 @@ export function TaskDetailScreen() {
       setRefreshing(false)
     }
   }, [taskId, t])
+
+  // A 409 means the step moved on: show that, and replace the form with the
+  // task's current state. Anything else keeps the form and says the action failed.
+  const reportTaskActionError = useCallback(
+    async (err: unknown, fallback: 'tasks.error.draftFailed' | 'tasks.error.submitFailed') => {
+      if (!isStaleTaskStep(err)) {
+        showActionError(t(fallback))
+        return
+      }
+      showActionError(t('tasks.error.staleStep'))
+      await fetchTask()
+      setFormEpoch((n) => n + 1)
+    },
+    [fetchTask, showActionError, t],
+  )
 
   useEffect(() => {
     if (!taskId) return
@@ -118,6 +150,14 @@ export function TaskDetailScreen() {
   // The zone view lags the URL until the new task loads.
   const taskState = zoneView?.task_id === taskId ? zoneView?.state : undefined
 
+  useEffect(() => {
+    shownConsignmentIdRef.current = consignment?.id === consignmentId ? consignmentId : undefined
+  }, [consignment, consignmentId])
+
+  useEffect(() => {
+    consignmentFailureToast.current = null
+  }, [consignmentId])
+
   // Loads the consignment, and once the task is done, finds the next task.
   // The only writer of both: a change of consignment, task or state cancels
   // the run, so a late response never overwrites a newer one.
@@ -136,12 +176,27 @@ export function TaskDetailScreen() {
       try {
         const loaded = await getConsignment(consignmentId)
         if (cancelled) return
+        setConsignmentLoadFailed(false)
+        if (consignmentFailureToast.current !== null) {
+          clearActionError(consignmentFailureToast.current)
+          consignmentFailureToast.current = null
+        }
         if (loaded) setConsignment(loaded)
         if (!findNext) return
         id = loaded ? nextActionableTaskId(loaded.workflowNodes ?? [], taskId) : undefined
       } catch (err) {
         if (cancelled) return
         console.error('TaskDetailScreen: failed to load consignment:', err)
+        // Retries while looking for the next task stay quiet. The last failure
+        // is a page error when nothing is on screen, and a toast when it is.
+        const retriesLeft = findNext && attempt < maxAttempts
+        if (!retriesLeft) {
+          if (shownConsignmentIdRef.current === consignmentId) {
+            consignmentFailureToast.current = showActionError(t('consignments.detail.error.loadFailed'))
+          } else {
+            setConsignmentLoadFailed(true)
+          }
+        }
         if (!findNext) return
       }
       if (id) setNextTaskId(id)
@@ -154,7 +209,7 @@ export function TaskDetailScreen() {
       cancelled = true
       if (timeout) clearTimeout(timeout)
     }
-  }, [consignmentId, taskId, taskState, submittedHere])
+  }, [consignmentId, taskId, taskState, submittedHere, consignmentRetry, clearActionError, showActionError, t])
 
   if (loading) {
     return (
@@ -170,7 +225,7 @@ export function TaskDetailScreen() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-app-surface rounded-2xl shadow-md p-8 flex flex-col items-center gap-4">
+        <div className="bg-app-surface rounded-2xl shadow-md p-8">
           <LoadError
             message={error}
             onRetry={() => {
@@ -178,11 +233,13 @@ export function TaskDetailScreen() {
               setError(null)
               setRetryCount((n) => n + 1)
             }}
+            secondary={
+              <Button type="button" variant="soft" color="gray" onClick={goToTasks}>
+                <ArrowLeftIcon />
+                {t('tasks.goBack')}
+              </Button>
+            }
           />
-          <Button variant="soft" color="gray" onClick={goToTasks}>
-            <ArrowLeftIcon />
-            {t('tasks.goBack')}
-          </Button>
         </div>
       </div>
     )
@@ -242,12 +299,14 @@ export function TaskDetailScreen() {
           </IconButton>
         </Tooltip>
       </div>
-      {submitError && (
-        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
-          <div className="rounded-xl bg-error-subtle px-4 py-3 shadow-sm">
-            <Text size="2" weight="medium" className="text-error-strong">
-              {submitError}
-            </Text>
+      {consignmentLoadFailed && consignment?.id !== consignmentId && (
+        <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-6`}>
+          <div className="bg-app-surface rounded-2xl shadow-md p-8">
+            <LoadError
+              message={t('consignments.detail.error.loadFailed')}
+              description={t('consignments.detail.error.loadFailedDescription')}
+              onRetry={() => setConsignmentRetry((n) => n + 1)}
+            />
           </div>
         </div>
       )}
@@ -260,7 +319,7 @@ export function TaskDetailScreen() {
             ? undefined
             : async (command, data, options) => {
                 if (!taskId || !zoneView.step_id) return
-                setSubmitError(null)
+                clearActionError()
                 if (options?.draft) {
                   try {
                     // The step stays where it is, so the form stays mounted with
@@ -268,14 +327,8 @@ export function TaskDetailScreen() {
                     // The form shows "Draft saved" next to its buttons.
                     await saveTaskStepDraft(taskId, zoneView.step_id, data)
                   } catch (err) {
-                    if (err instanceof HttpError && err.status === 409) {
-                      setSubmitError(t('tasks.error.staleStep'))
-                      await fetchTask()
-                      setFormEpoch((n) => n + 1)
-                    } else {
-                      setSubmitError(t('tasks.error.draftFailed'))
-                    }
                     console.error('TaskDetailScreen: failed to save draft:', err)
+                    await reportTaskActionError(err, 'tasks.error.draftFailed')
                     // Reject, so the form does not say the draft was saved.
                     throw err
                   }
@@ -296,18 +349,10 @@ export function TaskDetailScreen() {
                   // here: the submission that just succeeded carried them.
                   setFormEpoch((n) => n + 1)
                 } catch (err) {
-                  // Use a local error here rather than the screen-level `error`, which
-                  // would unmount the layout and discard the user's entered form data.
-                  if (err instanceof HttpError && err.status === 409) {
-                    // The task moved on since this view loaded (another tab, a callback).
-                    // Show where it is now rather than retrying against the old step.
-                    setSubmitError(t('tasks.error.staleStep'))
-                    await fetchTask()
-                    setFormEpoch((n) => n + 1)
-                  } else {
-                    setSubmitError(t('tasks.error.submitFailed'))
-                  }
+                  // A toast, not the screen-level `error`, which would unmount the
+                  // layout and discard the user's entered form data.
                   console.error('TaskDetailScreen: failed to submit task step:', err)
+                  await reportTaskActionError(err, 'tasks.error.submitFailed')
                   // Reject, so the form keeps treating its input as unsaved.
                   throw err
                 } finally {

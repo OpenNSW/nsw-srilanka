@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Theme } from '@radix-ui/themes'
+import { ActionErrorProvider } from '@/components/common/ActionErrorProvider'
 import { useColorScheme } from '@/services/useColorScheme'
 
 // Reads the active color scheme so <Theme accentColor> stays in sync with
@@ -19,7 +20,7 @@ export function ThemedShell({ children }: { children: ReactNode }) {
       panelBackground="solid"
       appearance="light"
     >
-      {children}
+      <ActionErrorProvider>{children}</ActionErrorProvider>
     </Theme>
   )
 }

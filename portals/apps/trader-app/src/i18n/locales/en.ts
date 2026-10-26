@@ -221,6 +221,7 @@ const en = {
         title: 'Something went wrong',
         unexpected: 'An unexpected error occurred',
         tryAgain: 'Try Again',
+        dismiss: 'Dismiss',
       },
     },
   },

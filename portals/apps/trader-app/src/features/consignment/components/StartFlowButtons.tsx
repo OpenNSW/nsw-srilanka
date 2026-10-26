@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { AlertDialog, Button, Flex, Text } from '@radix-ui/themes'
+import { AlertDialog, Button, Flex } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
+import { useActionError } from '@/components/common/actionError'
 import type { FlowOption } from '@/features/consignment/types.ts'
 import { startConsignmentFlow } from '@/features/consignment/service.ts'
 
@@ -15,15 +16,15 @@ interface StartFlowButtonsProps {
 // started flow cannot be withdrawn, so each start is confirmed first.
 export function StartFlowButtons({ consignmentId, flows, onStarted }: StartFlowButtonsProps) {
   const { t } = useTranslation()
+  const { showActionError, clearActionError } = useActionError()
   const [pending, setPending] = useState<FlowOption | null>(null)
   const [starting, setStarting] = useState(false)
-  const [failed, setFailed] = useState<FlowOption | null>(null)
 
   if (flows.length === 0) return null
 
   const start = async (flow: FlowOption) => {
     setStarting(true)
-    setFailed(null)
+    clearActionError()
     try {
       await startConsignmentFlow(consignmentId, flow.templateId)
       setPending(null)
@@ -31,7 +32,7 @@ export function StartFlowButtons({ consignmentId, flows, onStarted }: StartFlowB
     } catch (err) {
       console.error('Failed to start flow:', err)
       setPending(null)
-      setFailed(flow)
+      showActionError(t('consignments.detail.flows.failed', { label: flow.label }))
     } finally {
       setStarting(false)
     }
@@ -39,11 +40,6 @@ export function StartFlowButtons({ consignmentId, flows, onStarted }: StartFlowB
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {failed && (
-        <Text size="2" color="red">
-          {t('consignments.detail.flows.failed', { label: failed.label })}
-        </Text>
-      )}
       {flows.map((flow) => (
         <Button key={flow.templateId} variant="soft" size="2" onClick={() => setPending(flow)} disabled={starting}>
           {flow.label}

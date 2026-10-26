@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { ClearActionErrorOnNavigate } from '@/components/common/ActionErrorProvider'
 import { Layout } from './components/Layout'
 import { Footer } from '@/components/Layout'
 import { ConsignmentScreen } from './features/consignment/screens/ConsignmentScreen.tsx'
@@ -76,6 +77,7 @@ function App() {
 
   return (
     <>
+      <ClearActionErrorOnNavigate />
       <Routes>
         {import.meta.env.DEV && <Route path="/dev/zones" element={<ZonePreviewScreen />} />}
         <Route path="/login" element={<SignedOutRoute />} />
