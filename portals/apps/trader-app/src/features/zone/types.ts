@@ -71,13 +71,11 @@ export type ClaimHolder = {
 }
 
 // TaskClaim is who holds the task's claim, as the caller sees it. mine is decided
-// by the server: never compare ids or emails here. When required_to_submit is
-// true and mine is false, the backend refuses submissions (403).
+// by the server: never compare ids or emails here.
 export type TaskClaim = {
   holder?: ClaimHolder
   claimed_at?: string
   mine: boolean
-  required_to_submit: boolean
 }
 
 // ZoneView is the wire shape served by GET /api/v1/tasks/{id}. There is
@@ -92,7 +90,7 @@ export type ZoneView = {
   step_id?: string
   alert?: Alert
   audit?: AuditEntry[]
-  // claim is absent from backends without task claims.
+  // claim is absent where the deployment does not use task claims.
   claim?: TaskClaim
   view: ZoneComponent[]
   created_at: string

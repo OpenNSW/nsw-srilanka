@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { claimTask, getZoneView, releaseTask, saveTaskStepDraft, submitTaskStep } from './service'
 import { ClaimBanner } from './ClaimBanner'
-import { canActOnTask, showClaimBanner } from './claim'
 import { HttpError } from '@/services/http'
 import { getConsignment } from '@/features/consignment/service.ts'
 import type { Consignment, WorkflowNode } from '@/features/consignment/types'
@@ -37,20 +36,16 @@ function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): str
 
 type ClaimOp = 'claim' | 'release'
 
-// claimErrorMessage explains a refused claim or release. refreshed is the task as
-// refetched after the refusal, which tells a completed task from another user's
-// claim (both are 409s).
+// claimErrorMessage explains a refused claim, takeover or release. refreshed is the
+// task as refetched after the refusal, which tells a completed task from a claim that
+// changed while it was being taken over (both are 409s).
 function claimErrorMessage(err: unknown, op: ClaimOp, refreshed: ZoneView | undefined, t: TFunction): string {
   if (err instanceof HttpError) {
     if (err.status === 409) {
-      return refreshed?.state === 'COMPLETED' ? t('tasks.claim.error.completed') : t('tasks.claim.error.held')
+      return refreshed?.state === 'COMPLETED' ? t('tasks.claim.error.completed') : t('tasks.claim.error.changed')
     }
-    if (err.status === 403) {
-      // A refused release means another user holds the claim. A refused claim means
-      // the user may not act on the task's current step, or their sign-in lacks the
-      // claim scope.
-      return op === 'release' ? t('tasks.claim.error.notHolder') : t('tasks.claim.error.notPermitted')
-    }
+    // A refused release means another user holds the claim.
+    if (err.status === 403 && op === 'release') return t('tasks.claim.error.notHolder')
     // The deployment does not use claims, or the task is gone.
     if (err.status === 404) return t('tasks.claim.error.unavailable')
   }
@@ -133,11 +128,10 @@ export function TaskDetailScreen() {
       failure = err
       console.error(`TaskDetailScreen: failed to ${op} task:`, err)
     }
-    // Refetch either way: a claim or release changes the view (actions appear or
-    // go), and every refusal means the claim changed since the view loaded. The
-    // form remounts against what came back.
+    // Refetch either way: the banner shows the claim as it is now, and every refusal
+    // means the claim changed since the view loaded. The form is left as it is: a
+    // claim never changes what the user may do, so what they typed is kept.
     const zv = await fetchTask()
-    setFormEpoch((n) => n + 1)
     if (failure !== undefined) setClaimError(claimErrorMessage(failure, op, zv, t))
     setClaimBusy(false)
   }
@@ -300,7 +294,7 @@ export function TaskDetailScreen() {
           </div>
         </div>
       )}
-      {showClaimBanner(zoneView.claim) && (
+      {zoneView.claim && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
           <ClaimBanner
             claim={zoneView.claim}
@@ -317,10 +311,7 @@ export function TaskDetailScreen() {
         title={title}
         formEpoch={formEpoch}
         onSubmitForm={
-          // Without onSubmitForm the zones render read-only, with no actions: while a
-          // submission settles, and where the deployment requires a claim the caller
-          // does not hold (the backend would refuse the submission with 403).
-          hasSubmitted || !canActOnTask(zoneView.claim)
+          hasSubmitted
             ? undefined
             : async (command, data, options) => {
                 if (!taskId || !zoneView.step_id) return
@@ -366,12 +357,6 @@ export function TaskDetailScreen() {
                     // The task moved on since this view loaded (another tab, a callback).
                     // Show where it is now rather than retrying against the old step.
                     setSubmitError(t('tasks.error.staleStep'))
-                    await fetchTask()
-                    setFormEpoch((n) => n + 1)
-                  } else if (err instanceof HttpError && err.status === 403 && zoneView.claim?.required_to_submit) {
-                    // The claim changed since this view loaded (released, or taken over).
-                    // Show who holds it now; the actions go unless it is still the caller.
-                    setSubmitError(t('tasks.claim.error.required'))
                     await fetchTask()
                     setFormEpoch((n) => n + 1)
                   } else {

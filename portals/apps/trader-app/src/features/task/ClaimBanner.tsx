@@ -1,4 +1,4 @@
-import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
+import { AlertDialog, Badge, Button, Flex, Spinner, Text } from '@radix-ui/themes'
 import { LockClosedIcon, LockOpen1Icon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { TaskClaim } from '@/features/zone/types'
@@ -10,11 +10,13 @@ type Props = {
   completed: boolean
   busy: boolean
   error: string | null
+  // Claims the task, taking it over when another user holds it.
   onClaim: () => void
   onRelease: () => void
 }
 
-// ClaimBanner says who holds the task's claim and offers Claim or Release.
+// ClaimBanner says who holds the task's claim and offers Claim, Release or Take over.
+// A claim is a hint for other users: it never locks the task.
 export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease }: Props) {
   const { t } = useTranslation()
   const name = claim.holder?.name || t('tasks.claim.anotherUser')
@@ -40,23 +42,10 @@ export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease 
     )
   }
 
-  // Only worth saying where the claim decides who may act.
-  let hint: string | null = null
-  if (claim.required_to_submit && !completed && !claim.mine) {
-    hint = claim.holder ? t('tasks.claim.claimedByOther', { name }) : t('tasks.claim.claimToAct')
-  }
-
   return (
     <div className="rounded-2xl bg-app-surface shadow-sm px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {badge}
-          {hint && (
-            <Text size="2" color="gray">
-              {hint}
-            </Text>
-          )}
-        </div>
+        {badge}
         {!completed && !claim.holder && (
           <Button variant="soft" size="2" onClick={onClaim} disabled={busy} className="cursor-pointer">
             {busy ? <Spinner size="1" /> : <LockClosedIcon />}
@@ -68,6 +57,30 @@ export function ClaimBanner({ claim, completed, busy, error, onClaim, onRelease 
             {busy ? <Spinner size="1" /> : <LockOpen1Icon />}
             {t('tasks.claim.release')}
           </Button>
+        )}
+        {!completed && claim.holder && !claim.mine && (
+          <AlertDialog.Root>
+            <AlertDialog.Trigger>
+              <Button variant="soft" size="2" disabled={busy} className="cursor-pointer">
+                {busy ? <Spinner size="1" /> : <LockClosedIcon />}
+                {t('tasks.claim.takeOver')}
+              </Button>
+            </AlertDialog.Trigger>
+            <AlertDialog.Content maxWidth="450px">
+              <AlertDialog.Title>{t('tasks.claim.takeOverTitle')}</AlertDialog.Title>
+              <AlertDialog.Description size="2">{t('tasks.claim.takeOverConfirm', { name })}</AlertDialog.Description>
+              <Flex gap="3" mt="4" justify="end">
+                <AlertDialog.Cancel>
+                  <Button variant="soft" color="gray">
+                    {t('tasks.claim.cancel')}
+                  </Button>
+                </AlertDialog.Cancel>
+                <AlertDialog.Action>
+                  <Button onClick={onClaim}>{t('tasks.claim.takeOver')}</Button>
+                </AlertDialog.Action>
+              </Flex>
+            </AlertDialog.Content>
+          </AlertDialog.Root>
         )}
       </div>
       {error && (
