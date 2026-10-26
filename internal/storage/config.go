@@ -24,12 +24,12 @@ const KeyPlaceholder = "{key}"
 const DefaultTokenTTLSeconds = 3600
 
 // Default ProxyConfig endpoint paths: the storage routes this application
-// itself mounts for a machine client, so a proxy onto another deployment of it
-// needs none set.
+// itself mounts, so a proxy onto another deployment of it needs none set.
 const (
-	DefaultProxyUploadPath   = "/api/v1/internal/storage"
-	DefaultProxyDownloadPath = "/api/v1/storage/" + KeyPlaceholder
-	DefaultProxyDeletePath   = "/api/v1/storage/" + KeyPlaceholder
+	DefaultProxyUploadPath         = "/api/v1/storage"
+	DefaultProxyInternalUploadPath = "/api/v1/internal/storage"
+	DefaultProxyDownloadPath       = "/api/v1/storage/" + KeyPlaceholder
+	DefaultProxyDeletePath         = "/api/v1/storage/" + KeyPlaceholder
 )
 
 // Config is the storage configuration. Type (storage.type) selects either
@@ -171,21 +171,23 @@ type ProxyConfig struct {
 	// Service is the owning service's ID in the outbound services registry
 	// (config.yaml services), which supplies its URL, authentication and timeout.
 	Service string `yaml:"service"`
-	// UploadPath is the owning service's upload endpoint (POST), which
-	// allocates a key and returns the file metadata with an upload URL.
+	// UploadPath is the owning service's upload endpoint (POST) for the files
+	// this deployment's users upload, which allocates a key and returns the
+	// file metadata with an upload URL.
 	UploadPath string `yaml:"uploadPath"`
+	// InternalUploadPath is its upload endpoint (POST) for the files this
+	// deployment generates and saves itself, such as a document. It answers as
+	// UploadPath does, and is for a machine client.
+	InternalUploadPath string `yaml:"internalUploadPath"`
 	// DownloadPath is its download endpoint (GET), which returns a
 	// download URL. Must contain {key}.
 	DownloadPath string `yaml:"downloadPath"`
 	// DeletePath is its delete endpoint (DELETE). Must contain {key}.
 	DeletePath string `yaml:"deletePath"`
-	// AllowedUploadTypes are the MIME types this deployment's users may upload;
-	// any other is refused with 415 before the file is sent on. Required: the
-	// owning service accepts more from a machine client than from a user, so
-	// this is what keeps a user to the types they may upload. It does not
-	// apply to what this deployment generates and saves itself. List no type a
-	// browser opens as a document, such as text/html: the owning service may
-	// serve it inline.
+	// AllowedUploadTypes are the MIME types this deployment's users may upload.
+	// Optional: when set, any other type is refused with 415 before the file is
+	// sent on, and the owning service applies its own list either way. It does
+	// not apply to what this deployment generates and saves itself.
 	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
 }
 
@@ -195,9 +197,10 @@ func (c ProxyConfig) Validate() error {
 		return fmt.Errorf("storage.proxy.service is required when storage.type is %s", TypeProxy)
 	}
 	for name, path := range map[string]string{
-		"storage.proxy.uploadPath":   c.UploadPath,
-		"storage.proxy.downloadPath": c.DownloadPath,
-		"storage.proxy.deletePath":   c.DeletePath,
+		"storage.proxy.uploadPath":         c.UploadPath,
+		"storage.proxy.internalUploadPath": c.InternalUploadPath,
+		"storage.proxy.downloadPath":       c.DownloadPath,
+		"storage.proxy.deletePath":         c.DeletePath,
 	} {
 		if strings.TrimSpace(path) == "" {
 			return fmt.Errorf("%s is required when storage.type is %s", name, TypeProxy)
@@ -208,9 +211,6 @@ func (c ProxyConfig) Validate() error {
 	}
 	if !strings.Contains(c.DeletePath, KeyPlaceholder) {
 		return fmt.Errorf("storage.proxy.deletePath must contain %s", KeyPlaceholder)
-	}
-	if len(c.AllowedUploadTypes) == 0 {
-		return fmt.Errorf("storage.proxy.allowedUploadTypes must list at least one MIME type")
 	}
 	for _, t := range c.AllowedUploadTypes {
 		if err := corestorage.ValidMediaType(t); err != nil {

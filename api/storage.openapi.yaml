@@ -25,10 +25,10 @@ info:
     answers 502 when that deployment fails or refuses the agency's
     credentials.
 
-    Users and machine clients upload on different routes. A user reserves an
-    upload on `POST /api/v1/storage`, with scope `nsw:storage:write`. A machine
-    client, such as an agency forwarding its officers' files, uses
-    `POST /api/v1/internal/storage` on TNSW, with scope
+    Files users upload, and an agency's officers through its proxy, are
+    reserved on `POST /api/v1/storage`, with scope `nsw:storage:write`. A
+    machine client stores the files it generates itself, such as an agency's
+    documents, on `POST /api/v1/internal/storage` on TNSW, with scope
     `nsw:storage:internalwrite`.
 
     All routes require a JWT bearer token (see `securitySchemes.BearerAuth`)
@@ -53,7 +53,7 @@ paths:
 
         The allowed types and the size limit are the deployment's
         (`storage.allowedUploadTypes`, `storage.maxUploadBytes`). A machine
-        client uses `POST /api/v1/internal/storage` instead.
+        client's own generated files use `POST /api/v1/internal/storage`.
 
         Requires scope `nsw:storage:write`.
       operationId: reserveUpload
@@ -115,9 +115,9 @@ paths:
     post:
       summary: Reserve an upload as a machine client
       description: |
-        `POST /api/v1/storage` for machine clients, such as an agency
-        forwarding its officers' files. The request and response are the
-        same; the file reference returned is issued to the calling client and
+        `POST /api/v1/storage` for the files a machine client generates and
+        stores itself, such as an agency's documents. The request and response
+        are the same; the file reference returned is issued to the calling client and
         opens the file as well as being submittable.
 
         The allowed types are `storage.allowedUploadTypes` plus the types

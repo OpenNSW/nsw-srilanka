@@ -83,15 +83,16 @@ type uploadResponse struct {
 
 // Upload reserves a stored file and returns a reference to it for the caller,
 // with the URL to upload the file to. A user's reference can only be submitted,
-// as the value of a form's file field, so it never expires.
+// as the value of a form's file field, so it never expires; a machine
+// client's, such as an agency proxying its officer's upload, opens the file too.
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	h.serveUpload(w, r, h.uploads)
 }
 
-// InternalUpload is Upload for machine clients, such as an agency forwarding
-// its officers' files. Its reference opens the file as well as being
-// submittable. Which callers reach it is the route's scope: it does not check
-// the kind of principal.
+// InternalUpload is Upload for the files a machine client generates and stores
+// itself, such as an agency's documents, which may be of types users may not
+// upload. Its reference opens the file as well as being submittable. Which
+// callers reach it is the route's scope: it does not check the kind of principal.
 func (h *FileHandler) InternalUpload(w http.ResponseWriter, r *http.Request) {
 	h.serveUpload(w, r, h.machine)
 }

@@ -64,15 +64,21 @@ func NewProxyService(caller ServiceCaller, cfg ProxyConfig) (*ProxyService, erro
 }
 
 // Upload asks the owning service to allocate a key for the file and presign
-// an upload URL for it.
+// an upload URL for it, on the endpoint it serves users on.
 func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, mime string) (*corestorage.FileMetadata, error) {
+	return s.reserve(ctx, s.cfg.UploadPath, filename, size, mime)
+}
+
+// reserve asks the owning service, on path, to allocate a key for the file and
+// presign an upload URL for it.
+func (s *ProxyService) reserve(ctx context.Context, path, filename string, size int64, mime string) (*corestorage.FileMetadata, error) {
 	var resp struct {
 		corestorage.FileMetadata
 		Error string `json:"error"`
 	}
 	err := s.caller.Call(ctx, s.cfg.Service, remote.Request{
 		Method: http.MethodPost,
-		Path:   s.cfg.UploadPath,
+		Path:   path,
 		Body: remote.JSONBody{V: map[string]any{
 			"filename":  filename,
 			"mime_type": mime,
@@ -92,11 +98,12 @@ func (s *ProxyService) Upload(ctx context.Context, filename string, size int64, 
 	return &meta, nil
 }
 
-// Save stores content on the owning service: it allocates the key there, as
-// Upload does, then puts the content to the presigned URL itself. The owning
-// service decides which MIME types it accepts.
+// Save stores content this deployment generated on the owning service: it
+// allocates the key on the endpoint for such content, as Upload does for a
+// user's file, then puts the content to the presigned URL itself. The owning
+// service decides which MIME types that endpoint accepts.
 func (s *ProxyService) Save(ctx context.Context, filename, mime string, body io.Reader, size int64) (*corestorage.FileMetadata, error) {
-	meta, err := s.Upload(ctx, filename, size, mime)
+	meta, err := s.reserve(ctx, s.cfg.InternalUploadPath, filename, size, mime)
 	if err != nil {
 		return nil, err
 	}

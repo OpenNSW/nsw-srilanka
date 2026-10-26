@@ -183,12 +183,11 @@ func TestConfigValidate_UploadLimits(t *testing.T) {
 		cfg := Config{
 			Config: corestorage.Config{Type: TypeProxy},
 			Proxy: ProxyConfig{
-				Service:      "files-api",
-				UploadPath:   DefaultProxyUploadPath,
-				DownloadPath: DefaultProxyDownloadPath,
-				DeletePath:   DefaultProxyDeletePath,
-
-				AllowedUploadTypes: []string{"application/pdf"},
+				Service:            "files-api",
+				UploadPath:         DefaultProxyUploadPath,
+				InternalUploadPath: DefaultProxyInternalUploadPath,
+				DownloadPath:       DefaultProxyDownloadPath,
+				DeletePath:         DefaultProxyDeletePath,
 			},
 			TokenKeyset: testTokenKeyset,
 		}

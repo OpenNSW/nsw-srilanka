@@ -125,6 +125,7 @@ permissions:
     permissions:
       - nsw:consignment:read
       - nsw:storage:read
+      - nsw:storage:write
       - nsw:storage:internalwrite
       - nsw:task:write
 assignments:
@@ -290,6 +291,7 @@ inboundAuthConfig:
         - nsw:task:write
         - nsw:consignment:read
         - nsw:storage:read
+        - nsw:storage:write
         - nsw:storage:internalwrite
       userInfo:
         responseType: JSON

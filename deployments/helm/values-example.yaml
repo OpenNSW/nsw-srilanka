@@ -340,7 +340,8 @@ backend:
       # allowedUploadTypes, by the client's name in the catalog's clients. Not
       # read when type is proxy. Unlike allowedUploadTypes it may list a type a
       # browser opens as a document, such as text/html for the documents an
-      # agency's HTML_DOCUMENT_GENERATOR stores here; only the clients named,
+      # agency's HTML_DOCUMENT_GENERATOR generates and stores here (the route
+      # is for files a deployment generates itself); only the clients named,
       # holding nsw:storage:internalwrite, can store it.
       allowedInternalUploadTypes:
         npqs:
