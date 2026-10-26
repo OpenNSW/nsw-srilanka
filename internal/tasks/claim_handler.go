@@ -111,26 +111,40 @@ func (h *HTTPHandler) HandleClaimTask(w http.ResponseWriter, r *http.Request) {
 	// A completed task keeps its claim as the record of who worked it, so it is
 	// refused before a takeover could release that claim.
 	if record.State == store.StateCompleted {
-		h.answerClaim(w, r, "claim", taskID, "", orchestrator.ErrTaskCompleted)
+		h.answerClaim(w, r, "claim", taskID, nil, orchestrator.ErrTaskCompleted)
 		return
 	}
 
-	op, previous := "claim", ""
+	op := "claim"
+	var tk *takeover
 	if record.ClaimedBy != "" && record.ClaimedBy != in.UserID {
-		op, previous = "takeover", record.ClaimedBy
+		op, tk = "takeover", &takeover{previous: record.ClaimedBy}
 		// Core has no takeover of its own, so release the holder's claim, then claim.
-		// Should the task complete in between, the claim fails and the record of
-		// who worked it is lost: an accepted cost of keeping claims in core simple.
-		if err := h.Claims.ReleaseTask(ctx, taskID, previous); err != nil {
+		// Should the claim then fail (the task completes, or a third user claims it
+		// in between), the previous claim stays released: an accepted cost of keeping
+		// claims in core simple. The audit trail says so (takeover.released).
+		if err := h.Claims.ReleaseTask(ctx, taskID, tk.previous); err != nil {
 			// Another user took the claim since the task was read.
 			if errors.Is(err, orchestrator.ErrNotClaimHolder) {
 				err = orchestrator.ErrClaimHeld
 			}
-			h.answerClaim(w, r, op, taskID, previous, err)
+			h.answerClaim(w, r, op, taskID, tk, err)
 			return
 		}
+		tk.released = true
 	}
-	h.answerClaim(w, r, op, taskID, previous, h.Claims.ClaimTask(ctx, taskID, in.UserID))
+	err := h.Claims.ClaimTask(ctx, taskID, in.UserID)
+	if err != nil && tk != nil {
+		slog.WarnContext(ctx, "tasks: takeover released the previous claim but could not claim the task", "taskId", taskID, "error", err)
+	}
+	h.answerClaim(w, r, op, taskID, tk, err)
+}
+
+// takeover is a takeover of another user's claim, for the audit trail: whose claim
+// it was, and whether it was released before the takeover succeeded or failed.
+type takeover struct {
+	previous string
+	released bool
 }
 
 // HandleReleaseTask releases the calling user's claim on a task. Releasing a task
@@ -145,7 +159,7 @@ func (h *HTTPHandler) HandleReleaseTask(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	h.answerClaim(w, r, "release", taskID, "", h.Claims.ReleaseTask(r.Context(), taskID, in.UserID))
+	h.answerClaim(w, r, "release", taskID, nil, h.Claims.ReleaseTask(r.Context(), taskID, in.UserID))
 }
 
 // claimTarget returns the task a claim or release (op) is for, the calling user and
@@ -166,24 +180,24 @@ func (h *HTTPHandler) claimTarget(w http.ResponseWriter, r *http.Request, op str
 }
 
 // answerClaim answers err, the outcome of a claim, takeover or release (op) of the
-// task, and audits it. previous is the user whose claim a takeover released.
-func (h *HTTPHandler) answerClaim(w http.ResponseWriter, r *http.Request, op, taskID, previous string, err error) {
+// task, and audits it. tk is the takeover, or nil for a plain claim or a release.
+func (h *HTTPHandler) answerClaim(w http.ResponseWriter, r *http.Request, op, taskID string, tk *takeover, err error) {
 	ctx := r.Context()
 	switch {
 	case err == nil:
 		slog.InfoContext(ctx, "tasks: "+op+" applied", "taskId", taskID)
-		h.auditClaim(ctx, taskID, op, previous, "")
+		h.auditClaim(ctx, taskID, op, tk, "")
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, orchestrator.ErrTaskNotFound):
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 	case errors.Is(err, orchestrator.ErrClaimHeld):
-		h.auditClaim(ctx, taskID, op, previous, "task claim changed")
+		h.auditClaim(ctx, taskID, op, tk, "task claim changed")
 		httputil.Error(w, r, http.StatusConflict, errClaimChanged)
 	case errors.Is(err, orchestrator.ErrTaskCompleted):
-		h.auditClaim(ctx, taskID, op, previous, "task is completed")
+		h.auditClaim(ctx, taskID, op, tk, "task is completed")
 		httputil.Error(w, r, http.StatusConflict, errClaimTaskComplete)
 	case errors.Is(err, orchestrator.ErrNotClaimHolder):
-		h.auditClaim(ctx, taskID, op, previous, "task is claimed by another user")
+		h.auditClaim(ctx, taskID, op, tk, "task is claimed by another user")
 		httputil.Error(w, r, http.StatusForbidden, errNotClaimHolder)
 	case errors.Is(err, orchestrator.ErrHolderRequired):
 		httputil.Error(w, r, http.StatusUnauthorized, errAuthenticationReq)
@@ -239,7 +253,7 @@ func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, 
 	}
 	if !canRead {
 		slog.WarnContext(ctx, "tasks: "+op+" denied: no read access", "taskId", taskID)
-		h.auditClaim(ctx, taskID, op, "", "task read access denied")
+		h.auditClaim(ctx, taskID, op, nil, "task read access denied")
 		httputil.Error(w, r, http.StatusNotFound, errTaskNotFound)
 		return record, false
 	}
@@ -260,14 +274,17 @@ func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record s
 	}
 }
 
-// auditClaim records a claim, takeover or release of a task. previous is the user
-// whose claim a takeover released, or "". failure is the reason it was refused, or ""
-// when it was applied. The audit trail has no claim action of its own, so all are
-// updates to the task, told apart by the operation.
-func (h *HTTPHandler) auditClaim(ctx context.Context, taskID, op, previous, failure string) {
+// auditClaim records a claim, takeover or release of a task. tk is the takeover, or
+// nil. A takeover records whose claim it was (previous_holder) and whether that claim
+// was released (previous_claim_released), which stays true when the takeover itself
+// fails after the release. failure is the reason it was refused, or "" when it was
+// applied. The audit trail has no claim action of its own, so all are updates to the
+// task, told apart by the operation.
+func (h *HTTPHandler) auditClaim(ctx context.Context, taskID, op string, tk *takeover, failure string) {
 	metadata := map[string]any{"operation": op}
-	if previous != "" {
-		metadata["previous_holder"] = previous
+	if tk != nil {
+		metadata["previous_holder"] = tk.previous
+		metadata["previous_claim_released"] = tk.released
 	}
 	if failure != "" {
 		metadata["error"] = failure

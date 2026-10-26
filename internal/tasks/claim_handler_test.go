@@ -243,6 +243,7 @@ func TestHandleClaimTask_TakesOverAnotherUsersClaim(t *testing.T) {
 	assert.Equal(t, nswaudit.StatusSuccess, e.Status)
 	assert.Equal(t, "takeover", e.Metadata["operation"])
 	assert.Equal(t, "user-2", e.Metadata["previous_holder"])
+	assert.Equal(t, true, e.Metadata["previous_claim_released"])
 }
 
 // Claiming a task you already hold is a plain claim, not a takeover.
@@ -255,6 +256,7 @@ func TestHandleClaimTask_OwnClaimIsNotTakenOver(t *testing.T) {
 	require.Len(t, auditor.Records(), 1)
 	assert.Equal(t, "claim", auditor.Records()[0].Metadata["operation"])
 	assert.NotContains(t, auditor.Records()[0].Metadata, "previous_holder")
+	assert.NotContains(t, auditor.Records()[0].Metadata, "previous_claim_released")
 }
 
 // A completed task keeps its claim as the record of who worked it: it is refused
@@ -273,24 +275,39 @@ func TestHandleClaimTask_CompletedTaskIsNotTakenOver(t *testing.T) {
 	assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
 }
 
-// When the claim changes while it is being taken over, the caller is told to refetch:
-// either the holder's claim was no longer theirs to release, or someone else claimed
-// the task between the release and the claim.
+// When the claim or the task changes while a claim is being taken over, the takeover
+// fails (409): the holder's claim was no longer theirs to release, or after the release
+// someone else claimed the task or it completed. The audit trail says whether the
+// previous claim was released, since a release that went through is not undone.
 func TestHandleClaimTask_TakeoverRace(t *testing.T) {
+	released := []string{"release:" + testTaskID + ":user-2", "claim:" + testTaskID + ":" + testUserID}
 	tests := []struct {
-		name      string
-		claimer   *fakeClaimer
-		wantCalls []string
+		name         string
+		claimer      *fakeClaimer
+		wantBody     string
+		wantCalls    []string
+		wantReleased bool
 	}{
 		{
 			"the claim moved before the release",
 			&fakeClaimer{releaseErr: orchestrator.ErrNotClaimHolder},
+			errClaimChanged,
 			[]string{"release:" + testTaskID + ":user-2"},
+			false,
 		},
 		{
 			"someone claimed between the release and the claim",
 			&fakeClaimer{claimErr: &orchestrator.ClaimHeldError{Holder: "user-3"}},
-			[]string{"release:" + testTaskID + ":user-2", "claim:" + testTaskID + ":" + testUserID},
+			errClaimChanged,
+			released,
+			true,
+		},
+		{
+			"the task completed between the release and the claim",
+			&fakeClaimer{claimErr: orchestrator.ErrTaskCompleted},
+			errClaimTaskComplete,
+			released,
+			true,
 		},
 	}
 	for _, tt := range tests {
@@ -299,11 +316,14 @@ func TestHandleClaimTask_TakeoverRace(t *testing.T) {
 			recorder := sendClaim(claimHandler(t, claimedHSCodeTask("user-2"), tt.claimer, auditor), opClaim, chaUser())
 
 			assert.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
-			assert.Contains(t, recorder.Body.String(), errClaimChanged)
+			assert.Contains(t, recorder.Body.String(), tt.wantBody)
 			assert.Equal(t, tt.wantCalls, tt.claimer.calls)
 			require.Len(t, auditor.Records(), 1)
-			assert.Equal(t, "takeover", auditor.Records()[0].Metadata["operation"])
-			assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
+			e := auditor.Records()[0]
+			assert.Equal(t, nswaudit.StatusFailure, e.Status)
+			assert.Equal(t, "takeover", e.Metadata["operation"])
+			assert.Equal(t, "user-2", e.Metadata["previous_holder"])
+			assert.Equal(t, tt.wantReleased, e.Metadata["previous_claim_released"])
 		})
 	}
 }
