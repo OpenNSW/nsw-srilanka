@@ -981,7 +981,7 @@ func initTask(
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
 	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
 
-	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
+	emailProvider, err := cfg.Notification.Providers.Email.Build()
 	if err != nil {
 		return nil, nil, fmt.Errorf("email provider: %w", err)
 	}

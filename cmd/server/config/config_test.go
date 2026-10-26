@@ -216,7 +216,7 @@ func validConfig() *Config {
 		},
 		Notification: NotificationConfig{
 			Providers: NotificationProviders{
-				Email: providers.EmailConfig{BaseURL: "https://email.example.com", Token: "email-token"},
+				Email: EmailProviderConfig{EmailConfig: providers.EmailConfig{BaseURL: "https://email.example.com", Token: "email-token"}},
 				SMS: providers.SMSConfig{
 					BaseURL:  "https://sms.example.com",
 					UserName: "nsw",

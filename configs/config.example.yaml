@@ -291,6 +291,25 @@ notification:
     email:
       baseURL: https://email.svc.local
       token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    # Or send email through PingMailer, with a token from an OAuth2 client
+    # allowed to send as the sender (see internal/tasks/extensions/notify):
+    # email:
+    #   type: pingmailer
+    #   pingmailer:
+    #     baseURL: https://pingmailer.example.com
+    #     # allowInsecureHTTP: true   # only for a plain-HTTP in-cluster URL
+    #     auth:
+    #       type: oauth2
+    #       oauth2:
+    #         tokenURL: https://idp.example.com/oauth2/token
+    #         clientID: replace-with-pingmailer-client-id
+    #         clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+    #         endpointParams:
+    #           resource: https://mail.example.com
+    #     smtpHost: mail.example.com
+    #     smtpPort: 587
+    #     sender: no-reply@example.com
+    #     # senderName: Trade National Single Window
     sms:
       baseURL: https://smsservice.lk
       userName: replace-with-actual-username
