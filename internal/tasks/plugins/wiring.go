@@ -40,6 +40,12 @@ const (
 	// registered, so the trader can check it before committing.
 	TaskTypeCustomsCusdecVerify = "CUSTOMS_CUSDEC_VERIFY"
 
+	// TaskTypeCustomsCusdecRetrieve is the same plugin wired with the retrieve
+	// interpreter: it fetches the declaration as it stands in ASYCUDA World, so
+	// the dispatch notes are raised for the containers Customs holds now, after
+	// any amendment, rather than the ones the trader first declared.
+	TaskTypeCustomsCusdecRetrieve = "CUSTOMS_CUSDEC_RETRIEVE"
+
 	// TaskTypeCustomsCDNDispatch is the generic AUTH_API_CALL plugin wired with
 	// the Sri Lanka Customs (SLC Edge) Cargo Dispatch Note interpreter. One
 	// dispatch note covers one container, so a consignment fans out to this task
@@ -128,14 +134,23 @@ type FileFetcher interface {
 	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 }
 
+// CustomsSubmissions are where the SLC Edge dispatch steps record what they
+// sent, so the callbacks that answer a declaration or a dispatch note can find
+// the workflow that is waiting for them. The repositories satisfy them.
+type CustomsSubmissions struct {
+	Declarations  cusdec.Submissions
+	DispatchNotes cdn.Submissions
+}
+
 // Register installs the taskv2 plugins on reg.
 //
 // EXTERNAL_REVIEW uses our local plugin (ExternalReviewPlugin) that resolves
 // targets via remote.Manager and posts the OGA submission envelope. Payment
 // uses our local plugin (PaymentPlugin) that initiates checkout sessions via
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
-// dispatches SMS/email through notifications.Manager.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, backendBaseURL string) error {
+// dispatches SMS/email through notifications.Manager. ogaFiles issues the file
+// tokens EXTERNAL_REVIEW sends OGAs.
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}
@@ -145,19 +160,23 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	if paymentService == nil {
 		return fmt.Errorf("plugins: payment service is nil")
 	}
+	if (ogaFiles.ClientFor == nil) != (ogaFiles.IssueForClient == nil) {
+		return fmt.Errorf("plugins: OGA file tokens need both a client lookup and an issuer, or neither")
+	}
 
 	entries := []struct {
 		taskType string
 		plugin   flowplugins.TaskPlugin
 	}{
 		{TaskTypeUserInput, flowplugins.NewUserInputPlugin()},
-		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL)},
+		{TaskTypeExternalReview, NewExternalReviewPlugin(mgr, backendBaseURL, ogaFiles)},
 		{TaskTypePayment, NewPaymentPlugin(paymentService)},
 		{TaskTypeAPICall, flowplugins.NewAPICallPlugin(flowplugins.DefaultHTTPDispatcher)},
 		{TaskTypeAuthAPICall, NewAPICallPlugin(mgr)},
-		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files))},
+		{TaskTypeCustomsCusdecDispatch, NewAPICallPluginWithInterpreter(mgr, cusdec.NewCusdecInterpreter(files, customs.Declarations))},
 		{TaskTypeCustomsCusdecVerify, NewAPICallPluginWithInterpreter(mgr, cusdec.NewVerifyInterpreter())},
-		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter())},
+		{TaskTypeCustomsCusdecRetrieve, NewAPICallPluginWithInterpreter(mgr, cusdec.NewRetrieveInterpreter())},
+		{TaskTypeCustomsCDNDispatch, NewAPICallPluginWithInterpreter(mgr, cdn.NewCDNInterpreter(customs.DispatchNotes))},
 		{TaskTypeSLPAECDNUpload, NewAPICallPluginWithInterpreter(mgr, ecdn.NewInterpreter())},
 		{TaskTypeSLPAServiceOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewInterpreter())},
 		{TaskTypeSLPASundryOrder, NewAPICallPluginWithInterpreter(mgr, serviceorder.NewSundryInterpreter())},

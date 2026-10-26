@@ -97,8 +97,11 @@ type SummaryDTO struct {
 	TraderCompanyID string `json:"traderCompanyId"` // Company the trader belongs to
 	ChaCompanyID    string `json:"chaCompanyId"`    // CHA company selected at Stage 1
 	ChaID           string `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
-	CreatedAt       string `json:"createdAt"`       // Timestamp of consignment creation
-	UpdatedAt       string `json:"updatedAt"`       // Timestamp of last consignment update
+	// CallerRoles are the logical roles ("trader", "cha") the caller acts in on this
+	// consignment: a role the caller holds whose slot the caller's company fills.
+	CallerRoles []string `json:"callerRoles"`
+	CreatedAt   string   `json:"createdAt"` // Timestamp of consignment creation
+	UpdatedAt   string   `json:"updatedAt"` // Timestamp of last consignment update
 }
 
 // ListResult is the pagination envelope returned by the list consignments endpoint.
@@ -181,8 +184,9 @@ type WorkflowNodeTemplateResponseDTO struct {
 // ── Query ─────────────────────────────────────────────────────────────────────
 
 // Filter scopes a batch consignment query.
-// Use TraderCompanyID for role=trader and CHACompanyID for role=cha so that
-// colleagues at the same company see each other's consignments.
+// TraderCompanyID scopes to a trader-role caller's company and CHACompanyID to a
+// cha-role caller's, so that colleagues at the same company see each other's
+// consignments; with both set, a consignment matching either is listed.
 type Filter struct {
 	TraderCompanyID *string `json:"traderCompanyId,omitempty"`
 	CHACompanyID    *string `json:"chaCompanyId,omitempty"`

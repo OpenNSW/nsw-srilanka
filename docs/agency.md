@@ -33,8 +33,6 @@ without conflicts. Main-branch files touched:
 - `portals/apps/trader-app/src/App.tsx`, one import plus the `/consignments` and
   `/consignments/:consignmentId` routes choosing the agency screen when `isAgencyMode`.
   Everything else is in `src/features/case/`.
-- `portals/apps/trader-app/src/components/Layout/TopBar.tsx`, one import plus hiding
-  the role switcher when `isAgencyMode`.
 
 To check the branch still only touches those files (fetch first, so `main` is current):
 
@@ -52,7 +50,7 @@ point it at the agency's own catalog and artifacts, and give it the agency API's
 as its audience:
 
 ```sh
-cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles
+cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles and TNSW's client
 ```
 
 ```yaml
@@ -82,7 +80,6 @@ Run the same trader-app with these keys in `public/config.js` (or
 
 ```js
 APP_MODE: 'agency',
-IDP_TRADER_ROLE_NAME: '<officer IDP role>',   // see below
 ```
 
 In agency mode `/consignments` lists cases (`GET /api/v1/cases`), and
@@ -92,14 +89,8 @@ consignment's `workflowNodes` shape. Opening a task uses the normal
 `/api/v1/tasks/{id}`, authorized by the officer gate. The screens keep the
 `/consignments` paths because task cards and the task screen link there directly.
 
-The app only admits users whose IDP group maps to one of its roles, and it has no
-officer role. Mapping the officer role through `IDP_TRADER_ROLE_NAME` admits officers
-as the app's "Trader" role. That is internal only: agency mode hides the role
-switcher, the backend checks the real catalog roles, and agency mode shows none
-of the trader-only screens. Add a proper `officer` UI role when the agency UI grows.
-`IDP_TRADER_ROLE_NAME` is a single IDP role, so an officer who holds none of it is
-refused by the app however many catalog roles they hold; see
-[Known simplifications](#known-simplifications).
+The app has no roles of its own: it admits every signed-in user, and the backend
+checks the token's catalog roles on each call.
 
 ## Flow
 
@@ -139,7 +130,10 @@ over:
 1. TNSW's `EXTERNAL_REVIEW` step injects with its token `tok_b` and parks.
 2. The officer asks for more information. The review workflow's own `EXTERNAL_REVIEW`
    step replies on `tok_b` with `needs_more_info` and its own token `tok_x` as
-   `payload.callbackToken`, then parks.
+   `payload.callbackToken`, then parks. The step maps what it sends under its
+   `payload` input, and is also given the submission and the officer's review form,
+   which the reply leaves out, so the officer still sees what they reviewed and
+   decided while they wait.
 3. TNSW keeps `tok_x` and sends the task back to the trader. On resubmit, the same
    `EXTERNAL_REVIEW` step replies on `tok_x` with the new data and its own token
    `tok_c`, then parks.
@@ -271,9 +265,9 @@ the agency's artifacts therefore declare for every task:
 - the render config's `read.roles` says which roles may open the task, e.g.
   `["officer"]`.
 
-A step without an `authz` block is not checked on writes, and a render config without
-a `read` block is readable by every catalog role, so a task that should be open to one
-role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
+A step without an `authz` block is refused on writes, so every step must declare one.
+A render config without a `read` block is readable by every catalog role, so a task
+that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
 (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).
 
@@ -287,6 +281,13 @@ No role is required of the catalog; it maps the roles the agency's tasks name. T
 The case list and detail admit an officer holding the token role of any catalog role.
 A role a task names that the catalog does not define matches nobody, so the task is
 closed to everyone.
+
+A step that waits for TNSW's reply, such as a review's `*--request-info` step parked
+until the trader resubmits, is completed by TNSW's machine client rather than an
+officer. The catalog maps that client under `clients` as `tnsw` (for example
+`"tnsw": "NSW_TO_CDA"`, the client TNSW injects and replies as), and such a step's
+`authz` names it: `"QUEUED_EXTERNALLY": { "resubmit": ["tnsw"] }`. Without the
+mapping, TNSW's reply is refused with `403`.
 
 A catalog that maps no role (for example one with only `clients`) still starts, but no
 officer can open cases or act on tasks: the server logs a warning at start. And without
@@ -324,9 +325,3 @@ because callers and artifacts speak trade. Internally it is the case id.
 - **No "next task" button for officers.** On completion `TaskDetailScreen` looks up
   the next task via `/api/v1/consignments/{id}`, which 404s for a case, so the button
   never appears. The detail header also shows an empty trade-flow badge.
-
-- **The portal admits one IDP role.** The trader-app maps a single IDP role
-  (`IDP_TRADER_ROLE_NAME`) to its "Trader" role, and shows the unauthorized screen to a
-  user who holds none of it. An officer whose only roles are other catalog roles is
-  refused by the app, though the backend would admit them. Give such officers the
-  mapped role as well until the app accepts a list.

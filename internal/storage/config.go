@@ -2,7 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"mime"
 	"strings"
 	"time"
 
@@ -20,8 +19,8 @@ const TypeProxy = "proxy"
 // DownloadPath and DeletePath.
 const KeyPlaceholder = "{key}"
 
-// DefaultTokenTTLSeconds is how long a user's file token lasts when
-// storage.tokenTTLSeconds is unset: one hour.
+// DefaultTokenTTLSeconds is how long a file token a user reads with lasts
+// when storage.tokenTTLSeconds is unset: one hour.
 const DefaultTokenTTLSeconds = 3600
 
 // Default ProxyConfig endpoint paths: the storage routes this application
@@ -42,6 +41,12 @@ type Config struct {
 	// type is refused with 415. Required for the local and s3 backends; not
 	// read in proxy mode, where the owning service applies its own.
 	AllowedUploadTypes []string `yaml:"allowedUploadTypes"`
+	// InlineTypes are the media types a download opens in the browser; every
+	// other file is saved. Required for the local and s3 backends; not read in
+	// proxy mode, where the owning service applies its own. A type a browser
+	// interprets as a document, such as text/html, may be listed only when
+	// clients cannot upload it: it is for what this service stores itself.
+	InlineTypes []string `yaml:"inlineTypes"`
 	// MaxUploadBytes is the largest file, in bytes, clients may upload.
 	// Required for the local and s3 backends; not read in proxy mode.
 	MaxUploadBytes int64 `yaml:"maxUploadBytes"`
@@ -54,9 +59,10 @@ type Config struct {
 	// different for every deployment. Keep a key for as long as the tokens it
 	// sealed must open; those given to OGAs never expire.
 	TokenKeyset string `yaml:"tokenKeyset"`
-	// TokenTTLSeconds is how long a user's file token lasts, in seconds.
-	// Optional: DefaultTokenTTLSeconds when unset. Machine clients' tokens
-	// never expire.
+	// TokenTTLSeconds is how long a file token a user reads with lasts, in
+	// seconds: the tokens a task's view gives out. Optional:
+	// DefaultTokenTTLSeconds when unset. A user's upload tokens, which can only
+	// be submitted, and machine clients' tokens never expire.
 	TokenTTLSeconds int `yaml:"tokenTTLSeconds"`
 }
 
@@ -65,7 +71,7 @@ func (c Config) IsProxy() bool {
 	return strings.TrimSpace(c.Type) == TypeProxy
 }
 
-// TokenTTL returns how long a user's file token lasts.
+// TokenTTL returns how long a file token a user reads with lasts.
 func (c Config) TokenTTL() time.Duration {
 	if c.TokenTTLSeconds == 0 {
 		return DefaultTokenTTLSeconds * time.Second
@@ -116,13 +122,23 @@ func (c Config) validateBackend() error {
 	if len(c.AllowedUploadTypes) == 0 {
 		return fmt.Errorf("storage.allowedUploadTypes must list at least one MIME type")
 	}
+	if len(c.InlineTypes) == 0 {
+		return fmt.Errorf("storage.inlineTypes must list at least one MIME type")
+	}
+	// core/storage compares types to both lists exactly, so each must be a
+	// bare, lower-case type/subtype: no parameters, no wildcard.
 	for _, t := range c.AllowedUploadTypes {
-		// core/storage compares an upload's type to these exactly, so each
-		// must be a bare, lower-case type/subtype: no parameters, no wildcard.
-		mediaType, params, err := mime.ParseMediaType(t)
-		if err != nil || len(params) > 0 || mediaType != t || !strings.Contains(t, "/") || strings.Contains(t, "*") {
-			return fmt.Errorf("storage.allowedUploadTypes: %q is not a bare MIME type such as \"application/pdf\"", t)
+		if err := corestorage.ValidMediaType(t); err != nil {
+			return fmt.Errorf("storage.allowedUploadTypes: %w", err)
 		}
+	}
+	for _, t := range c.InlineTypes {
+		if err := corestorage.ValidMediaType(t); err != nil {
+			return fmt.Errorf("storage.inlineTypes: %w", err)
+		}
+	}
+	if err := corestorage.CheckUploadTypes(c.AllowedUploadTypes, c.InlineTypes); err != nil {
+		return fmt.Errorf("storage.allowedUploadTypes and storage.inlineTypes: %w", err)
 	}
 	if c.MaxUploadBytes <= 0 {
 		return fmt.Errorf("storage.maxUploadBytes must be greater than zero, got %d", c.MaxUploadBytes)
@@ -134,7 +150,7 @@ func (c Config) validateBackend() error {
 // the files and where it serves its storage API.
 type ProxyConfig struct {
 	// Service is the owning service's ID in the outbound services registry
-	// (services.json), which supplies its URL, authentication and timeout.
+	// (config.yaml services), which supplies its URL, authentication and timeout.
 	Service string `yaml:"service"`
 	// UploadPath is the owning service's upload endpoint (POST), which
 	// allocates a key and returns the file metadata with an upload URL.

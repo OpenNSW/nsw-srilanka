@@ -2,9 +2,8 @@
 // to directly.
 //
 // Most of an integration's configuration is not here: the outbound calls are
-// described in the services registry (see configs/services*.json), which the
-// remote manager reads on its own. What is left is everything else a partner
-// system needs from a deployment — the secret SLPA signs its callbacks with,
+// declared in config.yaml's services list and passed to the remote manager.
+// What is left is everything else a partner system needs from a deployment — the secret SLPA signs its callbacks with,
 // today — and it lives beside the integrations rather than in the server's
 // configuration package, so an integration states its own requirements and the
 // server only says where the values come from.

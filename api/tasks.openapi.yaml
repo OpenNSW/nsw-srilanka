@@ -36,10 +36,11 @@ paths:
 
         Each value the task's render config declares under `files` is
         replaced by a **file reference** issued to the caller: an opaque
-        string to pass to `GET /api/v1/storage/{key}`, or back in a
-        submission, never the stored file's key. A reference expires after
-        the deployment's `storage.tokenTTLSeconds`; refetch the task for
-        fresh ones.
+        string to pass to `GET /api/v1/storage/{key}`, never the stored
+        file's key. When the caller may act on the task's active step, it
+        can also be sent back in a submission or a draft. A reference
+        expires after the deployment's `storage.tokenTTLSeconds`; refetch
+        the task for fresh ones.
 
         The response says who holds the task's claim (`claim`). Sections of
         the view can depend on it: the render config can gate a section on
@@ -107,9 +108,10 @@ paths:
         instead.
 
         Each `payload` field the task's render config declares under `files`
-        must hold a file reference issued to the caller, from an upload or
-        the task's zone view; the stored value it stands for is what gets
-        stored. For now, a value that is not a reference is stored as sent.
+        must hold a file reference issued to the caller that can be
+        submitted, from an upload or the task's zone view; the stored value
+        it stands for is what gets stored. A value that is not a reference,
+        such as a raw storage key, is refused with 400.
 
         Requires scope `nsw:task:write`.
       operationId: completeTaskStep
@@ -132,9 +134,9 @@ paths:
           description: |
             Missing task or step ID, malformed JSON, unexpected trailing data,
             a missing/empty `command`, a `payload` that sets the reserved
-            `__command` key, or a declared file field whose value does not
-            have the declared shape (such as a list where one file is
-            declared).
+            `__command` key, or a declared file field that does not have the
+            declared shape (such as a list where one file is declared) or
+            holds a value that is not a file reference.
           content:
             application/json:
               schema:
@@ -148,13 +150,13 @@ paths:
         '403':
           description: |
             The caller may not perform this action on this task, a declared
-            file field holds a file reference issued to someone else, or,
-            where the deployment requires a claim to submit, the caller does
-            not hold the task's claim: "claim this task before acting on it"
-            when nobody holds it, "this task is claimed by another user" when
-            someone else does. The claim is mentioned only to a caller who can
-            read the task; anyone else gets "you may not perform this action
-            on this task".
+            file field holds a file reference issued to someone else or one
+            that can't be submitted, or, where the deployment requires a claim
+            to submit, the caller does not hold the task's claim: "claim this
+            task before acting on it" when nobody holds it, "this task is
+            claimed by another user" when someone else does. The claim is
+            mentioned only to a caller who can read the task; anyone else gets
+            "you may not perform this action on this task".
           content:
             application/json:
               schema:
@@ -178,8 +180,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '410':
           description: |
-            A declared file field holds a file reference that has expired.
-            Refetch the task, or upload the file again, and resubmit.
+            A declared file field holds a file reference from the task's view
+            that has expired. Refetch the task and resubmit.
           content:
             application/json:
               schema:
@@ -200,6 +202,95 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/tasks/{id}/steps/{stepId}/draft:
+    put:
+      summary: Save a draft of the task's active step
+      description: |
+        Stores `payload` as a draft of the step, without completing it. The
+        draft is stored where a submission would be, so the next read of the
+        task shows it, but the step, its `step_id` and the task's `version`
+        do not change, and other open views stay current. Drafts may be
+        partial. Only a step whose template declares drafts accepts one;
+        the server authorizes it as the command the template names for
+        drafts, so the body carries no `command`.
+
+        Declared file fields follow the same rule as a submission.
+
+        Requires scope `nsw:task:write`.
+      operationId: saveTaskStepDraft
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/StepID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTaskStepDraftRequest'
+      responses:
+        '204':
+          description: No Content. The draft is stored.
+        '400':
+          description: |
+            Missing task or step ID, malformed JSON, unexpected trailing data,
+            a `command` in the body, a `payload` that sets the reserved
+            `__command` key, a declared file field that does not have the
+            declared shape or holds a value that is not a file reference, or
+            a step that does not accept drafts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            The caller may not save a draft of this step, or a declared file
+            field holds a file reference issued to someone else, or one that
+            can't be submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            `{stepId}` is not the task's active step, or it has already been
+            submitted. Refetch the task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: |
+            A declared file field holds a file reference from the task's view
+            that has expired. Refetch the task and save again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Request body exceeds the configured maximum size.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal error resolving file references or storing the draft.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/callbacks/{token}:
     post:
       summary: Complete the step an external reviewer was dispatched for
@@ -215,8 +306,9 @@ paths:
         The body is the same envelope as the portal's
         `POST /api/v1/tasks/{id}/steps/{stepId}`, and must contain exactly one
         JSON value. Its declared file fields follow the same rule: each must
-        hold a file reference issued to the caller's client, such as one the
-        dispatch carried or an upload returned.
+        hold a file reference issued to the caller's client that can be
+        submitted, such as one an upload returned. A reference the dispatch
+        carried can only be opened, so it can't be sent back.
 
         A client caller never needs a claim. A user calling this route is held
         to the deployment's claim policy as on the portal's route, since the
@@ -244,8 +336,8 @@ paths:
           description: |
             A malformed token, malformed JSON, unexpected trailing data, a
             missing/empty `command`, a `payload` that sets the reserved
-            `__command` key, or a declared file field whose value does not
-            have the declared shape.
+            `__command` key, or a declared file field that does not have the
+            declared shape or holds a value that is not a file reference.
           content:
             application/json:
               schema:
@@ -259,10 +351,10 @@ paths:
         '403':
           description: |
             The caller may not perform this action on this task, a declared
-            file field holds a file reference issued to someone else, or the
-            caller is a user who does not hold the task's claim where the
-            deployment requires one. The claim is mentioned only to a caller
-            who can read the task.
+            file field holds a file reference issued to someone else or one
+            that can't be submitted, or the caller is a user who does not hold
+            the task's claim where the deployment requires one. The claim is
+            mentioned only to a caller who can read the task.
           content:
             application/json:
               schema:
@@ -287,8 +379,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '410':
           description: |
-            A declared file field holds a file reference that has expired.
-            Refetch the task, or upload the file again, and resubmit.
+            A declared file field holds a file reference from the task's view
+            that has expired. Refetch the task and resubmit.
           content:
             application/json:
               schema:
@@ -477,6 +569,22 @@ components:
           description: |
             Command-specific data. Genuinely dynamic per task type; must not
             set the reserved `__command` key, which the server adds itself.
+          additionalProperties: true
+          not:
+            required:
+              - __command
+
+    SaveTaskStepDraftRequest:
+      type: object
+      not:
+        required:
+          - command
+      properties:
+        payload:
+          type: object
+          description: |
+            The form data so far, as a submission would carry it. Must not set
+            the reserved `__command` key.
           additionalProperties: true
           not:
             required:

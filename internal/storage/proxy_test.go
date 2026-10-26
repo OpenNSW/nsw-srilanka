@@ -8,14 +8,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	coreauthn "github.com/OpenNSW/core/authn"
 	"github.com/OpenNSW/core/remote"
+	remoteauth "github.com/OpenNSW/core/remote/auth"
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/storage/drivers"
 )
@@ -72,15 +71,12 @@ func newOwningService(t *testing.T) *httptest.Server {
 // newRegistry registers the owning service as "files-api".
 func newRegistry(t *testing.T, url, token string) *remote.Manager {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "services.json")
-	registry := fmt.Sprintf(`{"version":"1","services":[{"id":"files-api","url":%q,`+
-		`"auth":{"type":"bearer","options":{"token":%q}}}]}`, url, token)
-	if err := os.WriteFile(path, []byte(registry), 0o600); err != nil {
-		t.Fatalf("write services.json: %v", err)
-	}
 	m := remote.NewManager()
-	if err := m.LoadServices(path); err != nil {
-		t.Fatalf("LoadServices: %v", err)
+	if err := m.SetServices(remote.ServiceConfig{
+		ID: "files-api", URL: url,
+		Auth: &remoteauth.Config{Type: remoteauth.TypeBearer, Bearer: &remoteauth.BearerConfig{Token: token}},
+	}); err != nil {
+		t.Fatalf("SetServices: %v", err)
 	}
 	return m
 }
@@ -170,6 +166,18 @@ func TestProxyHandler_UploadAndDownload(t *testing.T) {
 		t.Fatalf("Upload response = %+v (%v), want key and upload_url", meta, err)
 	}
 
+	// The owning service issues a download only for a file it holds.
+	put, _ := http.NewRequest(http.MethodPut, meta.UploadURL, strings.NewReader("0123456789"))
+	put.Header.Set("Content-Type", "application/pdf")
+	resp, err := http.DefaultClient.Do(put)
+	if err != nil {
+		t.Fatalf("PUT upload URL: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("PUT upload URL status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/storage/"+meta.Key, nil)
 	req.SetPathValue("key", meta.Key)
@@ -180,9 +188,48 @@ func TestProxyHandler_UploadAndDownload(t *testing.T) {
 	var dl struct {
 		DownloadURL string `json:"download_url"`
 		ExpiresAt   int64  `json:"expires_at"`
+		MimeType    string `json:"mime_type"`
+		Disposition string `json:"disposition"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&dl); err != nil || dl.DownloadURL == "" || dl.ExpiresAt <= time.Now().Unix() {
 		t.Fatalf("Download response = %+v (%v), want the owner's download_url and a future expires_at", dl, err)
+	}
+	// What the owning service says about the file is relayed as it said it.
+	if dl.MimeType != "application/pdf" || dl.Disposition != "inline" {
+		t.Errorf("Download response type, disposition = %q, %q; want application/pdf, inline", dl.MimeType, dl.Disposition)
+	}
+}
+
+// An owning service that says nothing about how the URL serves the file leaves the
+// field out of the response, which a client reads as a file to save.
+func TestProxyHandler_DownloadOmitsADispositionTheOwnerDoesNotGive(t *testing.T) {
+	owner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"download_url":"https://files.example/k","expires_at":4102444800}`))
+	}))
+	t.Cleanup(owner.Close)
+	svc, err := NewProxyService(newRegistry(t, owner.URL, ownerToken), defaultProxyConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/storage/any-key", nil)
+	req.SetPathValue("key", "any-key")
+	NewProxyHandler(svc).Download(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Download status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["disposition"]; ok {
+		t.Errorf("response %v carries a disposition the owner did not give", body)
+	}
+	if body["download_url"] != "https://files.example/k" {
+		t.Errorf("download_url = %v", body["download_url"])
 	}
 }
 

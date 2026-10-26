@@ -28,18 +28,34 @@ server:
   port: 8080
   logLevel: debug
   # The browser-facing URL: the host port compose publishes. TNSW's
-  # services.docker.json "cda" entry also calls 8083.
+  # config.docker.yaml services entry "cda" also calls 8083.
   serviceURL: http://localhost:8083
   maxRequestBytes: 33554432
   readHeaderTimeout: 5s
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  # services.docker.json: "tnsw" at api:8080, where notify_decision posts the
-  # decision back.
-  servicesConfigPath: configs/agency/cda/services.docker.json
   paymentMethodsConfigPath: configs/agency/cda/payment_methods.json
   catalogConfigPath: configs/agency/cda/catalog.json
+
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
+services:
+  - id: tnsw
+    url: http://api:8080
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: CDA_TO_NSW
+        clientSecret: "{{env:M2M_CDA_TO_NSW_SECRET}}"
+        scopes:
+          - nsw:task:write
+          - nsw:storage:read
+          - nsw:storage:write
+        endpointParams:
+          resource: https://api.nsw-srilanka.local
 
 # The CDA portal (the trader-app in agency mode).
 cors:
@@ -51,7 +67,7 @@ cors:
   maxAge: 3600
 
 # CDA keeps no files of its own: it serves TNSW's storage, calling TNSW as
-# CDA_TO_NSW (services.json, service tnsw), so officers open the documents
+# CDA_TO_NSW (services entry tnsw), so officers open the documents
 # traders uploaded there. TNSW applies its own upload limits.
 storage:
   type: proxy
@@ -59,7 +75,8 @@ storage:
   # the tokens TNSW gives this agency): comma-separated kid:key pairs, newest
   # first, each key 32 random bytes in base64. This agency's own, never TNSW's.
   tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-  # How long an officer's file token lasts, in seconds. Optional: 3600 when unset.
+  # How long the file tokens an officer reads with last, in seconds. Optional:
+  # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
   tokenTTLSeconds: 3600
   proxy:
     service: "tnsw"
@@ -72,11 +89,9 @@ storage:
 # idp/bootstrap/20-agency-cda.yaml. The keys are fetched in-network;
 # the issuer is the browser-facing host the tokens are minted for.
 authn:
-  jwksURL: https://thunderid:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://thunderid:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.cda.nsw-agency.local
-  # Only honored when APP_ENV=development.
-  insecureSkipTLSVerify: true
 
 # Placeholder providers.
 notification:
@@ -97,22 +112,21 @@ temporal:
   port: 7233
   namespace: cda
 
-# The cda-v2 folder of a one-trade-artifacts clone, which compose bind-mounts
-# at /app/artifacts: ../one-trade-artifacts/cda-v2 by default, or set
-# CDA_ARTIFACT_LOCAL_ROOT in .env to another clone's cda-v2 dir.
+# The cda folder of a one-trade-artifacts clone, which compose bind-mounts
+# at /app/artifacts: ../one-trade-artifacts/cda by default, or set
+# CDA_ARTIFACT_LOCAL_ROOT in .env to another clone's cda dir.
 artifactLoader:
   type: local
   local:
     root: /app/artifacts
-  # Or straight from GitHub (branch feat/add-cda-agency-config-to-workflows
-  # until it merges), with type: github:
+  # Or straight from GitHub, with type: github:
   # github:
   #   owner: OpenNSW
   #   repo: one-trade-artifacts
-  #   ref: feat/add-cda-agency-config-to-workflows
-  #   basePath: cda-v2
+  #   ref: main
+  #   basePath: cda
 
-# Reference ID formats for the cda-v2 REFID_GENERATOR tasks, in the schema of
+# Reference ID formats for the cda REFID_GENERATOR tasks, in the schema of
 # github.com/OpenNSW/core/refid. The counters live in cda_db (refid_sequences)
 # and restart at 0001 each year, on the UTC calendar.
 refid:

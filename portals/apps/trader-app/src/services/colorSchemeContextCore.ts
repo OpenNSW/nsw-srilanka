@@ -1,13 +1,10 @@
 import { createContext } from 'react'
 import type { ThemeProps } from '@radix-ui/themes'
 
-// The Radix accent color each scheme maps to. Radix ships a fixed named
-// palette (no arbitrary hex), so this picks whichever built-in scale reads
-// closest to the scheme's actual --color-primary (defined per scheme in
-// index.css) — it drives native Radix components (buttons, checkboxes,
-// focus rings, and every JSONForms field, since that renderer is built on
-// Radix Themes), while the CSS variables drive our own Tailwind utilities
-// (bg-primary, text-primary, etc.) for the same visual result everywhere.
+// The named Radix palette nearest each scheme's --color-primary. Radix's
+// accent scale itself is derived from --color-primary in index.css (the
+// "Radix accent" block), so buttons and JSONForms controls are painted in
+// the exact brand color; this name is only what <Theme> is given.
 export type AccentColor = NonNullable<ThemeProps['accentColor']>
 
 export interface ColorScheme {

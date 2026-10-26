@@ -45,10 +45,11 @@ type mockGateway struct {
 	configs map[string]PaymentConfig
 	bearers map[string]string          // paymentID -> SERVICE bearer token (empty = unauthenticated)
 	keys    map[string]*rsa.PrivateKey // paymentID -> key pair the webhook is encrypted to (absent = plaintext)
+	payees  payment.GatewayRegistry    // resolves a payment's payee to the gateway's ids, from the app's payment_methods.json
 	logf    func(string, ...any)
 }
 
-func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map[string]*rsa.PrivateKey) *mockGateway {
+func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map[string]*rsa.PrivateKey, payees payment.GatewayRegistry) *mockGateway {
 	t.Helper()
 	cfgMap := make(map[string]PaymentConfig, len(configs))
 	for _, c := range configs {
@@ -60,6 +61,7 @@ func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map
 		configs: cfgMap,
 		bearers: make(map[string]string),
 		keys:    keys,
+		payees:  payees,
 		logf:    t.Logf,
 	}
 }
@@ -80,7 +82,7 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, ti
 
 	g.logf("mock-gateway[%s]: confirming payment ref=%s amount=%s %s (task %s)", cfg.ID, tx.ReferenceNumber, tx.Amount.String(), tx.Currency, taskID)
 
-	identityFields, err := resolveIdentityFields(cfg, tx)
+	identityFields, err := resolveIdentityFields(cfg, tx, g.payees)
 	if err != nil {
 		return err
 	}
@@ -187,22 +189,31 @@ func (g *mockGateway) latestPaymentFor(ctx context.Context, taskID string) (*pay
 }
 
 // resolveIdentityFields looks up, for each wire field cfg.IdentityFields
-// declares, the expected value from the transaction's own gateway metadata —
-// the same metadata the fee's plugin_properties.gateway_metadata declared when
-// the checkout session was created (see internal/tasks/plugins/payment.go).
-// Echoing these back proves the mock is confirming the payment as the service
-// it actually belongs to, whatever identity scheme this gateway uses. A
-// gateway with no such scheme (cfg.IdentityFields empty) needs none of this.
-func resolveIdentityFields(cfg PaymentConfig, tx *payment.PaymentTransaction) (map[string]string, error) {
+// declares, the expected value from the gateway's mapping for the payment's
+// payee — the ids payment_methods.json maps the transaction's org_id and
+// service_id to, which the gateway checks the webhook against. Echoing these
+// back proves the mock is confirming the payment as the service it actually
+// belongs to, whatever identity scheme this gateway uses. A gateway with no
+// such scheme (cfg.IdentityFields empty) needs none of this.
+func resolveIdentityFields(cfg PaymentConfig, tx *payment.PaymentTransaction, payees payment.GatewayRegistry) (map[string]string, error) {
 	if len(cfg.IdentityFields) == 0 {
 		return nil, nil
 	}
+	payee := payment.Payee{OrgID: tx.OrgID, ServiceID: tx.ServiceID}
+	raw, err := payees.ResolvePayee(cfg.ID, payee)
+	if err != nil {
+		return nil, fmt.Errorf("mock-gateway[%s]: payment %s: %w", cfg.ID, tx.ReferenceNumber, err)
+	}
+	var mapping map[string]string
+	if err := json.Unmarshal(raw, &mapping); err != nil {
+		return nil, fmt.Errorf("mock-gateway[%s]: payee %s mapping: %w", cfg.ID, payee, err)
+	}
 	fields := make(map[string]string, len(cfg.IdentityFields))
-	for wireField, metadataKey := range cfg.IdentityFields {
-		value := tx.GatewayMetadata[metadataKey]
+	for wireField, mappingKey := range cfg.IdentityFields {
+		value := mapping[mappingKey]
 		if value == "" {
-			return nil, fmt.Errorf("mock-gateway[%s]: payment %s has no %q in gateway metadata (required by configs/payments/%s.json's identityFields)",
-				cfg.ID, tx.ReferenceNumber, metadataKey, cfg.ID)
+			return nil, fmt.Errorf("mock-gateway[%s]: payee %s has no %q in its mapping (required by configs/payments/%s.json's identityFields)",
+				cfg.ID, payee, mappingKey, cfg.ID)
 		}
 		fields[wireField] = value
 	}

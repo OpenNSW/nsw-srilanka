@@ -8,7 +8,7 @@
 # The file is mandatory. There are no built-in
 # defaults: every setting the server needs is written here, and one left out
 # (or empty) stops the server at startup rather than running on a value the
-# code chose. Only the optional sections (audit, metrics, refid, the inactive
+# code chose. Only the optional sections (otel, refid, the inactive
 # storage and artifactLoader backends) may be left out; payments and
 # REFID_GENERATOR steps need refid.
 #
@@ -19,7 +19,7 @@
 #
 # CONFIG_PATH and APP_ENV are the only settings read from the environment.
 # APP_ENV=development is what lets authn.insecureSkipTLSVerify (and any
-# insecure_skip_tls_verify in services.json) through; anything else fails the
+# services[].auth.oauth2.insecureSkipTLSVerify) through; anything else fails the
 # boot rather than trusting an unverified cert. `make dev`/`make preview`/
 # `make test-e2e` set it.
 #
@@ -50,7 +50,8 @@ db:
 
 server:
   port: 8080
-  # debug | info | warn | error
+  # debug | info | warn | error. Audit records (category=audit) are written
+  # at info, so warn or error drops them. Startup logs that at this level.
   logLevel: info
   # The browser-facing URL: the host port compose publishes (BACKEND_PORT).
   serviceURL: http://localhost:8080
@@ -64,10 +65,110 @@ server:
   # Config file paths, relative to the container's working directory (/app),
   # whose configs/ is the repo's, bind-mounted read-only.
   # The outbound services registry, reaching the agencies by container hostname.
-  servicesConfigPath: configs/services.docker.json
+
   paymentMethodsConfigPath: configs/payment_methods.json
   # The global catalog: logical names -> IdP token roles and OAuth2 client ids.
   catalogConfigPath: configs/catalog.json
+
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
+services:
+  - id: npqs
+    url: http://host.docker.internal:8081
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_NPQS
+        clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.npqs.nsw-agency.local
+  - id: fcau
+    url: http://host.docker.internal:8082
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_FCAU
+        clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.fcau.nsw-agency.local
+  - id: cda
+    url: http://host.docker.internal:8083
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_CDA
+        clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.cda.nsw-agency.local
+  - id: slpa
+    url: http://host.docker.internal:8084
+    timeout: 60s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://host.docker.internal:8084/api/nsw/v1/token
+        clientID: NSW_TO_SLPA_CLIENT_ID
+        clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
+  - id: efc
+    url: http://host.docker.internal:8085
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_EFC
+        clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.efc.nsw-agency.local
+  - id: customs-asycuda
+    url: https://customs-asycuda.example.com
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: https://idp.example.com/oauth2/token
+        clientID: NSW_TO_ASYCUDA_CLIENT_ID
+        clientSecret: "{{env:M2M_NSW_TO_ASYCUDA_SECRET}}"
+        scopes: []
+        insecureSkipTLSVerify: false
+  - id: ippc-hub
+    url: https://uat-hub.ephytoexchange.org/hub
+    timeout: 60s
+    tls:
+      clientCertFile: /certs/ippc/nppo.crt
+      clientKeyFile: /certs/ippc/nppo.key
+  - id: sltb
+    url: http://host.docker.internal:8086
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: NSW_TO_SLTB
+        clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
+        scopes:
+          - nsw:workflow:inject
+          - nsw:task:write
+        endpointParams:
+          resource: https://api.sltb.nsw-agency.local
 
 # Agency portals are listed too: they call the storage service directly.
 cors:
@@ -100,6 +201,25 @@ storage:
     # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
     # a known malware vector.
     - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    # XML is data to download, not to display: it is not in inlineTypes, so a
+    # download saves it instead of opening it.
+    - text/xml
+    - application/xml
+  # What a download opens in the browser; every other file is saved. MIME
+  # types, compared exactly with the stored type. Not read when type is proxy:
+  # the owning service applies its own. text/html is listed for the documents
+  # this service generates and stores itself, and is never in
+  # allowedUploadTypes: a type a browser interprets as a document runs script
+  # from the origin it is served on, so startup fails when a type clients may
+  # upload is listed here and is not one of the first six.
+  inlineTypes:
+    - application/pdf
+    - image/png
+    - image/jpeg
+    - image/gif
+    - image/webp
+    - text/plain
+    - text/html
   # Largest upload, in bytes (32 MiB). Not read when type is proxy.
   maxUploadBytes: 33554432
   # Seals the file tokens clients hold in place of stored file keys:
@@ -109,7 +229,8 @@ storage:
   # while their tokens must still open, which for tokens given to agencies is
   # for good.
   tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-  # How long a user's file token lasts, in seconds. Optional: 3600 when unset.
+  # How long the file tokens a user reads with last, in seconds. Optional:
+  # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
   tokenTTLSeconds: 3600
   # Only read when type is local.
   local:
@@ -129,7 +250,7 @@ storage:
   #   publicURL: ""
   # Only read when type is proxy. Serves storage from another service that owns
   # the files, reached through the outbound services registry
-  # (server.servicesConfigPath), which supplies its URL and authentication. All
+  # (services), which supplies its URL and authentication. All
   # four are required in proxy mode; below are that service's usual storage
   # routes, and {key} may appear anywhere in the download/delete paths.
   # proxy:
@@ -141,12 +262,9 @@ storage:
 authn:
   # The keys are fetched in-network; the issuer is the browser-facing host the
   # tokens are minted for.
-  jwksURL: https://thunderid:8090/oauth2/jwks
-  issuer: https://localhost:8090
+  jwksURL: http://thunderid:8090/oauth2/jwks
+  issuer: http://localhost:8090
   audience: https://api.nsw-srilanka.local
-  # Local development with self-signed certs may need to skip TLS verification
-  # for the JWKS endpoint. Only honored when APP_ENV=development (see above).
-  insecureSkipTLSVerify: true
 
 # One settings block per channel, in the schema of
 # github.com/OpenNSW/core/notification. At least one is required.
@@ -166,19 +284,16 @@ temporal:
   port: 7233
   namespace: default
 
-# Audit service (Argus).
-audit:
-  baseURL: http://argus:3001
-  apiKey: "{{env:ARGUS_API_KEY}}"
-
-# Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section) leaves
-# metrics off. serviceName is required when endpoint is set so TNSW, CDA and
-# EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
-# metrics:
-#   endpoint: http://otel-collector:4318/v1/metrics
+# Optional OTLP/HTTP export of metrics, logs and traces. Empty endpoint (or omit
+# the section) leaves export off. Point endpoint at an OpenObserve (or other
+# OTLP/HTTP) base URL when one is reachable from this stack; leave commented
+# for local compose. serviceName is required when endpoint is set so TNSW, CDA
+# and EFC can be told apart. Auth headers use "{{env:NAME}}" placeholders.
+# otel:
+#   endpoint: http://openobserve:5080/api/default
 #   serviceName: tnsw-api
 #   headers:
-#     Authorization: "{{env:METRICS_AUTH_HEADER}}"
+#     Authorization: "{{env:OTEL_AUTH_HEADER}}"
 
 integrations:
   # Shared with SLPA out of band. Their Cargo Management System signs each

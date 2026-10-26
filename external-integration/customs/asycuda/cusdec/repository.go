@@ -4,15 +4,23 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // DeclarationRepository defines the persistence interface for CusdecDeclaration entities.
 type DeclarationRepository interface {
 	GetByEdgeID(ctx context.Context, edgeID string) (*CusdecDeclaration, error)
 	GetByCusdecRef(ctx context.Context, ref DocumentReference) (*CusdecDeclaration, error)
-	Create(ctx context.Context, decl *CusdecDeclaration) error
 	Update(ctx context.Context, decl *CusdecDeclaration) error
+	// RecordSubmitted records that SLC Edge accepted a submission as edgeID,
+	// from workflow workflowID of case caseID, so its callbacks can find the
+	// task that workflow parks. It is the only writer that creates the row: SLC
+	// Edge issues a new edgeID for every submission and calls back only after
+	// returning it, so a second call for the same edgeID comes from a retry of
+	// the step, carries the same link, and leaves the row as it is.
+	RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error
 }
 
 type declarationRepository struct {
@@ -50,8 +58,18 @@ func (r *declarationRepository) GetByCusdecRef(ctx context.Context, ref Document
 	return &decl, nil
 }
 
-func (r *declarationRepository) Create(ctx context.Context, decl *CusdecDeclaration) error {
-	return r.db.WithContext(ctx).Create(decl).Error
+func (r *declarationRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
+	decl := CusdecDeclaration{
+		ID:         uuid.NewString(),
+		EdgeID:     edgeID,
+		Status:     CusdecStatusSubmitted,
+		CaseID:     caseID,
+		WorkflowID: workflowID,
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "edge_id"}},
+		DoNothing: true,
+	}).Create(&decl).Error
 }
 
 func (r *declarationRepository) Update(ctx context.Context, decl *CusdecDeclaration) error {

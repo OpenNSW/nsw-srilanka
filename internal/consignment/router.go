@@ -24,10 +24,10 @@ import (
 const (
 	errUnauthorized          = "unauthorized"
 	errConsignmentIDRequired = "consignment ID is required"
-	errInvalidRole           = "query param role must be trader or cha"
 	errInvalidState          = "query param state must be IN_PROGRESS or FINISHED"
 	errInvalidFlow           = "query param flow must be IMPORT or EXPORT"
-	errForbiddenRole         = "caller does not hold the requested role"
+	errForbiddenRole         = "caller holds neither the trader nor the cha role"
+	errTraderRoleRequired    = "creating a consignment requires the trader role"
 	errCompanyNotFound       = "company not found"
 	errConsignmentNotFound   = "consignment not found"
 	errWorkflowNotFound      = "workflow execution not found"
@@ -54,18 +54,18 @@ type Router struct {
 	cs      *Service
 	cha     cha.Service
 	company company.Service
-	audit   *nswaudit.Recorder
+	audit   nswaudit.Auditor
 	roles   map[string]string // logical name ("trader"/"cha") -> IdP token role
 }
 
 // NewRouter builds the router. roles is the global catalog's Roles map; it must
-// define "trader" and "cha" — HandleGetConsignments resolves a caller's ?role=
-// query param through it.
-func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, recorder *nswaudit.Recorder, roles map[string]string) (*Router, error) {
+// define "trader" and "cha" — the handlers resolve the caller's token roles
+// through it.
+func NewRouter(cs *Service, chaService cha.Service, companyService company.Service, auditor nswaudit.Auditor, roles map[string]string) (*Router, error) {
 	if err := validateRoles(roles); err != nil {
 		return nil, err
 	}
-	return &Router{cs: cs, cha: chaService, company: companyService, audit: recorder, roles: roles}, nil
+	return &Router{cs: cs, cha: chaService, company: companyService, audit: auditor, roles: roles}, nil
 }
 
 // validateRoles reports an error if roles (the global catalog's Roles map) omits
@@ -83,7 +83,7 @@ func validateRoles(roles map[string]string) error {
 // TODO: Move default workflow template ID to configuration.
 // defaultExportWorkflowTemplateID is the top-level workflow started by default when
 // creating a consignment.
-const defaultExportWorkflowTemplateID = "trade-export-v1"
+const defaultExportWorkflowTemplateID = "trade-export"
 
 // HandleCreateConsignment handles POST /api/v1/consignments
 // Creates an export consignment and starts its workflow directly — no CHA company or HS code
@@ -95,11 +95,24 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
 		return
 	}
+	if !slices.Contains(p.Roles, c.roles["trader"]) {
+		c.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionCreate,
+			TargetType: nswaudit.TargetConsignment,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error": "trader role not held",
+			},
+		})
+		httputil.Error(w, r, http.StatusForbidden, errTraderRoleRequired)
+		return
+	}
 
 	traderID := p.UserID
 	consignment, err := c.cs.CreateAndStartConsignment(ctx, traderID, defaultExportWorkflowTemplateID)
 	if err != nil {
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionCreate,
 			TargetType: nswaudit.TargetConsignment,
@@ -112,7 +125,7 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if consignment == nil {
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionCreate,
 			TargetType: nswaudit.TargetConsignment,
@@ -125,13 +138,12 @@ func (c *Router) HandleCreateConsignment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionCreate,
 		TargetType: nswaudit.TargetConsignment,
 		TargetID:   consignment.ID,
 		Failure:    false,
-		Message:    consignment,
 		Metadata: map[string]any{
 			"flow":            consignment.Flow,
 			"traderCompanyId": consignment.TraderCompanyID,
@@ -172,8 +184,9 @@ func buildConsignmentFilter(r *http.Request) (Filter, string) {
 }
 
 // HandleGetConsignments handles GET /api/v1/consignments
-// Query params: role=trader | role=cha (defaults to trader). The caller must hold
-// the JWT role that maps to the requested role, or the request is forbidden.
+// The scope comes from the caller's token roles: the trader role lists the consignments
+// of the caller's company as trader, the cha role those it is the CHA on, and holding
+// both lists both. A caller holding neither is forbidden.
 func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	p, ok := authn.FromContext(ctx)
@@ -182,32 +195,27 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	role := r.URL.Query().Get("role")
-	if role == "" {
-		role = "trader"
-	}
 	filter, filterErr := buildConsignmentFilter(r)
 	if filterErr != "" {
 		httputil.Error(w, r, http.StatusBadRequest, filterErr)
 		return
 	}
 
-	// Role-based identity resolution.
-	if role != "trader" && role != "cha" {
-		httputil.Error(w, r, http.StatusBadRequest, errInvalidRole)
-		return
-	}
-
-	// The caller must actually hold the role they're asserting via the query
-	// param — resolved through the global catalog, not hardcoded, so it stays in
-	// step with the same "trader"/"cha" -> token-role mapping the task-authz
-	// layer (internal/tasks/taskauthz) uses.
-	requiredTokenRole, roleOK := c.roles[role]
-	if !roleOK {
-		httputil.InternalServerError(w, r, "role not configured in catalog", fmt.Errorf("catalog has no mapping for role %q", role))
-		return
-	}
-	if !slices.Contains(p.Roles, requiredTokenRole) {
+	// Resolved through the global catalog, not hardcoded, so it stays in step with the
+	// same "trader"/"cha" -> token-role mapping the task-authz layer
+	// (internal/tasks/taskauthz) uses.
+	asTrader := slices.Contains(p.Roles, c.roles["trader"])
+	asCHA := slices.Contains(p.Roles, c.roles["cha"])
+	if !asTrader && !asCHA {
+		c.auditEvent(ctx, nswaudit.Event{
+			EventType:  nswaudit.EventConsignment,
+			Action:     nswaudit.ActionRead,
+			TargetType: nswaudit.TargetConsignment,
+			Failure:    true,
+			Metadata: map[string]any{
+				"error": "role not held",
+			},
+		})
 		httputil.Error(w, r, http.StatusForbidden, errForbiddenRole)
 		return
 	}
@@ -215,6 +223,15 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 	userCompany, err := c.company.GetCompanyByOUHandle(ctx, p.OUHandle)
 	if err != nil {
 		if errors.Is(err, company.ErrCompanyNotFound) || errors.Is(err, company.ErrInvalidCompanyID) {
+			c.auditEvent(ctx, nswaudit.Event{
+				EventType:  nswaudit.EventConsignment,
+				Action:     nswaudit.ActionRead,
+				TargetType: nswaudit.TargetConsignment,
+				Failure:    true,
+				Metadata: map[string]any{
+					"error": "company not found",
+				},
+			})
 			httputil.Error(w, r, http.StatusForbidden, errCompanyNotFound)
 			return
 		}
@@ -222,11 +239,11 @@ func (c *Router) HandleGetConsignments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch role {
-	case "cha":
-		filter.CHACompanyID = &userCompany.ID
-	case "trader":
+	if asTrader {
 		filter.TraderCompanyID = &userCompany.ID
+	}
+	if asCHA {
+		filter.CHACompanyID = &userCompany.ID
 	}
 	consignments, err := c.cs.ListConsignments(ctx, filter)
 	if err != nil {
@@ -269,7 +286,7 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrAccessDenied):
-			c.audit.Record(ctx, nswaudit.Event{
+			c.auditEvent(ctx, nswaudit.Event{
 				EventType:  nswaudit.EventConsignment,
 				Action:     nswaudit.ActionRead,
 				TargetType: nswaudit.TargetConsignment,
@@ -295,6 +312,16 @@ func (c *Router) HandleGetConsignmentByID(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	c.auditEvent(ctx, nswaudit.Event{
+		EventType:  nswaudit.EventConsignment,
+		Action:     nswaudit.ActionRead,
+		TargetType: nswaudit.TargetConsignment,
+		TargetID:   consignmentID,
+		Failure:    false,
+		Metadata: map[string]any{
+			"callerCompanyId": userCompany.ID,
+		},
+	})
 	httputil.JSON(w, http.StatusOK, consignment)
 }
 
@@ -354,7 +381,7 @@ func (c *Router) HandleStartConsignmentFlow(w http.ResponseWriter, r *http.Reque
 	auditEvent := func(failure bool, metadata map[string]any) {
 		metadata["view"] = "start-flow"
 		metadata["templateId"] = req.TemplateID
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetConsignment,
@@ -412,7 +439,7 @@ func (c *Router) HandleAdminGetConsignmentByID(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
@@ -441,7 +468,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 	dto, err := c.cs.GetAgencySummary(ctx, consignmentID)
 	if err != nil {
 		if errors.Is(err, ErrConsignmentNotFound) {
-			c.audit.Record(ctx, nswaudit.Event{
+			c.auditEvent(ctx, nswaudit.Event{
 				EventType:  nswaudit.EventConsignment,
 				Action:     nswaudit.ActionRead,
 				TargetType: nswaudit.TargetConsignment,
@@ -459,7 +486,7 @@ func (c *Router) HandleGetConsignmentAgency(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
@@ -530,7 +557,7 @@ func (c *Router) handleEngineStatus(
 	// TargetConsignment. Fixing it needs a TaskStore lookup (task-workflow ID ->
 	// TaskRecord.CaseID) that doesn't exist yet; see the issue for why the obvious
 	// GlobalVariables[VarCaseID] shortcut doesn't work here.
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionRead,
 		TargetType: nswaudit.TargetConsignment,
@@ -635,7 +662,7 @@ func (c *Router) handleResolveAdminIntervention(
 	}
 
 	auditFail := func(errMsg string) {
-		c.audit.Record(ctx, nswaudit.Event{
+		c.auditEvent(ctx, nswaudit.Event{
 			EventType:  nswaudit.EventConsignment,
 			Action:     nswaudit.ActionUpdate,
 			TargetType: nswaudit.TargetConsignment,
@@ -675,7 +702,7 @@ func (c *Router) handleResolveAdminIntervention(
 		return
 	}
 
-	c.audit.Record(ctx, nswaudit.Event{
+	c.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventConsignment,
 		Action:     nswaudit.ActionUpdate,
 		TargetType: nswaudit.TargetConsignment,
@@ -690,4 +717,10 @@ func (c *Router) handleResolveAdminIntervention(
 		},
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *Router) auditEvent(ctx context.Context, e nswaudit.Event) {
+	if c.audit != nil {
+		c.audit.Audit(ctx, e)
+	}
 }

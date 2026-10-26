@@ -12,6 +12,35 @@
       "config": {
         "webhook_client_id": "GOVPAY_TO_NSW",
         "private_key": "file:/certs/govpay/go_private.pem"
+      },
+      "payees": {
+        "fcau": {
+          "defaults": { "subinst_id": "001" },
+          "services": {
+            "app_fee": { "service_id": "001" }
+          }
+        },
+        "npqs": {
+          "defaults": { "subinst_id": "002" },
+          "services": {
+            "certificate_fee": { "service_id": "001" },
+            "treatment_fee": { "service_id": "003" }
+          }
+        },
+        "sltb": {
+          "defaults": { "subinst_id": "003" },
+          "services": {
+            "levy_fee": { "service_id": "001" },
+            "lab_fee": { "service_id": "002" }
+          }
+        },
+        "cda": {
+          "defaults": { "subinst_id": "004" },
+          "services": {
+            "app_fee": { "service_id": "001" },
+            "kcfn_fee": { "service_id": "002" }
+          }
+        }
       }
     }
   ]

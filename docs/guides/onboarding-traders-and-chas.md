@@ -278,7 +278,8 @@ Confirm that `OU Handle` matches the handle from Step 1 character for character.
 2. A **trader** can create a consignment.
 3. If `hasCha` is true, a trader from **another** company sees ACME in the CHA picker,
    and a CHA user from ACME sees consignments assigned to ACME once one is.
-4. A user in both groups sees the role switcher in the top bar.
+4. A user in both groups sees, in one list, the consignments ACME is the trader on and
+   those it is the CHA on.
 
 To see what the backend gets, decode the user's access token (browser dev tools, or any
 JWT decoder you trust) and check `ouHandle`, `roles` and `aud`

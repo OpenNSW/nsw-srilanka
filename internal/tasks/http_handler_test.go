@@ -2,21 +2,23 @@ package tasks
 
 import (
 	"context"
-	"crypto"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
-	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/OpenNSW/core/uiprojector"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +26,7 @@ import (
 
 func TestNewHTTPHandler_SetsMaxRequestBytes(t *testing.T) {
 	for _, v := range []int64{1024, 0, -1, -33554432} {
-		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, ClaimDeps{}, nil, v)
+		handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, ClaimDeps{}, nil, v)
 		if handler.MaxRequestBytes != v {
 			t.Errorf("MaxRequestBytes = %d, want %d", handler.MaxRequestBytes, v)
 		}
@@ -83,7 +85,8 @@ func TestHandleCompleteTaskStep_RequiresStepID(t *testing.T) {
 // A callback whose token is not one core produced is rejected before it reaches the task
 // manager (nil here, so reaching it would panic).
 func TestHandleCompleteTaskStepByToken_RejectsMalformedToken(t *testing.T) {
-	handler := &HTTPHandler{MaxRequestBytes: 1024}
+	client, capture := nswaudit.NewWithCapture()
+	handler := &HTTPHandler{MaxRequestBytes: 1024, Audit: client}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/not-a-token", strings.NewReader(`{"command":"approve","payload":{}}`))
 	req.SetPathValue("token", "not-a-token")
 	recorder := httptest.NewRecorder()
@@ -96,6 +99,10 @@ func TestHandleCompleteTaskStepByToken_RejectsMalformedToken(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), errInvalidCallbackToken) {
 		t.Fatalf("expected error body to mention %q, got %s", errInvalidCallbackToken, recorder.Body.String())
 	}
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "invalid_callback_token", recs[0].Metadata["error"])
 }
 
 // The token route takes the same envelope as the portal's, so a body without a command is
@@ -113,6 +120,68 @@ func TestHandleCompleteTaskStepByToken_RequiresCommand(t *testing.T) {
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", recorder.Code)
 	}
+}
+
+func TestHandleCompleteTaskStep_AuditParseFailure(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	handler := NewHTTPHandler(nil, nil, nil, taskauthz.Catalog{}, nil, nil, ClaimDeps{}, client, 1024)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-123/steps/step-1", strings.NewReader(`{invalid`))
+	req.SetPathValue("id", "task-123")
+	req.SetPathValue("stepId", "step-1")
+	rec := httptest.NewRecorder()
+
+	handler.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.EventTask, recs[0].EventType)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "task-123", recs[0].TargetID)
+	assert.Equal(t, http.StatusBadRequest, recs[0].Metadata["status"])
+	assert.Equal(t, "step-1", recs[0].Metadata["stepId"])
+}
+
+func TestWriteCompletion_DraftAndRejectedPayloadAreAudited(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPut, "/", nil)
+
+	t.Run("draft", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{Audit: client}
+		h.writeCompletion(httptest.NewRecorder(), req, nil, "taskId", "t1", "stepId", "s1", "draft", true)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+		assert.Equal(t, "t1", recs[0].TargetID)
+		assert.Equal(t, "s1", recs[0].Metadata["stepId"])
+		assert.Equal(t, true, recs[0].Metadata["draft"])
+		_, hasCommand := recs[0].Metadata["command"]
+		assert.False(t, hasCommand)
+	})
+
+	t.Run("invalid payload", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{Audit: client}
+		h.writeCompletion(httptest.NewRecorder(), req, payloadschema.ErrInvalidPayload, "taskId", "t1", "stepId", "s1", "command", "submit")
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+		assert.Equal(t, "invalid_payload", recs[0].Metadata["error"])
+		assert.Equal(t, "s1", recs[0].Metadata["stepId"])
+		assert.Equal(t, "submit", recs[0].Metadata["command"])
+	})
+
+	t.Run("draft not enabled", func(t *testing.T) {
+		client, capture := nswaudit.NewWithCapture()
+		h := &HTTPHandler{Audit: client}
+		h.writeCompletion(httptest.NewRecorder(), req, orchestrator.ErrDraftNotEnabled, "taskId", "t1", "stepId", "s1", "draft", true)
+		recs := capture.Records()
+		require.Len(t, recs, 1)
+		assert.Equal(t, "draft_not_enabled", recs[0].Metadata["error"])
+		assert.Equal(t, true, recs[0].Metadata["draft"])
+		assert.Equal(t, "s1", recs[0].Metadata["stepId"])
+	})
 }
 
 // --- HandleGetTask ---------------------------------------------------------
@@ -306,8 +375,8 @@ func TestHandleGetTask_ClientPrincipalDenied(t *testing.T) {
 func TestHandleGetTask_DeniedAudited(t *testing.T) {
 	templates := &stubTemplates{}
 	handler := getTaskHandler(t, pendingHSCodeTask(), templates)
-	auditor := &mockAuditor{}
-	handler.Audit = nswaudit.NewRecorder(auditor)
+	client, capture := nswaudit.NewWithCapture()
+	handler.Audit = client
 
 	in := taskauthz.Input{
 		Kind:  taskauthz.KindUser,
@@ -334,17 +403,47 @@ func TestHandleGetTask_DeniedAudited(t *testing.T) {
 		t.Fatalf("got %d, want 404", recorder.Code)
 	}
 
-	require.Len(t, auditor.events, 1)
-	assert.Equal(t, string(nswaudit.ActionRead), auditor.events[0].Action)
-	assert.Equal(t, string(nswaudit.TargetTask), auditor.events[0].TargetType)
-	assert.Equal(t, string(nswaudit.EventTask), auditor.events[0].EventType)
-	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
-	assert.Equal(t, string(nswaudit.ActorMember), auditor.events[0].ActorType)
-	assert.Equal(t, "user-trader-1", auditor.events[0].ActorID)
-	assert.NotEmpty(t, auditor.events[0].Timestamp)
-	require.NotNil(t, auditor.events[0].TargetID)
-	assert.Equal(t, testTaskID, *auditor.events[0].TargetID)
-	assert.Equal(t, "task read access denied", auditor.events[0].Metadata["error"])
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
+	assert.Equal(t, nswaudit.TargetTask, recs[0].TargetType)
+	assert.Equal(t, nswaudit.EventTask, recs[0].EventType)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, nswaudit.ActorMember, recs[0].ActorType)
+	assert.Equal(t, "user-trader-1", recs[0].ActorID)
+	assert.NotEmpty(t, recs[0].Timestamp)
+	assert.Equal(t, testTaskID, recs[0].TargetID)
+	assert.Equal(t, "task read access denied", recs[0].Metadata["error"])
+}
+
+// A successful task read must emit a success audit event (counterpart to DeniedAudited).
+func TestHandleGetTask_SuccessAudited(t *testing.T) {
+	handler := getTaskHandler(t, pendingHSCodeTask(), &stubTemplates{})
+	client, capture := nswaudit.NewWithCapture()
+	handler.Audit = client
+
+	in := ownerInput("Trader", "trader")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
+	req.SetPathValue("id", testTaskID)
+	ctx := taskauthz.WithInput(req.Context(), in)
+	ctx = authn.ContextWithPrincipal(ctx, &authn.Principal{
+		Kind:   authn.KindUser,
+		UserID: "user-trader-1",
+	})
+	req = req.WithContext(ctx)
+
+	recorder := httptest.NewRecorder()
+	handler.HandleGetTask(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.EventTask, recs[0].EventType)
+	assert.Equal(t, nswaudit.ActionRead, recs[0].Action)
+	assert.Equal(t, nswaudit.TargetTask, recs[0].TargetType)
+	assert.Equal(t, nswaudit.StatusSuccess, recs[0].Status)
+	assert.Equal(t, testTaskID, recs[0].TargetID)
+	assert.Equal(t, "user-trader-1", recs[0].ActorID)
 }
 
 // When handler.Audit is nil, a denied task read must not panic and still return 404.
@@ -549,38 +648,6 @@ func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 	}
 }
 
-type mockAuditor struct {
-	mu     sync.Mutex
-	events []*argus.AuditLogRequest
-}
-
-func (m *mockAuditor) LogEvent(ctx context.Context, event *argus.AuditLogRequest) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.events = append(m.events, event)
-	return true
-}
-
-func (m *mockAuditor) IsEnabled() bool { return true }
-
-func (m *mockAuditor) SignEvent(ctx context.Context, event *argus.AuditLogRequest) error {
-	return nil
-}
-
-func (m *mockAuditor) SignMessageBytes(ctx context.Context, message []byte) (string, error) {
-	return "", nil
-}
-
-func (m *mockAuditor) LogSignedEvent(ctx context.Context, event *argus.AuditLogRequest) {}
-
-func (m *mockAuditor) VerifyIntegrity(event *argus.AuditLogRequest, publicKey crypto.PublicKey) (bool, error) {
-	return true, nil
-}
-
-func (m *mockAuditor) Close(ctx context.Context) error {
-	return nil
-}
-
 // --- File fields -----------------------------------------------------------
 
 const fileTaskRenderConfig = `{
@@ -609,27 +676,57 @@ func pendingFileTask() *fakeTaskFetcher {
 }
 
 // A reader gets a reference to each declared file, never its stored value.
+// It can be submitted back only when the reader can act on the step.
 func TestHandleGetTask_GivesFileReferences(t *testing.T) {
-	refs := newFakeFileRefs()
-	fetcher := pendingFileTask()
-	h := getTaskHandler(t, fetcher, &stubTemplates{})
-	h.Files = NewFileBinding(refs, nil)
+	readOnly := []fileaccess.Scope{fileaccess.ScopeRead}
+	tests := []struct {
+		name       string
+		canAct     CanAct
+		wantScopes []fileaccess.Scope
+	}{
+		{"reader who can act", func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) { return true, nil }, readSubmit},
+		{"reader who can't act", func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) { return false, nil }, readOnly},
+		{"failure to decide", func(context.Context, store.TaskRecord, taskauthz.Input) (bool, error) {
+			return true, errors.New("registry down")
+		}, readOnly},
+		{"no CanAct", nil, readOnly},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			refs := newFakeFileRefs()
+			fetcher := pendingFileTask()
+			h := getTaskHandler(t, fetcher, &stubTemplates{})
+			h.Files = NewFileBinding(refs, nil)
+			var asked taskauthz.Input
+			if tt.canAct != nil {
+				h.CanAct = func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {
+					assert.Equal(t, testTaskID, record.TaskID)
+					asked = in
+					return tt.canAct(ctx, record, in)
+				}
+			}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
-	req.SetPathValue("id", testTaskID)
-	in := ownerInput("Trader", "trader")
-	ctx := taskauthz.WithInput(req.Context(), in)
-	req = req.WithContext(authn.ContextWithPrincipal(ctx, userPrincipal("alice")))
-	recorder := httptest.NewRecorder()
-	h.HandleGetTask(recorder, req)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+testTaskID, nil)
+			req.SetPathValue("id", testTaskID)
+			in := ownerInput("Trader", "trader")
+			ctx := taskauthz.WithInput(req.Context(), in)
+			req = req.WithContext(authn.ContextWithPrincipal(ctx, userPrincipal("alice")))
+			recorder := httptest.NewRecorder()
+			h.HandleGetTask(recorder, req)
 
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
-	assert.Contains(t, recorder.Body.String(), `"invoice":"ref1"`)
-	assert.NotContains(t, recorder.Body.String(), "stored-invoice-key")
-	value, err := refs.Resolve(userPrincipal("alice"), "ref1")
-	require.NoError(t, err)
-	assert.Equal(t, "stored-invoice-key", value)
-	assert.Equal(t, "stored-invoice-key", fetcher.record.Data["form"].(map[string]any)["invoice"], "the stored record must not change")
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			assert.Contains(t, recorder.Body.String(), `"invoice":"ref1"`)
+			assert.NotContains(t, recorder.Body.String(), "stored-invoice-key")
+			value, err := refs.Resolve(userPrincipal("alice"), "ref1", fileaccess.ScopeRead)
+			require.NoError(t, err)
+			assert.Equal(t, "stored-invoice-key", value)
+			assert.Equal(t, tt.wantScopes, refs.issued["ref1"].scopes)
+			if tt.canAct != nil {
+				assert.Equal(t, in.Roles, asked.Roles, "CanAct must be asked about the reader")
+			}
+			assert.Equal(t, "stored-invoice-key", fetcher.record.Data["form"].(map[string]any)["invoice"], "the stored record must not change")
+		})
+	}
 }
 
 func TestHandleGetTask_BadFileDeclarationIsAnError(t *testing.T) {
@@ -664,9 +761,10 @@ func submitStep(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, step
 
 func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 	refs := newFakeFileRefs()
-	alicesRef, _ := refs.IssueFor(userPrincipal("alice"), "k")
-	expiredRef, _ := refs.IssueFor(userPrincipal("bob"), "k")
+	alicesRef, _ := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
+	expiredRef, _ := refs.Issue(userPrincipal("bob"), "k", readSubmit...)
 	refs.expired[expiredRef] = true
+	readOnlyRef, _ := refs.Issue(userPrincipal("bob"), "k", fileaccess.ScopeRead)
 
 	tests := []struct {
 		name       string
@@ -678,7 +776,9 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 		{"missing task", &fakeTaskFetcher{}, "step-1", map[string]any{}, http.StatusNotFound},
 		{"step no longer active", pendingFileTask(), "step-0", map[string]any{"invoice": alicesRef}, http.StatusConflict},
 		{"someone else's file", pendingFileTask(), "step-1", map[string]any{"invoice": alicesRef}, http.StatusForbidden},
+		{"a raw storage key", pendingFileTask(), "step-1", map[string]any{"invoice": "stored-invoice-key"}, http.StatusBadRequest},
 		{"expired file", pendingFileTask(), "step-1", map[string]any{"invoice": expiredRef}, http.StatusGone},
+		{"a file that can't be submitted", pendingFileTask(), "step-1", map[string]any{"invoice": readOnlyRef}, http.StatusForbidden},
 		{"a list where one file is declared", pendingFileTask(), "step-1", map[string]any{"invoice": []any{alicesRef, expiredRef}}, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
@@ -689,17 +789,196 @@ func TestHandleCompleteTaskStep_RefusesFileReferences(t *testing.T) {
 	}
 }
 
+func TestHandleCompleteTaskStep_AuditsFileDenial(t *testing.T) {
+	refs := newFakeFileRefs()
+	alicesRef, err := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
+	require.NoError(t, err)
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	body, err := json.Marshal(map[string]any{"command": "submit", "payload": map[string]any{"invoice": alicesRef}})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-1", strings.NewReader(string(body)))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-1")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+
+	h.HandleCompleteTaskStep(httptest.NewRecorder(), req)
+
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, testTaskID, recs[0].TargetID)
+	assert.Equal(t, "step-1", recs[0].Metadata["stepId"])
+	assert.Equal(t, "file_not_yours", recs[0].Metadata["error"])
+	assert.Equal(t, http.StatusForbidden, recs[0].Metadata["status"])
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+}
+
+func TestHandleCompleteTaskStep_AuditsStaleStepWithCommand(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	body, err := json.Marshal(map[string]any{"command": "submit", "payload": map[string]any{}})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+testTaskID+"/steps/step-0", strings.NewReader(string(body)))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-0")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleCompleteTaskStep(rec, req)
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "stale_step", recs[0].Metadata["error"])
+	assert.Equal(t, "step-0", recs[0].Metadata["stepId"])
+	assert.Equal(t, "submit", recs[0].Metadata["command"])
+}
+
+func TestHandleSaveDraft_AuditsStaleStepAsDraft(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	var calls int
+	h := &HTTPHandler{
+		Store:           pendingFileTask(),
+		Files:           NewFileBinding(newFakeFileRefs(), namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+		Audit:           client,
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/step-0/draft", strings.NewReader(`{"payload":{}}`))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", "step-0")
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("bob")))
+	rec := httptest.NewRecorder()
+
+	h.HandleSaveDraft(rec, req)
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "stale_step", recs[0].Metadata["error"])
+	assert.Equal(t, "step-0", recs[0].Metadata["stepId"])
+	assert.Equal(t, true, recs[0].Metadata["draft"])
+	_, hasCommand := recs[0].Metadata["command"]
+	assert.False(t, hasCommand)
+}
+
 func TestResolveFiles_StoresTheValues(t *testing.T) {
 	refs := newFakeFileRefs()
-	ref, _ := refs.IssueFor(userPrincipal("alice"), "stored-invoice-key")
+	ref, _ := refs.Issue(userPrincipal("alice"), "stored-invoice-key", readSubmit...)
 	var calls int
 	h := &HTTPHandler{Store: pendingFileTask(), Files: NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls))}
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), userPrincipal("alice")))
 	payload := map[string]any{"invoice": ref, "__command": "submit"}
 
-	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload)
+	ok := h.resolveFiles(httptest.NewRecorder(), req, testTaskID, "step-1", payload, []any{"taskId", testTaskID, "stepId", "step-1", "command", payload["__command"]})
 
 	require.True(t, ok)
 	assert.Equal(t, map[string]any{"invoice": "stored-invoice-key", "__command": "submit"}, payload)
+}
+
+// --- HandleSaveDraft -------------------------------------------------------
+
+// saveDraft puts body to the draft route as p. The handler has no task manager,
+// so a request that got past the checks before it would panic.
+func saveDraft(t *testing.T, fetcher *fakeTaskFetcher, refs *fakeFileRefs, stepID string, p *authn.Principal, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var calls int
+	h := &HTTPHandler{
+		Store:           fetcher,
+		Files:           NewFileBinding(refs, namespaces(map[string]string{"form-step": "form"}, &calls)),
+		MaxRequestBytes: 1024,
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/"+testTaskID+"/steps/"+stepID+"/draft", strings.NewReader(body))
+	req.SetPathValue("id", testTaskID)
+	req.SetPathValue("stepId", stepID)
+	req = req.WithContext(authn.ContextWithPrincipal(req.Context(), p))
+	recorder := httptest.NewRecorder()
+	h.HandleSaveDraft(recorder, req)
+	return recorder
+}
+
+func TestHandleSaveDraft_RejectsBadRequests(t *testing.T) {
+	refs := newFakeFileRefs()
+	alicesRef, _ := refs.Issue(userPrincipal("alice"), "k", readSubmit...)
+
+	tests := []struct {
+		name       string
+		fetcher    *fakeTaskFetcher
+		stepID     string
+		body       string
+		wantStatus int
+	}{
+		{"no step id", pendingFileTask(), "", `{"payload":{}}`, http.StatusBadRequest},
+		{"a command: the step's template decides it", pendingFileTask(), "step-1", `{"command":"submit","payload":{}}`, http.StatusBadRequest},
+		{"the reserved command key", pendingFileTask(), "step-1", `{"payload":{"__command":"submit"}}`, http.StatusBadRequest},
+		{"trailing data", pendingFileTask(), "step-1", `{"payload":{}}{"payload":{}}`, http.StatusBadRequest},
+		{"oversized", pendingFileTask(), "step-1", `{"payload":{"x":"` + strings.Repeat("a", 2048) + `"}}`, http.StatusRequestEntityTooLarge},
+		{"missing task", &fakeTaskFetcher{}, "step-1", `{"payload":{}}`, http.StatusNotFound},
+		{"step no longer active", pendingFileTask(), "step-0", `{"payload":{}}`, http.StatusConflict},
+		{"someone else's file", pendingFileTask(), "step-1", `{"payload":{"invoice":"` + alicesRef + `"}}`, http.StatusForbidden},
+		{"a raw storage key", pendingFileTask(), "step-1", `{"payload":{"invoice":"stored-invoice-key"}}`, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := saveDraft(t, tt.fetcher, refs, tt.stepID, userPrincipal("bob"), tt.body)
+			assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
+		})
+	}
+}
+
+func TestWriteCompletion_DraftNotEnabledIsABadRequest(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/", nil)
+
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrDraftNotEnabled, "x"))
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errDraftNotEnabled)
+}
+
+// A step whose template names no one who may act is closed to everyone.
+func TestWriteCompletion_StepNotGuardedIsForbidden(t *testing.T) {
+	client, capture := nswaudit.NewWithCapture()
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+
+	(&HTTPHandler{Audit: client}).writeCompletion(recorder, req, fmt.Errorf("%w: step template %q", orchestrator.ErrStepNotGuarded, "x"), "taskId", "t1", "stepId", "s1")
+
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errForbiddenTaskAction)
+	recs := capture.Records()
+	require.Len(t, recs, 1)
+	assert.Equal(t, nswaudit.StatusFailure, recs[0].Status)
+	assert.Equal(t, "step_not_guarded", recs[0].Metadata["error"])
+	assert.Equal(t, "s1", recs[0].Metadata["stepId"])
+}
+
+func TestWriteCompletion_InvalidPayloadIsABadRequest(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	invalid := &payloadschema.InvalidPayloadError{Violations: []payloadschema.Violation{
+		{Path: "/outcome", Message: "missing property"},
+	}}
+
+	(&HTTPHandler{}).writeCompletion(recorder, req, fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", invalid))
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), errInvalidPayload)
+	// The failing fields are logged, not sent to the caller.
+	assert.NotContains(t, recorder.Body.String(), "/outcome")
 }

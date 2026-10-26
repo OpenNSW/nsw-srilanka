@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Badge, Button, Spinner, Text } from '@radix-ui/themes'
+import { Badge, Spinner, Text } from '@radix-ui/themes'
 import { useTranslation } from 'react-i18next'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
-import { CONTENT_TOP_PX } from '@/components/Layout'
+import { LoadError } from '@/components/common/LoadError.tsx'
+import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
 import type { CaseSummary } from './types'
 import { getCases } from './service'
+import { ROUTES } from '@/constants'
 
 // The officer's list of cases. A trimmed ConsignmentScreen: no create button, no
 // trade-flow filter, no role switch — an officer sees every case.
 export function CaseListScreen() {
-  const navigate = useNavigate()
   const { t } = useTranslation()
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -49,7 +49,7 @@ export function CaseListScreen() {
   const th = 'px-6 py-3 text-left text-xs font-semibold text-foreground-muted uppercase tracking-wider'
 
   return (
-    <div style={{ minHeight: `calc(100vh - ${CONTENT_TOP_PX}px)` }} className="p-6">
+    <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('cases.list.title')}</h1>
         {totalCount > 0 && (
@@ -70,13 +70,8 @@ export function CaseListScreen() {
             </div>
           )}
           {failed ? (
-            <div className="p-16 flex flex-col items-center gap-4 text-center">
-              <Text size="3" color="red">
-                {t('cases.list.error')}
-              </Text>
-              <Button variant="soft" onClick={() => setRetryCount((n) => n + 1)} disabled={loading}>
-                {t('cases.list.retry')}
-              </Button>
+            <div className="p-16">
+              <LoadError message={t('cases.list.error')} onRetry={() => setRetryCount((n) => n + 1)} />
             </div>
           ) : cases.length === 0 ? (
             <div className="p-16 text-center">
@@ -96,18 +91,9 @@ export function CaseListScreen() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {cases.map((c) => (
-                    <tr
-                      key={c.id}
-                      onClick={() => void navigate(`/consignments/${c.id}`)}
-                      className="hover:bg-primary-subtle cursor-pointer transition-colors"
-                    >
+                    <LinkRow key={c.id} to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {/* The row click is a mouse shortcut; this link is the keyboard path. */}
-                        <Link
-                          to={`/consignments/${c.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        >
+                        <RowLink to={ROUTES.CONSIGNMENT_DETAIL(c.id)}>
                           {c.name ? (
                             <div className="flex flex-col">
                               <Text size="2" weight="bold" className="text-info-strong">
@@ -122,7 +108,7 @@ export function CaseListScreen() {
                               {c.id}
                             </Text>
                           )}
-                        </Link>
+                        </RowLink>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={getStateColor(c.state)}>
@@ -134,7 +120,7 @@ export function CaseListScreen() {
                           {c.createdAt ? formatDateTime(c.createdAt) : '-'}
                         </Text>
                       </td>
-                    </tr>
+                    </LinkRow>
                   ))}
                 </tbody>
               </table>

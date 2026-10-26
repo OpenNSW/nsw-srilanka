@@ -19,7 +19,7 @@ certs/
 # tokens) and are gitignored. Only the committed *.example.json templates are
 # baked; deployments supply the real files via ConfigMap or bind mount, which is
 # the documented contract for /app/configs. config.yaml follows the same rule:
-# only config.example.yaml is baked. Top level only, so argus/ is still baked.
+# only config.example.yaml is baked.
 configs/*.json
 !configs/*.example.json
 configs/*.yaml

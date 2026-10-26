@@ -1,23 +1,28 @@
-import type { Alert, AlertVariant, AuditEntry, ZoneView } from '@/features/zone/types'
+import type { Alert, AlertVariant, AuditEntry, ZoneAction, ZoneView } from '@/features/zone/types'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 import { Zone } from './Zone'
+import { zoneWidthClass } from '@/features/zone/width'
+import { CopyableId } from '@/components/CopyableId'
 
 type Props = {
   task: ZoneView
-  onSubmitForm?: (command: string, data: Record<string, unknown>) => Promise<void>
+  onSubmitForm?: ZoneAction
   // Changes once an action's refetch has landed. Part of each zone's key, so a
   // step returning to the same form remounts it against the refreshed data
   // rather than leaving the values it mounted with on screen.
   formEpoch?: number
+  // The task's name, as the deployment configured it (its render config's
+  // title). Without one the title falls back to the task type.
+  title?: string
 }
 
-export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0 }: Props) {
+export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0, title }: Props) {
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      <Header task={task} />
+    <div className={`${zoneWidthClass(task)} mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8`}>
+      <Header task={task} title={title} />
       {task.alert !== undefined && <AlertBanner alert={task.alert} />}
       {task.view.map((component) => (
         <Zone
@@ -194,21 +199,23 @@ function formatRelative(iso: string, t: TFunction): string {
   return new Date(iso).toLocaleDateString()
 }
 
-function Header({ task }: { task: ZoneView }) {
+function Header({ task, title }: { task: ZoneView; title?: string }) {
   const { t } = useTranslation()
   const statusKey = workflowStatusI18nKey(task.state)
   const statusLabel = statusKey ? t(statusKey) : humanizeStatus(task.state)
   return (
-    <div>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">{humanizeStatus(task.task_type)}</h1>
-          <p className="text-xs text-foreground-muted mt-1 font-mono">{task.task_id}</p>
-        </div>
-        <span className="inline-flex items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary">
-          {statusLabel}
-        </span>
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+          {title || humanizeStatus(task.task_type)}
+        </h1>
+        <p className="mt-1">
+          <CopyableId label={t('tasks.taskId')} id={task.task_id} />
+        </p>
       </div>
+      <span className="inline-flex shrink-0 items-center rounded-full bg-primary-subtle px-3 py-1 text-xs font-semibold text-primary">
+        {statusLabel}
+      </span>
     </div>
   )
 }

@@ -17,26 +17,8 @@ const en = {
     nav: {
       menu: 'Menu',
       consignments: 'Consignments',
+      cases: 'Cases',
       verifiedDocs: 'Verified Docs',
-    },
-
-    roles: {
-      primary: '(Primary)',
-      trader: {
-        label: 'Trader',
-        description: 'Managing consignments',
-        dropdownDescription: 'Create and manage consignments',
-      },
-      cha: {
-        label: 'CHA',
-        description: 'Handling Customs Clearances',
-        dropdownDescription: 'Handle customs clearances',
-      },
-      nswAdmin: {
-        label: 'NSW Admin',
-        description: 'Managing the system',
-        dropdownDescription: 'Manage the system',
-      },
     },
 
     cases: {
@@ -45,11 +27,17 @@ const en = {
         title: 'Cases',
         empty: 'No cases yet.',
         error: 'Could not load cases.',
-        retry: 'Try Again',
         table: {
           id: 'Case',
           state: 'State',
           created: 'Created',
+        },
+      },
+      detail: {
+        title: 'Case',
+        backToList: 'Back to Cases',
+        field: {
+          caseId: 'Case ID',
         },
       },
     },
@@ -60,6 +48,10 @@ const en = {
         title: 'Consignments',
         create: 'New Consignment',
         creating: 'Creating...',
+        error: {
+          loadFailed: 'Could not load consignments.',
+          createFailed: 'Could not create the consignment. Please try again.',
+        },
         searchPlaceholder: 'Search by Name, ID, or HS Code...',
         filter: {
           statePlaceholder: 'State',
@@ -72,8 +64,7 @@ const en = {
           export: 'Export',
         },
         empty: {
-          cha: 'No consignments yet.',
-          trader: 'No consignments yet. Click "New Consignment" to create your first one.',
+          none: 'No consignments yet.',
           filtered: 'No consignments match your filters.',
         },
         table: {
@@ -89,7 +80,6 @@ const en = {
           consignment: 'Loading consignment...',
           settingUp: 'Setting up your consignment...',
         },
-        back: 'Back',
         backToList: 'Back to Consignments',
         tryAgain: 'Try Again',
         refresh: 'Refresh',
@@ -138,11 +128,21 @@ const en = {
 
     tasks: {
       loading: 'Loading task...',
-      back: 'Back to Tasks',
-      nextTask: 'Next Task',
       goBack: 'Go Back',
       refresh: 'Refresh',
-      submitSuccess: 'Application submitted successfully',
+      taskId: 'Task ID',
+      continueTo: 'Continue to {{name}}',
+      continueToNext: 'Continue to next task',
+      backToConsignment: 'Back to consignment',
+      backToCase: 'Back to case',
+      draftSaved: 'Draft saved',
+      savingDraft: 'Saving…',
+      unsaved: {
+        title: 'Leave without saving?',
+        description: 'Your answers on this form have not been saved. If you leave now, they will be lost.',
+        stay: 'Stay on this page',
+        leave: 'Leave without saving',
+      },
       validation: {
         requiredFields: 'Please fill in all required fields.',
       },
@@ -151,21 +151,30 @@ const en = {
         fetchFailed: 'Failed to fetch task details.',
         notFound: 'Task not found.',
         submitFailed: 'Failed to submit task. Please try again.',
+        draftFailed: 'Failed to save the draft. Please try again.',
         staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
       },
     },
 
     workflow: {
-      taskHistory: 'Task History',
-      actionRequired: 'Action Required',
-      inReview: 'In Review',
-      processHistory: 'Process History',
-      updatingList: 'Updating your list...',
-      refresh: 'Refresh',
-      waitingForUpdates: {
-        title: 'Waiting for Updates',
-        description: 'Current steps are being processed. Next tasks will unlock automatically.',
+      tabs: {
+        active: 'Active',
+        done: 'Done',
       },
+      actionRequired: 'Action Required',
+      waitingOnOthers: 'Waiting on Others',
+      untitledTask: 'Untitled task',
+      continue: 'Continue',
+      continueTask: 'Continue {{name}}',
+      view: 'View',
+      viewTask: 'View {{name}}',
+      completedAt: 'Completed {{date}}',
+      since: 'Since {{date}}',
+      nothingNeeded: 'Nothing needs your action right now.',
+      newStepsAppear: 'New steps appear here as your applications are reviewed.',
+      newStepsAppearCase: 'New steps appear here as the case progresses.',
+      consignmentComplete: 'This consignment is complete.',
+      noneDone: 'No tasks are finished yet.',
       status: {
         completed: 'Completed',
         ready: 'Ready',
@@ -197,6 +206,9 @@ const en = {
     },
 
     common: {
+      breadcrumb: 'Breadcrumb',
+      copied: 'Copied',
+      copyNamed: 'Copy {{name}}',
       dateTimeAt: '{{date}} at {{time}}',
       poweredBy: 'Powered by OpenNSW',
       pagination: {

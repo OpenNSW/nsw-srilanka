@@ -35,7 +35,8 @@ var (
 
 // Extension is the PRE_RESUME task extension enforcing, per task state and
 // command, which principals may advance a task: users by token role + resolved
-// ownership, M2M clients by client id. It is deny-by-default.
+// ownership, M2M clients by client id, and this service's own in-process callers
+// by the reserved name taskauthz.SystemPrincipal. It is deny-by-default.
 type Extension struct {
 	catalog taskauthz.Catalog
 }
@@ -106,9 +107,9 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 	if len(properties) == 0 {
 		return fmt.Errorf("%w: no authorization rules configured for task %q", ErrForbidden, record.TaskID)
 	}
-	var r rules
-	if err := json.Unmarshal(properties, &r); err != nil {
-		return fmt.Errorf("task authz: invalid properties for task %q: %w", record.TaskID, err)
+	r, err := parseRules(record, properties)
+	if err != nil {
+		return err
 	}
 
 	command, _ := payload["__command"].(string)
@@ -123,15 +124,91 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 	if !ok {
 		return ErrUnauthenticated
 	}
+	return e.authorize(ctx, record, in, allowed)
+}
 
+// MayAct reports whether in, the caller, may run some command on record in
+// its current state: what Execute decides for one command, asked of them all.
+// properties are the extension's properties on record's active step. No rules,
+// or none for the state, mean the caller may not. Only an error that is not a
+// denial, such as a failed ownership lookup, is returned.
+func (e *Extension) MayAct(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, properties json.RawMessage) (bool, error) {
+	if len(properties) == 0 {
+		return false, nil
+	}
+	r, err := parseRules(record, properties)
+	if err != nil {
+		return false, err
+	}
+	var allowed []string
+	for _, names := range r[record.State] {
+		allowed = append(allowed, names...)
+	}
+	if len(allowed) == 0 {
+		return false, nil
+	}
+	// Any one allowed name suffices, as it does for a single command.
+	switch err := e.authorize(ctx, record, in, allowed); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrForbidden), errors.Is(err, ErrUnauthenticated):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+// MayActOnStep reports whether in, the caller, may act on record's active step,
+// whose template is step: whether every PRE_RESUME authz extension on it lets
+// the caller run some command in the task's current state, as core runs them
+// all before a submission. A step with none is one no one may act on, as the
+// task manager refuses it (core's WithRequiredPreResumeExtensions).
+func (e *Extension) MayActOnStep(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, step types.StepTemplate) (bool, error) {
+	declared := false
+	for _, ext := range step.Extensions {
+		if ext.ID != ExtAuthz || ext.Phase != types.PhasePreResume {
+			continue
+		}
+		declared = true
+		if ok, err := e.MayAct(ctx, record, in, ext.Properties); err != nil || !ok {
+			return false, err
+		}
+	}
+	return declared, nil
+}
+
+func parseRules(record *store.TaskRecord, properties json.RawMessage) (rules, error) {
+	var r rules
+	if err := json.Unmarshal(properties, &r); err != nil {
+		return nil, fmt.Errorf("task authz: invalid properties for task %q: %w", record.TaskID, err)
+	}
+	return r, nil
+}
+
+// authorize allows the call iff in may act as one of the allowed names.
+func (e *Extension) authorize(ctx context.Context, record *store.TaskRecord, in taskauthz.Input, allowed []string) error {
 	switch in.Kind {
 	case taskauthz.KindUser:
 		return e.authorizeUser(ctx, record, in, allowed)
 	case taskauthz.KindClient:
 		return e.authorizeClient(in, allowed)
+	case taskauthz.KindSystem:
+		return authorizeSystem(allowed)
 	default:
 		return ErrUnauthenticated
 	}
+}
+
+// authorizeSystem allows an in-process caller iff the rule names the reserved
+// system principal. Nothing else lets it through: it holds no role and is no
+// client, so a rule naming only users or clients refuses it like anyone else.
+func authorizeSystem(allowed []string) error {
+	for _, name := range allowed {
+		if name == taskauthz.SystemPrincipal {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: the rule does not allow %q", ErrForbidden, taskauthz.SystemPrincipal)
 }
 
 // authorizeUser allows the call iff the caller may act as some allowed name —

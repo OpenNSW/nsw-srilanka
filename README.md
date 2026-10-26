@@ -30,8 +30,6 @@ nsw-srilanka/
 ├── deployments/helm/                       # Helm chart for deploying the stack
 ├── docs/                                   # WORKFLOW_GUIDE.md and other developer docs
 ├── configs/                                 # Runtime configs only (no workflow/form artifacts)
-│   ├── services.docker.example.json         # Template for services.docker.json (Docker Compose — container hostnames)
-│   ├── services.example.json                # Template for services.json (local/native dev — localhost)
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── config.example.yaml                  # Template for config.yaml (server config — local/native dev)
 │   ├── config.docker.example.yaml           # Template for config.docker.yaml (server config — Docker Compose)
@@ -54,13 +52,12 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 ## How to Run Locally
 
 > [!NOTE]
-> ⚠️ **This quickstart is for local development only.** The example configs enable
-> insecure TLS (`authn.insecureSkipTLSVerify: true`, `insecure_skip_tls_verify`
-> in `services.json`) for the self-signed local IdP. The backend only honors these
-> when `APP_ENV=development` — which `make dev`/`make preview` inject and nothing
-> else does — so a raw `docker compose up` or any real deployment **refuses to
-> start** on them. For non-local environments, trust the IdP/agency certificate
-> chain, keep those flags off, and never set `APP_ENV=development`.
+> ⚠️ **This quickstart is for local development only.** The local IdP serves plain
+> HTTP (`server.http_only: true` in `idp/deployment.yaml`), so the example configs
+> reach it over `http://` with no TLS settings. For non-local environments, serve the
+> IdP over HTTPS with a trusted certificate chain. The insecure-TLS escape hatches
+> (`authn.insecureSkipTLSVerify`, `services[].auth.oauth2.insecureSkipTLSVerify`) are
+> honored only when `APP_ENV=development`; never set that outside local dev.
 
 ### 1. First-time setup
 
@@ -68,7 +65,19 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 make setup
 ```
 
-This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/{services,services.docker,payment_methods,catalog,companies}.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
+This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/{payment_methods,catalog,companies}.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
+
+Configure outbound HTTP services in the YAML config's top-level `services` list.
+Secret values use quoted `{{env:NAME}}` or `{{file:/path}}` placeholders.
+
+> [!IMPORTANT]
+> **Upgrading an existing clone to the plain-HTTP IdP.** Because `make setup` keeps
+> your existing files, change the IdP URLs (`localhost:8090`, `thunderid:8090`) from
+> `https://` to `http://` yourself in `configs/{config,config.docker}.yaml`
+> and `portals/apps/trader-app/public/config.js`. `PUBLIC_URL`, `PORT` and `HOSTNAME` in
+> `idp/.env` are no longer read and can go. Then run `docker compose up` so
+> `thunderid-setup` re-imports the Console with `http://` redirect URIs, and sign in
+> again: the token issuer is now `http://localhost:8090`.
 
 > [!NOTE]
 > `make setup` requires **golangci-lint v2** to already be installed; it stops with an error otherwise.
@@ -152,7 +161,7 @@ The dev container is hermetic: it builds from the pinned `go.mod` version, ignor
    go work init . ../core
    ```
 
-2. **Prepare config** — the `configs/config.yaml` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`, and `.env` supplies the secrets it references. The host binary also needs the `localhost` variant of the service endpoints, `configs/services.json` (also seeded by `make setup`) — in `configs/config.yaml`, switch `server.servicesConfigPath` to the commented-out `./configs/services.json` line.
+2. **Prepare config** — the `configs/config.yaml` seeded by `make setup` already points the DB, Temporal and IdP at `localhost`, and `.env` supplies the secrets it references. Its `services` section also uses `localhost` endpoints for outbound calls.
 3. **Start everything except the API and portal** (db, temporal, idp, migrations, …) so you run those two natively:
 
    ```bash
@@ -174,7 +183,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 ### 4. Verify
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
-- Request metrics: set `metrics.endpoint` and `metrics.serviceName` in `config.yaml` to push OTLP/HTTP metrics. Leave `metrics.endpoint` empty (or omit the section) for a no-op.
+- Observability: set `otel.endpoint` and `otel.serviceName` in `config.yaml` to push OTLP/HTTP metrics, logs and traces (e.g. to OpenObserve). Leave `otel.endpoint` empty (or omit the section) for a no-op.
 - Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)
@@ -295,16 +304,14 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 ## Configuration Reference
 
-| File                           | Purpose                                                                                                                                                                        | Source of truth                        |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                   | `.env.example`                         |
-| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                               | `idp/.env.example`                     |
-| `configs/services.docker.json` | Outbound service endpoints — uses Docker container hostnames (for `compose.yml`)                                                                                               | `configs/services.docker.example.json` |
-| `configs/services.json`        | Outbound service endpoints — uses `localhost` (for native/host dev runs)                                                                                                       | `configs/services.example.json`        |
-| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template)                                                                                                        | `configs/payment_methods.example.json` |
-| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids                                                                                                         | `configs/catalog.example.json`         |
-| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                            | `configs/companies.example.json`       |
-| `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`          |
-| `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname                                                                                                | `configs/config.docker.example.yaml`   |
+| File                           | Purpose                                                                                                                                                                                           | Source of truth                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                                      | `.env.example`                         |
+| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                                                  | `idp/.env.example`                     |
+| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template), and each method's ids for every payee (`org_id`/`service_id`) under `payees`                                             | `configs/payment_methods.example.json` |
+| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids                                                                                                                            | `configs/catalog.example.json`         |
+| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                                               | `configs/companies.example.json`       |
+| `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, outbound services, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`          |
+| `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname                                                                                                                   | `configs/config.docker.example.yaml`   |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

@@ -378,7 +378,7 @@ func (h *HTTPHandler) auditClaim(ctx context.Context, taskID, op, failure string
 	if failure != "" {
 		metadata["error"] = failure
 	}
-	h.Audit.Record(ctx, nswaudit.Event{
+	h.auditEvent(ctx, nswaudit.Event{
 		EventType:  nswaudit.EventTask,
 		Action:     nswaudit.ActionUpdate,
 		TargetType: nswaudit.TargetTask,

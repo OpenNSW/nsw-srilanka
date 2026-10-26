@@ -3,6 +3,7 @@
  */
 
 import { getRequiredEnv } from '@/runtimeConfig'
+import { isAgencyMode } from '@/features/case/mode'
 
 export const API_BASE_URL = getRequiredEnv('API_BASE_URL')
 
@@ -12,12 +13,17 @@ export const API_CONFIG = {
   TIMEOUT: 30000, // 30 seconds
 } as const
 
-// Application Routes
+// Application Routes. An agency portal serves the same screens for its cases, under /cases.
+const CONSIGNMENTS_PATH = isAgencyMode ? '/cases' : '/consignments'
+
 export const ROUTES = {
   HOME: '/',
-  CONSIGNMENTS: '/consignments',
-  CONSIGNMENT_DETAIL: (id: string) => `/consignments/${id}`,
-  TASK_FORM: (consignmentId: string, taskId: string) => `/consignments/${consignmentId}/tasks/${taskId}`,
+  CONSIGNMENTS: CONSIGNMENTS_PATH,
+  CONSIGNMENT_DETAIL: (id: string) => `${CONSIGNMENTS_PATH}/${id}`,
+  TASK_FORM: (consignmentId: string, taskId: string) => `${CONSIGNMENTS_PATH}/${consignmentId}/tasks/${taskId}`,
+  // Route patterns, for <Route path> and useMatch.
+  CONSIGNMENT_DETAIL_PATTERN: `${CONSIGNMENTS_PATH}/:consignmentId`,
+  TASK_FORM_PATTERN: `${CONSIGNMENTS_PATH}/:consignmentId/tasks/:taskId`,
 } as const
 
 // Pagination

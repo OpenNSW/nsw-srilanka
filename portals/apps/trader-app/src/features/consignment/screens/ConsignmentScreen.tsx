@@ -6,10 +6,11 @@ import { MagnifyingGlassIcon, PlusIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { ConsignmentSummary, TradeFlow, ConsignmentState } from '@/features/consignment/types.ts'
 import { createConsignment, getAllConsignments } from '@/features/consignment/service.ts'
-import { useRole } from '@/services/useRole'
 import { getStateColor, formatState, formatDateTime } from '@/features/consignment/utils.ts'
 import { PaginationControl } from '@/components/common/PaginationControl.tsx'
-import { CONTENT_TOP_PX } from '@/components/Layout'
+import { LoadError } from '@/components/common/LoadError.tsx'
+import { LinkRow, RowLink } from '@/components/common/LinkRow.tsx'
+import { ROUTES } from '@/constants'
 
 export function ConsignmentScreen() {
   const navigate = useNavigate()
@@ -18,6 +19,8 @@ export function ConsignmentScreen() {
 
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const [page, setPage] = useState(0)
   const limit = 50
 
@@ -26,9 +29,8 @@ export function ConsignmentScreen() {
   const [stateFilter, setStateFilter] = useState<string>('all')
   const [tradeFlowFilter, setTradeFlowFilter] = useState<string>('all')
 
-  const { role } = useRole()
-
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState(false)
 
   const listRequestIdRef = useRef(0)
 
@@ -38,19 +40,15 @@ export function ConsignmentScreen() {
     setPage(0)
   }
 
-  const [prevRole, setPrevRole] = useState(role)
-  if (role !== prevRole) {
-    setPrevRole(role)
-    setPage(0)
-  }
-
   const handleCreateConsignment = async () => {
     setCreating(true)
+    setCreateError(false)
     try {
       const response = await createConsignment()
-      void navigate(`/consignments/${response.id}`)
+      void navigate(ROUTES.CONSIGNMENT_DETAIL(response.id))
     } catch (error) {
       console.error('Failed to create consignment:', error)
+      setCreateError(true)
     } finally {
       setCreating(false)
     }
@@ -66,7 +64,6 @@ export function ConsignmentScreen() {
           limit,
           stateFilter as ConsignmentState | 'all',
           tradeFlowFilter as TradeFlow | 'all',
-          role,
           debouncedSearchQuery,
         )
         if (requestId !== listRequestIdRef.current) {
@@ -74,11 +71,16 @@ export function ConsignmentScreen() {
         }
         setConsignments(data.items || [])
         setTotalCount(data.total || 0)
+        setLoadFailed(false)
       } catch (error) {
         if (requestId !== listRequestIdRef.current) {
           return
         }
         console.error('Failed to fetch consignments:', error)
+        // A failure is not an empty list. Clear any rows from the previous page.
+        setConsignments([])
+        setTotalCount(0)
+        setLoadFailed(true)
       } finally {
         if (requestId === listRequestIdRef.current) {
           setLoading(false)
@@ -87,10 +89,10 @@ export function ConsignmentScreen() {
     }
 
     void fetchConsignments()
-  }, [page, stateFilter, tradeFlowFilter, role, debouncedSearchQuery])
+  }, [page, stateFilter, tradeFlowFilter, debouncedSearchQuery, retryCount])
 
   return (
-    <div style={{ minHeight: `calc(100vh - ${CONTENT_TOP_PX}px)` }} className="p-6">
+    <div style={{ minHeight: 'calc(100vh - var(--app-top-offset))' }} className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-foreground tracking-tight">{t('consignments.list.title')}</h1>
@@ -100,12 +102,15 @@ export function ConsignmentScreen() {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
-          {role === 'cha' ? null : (
-            <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
-              <PlusIcon />
-              {creating ? t('consignments.list.creating') : t('consignments.list.create')}
-            </Button>
+        <div className="flex flex-col items-end gap-2">
+          <Button onClick={() => void handleCreateConsignment()} disabled={creating} loading={creating}>
+            <PlusIcon />
+            {creating ? t('consignments.list.creating') : t('consignments.list.create')}
+          </Button>
+          {createError && (
+            <Text size="2" color="red">
+              {t('consignments.list.error.createFailed')}
+            </Text>
           )}
         </div>
       </div>
@@ -171,14 +176,19 @@ export function ConsignmentScreen() {
               </Text>
             </div>
           )}
-          {consignments.length === 0 ? (
+          {loadFailed ? (
+            <div className="p-16">
+              <LoadError
+                message={t('consignments.list.error.loadFailed')}
+                onRetry={() => setRetryCount((n) => n + 1)}
+              />
+            </div>
+          ) : consignments.length === 0 ? (
             <div className="p-16 text-center">
               <Text size="3" color="gray">
                 {debouncedSearchQuery || stateFilter !== 'all' || tradeFlowFilter !== 'all'
                   ? t('consignments.list.empty.filtered')
-                  : role === 'cha'
-                    ? t('consignments.list.empty.cha')
-                    : t('consignments.list.empty.trader')}
+                  : t('consignments.list.empty.none')}
               </Text>
             </div>
           ) : (
@@ -202,26 +212,24 @@ export function ConsignmentScreen() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {consignments.map((consignment) => (
-                    <tr
-                      key={consignment.id}
-                      onClick={() => void navigate(`/consignments/${consignment.id}`)}
-                      className="hover:bg-primary-subtle cursor-pointer transition-colors"
-                    >
+                    <LinkRow key={consignment.id} to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {consignment.name ? (
-                          <div className="flex flex-col">
-                            <Text size="2" weight="bold" className="text-info-strong">
-                              {consignment.name}
-                            </Text>
-                            <Text size="1" color="gray" className="font-mono mt-0.5">
+                        <RowLink to={ROUTES.CONSIGNMENT_DETAIL(consignment.id)}>
+                          {consignment.name ? (
+                            <div className="flex flex-col">
+                              <Text size="2" weight="bold" className="text-info-strong">
+                                {consignment.name}
+                              </Text>
+                              <Text size="1" color="gray" className="font-mono mt-0.5">
+                                {consignment.id}
+                              </Text>
+                            </div>
+                          ) : (
+                            <Text size="2" weight="medium" className="text-info-strong font-mono">
                               {consignment.id}
                             </Text>
-                          </div>
-                        ) : (
-                          <Text size="2" weight="medium" className="text-info-strong font-mono">
-                            {consignment.id}
-                          </Text>
-                        )}
+                          )}
+                        </RowLink>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
@@ -238,7 +246,7 @@ export function ConsignmentScreen() {
                           {consignment.createdAt ? formatDateTime(consignment.createdAt) : '-'}
                         </Text>
                       </td>
-                    </tr>
+                    </LinkRow>
                   ))}
                 </tbody>
               </table>

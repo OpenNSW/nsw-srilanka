@@ -3,7 +3,7 @@
 #   helm install lk-tnsw ./lk-tnsw -f ./values-example.yaml
 #
 # This chart deploys the app only. Infra dependencies (Postgres, Temporal,
-# Thunder ID, Argus) are separate deployments — backend.config below just
+# Thunder ID) are separate deployments — backend.config below just
 # points at their in-cluster Service names / external URLs.
 #
 # NON-secret config lives here in plain text: backend.config is the server's
@@ -13,7 +13,6 @@
 # "{{env:NAME}}" placeholder. Create the Secrets out-of-band, e.g.:
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
-#     --from-literal=argus-api-key=... \
 #     --from-literal=slpa-webhook-secret=... \
 #     --from-literal=notification-email-token=... \
 #     --from-literal=notification-sms-password=... \
@@ -24,8 +23,15 @@
 #     --from-literal=m2m-efc-secret=... \
 #     --from-literal=m2m-sltb-secret=... \
 #     --from-literal=m2m-asycuda-secret=...
+#   # OpenObserve OTLP auth (only when backend.config otel is enabled):
+#   kubectl create secret generic otel-auth-header \
+#     --from-literal=Authorization="Basic $(printf '%s:%s' email password | base64)"
 #   kubectl create secret generic govpay-go-private-key \
 #     --from-file=go_private.pem=...
+#   # Temporal client certificate (only when backend.config temporal.tls is set;
+#   # a cert-manager Certificate Secret has the same keys):
+#   kubectl create secret generic temporal-client-tls \
+#     --from-file=ca.crt=... --from-file=tls.crt=... --from-file=tls.key=...
 #
 # Adding a secret takes three steps: a key in the Secret, an entry in
 # backend.env, and a "{{env:NAME}}" placeholder in backend.config (migration.env
@@ -33,7 +39,7 @@
 # unset stops the server, or the migration Job, at startup.
 #
 # The https:// URLs and client IDs below are placeholders — replace them with
-# your environment's real IdP, Temporal, and Argus endpoints.
+# your environment's real IdP and Temporal endpoints.
 
 # Drives the backend/frontend resource names via
 # lk-tnsw.{backend,frontend}.fullname (templates/_helpers.tpl) — with
@@ -55,12 +61,12 @@ backend:
     type: ClusterIP
     port: 80
 
-  # Only what config.yaml cannot hold: APP_ENV, and the secrets it (and
-  # services.json) references as {{env:NAME}} / env:NAME — each pulled from a
+  # Only what config.yaml cannot hold: APP_ENV, and the secrets referenced
+  # as {{env:NAME}} — each pulled from a
   # Kubernetes Secret, never inlined.
   env:
-    # Gates authn.insecureSkipTLSVerify and services.json's per-service
-    # insecure_skip_tls_verify. Leave unset in any real deployment — the
+    # Gates authn.insecureSkipTLSVerify and each service's OAuth2
+    # insecureSkipTLSVerify. Leave unset in any real deployment — the
     # backend then fails closed rather than trusting an unverified cert.
     APP_ENV: ""
 
@@ -69,11 +75,6 @@ backend:
         secretKeyRef:
           name: nsw-secrets
           key: db-password
-    ARGUS_API_KEY:
-      valueFrom:
-        secretKeyRef:
-          name: nsw-secrets
-          key: argus-api-key
     # Inbound: SLPA signs each service order webhook with this shared secret and
     # it is the whole of that route's authentication, so the service refuses to
     # start without it. Required on any deployment SLPA calls back.
@@ -94,7 +95,7 @@ backend:
         secretKeyRef: { name: nsw-secrets, key: storage-token-keyset }
 
     # --- Outbound M2M (NSW -> Agency): client secrets referenced as
-    # env:M2M_NSW_TO_<AGENCY>_SECRET in configs/services*.json. ---
+    # {{env:M2M_NSW_TO_<AGENCY>_SECRET}} in the services list in config.yaml. ---
     M2M_NSW_TO_NPQS_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-npqs-secret }
@@ -120,6 +121,12 @@ backend:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: m2m-asycuda-secret }
 
+    # OTLP auth for OpenObserve (or other backend). Only needed when backend.config
+    # otel.endpoint is set; value is the full Authorization header value.
+    # OTEL_AUTH_HEADER:
+    #   valueFrom:
+    #     secretKeyRef: { name: otel-auth-header, key: Authorization }
+
   # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
   # gateway needs the private key. payment_methods.json points at it with
   # "private_key": "file:/certs/govpay/go_private.pem"; this mounts it there
@@ -130,10 +137,17 @@ backend:
     - name: govpay-go-private-key
       secret:
         secretName: govpay-go-private-key
+    # The Temporal client certificate, for backend.config temporal.tls.
+    # - name: temporal-client-tls
+    #   secret:
+    #     secretName: temporal-client-tls
   volumeMounts:
     - name: govpay-go-private-key
       mountPath: /certs/govpay
       readOnly: true
+    # - name: temporal-client-tls
+    #   mountPath: /certs/temporal
+    #   readOnly: true
 
   # The server's config.yaml, authored here as values; the chart mounts it and
   # sets CONFIG_PATH (see values.yaml). There are no built-in defaults: every
@@ -145,6 +159,8 @@ backend:
 
     server:
       port: 8080               # keep in step with containerPort above
+      # Audit records (category=audit) are written at info, so warn or error
+      # drops them. Startup logs that at this level.
       logLevel: info
       serviceURL: "https://nsw-api.example.com"
       # Request-body size cap and server timeouts (Slowloris/DoS hardening).
@@ -157,9 +173,108 @@ backend:
       # (Only the *.example.json templates ship in the image — see the root
       # Dockerfile. The live files below are gitignored, so supply them via a
       # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
-      servicesConfigPath: configs/services.json
       paymentMethodsConfigPath: configs/payment_methods.json
       catalogConfigPath: configs/catalog.json
+
+
+    # Outbound services; replace the local endpoints for this deployment.
+    services:
+      - id: npqs
+        url: http://localhost:8081
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_NPQS
+            clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.npqs.nsw-agency.local
+      - id: fcau
+        url: http://localhost:8082
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_FCAU
+            clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.fcau.nsw-agency.local
+      - id: cda
+        url: http://localhost:8083
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_CDA
+            clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.cda.nsw-agency.local
+      - id: slpa
+        url: https://slpa-cms.example.com
+        timeout: 60s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
+            clientID: NSW_TO_SLPA_CLIENT_ID
+            clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
+      - id: efc
+        url: http://localhost:8085
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_EFC
+            clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.efc.nsw-agency.local
+      - id: customs-asycuda
+        url: https://customs-asycuda.example.com
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://idp.example.com/oauth2/token
+            clientID: NSW_TO_ASYCUDA_CLIENT_ID
+            clientSecret: "{{env:M2M_NSW_TO_ASYCUDA_SECRET}}"
+            scopes: []
+            insecureSkipTLSVerify: false
+      - id: ippc-hub
+        url: https://uat-hub.ephytoexchange.org/hub
+        timeout: 60s
+        tls:
+          clientCertFile: /certs/ippc/nppo.crt
+          clientKeyFile: /certs/ippc/nppo.key
+      - id: sltb
+        url: http://localhost:8086
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_SLTB
+            clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.sltb.nsw-agency.local
 
     # The server's (and the otc CLI's) database connection: core/database's
     # Config (github.com/OpenNSW/core/database). The schema migrator has its own,
@@ -217,12 +332,32 @@ backend:
         # .xlsx only: OOXML workbooks cannot carry VBA macros, unlike legacy .xls,
         # a known malware vector.
         - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        # XML is data to download, not to display: it is not in inlineTypes, so a
+        # download saves it instead of opening it.
+        - text/xml
+        - application/xml
+      # What a download opens in the browser; every other file is saved. MIME
+      # types, compared exactly with the stored type. Not read when type is
+      # proxy: the owning service applies its own. text/html is listed for the
+      # documents this service generates and stores itself, and is never in
+      # allowedUploadTypes: a type a browser interprets as a document runs script
+      # from the origin it is served on, so startup fails when a type clients may
+      # upload is listed here and is not one of the first six.
+      inlineTypes:
+        - application/pdf
+        - image/png
+        - image/jpeg
+        - image/gif
+        - image/webp
+        - text/plain
+        - text/html
       # Largest upload, in bytes (32 MiB). Not read when type is proxy.
       maxUploadBytes: 33554432
       # Seals the file tokens clients hold in place of stored file keys.
       # Required whatever the type.
       tokenKeyset: "{{env:STORAGE_TOKEN_KEYSET}}"
-      # How long a user's file token lasts, in seconds. Optional: 3600 when unset.
+      # How long the file tokens a user reads with last, in seconds. Optional:
+      # 3600 when unset. Upload tokens, which can only be submitted, don't expire.
       tokenTTLSeconds: 3600
       s3:
         bucket: nsw-uploads
@@ -246,6 +381,15 @@ backend:
       host: temporal
       port: 7233
       namespace: default
+      # For a Temporal server that requires TLS or client certificates, mount
+      # the temporal-client-tls Secret (backend.volumes above) and uncomment.
+      # The files are read once at startup, so restart the backend after the
+      # certificate is renewed. serverName defaults to host.
+      # tls:
+      #   caFile: /certs/temporal/ca.crt
+      #   certFile: /certs/temporal/tls.crt
+      #   keyFile: /certs/temporal/tls.key
+      #   serverName: temporal
 
     # Email/SMS gateways, one settings block per channel.
     notification:
@@ -259,20 +403,15 @@ backend:
           password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
           sidCode: "NSW"
 
-    # Audit service (Argus).
-    audit:
-      baseURL: "http://argus:3001"
-      apiKey: "{{env:ARGUS_API_KEY}}"
-
-    # Optional OTLP/HTTP metrics export. Empty endpoint (or omit the section)
-    # leaves metrics off. serviceName is required when endpoint is set so each
-    # deployment can be told apart. Auth headers use "{{env:NAME}}" with the
-    # secret exposed via backend.env.
-    # metrics:
-    #   endpoint: http://otel-collector:4318/v1/metrics
+    # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
+    # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
+    # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
+    # OTEL_AUTH_HEADER in backend.env when required.
+    # otel:
+    #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
     #   serviceName: tnsw-api
     #   headers:
-    #     Authorization: "{{env:METRICS_AUTH_HEADER}}"
+    #     Authorization: "{{env:OTEL_AUTH_HEADER}}"
 
     integrations:
       slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
@@ -439,12 +578,6 @@ frontend:
     IDP_EXTRA_QUERY_PARAMS: "resource=https://api.nsw-srilanka.local"
     APP_URL: "https://trader.example.com"
     IDP_SCOPES: "openid,profile,email,group,role,ou,nsw:consignment:read,nsw:consignment:write,nsw:task:read,nsw:task:write,nsw:hscode:read,nsw:company:read,nsw:cha:read,nsw:storage:read,nsw:storage:write,nsw:profile:read,nsw:consignment:adminread,nsw:consignment:adminwrite"
-    # ID-token claim holding the roles (an array), and the role names in it. For an IdP that
-    # models roles as groups, set the claim to "groups" and use the group names.
-    IDP_ROLE_CLAIM_NAME: "roles"
-    IDP_TRADER_ROLE_NAME: "Trader"
-    IDP_CHA_ROLE_NAME: "CHA"
-    IDP_NSW_ADMIN_ROLE_NAME: "NSW Admin"
     SHOW_AUTOFILL_BUTTON: "false"
     # "tnsw" (default) lists consignments; "agency" lists an agency's cases instead.
     APP_MODE: "tnsw"

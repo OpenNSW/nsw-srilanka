@@ -2,11 +2,10 @@ package cdn
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
-	"gorm.io/gorm"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 )
 
 // Task templates the CDN lifecycle parks on while it waits for ASYCUDA. Each is
@@ -17,28 +16,24 @@ const (
 	acknowledgmentWaitTemplateID = "customs-wait-cdn-ack"
 )
 
-// stateQueuedExternally is the state a task parks in while an external system
-// owns the next move. Only a task in that state is waiting to be resumed.
-const stateQueuedExternally = "QUEUED_EXTERNALLY"
-
 // resumeIntegrationWait releases the dispatch note's integration wait once §7.2
 // arrives, so the CDN task completes and the acknowledgment wait that follows it
-// opens. The edgeId is the correlator for the round-trip (§2.1), so the workflow
-// is found by the edgeId its dispatch step recorded.
-func (s *cdnWebhookService) resumeIntegrationWait(ctx context.Context, req CDNIntegrationResultRequest, alreadyProcessed bool) error {
+// opens. The edgeId is the correlator for the round-trip (§2.1): the dispatch
+// note it names recorded the workflow that sent it.
+func (s *cdnWebhookService) resumeIntegrationWait(ctx context.Context, note *DispatchNote, req CDNIntegrationResultRequest, alreadyProcessed bool) error {
 	payload := map[string]any{
 		"__command":  "submit",
 		"integrated": req.Payload.Integrated,
 	}
 	if req.Payload.Integrated {
 		ref := req.Payload.CDNRef
-		payload["cdn_number"] = fmt.Sprintf("%s/%s/%s/%d", ref.Office, ref.Year, ref.Serial, ref.Number)
+		payload["cdn_number"] = formatCDNRef(ref)
 	} else {
 		payload["error"] = describeErrors(req.Payload.Errors)
 	}
 
 	return s.resumeWait(ctx, waitLookup{
-		edgeID:     req.Payload.EdgeID,
+		note:       note,
 		templateID: integrationWaitTemplateID,
 		payload:    payload,
 	}, alreadyProcessed)
@@ -49,7 +44,7 @@ func (s *cdnWebhookService) resumeIntegrationWait(ctx context.Context, req CDNIn
 // note is the bridge back to the workflow the wait belongs to.
 func (s *cdnWebhookService) resumeAcknowledgmentWait(ctx context.Context, note *DispatchNote, alreadyAcknowledged bool) error {
 	return s.resumeWait(ctx, waitLookup{
-		edgeID:     note.EdgeID,
+		note:       note,
 		templateID: acknowledgmentWaitTemplateID,
 		payload: map[string]any{
 			"__command":  "submit",
@@ -58,63 +53,61 @@ func (s *cdnWebhookService) resumeAcknowledgmentWait(ctx context.Context, note *
 	}, alreadyAcknowledged)
 }
 
+// resumeCancelledWait releases the acknowledgment wait as cancelled once §7.7
+// arrives: no acknowledgment will follow, so the branch finishes with the note
+// marked cancelled.
+func (s *cdnWebhookService) resumeCancelledWait(ctx context.Context, note *DispatchNote, alreadyCancelled bool) error {
+	return s.resumeWait(ctx, waitLookup{
+		note:       note,
+		templateID: acknowledgmentWaitTemplateID,
+		payload: map[string]any{
+			"__command":  "submit",
+			"ack_status": string(DispatchNoteStatusCancelled),
+		},
+	}, alreadyCancelled)
+}
+
 type waitLookup struct {
-	edgeID     string
+	note       *DispatchNote
 	templateID string
 	payload    map[string]any
 }
 
 // resumeWait finds the parked task the given callback answers and completes its
-// step. A missing task is only an error when this callback is genuinely new: a
-// redelivery (§2 retries up to four times) legitimately finds nothing left to
-// resume, and must still be acknowledged so the retries stop.
+// step. A missing task is only an error when this callback is genuinely new —
+// its task may not have parked yet, so SLC Edge is asked to retry. A redelivery
+// (§2 retries up to four times) legitimately finds nothing left to resume, and
+// must still be acknowledged so the retries stop. Tasks that could not be read
+// are always an error: whether one is parked is not known.
 func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alreadyProcessed bool) error {
-	if s.db == nil || s.taskManager == nil {
+	edgeID := look.note.EdgeID
+	if s.tasks == nil || s.taskManager == nil {
 		// A deployment without the workflow wiring still records the callback;
 		// it simply has no task to advance.
-		slog.DebugContext(ctx, "cdn: no workflow wiring, skipping task resume", "edge_id", look.edgeID)
+		slog.DebugContext(ctx, "cdn: no workflow wiring, skipping task resume", "edge_id", edgeID)
 		return nil
 	}
 
-	var record struct {
-		ParentWorkflowID string `gorm:"column:parent_workflow_id"`
-	}
-	err := s.db.WithContext(ctx).
-		Table("task_records_v2").
-		// The dispatch step records the id under whichever key its output mapping
-		// used; both spellings are in play across deployments.
-		Where("data->'cig_cdn'->>'edge_id' = ? OR data->'cig_cdn'->>'edgeId' = ?", look.edgeID, look.edgeID).
-		Select("parent_workflow_id").
-		First(&record).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if alreadyProcessed {
-				slog.InfoContext(ctx, "cdn: no workflow for edgeId but callback already processed, ignoring redelivery",
-					"edge_id", look.edgeID)
-				return nil
-			}
-			return fmt.Errorf("edgeId %s: %w", look.edgeID, ErrDispatchNoteNotFoundByEdgeID)
-		}
-		return fmt.Errorf("failed to locate CDN workflow by edgeId %s: %w", look.edgeID, err)
-	}
-
-	var task struct {
-		TaskID string `gorm:"column:task_id"`
-		StepID string `gorm:"column:active_step_id"`
-	}
-	err = s.db.WithContext(ctx).
-		Table("task_records_v2").
-		Where("parent_workflow_id = ? AND active_task_template_id = ? AND state = ?",
-			record.ParentWorkflowID, look.templateID, stateQueuedExternally).
-		Select("task_id", "active_step_id").
-		First(&task).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			slog.InfoContext(ctx, "cdn: no parked task to resume",
-				"edge_id", look.edgeID, "template", look.templateID, "workflow_id", record.ParentWorkflowID)
+	if look.note.WorkflowID == "" {
+		if alreadyProcessed {
+			slog.InfoContext(ctx, "cdn: no workflow for edgeId but callback already processed, ignoring redelivery",
+				"edge_id", edgeID)
 			return nil
 		}
-		return fmt.Errorf("failed to locate parked CDN task for workflow %s: %w", record.ParentWorkflowID, err)
+		return fmt.Errorf("edgeId %s: %w", edgeID, ErrDispatchNoteNotFoundByEdgeID)
+	}
+
+	task, ok, err := parkedtask.Find(ctx, s.tasks, look.note.CaseID, look.note.WorkflowID, look.templateID)
+	if err != nil {
+		return fmt.Errorf("locate the %s task for workflow %s: %w", look.templateID, look.note.WorkflowID, err)
+	}
+	if !ok {
+		if alreadyProcessed {
+			slog.InfoContext(ctx, "cdn: no parked task to resume, callback already processed",
+				"edge_id", edgeID, "template", look.templateID, "workflow_id", look.note.WorkflowID)
+			return nil
+		}
+		return fmt.Errorf("edgeId %s, template %s: %w", edgeID, look.templateID, ErrTaskNotParked)
 	}
 
 	if err := s.taskManager.CompleteTaskStep(ctx, task.TaskID, task.StepID, look.payload); err != nil {
@@ -122,6 +115,6 @@ func (s *cdnWebhookService) resumeWait(ctx context.Context, look waitLookup, alr
 	}
 
 	slog.InfoContext(ctx, "cdn: resumed parked task",
-		"task_id", task.TaskID, "template", look.templateID, "edge_id", look.edgeID)
+		"task_id", task.TaskID, "template", look.templateID, "edge_id", edgeID)
 	return nil
 }

@@ -64,7 +64,8 @@ func (h *ProxyHandler) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 // Download returns the owning service's download URL for the key and when it
-// expires.
+// expires, with the type of the file and how the URL serves it as the owning
+// service reported them.
 func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("key")
 	if key == "" {
@@ -72,15 +73,22 @@ func (h *ProxyHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	downloadURL, expiresAt, err := h.svc.DownloadURL(r.Context(), key)
+	dl, err := h.svc.DownloadURL(r.Context(), key)
 	if err != nil {
 		writeProxyError(w, r, err, "failed to generate access")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{
-		"download_url": downloadURL,
-		"expires_at":   expiresAt,
-	})
+	body := map[string]any{
+		"download_url": dl.URL,
+		"expires_at":   dl.ExpiresAt,
+		"mime_type":    dl.ContentType,
+	}
+	// An owning service that says nothing about it leaves the field out, which a
+	// client reads as a file to save.
+	if dl.Disposition != "" {
+		body["disposition"] = dl.Disposition
+	}
+	httputil.JSON(w, http.StatusOK, body)
 }
 
 // Delete removes the file from the owning service.

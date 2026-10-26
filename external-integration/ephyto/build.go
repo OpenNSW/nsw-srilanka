@@ -29,25 +29,18 @@ func BuildInput(inputs map[string]any) spscert.Input {
 	if isReExport(uf) {
 		certType = "657" // Phytosanitary Certificate for Re-Export
 	}
-	// The Hub destination is a connection code (e.g. "LK2"), chosen by the trader
-	// on the submission form — not hardcoded here. In UAT the form offers only
-	// the LK2 test connection, so envelopes route LK2 -> LK2, but the routing is
-	// driven entirely by the selected value.
-	hubDest := asString(inputs["hub_destination"])
-	// The certificate content import country must be a valid ISO alpha-2 code
-	// (the Hub validates ImportSPSCountry.ID as ISO alpha-2), so the connection
-	// code "LK2" must not leak here. It is the ISO code the destination
-	// connection represents — LK for Sri Lanka's LK2 test instance.
-	importISO := isoFromHubConnection(hubDest)
+	// The certificate goes from Sri Lanka's NPPO to the importing country's. The
+	// Hub routes the envelope by ISO 3166-1 alpha-2 country code, and the importing
+	// country is the one the application names, so the same code is the
+	// certificate content's import country. An application that names none leaves
+	// it empty, and the envelope is refused (see HubInterpreter.BuildEnvelope).
+	importISO := countryCode(uf["importing_country"])
 
 	return spscert.Input{
 		SOAP: spscert.SOAPInput{
-			Operation: "ValidateAndDeliverEnvelope",
-			// Envelope routing uses the Hub connection code selected by the trader,
-			// not an ISO country code. NPQS only exchanges with its own IPPC Hub
-			// test connection, so the same code is both sender and recipient.
-			From:                  hubDest,
-			To:                    hubDest,
+			Operation:             "ValidateAndDeliverEnvelope",
+			From:                  exportNPPOCode,
+			To:                    importISO,
 			CertificateType:       certTypeCode(certType),
 			CertificateStatus:     certStatusIssued,
 			NPPOCertificateNumber: certID,
@@ -59,12 +52,49 @@ func BuildInput(inputs map[string]any) spscert.Input {
 			StatusCode:             strconv.Itoa(certStatusIssued),
 			IssueDateTime:          nowFunc().Format(time.RFC3339),
 			AuthorizedOfficer:      asString(uf["applicant_name"]),
-			PlaceOfIssue:           officeName(asString(uf["nppo_office_location"])),
+			PlaceOfIssue:           officeName(answerCode(uf["nppo_office_location"])),
 			CertifyingStatementIDs: certifyingStatementIDs(certType),
-			DocDeclarations:        buildDocDeclarations(uf),
+			DocDeclarations:        buildDocDeclarations(uf, inputs),
 			Attachments:            buildAttachments(uf, inputs),
 			Consignment:            buildConsignment(uf, importISO, inputs["certificate_items"]),
+			Replacement:            buildReplacement(inputs),
 		},
+	}
+}
+
+// ReplacementInput is the input naming the certificate a submission replaces:
+//
+//	"replacement": {
+//	  "replaced_number":     "…", // the replaced certificate's number (required)
+//	  "reason":              "…", // why it is replaced, as the trader put it
+//	  "replaced_issue_date": "…"  // when the replaced certificate was issued (optional)
+//	}
+//
+// Absent, the submission is an ordinary certificate.
+const ReplacementInput = "replacement"
+
+// replacementStatementCode is the ADRP statement a replacement certificate
+// carries, as in the IPPC sandbox's replacement sample: the certificate
+// replaces the one ADRPN names, for the reason ADRPR gives.
+const replacementStatementCode = "4"
+
+// buildReplacement fills in the replacement notes (ADRP, ADRPN, ADRPR, ADRD)
+// of a certificate that replaces an earlier one. A replacement is a new
+// certificate, issued as any other (status 70) under its own number; the notes
+// tell the importing NPPO which certificate it supersedes and why. Nothing is
+// returned when the input names no replaced certificate.
+func buildReplacement(inputs map[string]any) *spscert.Replacement {
+	r := asMap(inputs[ReplacementInput])
+	replaced := strings.TrimSpace(asString(r["replaced_number"]))
+	if replaced == "" {
+		return nil
+	}
+	return &spscert.Replacement{
+		StatementCode:     replacementStatementCode,
+		ReplacedNumber:    replaced,
+		Reason:            strings.TrimSpace(asString(r["reason"])),
+		ReplacedIssueDate: strings.TrimSpace(asString(r["replaced_issue_date"])),
+		LanguageID:        "en",
 	}
 }
 
@@ -162,11 +192,8 @@ func validationBullets(items []hub.ValidationResult) []string {
 // ---------------------------------------------------------------------------
 
 const (
-	// exportNPPOCode is Sri Lanka's ISO 3166-1 alpha-2 code, used inside the
-	// SPSCertificate content (ExportSPSCountry / OriginSPSCountry, etc.). The Hub
-	// validates these against ISO alpha-2, so a Hub connection code like "LK2"
-	// must never leak here. Envelope routing (hub:From / hub:To) uses the
-	// connection code the trader selects on the form, not this value.
+	// exportNPPOCode is Sri Lanka's ISO 3166-1 alpha-2 code: the envelope's sender
+	// (hub:From) and the SPSCertificate content's export and origin country.
 	exportNPPOCode   = "LK"
 	certStatusIssued = 70 // Hub CertificateStatus for an issued certificate
 	// certStatusWithdrawn is the Hub CertificateStatus for a withdrawn
@@ -176,24 +203,24 @@ const (
 	issuingNPPO         = "National Plant Quarantine Service of Sri Lanka"
 )
 
-// isoFromHubConnection derives the ISO 3166-1 alpha-2 country code from a Hub
-// connection identifier by taking its leading letters (e.g. "LK2" -> "LK").
-// Hub connection codes are the ISO country code plus an instance suffix, so this
-// yields the code the SPSCertificate content requires. Anything that does not
-// resolve to a two-letter code falls back to the export NPPO country (LK).
-func isoFromHubConnection(conn string) string {
-	var letters []rune
-	for _, r := range strings.TrimSpace(conn) {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-			letters = append(letters, r)
-			continue
+// countryCode reads an importing country answer as its ISO 3166-1 alpha-2
+// code. A dropdown answer is { value, label } with the code as its value; an
+// older application holds the bare code, or the "Name - CODE" the form showed.
+// Anything that is not a two-letter code yields "".
+func countryCode(v any) string {
+	code := strings.TrimSpace(answerCode(v))
+	if i := strings.LastIndex(code, " - "); i >= 0 {
+		code = strings.TrimSpace(code[i+3:])
+	}
+	if len(code) != 2 {
+		return ""
+	}
+	for _, r := range code {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return ""
 		}
-		break
 	}
-	if len(letters) == 2 {
-		return strings.ToUpper(string(letters))
-	}
-	return exportNPPOCode
+	return strings.ToUpper(code)
 }
 
 func certTypeCode(typeCode string) int {
@@ -258,22 +285,27 @@ func transportModeCode(mode string) string {
 	}
 }
 
+// weightUnit passes on the UN/ECE code the form stores (KGM, TNE, MTQ, ...).
+// A weight entered with no unit is in kilograms, the form's default.
 func weightUnit(unit string) string {
-	switch unit {
-	case "g":
-		return "GRM"
-	case "t":
-		return "TNE"
-	default:
+	if unit == "" {
 		return "KGM"
 	}
+	return unit
 }
 
 // ---------------------------------------------------------------------------
 // Builders
 // ---------------------------------------------------------------------------
 
-func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
+// DateOfInspectionInput is the task input carrying the date the officer
+// inspected the consignment. It is the only source of the certificate's date of
+// inspection: the application's proposed_inspection_date only schedules the
+// inspection, so a certificate whose consignment was never inspected declares
+// no date rather than the one the trader asked for.
+const DateOfInspectionInput = "date_of_inspection"
+
+func buildDocDeclarations(uf map[string]any, inputs map[string]any) *spscert.DocDeclarations {
 	dd := &spscert.DocDeclarations{LanguageID: "en"}
 	if v := asString(uf["additional_declaration"]); v != "" {
 		dd.AdditionalDeclarations = []string{v}
@@ -281,7 +313,7 @@ func buildDocDeclarations(uf map[string]any) *spscert.DocDeclarations {
 	if v := asString(uf["import_permit_number"]); v != "" {
 		dd.ImportPermit = v
 	}
-	if v := asString(uf["proposed_inspection_date"]); v != "" {
+	if v := asString(inputs[DateOfInspectionInput]); v != "" {
 		dd.DateOfInspection = v
 	}
 	if v := asString(uf["distinguishing_marks"]); v != "" {
@@ -362,7 +394,7 @@ func buildConsignment(uf map[string]any, importISO string, certificateItems any)
 	// for nothing else about the carriage; a vessel or voyage would go on the same
 	// element (see spscert.Conveyance) if it ever did.
 	c.MeansOfConveyance = []spscert.Conveyance{
-		{ModeCode: transportModeCode(asString(uf["transport_mode"]))},
+		{ModeCode: transportModeCode(answerCode(uf["transport_mode"]))},
 	}
 
 	treatment := asString(uf["disinfestation_treatment"])
@@ -394,10 +426,10 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 		DescriptionLang: "en",
 		LanguageID:      "en",
 		ScientificName:  asString(com["commodity_botanical_name"]),
-		OriginCountries: []string{originISO(asString(com["origin_country"]))},
-		VegetablePart:   asString(com["commodity_plant_part"]),
-		Condition:       asString(com["commodity_condition"]),
-		IntendedUse:     asString(com["commodity_intended_use"]),
+		OriginCountries: []string{originISO(answerCode(com["origin_country"]))},
+		VegetablePart:   answerCode(com["commodity_plant_part"]),
+		Condition:       answerCode(com["commodity_condition"]),
+		IntendedUse:     answerCode(com["commodity_intended_use"]),
 	}
 	if cn := asString(com["commodity_common_name"]); cn != "" {
 		tl.CommonNames = []string{cn}
@@ -414,15 +446,15 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 			TypeCode:  "PK", // generic package; the form has no IPPC package code
 			Quantity:  count,
 		}}
-	} else if pd := asString(com["packages_description"]); pd != "" {
+	} else if pd := answerCode(com["packages_description"]); pd != "" {
 		tl.PackageDescription = pd
 	}
 
 	if v := numStr(com["quantity_net_weight"]); v != "" {
-		tl.NetWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(asString(com["quantity_net_weight_unit"]))}
+		tl.NetWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(answerCode(com["quantity_net_weight_unit"]))}
 	}
 	if v := numStr(com["quantity_gross_weight"]); v != "" {
-		tl.GrossWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(asString(com["quantity_gross_weight_unit"]))}
+		tl.GrossWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(answerCode(com["quantity_gross_weight_unit"]))}
 	}
 
 	if treatment != "" {
@@ -558,6 +590,16 @@ func asString(v any) string {
 	default:
 		return ""
 	}
+}
+
+// answerCode reads a dropdown answer as the code it stands for. A dropdown
+// stores { value, label }, the code and the title the trader saw; an
+// application saved before its dropdowns did holds the bare code.
+func answerCode(v any) string {
+	if m, ok := v.(map[string]any); ok {
+		return asString(m["value"])
+	}
+	return asString(v)
 }
 
 func asBool(v any) bool {

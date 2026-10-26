@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	argus "github.com/LSFLK/argus/pkg/audit"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
@@ -46,11 +45,13 @@ func (f *fakeClaimer) ReleaseTask(_ context.Context, taskID, holder string) erro
 
 // claimHandler is a handler over the pending HS-code task, with claims sent to claimer
 // and audit events to auditor.
-func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, auditor *mockAuditor) *HTTPHandler {
+func claimHandler(t *testing.T, fetcher *fakeTaskFetcher, claimer *fakeClaimer, auditor *nswaudit.CaptureSink) *HTTPHandler {
 	t.Helper()
 	h := getTaskHandler(t, fetcher, &stubTemplates{})
 	h.Claims = claimer
-	h.Audit = nswaudit.NewRecorder(auditor)
+	client := nswaudit.New()
+	client.RegisterSink(auditor)
+	h.Audit = client
 	return h
 }
 
@@ -80,30 +81,29 @@ func sendClaim(h *HTTPHandler, op string, in *taskauthz.Input) *httptest.Respons
 }
 
 func TestHandleClaimTask_ClaimsForTheCaller(t *testing.T) {
-	claimer, auditor := &fakeClaimer{}, &mockAuditor{}
+	claimer, auditor := &fakeClaimer{}, &nswaudit.CaptureSink{}
 	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), claimer, auditor), opClaim, chaUser())
 
 	require.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
 	assert.Equal(t, []string{"claim:" + testTaskID + ":" + testUserID}, claimer.calls)
 
-	require.Len(t, auditor.events, 1)
-	e := auditor.events[0]
-	assert.Equal(t, string(nswaudit.ActionUpdate), e.Action)
-	assert.Equal(t, string(nswaudit.TargetTask), e.TargetType)
-	assert.Equal(t, argus.StatusSuccess, e.Status)
+	require.Len(t, auditor.Records(), 1)
+	e := auditor.Records()[0]
+	assert.Equal(t, nswaudit.ActionUpdate, e.Action)
+	assert.Equal(t, nswaudit.TargetTask, e.TargetType)
+	assert.Equal(t, nswaudit.StatusSuccess, e.Status)
 	assert.Equal(t, "claim", e.Metadata["operation"])
-	require.NotNil(t, e.TargetID)
-	assert.Equal(t, testTaskID, *e.TargetID)
+	assert.Equal(t, testTaskID, e.TargetID)
 }
 
 func TestHandleReleaseTask_ReleasesForTheCaller(t *testing.T) {
-	claimer, auditor := &fakeClaimer{}, &mockAuditor{}
+	claimer, auditor := &fakeClaimer{}, &nswaudit.CaptureSink{}
 	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), claimer, auditor), opRelease, chaUser())
 
 	require.Equal(t, http.StatusNoContent, recorder.Code, recorder.Body.String())
 	assert.Equal(t, []string{"release:" + testTaskID + ":" + testUserID}, claimer.calls)
-	require.Len(t, auditor.events, 1)
-	assert.Equal(t, "release", auditor.events[0].Metadata["operation"])
+	require.Len(t, auditor.Records(), 1)
+	assert.Equal(t, "release", auditor.Records()[0].Metadata["operation"])
 }
 
 // The claim is refused before it reaches the task manager when the caller is not a
@@ -136,7 +136,7 @@ func TestHandleClaimTask_RefusedBeforeTheManager(t *testing.T) {
 		for _, op := range []string{opClaim, opRelease} {
 			t.Run(tt.name+" "+op, func(t *testing.T) {
 				claimer := &fakeClaimer{}
-				recorder := sendClaim(claimHandler(t, tt.fetcher, claimer, &mockAuditor{}), op, tt.in)
+				recorder := sendClaim(claimHandler(t, tt.fetcher, claimer, &nswaudit.CaptureSink{}), op, tt.in)
 
 				assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
 				assert.Contains(t, recorder.Body.String(), tt.wantBody)
@@ -154,7 +154,7 @@ func TestHandleClaimTask_OffWhereTheDeploymentDoesNotUseClaims(t *testing.T) {
 		t.Run(op, func(t *testing.T) {
 			in := chaUser()
 			in.Claims = taskauthz.ClaimsOff
-			fetcher, claimer, auditor := pendingHSCodeTask(), &fakeClaimer{}, &mockAuditor{}
+			fetcher, claimer, auditor := pendingHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{}
 
 			recorder := sendClaim(claimHandler(t, fetcher, claimer, auditor), op, in)
 
@@ -162,7 +162,7 @@ func TestHandleClaimTask_OffWhereTheDeploymentDoesNotUseClaims(t *testing.T) {
 			assert.Contains(t, recorder.Body.String(), errClaimsOff)
 			assert.Zero(t, fetcher.calls, "the task must not be read")
 			assert.Empty(t, claimer.calls, "the task manager must not be reached")
-			assert.Empty(t, auditor.events)
+			assert.Empty(t, auditor.Records())
 		})
 	}
 }
@@ -179,14 +179,14 @@ func TestHandleClaimTask_ReadDenialIsAudited(t *testing.T) {
 	notOwner := ownerInput("CHA", "trader")
 	notOwner.UserID = testUserID
 	notOwner.Claims = taskauthz.ClaimsOptional
-	auditor := &mockAuditor{}
+	auditor := &nswaudit.CaptureSink{}
 
 	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), &fakeClaimer{}, auditor), opClaim, &notOwner)
 
 	require.Equal(t, http.StatusNotFound, recorder.Code)
-	require.Len(t, auditor.events, 1)
-	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
-	assert.Equal(t, "task read access denied", auditor.events[0].Metadata["error"])
+	require.Len(t, auditor.Records(), 1)
+	assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
+	assert.Equal(t, "task read access denied", auditor.Records()[0].Metadata["error"])
 }
 
 // --- who may claim: the right to act -----------------------------------------
@@ -233,7 +233,7 @@ func TestHandleClaimTask_RequiresTheRightToAct(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			claimer := &fakeClaimer{}
-			h := claimHandler(t, tt.fetcher, claimer, &mockAuditor{})
+			h := claimHandler(t, tt.fetcher, claimer, &nswaudit.CaptureSink{})
 			h.StepActors = tt.actors
 
 			recorder := sendClaim(h, opClaim, chaUser())
@@ -256,7 +256,7 @@ func TestHandleClaimTask_RightToActCheckedAfterRead(t *testing.T) {
 	notOwner.UserID = testUserID
 	notOwner.Claims = taskauthz.ClaimsOptional
 	lookups := 0
-	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, &mockAuditor{})
+	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, &nswaudit.CaptureSink{})
 	h.StepActors = fixedActors([]string{"cha"}, true, nil, &lookups)
 
 	recorder := sendClaim(h, opClaim, &notOwner)
@@ -267,17 +267,17 @@ func TestHandleClaimTask_RightToActCheckedAfterRead(t *testing.T) {
 
 // A reader refused for not being able to act is audited as a refused claim.
 func TestHandleClaimTask_RefusalForNotActingIsAudited(t *testing.T) {
-	auditor := &mockAuditor{}
+	auditor := &nswaudit.CaptureSink{}
 	h := claimHandler(t, activeHSCodeTask(), &fakeClaimer{}, auditor)
 	h.StepActors = fixedActors([]string{"trader"}, true, nil, nil)
 
 	recorder := sendClaim(h, opClaim, chaUser())
 
 	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Len(t, auditor.events, 1)
-	assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
-	assert.Equal(t, "claim", auditor.events[0].Metadata["operation"])
-	assert.Equal(t, "caller may not act on the task", auditor.events[0].Metadata["error"])
+	require.Len(t, auditor.Records(), 1)
+	assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
+	assert.Equal(t, "claim", auditor.Records()[0].Metadata["operation"])
+	assert.Equal(t, "caller may not act on the task", auditor.Records()[0].Metadata["error"])
 }
 
 // Release is not gated on the right to act, so a holder who has lost it can still let
@@ -285,7 +285,7 @@ func TestHandleClaimTask_RefusalForNotActingIsAudited(t *testing.T) {
 func TestHandleReleaseTask_IsNotGatedOnTheRightToAct(t *testing.T) {
 	lookups := 0
 	claimer := &fakeClaimer{}
-	h := claimHandler(t, activeHSCodeTask(), claimer, &mockAuditor{})
+	h := claimHandler(t, activeHSCodeTask(), claimer, &nswaudit.CaptureSink{})
 	h.StepActors = fixedActors([]string{"trader"}, true, nil, &lookups)
 
 	recorder := sendClaim(h, opRelease, chaUser())
@@ -314,16 +314,16 @@ func TestHandleClaimTask_MapsManagerErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			auditor := &mockAuditor{}
+			auditor := &nswaudit.CaptureSink{}
 			recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), &fakeClaimer{err: tt.err}, auditor), tt.op, chaUser())
 
 			assert.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
 			assert.True(t, strings.Contains(recorder.Body.String(), tt.wantBody), "body = %s", recorder.Body.String())
 			if tt.wantAudit {
-				require.Len(t, auditor.events, 1)
-				assert.Equal(t, argus.StatusFailure, auditor.events[0].Status)
+				require.Len(t, auditor.Records(), 1)
+				assert.Equal(t, nswaudit.StatusFailure, auditor.Records()[0].Status)
 			} else {
-				assert.Empty(t, auditor.events)
+				assert.Empty(t, auditor.Records())
 			}
 		})
 	}
@@ -440,16 +440,16 @@ func TestSubmitStep_ClaimRefusalIsAudited(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			auditor := &mockAuditor{}
+			client, auditor := nswaudit.NewWithCapture()
 			h := getTaskHandler(t, tt.fetcher, &stubTemplates{})
-			h.Audit = nswaudit.NewRecorder(auditor)
+			h.Audit = client
 
 			recorder := submitForClaimPolicy(t, h, agencyUser(), false)
 
 			require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
-			require.Len(t, auditor.events, 1)
-			e := auditor.events[0]
-			assert.Equal(t, argus.StatusFailure, e.Status)
+			require.Len(t, auditor.Records(), 1)
+			e := auditor.Records()[0]
+			assert.Equal(t, nswaudit.StatusFailure, e.Status)
 			assert.Equal(t, "submit", e.Metadata["operation"])
 			assert.Equal(t, tt.reason, e.Metadata["error"])
 		})
@@ -612,7 +612,7 @@ func TestHandleGetTask_ClaimFactsGateSections(t *testing.T) {
 // The other user's id is not revealed in the conflict response.
 func TestHandleClaimTask_ConflictDoesNotRevealTheHolderID(t *testing.T) {
 	claimer := &fakeClaimer{err: &orchestrator.ClaimHeldError{Holder: "user-secret-2"}}
-	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), claimer, &mockAuditor{}), opClaim, chaUser())
+	recorder := sendClaim(claimHandler(t, pendingHSCodeTask(), claimer, &nswaudit.CaptureSink{}), opClaim, chaUser())
 
 	require.Equal(t, http.StatusConflict, recorder.Code)
 	assert.NotContains(t, recorder.Body.String(), "user-secret-2")

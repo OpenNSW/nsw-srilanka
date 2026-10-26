@@ -70,7 +70,7 @@ func TestStartConsignmentFlow(t *testing.T) {
 
 	t.Run("a flow that is not startable is refused before any read", func(t *testing.T) {
 		svc, sqlMock, flows := newFlowsService(t)
-		_, err := svc.StartConsignmentFlow(context.Background(), uuid.NewString(), "trade-export-v1", "co-trader", []string{"Trader"})
+		_, err := svc.StartConsignmentFlow(context.Background(), uuid.NewString(), "trade-export", "co-trader", []string{"Trader"})
 		assert.ErrorIs(t, err, ErrFlowNotAllowed)
 		assert.Empty(t, flows.reqs)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
@@ -112,7 +112,7 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 		t.Helper()
 		mockCompany := svc.companyService.(*MockCompanyService)
 		mockCompany.On("GetCompanyByOUHandle", mock.Anything, "trader-ou").Return(&company.Record{ID: "co-trader", OUHandle: "trader-ou"}, nil).Maybe()
-		r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.NewRecorder(nil))
+		r := mustNewRouter(t, svc, nil, mockCompany, nswaudit.New())
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/consignments/"+consignmentID+"/flows", strings.NewReader(body))
 		req.SetPathValue("id", consignmentID)
 		req = req.WithContext(withAuthContextRoles(req.Context(), "trader1", "trader-ou", "Trader"))
@@ -136,7 +136,7 @@ func TestHandleStartConsignmentFlow(t *testing.T) {
 
 	t.Run("not startable", func(t *testing.T) {
 		svc, _, _ := newFlowsService(t)
-		w := call(t, svc, `{"templateId":"trade-export-v1"}`, uuid.NewString())
+		w := call(t, svc, `{"templateId":"trade-export"}`, uuid.NewString())
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
