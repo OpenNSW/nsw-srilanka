@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ColorSchemeContext, COLOR_SCHEMES } from './colorSchemeContextCore'
+import { ColorSchemeContext, COLOR_SCHEMES, showColorSchemeSwitcher } from './colorSchemeContextCore'
 
 const STORAGE_KEY = 'color-scheme'
 
@@ -9,7 +9,7 @@ function resolveScheme(id: string | null) {
 
 export function ColorSchemeProvider({ children }: { children: ReactNode }) {
   const [scheme, setScheme] = useState(() => {
-    const initial = resolveScheme(localStorage.getItem(STORAGE_KEY))
+    const initial = resolveScheme(showColorSchemeSwitcher() ? localStorage.getItem(STORAGE_KEY) : null)
     // Set synchronously (not in the effect below) so the first paint already has the right
     // theme attribute — an effect only runs after that first paint, which would otherwise
     // flash the `:root` default colors for one frame before flipping to the stored scheme.

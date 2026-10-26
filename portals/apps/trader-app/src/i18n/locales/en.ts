@@ -210,7 +210,7 @@ const en = {
       copied: 'Copied',
       copyNamed: 'Copy {{name}}',
       dateTimeAt: '{{date}} at {{time}}',
-      poweredBy: 'Powered by OpenNSW',
+      poweredBy: 'Powered by OpenNSW from the Lanka Software Foundation',
       pagination: {
         total: 'Total: {{count}}',
         page: 'Page {{page}} of {{totalPages}}',
