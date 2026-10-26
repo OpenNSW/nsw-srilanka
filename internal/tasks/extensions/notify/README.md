@@ -26,7 +26,7 @@ notification:
 
 ### Email through PingMailer
 
-Email can go through [PingMailer](https://github.com/Silver-Mail-Platform/pingmailer)
+Email can go through [PingMailer](https://github.com/OpenGovMail/pingmailer)
 instead (`type: pingmailer`). PingMailer relays each message to SMTP with the
 access token the call carries, so the provider gets one from an OAuth2 client
 allowed to send as `sender`, and refreshes it as it expires. It needs a
