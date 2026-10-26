@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/taskflow/callbacktoken"
@@ -182,6 +183,18 @@ func TestPaymentPlugin_Execute_FallsBackToConfiguredAmountWhenNoInput(t *testing
 	require.True(t, svc.called, "expected the payment service to be called")
 	assert.True(t, svc.lastReq.Amount.Equal(decimal.NewFromInt(12500)),
 		"expected the configured amount to reach the gateway, got %s", svc.lastReq.Amount)
+}
+
+// A payment reference stays payable for a year, not a day.
+func TestPaymentPlugin_Execute_ReferenceStaysPayableForAYear(t *testing.T) {
+	svc := &fakePaymentService{resp: &payment.CreateCheckoutResponse{SessionID: "session-1", ReferenceNumber: "TNSW-1", Type: payment.FlowTypeRedirect}}
+	p := NewPaymentPlugin(svc)
+
+	err := p.Execute(paymentPluginCtx(nil), []byte(paymentConfigJSON))
+
+	require.ErrorIs(t, err, ErrSuspended)
+	assert.WithinDuration(t, time.Now().Add(365*24*time.Hour), svc.lastReq.ExpiresAt, time.Minute,
+		"expected the reference to stay payable for a year")
 }
 
 // The checkout carries the token for the step that dispatched it, so the
