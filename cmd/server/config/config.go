@@ -17,6 +17,7 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
@@ -45,6 +46,9 @@ type Config struct {
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
 
+	// Artifacts picks the manifest version new flows start on. Optional.
+	Artifacts ArtifactsConfig `yaml:"artifacts"`
+
 	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
 	// one. Optional; an agency ignores it.
 	Consignment consignment.Config `yaml:"consignment"`
@@ -56,6 +60,10 @@ type Config struct {
 
 	// Services declares outbound endpoints and authentication in this file.
 	Services []remote.ServiceConfig `yaml:"services"`
+
+	// Catalog maps the logical names used across configuration onto this
+	// deployment's IdP token roles and OAuth2 client ids. Required.
+	Catalog catalog.Catalog `yaml:"catalog"`
 }
 
 // ServerConfig holds server configuration.
@@ -63,13 +71,30 @@ type ServerConfig struct {
 	Port                     int           `yaml:"port"`
 	ServiceURL               string        `yaml:"serviceURL"`
 	PaymentMethodsConfigPath string        `yaml:"paymentMethodsConfigPath"`
-	CatalogConfigPath        string        `yaml:"catalogConfigPath"`
 	LogLevel                 slog.Level    `yaml:"logLevel"`
 	MaxRequestBytes          int64         `yaml:"maxRequestBytes"`
 	ReadHeaderTimeout        time.Duration `yaml:"readHeaderTimeout"`
 	ReadTimeout              time.Duration `yaml:"readTimeout"`
 	WriteTimeout             time.Duration `yaml:"writeTimeout"`
 	IdleTimeout              time.Duration `yaml:"idleTimeout"`
+}
+
+// ArtifactsConfig is how this deployment uses the versioned artifact manifests the
+// artifact loader reads (manifest_v1.json, manifest_v2.json, …; see core/artifact).
+type ArtifactsConfig struct {
+	// ManifestVersion pins the manifest version new flows start on. 0, the default,
+	// takes the highest published one. Pin to roll back to the last good manifest, or to
+	// publish a manifest before turning it on. Flows already running keep the version
+	// they started on either way.
+	ManifestVersion int `yaml:"manifestVersion"`
+}
+
+// Validate checks the artifacts configuration.
+func (a ArtifactsConfig) Validate() error {
+	if a.ManifestVersion < 0 {
+		return fmt.Errorf("artifacts.manifestVersion must be 0 (the highest published) or a published version, got %d", a.ManifestVersion)
+	}
+	return nil
 }
 
 // Validate checks that the server configuration is valid.
@@ -98,13 +123,8 @@ func (s ServerConfig) Validate() error {
 	if s.IdleTimeout <= 0 {
 		return fmt.Errorf("server.idleTimeout must be greater than zero")
 	}
-	for _, p := range []struct{ key, path string }{
-		{"server.paymentMethodsConfigPath", s.PaymentMethodsConfigPath},
-		{"server.catalogConfigPath", s.CatalogConfigPath},
-	} {
-		if strings.TrimSpace(p.path) == "" {
-			return fmt.Errorf("%s is required", p.key)
-		}
+	if strings.TrimSpace(s.PaymentMethodsConfigPath) == "" {
+		return fmt.Errorf("server.paymentMethodsConfigPath is required")
 	}
 	return nil
 }
@@ -178,6 +198,9 @@ func (c *Config) Validate() error {
 	if err := c.Authn.Validate(); err != nil {
 		return fmt.Errorf("invalid authn configuration: %w", err)
 	}
+	if err := c.Catalog.Validate(); err != nil {
+		return fmt.Errorf("invalid catalog configuration: %w", err)
+	}
 	if err := c.validateTNSW(); err != nil {
 		return err
 	}
@@ -214,6 +237,9 @@ func (c *Config) validateAuxiliary() error {
 	}
 	if err := c.Otel.Validate(); err != nil {
 		return fmt.Errorf("invalid otel configuration: %w", err)
+	}
+	if err := c.Artifacts.Validate(); err != nil {
+		return fmt.Errorf("invalid artifacts configuration: %w", err)
 	}
 	return nil
 }

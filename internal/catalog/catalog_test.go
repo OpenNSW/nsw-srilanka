@@ -1,10 +1,10 @@
 package catalog
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func testCatalog() *Catalog {
@@ -37,56 +37,27 @@ func TestCatalog_Validate(t *testing.T) {
 	}
 }
 
-func TestLoad(t *testing.T) {
-	dir := t.TempDir()
-
-	write := func(name, body string) string {
-		t.Helper()
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-
-	valid := write("ok.json", `{"roles":{"trader":"Trader"},"clients":{"fcau":"FCAU_TO_NSW"}}`)
-	c, err := Load(valid)
-	if err != nil || c == nil {
-		t.Fatalf("Load(valid) = %v, %v", c, err)
+func TestCatalog_DecodeYAML(t *testing.T) {
+	var c Catalog
+	// The catalog is meant to grow entries ahead of the code reading them, so an
+	// unknown key must not break existing consumers.
+	body := `
+roles:
+  trader: Trader
+clients:
+  fcau: FCAU_TO_NSW
+agencies:
+  customs:
+    code: CUSTOMS
+`
+	if err := yaml.Unmarshal([]byte(body), &c); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
 	if c.Roles["trader"] != "Trader" || c.Clients["fcau"] != "FCAU_TO_NSW" {
-		t.Fatalf("Load(valid) parsed %+v", c)
+		t.Fatalf("decoded %+v", c)
 	}
-
-	// The catalog is meant to grow sections ahead of the code reading them, so an
-	// unknown top-level key must not break existing consumers.
-	forward := write("forward.json", `{"roles":{"trader":"Trader"},"clients":{"fcau":"FCAU_TO_NSW"},"agencies":{"customs":{"code":"CUSTOMS"}}}`)
-	if c, err := Load(forward); err != nil || c.Roles["trader"] != "Trader" {
-		t.Fatalf("Load(unknown section) = %v, %v; want the known sections to parse", c, err)
-	}
-
-	bad := write("bad.json", `{not json`)
-	if _, err := Load(bad); err == nil {
-		t.Fatal("Load(malformed) want error, got nil")
-	}
-
-	missing := filepath.Join(dir, "missing.json")
-	err = func() error { _, e := Load(missing); return e }()
-	if err == nil {
-		t.Fatal("Load(missing) want error, got nil")
-	}
-	// The path is the only thing that makes a config failure actionable.
-	if !strings.Contains(err.Error(), missing) {
-		t.Errorf("Load(missing) error %q does not name the path %q", err, missing)
-	}
-
-	invalid := write("invalid.json", `{"roles":{},"clients":{}}`)
-	err = func() error { _, e := Load(invalid); return e }()
-	if err == nil {
-		t.Fatal("Load(empty catalog) want validation error, got nil")
-	}
-	if !strings.Contains(err.Error(), invalid) {
-		t.Errorf("Load(invalid) error %q does not name the path %q", err, invalid)
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate() = %v", err)
 	}
 }
 

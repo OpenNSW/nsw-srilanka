@@ -33,7 +33,6 @@ nsw-srilanka/
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── config.example.yaml                  # Template for config.yaml (server config — local/native dev)
 │   ├── config.docker.example.yaml           # Template for config.docker.yaml (server config — Docker Compose)
-│   ├── catalog.example.json                 # Template for catalog.json
 │   └── companies.example.json               # Template for companies.json
 ├── compose.yml / compose.override.yml     # Docker Compose stack (base + dev hot-reload override)
 ├── .env.example                            # Template for .env (secrets and Docker Compose host settings)
@@ -43,7 +42,7 @@ nsw-srilanka/
 └── go.sum
 ```
 
-The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which files to load at startup.
+The agency-specific workflow definitions (workflow graphs, JSONForms schemas, render configs) are **not** committed to this repo — keeping the application deployment-free. They live in the public repo [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) under the `tnsw/` base path, and are fetched at startup by the pluggable artifact loader (configured by `artifactLoader` in `config.yaml` — see [`configs/config.example.yaml`](configs/config.example.yaml)). All behaviour is configured through those JSON files — the Go server itself is intentionally thin. The `tnsw/manifest.json` file is the index that tells the artifact registry which file each artifact ID resolves to. A release publishes it as an immutable `manifest_v<N>.json`; the server loads every published version, and `manifest.json` as version 1 where there are none.
 
 For a comprehensive guide to authoring and modifying workflow and form configuration files, see [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md).
 
@@ -184,7 +183,7 @@ Edits in `OpenNSW/core` are now picked up by the host compiler, and you get a na
 
 - Health check: `curl http://localhost:8080/health` should return `{"status":"ok","service":"tnsw-api"}`.
 - Observability: set `otel.endpoint` and `otel.serviceName` in `config.yaml` to push OTLP/HTTP metrics, logs and traces (e.g. to OpenObserve). Leave `otel.endpoint` empty (or omit the section) for a no-op.
-- Logs will report DB connection, Temporal worker startup, and the workflow artifact registrations loaded via the artifact loader from `tnsw/manifest.json` in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
+- Logs will report DB connection, Temporal worker startup, and the artifact manifests loaded via the artifact loader from `tnsw/manifest_v<N>.json`, or `tnsw/manifest.json` as version 1 where there are none, in [OpenNSW/one-trade-artifacts](https://github.com/OpenNSW/one-trade-artifacts) (the default; configurable via `ARTIFACT_*` env).
 
 ### 5. Simulating a payment webhook (dev only)
 
@@ -309,7 +308,6 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                                      | `.env.example`                         |
 | `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                                                  | `idp/.env.example`                     |
 | `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template), and each method's ids for every payee (`org_id`/`service_id`) under `payees`                                             | `configs/payment_methods.example.json` |
-| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids                                                                                                                            | `configs/catalog.example.json`         |
 | `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                                               | `configs/companies.example.json`       |
 | `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, outbound services, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`          |
 | `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname                                                                                                                   | `configs/config.docker.example.yaml`   |

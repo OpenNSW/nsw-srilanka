@@ -1,11 +1,11 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
-import type { JsonSchema } from '@jsonforms/core'
+import type { JsonSchema, Translator } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Callout, Text } from '@radix-ui/themes'
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { Handle, ZoneAction, ZoneRendererProps } from '@/features/zone/types'
+import { handleLabel, type Handle, type ZoneAction, type ZoneRendererProps } from '@/features/zone/types'
 import { useReportUnsaved } from '@/features/zone/unsavedChanges'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
@@ -87,7 +87,7 @@ const FORM_ELEMENT_CATALOG: Record<string, { variant: 'solid' | 'outline'; color
 }
 
 export function FormRenderer({ payload, handles, onAction }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // The form owns its data state from mount until submit. payload.data is
   // consumed only as the initial seed: TraderZoneLayout keys Zone by task
   // state, so a state transition unmounts this component and the next mount
@@ -155,7 +155,23 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const validationMode: 'ValidateAndShow' | 'ValidateAndHide' = showErrors ? 'ValidateAndShow' : 'ValidateAndHide'
 
-  const formI18n = useMemo(() => ({ translateError: createFormErrorTranslator(payload.schema) }), [payload.schema])
+  const formI18n = useMemo(
+    () => ({
+      locale: i18n.resolvedLanguage ?? i18n.language,
+      translate: ((id: string, defaultMessage?: string, values?: Record<string, unknown>) => {
+        const formKey = `form.${id}`
+        if (i18n.exists(formKey)) {
+          return String(t(formKey as never, values))
+        }
+        if (i18n.exists(id)) {
+          return String(t(id as never, values))
+        }
+        return defaultMessage
+      }) as Translator,
+      translateError: createFormErrorTranslator(payload.schema),
+    }),
+    [payload.schema, i18n, t],
+  )
 
   // Catch dataSeed up to data, synchronously, exactly when additionalErrors
   // or validationMode is about to change — the only moments JsonForms's
@@ -394,11 +410,11 @@ function HandleButton({
   // only disabled.
   pending: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
   const disabled = submitting
-  let label = handle.label
-  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : 'Submitting...'
+  let label = handleLabel(handle, i18n.resolvedLanguage ?? i18n.language, t)
+  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : t('tasks.submitting')
   return (
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
       {label}

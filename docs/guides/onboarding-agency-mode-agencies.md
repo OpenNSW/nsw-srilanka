@@ -109,7 +109,7 @@ All examples. Decide yours before starting; the notes say where a value is repea
 | OU                    | `dea`                                     |                                                                                         |
 | Agency API            | `DEA API`                                 | The resource server, with the API identifier                                            |
 | Officers' group       | `DEA Officers`                            |                                                                                         |
-| Officer role          | `DEA Officer`                             | Repeated in the agency's `catalog.json` and portal config; must match exactly           |
+| Officer role          | `DEA Officer`                             | Repeated in the agency's catalog and portal config; must match exactly                  |
 | Portal application    | `DEAPortalApp`                            |                                                                                         |
 | Agency-to-TNSW client | `DEA_TO_NSW_M2M`, with role `DeaToNswM2M` | The agency calling TNSW                                                                 |
 | TNSW-to-agency client | `NSW_TO_DEA_M2M`, with role `NswToDeaM2M` | TNSW calling the agency                                                                 |
@@ -323,20 +323,14 @@ keep the old ones, as for TNSW (see the
 Add the notification provider credentials the same way if the agency's workflows send
 email or SMS.
 
-### 4b. The JSON configs
+### 4b. The payment methods file
 
-The image ships only templates, so mount the agency's two files at `/app/configs`. Here
-and in the Helm values below, the names, hosts and URLs are the examples; use yours.
+The image ships only templates, so mount the agency's payment methods file at
+`/app/configs`. Here and in the Helm values below, the names, hosts and URLs are the
+examples; use yours.
 
-`catalog.json`, mapping each role the agency's tasks name to its IdP role's name,
-**exactly** as created in Step 2f, and `tnsw` to the TNSW-to-agency client, whose
-replies the tasks' waiting steps accept:
-
-```json
-{ "roles": { "officer": "DEA Officer" }, "clients": { "tnsw": "NSW_TO_DEA_M2M" } }
-```
-
-The agency's outbound `tnsw` service, used by `notify_decision` and storage,
+The agency's catalog lives in `backend.config.catalog` in the Helm values below. The
+agency's outbound `tnsw` service, used by `notify_decision` and storage,
 lives in `backend.config.services` in the Helm values below. Its OAuth2 secret is
 a `{{env:NAME}}` placeholder expanded while loading the YAML config.
 
@@ -348,7 +342,7 @@ a `{{env:NAME}}` placeholder expanded while loading the YAML config.
 
 ```sh
 kubectl create configmap dea-configs -n dea \
-  --from-file=catalog.json --from-file=payment_methods.json
+  --from-file=payment_methods.json
 ```
 
 ### 4c. Values
@@ -387,7 +381,14 @@ backend:
       writeTimeout: 30s
       idleTimeout: 60s
       paymentMethodsConfigPath: configs/payment_methods.json
-      catalogConfigPath: configs/catalog.json
+    # Each role the agency's tasks name, mapped to its IdP role's name exactly as
+    # created in Step 2f, and tnsw to the TNSW-to-agency client, whose replies the
+    # tasks' waiting steps accept.
+    catalog:
+      roles:
+        officer: DEA Officer
+      clients:
+        tnsw: NSW_TO_DEA_M2M
     services:
       - id: tnsw
         url: https://nsw-api.example.com
@@ -490,9 +491,9 @@ These values must agree, or officers and TNSW get `401`:
 
 And this, or officers are signed in but their calls get `403`:
 
-| This                    | must equal                        |
-| ----------------------- | --------------------------------- |
-| the `catalog.json` role | the officer role's name (Step 2f) |
+| This                      | must equal                        |
+| ------------------------- | --------------------------------- |
+| the `catalog.roles` value | the officer role's name (Step 2f) |
 
 ### 4d. Install
 
@@ -508,7 +509,7 @@ IdP's JWKS.
 
 1. An officer signs in at the portal URL. The portal shows an empty case list.
    If the case list fails with `403`, check the officer role's name in the IdP and in
-   `catalog.json`.
+   the catalog.
 2. TNSW can get a token for the agency. From a machine that has the TNSW-to-agency
    client's secret, with your client ID, API identifier and IdP host:
 
@@ -577,11 +578,13 @@ services:
           resource: https://api.dea.nsw-agency.local
 ```
 
-In TNSW's `catalog.json`, map the handle to the agency-to-TNSW client under `clients`, so
-that artifacts naming the handle match its callbacks:
+In TNSW's catalog, in the same file, map the handle to the agency-to-TNSW client under
+`clients`, so that artifacts naming the handle match its callbacks:
 
-```json
-{ "clients": { "dea": "<agency-to-TNSW client ID>" } }
+```yaml
+catalog:
+  clients:
+    dea: "<agency-to-TNSW client ID>"
 ```
 
 Then roll out:
@@ -590,7 +593,7 @@ Then roll out:
 helm upgrade lk-tnsw ./deployments/helm/lk-tnsw -n tnsw -f <your-values>.yaml
 ```
 
-If `catalog.json` comes from a ConfigMap outside the chart, update it
+If `config.yaml` comes from a ConfigMap outside the chart, update it
 first, then `kubectl rollout restart deployment/<backend> -n tnsw`.
 
 ### 6c. The trade-flow step
@@ -634,10 +637,10 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Task                                      | Where                                                                                                                      |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Add an officer                            | Step 2h only                                                                                                               |
-| Add a role                                | A role and group in ThunderID (Step 2f), the agency's `catalog.json`, and the tasks' `authz` and `read.roles` (Step 1)     |
+| Add a role                                | A role and group in ThunderID (Step 2f), the agency's catalog, and the tasks' `authz` and `read.roles` (Step 1)            |
 | Add a kind of review                      | A task config and workflow (Step 1), the TNSW step (Step 6c), then move both deployments' artifact `ref`                   |
 | Add a portal URL                          | Add it to the portal application's redirect URIs in the console, to the agency's `cors`, and to ThunderID's CORS (Step 2g) |
-| Change the officer role's name            | The IdP role and the agency's `catalog.json` together                                                                      |
+| Change the officer role's name            | The IdP role and the agency's catalog together                                                                             |
 | Rotate the agency-to-TNSW client's secret | **Regenerate Client Secret** in the console (Step 2e), update the agency's Secret, then restart the agency backend         |
 | Rotate the TNSW-to-agency client's secret | **Regenerate Client Secret** in the console (Step 2e), update TNSW's Secret, then restart the TNSW backend                 |
 | Upgrade                                   | `helm upgrade <release> …` with the same chart version as TNSW. Migrations are shared, so keep the two on the same release |
@@ -650,14 +653,14 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 | Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                                          |
 | Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                                 |
 | Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                          |
-| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the `catalog.json` name doesn't match the token's `roles`, or the officer isn't in the group                                                               |
+| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                                    |
 | Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                         |
-| Reply `403` `client … is not permitted`                 | The agency's `catalog.json` doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                        |
+| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4c)                                                                                                                                               |
 | Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                           |
 | Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                                 |
 | Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                         |
 | Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                                      |
-| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `nsw:task:write` or isn't the agency's client in TNSW's `catalog.json` (6b) |
+| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `nsw:task:write` or isn't the agency's client in TNSW's catalog (6b)        |
 
 ## Local development
 

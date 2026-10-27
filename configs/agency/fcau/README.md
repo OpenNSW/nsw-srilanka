@@ -6,10 +6,9 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 | File                   | Purpose                                                                                                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8082, own database, Temporal namespace, artifacts, authn                                                          |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8082, own database, Temporal namespace, artifacts, authn, catalog                                                 |
 | `config.docker.yaml`   | `config.yaml` for the `fcau-init` and `fcau-api` containers: Postgres, Temporal and the IdP by container hostname                                                      |
 | `fcau.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                        |
-| `catalog.json`         | `officer` → the `FCAU Officer` role FCAU officers hold in the IdP; `tnsw` → `NSW_TO_FCAU`, the client TNSW replies as, so the steps that wait on its reply can name it |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                  |
 | `portal-config.js`     | Runtime config of the `fcau-portal` container: the trader-app in agency mode                                                                                           |
 | `branding.json`        | Branding for the `fcau-portal` container, as the FCAU officer portal had it in nsw-agency                                                                              |
@@ -81,7 +80,7 @@ creates FCAU for this deployment, on the `FCAU API` resource server
 | Caller                             | Client                | Grant                                                                                                                                 |
 | ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `fcau_officer`             | `OGA_PORTAL_APP_FCAU` | `FCAU Officer` role (via `FCAU Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on FCAU's parked steps, which `catalog.json` maps `tnsw` to |
+| TNSW injecting and replying        | `NSW_TO_FCAU`         | `NswToFcauM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on FCAU's parked steps, which its catalog maps `tnsw` to    |
 | FCAU decision callback and storage | `FCAU_TO_NSW`         | `FcauToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                          |
 
 TNSW's `config.yaml` services entry `fcau` requests `nsw:workflow:inject` and `nsw:task:write` with

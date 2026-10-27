@@ -36,7 +36,15 @@ server:
   writeTimeout: 30s
   idleTimeout: 60s
   paymentMethodsConfigPath: ./configs/agency/sltb/payment_methods.json
-  catalogConfigPath: ./configs/agency/sltb/catalog.json
+
+# The catalog: the logical names the agency's workflow rules use, mapped to
+# this deployment's IdP token roles and OAuth2 client ids. Each role here
+# owns an injected workflow; tnsw names the client TNSW calls this agency as.
+catalog:
+  roles:
+    officer: SLTB Officer
+  clients:
+    tnsw: NSW_TO_SLTB
 
 # Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
 # {{file:/path}} placeholders, expanded with the rest of this config at load.

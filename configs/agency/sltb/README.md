@@ -6,10 +6,9 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 | File                   | Purpose                                                                                                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8086, own database, Temporal namespace, artifacts, authn, outbound services, reference ID formats                 |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8086, own database, Temporal namespace, artifacts, authn, outbound services, reference ID formats, catalog        |
 | `config.docker.yaml`   | `config.yaml` for the `sltb-init` and `sltb-api` containers: Postgres, Temporal and the IdP by container hostname                                                      |
 | `sltb.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                        |
-| `catalog.json`         | `officer` → the `SLTB Officer` role SLTB officers hold in the IdP; `tnsw` → `NSW_TO_SLTB`, the client TNSW replies as, so the steps that wait on its reply can name it |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                  |
 | `portal-config.js`     | Runtime config of the `sltb-portal` container: the trader-app in agency mode                                                                                           |
 | `branding.json`        | Branding for the `sltb-portal` container, as the SLTB officer portal had it in nsw-agency                                                                              |
@@ -77,7 +76,7 @@ creates SLTB for this deployment, on the `SLTB API` resource server
 | Caller                             | Client                | Grant                                                                                                                                 |
 | ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `sltb_officer`             | `OGA_PORTAL_APP_SLTB` | `SLTB Officer` role (via `SLTB Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps, which `catalog.json` maps `tnsw` to |
+| TNSW injecting and replying        | `NSW_TO_SLTB`         | `NswToSltbM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on SLTB's parked steps, which its catalog maps `tnsw` to    |
 | SLTB decision callback and storage | `SLTB_TO_NSW`         | `SltbToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                          |
 
 TNSW's `config.yaml` services entry `sltb` requests `nsw:workflow:inject` and `nsw:task:write` with

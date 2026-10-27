@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@radix-ui/themes'
+import { useTranslation } from 'react-i18next'
 import type { ZoneRendererProps } from '@/features/zone/types'
 
 export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
+  const { t } = useTranslation()
   const { checkout_url, content } = payload
   const sessionKey = `nsw:redirected:${checkout_url}`
 
@@ -66,10 +68,8 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
             </svg>
           </div>
           <div>
-            <h4 className="font-semibold text-primary text-base">Redirected to Payment Gateway</h4>
-            <p className="text-xs text-foreground-muted">
-              Your session was redirected to the external payment gateway.
-            </p>
+            <h4 className="font-semibold text-primary text-base">{t('tasks.redirect.redirectedTitle')}</h4>
+            <p className="text-xs text-foreground-muted">{t('tasks.redirect.redirectedDescription')}</p>
           </div>
         </div>
 
@@ -98,7 +98,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
             onClick={handleGoToSession}
             className="cursor-pointer font-medium shadow-sm flex items-center gap-2"
           >
-            Return to payment session
+            {t('tasks.redirect.returnToPayment')}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="w-4 h-4"
@@ -119,7 +119,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
             onClick={handleReset}
             className="cursor-pointer text-foreground-muted hover:text-foreground transition-colors"
           >
-            Reset redirection state
+            {t('tasks.redirect.resetRedirection')}
           </Button>
         </div>
       </div>
@@ -128,7 +128,7 @@ export function RedirectRenderer({ payload }: ZoneRendererProps<'REDIRECT'>) {
 
   return (
     <div className="rounded-2xl bg-primary-subtle/40 p-6 text-sm text-foreground-muted">
-      <p className="mb-3 font-medium text-primary">Redirecting to payment gateway…</p>
+      <p className="mb-3 font-medium text-primary">{t('tasks.redirect.redirecting')}</p>
       <ReactMarkdown
         components={{
           a: ({ children, href }) => (

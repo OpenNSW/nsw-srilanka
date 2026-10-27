@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"testing"
 
 	"github.com/OpenNSW/core/artifact"
@@ -16,21 +17,21 @@ func nonRetryable(err error) bool {
 }
 
 func TestWorkflowDefinitionLoader(t *testing.T) {
-	reg := artifact.NewRegistry(testutil.MemLoader{
-		"wf_branch.json":  []byte(`{"id": "branch", "name": "Branch", "version": 1, "nodes": []}`),
-		"wf_invalid.json": []byte(`{`),
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"wf_branch.json":   []byte(`{"id": "branch", "name": "Branch", "version": 1, "nodes": []}`),
+		"wf_invalid.json":  []byte(`{`),
+		"manifest_v1.json": []byte(`{"artifacts":[{"id":"branch","kind":"workflow","path":"wf_branch.json"},{"id":"invalid","kind":"workflow","path":"wf_invalid.json"}]}`),
 	})
-	reg.RegisterArtifact("branch", "workflow", "", "wf_branch.json")
-	reg.RegisterArtifact("invalid", "workflow", "", "wf_invalid.json")
-	load := workflowDefinitionLoader(reg)
+	require.NoError(t, err)
+	load := workflowDefinitionLoader(set)
 
-	def, err := load("branch")
+	def, err := load(1, "branch")
 	require.NoError(t, err)
 	assert.Equal(t, "branch", def.ID)
 
 	// A workflow that isn't there, or doesn't parse, won't load on a retry either.
 	for _, id := range []string{"missing", "invalid"} {
-		_, err := load(id)
+		_, err := load(1, id)
 		require.Error(t, err)
 		assert.True(t, nonRetryable(err), "%s: err = %v", id, err)
 	}

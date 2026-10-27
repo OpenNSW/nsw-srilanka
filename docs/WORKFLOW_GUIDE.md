@@ -195,7 +195,7 @@ In `PENDING_USER` the feedback (when present) renders above the form; in `COMPLE
 
 ### Read authorization
 
-`GET /api/v1/tasks/{id}` is scoped to the caller. Before rendering, the backend resolves one **claim** per role in `configs/catalog.json`, named `role:<logicalName>` — so `role:trader` and `role:cha` today. A claim is true only when the caller both holds that role in their token **and** their company owns the task's consignment in that same slot; holding the role is not enough.
+`GET /api/v1/tasks/{id}` is scoped to the caller. Before rendering, the backend resolves one **claim** per role in the catalog (`catalog.roles` in `config.yaml`), named `role:<logicalName>` — so `role:trader` and `role:cha` today. A claim is true only when the caller both holds that role in their token **and** their company owns the task's consignment in that same slot; holding the role is not enough.
 
 Two levers use those claims:
 
@@ -235,7 +235,7 @@ Two levers use those claims:
 In the same `PENDING_USER` state the CHA gets the form and its submit button, while the trader gets only a waiting notice. A section with no `requireClaim` is visible to whichever role the caller is acting as — which is how both roles share one completed-summary section.
 
 > [!WARNING]
-> Claim names are matched **exactly and case-sensitively**, and a `requireClaim` naming a claim the backend does not produce fails the whole request with a `500` rather than silently hiding the section. Only use names of the form `role:<key>` where `<key>` is a role in `configs/catalog.json`.
+> Claim names are matched **exactly and case-sensitively**, and a `requireClaim` naming a claim the backend does not produce fails the whole request with a `500` rather than silently hiding the section. Only use names of the form `role:<key>` where `<key>` is a role in the catalog (`catalog.roles` in `config.yaml`).
 
 > [!IMPORTANT]
 > This is presentation-layer scoping and the read gate — it does not authorize _writes_. Who may run a command is a separate, deny-by-default rule in the subtask template's `authz` extension (see [`internal/tasks/extensions/authz/README.md`](../internal/tasks/extensions/authz/README.md)). A section hidden here still needs its command denied there.
@@ -279,7 +279,7 @@ Each reference names who it was issued to and lists its **scopes**, what it allo
 - An upload (`POST /api/v1/storage`) returns a file reference issued to the uploader as its `key`, which is what a form's file field holds. A user's has `submit` only: it can't open the file (`403`), so it never expires, and once the form is submitted or saved as a draft, the task's view gives a reference that opens it. A machine client's, such as an agency forwarding its officer's upload, has `read` and `submit`, since the agency opens the file with it.
 - `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state (a step without one is refused to everyone). It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default). Anything else is refused with a `403`, a raw storage key included, and an expired reference with a `410`.
 - A submission, or a draft (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`), must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`, and a value that is not a reference at all, such as a raw storage key, with a `400`.
-- An `EXTERNAL_REVIEW` step, whether it dispatches a review or replies on the OGA's parked step, sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
+- An `EXTERNAL_REVIEW` step, whether it dispatches a review or replies on the OGA's parked step, sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`catalog.clients` in `config.yaml`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 
@@ -516,11 +516,17 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 
 ## 6. Development Workflow & Hot-Reloading
 
-1. **Parent Workflow Hot-Reload**:
-   - The parent workflow file `fcau_workflow.json` is read from disk on every new consignment initialization. Modifying this file does **not** require a server restart.
-2. **Form schemas and markdown templates**:
-   - `*_jsonform.json` and markdown templates are fetched through the artifact loader on **every render**, so edits show up on the next request with no restart (with `artifactLoader.type: local`). `html_template` documents are likewise fetched each time a document is generated.
-3. **Render configs**:
-   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only** — existing tasks keep the blob they were created with. To see a render-config change, start a **fresh consignment**.
-4. **The manifest**:
-   - `manifest.json` is read once at startup. Adding a new template file means adding its row there **and** restarting the server.
+1. **Manifests are read at startup**:
+   - The server loads every `manifest_v<N>.json` once at startup, or `manifest.json` as version 1 where there are none (an artifacts repository checkout). New flows start on the highest one, or on `artifacts.manifestVersion` when it pins one. A new manifest takes effect for new flows on the next restart.
+2. **A flow keeps its manifest version**:
+   - Every flow records the manifest version it started on, and every task, form render and notification in it resolves through that version. Running flows never pick up a newer manifest; start a **fresh consignment** to see a change.
+3. **Files are still read on use**:
+   - Within a manifest version, files are fetched through the artifact loader when needed, so with `artifactLoader.type: local` an in-place edit shows up on the next request. That only holds for a local checkout: a release publishes each version as an immutable snapshot (see [Changing artifacts](#changing-artifacts)).
+4. **Render configs**:
+   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only**.
+
+### Changing artifacts
+
+The artifacts repo holds only the current state: edit its files and `manifest.json` in place. A release publishes that state to artifact storage as the next manifest version, an immutable `manifest_v<N>.json` whose rows point at copies of the files (see OpenNSW/one-trade-artifacts#243). After a restart new flows start on it, and running flows finish on the version they started on.
+
+Manifest versions must be contiguous: the server probes `manifest_v1.json` upward and stops at the first one missing. To roll back, set `artifacts.manifestVersion` to the last good version.
