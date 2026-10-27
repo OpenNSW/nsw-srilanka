@@ -5,7 +5,7 @@ import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/j
 import { Button, Callout, Text } from '@radix-ui/themes'
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
-import type { Handle, ZoneAction, ZoneRendererProps } from '@/features/zone/types'
+import { handleLabel, type Handle, type ZoneAction, type ZoneRendererProps } from '@/features/zone/types'
 import { useReportUnsaved } from '@/features/zone/unsavedChanges'
 import { autoFillForm } from '@/utils/formUtils'
 import { getBooleanEnv } from '@/runtimeConfig'
@@ -394,10 +394,10 @@ function HandleButton({
   // only disabled.
   pending: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
   const disabled = submitting
-  let label = handle.label
+  let label = handleLabel(handle, i18n.resolvedLanguage ?? i18n.language, t)
   if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : t('tasks.submitting')
   return (
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
