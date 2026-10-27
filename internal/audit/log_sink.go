@@ -8,14 +8,16 @@ import (
 const categoryAudit = "audit"
 
 // LogSink writes enriched audit records as structured slog lines with
-// category=audit so they can be filtered from ops logs on the same stream.
+// category=audit. Bootstrap omits that category from the process (pod) log
+// and exports the lines only over OTLP when otel log export is on.
 type LogSink struct {
 	logger *slog.Logger
 }
 
 // NewLogSink returns a LogSink. A nil logger uses slog.Default on each Write
 // rather than at construction, so it follows server.logLevel and the handler
-// installed after OpenTelemetry starts, which replaces slog.Default.
+// installed after OpenTelemetry starts, which replaces slog.Default. Audit
+// lines then reach the OTLP handler only, not stdout.
 func NewLogSink(logger *slog.Logger) *LogSink {
 	if logger != nil {
 		logger = logger.With(slog.String("category", categoryAudit))

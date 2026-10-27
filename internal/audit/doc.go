@@ -1,5 +1,6 @@
 // Package audit records security-relevant application events as structured
-// logs with category=audit so they can be filtered from ops logs.
+// logs with category=audit. Those lines are exported over OTLP when configured
+// and are omitted from the process (pod) log.
 //
 // Call sites depend on Auditor. Bootstrap constructs a Client, registers
 // LogSink, and passes the Client as Auditor. Core payment and storage emit

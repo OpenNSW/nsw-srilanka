@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Security
+
+- The security log no longer records request or response bodies. Forms are JSON Schema–driven, so field-level redaction cannot cover every PII key; the line keeps who called (`callerKind` / `callerID` / `remoteAddr`), the route, status, duration, and sizes. The callback token in the path is still replaced.
+- Audit records (`category=audit`) are omitted from the process (pod) log and are exported only over OTLP when `otel.endpoint` is set. Startup warns when export is off or when `server.logLevel` is above `info`. Keep OpenObserve (or another collector) on wherever the audit trail is required.
+
+### Known issues
+
+- Audit still has no separate store and no delivery guarantee beyond OTLP export. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not.
+
 ## [0.10.0] - 2026-10-26
 
 This release changes how files are stored and opened. Every deployment that stores files must set `storage.inlineTypes`, machine clients get their own upload route and scope, and each agency's storage settings gain two required keys. The upgrade has a set order: the IdP first, then TNSW, then each agency, one at a time. It also sends ePhyto certificates from LK to the importing country, with replacement certificates and a date of inspection; raises Customs dispatch notes for the containers on the latest declaration, ends the branch of a cancelled note and fills in the boat note from Customs' data; and keeps a payment reference payable for a year. The image version and the artifacts pin must change in the same deployment.

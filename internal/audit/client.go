@@ -75,7 +75,7 @@ type Sink interface {
 }
 
 // Client is the sink-capable audit client. Call sites use Auditor; bootstrap
-// registers LogSink (category=audit).
+// registers LogSink (category=audit, OTLP export only).
 type Client struct {
 	mu    sync.RWMutex
 	sinks []Sink
