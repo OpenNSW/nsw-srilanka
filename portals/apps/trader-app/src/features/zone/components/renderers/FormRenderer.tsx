@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { JsonForms } from '@jsonforms/react'
-import type { JsonSchema } from '@jsonforms/core'
+import type { JsonSchema, Translator } from '@jsonforms/core'
 import { FormStepsProvider, isStepperUiSchema, radixRenderers } from '@opennsw/jsonforms-renderers'
 import { Button, Callout, Text } from '@radix-ui/themes'
 import { CheckIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons'
@@ -87,7 +87,7 @@ const FORM_ELEMENT_CATALOG: Record<string, { variant: 'solid' | 'outline'; color
 }
 
 export function FormRenderer({ payload, handles, onAction }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // The form owns its data state from mount until submit. payload.data is
   // consumed only as the initial seed: TraderZoneLayout keys Zone by task
   // state, so a state transition unmounts this component and the next mount
@@ -155,7 +155,23 @@ export function FormRenderer({ payload, handles, onAction }: Props) {
 
   const validationMode: 'ValidateAndShow' | 'ValidateAndHide' = showErrors ? 'ValidateAndShow' : 'ValidateAndHide'
 
-  const formI18n = useMemo(() => ({ translateError: createFormErrorTranslator(payload.schema) }), [payload.schema])
+  const formI18n = useMemo(
+    () => ({
+      locale: i18n.resolvedLanguage ?? i18n.language,
+      translate: ((id: string, defaultMessage?: string, values?: Record<string, unknown>) => {
+        const formKey = `form.${id}`
+        if (i18n.exists(formKey)) {
+          return String(t(formKey as never, values))
+        }
+        if (i18n.exists(id)) {
+          return String(t(id as never, values))
+        }
+        return defaultMessage
+      }) as Translator,
+      translateError: createFormErrorTranslator(payload.schema),
+    }),
+    [payload.schema, i18n, t],
+  )
 
   // Catch dataSeed up to data, synchronously, exactly when additionalErrors
   // or validationMode is about to change — the only moments JsonForms's
