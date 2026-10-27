@@ -18,6 +18,7 @@
         "tel": "+94112345010",
         "fax": "+94112345011",
         "web": "https://www.adam-pvt-ltd.lk",
+        "contact_email": "info@adam-pvt-ltd.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -47,6 +48,7 @@
         "tel": "+94112345020",
         "fax": "+94112345021",
         "web": "https://www.edward-pvt-ltd.lk",
+        "contact_email": "info@edward-pvt-ltd.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -76,6 +78,7 @@
         "tel": "+94112345030",
         "fax": "+94112345031",
         "web": "https://www.cda.lk",
+        "contact_email": "info@cda.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -105,6 +108,7 @@
         "tel": "+94112345040",
         "fax": "+94112345041",
         "web": "https://www.fcau.lk",
+        "contact_email": "info@fcau.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -134,6 +138,7 @@
         "tel": "+94112345050",
         "fax": "+94112345051",
         "web": "https://www.npqs.lk",
+        "contact_email": "info@npqs.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -163,6 +168,7 @@
         "tel": "+94112345060",
         "fax": "+94112345061",
         "web": "https://www.govtech.lk",
+        "contact_email": "info@govtech.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -192,6 +198,7 @@
         "tel": "+94112345070",
         "fax": "+94112345071",
         "web": "https://www.piu.lk",
+        "contact_email": "info@piu.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
@@ -221,6 +228,7 @@
         "tel": "+94112345080",
         "fax": "+94112345081",
         "web": "https://www.sltb.lk",
+        "contact_email": "info@sltb.lk",
         "slpacmsuser_key": "agztNvLSUA",
         "agencies": {
           "cda": {
