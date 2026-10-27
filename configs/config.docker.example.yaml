@@ -67,8 +67,22 @@ server:
   # The outbound services registry, reaching the agencies by container hostname.
 
   paymentMethodsConfigPath: configs/payment_methods.json
-  # The global catalog: logical names -> IdP token roles and OAuth2 client ids.
-  catalogConfigPath: configs/catalog.json
+
+# The global catalog: the logical names used across configuration (task
+# authz rules, storage.allowedInternalUploadTypes), mapped to this
+# deployment's IdP token roles and OAuth2 client ids. Required.
+catalog:
+  roles:
+    trader: Trader
+    cha: CHA
+  clients:
+    fcau: FCAU_TO_NSW
+    npqs: NPQS_TO_NSW
+    cda: CDA_TO_NSW
+    efc: EFC_TO_NSW
+    sltb: SLTB_TO_NSW
+    slce: SLCE_TO_NSW
+    govpay: GOVPAY_TO_NSW
 
 # Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
 # {{file:/path}} placeholders, expanded with the rest of this config at load.
@@ -205,7 +219,7 @@ storage:
     - text/xml
     - application/xml
   # What machine clients may upload on POST /api/v1/internal/storage beyond
-  # allowedUploadTypes, by the client's name in catalog.json (clients). That
+  # allowedUploadTypes, by the client's name in catalog.clients. That
   # route is for the files a deployment generates itself, such as the documents
   # an agency's HTML_DOCUMENT_GENERATOR stores here. Not read when type is
   # proxy. Unlike allowedUploadTypes it may list a type a browser opens as a

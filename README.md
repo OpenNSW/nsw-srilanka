@@ -33,7 +33,6 @@ nsw-srilanka/
 │   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── config.example.yaml                  # Template for config.yaml (server config — local/native dev)
 │   ├── config.docker.example.yaml           # Template for config.docker.yaml (server config — Docker Compose)
-│   ├── catalog.example.json                 # Template for catalog.json
 │   └── companies.example.json               # Template for companies.json
 ├── compose.yml / compose.override.yml     # Docker Compose stack (base + dev hot-reload override)
 ├── .env.example                            # Template for .env (secrets and Docker Compose host settings)
@@ -309,7 +308,6 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 | `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                                      | `.env.example`                         |
 | `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                                                  | `idp/.env.example`                     |
 | `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template), and each method's ids for every payee (`org_id`/`service_id`) under `payees`                                             | `configs/payment_methods.example.json` |
-| `configs/catalog.json`         | Global catalog — logical names → IdP token roles and OAuth2 client ids                                                                                                                            | `configs/catalog.example.json`         |
 | `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                                               | `configs/companies.example.json`       |
 | `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, outbound services, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`          |
 | `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname                                                                                                                   | `configs/config.docker.example.yaml`   |

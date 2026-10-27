@@ -12,7 +12,7 @@ both. Both share the task engine, Temporal, renderers, plugins, storage and
 | Task claims          | off                                                     | on (a hint, never required)                |
 | Own routes           | consignments, admin, CHAs/companies, payments, webhooks | `inject`, `cases`, `cases/{id}`            |
 | Catalog must map     | `trader`, `cha`                                         | no particular role (see Roles per task)    |
-| Catalog              | `configs/catalog.json`                                  | `configs/agency/catalog.json`              |
+| Catalog              | `catalog` in `configs/config.yaml`                      | `catalog` in the agency's `config.yaml`    |
 | Artifacts            | TNSW artifact root                                      | the agency's artifacts                     |
 
 A missing or unknown `mode` stops the server at startup.
@@ -46,16 +46,15 @@ next free slot; if main adds its own `000018`, renumber this one after the merge
 ## Running as an agency
 
 Set `mode: agency` in `config.yaml` (`backend.config` in the Helm values), then
-point it at the agency's own catalog and artifacts, and give it the agency API's identifier
-as its audience:
-
-```sh
-cp configs/agency/catalog.example.json configs/agency/catalog.json   # set the token roles and TNSW's client
-```
+give it the agency's own catalog (the token roles and TNSW's client) and artifacts, and
+the agency API's identifier as its audience:
 
 ```yaml
-server:
-  catalogConfigPath: configs/agency/catalog.json
+catalog:
+  roles:
+    officer: Officer
+  clients:
+    tnsw: NSW_TO_AGENCY
 artifactLoader:
   type: local
   local:
@@ -216,8 +215,8 @@ that should be open to one role only must say so. For the syntax see [`WORKFLOW_
 No role is required of the catalog; it maps the roles the agency's tasks name. To add one:
 
 1. Create the role in the IdP (`idp/resources/government/<agency>.json`).
-2. Map its logical name to that token role in the agency's `catalog.json`, e.g.
-   `"reviewer": "CDA Reviewer"`.
+2. Map its logical name to that token role under `catalog.roles` in the agency's
+   `config.yaml`, e.g. `reviewer: CDA Reviewer`.
 3. Name it in the `authz` and `read.roles` of the tasks it may act on.
 
 The case list and detail admit an officer holding the token role of any catalog role.

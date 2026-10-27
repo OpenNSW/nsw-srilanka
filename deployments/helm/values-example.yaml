@@ -174,8 +174,22 @@ backend:
       # Dockerfile. The live files below are gitignored, so supply them via a
       # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
       paymentMethodsConfigPath: configs/payment_methods.json
-      catalogConfigPath: configs/catalog.json
 
+    # The global catalog: logical names used across configuration (task authz
+    # rules, storage.allowedInternalUploadTypes) -> this deployment's IdP token
+    # roles and OAuth2 client ids.
+    catalog:
+      roles:
+        trader: Trader
+        cha: CHA
+      clients:
+        fcau: FCAU_TO_NSW
+        npqs: NPQS_TO_NSW
+        cda: CDA_TO_NSW
+        efc: EFC_TO_NSW
+        sltb: SLTB_TO_NSW
+        slce: SLCE_TO_NSW
+        govpay: GOVPAY_TO_NSW
 
     # Outbound services; replace the local endpoints for this deployment.
     services:

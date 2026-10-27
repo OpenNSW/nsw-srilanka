@@ -6,10 +6,9 @@ Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
 | File                   | Purpose                                                                                                                                                             |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8085, own database, Temporal namespace, artifacts, authn, outbound services                                    |
+| `config.yaml`          | Server config for a native run: `mode: agency`, port 8085, own database, Temporal namespace, artifacts, authn, outbound services, catalog                           |
 | `config.docker.yaml`   | `config.yaml` for the `efc-init` and `efc-api` containers: Postgres, Temporal and the IdP by container hostname                                                     |
 | `efc.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                     |
-| `catalog.json`         | `officer` → the `EFC Officer` role EFC officers hold in the IdP; `tnsw` → `NSW_TO_EFC`, the client TNSW replies as, so the steps that wait on its reply can name it |
 | `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                               |
 | `portal-config.js`     | Runtime config of the `efc-portal` container: the trader-app in agency mode                                                                                         |
 | `branding.json`        | Branding for the `efc-portal` container, as the EFC officer portal had it in nsw-agency                                                                             |
@@ -71,7 +70,7 @@ creates EFC for this deployment, on the `EFC API` resource server
 | Caller                            | Client               | Grant                                                                                                                               |
 | --------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Officer `efc_officer`             | `OGA_PORTAL_APP_EFC` | `EFC Officer` role (via `EFC Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on EFC's parked steps, which `catalog.json` maps `tnsw` to |
+| TNSW injecting and replying       | `NSW_TO_EFC`         | `NswToEfcM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on EFC's parked steps, which its catalog maps `tnsw` to    |
 | EFC decision callback and storage | `EFC_TO_NSW`         | `EfcToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                         |
 
 TNSW's `config.yaml` services entry `efc` requests `nsw:workflow:inject` and `nsw:task:write` with

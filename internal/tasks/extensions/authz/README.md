@@ -37,19 +37,23 @@ with no rule is rejected):
 
 ## Catalog
 
-The logical names resolve through the global catalog (`configs/catalog.json`,
-`server.catalogConfigPath`): `roles` maps a name to an IdP token role, `clients` maps a
-name to an OAuth2 client id.
+The logical names resolve through the global catalog, the `catalog` section of
+`config.yaml`: `roles` maps a name to an IdP token role, `clients` maps a name to an
+OAuth2 client id.
 
-```json
-{
-  "roles":   { "trader": "Trader", "cha": "CHA" },
-  "clients": { "fcau": "FCAU_TO_NSW", "npqs": "NPQS_TO_NSW" }
-}
+```yaml
+catalog:
+  roles:
+    trader: Trader
+    cha: CHA
+  clients:
+    fcau: FCAU_TO_NSW
+    npqs: NPQS_TO_NSW
 ```
 
-The composition root loads the file once (`internal/catalog`) and injects the
-`roles`/`clients` slice of it here, so this package reads no configuration file.
+The composition root decodes it with the rest of the config (`internal/catalog`) and
+injects the `roles`/`clients` slice of it here, so this package reads no configuration
+file.
 
 The name `system` is reserved (`taskauthz.SystemPrincipal`): `Register` refuses a
 catalog that defines it as a role or a client.

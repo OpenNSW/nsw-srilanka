@@ -22,6 +22,7 @@ import (
 	"github.com/OpenNSW/core/temporal"
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"gopkg.in/yaml.v3"
 )
@@ -49,7 +50,6 @@ server:
   serviceURL: http://localhost:8080
   logLevel: info
   paymentMethodsConfigPath: configs/payment_methods.json
-  catalogConfigPath: configs/catalog.json
   maxRequestBytes: 33554432
   readHeaderTimeout: 5s
   readTimeout: 15s
@@ -100,6 +100,11 @@ artifactLoader:
   type: local
   local:
     root: "."
+catalog:
+  roles:
+    trader: Trader
+  clients:
+    fcau: FCAU_TO_NSW
 `
 
 // configYAML returns baseYAML with override deep-merged over it and the
@@ -176,7 +181,6 @@ func validConfig() *Config {
 		Server: ServerConfig{
 			Port:                     8080,
 			PaymentMethodsConfigPath: "configs/payment_methods.json",
-			CatalogConfigPath:        "configs/catalog.json",
 			ServiceURL:               "http://localhost:8080",
 			MaxRequestBytes:          33554432,
 			ReadHeaderTimeout:        5 * time.Second,
@@ -233,6 +237,10 @@ func validConfig() *Config {
 		ArtifactLoader: loaders.Config{
 			Type:  loaders.TypeLocal,
 			Local: local.Config{Root: "."},
+		},
+		Catalog: catalog.Catalog{
+			Roles:   map[string]string{"trader": "Trader"},
+			Clients: map[string]string{"fcau": "FCAU_TO_NSW"},
 		},
 	}
 }
@@ -352,7 +360,7 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"server.serviceURL",
 		"services",
 		"server.paymentMethodsConfigPath",
-		"server.catalogConfigPath",
+		"catalog",
 		"server.maxRequestBytes",
 		"server.readHeaderTimeout",
 		"server.readTimeout",
@@ -785,7 +793,7 @@ func TestConfigValidate_RequiredSettings(t *testing.T) {
 		"no server port":   {func(c *Config) { c.Server.Port = 0 }, "server.port must be between 1 and 65535"},
 		"no services":      {func(c *Config) { c.Services = nil }, "services is required"},
 		"no payments path": {func(c *Config) { c.Server.PaymentMethodsConfigPath = "" }, "server.paymentMethodsConfigPath is required"},
-		"no catalog path":  {func(c *Config) { c.Server.CatalogConfigPath = "" }, "server.catalogConfigPath is required"},
+		"no catalog":       {func(c *Config) { c.Catalog = catalog.Catalog{} }, "invalid catalog configuration"},
 		"no CORS methods":  {func(c *Config) { c.CORS.AllowedMethods = nil }, "cors.allowedMethods is required"},
 		"no CORS headers":  {func(c *Config) { c.CORS.AllowedHeaders = nil }, "cors.allowedHeaders is required"},
 		"no db port":       {func(c *Config) { c.Database.Postgres.Port = 0 }, "db.postgres.port"},

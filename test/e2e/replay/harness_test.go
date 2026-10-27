@@ -110,7 +110,6 @@ func newHarness(t *testing.T) *harness {
 	// examples (absolute, so they resolve irrespective of cwd). The payment
 	// methods example is rewritten to carry the minted private keys.
 	cfg.Server.PaymentMethodsConfigPath = writePaymentMethodsConfig(t, root, payments, paymentKeys)
-	cfg.Server.CatalogConfigPath = filepath.Join(root, "configs", "catalog.example.json")
 	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
 	// consignment_flows.json starts a flow on a consignment. The artifacts hold no other
 	// consignment-level workflow, so the export workflow stands in for one.
