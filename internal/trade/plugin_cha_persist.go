@@ -114,7 +114,7 @@ var chaSeedFields = []string{"tin_no", "tel", "contact_email", "address"}
 
 // chaSeed is the CHA's details as the "cha" workflow variable, in the shape of a company
 // record ({id, name, data}) so an artifact reads them the way it reads the trader's.
-// Fields the company's data lacks are left out.
+// Fields the company's data lacks, or holds only whitespace in, are left out.
 func chaSeed(record *company.Record) map[string]any {
 	data := map[string]any{}
 	var all map[string]any
@@ -123,7 +123,8 @@ func chaSeed(record *company.Record) map[string]any {
 		_ = json.Unmarshal(record.Data, &all)
 	}
 	for _, field := range chaSeedFields {
-		if value, ok := all[field].(string); ok && value != "" {
+		// Company data isn't trimmed when it's written, so a blank value can hold spaces.
+		if value, ok := all[field].(string); ok && strings.TrimSpace(value) != "" {
 			data[field] = value
 		}
 	}

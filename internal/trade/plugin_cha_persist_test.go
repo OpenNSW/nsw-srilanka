@@ -132,7 +132,8 @@ func TestCHASeedKeepsOnlyTheDetailsAnAgencyFormReads(t *testing.T) {
 }
 
 func TestCHASeedLeavesOutMissingAndBlankDetails(t *testing.T) {
-	seed := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: json.RawMessage(`{"tin_no": "", "tel": "0112345010"}`)})
+	seed := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: json.RawMessage(
+		`{"tin_no": "", "address": "   ", "contact_email": "\t\n", "tel": "0112345010"}`)})
 
 	assert.Equal(t, map[string]any{"tel": "0112345010"}, seed["data"])
 }
