@@ -1,7 +1,8 @@
 # Payload schema validation extension
 
 A `PRE_RESUME` task extension that checks a step submission against the JSON Schema of
-the form the user filled in. The trader app already validates every form in the
+the form the user filled in, holds read-only values to what the server stored, and limits
+the size of every number a user enters. The trader app already validates every form in the
 browser; this extension applies the same schema on the server, so a call that skips the
 browser is held to the same rules.
 
@@ -84,11 +85,22 @@ on the data or a row's position (`if`/`then`/`else`, `oneOf`, `anyOf`, `not`,
 form with read-only values, a `readOnly` or `default` beside a draft-07 `$ref`, which the
 library drops, makes the form misconfigured.
 
+### Number limits
+
+Every number a user enters in any form is limited to ±9,999,999,999,999.99, whatever the
+form's schema says. This matches the range of PostgreSQL `NUMERIC(15, 2)` columns used for
+money, preventing an officer's entry from overflowing payment or ledger steps that run
+later in the flow. A form that requires a tighter limit sets its own `maximum` or
+`minimum`.
+
+Read-only values are left out of this check: they originate from the server and are already
+held to what the server stored.
+
 ## Outcome
 
 - **Matches:** the step goes ahead.
 - **Doesn't match:** `400` with the fixed message `submission does not match the form`.
-  The failing fields of both checks (JSON pointer and the rule that failed, never a
+  The failing fields across all checks (JSON pointer and the rule that failed, never a
   value) are logged together at warn level, not returned:
   the browser checks the same schema first, so this is either a form the browser and the
   server disagree on, or a call that skipped the browser.
@@ -99,10 +111,10 @@ library drops, makes the form misconfigured.
 
 ## Drafts
 
-A draft may be incomplete, so draft saves are not held to the form's schema. They are
-held to the read-only rules, since a draft replaces the stored values those compare
-against. The draft route marks its request context (`WithDraft`), and the extension knows
-a draft by that mark, never by the command: a submission that names the step's draft
+A draft may be incomplete, so draft saves are not held to the form's schema or the number
+limit. They are held to the read-only rules, since a draft replaces the stored values those
+compare against. The draft route marks its request context (`WithDraft`), and the extension
+knows a draft by that mark, never by the command: a submission that names the step's draft
 command is validated in full.
 
 ## Not covered yet
