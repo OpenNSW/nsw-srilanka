@@ -125,14 +125,19 @@ var chaSeedFields = []string{"tin_no", "tel", "contact_email", "address"}
 
 // chaSeed is the CHA's details as the "cha" workflow variable, in the shape of a company
 // record ({id, name, data}) so an artifact reads them the way it reads the trader's.
-// Fields the company's data lacks, or holds only whitespace in, are left out. Data that isn't
-// a JSON object is an error.
+// Fields the company's data lacks, or holds only whitespace in, are left out. No data at all
+// counts as {}, as in company.Service.ReplaceCompanyData; data that isn't a JSON object,
+// null included, is an error.
 func chaSeed(record *company.Record) (map[string]any, error) {
 	data := map[string]any{}
 	var all map[string]any
 	if len(record.Data) > 0 {
 		if err := json.Unmarshal(record.Data, &all); err != nil {
 			return nil, fmt.Errorf("data is not a JSON object: %w", err)
+		}
+		// null decodes into a nil map without an error.
+		if all == nil {
+			return nil, fmt.Errorf("data is null, not a JSON object")
 		}
 	}
 	for _, field := range chaSeedFields {

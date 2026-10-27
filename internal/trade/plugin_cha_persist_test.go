@@ -141,17 +141,22 @@ func TestCHASeedLeavesOutMissingAndBlankDetails(t *testing.T) {
 }
 
 func TestCHASeedWithoutData(t *testing.T) {
-	for _, data := range []json.RawMessage{nil, json.RawMessage(`{}`), json.RawMessage(`null`)} {
-		seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
-		require.NoError(t, err, "data %q", data)
+	cases := map[string]json.RawMessage{"no data": nil, "empty object": json.RawMessage(`{}`)}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
+			require.NoError(t, err)
 
-		assert.Equal(t, "cha-1", seed["id"])
-		assert.Empty(t, seed["data"])
+			assert.Equal(t, "cha-1", seed["id"])
+			assert.Empty(t, seed["data"])
+		})
 	}
 }
 
 func TestCHASeedRejectsUnreadableData(t *testing.T) {
-	for _, data := range []json.RawMessage{json.RawMessage(`not json`), json.RawMessage(`[]`), json.RawMessage(`"x"`)} {
+	for _, data := range []json.RawMessage{
+		json.RawMessage(`not json`), json.RawMessage(`[]`), json.RawMessage(`"x"`), json.RawMessage(`null`),
+	} {
 		_, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
 
 		assert.Error(t, err, "data %q", data)
