@@ -132,7 +132,6 @@ const en = {
         start: 'Start',
         view: 'View',
         continue: 'Continue',
-        dependentWarning: 'Complete dependent pre-consignments first',
       },
     },
 
