@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- **`contact_email` on the example companies.** Application forms prefill the trader's email from `data.contact_email`, so give every company record one. `make setup` doesn't overwrite an existing `configs/companies.json`, so copy the example's new key into it, then re-apply it with `otc company apply -f configs/companies.json`. `otc company apply` replaces `data` as a whole, so apply the complete record.
+- **`contact_email` on the example companies.** Application forms prefill the trader's email from `data.contact_email`, so give every company record one. `make setup` doesn't overwrite an existing `configs/companies.json`, so copy the example's new key into it, then re-apply it with `otc company apply -f configs/companies.json`. `otc company apply` replaces `data` as a whole, so apply the complete record. ([#937](https://github.com/OpenNSW/nsw-srilanka/pull/937))
 
 ## [0.10.0] - 2026-10-26
 
