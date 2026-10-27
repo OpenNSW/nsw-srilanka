@@ -13,6 +13,8 @@ import (
 type DispatchNoteRepository interface {
 	GetByEdgeID(ctx context.Context, edgeID string) (*DispatchNote, error)
 	GetByCDNRef(ctx context.Context, ref DocumentReference) (*DispatchNote, error)
+	// ListByCase returns the dispatch notes raised in case caseID.
+	ListByCase(ctx context.Context, caseID string) ([]DispatchNote, error)
 	Update(ctx context.Context, note *DispatchNote) error
 	// RecordSubmitted records that SLC Edge accepted a submission as edgeID,
 	// from workflow workflowID of case caseID, so its callbacks can find the
@@ -56,6 +58,14 @@ func (r *dispatchNoteRepository) GetByCDNRef(ctx context.Context, ref DocumentRe
 		return nil, err
 	}
 	return &note, nil
+}
+
+func (r *dispatchNoteRepository) ListByCase(ctx context.Context, caseID string) ([]DispatchNote, error) {
+	var notes []DispatchNote
+	if err := r.db.WithContext(ctx).Where("case_id = ?", caseID).Order("created_at").Find(&notes).Error; err != nil {
+		return nil, err
+	}
+	return notes, nil
 }
 
 func (r *dispatchNoteRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {

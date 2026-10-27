@@ -22,6 +22,11 @@ const (
 	// DispatchNoteStatusCancelled is a note Customs cancelled (§7.7). It ends
 	// the note's lifecycle wherever it had reached.
 	DispatchNoteStatusCancelled DispatchNoteStatus = "CANCELLED"
+	// DispatchNoteStatusWithdrawn is a note NSW stopped waiting on before it
+	// was integrated, because an amended declaration no longer had its
+	// container (see Reconciler). A result that still arrives for it records
+	// the reference ASYCUDA gave it, and Customs' §7.7 cancels it.
+	DispatchNoteStatusWithdrawn DispatchNoteStatus = "WITHDRAWN"
 )
 
 // --------------------------------------------------------

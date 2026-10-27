@@ -66,6 +66,10 @@ func (s *cdnWebhookService) ProcessCancellation(ctx context.Context, req CDNCanc
 		// The branch finished when the note was acknowledged, so there is no wait
 		// left to release; the note is still recorded as cancelled.
 		slog.WarnContext(ctx, "acknowledged dispatch note cancelled; its branch has already finished", "cdn_ref", ref)
+	case DispatchNoteStatusWithdrawn:
+		// NSW ended the branch when it withdrew the note; Customs cancelling the
+		// note it registered regardless leaves nothing to release.
+		slog.InfoContext(ctx, "withdrawn dispatch note cancelled by Customs", "cdn_ref", ref)
 	case DispatchNoteStatusIntegrated:
 	default:
 		return fmt.Errorf("invalid state transition: cannot cancel dispatch note in status %s", note.Status)

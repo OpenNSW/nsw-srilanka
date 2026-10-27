@@ -28,6 +28,11 @@ const (
 	errNoteCaseNotRecorded       = "dispatch note has no case recorded"
 )
 
+// ServiceID is the configured service that reaches SLC Edge. The task
+// templates name it for the calls a step makes; the webhooks use it for the
+// calls a callback makes.
+const ServiceID = "customs-asycuda"
+
 // Handler handles central inbound HTTP webhook requests from SLCE / ASYCUDA
 // routed to POST /webhooks/slce.
 type Handler struct {

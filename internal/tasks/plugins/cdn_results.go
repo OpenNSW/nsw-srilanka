@@ -44,8 +44,8 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 	var (
 		numbers []any
 		firstOK map[string]any
-		// firstLive is the first branch Customs did not cancel, for the
-		// fallback below.
+		// firstLive is the first branch Customs did not cancel and NSW did not
+		// withdraw, for the fallback below.
 		firstLive map[string]any
 	)
 	containers := make([]map[string]any, 0, len(branches))
@@ -58,6 +58,11 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 		}
 
 		userform, _ := branch["userform"].(map[string]any)
+		// Nor is a branch NSW withdrew because an amended declaration dropped
+		// its container: it never raised a note that stands.
+		if withdrawn, _ := userform["cancelled"].(bool); withdrawn {
+			continue
+		}
 		cig, _ := branch["cig_cdn"].(map[string]any)
 		if firstLive == nil {
 			firstLive = userform

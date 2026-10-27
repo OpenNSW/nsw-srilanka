@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/OpenNSW/core/taskflow/store"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // reviewForm is a form template as the artifacts store it.
@@ -115,6 +117,33 @@ func TestExtension_Execute_MatchesErrInvalidPayloadWhenWrapped(t *testing.T) {
 	var invalid *InvalidPayloadError
 	if !errors.Is(wrapped, ErrInvalidPayload) || !errors.As(wrapped, &invalid) {
 		t.Fatalf("wrapped error %v doesn't match ErrInvalidPayload", wrapped)
+	}
+}
+
+// A step's system command ends it without submitting the form, so the system
+// principal running it is not held to the form. Anyone else naming the command,
+// or the system running another one, still is.
+func TestExtension_Execute_SystemCommands(t *testing.T) {
+	ext := NewExtension(fakeForms{"review-form": reviewForm}.form, namespace("reviewform"))
+	props := json.RawMessage(`{"form": "review-form", "system_commands": ["cancel"]}`)
+	record := &store.TaskRecord{ActiveTaskTemplateID: "review-step"}
+	system := taskauthz.WithSystem(context.Background())
+	person := taskauthz.WithInput(context.Background(), taskauthz.Input{Kind: taskauthz.KindUser})
+
+	if err := ext.Execute(system, record, decode(t, `{"__command": "cancel", "cancelled": true}`), props); err != nil {
+		t.Errorf("system cancel = %v; want nil", err)
+	}
+	for name, tc := range map[string]struct {
+		ctx     context.Context
+		payload string
+	}{
+		"a person naming the system command": {person, `{"__command": "cancel", "cancelled": true}`},
+		"no principal at all":                {context.Background(), `{"__command": "cancel", "cancelled": true}`},
+		"the system submitting":              {system, `{"__command": "submit", "cancelled": true}`},
+	} {
+		if err := ext.Execute(tc.ctx, record, decode(t, tc.payload), props); !errors.Is(err, ErrInvalidPayload) {
+			t.Errorf("%s: Execute() = %v; want ErrInvalidPayload", name, err)
+		}
 	}
 }
 

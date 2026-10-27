@@ -65,10 +65,22 @@ type CaseFlows interface {
 	StartFlow(ctx context.Context, caseID, templateID, workflowID string, vars map[string]any) error
 }
 
+// ContainerReconciler brings a case's dispatch note branches in line with the
+// containers an amended declaration has. It is given the declaration as
+// amended; a redelivered amendment finds the branches already in line, so it
+// is called again safely.
+type ContainerReconciler interface {
+	ReconcileContainers(ctx context.Context, caseID string, ref DocumentReference, amended map[string]any) error
+}
+
 // ProcessAmendment opens the amendment flow on the declaration's case, seeded
 // with the amended declaration and its duties, so the trader sees what Customs
 // changed. The declaration's own workflow is not touched: an amendment can
 // arrive while it waits on payment or warranting, or after it has finished.
+//
+// The case's dispatch note branches are then reconciled with the containers
+// the declaration now has. That comes second, so a failure there, which has
+// SLC Edge redeliver the amendment, finds the flow already open.
 func (s *webhookService) ProcessAmendment(ctx context.Context, req CusdecAmendedRequest) error {
 	ref := req.Payload.CusdecRef
 	decl, err := s.repo.GetByCusdecRef(ctx, ref)
@@ -106,6 +118,13 @@ func (s *webhookService) ProcessAmendment(ctx context.Context, req CusdecAmended
 	}
 	slog.InfoContext(ctx, "opened CusDec amendment flow",
 		"cusdec_ref", ref, "case_id", decl.CaseID, "workflow_id", workflowID, "operation_time", operationTime)
+
+	if s.containers == nil {
+		return nil
+	}
+	if err := s.containers.ReconcileContainers(ctx, decl.CaseID, ref, cusdec); err != nil {
+		return fmt.Errorf("cusdec: reconcile the dispatch notes with the amended containers: %w", err)
+	}
 	return nil
 }
 

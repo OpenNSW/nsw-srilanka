@@ -38,6 +38,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cdn"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/cusdec"
+	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/document"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/customs/asycuda/parkedtask"
 	"github.com/OpenNSW/nsw-srilanka/external-integration/payment/govpay"
 	slpawebhook "github.com/OpenNSW/nsw-srilanka/external-integration/slpa/webhook"
@@ -390,8 +391,23 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		cdnRepo := cdn.NewDispatchNoteRepository(db)
 		cdnWebhookService := cdn.NewCDNWebhookService(cdnRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
 
+		// An amendment (§6.5.4) withdraws the dispatch note branches of the
+		// containers it dropped, after checking the notes ASYCUDA registered
+		// against the declaration (§6.7) through the SLC Edge service.
+		containers := cdn.NewReconciler(cdnRepo, parkedtask.NewStore(db), systemTasks,
+			func(ctx context.Context, req document.DeclarationRetrieve) (map[string]any, error) {
+				var resp map[string]any
+				err := remoteManager.Call(ctx, asycuda.ServiceID, remote.Request{
+					Method: http.MethodPost,
+					Path:   document.DeclarationRetrievePath,
+					Body:   remote.JSONBody{V: req},
+				}, &resp)
+				return resp, err
+			})
+
 		cusdecRepo := cusdec.NewDeclarationRepository(db)
-		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService})
+		cusdecWebhookService := cusdec.NewWebhookService(cusdecRepo, parkedtask.NewStore(db), systemTasks, caseFlowStarter{flowService},
+			cusdec.WithContainerReconciler(containers))
 
 		slceHandler = asycuda.NewHandler(cusdecWebhookService, cdnWebhookService)
 

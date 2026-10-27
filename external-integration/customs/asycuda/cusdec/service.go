@@ -30,19 +30,33 @@ type webhookService struct {
 	tasks       parkedtask.Tasks
 	taskManager TaskCompleter
 	flows       CaseFlows
+	containers  ContainerReconciler
+}
+
+// Option configures a WebhookService.
+type Option func(*webhookService)
+
+// WithContainerReconciler has an amendment (§6.5.4) bring the case's dispatch
+// note branches in line with the containers the amended declaration has.
+func WithContainerReconciler(r ContainerReconciler) Option {
+	return func(s *webhookService) { s.containers = r }
 }
 
 // NewWebhookService creates a new WebhookService. tasks is core's task store:
 // a callback resumes the task the declaration's workflow parked, found by the
 // case and workflow the declaration recorded when it was dispatched. flows opens
 // the amendment flow (§6.5.4) on that case.
-func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows) WebhookService {
-	return &webhookService{
+func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows, opts ...Option) WebhookService {
+	s := &webhookService{
 		repo:        repo,
 		tasks:       tasks,
 		taskManager: taskManager,
 		flows:       flows,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // reviewTemplateID is the step the declaration flow parks on until the

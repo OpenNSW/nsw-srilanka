@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,16 @@ func (m *mockRepository) Create(ctx context.Context, note *DispatchNote) error {
 func (m *mockRepository) Update(ctx context.Context, note *DispatchNote) error {
 	m.updated = note
 	return nil
+}
+
+func (m *mockRepository) ListByCase(_ context.Context, caseID string) ([]DispatchNote, error) {
+	var notes []DispatchNote
+	for _, n := range m.byEdgeID {
+		if n.CaseID == caseID {
+			notes = append(notes, *n)
+		}
+	}
+	return notes, nil
 }
 
 func (m *mockRepository) RecordSubmitted(ctx context.Context, edgeID, caseID, workflowID string) error {
@@ -457,4 +468,81 @@ func TestProcessIntegrationResult_TaskStoreFailureIsAnError(t *testing.T) {
 			assert.Nil(t, repo.updated)
 		})
 	}
+}
+
+// withdrawnNote is a note NSW withdrew while it waited to be integrated, in a
+// repository the callbacks find it in by edgeId and by cdnRef.
+func withdrawnNote() (*mockRepository, *DispatchNote) {
+	note := &DispatchNote{ID: "note-1", EdgeID: "edge-1", Status: DispatchNoteStatusWithdrawn, CaseID: "case-1", WorkflowID: "wf-branch-0"}
+	return &mockRepository{
+		byEdgeID: map[string]*DispatchNote{"edge-1": note},
+		byCDNRef: map[string]*DispatchNote{"2026-CBEX1-C": note},
+	}, note
+}
+
+// ASYCUDA registered a note NSW had withdrawn: the reference is recorded so
+// Customs' cancellation finds it, the note stays withdrawn, and no step is
+// completed, since the branch has ended.
+func TestProcessIntegrationResult_WithdrawnNoteKeepsItsReference(t *testing.T) {
+	repo, _ := withdrawnNote()
+	tasks := &resumeRecorder{}
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), tasks, nil)
+
+	ref := DocumentReference{Year: "2026", Office: "CBEX1", Serial: "C", Number: 28242}
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED", ProcessAt: time.Now(),
+		Payload: integrationResultPayload{EdgeID: "edge-1", Integrated: true, CDNRef: ref},
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusWithdrawn, repo.updated.Status)
+	assert.Equal(t, 28242, repo.updated.CDNNumber)
+	assert.Empty(t, tasks.completed, "a withdrawn branch has no wait to release")
+}
+
+func TestProcessIntegrationResult_WithdrawnNoteThatFailedRecordsNothing(t *testing.T) {
+	repo, _ := withdrawnNote()
+	tasks := &resumeRecorder{}
+	svc := NewCDNWebhookService(repo, parkedIntegrationWait(), tasks, nil)
+
+	err := svc.ProcessIntegrationResult(context.Background(), CDNIntegrationResultRequest{
+		Event: "CDN_INTEGRATED", ProcessAt: time.Now(),
+		Payload: integrationResultPayload{EdgeID: "edge-1", Integrated: false, Errors: []byte(`{"0":[{"code":1,"description":"x"}]}`)},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, repo.updated)
+	assert.Empty(t, tasks.completed)
+}
+
+func TestProcessAcknowledgment_WithdrawnNoteIsLeftAsItIs(t *testing.T) {
+	repo, note := withdrawnNote()
+	note.CDNYear, note.CDNOffice, note.CDNSerial, note.CDNNumber = "2026", "CBEX1", "C", 28242
+	tasks := &resumeRecorder{}
+	svc := NewCDNWebhookService(repo, fakeTasks{}, tasks, nil)
+
+	err := svc.ProcessAcknowledgment(context.Background(), CDNAcknowledgmentRequest{
+		Event: "CDN_ACKNOWLEDGED", ProcessAt: time.Now(),
+		Payload: acknowledgmentPayload{CDNRef: DocumentReference{Year: "2026", Office: "CBEX1", Serial: "C", Number: 28242}},
+	})
+	require.NoError(t, err)
+	assert.Nil(t, repo.updated)
+	assert.Empty(t, tasks.completed)
+}
+
+// Customs cancelling a note NSW withdrew closes it, with no wait to release.
+func TestProcessCancellation_WithdrawnNoteIsCancelled(t *testing.T) {
+	repo, note := withdrawnNote()
+	note.CDNYear, note.CDNOffice, note.CDNSerial, note.CDNNumber = "2026", "CBEX1", "C", 28242
+	tasks := &resumeRecorder{}
+	svc := NewCDNWebhookService(repo, fakeTasks{}, tasks, nil)
+
+	err := svc.ProcessCancellation(context.Background(), CDNCancelledRequest{
+		EventType: EventCDNCancelled, ProcessedAt: time.Now(),
+		Payload: cancelledPayload{CDNRef: DocumentReference{Year: "2026", Office: "CBEX1", Serial: "C", Number: 28242}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, repo.updated)
+	assert.Equal(t, DispatchNoteStatusCancelled, repo.updated.Status)
+	assert.Empty(t, tasks.completed)
 }

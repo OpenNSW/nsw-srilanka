@@ -61,6 +61,9 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 		return fmt.Errorf("edgeId %s: %w", req.Payload.EdgeID, ErrDispatchNoteNotRecorded)
 	}
 
+	if note.Status == DispatchNoteStatusWithdrawn {
+		return s.recordWithdrawnResult(ctx, note, req)
+	}
 	// A note already in a terminal state is not recorded again — but the parked
 	// task still has to be released. The record and the workflow advance
 	// separately, so a delivery that lands while the task is not yet parked (or
@@ -116,6 +119,28 @@ func (s *cdnWebhookService) ProcessIntegrationResult(ctx context.Context, req CD
 	return nil
 }
 
+// recordWithdrawnResult records the result of a note NSW withdrew while it was
+// waiting to be integrated. There is no wait to release: the branch has ended.
+// A registered note keeps its reference, so Customs' cancellation of it (§7.7)
+// finds it and the registered counts NSW and ASYCUDA hold still agree.
+func (s *cdnWebhookService) recordWithdrawnResult(ctx context.Context, note *DispatchNote, req CDNIntegrationResultRequest) error {
+	if !req.Payload.Integrated {
+		slog.InfoContext(ctx, "integration failed for a withdrawn dispatch note; nothing to record", "edge_id", note.EdgeID)
+		return nil
+	}
+	ref := req.Payload.CDNRef
+	if note.CDNNumber == ref.Number && note.CDNOffice == ref.Office && note.CDNYear == ref.Year && note.CDNSerial == ref.Serial {
+		return nil
+	}
+	note.CDNYear, note.CDNOffice, note.CDNSerial, note.CDNNumber = ref.Year, ref.Office, ref.Serial, ref.Number
+	if err := s.repo.Update(ctx, note); err != nil {
+		return fmt.Errorf("failed to record the reference of withdrawn dispatch note %s: %w", note.EdgeID, err)
+	}
+	slog.WarnContext(ctx, "ASYCUDA registered a dispatch note NSW had withdrawn; Customs has to cancel it",
+		"edge_id", note.EdgeID, "cdn_ref", ref)
+	return nil
+}
+
 // storedResult re-points an already-recorded result at the reference actually on
 // the note. The row is the authority once written: replaying a callback that
 // carries a different cdnRef must not hand the workflow a reference that no
@@ -160,9 +185,10 @@ func (s *cdnWebhookService) ProcessAcknowledgment(ctx context.Context, req CDNAc
 		return s.resumeAcknowledgmentWait(ctx, note, true)
 	}
 
-	// A cancelled note's branch has finished (§7.7): there is no wait left to
-	// release, and its status must stay cancelled.
-	if note.Status == DispatchNoteStatusCancelled {
+	// A cancelled note's branch has finished (§7.7), and a withdrawn note's
+	// branch was ended by NSW: there is no wait left to release, and the status
+	// must stay as it is.
+	if note.Status == DispatchNoteStatusCancelled || note.Status == DispatchNoteStatusWithdrawn {
 		slog.InfoContext(ctx, "acknowledgment for a cancelled dispatch note, acknowledging without action", "cdn_ref", ref)
 		return nil
 	}

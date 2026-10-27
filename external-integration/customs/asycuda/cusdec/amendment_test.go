@@ -3,6 +3,7 @@ package cusdec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -111,4 +112,51 @@ func TestProcessAmendment_Errors(t *testing.T) {
 			assert.Empty(t, flows.started)
 		})
 	}
+}
+
+// reconcileRecorder records the reconciliations an amendment asks for.
+type reconcileRecorder struct {
+	calls []reconcileCall
+	err   error
+}
+
+type reconcileCall struct {
+	caseID  string
+	ref     DocumentReference
+	amended map[string]any
+}
+
+func (r *reconcileRecorder) ReconcileContainers(_ context.Context, caseID string, ref DocumentReference, amended map[string]any) error {
+	r.calls = append(r.calls, reconcileCall{caseID, ref, amended})
+	return r.err
+}
+
+// An amendment has the case's dispatch notes reconciled with the declaration
+// as amended, after the amendment flow is open.
+func TestProcessAmendment_ReconcilesTheDispatchNotes(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": registeredDeclaration()}}
+	flows := &recordingFlows{}
+	containers := &reconcileRecorder{}
+	service := NewWebhookService(repo, fakeTasks{}, &mockTaskCompleter{}, flows, WithContainerReconciler(containers))
+
+	require.NoError(t, service.ProcessAmendment(context.Background(), amendment(t, "2026-10-14T05:07:38Z")))
+
+	require.Len(t, containers.calls, 1)
+	assert.Equal(t, testCaseID, containers.calls[0].caseID)
+	assert.Equal(t, amendedRef, containers.calls[0].ref)
+	assert.Equal(t, "DE", containers.calls[0].amended["generalSegment"].(map[string]any)["countryOfDestination"])
+}
+
+// A reconciliation that fails is returned, so SLC Edge redelivers the
+// amendment; the flow is already open, and the redelivery names the same one.
+func TestProcessAmendment_ReturnsAFailedReconciliation(t *testing.T) {
+	repo := &mockCusdecRepository{declsByEdgeID: map[string]*CusdecDeclaration{"edge-123": registeredDeclaration()}}
+	flows := &recordingFlows{}
+	containers := &reconcileRecorder{err: errors.New("slc edge: 503")}
+	service := NewWebhookService(repo, fakeTasks{}, &mockTaskCompleter{}, flows, WithContainerReconciler(containers))
+
+	err := service.ProcessAmendment(context.Background(), amendment(t, "2026-10-14T05:07:38Z"))
+
+	require.Error(t, err)
+	assert.Len(t, flows.started, 1, "the flow opens before the reconciliation")
 }

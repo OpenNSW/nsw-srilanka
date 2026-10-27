@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/store"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
 )
 
 // FormOf returns the form template with the given id as the artifacts store it:
@@ -37,6 +41,12 @@ type Extension struct {
 type properties struct {
 	// Form is the id of the form whose schema a submission must match.
 	Form string `json:"form"`
+	// SystemCommands are commands this service runs on the step itself, which
+	// end it without submitting the form: a dispatch note branch withdrawn
+	// when an amended declaration drops its container, for one. They are not
+	// held to the form when the system principal runs them; a person who names
+	// one still is.
+	SystemCommands []string `json:"system_commands,omitempty"`
 }
 
 // NewExtension builds the extension over the lookups it reads forms and step
@@ -50,10 +60,14 @@ func NewExtension(formOf FormOf, namespaceOf NamespaceOf) *Extension {
 // an *InvalidPayloadError, which matches ErrInvalidPayload; any other error is
 // a misconfiguration or a failed lookup.
 func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, payload map[string]any, props json.RawMessage) error {
-	formID, err := namedForm(props)
+	p, err := parseProperties(props)
 	if err != nil {
 		return fmt.Errorf("payload schema: step template %q: %w", record.ActiveTaskTemplateID, err)
 	}
+	if isSystemCommand(ctx, p, payload) {
+		return nil
+	}
+	formID := p.Form
 	f, err := e.formNamed(ctx, formID)
 	if err != nil {
 		return err
@@ -110,18 +124,29 @@ func (e *Extension) stored(ctx context.Context, record *store.TaskRecord) (value
 	return value{v, ok}, nil
 }
 
-// namedForm returns the id of the form the extension's properties name.
-func namedForm(props json.RawMessage) (string, error) {
+// parseProperties reads the extension's properties, which must name a form.
+func parseProperties(props json.RawMessage) (properties, error) {
 	var p properties
 	if len(props) > 0 {
 		if err := json.Unmarshal(props, &p); err != nil {
-			return "", fmt.Errorf("extension properties: %w", err)
+			return properties{}, fmt.Errorf("extension properties: %w", err)
 		}
 	}
 	if p.Form == "" {
-		return "", errors.New(`extension properties name no "form"`)
+		return properties{}, errors.New(`extension properties name no "form"`)
 	}
-	return p.Form, nil
+	return p, nil
+}
+
+// isSystemCommand reports whether the system principal is running one of the
+// step's system commands, which end the step without submitting its form.
+func isSystemCommand(ctx context.Context, p properties, payload map[string]any) bool {
+	in, ok := taskauthz.InputFromContext(ctx)
+	if !ok || in.Kind != taskauthz.KindSystem {
+		return false
+	}
+	command, _ := payload[orchestrator.CommandVar].(string)
+	return command != "" && slices.Contains(p.SystemCommands, command)
 }
 
 // form is a form template's JSON Schema and UI schema, as written.
