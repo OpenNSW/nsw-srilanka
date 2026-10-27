@@ -260,6 +260,46 @@ func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {
 	}
 }
 
+// The commodity name is a searchable dropdown storing { value, label }. With
+// no description given, the trade line's mandatory description falls back to
+// the name the trader picked, and the name is also sent as its common name.
+func TestBuildInput_DescribesACommodityByItsDropdownName(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "commodity_description")
+	com["commodity_common_name"] = map[string]any{"value": "CN-042", "label": "Monstera leaves"}
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if tl.Description != "Monstera leaves" {
+		t.Errorf("description = %q, want the dropdown label", tl.Description)
+	}
+	if len(tl.CommonNames) != 1 || tl.CommonNames[0] != "Monstera leaves" {
+		t.Errorf("common names = %v, want [Monstera leaves]", tl.CommonNames)
+	}
+	if _, err := BuildCertXML(in); err != nil {
+		t.Fatalf("BuildCertXML: %v", err)
+	}
+}
+
+func TestAnswerLabel(t *testing.T) {
+	for _, c := range []struct {
+		in   any
+		want string
+	}{
+		{map[string]any{"value": "CN-042", "label": "Monstera leaves"}, "Monstera leaves"},
+		{map[string]any{"value": "CN-042"}, "CN-042"},
+		{map[string]any{"value": "CN-042", "label": "  "}, "CN-042"},
+		{" Cinnamon Quills ", "Cinnamon Quills"},
+		{nil, ""},
+	} {
+		if got := answerLabel(c.in); got != c.want {
+			t.Errorf("answerLabel(%v) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestBuildInput_ReExportSelectsType657(t *testing.T) {
 	uf := sampleUserform()
 	uf["certificate_type"] = "re-export"

@@ -415,9 +415,10 @@ func buildConsignment(uf map[string]any, importISO string, certificateItems any)
 }
 
 func buildTradeLine(com map[string]any, seq int, treatment string, reExport *spscert.ReExport) spscert.TradeLineInput {
+	commonName := answerLabel(com["commodity_common_name"])
 	description := asString(com["commodity_description"])
 	if description == "" {
-		description = asString(com["commodity_common_name"])
+		description = commonName
 	}
 
 	tl := spscert.TradeLineInput{
@@ -431,8 +432,8 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 		Condition:       answerCode(com["commodity_condition"]),
 		IntendedUse:     answerCode(com["commodity_intended_use"]),
 	}
-	if cn := asString(com["commodity_common_name"]); cn != "" {
-		tl.CommonNames = []string{cn}
+	if commonName != "" {
+		tl.CommonNames = []string{commonName}
 	}
 
 	// Packaging: a structured package OR the free-text fallback (OPTND), never
@@ -597,6 +598,18 @@ func asString(v any) string {
 // application saved before its dropdowns did holds the bare code.
 func answerCode(v any) string {
 	if m, ok := v.(map[string]any); ok {
+		return asString(m["value"])
+	}
+	return asString(v)
+}
+
+// answerLabel reads a dropdown answer as the title the trader saw, falling
+// back to its code when no label was stored. A bare string passes through.
+func answerLabel(v any) string {
+	if m, ok := v.(map[string]any); ok {
+		if label := asString(m["label"]); label != "" {
+			return label
+		}
 		return asString(m["value"])
 	}
 	return asString(v)
