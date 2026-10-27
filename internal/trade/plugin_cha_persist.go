@@ -24,6 +24,9 @@ import (
 // Access to the consignment is company-wide — any user at the selected CHA company can act on
 // it — so only cha_company_id is recorded; no individual CHA user is assigned.
 //
+// It also hands the chosen CHA's details on as the task's "cha" output (see chaSeed), so the
+// agency flows can prefill the declarant's details from them.
+//
 // It is synchronous — it returns nil (not ErrSuspended) so the engine advances
 // immediately without waiting for any user or external action.
 type CHAPersistPlugin struct {
@@ -75,7 +78,7 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 	}
 
 	// The name lives on the consignment's cases row; the CHA company on the consignment.
-	return p.db.WithContext(ctx.Context).Transaction(func(tx *gorm.DB) error {
+	err = p.db.WithContext(ctx.Context).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&consignment.Consignment{}).
 			Where("id = ?", consignmentID).
 			Update("cha_company_id", chaCompanyID)
@@ -93,4 +96,36 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	if ctx.Record.Data == nil {
+		ctx.Record.Data = make(map[string]any)
+	}
+	ctx.Record.Data["cha"] = chaSeed(record)
+	return nil
+}
+
+// chaSeedFields are the company data fields a CHA's details carry into the agency flows.
+// A company's data holds more, such as the SLPA CMS key it was issued, which must not reach a
+// trader's workflow, so this is an allowlist.
+var chaSeedFields = []string{"tin_no", "tel", "contact_email", "address"}
+
+// chaSeed is the CHA's details as the "cha" workflow variable, in the shape of a company
+// record ({id, name, data}) so an artifact reads them the way it reads the trader's.
+// Fields the company's data lacks are left out.
+func chaSeed(record *company.Record) map[string]any {
+	data := map[string]any{}
+	var all map[string]any
+	if len(record.Data) > 0 {
+		// Unreadable data is no reason to fail the selection: the forms just stay empty.
+		_ = json.Unmarshal(record.Data, &all)
+	}
+	for _, field := range chaSeedFields {
+		if value, ok := all[field].(string); ok && value != "" {
+			data[field] = value
+		}
+	}
+	return map[string]any{"id": record.ID, "name": record.Name, "data": data}
 }
