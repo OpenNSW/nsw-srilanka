@@ -1,6 +1,5 @@
 import type { Locale } from '@/i18n/types'
 
-// Sinhala. Keys not yet translated by PIU fall back to English (fallbackLng in ./index.ts).
 const si: Locale = {
   label: 'සිංහල',
   translation: {
@@ -9,23 +8,26 @@ const si: Locale = {
       login: {
         tagline: 'ඔබගේ භාණ්ඩ තොග (consignments) වෙත ප්‍රවේශවීමට පුරනය වන්න',
         button: 'පුරන්න',
+        errorTitle: 'Authentication Failed',
       },
       unauthorized: {
         title: 'ප්‍රවේශය සීමාකර තිබේ.',
+        message: 'ඔබගේ ගිණුම මෙම නියෝජිතායතනයේ වෙබ් පෝර්ටලයට අයිති නොවේ.  නිවැරදි ආයතනික ගිණුම ඔස්සේ පුරනය වන්න.',
         signOut: 'පිටවන්න',
       },
     },
-
     nav: {
       menu: 'මෙනුව',
       consignments: 'භාණ්ඩ තොග',
       cases: 'නඩු/ගොනු',
       verifiedDocs: 'තහවුරු කළ ලියකියවිලි',
     },
-
     cases: {
       list: {
+        loading: 'Loading Cases...',
         title: 'නඩු/ගොනු',
+        empty: 'No cases yet.',
+        error: 'Could not load cases.',
         table: {
           id: 'නඩුව/ගොනුව',
           state: 'තත්ත්වය',
@@ -40,20 +42,23 @@ const si: Locale = {
         },
       },
     },
-
     consignments: {
       state: {
         inProgress: 'ක්‍රියාත්මක වෙමින් පවතී',
         finished: 'අවසන් කරන ලදී',
       },
       tradeFlow: {
-        import: 'ආනයන',
         export: 'අපනයන',
       },
       list: {
+        loading: 'භාණ්ඩ තොග පිළිබඳ විස්තරය පූරනය වෙමින් පවතී ...',
         title: 'භාණ්ඩ තොග',
         create: 'නව භාණ්ඩ තොගයක්',
         creating: 'සාදමින්...',
+        error: {
+          loadFailed: 'Could not load consignments.',
+          createFailed: 'Could not create the consignment. Please try again.',
+        },
         searchPlaceholder: 'නම, අංකය, හෝ HS කේතය මගින් සොයන්න...',
         filter: {
           statePlaceholder: 'තත්ත්වය',
@@ -62,8 +67,11 @@ const si: Locale = {
           finished: 'අවසන් කරන ලදී',
           tradeFlowPlaceholder: 'වෙළඳ ප්‍රවාහය',
           allTypes: 'සියලු වර්ග',
-          import: 'ආනයන',
           export: 'අපනයන',
+        },
+        empty: {
+          none: 'No consignments yet.',
+          filtered: 'No consignments match your filters.',
         },
         table: {
           id: 'භාණ්ඩ තොගය',
@@ -73,11 +81,16 @@ const si: Locale = {
         },
       },
       detail: {
-        title: 'භාණ්ඩ තොග විස්තරය',
+        loading: {
+          processing: 'Processing your submission...',
+          consignment: 'Loading consignment...',
+          settingUp: 'Setting up your consignment...',
+        },
         backToList: 'භාණ්ඩ තොග වෙත ආපසු',
         tryAgain: 'නැවත උත්සාහ කරන්න',
         refresh: 'නැවුම් කරන්න',
         refreshing: 'නැවුම් කරමින්...',
+        title: 'භාණ්ඩ තොග විස්තරය',
         field: {
           consignmentId: 'භාණ්ඩ තොග අංකය',
           dateCreated: 'සාදන ලද දිනය',
@@ -87,16 +100,30 @@ const si: Locale = {
           confirmDescription: 'මෙයින් භාණ්ඩ තොගය සඳහා {{label}} ආරම්භ වේ. එහි පියවර පහත ලැයිස්තුවේ දිස්වේ.',
           cancel: 'අවලංගු කරන්න',
           start: 'අරඹන්න',
+          failed: 'Could not start {{label}}. Please try again.',
         },
         noWorkflow: {
           title: 'කාර්ය ප්‍රවාහ පියවර නොමැත',
           description: 'මෙම භාණ්ඩ තොගය සඳහා කාර්ය ප්‍රවාහ පියවර කිසිවක් සකසා නොමැත.',
         },
+        error: {
+          idRequired: 'Consignment ID is required',
+          notFound: 'Consignment not found',
+          loadFailed: 'Failed to load consignment',
+          loadFailedDescription: 'There was a problem loading the consignment details. Please try again.',
+          notFoundDescription: "The consignment you're looking for doesn't exist or you don't have access to it.",
+        },
       },
     },
-
     preconsignment: {
       title: 'තහවුරු කළ ලියකියවිලි',
+      error: {
+        loadFailed: 'Failed to load pre-consignments list.',
+        noReadyTask: 'No ready task found in pre-consignment.',
+        startFailed: 'Failed to start registration process.',
+        noTask: 'No task found in pre-consignment.',
+        loadDetailFailed: 'An error occurred while loading the process details.',
+      },
       action: {
         start: 'අරඹන්න',
         view: 'බලන්න',
@@ -104,8 +131,8 @@ const si: Locale = {
         dependentWarning: 'පළමුව අදාළ පූර්ව භාණ්ඩ තොග සම්පූර්ණ කරන්න',
       },
     },
-
     tasks: {
+      loading: 'Loading task...',
       goBack: 'ආපසු යන්න',
       refresh: 'නැවුම් කරන්න',
       taskId: 'කාර්ය අංකය',
@@ -150,25 +177,51 @@ const si: Locale = {
         raiseServiceOrder: 'සේවා ඇණවුම යොමු කරන්න',
         raiseSundryOrder: 'විවිධ ඇණවුම යොමු කරන්න',
       },
+      redirect: {
+        redirectedTitle: 'Redirected to Payment Gateway',
+        redirectedDescription: 'Your session was redirected to the external payment gateway.',
+        returnToPayment: 'Return to payment session',
+        resetRedirection: 'Reset redirection state',
+        redirecting: 'Redirecting to payment gateway…',
+      },
       unsaved: {
         title: 'සුරැකීමකින් තොරව ඉවත් වෙනවාද?',
         description: 'මෙම පෝරමයේ ඔබේ පිළිතුරු සුරැකී නොමැත. ඔබ දැන් පිටව ගියහොත් ඒවා නැතිවී යනු ඇත.',
         stay: 'මෙම පිටුවේ රැඳී සිටින්න',
         leave: 'නොසුරකා ඉවත් වන්න',
       },
+      validation: {
+        requiredFields: 'Please fill in all required fields.',
+      },
+      error: {
+        missingId: 'Task ID is missing.',
+        fetchFailed: 'Failed to fetch task details.',
+        notFound: 'Task not found.',
+        submitFailed: 'Failed to submit task. Please try again.',
+        draftFailed: 'Failed to save the draft. Please try again.',
+        staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
+      },
       claim: {
+        unclaimed: 'භාරගෙන නොමැත',
+        claimedByYou: 'ඔබ විසින් භාරගන්නා ලදී.',
+        claimedBy: '{{name}} විසින් භාරගන්නා ලදී',
+        anotherUser: 'වෙනත් පරිශීලකයෙක්',
         claim: 'භාරගැනීම',
         release: 'නිකුත් කිරීම',
         takeOver: 'භාරයට ගන්න',
         takeOverTitle: 'මෙම කාර්යය ඔබේ භාරයට ගන්නද?',
+        takeOverConfirm: '{{name}} is working on this task. Take it over so that it shows you instead?',
+        takeOverConfirmUnnamed: 'Another user is working on this task. Take it over so that it shows you instead?',
         cancel: 'අවලංගු කිරීම',
-        claimedByYou: 'ඔබ විසින් භාරගන්නා ලදී.',
-        claimedBy: '{{name}} විසින් භාරගන්නා ලදී',
-        anotherUser: 'වෙනත් පරිශීලකයෙක්',
-        unclaimed: 'භාරගෙන නොමැත',
+        error: {
+          changed: 'The claim on this task just changed. It now shows who holds it.',
+          completed: 'This task is completed and can no longer be claimed.',
+          notHolder: 'This task is claimed by another user, so you cannot release it.',
+          unavailable: 'Claiming is not available for this task.',
+          failed: 'Could not update the claim. Please try again.',
+        },
       },
     },
-
     workflow: {
       tabs: {
         active: 'සක්‍රිය',
@@ -198,11 +251,16 @@ const si: Locale = {
         cancelled: 'අවලංගු කරන ලදී',
       },
     },
-
     audit: {
       title: 'ක්‍රියාකාරකම්',
+      entries: '· {{count}} entries',
+      time: {
+        justNow: 'just now',
+        minutesAgo: '{{mins}}m ago',
+        hoursAgo: '{{hours}}h ago',
+        daysAgo: '{{days}}d ago',
+      },
     },
-
     footer: {
       links: {
         policy: 'ප්‍රතිපත්තිය',
@@ -210,17 +268,22 @@ const si: Locale = {
         support: 'සහාය',
       },
     },
-
     common: {
       colorScheme: 'වර්ණ තේමාව',
       breadcrumb: 'මාර්ගය (Breadcrumb)',
       copied: 'පිටපත් කරන ලදී',
       copyNamed: '{{name}} පිටපත් කරන්න',
+      dateTimeAt: '{{දිනය}} {{වේලාව}}',
+      poweredBy: 'Powered by <0>OpenNSW</0> from the <1>Lanka Software Foundation</1>',
       pagination: {
+        total: 'Total: {{count}}',
+        page: 'Page {{page}} of {{totalPages}}',
         previous: 'පෙර',
         next: 'ඊළඟ',
       },
       error: {
+        title: 'Something went wrong',
+        unexpected: 'An unexpected error occurred',
         tryAgain: 'නැවත උත්සාහ කරන්න',
       },
     },
