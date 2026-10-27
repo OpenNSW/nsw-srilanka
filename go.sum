@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/OpenNSW/core v0.0.0-20261023160916-7f2278081605 h1:Ruz47TaLg/A5ZuU8KOWrN/Q8GNadtAEzlGmsLr064Ok=
-github.com/OpenNSW/core v0.0.0-20261023160916-7f2278081605/go.mod h1:pKFzidLBaXj8N4wyjkFgPwxhfxAgwvnZLok8Qt3KMTM=
+github.com/OpenNSW/core v0.0.0-20261027045108-a533c532e735 h1:DRkYAFK6tts1rylOHroNNChggR1jOwCTVApHx9jJf1I=
+github.com/OpenNSW/core v0.0.0-20261027045108-a533c532e735/go.mod h1:pKFzidLBaXj8N4wyjkFgPwxhfxAgwvnZLok8Qt3KMTM=
 github.com/OpenNSW/core/authn v0.4.0 h1:kZNUGp49aAZ1ui19soMKF2qGVOc2os1PyS6UuRpT7UY=
 github.com/OpenNSW/core/authn v0.4.0/go.mod h1:9/yGWkx5t5u0+YBUH4FsaZO6wpq/5WK5tdyOD+yL2Ek=
 github.com/OpenNSW/core/authz v0.1.0 h1:qWM+NObLNEaG6GZ2ZnKYmtkwrtlAmEzIljfpiQw2vbo=

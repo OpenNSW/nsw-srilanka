@@ -233,7 +233,9 @@ export function ConsignmentScreen() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                          {consignment.flow}
+                          {consignment.flow === 'IMPORT'
+                            ? t('consignments.tradeFlow.import')
+                            : t('consignments.tradeFlow.export')}
                         </Badge>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

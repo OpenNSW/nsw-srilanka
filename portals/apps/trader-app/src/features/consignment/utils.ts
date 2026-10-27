@@ -29,7 +29,14 @@ export function getStateColor(state: ConsignmentState): 'gray' | 'blue' | 'green
  * Example: IN_PROGRESS -> In Progress
  */
 export function formatState(state: ConsignmentState): string {
-  return humanizeStatus(state)
+  switch (state) {
+    case 'IN_PROGRESS':
+      return i18n.t('consignments.state.inProgress')
+    case 'FINISHED':
+      return i18n.t('consignments.state.finished')
+    default:
+      return humanizeStatus(state)
+  }
 }
 
 /**

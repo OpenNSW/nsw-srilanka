@@ -2,12 +2,16 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import en from './locales/en'
+import si from './locales/si'
+import ta from './locales/ta'
 
 // `resources` and `languageLabels` are derived from the same map and won't drift apart.
 // Add a language by creating <lang>.ts under ./locales (matching the shape
 // of en.ts) and registering it here.
 const locales = {
   en,
+  si,
+  ta,
 }
 
 export const languageLabels: Record<string, string> = Object.fromEntries(

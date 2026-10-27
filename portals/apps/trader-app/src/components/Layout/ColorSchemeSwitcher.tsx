@@ -1,5 +1,6 @@
 import { DropdownMenu } from '@radix-ui/themes'
 import { CheckIcon } from '@radix-ui/react-icons'
+import { useTranslation } from 'react-i18next'
 import { COLOR_SCHEMES } from '@/services/colorSchemeContextCore'
 import { useColorScheme } from '@/services/useColorScheme'
 
@@ -8,6 +9,7 @@ import { useColorScheme } from '@/services/useColorScheme'
 // what each one actually overrides. Lives in the footer (not the TopBar)
 // since it's a whole-app setting, not a page action.
 export function ColorSchemeSwitcher() {
+  const { t } = useTranslation()
   const { scheme, setSchemeId } = useColorScheme()
 
   return (
@@ -23,7 +25,7 @@ export function ColorSchemeSwitcher() {
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" side="top" className="min-w-64">
-        <DropdownMenu.Label className="text-foreground-subtle">Color scheme</DropdownMenu.Label>
+        <DropdownMenu.Label className="text-foreground-subtle">{t('common.colorScheme')}</DropdownMenu.Label>
         {COLOR_SCHEMES.map((s) => (
           <DropdownMenu.Item key={s.id} onSelect={() => setSchemeId(s.id)} className="items-start py-2">
             <span

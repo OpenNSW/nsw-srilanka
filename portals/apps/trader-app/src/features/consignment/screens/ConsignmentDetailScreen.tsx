@@ -310,7 +310,9 @@ export function ConsignmentDetailScreen({
             {/* A case carries no flow. */}
             {consignment.flow && (
               <Badge size="1" color={consignment.flow === 'IMPORT' ? 'blue' : 'green'} variant="soft">
-                {consignment.flow}
+                {consignment.flow === 'IMPORT'
+                  ? t('consignments.tradeFlow.import')
+                  : t('consignments.tradeFlow.export')}
               </Badge>
             )}
           </div>

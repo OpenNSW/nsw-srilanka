@@ -1,4 +1,5 @@
 import type { JsonSchema, UISchemaElement } from '@jsonforms/core'
+import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
 
 export type FormPayload = {
@@ -24,13 +25,79 @@ export type Alert = string | { message: string; title?: string; variant?: AlertV
 // Handle is one operation as the trader-app receives it: command identifies
 // what to dispatch, label is the user-facing text, element is an identifier
 // owned by this zone's renderer (e.g. 'primary_action', 'secondary_action'
-// for a FORM zone). Dispatch behavior — whether to gather form data,
-// validation gating — is decided by the renderer based on element, not by
-// any field on the handle itself.
+// for a FORM zone). i18n holds label translations keyed by language
+// code (e.g. 'si', 'ta'); see handleLabel. Dispatch behavior — whether to
+// gather form data, validation gating — is decided by the renderer based on
+// element, not by any field on the handle itself.
 export type Handle = {
   command: string
   label: string
+  i18n?: Record<string, string>
   element?: string
+}
+
+export const HANDLE_LABEL_KEYS = {
+  'Save as Draft': 'tasks.handles.saveAsDraft',
+  Continue: 'tasks.handles.continue',
+  'Continue >': 'tasks.handles.continue',
+  'Save & Continue': 'tasks.handles.saveAndContinue',
+  'Complete Selection': 'tasks.handles.completeSelection',
+  'Proceed to Payment': 'tasks.handles.proceedToPayment',
+  'Submit Application': 'tasks.handles.submitApplication',
+  'Submit application': 'tasks.handles.submitApplication',
+  'Submit Decision': 'tasks.handles.submitDecision',
+  'Submit decision': 'tasks.handles.submitDecision',
+  Done: 'tasks.handles.done',
+  'Upload Documents': 'tasks.handles.uploadDocuments',
+  'Submit Documents': 'tasks.handles.submitDocuments',
+  Submit: 'tasks.handles.submit',
+  'Schedule Inspection': 'tasks.handles.scheduleInspection',
+  'Acknowledge Amendment': 'tasks.handles.acknowledgeAmendment',
+  Consolidate: 'tasks.handles.consolidate',
+  'Look Again': 'tasks.handles.lookAgain',
+  Verify: 'tasks.handles.verify',
+  'Submit Blend Sheet': 'tasks.handles.submitBlendSheet',
+  'Submit Boat Note': 'tasks.handles.submitBoatNote',
+  'Submit CDN Application': 'tasks.handles.submitCDNApplication',
+  'Submit Certificates': 'tasks.handles.submitCertificates',
+  'Submit CusDec Application': 'tasks.handles.submitCusDecApplication',
+  'Submit Inspection Schedule': 'tasks.handles.submitInspectionSchedule',
+  'Submit Payment Slip': 'tasks.handles.submitPaymentSlip',
+  'Submit Receipt': 'tasks.handles.submitReceipt',
+  'Submit Response': 'tasks.handles.submitResponse',
+  'Submit Treatment Request': 'tasks.handles.submitTreatmentRequest',
+  'Submit inspection outcome': 'tasks.handles.submitInspectionOutcome',
+  'Submit to the Export Division': 'tasks.handles.submitToExportDivision',
+  'Fetch Pre-advised Containers': 'tasks.handles.fetchPreAdvisedContainers',
+  'Generate Invoice': 'tasks.handles.generateInvoice',
+  'Raise Service Order': 'tasks.handles.raiseServiceOrder',
+  'Raise Sundry Order': 'tasks.handles.raiseSundryOrder',
+} as const
+
+// handleLabel resolves the localized label for a handle. If an explicit
+// translation is provided in handle.i18n, it is prioritized; otherwise it
+// falls back to the frontend translation dictionary before returning handle.label.
+export function handleLabel(handle: Handle, language?: string, t?: TFunction): string {
+  if (language && handle.i18n?.[language]) {
+    return handle.i18n[language]
+  }
+  if (t) {
+    const trimmed = handle.label.trim()
+    if (trimmed in HANDLE_LABEL_KEYS) {
+      const key = HANDLE_LABEL_KEYS[trimmed as keyof typeof HANDLE_LABEL_KEYS]
+      const translated = t(key)
+      if (translated) {
+        return String(translated)
+      }
+    }
+    if (handle.element === 'draft_action') {
+      const draftText = t('tasks.handles.saveAsDraft')
+      if (draftText) {
+        return String(draftText)
+      }
+    }
+  }
+  return handle.label
 }
 
 // ZoneAction dispatches a handle a zone's renderer activated, with the data it
