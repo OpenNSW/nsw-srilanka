@@ -22,10 +22,11 @@ type NamespaceOf func(ctx context.Context, stepTemplateID string) (string, error
 
 // Extension is the PRE_RESUME task extension that validates a submission
 // against the form the step names in the extension's properties: its JSON
-// Schema, and the values it shows read-only, which must come back as the step
-// stored them. It runs on every step that lists it and fails closed: a
-// step whose form can't be found or compiled rejects every submission rather
-// than letting one through unchecked.
+// Schema, the values it shows read-only, which must come back as the step
+// stored them, and a limit on the size of every number the user enters (see
+// maxNumber), which no form's schema can lift. It runs on every step that
+// lists it and fails closed: a step whose form can't be found or compiled
+// rejects every submission rather than letting one through unchecked.
 type Extension struct {
 	formOf      FormOf
 	namespaceOf NamespaceOf
@@ -80,6 +81,7 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 			}
 			found = append(found, violations(invalid)...)
 		}
+		found = append(found, readOnly.numberViolations(data)...)
 	}
 	if readOnly.root != nil {
 		stored, err := e.stored(ctx, record)
