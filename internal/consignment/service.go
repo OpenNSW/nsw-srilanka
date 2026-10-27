@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/artifact/adapter/workflowdef"
+	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
@@ -597,7 +599,7 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 			CreatedAt: t.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 			WorkflowNodeTemplate: WorkflowNodeTemplateResponseDTO{
-				Name: taskDisplayName(t.ActiveTaskTemplateID, t.RenderConfig),
+				Name: s.taskDisplayName(ctx, t),
 				Type: t.TaskType,
 			},
 			State: nodeState,
@@ -606,9 +608,19 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 	return dtos, nil
 }
 
-// taskDisplayName extracts the human-readable title from a task's render config root level,
-// falling back to the template ID when no title is present.
-func taskDisplayName(templateID string, renderConfig json.RawMessage) string {
+// taskDisplayName returns the title at the root of t's render config, falling back to its
+// task template's ID. A config that does not resolve only costs the title, so it is logged.
+func (s *Service) taskDisplayName(ctx context.Context, t store.TaskRecord) string {
+	renderConfig, err := renderconfig.Load(ctx, s.artifacts, t)
+	if err != nil {
+		slog.WarnContext(ctx, "consignment: render config unavailable for task name", "taskId", t.TaskID, "error", err)
+		return t.TaskTemplateID
+	}
+	return titleOrFallback(renderConfig, t.TaskTemplateID)
+}
+
+// titleOrFallback returns the title at the root of renderConfig, or fallback when it has none.
+func titleOrFallback(renderConfig json.RawMessage, fallback string) string {
 	if len(renderConfig) > 0 {
 		var rc struct {
 			Title string `json:"title"`
@@ -617,7 +629,7 @@ func taskDisplayName(templateID string, renderConfig json.RawMessage) string {
 			return rc.Title
 		}
 	}
-	return templateID
+	return fallback
 }
 
 // companyRecordToMap converts a company.Record to a map[string]any via its JSON tags.

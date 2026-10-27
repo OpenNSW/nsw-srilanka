@@ -12,6 +12,7 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
+	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig"
@@ -145,7 +146,7 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 			if t.TaskType == "SYSTEM" {
 				continue
 			}
-			nodes = append(nodes, toNode(t, meta))
+			nodes = append(nodes, toNode(t, meta, h.renderConfig(r, t, meta)))
 		}
 	}
 	httputil.JSON(w, http.StatusOK, CaseDetail{CaseSummary: toSummary(*c), WorkflowNodes: nodes})
@@ -164,6 +165,20 @@ func (h *CaseHandler) meta(r *http.Request, wf CaseWorkflow) taskconfig.TaskMeta
 	}
 	slog.WarnContext(r.Context(), "agency: task config unavailable for case view", "taskCode", wf.TaskCode, "manifestVersion", wf.ManifestVersion, "error", err)
 	return taskconfig.TaskMeta{}
+}
+
+// renderConfig returns t's render config when the view needs its title, that is when
+// meta has none. A config that does not resolve only costs the title, so it is logged.
+func (h *CaseHandler) renderConfig(r *http.Request, t store.TaskRecord, meta taskconfig.TaskMeta) json.RawMessage {
+	if meta.Title != "" {
+		return nil
+	}
+	rc, err := renderconfig.Load(r.Context(), h.artifacts, t)
+	if err != nil {
+		slog.WarnContext(r.Context(), "agency: render config unavailable for case view", "taskId", t.TaskID, "error", err)
+		return nil
+	}
+	return rc
 }
 
 // requireCatalogRole writes the error response and returns false unless the caller is a
@@ -200,7 +215,7 @@ func toSummary(c Case) CaseSummary {
 // consignment.Service.buildNodeDTOsFromTaskRecords, copied rather than exported so the
 // agency can diverge (e.g. officer-facing state labels) without touching TNSW code.
 // The task_config's meta names the node when it has a title.
-func toNode(t store.TaskRecord, meta taskconfig.TaskMeta) WorkflowNode {
+func toNode(t store.TaskRecord, meta taskconfig.TaskMeta, renderConfig json.RawMessage) WorkflowNode {
 	state := "IN_PROGRESS"
 	switch t.State {
 	case "COMPLETED", "FAILED", "QUEUED_EXTERNALLY":
@@ -211,7 +226,7 @@ func toNode(t store.TaskRecord, meta taskconfig.TaskMeta) WorkflowNode {
 		CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 		WorkflowNodeTemplate: WorkflowNodeTemplate{
-			Name:        taskDisplayName(meta.Title, t.ActiveTaskTemplateID, t.RenderConfig),
+			Name:        taskDisplayName(meta.Title, t.TaskTemplateID, renderConfig),
 			Description: meta.Description,
 			Type:        t.TaskType,
 		},

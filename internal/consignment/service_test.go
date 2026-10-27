@@ -611,7 +611,16 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_NilStore(t *testing.T) 
 
 func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T) {
 	mockTaskStore := new(MockTaskStore)
-	svc := mustNewService(t, nil, nil, nil, nil, nil, mockTaskStore)
+	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
+		"manifest_v1.json": []byte(`{"artifacts":[
+			{"id":"my-task","kind":"task_template","path":"task.json"},
+			{"id":"my-task:render","kind":"generic_template","path":"render.json"}
+		]}`),
+		"task.json":   []byte(`{"id":"my-task","type":"FORM","workflow_id":"my-task-flow","render_config_id":"my-task:render"}`),
+		"render.json": []byte(`{"title":"My Step"}`),
+	})
+	require.NoError(t, err)
+	svc := mustNewService(t, nil, set, nil, nil, nil, mockTaskStore)
 	ctx := context.Background()
 	consignmentID := "cons-1"
 	now := time.Now()
@@ -621,7 +630,7 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 		{TaskID: "t2", TaskType: "FORM", State: "FAILED", ActiveTaskTemplateID: "step-2", CreatedAt: now, UpdatedAt: now},
 		{
 			TaskID: "t3", TaskType: "FORM", State: "PENDING_USER", ActiveTaskTemplateID: "step-3", CreatedAt: now, UpdatedAt: now,
-			RenderConfig: json.RawMessage(`{"title":"My Step"}`),
+			TaskTemplateID: "my-task", ManifestVersion: 1,
 		},
 		{TaskID: "t4", TaskType: "FORM", State: "QUEUED_EXTERNALLY", ActiveTaskTemplateID: "step-4", CreatedAt: now, UpdatedAt: now},
 		{TaskID: "t5", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
@@ -705,25 +714,25 @@ func TestConsignmentService_GetAgencySummary_CompanyNotFound(t *testing.T) {
 
 func TestTaskDisplayName(t *testing.T) {
 	// nil render config → template ID
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", nil))
+	assert.Equal(t, "trade-export", titleOrFallback(nil, "trade-export"))
 
 	// root-level title present → use title
 	rcRootTitle := json.RawMessage(`{"title":"My Root Title"}`)
-	assert.Equal(t, "My Root Title", taskDisplayName("trade-export", rcRootTitle))
+	assert.Equal(t, "My Root Title", titleOrFallback(rcRootTitle, "trade-export"))
 
 	// root-level title empty → template ID
 	rcEmptyTitle := json.RawMessage(`{"title":""}`)
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcEmptyTitle))
+	assert.Equal(t, "trade-export", titleOrFallback(rcEmptyTitle, "trade-export"))
 
 	// root-level title missing → template ID
 	rcNoTitle := json.RawMessage("{}")
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcNoTitle))
+	assert.Equal(t, "trade-export", titleOrFallback(rcNoTitle, "trade-export"))
 
 	// JSON null render config → template ID
 	rcNull := json.RawMessage("null")
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rcNull))
+	assert.Equal(t, "trade-export", titleOrFallback(rcNull, "trade-export"))
 
 	// invalid JSON → template ID
 	rc4 := json.RawMessage(`invalid`)
-	assert.Equal(t, "trade-export", taskDisplayName("trade-export", rc4))
+	assert.Equal(t, "trade-export", titleOrFallback(rc4, "trade-export"))
 }

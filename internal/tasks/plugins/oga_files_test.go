@@ -27,6 +27,21 @@ var tokenFor = OGAFiles{
 	IssueForClient: func(clientID, value string) (string, error) {
 		return clientID + "/" + value, nil
 	},
+	// A task that declares no files; withRenderConfig gives it some.
+	RenderConfigOf: fixedRenderConfig(`{}`),
+}
+
+// fixedRenderConfig resolves every task's render config to renderConfig.
+func fixedRenderConfig(renderConfig string) func(context.Context, store.TaskRecord) (json.RawMessage, error) {
+	return func(context.Context, store.TaskRecord) (json.RawMessage, error) {
+		return json.RawMessage(renderConfig), nil
+	}
+}
+
+// withRenderConfig is f resolving every task's render config to renderConfig.
+func withRenderConfig(f OGAFiles, renderConfig string) OGAFiles {
+	f.RenderConfigOf = fixedRenderConfig(renderConfig)
+	return f
 }
 
 const reviewRenderConfig = `{
@@ -50,7 +65,7 @@ func reviewInputs(t *testing.T) map[string]any {
 func TestOGAFiles_TokenizeSendsTokens(t *testing.T) {
 	in := reviewInputs(t)
 
-	sent, err := tokenFor.tokenize(json.RawMessage(reviewRenderConfig), "submission", in["submission"], "cda")
+	sent, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "cda")
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{
@@ -64,14 +79,14 @@ func TestOGAFiles_TokenizeSendsTokens(t *testing.T) {
 func TestOGAFiles_TokenizeWholeInputs(t *testing.T) {
 	in := reviewInputs(t)
 
-	sent, err := tokenFor.tokenize(json.RawMessage(reviewRenderConfig), "", in, "cda")
+	sent, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "", in, "cda")
 	require.NoError(t, err)
 	assert.Equal(t, "CDA_TO_NSW/k-invoice", sent.(map[string]any)["submission"].(map[string]any)["invoice"])
 }
 
 // With no client to issue a token to, a file is not sent at all.
 func TestOGAFiles_TokenizeFailsClosedWithoutAClient(t *testing.T) {
-	_, err := tokenFor.tokenize(json.RawMessage(reviewRenderConfig), "submission", reviewInputs(t)["submission"], "efc")
+	_, err := withRenderConfig(tokenFor, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", reviewInputs(t)["submission"], "efc")
 	assert.ErrorContains(t, err, `"efc"`)
 }
 
@@ -83,19 +98,19 @@ func TestOGAFiles_TokenizeWithoutFilesToSend(t *testing.T) {
 		"declared but not present": `{"files":["submission.missing"]}`,
 	} {
 		// "efc" has no client: nothing to issue means no client needed.
-		sent, err := tokenFor.tokenize(json.RawMessage(renderConfig), "submission", in["submission"], "efc")
+		sent, err := withRenderConfig(tokenFor, renderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "efc")
 		require.NoError(t, err, name)
 		assert.Equal(t, in["submission"], sent, name)
 	}
 }
 
 func TestOGAFiles_TokenizeErrors(t *testing.T) {
-	_, err := tokenFor.tokenize(json.RawMessage(`{"files":["submission.docs[0]"]}`), "submission", map[string]any{}, "cda")
+	_, err := withRenderConfig(tokenFor, `{"files":["submission.docs[0]"]}`).tokenize(context.Background(), store.TaskRecord{}, "submission", map[string]any{}, "cda")
 	assert.Error(t, err, "a bad declaration")
 
 	failing := tokenFor
 	failing.IssueForClient = func(string, string) (string, error) { return "", errors.New("no keyset") }
-	_, err = failing.tokenize(json.RawMessage(reviewRenderConfig), "submission", reviewInputs(t)["submission"], "cda")
+	_, err = withRenderConfig(failing, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", reviewInputs(t)["submission"], "cda")
 	assert.ErrorContains(t, err, "no keyset")
 }
 
@@ -103,10 +118,10 @@ func TestOGAFiles_TokenizeErrors(t *testing.T) {
 // is: the push fails, and nothing reaches the OGA.
 func TestExternalReview_DoesNotPushMismatchedFileFields(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, reviewRenderConfig))
 	in := reviewInputs(t)
 	in["submission"].(map[string]any)["invoice"] = []any{"k-invoice", "k-other"}
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","path":"/review"}`))
 
@@ -135,12 +150,11 @@ func newOGA(t *testing.T) (*remote.Manager, *[]map[string]any) {
 
 func TestExternalReview_PushesFileTokens(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, reviewRenderConfig))
 	in := reviewInputs(t)
 	record := &store.TaskRecord{
 		TaskID:       uuid.NewString(),
 		ActiveStepID: uuid.NewString(),
-		RenderConfig: json.RawMessage(reviewRenderConfig),
 		Data:         reviewInputs(t),
 	}
 
@@ -157,10 +171,11 @@ func TestExternalReview_PushesFileTokens(t *testing.T) {
 func TestExternalReview_DoesNotPushFilesWithoutAClient(t *testing.T) {
 	m, pushed := newOGA(t)
 	p := NewExternalReviewPlugin(m, "http://nsw.local", OGAFiles{
+		RenderConfigOf: fixedRenderConfig(reviewRenderConfig),
 		ClientFor:      func(string) (string, bool) { return "", false },
 		IssueForClient: tokenFor.IssueForClient,
 	})
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: reviewInputs(t)}, json.RawMessage(`{"service_id":"cda","path":"/review"}`))
 
@@ -173,10 +188,10 @@ func TestExternalReview_DoesNotPushFilesWithoutAClient(t *testing.T) {
 // tokens for the OGA's client too, and the task keeps its stored values.
 func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, reviewRenderConfig))
 	in := reviewInputs(t)
 	in["replyToken"] = "tok_x"
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
 
@@ -194,13 +209,12 @@ func TestExternalReview_RepliesWithFileTokens(t *testing.T) {
 // ones under "payload", and they go as tokens for the OGA's client too.
 func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
 	m, pushed := newOGA(t)
-	p := NewExternalReviewPlugin(m, "http://nsw.local", tokenFor)
+	p := NewExternalReviewPlugin(m, "http://nsw.local", withRenderConfig(tokenFor, `{"files": ["payload.invoice"]}`))
 	in := map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"invoice": "k-invoice", "feedback": "attach the invoice"},
 	}
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(),
-		RenderConfig: json.RawMessage(`{"files": ["payload.invoice"]}`)}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
 
@@ -217,12 +231,13 @@ func TestExternalReview_RepliesWithPayloadFileTokens(t *testing.T) {
 func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {
 	m, pushed := newOGA(t)
 	p := NewExternalReviewPlugin(m, "http://nsw.local", OGAFiles{
+		RenderConfigOf: fixedRenderConfig(reviewRenderConfig),
 		ClientFor:      func(string) (string, bool) { return "", false },
 		IssueForClient: tokenFor.IssueForClient,
 	})
 	in := reviewInputs(t)
 	in["replyToken"] = "tok_x"
-	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString(), RenderConfig: json.RawMessage(reviewRenderConfig)}
+	record := &store.TaskRecord{TaskID: uuid.NewString(), ActiveStepID: uuid.NewString()}
 
 	err := p.Execute(pluginContext{Context: context.Background(), Record: record, Inputs: in}, json.RawMessage(`{"service_id":"cda","reply_command":"submit"}`))
 
@@ -235,7 +250,7 @@ func TestExternalReview_DoesNotReplyWithFilesWithoutAClient(t *testing.T) {
 // it sends back to TNSW as they are, with no client of its own to issue for.
 func TestOGAFiles_ZeroSendsStoredValues(t *testing.T) {
 	in := reviewInputs(t)
-	sent, err := OGAFiles{}.tokenize(json.RawMessage(reviewRenderConfig), "submission", in["submission"], "tnsw")
+	sent, err := withRenderConfig(OGAFiles{}, reviewRenderConfig).tokenize(context.Background(), store.TaskRecord{}, "submission", in["submission"], "tnsw")
 	require.NoError(t, err)
 	assert.Equal(t, reviewInputs(t)["submission"], sent)
 }

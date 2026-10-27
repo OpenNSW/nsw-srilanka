@@ -139,7 +139,7 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 	h := &HTTPHandler{
 		Manager:         orchestrator.NewTaskManager(db, set, nil, extReg, wf, nil, nil),
 		Store:           db,
-		Files:           NewFileBinding(newFakeFileRefs(), nil),
+		Files:           NewFileBinding(newFakeFileRefs(), nil, fixedRenderConfig(`{}`)),
 		MaxRequestBytes: 1024,
 	}
 	return h, db, wf
