@@ -167,7 +167,7 @@ export function PreconsignmentScreen() {
                       onClick={() => void handleStartProcess(item.id)}
                       disabled={isLocked || !areDependenciesMet(item)}
                       style={{ cursor: isLocked || !areDependenciesMet(item) ? 'not-allowed' : 'pointer' }}
-                      title={!areDependenciesMet(item) ? 'Complete dependent pre-consignments first' : ''}
+                      title={!areDependenciesMet(item) ? t('preconsignment.action.dependentWarning') : ''}
                     >
                       <PlayIcon /> {t('preconsignment.action.start')}
                     </Button>

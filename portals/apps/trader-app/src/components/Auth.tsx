@@ -35,7 +35,7 @@ export function UserDropdown({ onSignOut }: { onSignOut: () => void }) {
     (profile?.name as string) ||
     [profile?.given_name, profile?.family_name].filter((part): part is string => Boolean(part)).join(' ')
   const email = (profile?.email as string) || ''
-  const name = personName || email || t('auth.unauthorized.title')
+  const name = personName || email || t('auth.userFallback')
   const initials = name
     .split(/\s+/)
     .filter(Boolean)

@@ -398,7 +398,7 @@ function HandleButton({
   const style = (handle.element && FORM_ELEMENT_CATALOG[handle.element]) || { variant: 'solid' as const }
   const disabled = submitting
   let label = handle.label
-  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : 'Submitting...'
+  if (pending) label = handle.element === 'draft_action' ? t('tasks.savingDraft') : t('tasks.submitting')
   return (
     <Button onClick={() => onClick(handle)} size="3" variant={style.variant} color={style.color} disabled={disabled}>
       {label}

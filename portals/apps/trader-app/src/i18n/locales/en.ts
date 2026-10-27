@@ -2,6 +2,7 @@ const en = {
   label: 'English',
   translation: {
     auth: {
+      userFallback: 'User',
       login: {
         tagline: 'Sign in to continue to your consignments.',
         button: 'Sign In',
@@ -43,6 +44,14 @@ const en = {
     },
 
     consignments: {
+      state: {
+        inProgress: 'In Progress',
+        finished: 'Finished',
+      },
+      tradeFlow: {
+        import: 'Import',
+        export: 'Export',
+      },
       list: {
         loading: 'Loading Consignments...',
         title: 'Consignments',
@@ -123,6 +132,7 @@ const en = {
         start: 'Start',
         view: 'View',
         continue: 'Continue',
+        dependentWarning: 'Complete dependent pre-consignments first',
       },
     },
 
@@ -137,6 +147,14 @@ const en = {
       backToCase: 'Back to case',
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
+      submitting: 'Submitting...',
+      redirect: {
+        redirectedTitle: 'Redirected to Payment Gateway',
+        redirectedDescription: 'Your session was redirected to the external payment gateway.',
+        returnToPayment: 'Return to payment session',
+        resetRedirection: 'Reset redirection state',
+        redirecting: 'Redirecting to payment gateway…',
+      },
       unsaved: {
         title: 'Leave without saving?',
         description: 'Your answers on this form have not been saved. If you leave now, they will be lost.',
@@ -202,6 +220,7 @@ const en = {
         locked: 'Locked',
         failed: 'Failed',
         awaitingFeedback: 'Awaiting Feedback',
+        cancelled: 'Cancelled',
       },
     },
 
@@ -226,6 +245,7 @@ const en = {
     },
 
     common: {
+      colorScheme: 'Color scheme',
       breadcrumb: 'Breadcrumb',
       copied: 'Copied',
       copyNamed: 'Copy {{name}}',
