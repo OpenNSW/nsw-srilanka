@@ -584,19 +584,17 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
 	// category=audit is omitted from stdout and reaches only the OTLP
 	// handler. Security log reads slog.Default after that, so its line is
-	// on the process stream (and OTLP when export is on). otelhttp starts
-	// the server span before trace middleware reads it, so the correlation
-	// id is that span's trace id. The security log sits inside trace
-	// middleware so the line carries the trace id, and outside CORS so a
-	// preflight is logged too. Authentication attaches the principal on a
-	// child request; the log reads it back from authn.RequestCaller.
+	// on the process stream (and OTLP when export is on). It sits inside
+	// trace middleware so the line carries the trace id, and outside CORS
+	// so a preflight is logged too. Authentication attaches the principal
+	// on a child request; the log reads it back from authn.RequestCaller.
 	exportLogs := tel.SlogHandler()
 	configureLogging(cfg, os.Stdout, exportLogs)
 	logAuditExportStatus(cfg, exportLogs != nil)
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")
 	}
-	handler := tel.Handler("tnsw-api", trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(mux))))
+	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", mux))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
