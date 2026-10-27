@@ -24,26 +24,7 @@ func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	const response = `{"status":"accepted","email":"a@example.com"}`
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
-		p := &authn.Principal{Kind: authn.KindUser, UserID: "user-1"}
-		if slot := authn.RequestCallerFrom(r.Context()); slot != nil {
-			slot.Principal = p
-		}
-		ctx := authn.ContextWithPrincipal(r.Context(), p)
-		if got, ok := authn.FromContext(ctx); !ok || got.Subject() != "user-1" {
-			t.Fatalf("principal on handler context = %v ok=%v", got, ok)
-		}
-		got, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		if string(got) != payload {
-			t.Fatalf("handler body = %q", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(response))
-	})
+	mux.HandleFunc("POST /api/v1/tasks/{id}", attachUserAndEcho(t, "user-1", payload, response))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc?x=1", strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
@@ -58,11 +39,8 @@ func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	}
 
 	raw := buf.String()
-	for _, secret := range []string{"super-secret-token", "a@example.com", "+94111", payload, response, "203.0.113.10"} {
-		if strings.Contains(raw, secret) {
-			t.Fatalf("security log contained %q: %s", secret, raw)
-		}
-	}
+	assertLogOmits(t, raw,
+		"super-secret-token", "a@example.com", "+94111", payload, response, "203.0.113.10")
 	line := decodeLine(t, buf.Bytes())
 	assertEqual(t, "category", line["category"], "security")
 	assertEqual(t, "msg", line["msg"], "http request")
@@ -74,23 +52,54 @@ func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	assertEqual(t, "status", line["status"], float64(http.StatusCreated))
 	assertEqual(t, "requestBytes", line["requestBytes"], float64(len(payload)))
 	assertEqual(t, "responseBytes", line["responseBytes"], float64(len(response)))
-	if _, ok := line["remoteAddr"]; ok {
-		t.Fatalf("remoteAddr should not be logged: %v", line["remoteAddr"])
+	assertKeysAbsent(t, line, "remoteAddr", "query", "requestBody", "responseBody")
+	assertKeysPresent(t, line, "time", "durationMs")
+}
+
+func attachUserAndEcho(t *testing.T, userID, wantBody, response string) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := &authn.Principal{Kind: authn.KindUser, UserID: userID}
+		if slot := authn.RequestCallerFrom(r.Context()); slot != nil {
+			slot.Principal = p
+		}
+		got, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(got) != wantBody {
+			t.Fatalf("handler body = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(response))
 	}
-	if _, ok := line["query"]; ok {
-		t.Fatalf("query should not be logged: %v", line["query"])
+}
+
+func assertLogOmits(t *testing.T, raw string, forbidden ...string) {
+	t.Helper()
+	for _, s := range forbidden {
+		if strings.Contains(raw, s) {
+			t.Fatalf("security log contained %q: %s", s, raw)
+		}
 	}
-	if _, ok := line["requestBody"]; ok {
-		t.Fatalf("requestBody should not be logged: %v", line["requestBody"])
+}
+
+func assertKeysAbsent(t *testing.T, line map[string]any, keys ...string) {
+	t.Helper()
+	for _, k := range keys {
+		if _, ok := line[k]; ok {
+			t.Fatalf("%s should not be logged: %v", k, line[k])
+		}
 	}
-	if _, ok := line["responseBody"]; ok {
-		t.Fatalf("responseBody should not be logged: %v", line["responseBody"])
-	}
-	if _, ok := line["time"]; !ok {
-		t.Fatal("expected slog timestamp")
-	}
-	if _, ok := line["durationMs"]; !ok {
-		t.Fatal("expected durationMs")
+}
+
+func assertKeysPresent(t *testing.T, line map[string]any, keys ...string) {
+	t.Helper()
+	for _, k := range keys {
+		if _, ok := line[k]; !ok {
+			t.Fatalf("expected %s", k)
+		}
 	}
 }
 
@@ -299,6 +308,36 @@ func TestMiddlewareRedactsCallbackTokenInPath(t *testing.T) {
 	}
 	line := decodeLine(t, []byte(raw))
 	assertEqual(t, "path", line["path"], "/api/v1/callbacks/{token}")
+}
+
+// TestMiddlewareRedactsCallbackTokenThroughRequestCopy matches the real chain:
+// Middleware outside a WithContext copy (otelhttp), with CaptureRoute next to
+// the mux so pattern is still recorded.
+func TestMiddlewareRedactsCallbackTokenThroughRequestCopy(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	const token = "callback-secret"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/callbacks/{token}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// otelhttp copies via WithContext before the mux; path values land on that
+	// copy only. CaptureRoute still sees Pattern on the copy and fills the slot.
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		CaptureRoute(mux).ServeHTTP(w, r.WithContext(r.Context()))
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/"+token, nil)
+	Middleware(logger)(inner).ServeHTTP(httptest.NewRecorder(), req)
+
+	raw := buf.String()
+	if strings.Contains(raw, token) {
+		t.Fatalf("security log contained callback token: %s", raw)
+	}
+	line := decodeLine(t, []byte(raw))
+	assertEqual(t, "path", line["path"], "/api/v1/callbacks/{token}")
+	assertEqual(t, "pattern", line["pattern"], "POST /api/v1/callbacks/{token}")
 }
 
 func TestMiddlewareLogsSwitchingProtocols(t *testing.T) {

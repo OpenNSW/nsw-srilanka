@@ -18,36 +18,36 @@ import (
 // to server logs. Must be called before any request is served.
 //
 // Audit records do not use this default logger. Bootstrap points LogSink at
-// the OTLP handler after telemetry starts. Call logAuditExportStatus once
-// that path is known.
+// the OTLP handler when telemetry starts (before workers). Call
+// logAuditExportStatus once that path is known.
 func ConfigureLogging(cfg *config.Config) {
 	configureLogging(cfg, os.Stdout)
-	// Warn early so a Build that fails before telemetry still surfaces a
-	// high logLevel. Export status is reported after OTLP is known.
-	if cfg.Server.LogLevel > slog.LevelInfo {
-		slog.Log(context.Background(), cfg.Server.LogLevel,
-			"server.logLevel is above info: audit records (category=audit) are not exported")
-	}
 }
 
 // logAuditExportStatus reports when audit records will not be retained.
 // Both conditions are reported when both apply: a high logLevel suppresses
 // Info audit lines on the export handler, and a missing OTLP exporter means
-// there is no destination. Messages that describe the log level are logged at
-// that level so the filter they describe lets them through.
+// there is no destination. Messages are logged at least at warn, or at the
+// configured level when that is higher, so the filter they describe lets
+// them through.
 func logAuditExportStatus(cfg *config.Config, exportEnabled bool) {
 	if cfg.Server.LogLevel > slog.LevelInfo {
 		slog.Log(context.Background(), cfg.Server.LogLevel,
 			"server.logLevel is above info: audit records (category=audit) are not exported")
 	}
 	if !exportEnabled {
-		slog.Warn("otel log export is off: audit records (category=audit) are not retained")
+		level := slog.LevelWarn
+		if cfg.Server.LogLevel > level {
+			level = cfg.Server.LogLevel
+		}
+		slog.Log(context.Background(), level,
+			"otel log export is off: audit records (category=audit) are not retained")
 	}
 }
 
 // configureLogging is ConfigureLogging with an injectable log destination
 // and optional extra slog handlers (e.g. OTLP) fan-out via MultiHandler.
-// Audit does not go through this path; see LogSink.SetLogger in Build.
+// Audit does not go through this path; see NewLogSink in Build.
 func configureLogging(cfg *config.Config, dest io.Writer, extras ...slog.Handler) {
 	opts := &slog.HandlerOptions{
 		AddSource: cfg.Server.LogLevel <= slog.LevelDebug,

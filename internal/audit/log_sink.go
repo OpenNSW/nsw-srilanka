@@ -3,7 +3,6 @@ package audit
 import (
 	"context"
 	"log/slog"
-	"sync"
 )
 
 // Category is the slog attribute value on every LogSink record. Bootstrap and
@@ -11,45 +10,25 @@ import (
 const Category = "audit"
 
 // LogSink writes enriched audit records as structured slog lines with
-// category=audit. A nil logger discards writes. Bootstrap sets an OTLP-only
-// logger after telemetry starts so records never reach the process (pod) log.
+// category=audit. A nil logger discards writes. Bootstrap passes an OTLP-only
+// logger at construction so records never reach the process (pod) log and are
+// not dropped while workers start.
 type LogSink struct {
-	mu     sync.RWMutex
 	logger *slog.Logger
 }
 
-// NewLogSink returns a LogSink. A nil logger discards until SetLogger provides
-// one (typically the OTLP handler after OpenTelemetry starts).
+// NewLogSink returns a LogSink. A nil logger discards. The category attribute
+// is applied here so callers do not need to set it.
 func NewLogSink(logger *slog.Logger) *LogSink {
-	s := &LogSink{}
-	s.SetLogger(logger)
-	return s
-}
-
-// SetLogger replaces the destination. nil discards. The category attribute is
-// applied here so callers do not need to set it.
-func (s *LogSink) SetLogger(logger *slog.Logger) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if logger != nil {
-		s.logger = logger.With(slog.String("category", Category))
-	} else {
-		s.logger = nil
+		logger = logger.With(slog.String("category", Category))
 	}
+	return &LogSink{logger: logger}
 }
 
 // Write implements Sink.
 func (s *LogSink) Write(ctx context.Context, r Record) {
-	if s == nil {
-		return
-	}
-	s.mu.RLock()
-	logger := s.logger
-	s.mu.RUnlock()
-	if logger == nil {
+	if s == nil || s.logger == nil {
 		return
 	}
 	attrs := []any{
@@ -72,5 +51,5 @@ func (s *LogSink) Write(ctx context.Context, r Record) {
 	if len(r.Message) > 0 {
 		attrs = append(attrs, "message", string(r.Message))
 	}
-	logger.InfoContext(ctx, "audit", attrs...)
+	s.logger.InfoContext(ctx, "audit", attrs...)
 }

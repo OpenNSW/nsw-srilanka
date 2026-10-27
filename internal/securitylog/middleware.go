@@ -10,6 +10,7 @@
 package securitylog
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,10 +22,19 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 )
 
+// callbacksPathPrefix is the path prefix of POST /api/v1/callbacks/{token}.
+// Redaction uses the prefix rather than PathValue("token"): otelhttp copies
+// the request before the mux runs, so path values never appear on the
+// request Middleware holds.
+const callbacksPathPrefix = "/api/v1/callbacks/"
+
 // Middleware logs one security line after next returns, including when next
 // panics. logger nil uses slog.Default. The logger must already be the process
 // handler so the line picks up the request trace id. GET /health is served and
 // not logged.
+//
+// Wrap the mux with CaptureRoute so pattern is recorded when Middleware sits
+// outside otelhttp (which copies the request before ServeMux sets Pattern).
 func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
@@ -39,7 +49,10 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			}
 
 			caller := &authn.RequestCaller{}
-			r = r.WithContext(authn.WithRequestCaller(r.Context(), caller))
+			route := &matchedRoute{}
+			ctx := authn.WithRequestCaller(r.Context(), caller)
+			ctx = withMatchedRoute(ctx, route)
+			r = r.WithContext(ctx)
 
 			// Count bytes as the handler reads. Declared Content-Length wins;
 			// chunked / unknown length uses the count. Nothing is buffered.
@@ -72,7 +85,7 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 
 				attrs := []any{
 					"method", r.Method,
-					"path", loggedPath(r),
+					"path", loggedPath(r.URL.Path),
 					"callerKind", kind,
 					"callerID", id,
 					"status", status,
@@ -84,8 +97,12 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				if n := requestBytes(r.ContentLength, reqBody); n > 0 {
 					attrs = append(attrs, "requestBytes", n)
 				}
-				if r.Pattern != "" {
-					attrs = append(attrs, "pattern", r.Pattern)
+				pattern := r.Pattern
+				if pattern == "" {
+					pattern = route.pattern
+				}
+				if pattern != "" {
+					attrs = append(attrs, "pattern", pattern)
 				}
 				if resp.n > 0 {
 					attrs = append(attrs, "responseBytes", resp.n)
@@ -100,6 +117,35 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(wrapped, r)
 		})
 	}
+}
+
+// CaptureRoute records the ServeMux pattern onto the matchedRoute slot that
+// Middleware put in the context. Place it next to the mux so Middleware
+// outside otelhttp still sees pattern after the handler returns.
+func CaptureRoute(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if m := matchedRouteFrom(r.Context()); m != nil {
+			m.pattern = r.Pattern
+		}
+	})
+}
+
+// matchedRoute is a slot Middleware allocates before ServeHTTP. CaptureRoute
+// fills pattern after the mux runs.
+type matchedRoute struct {
+	pattern string
+}
+
+type matchedRouteKey struct{}
+
+func withMatchedRoute(ctx context.Context, slot *matchedRoute) context.Context {
+	return context.WithValue(ctx, matchedRouteKey{}, slot)
+}
+
+func matchedRouteFrom(ctx context.Context) *matchedRoute {
+	slot, _ := ctx.Value(matchedRouteKey{}).(*matchedRoute)
+	return slot
 }
 
 // wrapRequestBody installs a counter on r.Body when present. It does not read.
@@ -138,14 +184,14 @@ func (c *countingBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// loggedPath hides the callback token. The mux records it as the {token} path
-// value on this request; the raw path would otherwise keep the secret.
-func loggedPath(r *http.Request) string {
-	token := r.PathValue("token")
-	if token == "" {
-		return r.URL.Path
+// loggedPath hides the callback token by path prefix. PathValue is empty on
+// Middleware's request when otelhttp (or any WithContext copy) sits between
+// this middleware and the mux.
+func loggedPath(path string) string {
+	if after, ok := strings.CutPrefix(path, callbacksPathPrefix); ok && after != "" {
+		return callbacksPathPrefix + "{token}"
 	}
-	return strings.Replace(r.URL.Path, token, "{token}", 1)
+	return path
 }
 
 // responseLog records the status and response size. Bodies are not copied.

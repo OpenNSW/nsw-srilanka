@@ -110,7 +110,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // Build initializes dependencies and returns a fully wired application server.
 // The initialization flow is structured in distinct stages to ensure readability.
-func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:gocyclo
+func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //nolint:gocyclo
 	// -------------------------------------------------------------------
 	// Stage 1: Relational Database & Connection Health Check
 	// -------------------------------------------------------------------
@@ -123,6 +123,27 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, fmt.Errorf("database health check failed: %w", err)
 	}
+
+	// OTLP before the auditor and workers so in-flight workflow audit on
+	// restart is not dropped while telemetry was still starting. On a later
+	// Build failure, shut telemetry down here; App.Close does it on success.
+	tel, err := telemetry.Start(ctx, cfg.Otel)
+	if err != nil {
+		_ = database.Close(db)
+		return nil, fmt.Errorf("failed to start telemetry: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tel.Shutdown(context.Background())
+		}
+	}()
+	exportLogs := tel.SlogHandler()
+	configureLogging(cfg, os.Stdout, exportLogs)
+	var auditLogger *slog.Logger
+	if h := auditExportHandler(cfg, exportLogs); h != nil {
+		auditLogger = slog.New(h)
+	}
+	logAuditExportStatus(cfg, exportLogs != nil)
 
 	// -------------------------------------------------------------------
 	// Stage 2: Domain Core Repositories & Base Services
@@ -150,11 +171,10 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
 	// Built before payment and storage are handed to the task stack. Workers
 	// can emit events as soon as those services exist, so the auditor has to
-	// be attached here rather than after the task manager starts.
+	// be attached here rather than after the task manager starts. Telemetry
+	// above already supplied the OTLP (or nil) logger.
 	auditor := nswaudit.New()
-	// Nil logger discards until telemetry installs the OTLP handler below.
-	auditSink := nswaudit.NewLogSink(nil)
-	auditor.RegisterSink(auditSink)
+	auditor.RegisterSink(nswaudit.NewLogSink(auditLogger))
 	coreAuditor := nswaudit.NewCoreAdapter(auditor)
 	var unwiredAudit []string
 	if !attachAuditor(paymentService, coreAuditor) {
@@ -573,34 +593,17 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// OTLP metrics/logs/traces when otel.endpoint is set; otherwise a no-op.
-	tel, err := telemetry.Start(ctx, cfg.Otel)
-	if err != nil {
-		_ = stopParentRunner()
-		_ = stopTask()
-		temporalClient.Close()
-		_ = authnManager.Close()
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to start telemetry: %w", err)
-	}
-	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
-	// Audit uses LogSink with the OTLP handler only (never slog.Default), so
-	// it does not appear in the pod log. Security log reads slog.Default
-	// after that, so its line is on the process stream (and OTLP when
-	// export is on). It sits inside trace middleware so the line carries
-	// the trace id, and outside CORS so a preflight is logged too.
-	// Authentication attaches the principal on a child request; the log
-	// reads it back from authn.RequestCaller.
-	exportLogs := tel.SlogHandler()
-	configureLogging(cfg, os.Stdout, exportLogs)
-	if h := auditExportHandler(cfg, exportLogs); h != nil {
-		auditSink.SetLogger(slog.New(h))
-	}
-	logAuditExportStatus(cfg, exportLogs != nil)
+	// Security log reads slog.Default (process stream, and OTLP when export
+	// is on from the early configureLogging). It sits inside trace so the
+	// line carries the trace id, and outside CORS so a preflight is logged
+	// too. CaptureRoute next to the mux records Pattern for Middleware:
+	// otelhttp copies the request before ServeMux sets it. Authentication
+	// attaches the principal on a child request; the log reads it back from
+	// authn.RequestCaller.
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")
 	}
-	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", mux))))
+	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", securitylog.CaptureRoute(mux)))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {

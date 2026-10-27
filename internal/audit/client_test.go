@@ -138,19 +138,6 @@ func TestLogSink_NilLoggerDiscards(t *testing.T) {
 	if buf.Len() != 0 {
 		t.Fatalf("nil LogSink wrote to slog.Default: %s", buf.String())
 	}
-
-	sink.SetLogger(slog.New(slog.NewJSONHandler(&buf, nil)))
-	sink.Write(context.Background(), Record{
-		EventType:  EventTask,
-		Action:     ActionUpdate,
-		Status:     StatusFailure,
-		ActorType:  ActorMember,
-		ActorID:    "u1",
-		TargetType: TargetTask,
-	})
-	if !bytes.Contains(buf.Bytes(), []byte(`"category":"audit"`)) {
-		t.Fatalf("SetLogger record missing category: %s", buf.String())
-	}
 }
 
 func TestClient_FansOutToMultipleSinks(t *testing.T) {

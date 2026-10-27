@@ -136,7 +136,7 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	}
 }
 
-func TestLogSinkExportsOnlyViaSetLogger(t *testing.T) {
+func TestLogSinkExportsOnlyViaOTLPHandler(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() {
 		slog.SetDefault(prevDefault)
@@ -156,13 +156,13 @@ func TestLogSinkExportsOnlyViaSetLogger(t *testing.T) {
 	extra := newAlwaysEnabled()
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &processLog, extra)
 
-	sink := nswaudit.NewLogSink(nil)
-	sink.Write(context.Background(), record)
+	nilSink := nswaudit.NewLogSink(nil)
+	nilSink.Write(context.Background(), record)
 	if processLog.Len() != 0 || len(*extra.attrs) != 0 {
 		t.Fatalf("nil LogSink wrote somewhere: process=%q export=%v", processLog.String(), *extra.attrs)
 	}
 
-	sink.SetLogger(slog.New(auditExportHandler(
+	sink := nswaudit.NewLogSink(slog.New(auditExportHandler(
 		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}},
 		extra,
 	)))
@@ -182,11 +182,11 @@ func TestLogSinkExportsOnlyViaSetLogger(t *testing.T) {
 	}
 
 	extraWarn := newAlwaysEnabled()
-	sink.SetLogger(slog.New(auditExportHandler(
+	warnSink := nswaudit.NewLogSink(slog.New(auditExportHandler(
 		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}},
 		extraWarn,
 	)))
-	sink.Write(context.Background(), record)
+	warnSink.Write(context.Background(), record)
 	for _, attrs := range *extraWarn.attrs {
 		if attrs["category"] == nswaudit.Category {
 			t.Fatal("audit line exported below server.logLevel")
@@ -206,6 +206,16 @@ func TestLogAuditExportStatus(t *testing.T) {
 	}
 	if !strings.Contains(warnBuf.String(), "otel log export is off") {
 		t.Fatalf("missing export-off warning when level is also high: %s", warnBuf.String())
+	}
+	if strings.Count(warnBuf.String(), "server.logLevel is above info") != 1 {
+		t.Fatalf("log-level warning should appear once: %s", warnBuf.String())
+	}
+
+	var errorBuf bytes.Buffer
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelError}}, &errorBuf)
+	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelError}}, false)
+	if !strings.Contains(errorBuf.String(), "otel log export is off") {
+		t.Fatalf("export-off warning dropped at error level: %s", errorBuf.String())
 	}
 
 	var noExport bytes.Buffer
