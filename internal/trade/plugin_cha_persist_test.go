@@ -117,7 +117,8 @@ func TestCHASeedKeepsOnlyTheDetailsAnAgencyFormReads(t *testing.T) {
 		}`),
 	}
 
-	seed := chaSeed(record)
+	seed, err := chaSeed(record)
+	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{
 		"id":   "cha-1",
@@ -132,19 +133,51 @@ func TestCHASeedKeepsOnlyTheDetailsAnAgencyFormReads(t *testing.T) {
 }
 
 func TestCHASeedLeavesOutMissingAndBlankDetails(t *testing.T) {
-	seed := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: json.RawMessage(
+	seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: json.RawMessage(
 		`{"tin_no": "", "address": "   ", "contact_email": "\t\n", "tel": "0112345010"}`)})
+	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{"tel": "0112345010"}, seed["data"])
 }
 
-func TestCHASeedToleratesUnreadableData(t *testing.T) {
-	for _, data := range []json.RawMessage{nil, json.RawMessage(`not json`)} {
-		seed := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
+func TestCHASeedWithoutData(t *testing.T) {
+	for _, data := range []json.RawMessage{nil, json.RawMessage(`{}`), json.RawMessage(`null`)} {
+		seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
+		require.NoError(t, err, "data %q", data)
 
 		assert.Equal(t, "cha-1", seed["id"])
 		assert.Empty(t, seed["data"])
 	}
+}
+
+func TestCHASeedRejectsUnreadableData(t *testing.T) {
+	for _, data := range []json.RawMessage{json.RawMessage(`not json`), json.RawMessage(`[]`), json.RawMessage(`"x"`)} {
+		_, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
+
+		assert.Error(t, err, "data %q", data)
+	}
+}
+
+// unreadableCHA answers GetCompanyByID with a CHA-enabled company whose data isn't an object.
+type unreadableCHA struct {
+	company.Service
+}
+
+func (unreadableCHA) GetCompanyByID(_ context.Context, id string) (*company.Record, error) {
+	return &company.Record{ID: id, HasCHA: true, Data: json.RawMessage(`[]`)}, nil
+}
+
+func TestCHAPersistFailsOnUnreadableDataBeforeWriting(t *testing.T) {
+	p, mock := newCHAPersist(t)
+	p.companyService = unreadableCHA{}
+
+	ctx := pluginContext(map[string]any{"cha_company_id": "cha-1", "consignment_name": "Tea to Rotterdam"})
+	err := p.Execute(ctx, nil)
+
+	// sqlmock expects no SQL here, so starting a write would have failed with a different error.
+	require.ErrorContains(t, err, `cha_persist: CHA company "cha-1": data is not a JSON object`)
+	assert.NotContains(t, ctx.Record.Data, "cha")
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCHAPersistEmitsTheChaDetails(t *testing.T) {

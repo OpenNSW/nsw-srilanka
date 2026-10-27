@@ -1,6 +1,7 @@
 package trade
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -58,6 +59,11 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 	if !record.HasCHA {
 		return fmt.Errorf("cha_persist: company %q is not enabled as a CHA", chaCompanyID)
 	}
+	// Read before anything is written, so unreadable data fails the step with nothing saved.
+	cha, err := chaSeed(record)
+	if err != nil {
+		return fmt.Errorf("cha_persist: CHA company %q: %w", chaCompanyID, err)
+	}
 
 	if ctx.Record == nil {
 		return fmt.Errorf("cha_persist: task record is nil")
@@ -77,8 +83,22 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 		return fmt.Errorf("cha_persist: consignment name exceeds maximum length of 255 characters")
 	}
 
-	// The name lives on the consignment's cases row; the CHA company on the consignment.
-	err = p.db.WithContext(ctx.Context).Transaction(func(tx *gorm.DB) error {
+	if err := p.assignCHA(ctx.Context, consignmentID, chaCompanyID, name); err != nil {
+		return err
+	}
+
+	if ctx.Record.Data == nil {
+		ctx.Record.Data = make(map[string]any)
+	}
+	ctx.Record.Data["cha"] = cha
+	return nil
+}
+
+// assignCHA records the CHA company on the consignment and, when name is not empty, names its
+// case, in one transaction. The name lives on the consignment's cases row; the CHA company on
+// the consignment.
+func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaCompanyID, name string) error {
+	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&consignment.Consignment{}).
 			Where("id = ?", consignmentID).
 			Update("cha_company_id", chaCompanyID)
@@ -96,15 +116,6 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, _ json.RawMessage)
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	if ctx.Record.Data == nil {
-		ctx.Record.Data = make(map[string]any)
-	}
-	ctx.Record.Data["cha"] = chaSeed(record)
-	return nil
 }
 
 // chaSeedFields are the company data fields a CHA's details carry into the agency flows.
@@ -114,13 +125,15 @@ var chaSeedFields = []string{"tin_no", "tel", "contact_email", "address"}
 
 // chaSeed is the CHA's details as the "cha" workflow variable, in the shape of a company
 // record ({id, name, data}) so an artifact reads them the way it reads the trader's.
-// Fields the company's data lacks, or holds only whitespace in, are left out.
-func chaSeed(record *company.Record) map[string]any {
+// Fields the company's data lacks, or holds only whitespace in, are left out. Data that isn't
+// a JSON object is an error.
+func chaSeed(record *company.Record) (map[string]any, error) {
 	data := map[string]any{}
 	var all map[string]any
 	if len(record.Data) > 0 {
-		// Unreadable data is no reason to fail the selection: the forms just stay empty.
-		_ = json.Unmarshal(record.Data, &all)
+		if err := json.Unmarshal(record.Data, &all); err != nil {
+			return nil, fmt.Errorf("data is not a JSON object: %w", err)
+		}
 	}
 	for _, field := range chaSeedFields {
 		// Company data isn't trimmed when it's written, so a blank value can hold spaces.
@@ -128,5 +141,5 @@ func chaSeed(record *company.Record) map[string]any {
 			data[field] = value
 		}
 	}
-	return map[string]any{"id": record.ID, "name": record.Name, "data": data}
+	return map[string]any{"id": record.ID, "name": record.Name, "data": data}, nil
 }
