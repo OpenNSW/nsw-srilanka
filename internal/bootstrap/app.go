@@ -152,7 +152,9 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// can emit events as soon as those services exist, so the auditor has to
 	// be attached here rather than after the task manager starts.
 	auditor := nswaudit.New()
-	auditor.RegisterSink(nswaudit.NewLogSink(nil))
+	// Nil logger discards until telemetry installs the OTLP handler below.
+	auditSink := nswaudit.NewLogSink(nil)
+	auditor.RegisterSink(auditSink)
 	coreAuditor := nswaudit.NewCoreAdapter(auditor)
 	var unwiredAudit []string
 	if !attachAuditor(paymentService, coreAuditor) {
@@ -582,14 +584,18 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		return nil, fmt.Errorf("failed to start telemetry: %w", err)
 	}
 	// Fan stdout logs out to OTLP when export is on (no-op handler otherwise).
-	// category=audit is omitted from stdout and reaches only the OTLP
-	// handler. Security log reads slog.Default after that, so its line is
-	// on the process stream (and OTLP when export is on). It sits inside
-	// trace middleware so the line carries the trace id, and outside CORS
-	// so a preflight is logged too. Authentication attaches the principal
-	// on a child request; the log reads it back from authn.RequestCaller.
+	// Audit uses LogSink with the OTLP handler only (never slog.Default), so
+	// it does not appear in the pod log. Security log reads slog.Default
+	// after that, so its line is on the process stream (and OTLP when
+	// export is on). It sits inside trace middleware so the line carries
+	// the trace id, and outside CORS so a preflight is logged too.
+	// Authentication attaches the principal on a child request; the log
+	// reads it back from authn.RequestCaller.
 	exportLogs := tel.SlogHandler()
 	configureLogging(cfg, os.Stdout, exportLogs)
+	if h := auditExportHandler(cfg, exportLogs); h != nil {
+		auditSink.SetLogger(slog.New(h))
+	}
 	logAuditExportStatus(cfg, exportLogs != nil)
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")

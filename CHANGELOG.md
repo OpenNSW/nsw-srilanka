@@ -8,8 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Security
 
-- The security log no longer records request or response bodies. Forms are JSON Schema–driven, so field-level redaction cannot cover every PII key; the line keeps who called (`callerKind` / `callerID` / `remoteAddr`), the route, status, duration, and sizes. The callback token in the path is still replaced.
-- Audit records (`category=audit`) are omitted from the process (pod) log and are exported only over OTLP when `otel.endpoint` is set. Startup warns when export is off or when `server.logLevel` is above `info`. Keep OpenObserve (or another collector) on wherever the audit trail is required.
+- The security log no longer records request or response bodies. Forms are JSON Schema–driven, so field-level redaction cannot cover every PII key; the line keeps who called (`callerKind` / `callerID`), the route, status, duration, and sizes. The callback token in the path is still replaced. Client IP is not logged (behind ingress `RemoteAddr` is the proxy; a real client address would be PII in the pod log).
+- Audit records (`category=audit`) are written only to the OTLP log exporter when `otel.endpoint` is set, not to the process (pod) log. Startup warns when export is off or when `server.logLevel` is above `info`. Keep OpenObserve (or another collector) on wherever the audit trail is required.
 
 ## [0.10.0] - 2026-10-26
 

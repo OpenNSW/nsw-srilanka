@@ -1,8 +1,9 @@
 // Package securitylog records every inbound HTTP request as a slog line with
 // category=security, except GET /health. The line names who called (caller
-// and remote address), the route, status, and duration. Request and response
+// kind and id), the route, status, and duration. Request and response
 // payloads are not logged: forms are JSON Schema–driven (jsonforms), so field-
-// level redaction cannot list every PII key.
+// level redaction cannot list every PII key. RemoteAddr is omitted: behind
+// ingress it is the proxy, and a real client IP would be PII in the pod log.
 //
 // Authorization headers are not logged. The callback token in
 // /api/v1/callbacks/{token} is replaced in the path.
@@ -72,7 +73,6 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				attrs := []any{
 					"method", r.Method,
 					"path", loggedPath(r),
-					"remoteAddr", r.RemoteAddr,
 					"callerKind", kind,
 					"callerID", id,
 					"status", status,

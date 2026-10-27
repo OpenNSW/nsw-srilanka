@@ -3,33 +3,42 @@ package audit
 import (
 	"context"
 	"log/slog"
+	"sync"
 )
 
-const categoryAudit = "audit"
+// Category is the slog attribute value on every LogSink record. Bootstrap and
+// collectors filter on this string; keep a single definition here.
+const Category = "audit"
 
 // LogSink writes enriched audit records as structured slog lines with
-// category=audit. Bootstrap omits that category from the process (pod) log
-// and exports the lines only over OTLP when otel log export is on.
+// category=audit. A nil logger discards writes. Bootstrap sets an OTLP-only
+// logger after telemetry starts so records never reach the process (pod) log.
 type LogSink struct {
+	mu     sync.RWMutex
 	logger *slog.Logger
 }
 
-// NewLogSink returns a LogSink. A nil logger uses slog.Default on each Write
-// rather than at construction, so it follows server.logLevel and the handler
-// installed after OpenTelemetry starts, which replaces slog.Default. Audit
-// lines then reach the OTLP handler only, not stdout.
+// NewLogSink returns a LogSink. A nil logger discards until SetLogger provides
+// one (typically the OTLP handler after OpenTelemetry starts).
 func NewLogSink(logger *slog.Logger) *LogSink {
-	if logger != nil {
-		logger = logger.With(slog.String("category", categoryAudit))
-	}
-	return &LogSink{logger: logger}
+	s := &LogSink{}
+	s.SetLogger(logger)
+	return s
 }
 
-func (s *LogSink) active() *slog.Logger {
-	if s.logger != nil {
-		return s.logger
+// SetLogger replaces the destination. nil discards. The category attribute is
+// applied here so callers do not need to set it.
+func (s *LogSink) SetLogger(logger *slog.Logger) {
+	if s == nil {
+		return
 	}
-	return slog.Default().With(slog.String("category", categoryAudit))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if logger != nil {
+		s.logger = logger.With(slog.String("category", Category))
+	} else {
+		s.logger = nil
+	}
 }
 
 // Write implements Sink.
@@ -37,7 +46,9 @@ func (s *LogSink) Write(ctx context.Context, r Record) {
 	if s == nil {
 		return
 	}
-	logger := s.active()
+	s.mu.RLock()
+	logger := s.logger
+	s.mu.RUnlock()
 	if logger == nil {
 		return
 	}

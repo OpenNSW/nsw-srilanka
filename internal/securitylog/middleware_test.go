@@ -58,7 +58,7 @@ func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	}
 
 	raw := buf.String()
-	for _, secret := range []string{"super-secret-token", "a@example.com", "+94111", payload, response} {
+	for _, secret := range []string{"super-secret-token", "a@example.com", "+94111", payload, response, "203.0.113.10"} {
 		if strings.Contains(raw, secret) {
 			t.Fatalf("security log contained %q: %s", secret, raw)
 		}
@@ -69,12 +69,14 @@ func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
 	assertEqual(t, "method", line["method"], "POST")
 	assertEqual(t, "path", line["path"], "/api/v1/tasks/abc")
 	assertEqual(t, "pattern", line["pattern"], "POST /api/v1/tasks/{id}")
-	assertEqual(t, "remoteAddr", line["remoteAddr"], "203.0.113.10:54321")
 	assertEqual(t, "callerKind", line["callerKind"], "user")
 	assertEqual(t, "callerID", line["callerID"], "user-1")
 	assertEqual(t, "status", line["status"], float64(http.StatusCreated))
 	assertEqual(t, "requestBytes", line["requestBytes"], float64(len(payload)))
 	assertEqual(t, "responseBytes", line["responseBytes"], float64(len(response)))
+	if _, ok := line["remoteAddr"]; ok {
+		t.Fatalf("remoteAddr should not be logged: %v", line["remoteAddr"])
+	}
 	if _, ok := line["query"]; ok {
 		t.Fatalf("query should not be logged: %v", line["query"])
 	}

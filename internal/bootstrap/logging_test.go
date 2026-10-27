@@ -136,7 +136,7 @@ func TestConfigureLoggingExtrasHonorLogLevel(t *testing.T) {
 	}
 }
 
-func TestConfigureLoggingAuditOmitsProcessLogExportsOnly(t *testing.T) {
+func TestLogSinkExportsOnlyViaSetLogger(t *testing.T) {
 	prevDefault := slog.Default()
 	t.Cleanup(func() {
 		slog.SetDefault(prevDefault)
@@ -152,40 +152,43 @@ func TestConfigureLoggingAuditOmitsProcessLogExportsOnly(t *testing.T) {
 		TargetID:   "t1",
 	}
 
-	var first bytes.Buffer
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &first)
-	sink := nswaudit.NewLogSink(nil)
-
-	var second bytes.Buffer
+	var processLog bytes.Buffer
 	extra := newAlwaysEnabled()
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &second, extra)
+	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}}, &processLog, extra)
+
+	sink := nswaudit.NewLogSink(nil)
+	sink.Write(context.Background(), record)
+	if processLog.Len() != 0 || len(*extra.attrs) != 0 {
+		t.Fatalf("nil LogSink wrote somewhere: process=%q export=%v", processLog.String(), *extra.attrs)
+	}
+
+	sink.SetLogger(slog.New(auditExportHandler(
+		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelInfo}},
+		extra,
+	)))
 	sink.Write(context.Background(), record)
 
-	if strings.Contains(first.String(), "category=audit") {
-		t.Fatalf("audit line used the logger from before reconfigure: %s", first.String())
-	}
-	if strings.Contains(second.String(), "category=audit") {
-		t.Fatalf("audit line must not reach the process log: %s", second.String())
+	if strings.Contains(processLog.String(), "category=audit") || strings.Contains(processLog.String(), `"audit"`) {
+		t.Fatalf("audit line reached the process log: %s", processLog.String())
 	}
 	var auditRecords int
 	for _, attrs := range *extra.attrs {
-		if attrs["category"] == "audit" {
+		if attrs["category"] == nswaudit.Category {
 			auditRecords++
 		}
 	}
 	if auditRecords != 1 {
-		t.Fatalf("extra handler audit records = %d, want 1", auditRecords)
+		t.Fatalf("export handler audit records = %d, want 1", auditRecords)
 	}
 
-	var warnBuf bytes.Buffer
 	extraWarn := newAlwaysEnabled()
-	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf, extraWarn)
+	sink.SetLogger(slog.New(auditExportHandler(
+		&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}},
+		extraWarn,
+	)))
 	sink.Write(context.Background(), record)
-	if strings.Contains(warnBuf.String(), "category=audit") {
-		t.Fatalf("audit line written to process log below server.logLevel: %s", warnBuf.String())
-	}
 	for _, attrs := range *extraWarn.attrs {
-		if attrs["category"] == "audit" {
+		if attrs["category"] == nswaudit.Category {
 			t.Fatal("audit line exported below server.logLevel")
 		}
 	}
@@ -197,9 +200,12 @@ func TestLogAuditExportStatus(t *testing.T) {
 
 	var warnBuf bytes.Buffer
 	configureLogging(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, &warnBuf)
-	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, true)
+	logAuditExportStatus(&config.Config{Server: config.ServerConfig{LogLevel: slog.LevelWarn}}, false)
 	if !strings.Contains(warnBuf.String(), "audit records (category=audit) are not exported") {
-		t.Fatalf("missing audit-dropped warning: %s", warnBuf.String())
+		t.Fatalf("missing log-level warning: %s", warnBuf.String())
+	}
+	if !strings.Contains(warnBuf.String(), "otel log export is off") {
+		t.Fatalf("missing export-off warning when level is also high: %s", warnBuf.String())
 	}
 
 	var noExport bytes.Buffer
