@@ -172,16 +172,17 @@ kubectl create secret generic govpay-go-private-key \
 
 [`values-example.yaml`](../values-example.yaml) mounts it at `/certs/govpay`
 through `backend.volumes` / `backend.volumeMounts`, which is where the govpay
-entry in `payment_methods.json` points (`"private_key":
+method in `backend.config.payment` points (`private_key:
 "file:/certs/govpay/go_private.pem"`). The key must be a `file:` (or `env:`)
 reference; an inline PEM is refused. Without it the backend starts but answers
 every GovPay+ call with 500; a key that is set but unreadable stops the backend
 at startup.
 
-The govpay entry also maps every payee a fee is charged to (`org_id` and
+The govpay method also maps every payee a fee is charged to (`org_id` and
 `service_id` in the PAYMENT step) to that environment's GovPay+
-sub-institution and service ids, under `payees` (shape in
-[`configs/payment_methods.example.json`](../../../configs/payment_methods.example.json)).
+sub-institution and service ids, under `payees` (shape in the `payment`
+section of [`configs/config.example.yaml`](../../../configs/config.example.yaml)).
+Quote the ids: unquoted, `001` is read as the number 1 and refused.
 A mapping missing either id stops the backend at startup; a fee whose payee is
 not mapped fails its PAYMENT step.
 

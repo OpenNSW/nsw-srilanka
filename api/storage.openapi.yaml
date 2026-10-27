@@ -52,8 +52,11 @@ paths:
         2. Keep `key` as the file's value, for example in a form's file field.
 
         The allowed types and the size limit are the deployment's
-        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`). A machine
-        client's own generated files use `POST /api/v1/internal/storage`.
+        (`storage.allowedUploadTypes`, `storage.maxUploadBytes`), and the
+        file name's extension must be one `storage.uploadTypeExtensions` lists
+        for `mime_type`; a name without an extension is given the type's
+        first. A machine client's own generated files use
+        `POST /api/v1/internal/storage`.
 
         Requires scope `nsw:storage:write`.
       operationId: reserveUpload
@@ -73,7 +76,8 @@ paths:
         '400':
           description: |
             Malformed JSON, a missing `filename` or `mime_type`, a `size` that
-            is not positive, or a file over the size limit.
+            is not positive, a file over the size limit, or a file name whose
+            extension `mime_type` doesn't have.
           content:
             application/json:
               schema:
@@ -124,8 +128,9 @@ paths:
         `storage.allowedInternalUploadTypes` grants the calling client, which
         may include a type a browser opens as a document, such as
         `text/html`. The media type is compared with parameters and case
-        ignored. The size limit is `storage.maxUploadBytes`. Served by TNSW
-        only.
+        ignored. The size limit is `storage.maxUploadBytes`, and the file
+        name is matched to the type by `storage.uploadTypeExtensions`, as on
+        `POST /api/v1/storage`. Served by TNSW only.
 
         Requires scope `nsw:storage:internalwrite`.
       operationId: reserveInternalUpload
@@ -145,7 +150,8 @@ paths:
         '400':
           description: |
             Malformed JSON, a missing `filename` or `mime_type`, a `size` that
-            is not positive, or a file over the size limit.
+            is not positive, a file over the size limit, or a file name whose
+            extension `mime_type` doesn't have.
           content:
             application/json:
               schema:
@@ -318,7 +324,7 @@ components:
             expires; a machine client's opens the file too.
         name:
           type: string
-          description: The file name, as sent.
+          description: The file name as sent, or with its type's extension added when it had none.
           example: "invoice.pdf"
         upload_url:
           type: string

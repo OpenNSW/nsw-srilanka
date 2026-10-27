@@ -99,7 +99,7 @@ func newDecryptor(pemData []byte) (*Decryptor, error) {
 //
 // Only "file:" and "env:" references are accepted. A SecretRef without one of
 // those prefixes resolves as a literal, which here would mean a PEM private key
-// written into payment_methods.json.
+// written into config.yaml.
 func loadDecryptor(ref secret.SecretRef) (*Decryptor, error) {
 	if strings.TrimSpace(string(ref)) == "" {
 		return nil, nil

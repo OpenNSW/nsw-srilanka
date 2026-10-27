@@ -187,6 +187,14 @@ func TestLoadFile_ExamplesLoad(t *testing.T) {
 			if err := cfg.Validate(); err != nil {
 				t.Errorf("configs/%s does not validate: %v", name, err)
 			}
+			// GovPay+ ids are strings with leading zeros: unquoted, YAML
+			// would read them as numbers and the gateway refuse the mapping.
+			if len(cfg.Payment.Methods) == 0 {
+				t.Fatalf("configs/%s lists no payment methods", name)
+			}
+			if got := cfg.Payment.Methods[0].Payees["npqs"].Defaults["subinst_id"]; got != "002" {
+				t.Errorf("payment.methods[0].payees.npqs.defaults.subinst_id = %#v, want the string \"002\"", got)
+			}
 		})
 	}
 }

@@ -467,6 +467,69 @@ func TestFileHandler_UploadThroughProxy(t *testing.T) {
 	assertStatus(t, upload(h, user("alice"), `{"filename":"a.pdf","mime_type":"application/pdf","size":10}`), http.StatusBadGateway)
 }
 
+// Every upload route matches the file name's extension to its type: the user
+// route and the internal route on a deployment that stores files, and in proxy
+// mode the owning service, whose refusal is relayed.
+func TestFileHandler_UploadExtension(t *testing.T) {
+	const mismatch = `{"filename":"setup.exe","mime_type":"application/pdf","size":10}`
+	const want = `the file name's extension (".exe") does not match its type (application/pdf)`
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	stack, err := New(context.Background(), localConfig(t, srv.URL), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	stack.LocalContent.RegisterRoutes(mux)
+	access, _ := testFileAccess(t)
+	h := NewFileHandler(stack.Service, access, WithUploads(stack.Uploads))
+
+	// errorOf returns the message of the error rec answered with.
+	errorOf := func(rec *httptest.ResponseRecorder) string {
+		var e struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &e)
+		return e.Error
+	}
+
+	rec := upload(h, user("alice"), mismatch)
+	assertStatus(t, rec, http.StatusBadRequest)
+	if got := errorOf(rec); got != want {
+		t.Errorf("error %q, want %q", got, want)
+	}
+
+	// A name without an extension is stored, and named, with its type's.
+	rec = upload(h, user("alice"), `{"filename":"scan","mime_type":"application/pdf","size":10}`)
+	assertStatus(t, rec, http.StatusOK)
+	var body struct {
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := access.Resolve(user("alice"), body.Key, fileaccess.ScopeSubmit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body.Name != "scan.pdf" || !strings.HasSuffix(stored, ".pdf") {
+		t.Errorf("named %q and stored as %q, want both to end in .pdf", body.Name, stored)
+	}
+
+	_, machine, _ := machineStack(t)
+	assertStatus(t, internalUpload(machine, client(htmlClient), `{"filename":"doc.pdf","mime_type":"text/html; charset=utf-8","size":10}`), http.StatusBadRequest)
+	assertStatus(t, internalUpload(machine, client(htmlClient), `{"filename":"doc.html","mime_type":"text/html; charset=utf-8","size":10}`), http.StatusOK)
+
+	proxy := newProxyStack(t, ownerToken)
+	rec = upload(NewFileHandler(proxy.Service, access, WithUploads(proxy.Uploads)), user("alice"), mismatch)
+	assertStatus(t, rec, http.StatusBadRequest)
+	if got := errorOf(rec); got != want {
+		t.Errorf("proxied error %q, want it to relay %q", got, want)
+	}
+}
+
 // An owning service that answers 200 with a response this service can't use
 // failed, as surely as one that answered 5xx: a gateway failure, not this
 // service's own (500).

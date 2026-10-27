@@ -104,7 +104,10 @@ func (l logged) Upload(ctx context.Context, filename string, size int64, mimeTyp
 // inlineTypes. The limit is applied here, on the media type. How a stored file is
 // served is still decided by the deployment's primary Service from inlineTypes.
 func newMachineUploads(driver corestorage.StorageDriver, cfg Config, extra map[string][]string) Uploader {
-	svc := corestorage.NewService(driver, corestorage.WithMaxUploadSize(cfg.MaxUploadBytes))
+	svc := corestorage.NewService(driver,
+		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
+		corestorage.WithUploadTypeExtensions(cfg.UploadTypeExtensions),
+	)
 	return logged{limitTypes(svc, machineClient(cfg.AllowedUploadTypes, extra))}
 }
 

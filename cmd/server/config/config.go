@@ -11,6 +11,7 @@ import (
 	"github.com/OpenNSW/core/configyaml"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
+	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
 	"github.com/OpenNSW/core/temporal"
@@ -64,19 +65,23 @@ type Config struct {
 	// Catalog maps the logical names used across configuration onto this
 	// deployment's IdP token roles and OAuth2 client ids. Required.
 	Catalog catalog.Catalog `yaml:"catalog"`
+
+	// Payment lists the payment methods fees can be paid with, each with its
+	// gateway's config and the ids it maps every payee to. Optional: an agency
+	// takes no payments and lists none.
+	Payment payment.Config `yaml:"payment"`
 }
 
 // ServerConfig holds server configuration.
 type ServerConfig struct {
-	Port                     int           `yaml:"port"`
-	ServiceURL               string        `yaml:"serviceURL"`
-	PaymentMethodsConfigPath string        `yaml:"paymentMethodsConfigPath"`
-	LogLevel                 slog.Level    `yaml:"logLevel"`
-	MaxRequestBytes          int64         `yaml:"maxRequestBytes"`
-	ReadHeaderTimeout        time.Duration `yaml:"readHeaderTimeout"`
-	ReadTimeout              time.Duration `yaml:"readTimeout"`
-	WriteTimeout             time.Duration `yaml:"writeTimeout"`
-	IdleTimeout              time.Duration `yaml:"idleTimeout"`
+	Port              int           `yaml:"port"`
+	ServiceURL        string        `yaml:"serviceURL"`
+	LogLevel          slog.Level    `yaml:"logLevel"`
+	MaxRequestBytes   int64         `yaml:"maxRequestBytes"`
+	ReadHeaderTimeout time.Duration `yaml:"readHeaderTimeout"`
+	ReadTimeout       time.Duration `yaml:"readTimeout"`
+	WriteTimeout      time.Duration `yaml:"writeTimeout"`
+	IdleTimeout       time.Duration `yaml:"idleTimeout"`
 }
 
 // ArtifactsConfig is how this deployment uses the versioned artifact manifests the
@@ -122,9 +127,6 @@ func (s ServerConfig) Validate() error {
 	}
 	if s.IdleTimeout <= 0 {
 		return fmt.Errorf("server.idleTimeout must be greater than zero")
-	}
-	if strings.TrimSpace(s.PaymentMethodsConfigPath) == "" {
-		return fmt.Errorf("server.paymentMethodsConfigPath is required")
 	}
 	return nil
 }

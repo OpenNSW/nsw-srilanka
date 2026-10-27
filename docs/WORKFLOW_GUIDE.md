@@ -475,15 +475,14 @@ Opens a checkout for a fee and waits in `PENDING_PAYMENT` until the gateway repo
 
 In `reference`, `params` maps a param to a JSON Pointer into the step's inputs, as in `REFID_GENERATOR`, and `values` fixes a param per fee. A missing param, or a value the format rejects, fails the step.
 
-`org_id` and `service_id` name the payee: who the fee is paid to and for what. They are the same in every environment. What a gateway needs to collect the fee, such as GovPay's sub-institution and service ids, differs per environment, so each payment method maps payees to its own ids under `payees` in `configs/payment_methods.json`:
+`org_id` and `service_id` name the payee: who the fee is paid to and for what. They are the same in every environment. What a gateway needs to collect the fee, such as GovPay's sub-institution and service ids, differs per environment, so each payment method maps payees to its own ids under `payees`, in the `payment` section of `configs/config.yaml`:
 
-```json
-"payees": {
-  "cda": {
-    "defaults": { "subinst_id": "004" },
-    "services": { "app_fee": { "service_id": "001" } }
-  }
-}
+```yaml
+payees:
+  cda:
+    defaults: { subinst_id: "004" }
+    services:
+      app_fee: { service_id: "001" }
 ```
 
 A service's entry is merged over its org's `defaults`. The GovPay method needs both `subinst_id` and `service_id`, and the backend refuses to start if a mapping lacks either. For where the ids come from and a checklist for adding a fee, see the [GovPay+ gateway README](../external-integration/payment/govpay/README.md).

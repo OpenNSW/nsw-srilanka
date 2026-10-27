@@ -94,7 +94,7 @@ paths:
         '500':
           description: |
             Internal error, including a payee whose GovPay+ mapping in
-            payment_methods.json lacks `subinst_id` or `service_id`.
+            config.yaml lacks `subinst_id` or `service_id`.
           content:
             application/json:
               schema:

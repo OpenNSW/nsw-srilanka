@@ -116,7 +116,7 @@ All examples. Decide yours before starting; the notes say where a value is repea
 | Database              | `dea_db`                                  |                                                                                         |
 | Temporal namespace    | `dea`                                     |                                                                                         |
 | Artifacts base path   | `dea-v2`                                  | Folder in `one-trade-artifacts`                                                         |
-| Kubernetes namespace  | `dea`                                     | With Secret `dea-secrets` and ConfigMap `dea-configs`                                   |
+| Kubernetes namespace  | `dea`                                     | With Secret `dea-secrets`                                                               |
 
 The local agencies (CDA, EFC and others) follow the same pattern, which you can copy, but
 nothing depends on it.
@@ -323,29 +323,15 @@ keep the old ones, as for TNSW (see the
 Add the notification provider credentials the same way if the agency's workflows send
 email or SMS.
 
-### 4b. The payment methods file
+### 4b. Values
 
-The image ships only templates, so mount the agency's payment methods file at
-`/app/configs`. Here and in the Helm values below, the names, hosts and URLs are the
-examples; use yours.
+In the Helm values below, the names, hosts and URLs are the examples; use yours.
 
-The agency's catalog lives in `backend.config.catalog` in the Helm values below. The
-agency's outbound `tnsw` service, used by `notify_decision` and storage,
-lives in `backend.config.services` in the Helm values below. Its OAuth2 secret is
-a `{{env:NAME}}` placeholder expanded while loading the YAML config.
-
-`payment_methods.json`, empty, since an agency takes no payments but the server loads it:
-
-```json
-{ "version": "1.0", "methods": [] }
-```
-
-```sh
-kubectl create configmap dea-configs -n dea \
-  --from-file=payment_methods.json
-```
-
-### 4c. Values
+The agency's catalog lives in `backend.config.catalog`. The agency's outbound `tnsw`
+service, used by `notify_decision` and storage, lives in `backend.config.services`. Its
+OAuth2 secret is a `{{env:NAME}}` placeholder expanded while loading the YAML config. An
+agency takes no payments, so drop the example's `payment` section and the GovPay+ private
+key volume that goes with it.
 
 Start from [`deployments/helm/values-example.yaml`](../../deployments/helm/values-example.yaml)
 for the parts not shown (images, routes or ingress, resources). What differs from TNSW, with
@@ -361,13 +347,9 @@ backend:
     STORAGE_TOKEN_KEYSET:
       valueFrom: { secretKeyRef: { name: dea-secrets, key: storage-token-keyset } }
 
-  volumes:
-    - name: agency-configs
-      configMap: { name: dea-configs }
-  volumeMounts:
-    - name: agency-configs
-      mountPath: /app/configs
-      readOnly: true
+  # No GovPay+ private key: an agency takes no payments.
+  volumes: []
+  volumeMounts: []
 
   config:
     mode: agency
@@ -380,7 +362,6 @@ backend:
       readTimeout: 15s
       writeTimeout: 30s
       idleTimeout: 60s
-      paymentMethodsConfigPath: configs/payment_methods.json
     # Each role the agency's tasks name, mapped to its IdP role's name exactly as
     # created in Step 2f, and tnsw to the TNSW-to-agency client, whose replies the
     # tasks' waiting steps accept.
@@ -495,7 +476,7 @@ And this, or officers are signed in but their calls get `403`:
 | ------------------------- | --------------------------------- |
 | the `catalog.roles` value | the officer role's name (Step 2f) |
 
-### 4d. Install
+### 4c. Install
 
 ```sh
 helm install dea ./deployments/helm/lk-tnsw -n dea -f dea-values.yaml
@@ -647,20 +628,20 @@ through: the officer sees the case, decides, and the trader's consignment moves 
 
 ## Troubleshooting
 
-| Symptom                                                 | Likely cause                                                                                                                                                                                                                                 |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                                     |
-| Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                                          |
-| Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                                 |
-| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                          |
-| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                                    |
-| Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                         |
-| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4c)                                                                                                                                               |
-| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                           |
-| Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                                 |
-| Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                         |
-| Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                                      |
-| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `nsw:task:write` or isn't the agency's client in TNSW's catalog (6b)        |
+| Symptom                                                 | Likely cause                                                                                                                                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An M2M token request fails with `invalid_scope`         | The application lacks the scope (Step 2e), or no role grants it the permission (Step 2f)                                                                                                                                              |
+| Backend exits at startup naming `mode` or `tokenKeyset` | `mode` missing or misspelled (it must be `agency`), or `STORAGE_TOKEN_KEYSET` unset                                                                                                                                                   |
+| Backend logs Temporal errors about the namespace        | The Temporal namespace not created (Step 3), or `temporal.namespace` differs                                                                                                                                                          |
+| Officer signs in, but every call is `401`               | `authn.audience` ≠ the `resource=` the portal sends                                                                                                                                                                                   |
+| Officer gets `403` opening a task                       | The task's `read.roles` or `authz` doesn't name a catalog role the officer holds, the catalog's name doesn't match the token's `roles`, or the officer isn't in the group                                                             |
+| Inject `401`                                            | TNSW's service entry in `config.yaml` asks for a `resource` other than the agency's `authn.audience`                                                                                                                                  |
+| Reply `403` `client … is not permitted`                 | The agency's catalog doesn't map `tnsw` under `clients` to the TNSW-to-agency client (Step 4b)                                                                                                                                        |
+| Inject or reply `403` `insufficient scope`              | The TNSW-to-agency client lacks its role (Step 2f), or the `config.yaml` services entry doesn't request `nsw:workflow:inject` and `nsw:task:write`                                                                                    |
+| Inject `400` `unknown task code`                        | The code isn't registered in the agency folder's manifest, or the agency loads another `ref`                                                                                                                                          |
+| Inject `409`                                            | The same `taskId` was injected before with a different `consignmentId` or `taskCode`                                                                                                                                                  |
+| Officer can't open or upload documents                  | The agency-to-TNSW client lacks its role (Step 2f), or `M2M_DEA_TO_NSW_SECRET` is wrong                                                                                                                                               |
+| Officer decides, but TNSW's consignment doesn't move    | The `notify_decision` call failed; see the agency backend's logs. A callback `401` means the token's `aud` isn't TNSW's `authn.audience`; a `403`, that it lacks `nsw:task:write` or isn't the agency's client in TNSW's catalog (6b) |
 
 ## Local development
 

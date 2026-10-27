@@ -64,15 +64,15 @@ type PaymentConfig struct {
 	// prove which of its own sub-accounts/services the payment was registered
 	// under — separate from the M2M bearer in Identity, which only proves the
 	// caller is the gateway. Each entry maps a webhook wire field name to the
-	// key in the gateway's payee mapping (payment_methods.json "payees")
+	// key in the gateway's payee mapping (config.yaml payment.methods[].payees)
 	// holding the expected value; the mock looks each one up and echoes it back. This harness has no
 	// built-in knowledge of any gateway's identity scheme, so a new gateway
 	// needs only its own configs/payments/<id>.json entry, no Go changes.
 	IdentityFields map[string]string `json:"identityFields,omitempty"`
 
 	// PrivateKeyField is for a gateway that encrypts its calls to this GO's
-	// RSA public key. It names the gateway's payment_methods.json config field
-	// that takes the private key as a "file:" reference. The harness mints a
+	// RSA public key. It names the field of the gateway's config in config.yaml
+	// (payment.methods[].config) that takes the private key as a "file:" reference. The harness mints a
 	// fresh key pair per run, points that field at the private half, and the
 	// mock encrypts its webhook to the public half using the GovPay+ scheme
 	// (spec §3), the only one it speaks, like its envelope.

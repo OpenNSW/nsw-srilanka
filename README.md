@@ -30,7 +30,6 @@ nsw-srilanka/
 ├── deployments/helm/                       # Helm chart for deploying the stack
 ├── docs/                                   # WORKFLOW_GUIDE.md and other developer docs
 ├── configs/                                 # Runtime configs only (no workflow/form artifacts)
-│   ├── payment_methods.example.json         # Template for payment_methods.json
 │   ├── config.example.yaml                  # Template for config.yaml (server config — local/native dev)
 │   ├── config.docker.example.yaml           # Template for config.docker.yaml (server config — Docker Compose)
 │   └── companies.example.json               # Template for companies.json
@@ -64,7 +63,7 @@ For a comprehensive guide to authoring and modifying workflow and form configura
 make setup
 ```
 
-This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/{payment_methods,catalog,companies}.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
+This installs the Go quality tools, configures the git hooks (see [CONTRIBUTING.md](CONTRIBUTING.md)), and seeds the following local config files from their `*.example` templates — `.env`, `idp/.env`, `configs/companies.json` and `configs/{config,config.docker}.yaml`. Existing files are never overwritten, so it is safe to re-run.
 
 Configure outbound HTTP services in the YAML config's top-level `services` list.
 Secret values use quoted `{{env:NAME}}` or `{{file:/path}}` placeholders.
@@ -303,13 +302,12 @@ The `OpenNSW/core` SDK provides all the infrastructure building blocks used by t
 
 ## Configuration Reference
 
-| File                           | Purpose                                                                                                                                                                                           | Source of truth                        |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `.env`                         | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                                      | `.env.example`                         |
-| `idp/.env`                     | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                                                  | `idp/.env.example`                     |
-| `configs/payment_methods.json` | Payment gateway catalogue (id, type, gateway URL, instruction template), and each method's ids for every payee (`org_id`/`service_id`) under `payees`                                             | `configs/payment_methods.example.json` |
-| `configs/companies.json`       | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                                               | `configs/companies.example.json`       |
-| `configs/config.yaml`          | Server config (mandatory; `CONFIG_PATH`) — DB, server, outbound services, CORS, storage, auth, notification, artifact loader, `refid` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`          |
-| `configs/config.docker.yaml`   | The same, for Docker Compose — reaches the other services by container hostname                                                                                                                   | `configs/config.docker.example.yaml`   |
+| File                         | Purpose                                                                                                                                                                                                      | Source of truth                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| `.env`                       | Secrets the config files reference, and Docker Compose host settings (ports)                                                                                                                                 | `.env.example`                       |
+| `idp/.env`                   | Identity Provider environment (client IDs, secrets, JWKS config)                                                                                                                                             | `idp/.env.example`                   |
+| `configs/companies.json`     | Seed company/trader records (registration, VAT/TIN, per-agency IDs)                                                                                                                                          | `configs/companies.example.json`     |
+| `configs/config.yaml`        | Server config (mandatory; `CONFIG_PATH`) — DB, server, outbound services, CORS, storage, auth, notification, artifact loader, `refid`, `payment` — for native runs. The `otc` CLI reads its `db` section too | `configs/config.example.yaml`        |
+| `configs/config.docker.yaml` | The same, for Docker Compose — reaches the other services by container hostname                                                                                                                              | `configs/config.docker.example.yaml` |
 
 Workflow execution mechanics (input/output mappings, task plugins, render projections) are documented in [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) and the `github.com/OpenNSW/core` README.

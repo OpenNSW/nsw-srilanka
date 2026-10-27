@@ -9,27 +9,26 @@ Both calls are encrypted to this GO's RSA key and authenticated as GovPay+'s OAu
 
 ## Configuration
 
-The method's entry in `configs/payment_methods.json`:
+The method's entry under `payment.methods` in `config.yaml`:
 
-```json
-{
-  "id": "govpay",
-  "is_active": true,
-  "render_info": { "display_name": "GovPay", "description": "Offline payment instructions", "display_order": 1 },
-  "config": {
-    "webhook_client_id": "GOVPAY_TO_NSW",
-    "private_key": "file:/certs/govpay/go_private.pem"
-  },
-  "payees": {
-    "cda": {
-      "defaults": { "subinst_id": "004" },
-      "services": {
-        "app_fee": { "service_id": "001" },
-        "kcfn_fee": { "service_id": "002" }
-      }
-    }
-  }
-}
+```yaml
+payment:
+  methods:
+    - id: govpay
+      is_active: true
+      render_info:
+        display_name: GovPay
+        description: Offline payment instructions
+        display_order: 1
+      config:
+        webhook_client_id: GOVPAY_TO_NSW
+        private_key: "file:/certs/govpay/go_private.pem"
+      payees:
+        cda:
+          defaults: { subinst_id: "004" }
+          services:
+            app_fee: { service_id: "001" }
+            kcfn_fee: { service_id: "002" }
 ```
 
 | Key                        | Meaning                                                                                                                                                                                      |
@@ -38,7 +37,7 @@ The method's entry in `configs/payment_methods.json`:
 | `config.private_key`       | This GO's RSA private key, as a `file:` or `env:` reference; an inline PEM is refused. Without it every callback answers 500; a key that is set but unreadable stops the backend at startup. |
 | `payees`                   | The GovPay+ ids for each fee. See below.                                                                                                                                                     |
 
-`configs/payment_methods.json` is git-ignored and seeded from `configs/payment_methods.example.json` only when it does not exist. After pulling a change to the example, copy the change into your local file.
+`configs/config.yaml` and `configs/config.docker.yaml` are git-ignored and seeded from their `*.example.yaml` templates only when they do not exist. After pulling a change to the `payment` section of a template, copy the change into your local file.
 
 ## Payee mapping
 
@@ -47,10 +46,11 @@ A PAYMENT step names its payee in NSW's own terms: an `org_id` (who is paid) and
 - `payees.<org_id>.services.<service_id>` lists a fee. A fee not listed cannot be paid through GovPay.
 - A fee's mapping is its service entry merged over its org's `defaults`, keys in the service entry winning. Put ids shared by all of an org's fees, typically `subinst_id`, in `defaults`.
 - Every resolved mapping must have both `subinst_id` and `service_id`. A mapping missing either stops the backend at startup.
+- Quote the ids. Unquoted, YAML reads `001` as the number 1, which the gateway refuses.
 
 In the example above, `cda/app_fee` resolves to `{"subinst_id": "004", "service_id": "001"}`.
 
-The ids in `payment_methods.example.json` are placeholders for local runs. Each deployed environment needs the ids GovPay+ issued for that environment.
+The ids in the `config*.example.yaml` templates are placeholders for local runs. Each deployed environment needs the ids GovPay+ issued for that environment.
 
 ### How the ids are checked
 
@@ -68,9 +68,9 @@ The ids are looked up from the current config on every call, not stored on the t
 
 1. **Get the ids from GovPay+.** For each environment, the sub-institution id and service id GovPay+ registered the fee under.
 2. **Name the payee in the PAYMENT step.** Set `org_id` and `service_id` in its `plugin_properties` (see [Payments](../../../docs/WORKFLOW_GUIDE.md#payments-payment) in the workflow guide). Use the same pair in every environment; don't put GovPay+ ids in the step.
-3. **Map the payee in every environment's `payment_methods.json`.** Add it under `govpay.payees`:
-   - `configs/payment_methods.example.json`, with placeholder ids, so local runs work.
-   - Each deployed environment's `payment_methods.json`, with that environment's real ids.
+3. **Map the payee in every environment's config.** Add it under the govpay method's `payees` in the `payment` section:
+   - `configs/config.example.yaml` and `configs/config.docker.example.yaml`, with placeholder ids, so local runs work.
+   - Each deployed environment's config (Helm: `backend.config.payment`), with that environment's real ids.
 
    A new org needs its own entry with `defaults` and `services`; a new fee for an existing org only needs a line under its `services`.
 
@@ -80,10 +80,10 @@ The ids are looked up from the current config on every call, not stored on the t
 
 ## Troubleshooting
 
-| Error                                                                                                              | Cause                                                                                                                                            | Fix                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `payment (<org>/<service>): no payment method can pay this payee; map it under payees in payment_methods.json`     | The fee is not under `govpay.payees` in the `payment_methods.json` this backend loaded. Locally, often a copy that predates the example.         | Add the mapping (checklist step 3) and restart.                                                                                                                                                        |
-| Startup fails with `govpay identity not configured: a govpay payee mapping must declare subinst_id and service_id` | A resolved mapping lacks one of the ids.                                                                                                         | Add the missing id to the service entry or the org's `defaults`.                                                                                                                                       |
-| `refid: invalid or missing param: value for param "<name>" does not match pattern "<pattern>"`                     | A reference param read from the step's inputs has the wrong shape, e.g. company data seeded from an old `companies.json`.                        | Fix the source data (`cp configs/companies.example.json configs/companies.json` and re-run `seed-companies` locally), then start a new application. Running workflows keep the data they started with. |
-| Presentment answers 404 `invalid_reference` for a reference that exists                                            | GovPay+ posted ids that do not match the payee's mapping; the backend logs `govpay presentment rejected: identity mismatch` with the ids it got. | Correct the environment's mapping, or the fee's registration with GovPay+.                                                                                                                             |
-| Every callback answers 500                                                                                         | No `private_key` configured, or `webhook_client_id` missing.                                                                                     | Set both in `config`.                                                                                                                                                                                  |
+| Error                                                                                                                   | Cause                                                                                                                                            | Fix                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `payment (<org>/<service>): no payment method can pay this payee; map it under payment.methods[].payees in config.yaml` | The fee is not under the govpay method's `payees` in the config this backend loaded. Locally, often a copy that predates the example.            | Add the mapping (checklist step 3) and restart.                                                                                                                                                        |
+| Startup fails with `govpay identity not configured: a govpay payee mapping must declare subinst_id and service_id`      | A resolved mapping lacks one of the ids.                                                                                                         | Add the missing id to the service entry or the org's `defaults`.                                                                                                                                       |
+| `refid: invalid or missing param: value for param "<name>" does not match pattern "<pattern>"`                          | A reference param read from the step's inputs has the wrong shape, e.g. company data seeded from an old `companies.json`.                        | Fix the source data (`cp configs/companies.example.json configs/companies.json` and re-run `seed-companies` locally), then start a new application. Running workflows keep the data they started with. |
+| Presentment answers 404 `invalid_reference` for a reference that exists                                                 | GovPay+ posted ids that do not match the payee's mapping; the backend logs `govpay presentment rejected: identity mismatch` with the ids it got. | Correct the environment's mapping, or the fee's registration with GovPay+.                                                                                                                             |
+| Every callback answers 500                                                                                              | No `private_key` configured, or `webhook_client_id` missing.                                                                                     | Set both in `config`.                                                                                                                                                                                  |

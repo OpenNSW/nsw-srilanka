@@ -18,21 +18,21 @@ import (
 
 // Config holds the GovPay+ gateway configuration.
 type Config struct {
-	BaseURL string
+	BaseURL string `yaml:"base_url"`
 
 	// WebhookClientID is the OAuth2 client GovPay+ authenticates its callbacks
 	// as. Both callback routes already require a token carrying the payment
 	// webhook scopes, but any machine client holding those scopes could
 	// otherwise post against any gateway — so the gateway pins the caller to its
 	// own client. Required: without it a callback cannot be judged either way.
-	WebhookClientID string `json:"webhook_client_id"`
+	WebhookClientID string `yaml:"webhook_client_id"`
 
 	// PrivateKey locates this GO's RSA private key (PEM), the half of the pair
 	// whose public key GovPay+ holds. GovPay+ encrypts a fresh transaction key
 	// to it on every call (spec §3), so without it no call can be read. It must
 	// be a "file:" or "env:" reference, never the PEM itself: this config is a
 	// plain file, not a secret store.
-	PrivateKey secret.SecretRef `json:"private_key"`
+	PrivateKey secret.SecretRef `yaml:"private_key"`
 }
 
 // MethodID is the payment method this gateway is registered under. The

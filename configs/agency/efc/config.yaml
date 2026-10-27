@@ -35,7 +35,6 @@ server:
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  paymentMethodsConfigPath: ./configs/agency/efc/payment_methods.json
 
 # The catalog: the logical names the agency's workflow rules use, mapped to
 # this deployment's IdP token roles and OAuth2 client ids. Each role here

@@ -108,7 +108,7 @@ func TestResolvePaymentAmount(t *testing.T) {
 // CreateCheckoutSession unimplemented, which is fine as long as Execute never
 // reaches them.
 type fakePaymentService struct {
-	payment.PaymentService
+	payment.Service
 
 	// methods are the ids of the methods that can pay any payee; nil means
 	// just govpay.
@@ -288,7 +288,7 @@ func TestPaymentPlugin_Execute_DefaultReferenceFormat(t *testing.T) {
 }
 
 // A fee still declaring the GovPay+ ids it used to carry has them ignored: the
-// ids come from the payee's mapping in payment_methods.json, and the step's
+// ids come from the payee's mapping in config.yaml, and the step's
 // metadata holds only its own bookkeeping and reference format.
 func TestPaymentPlugin_Execute_IgnoresLegacyGatewayMetadata(t *testing.T) {
 	svc := &fakePaymentService{resp: checkoutResponse()}

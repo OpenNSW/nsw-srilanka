@@ -20,6 +20,13 @@ import (
 // set.
 var (
 	testUploadTypes = []string{"application/pdf", "image/png"}
+	// testUploadTypeExtensions covers testUploadTypes and text/html, which
+	// tests grant a machine client.
+	testUploadTypeExtensions = map[string][]string{
+		"application/pdf": {".pdf"},
+		"image/png":       {".png"},
+		"text/html":       {".html"},
+	}
 	testInlineTypes = corestorage.DefaultInlineTypes()
 )
 
@@ -43,10 +50,11 @@ func localConfig(t *testing.T, publicURL string) Config {
 			},
 			PresignTTLSeconds: 900,
 		},
-		AllowedUploadTypes: testUploadTypes,
-		InlineTypes:        testInlineTypes,
-		MaxUploadBytes:     testMaxUploadBytes,
-		TokenKeyset:        testTokenKeyset,
+		AllowedUploadTypes:   testUploadTypes,
+		UploadTypeExtensions: testUploadTypeExtensions,
+		InlineTypes:          testInlineTypes,
+		MaxUploadBytes:       testMaxUploadBytes,
+		TokenKeyset:          testTokenKeyset,
 	}
 }
 
@@ -135,6 +143,45 @@ func TestNew_AppliesConfiguredUploadLimits(t *testing.T) {
 	if _, err := stack.Service.Upload(ctx, "a.pdf", testMaxUploadBytes+1, "application/pdf"); !errors.As(err, &tooLarge) {
 		t.Errorf("Upload over maxUploadBytes = %v, want *FileTooLargeError", err)
 	}
+}
+
+func TestConfigValidate_UploadTypeExtensions(t *testing.T) {
+	tests := []struct {
+		name       string
+		extensions map[string][]string
+		internal   map[string][]string
+		wantErr    string
+	}{
+		{name: "none", extensions: nil, wantErr: "storage.uploadTypeExtensions must list"},
+		{name: "an extension in capitals", extensions: map[string][]string{"application/pdf": {".PDF"}, "image/png": {".png"}}, wantErr: "storage.uploadTypeExtensions"},
+		{name: "a type with no extensions", extensions: map[string][]string{"application/pdf": {}, "image/png": {".png"}}, wantErr: "storage.uploadTypeExtensions"},
+		{name: "an uploadable type left out", extensions: map[string][]string{"application/pdf": {".pdf"}}, wantErr: `lists no extensions for "image/png"`},
+		{name: "a type granted on the internal route left out", extensions: map[string][]string{"application/pdf": {".pdf"}, "image/png": {".png"}},
+			internal: map[string][]string{"npqs": {"text/html"}}, wantErr: `lists no extensions for "text/html"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := localConfig(t, "http://localhost:8080")
+			cfg.UploadTypeExtensions = tt.extensions
+			cfg.AllowedInternalUploadTypes = tt.internal
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("Validate() = %v, want an error containing %q", err, tt.wantErr)
+			}
+			// New refuses it the same way, instead of reaching core's panic.
+			if _, err := New(context.Background(), cfg, nil); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("New() = %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+
+	t.Run("covering both routes", func(t *testing.T) {
+		cfg := localConfig(t, "http://localhost:8080")
+		cfg.InlineTypes = append(corestorage.DefaultInlineTypes(), "text/html")
+		cfg.AllowedInternalUploadTypes = map[string][]string{"npqs": {"text/html"}}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() = %v, want nil", err)
+		}
+	})
 }
 
 func TestConfigValidate_UploadLimits(t *testing.T) {

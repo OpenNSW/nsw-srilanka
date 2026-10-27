@@ -4,14 +4,13 @@ Configuration to run this backend as the National Plant Quarantine Service (NPQS
 next to TNSW on the same machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
 Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
-| File                   | Purpose                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn, reference formats, catalog                              |
-| `config.docker.yaml`   | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname, with the same reference formats                     |
-| `npqs.env`             | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                        |
-| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                                  |
-| `portal-config.js`     | Runtime config of the `npqs-portal` container: the trader-app in agency mode                                                                                           |
-| `branding.json`        | Branding for the `npqs-portal` container, as the NPQS officer portal had it in nsw-agency                                                                              |
+| File                 | Purpose                                                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.yaml`        | Server config for a native run: `mode: agency`, port 8081, own database, Temporal namespace, artifacts, authn, reference formats, catalog          |
+| `config.docker.yaml` | `config.yaml` for the `npqs-init` and `npqs-api` containers: Postgres, Temporal and the IdP by container hostname, with the same reference formats |
+| `npqs.env`           | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                    |
+| `portal-config.js`   | Runtime config of the `npqs-portal` container: the trader-app in agency mode                                                                       |
+| `branding.json`      | Branding for the `npqs-portal` container, as the NPQS officer portal had it in nsw-agency                                                          |
 
 NPQS keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling
@@ -89,11 +88,11 @@ For the officer UI, run the trader-app with the values in `portal-config.js`.
 creates NPQS for this deployment, on the `NPQS API` resource server
 (`https://api.npqs.nsw-agency.local`, `authn.audience` in `config.yaml`):
 
-| Caller                             | Client                | Grant                                                                                                                                 |
-| ---------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`                  |
-| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps, which its catalog maps `tnsw` to    |
-| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                          |
+| Caller                             | Client                | Grant                                                                                                                              |
+| ---------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Officer `npqs_officer`             | `OGA_PORTAL_APP_NPQS` | `NPQS Officer` role (via `NPQS Officers`): `nsw:consignment:read`, `nsw:task:*`, `nsw:profile:read`, `nsw:storage:*`               |
+| TNSW injecting and replying        | `NSW_TO_NPQS`         | `NswToNpqsM2M` role: `nsw:workflow:inject`, and `nsw:task:write` to reply on NPQS's parked steps, which its catalog maps `tnsw` to |
+| NPQS decision callback and storage | `NPQS_TO_NSW`         | `NpqsToNswM2M` role: `nsw:task:write` and `nsw:storage:read`/`write`/`internalwrite` on TNSW                                       |
 
 TNSW's `config.yaml` services entry `npqs` requests `nsw:workflow:inject` and `nsw:task:write` with
 `resource=https://api.npqs.nsw-agency.local` (see `configs/config*.example.yaml`).

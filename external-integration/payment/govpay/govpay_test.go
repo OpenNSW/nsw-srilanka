@@ -9,6 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // updateBody is a GovPay+ update (webhook) request carrying the payment outcome
@@ -189,14 +190,24 @@ func TestGovPay_CreateSession(t *testing.T) {
 	assert.NotEmpty(t, resp.Instructions)
 }
 
+// decodeYAML is the decode func core/payment hands a Factory: it decodes the
+// method's config block from config.yaml into the gateway's own type.
+func decodeYAML(t *testing.T, src string) func(v any) error {
+	t.Helper()
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(src), &node))
+	return node.Decode
+}
+
 func TestNewGovPayGateway(t *testing.T) {
-	gw, err := NewGovPayGateway([]byte(`{"BaseURL":"https://sandbox.govpay.lk"}`))
+	gw, err := NewGovPayGateway(decodeYAML(t, "base_url: https://sandbox.govpay.lk\nwebhook_client_id: GOVPAY_TO_NSW"))
 	require.NoError(t, err)
 	g, ok := gw.(*GovPayGateway)
 	require.True(t, ok)
 	assert.Equal(t, "https://sandbox.govpay.lk", g.cfg.BaseURL)
+	assert.Equal(t, "GOVPAY_TO_NSW", g.cfg.WebhookClientID)
 
-	_, err = NewGovPayGateway([]byte(`not json`))
+	_, err = NewGovPayGateway(decodeYAML(t, "[not, a, mapping]"))
 	require.Error(t, err)
 }
 

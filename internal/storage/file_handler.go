@@ -236,6 +236,7 @@ func downloadOf(ctx context.Context, svc Service, value string) (fileDownload, e
 // is empty for a download.
 func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, err error, fallback, mimeType string) {
 	var tooLarge *corestorage.FileTooLargeError
+	var mismatch *corestorage.ExtensionMismatchError
 	switch {
 	case errors.Is(err, corestorage.ErrInvalidKey):
 		httputil.Error(w, r, http.StatusBadRequest, "invalid key format")
@@ -251,6 +252,8 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 			message += ": " + mimeType
 		}
 		httputil.Error(w, r, http.StatusUnsupportedMediaType, message)
+	case errors.As(err, &mismatch):
+		httputil.Error(w, r, http.StatusBadRequest, fmt.Sprintf("the file name's extension (%q) does not match its type (%s)", mismatch.Extension, mismatch.MediaType))
 	case isUpstreamFailure(err):
 		writeProxyError(w, r, err, fallback)
 	default:

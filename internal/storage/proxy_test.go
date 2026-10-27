@@ -59,7 +59,10 @@ func newOwningService(t *testing.T) *httptest.Server {
 	}
 	// The owner applies the same upload policy this deployment does, so a
 	// rejection it relays is a real one.
-	h := corestorage.NewHTTPHandler(corestorage.NewService(driver, corestorage.WithAllowedUploadTypes(testUploadTypes...)))
+	h := corestorage.NewHTTPHandler(corestorage.NewService(driver,
+		corestorage.WithAllowedUploadTypes(testUploadTypes...),
+		corestorage.WithUploadTypeExtensions(testUploadTypeExtensions),
+	))
 	mux.HandleFunc(UploadRoute, h.Upload)
 	mux.HandleFunc(InternalUploadRoute, h.Upload)
 	mux.HandleFunc(DownloadRoute, h.Download)

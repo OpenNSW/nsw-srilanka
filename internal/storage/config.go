@@ -2,6 +2,8 @@ package storage
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,6 +43,14 @@ type Config struct {
 	// route is open only to machine clients, and only the clients named here can
 	// store such a type.
 	AllowedInternalUploadTypes map[string][]string `yaml:"allowedInternalUploadTypes"`
+	// UploadTypeExtensions lists, per media type, the extensions an uploaded
+	// file's name may end in, in order of preference: a name ending in another
+	// is refused with 400, and a name without one is given the first. The
+	// stored file keeps the extension, and a download is named by it. It must
+	// list every type AllowedUploadTypes and AllowedInternalUploadTypes do.
+	// Required for the local and s3 backends; not read in proxy mode, where the
+	// owning service applies its own.
+	UploadTypeExtensions map[string][]string `yaml:"uploadTypeExtensions"`
 	// InlineTypes are the media types a download opens in the browser; every
 	// other file is saved. Required for the local and s3 backends; not read in
 	// proxy mode, where the owning service applies its own. A type a browser
@@ -152,6 +162,28 @@ func (c Config) validateBackend() error {
 	}
 	if c.MaxUploadBytes <= 0 {
 		return fmt.Errorf("storage.maxUploadBytes must be greater than zero, got %d", c.MaxUploadBytes)
+	}
+	return c.validateUploadTypeExtensions()
+}
+
+// validateUploadTypeExtensions checks that every type clients may upload, on
+// either upload route, lists the extensions its file names may end in:
+// core/storage checks no name whose type has none.
+func (c Config) validateUploadTypeExtensions() error {
+	if len(c.UploadTypeExtensions) == 0 {
+		return fmt.Errorf("storage.uploadTypeExtensions must list the file name extensions of each type clients may upload")
+	}
+	if err := corestorage.CheckUploadTypeExtensions(c.UploadTypeExtensions); err != nil {
+		return fmt.Errorf("storage.uploadTypeExtensions: %w", err)
+	}
+	uploadable := slices.Clone(c.AllowedUploadTypes)
+	for _, client := range slices.Sorted(maps.Keys(c.AllowedInternalUploadTypes)) {
+		uploadable = append(uploadable, c.AllowedInternalUploadTypes[client]...)
+	}
+	for _, t := range uploadable {
+		if _, ok := c.UploadTypeExtensions[t]; !ok {
+			return fmt.Errorf("storage.uploadTypeExtensions lists no extensions for %q, which clients may upload", t)
+		}
 	}
 	return nil
 }

@@ -24,7 +24,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
@@ -106,10 +105,9 @@ func newHarness(t *testing.T) *harness {
 	// app reads the private half, the mock gateway encrypts to the public half.
 	paymentKeys := mintPaymentKeys(t, payments)
 
-	// Defaults point at gitignored real config files; redirect to the committed
-	// examples (absolute, so they resolve irrespective of cwd). The payment
-	// methods example is rewritten to carry the minted private keys.
-	cfg.Server.PaymentMethodsConfigPath = writePaymentMethodsConfig(t, root, payments, paymentKeys)
+	// The example's payment methods point at no real key; give them the minted
+	// private keys.
+	setPaymentKeys(t, &cfg.Payment, payments, paymentKeys)
 	cfg.Storage.Local.BaseDir = t.TempDir() // keep blob storage out of the repo tree
 	// consignment_flows.json starts a flow on a consignment. The artifacts hold no other
 	// consignment-level workflow, so the export workflow stands in for one.
@@ -132,7 +130,7 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() { _ = database.Close(gwDB) })
 	// The mock reads the gateway's ids for a payment's payee from the same
 	// payment methods config the app loads; it builds no gateways of its own.
-	gwPayees, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, nil)
+	gwPayees, err := payment.NewRegistry(cfg.Payment, nil)
 	if err != nil {
 		t.Fatalf("gateway: load payment methods: %v", err)
 	}
@@ -230,21 +228,10 @@ func mintPaymentKeys(t *testing.T, payments []PaymentConfig) map[string]*rsa.Pri
 	return keys
 }
 
-// writePaymentMethodsConfig copies configs/payment_methods.example.json to a
-// temp file, pointing each keyed gateway's privateKeyField at a temp PEM file
-// holding its minted private key, and returns the copy's path.
-func writePaymentMethodsConfig(t *testing.T, root string, payments []PaymentConfig, keys map[string]*rsa.PrivateKey) string {
+// setPaymentKeys writes each keyed gateway's minted private key to a temp PEM
+// file and points the gateway's privateKeyField in cfg at it.
+func setPaymentKeys(t *testing.T, cfg *payment.Config, payments []PaymentConfig, keys map[string]*rsa.PrivateKey) {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(root, "configs", "payment_methods.example.json"))
-	if err != nil {
-		t.Fatalf("read payment methods config: %v", err)
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("parse payment methods config: %v", err)
-	}
-	methods, _ := doc["methods"].([]any)
-
 	dir := t.TempDir()
 	for _, p := range payments {
 		key, ok := keys[p.ID]
@@ -260,35 +247,26 @@ func writePaymentMethodsConfig(t *testing.T, root string, payments []PaymentConf
 			t.Fatalf("payment %q: write private key: %v", p.ID, err)
 		}
 
-		method := findPaymentMethod(methods, p.ID)
+		method := findPaymentMethod(cfg, p.ID)
 		if method == nil {
-			t.Fatalf("payment %q declares privateKeyField but payment_methods.example.json has no method with that id", p.ID)
+			t.Fatalf("payment %q declares privateKeyField but config.example.yaml has no payment method with that id", p.ID)
 		}
-		methodCfg, _ := method["config"].(map[string]any)
-		if methodCfg == nil {
-			methodCfg = make(map[string]any)
-			method["config"] = methodCfg
+		methodCfg := map[string]any{}
+		if err := method.Config.Decode(&methodCfg); err != nil {
+			t.Fatalf("payment %q: decode gateway config: %v", p.ID, err)
 		}
 		methodCfg[p.PrivateKeyField] = "file:" + keyPath
+		if err := method.Config.Encode(methodCfg); err != nil {
+			t.Fatalf("payment %q: encode gateway config: %v", p.ID, err)
+		}
 	}
-
-	out, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal payment methods config: %v", err)
-	}
-	path := filepath.Join(dir, "payment_methods.json")
-	if err := os.WriteFile(path, out, 0o600); err != nil {
-		t.Fatalf("write payment methods config: %v", err)
-	}
-	return path
 }
 
-// findPaymentMethod returns the payment_methods.json method object with the
-// given id, or nil.
-func findPaymentMethod(methods []any, id string) map[string]any {
-	for _, m := range methods {
-		if method, ok := m.(map[string]any); ok && method["id"] == id {
-			return method
+// findPaymentMethod returns cfg's payment method with the given id, or nil.
+func findPaymentMethod(cfg *payment.Config, id string) *payment.MethodConfig {
+	for i := range cfg.Methods {
+		if cfg.Methods[i].ID == id {
+			return &cfg.Methods[i]
 		}
 	}
 	return nil
