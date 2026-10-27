@@ -265,7 +265,7 @@ func TestLoadDecryptor(t *testing.T) {
 	})
 
 	// An inline PEM would resolve as a SecretRef literal, putting the private
-	// key in payment_methods.json; it is refused, as is an explicit literal:.
+	// key in config.yaml; it is refused, as is an explicit literal:.
 	t.Run("inline key is refused", func(t *testing.T) {
 		_, err := loadDecryptor(secret.SecretRef(testPrivateKeyPEM(t)))
 		require.Error(t, err)

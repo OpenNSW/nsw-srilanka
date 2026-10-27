@@ -49,7 +49,6 @@ server:
   port: 8080
   serviceURL: http://localhost:8080
   logLevel: info
-  paymentMethodsConfigPath: configs/payment_methods.json
   maxRequestBytes: 33554432
   readHeaderTimeout: 5s
   readTimeout: 15s
@@ -179,14 +178,13 @@ func validConfig() *Config {
 			},
 		},
 		Server: ServerConfig{
-			Port:                     8080,
-			PaymentMethodsConfigPath: "configs/payment_methods.json",
-			ServiceURL:               "http://localhost:8080",
-			MaxRequestBytes:          33554432,
-			ReadHeaderTimeout:        5 * time.Second,
-			ReadTimeout:              15 * time.Second,
-			WriteTimeout:             30 * time.Second,
-			IdleTimeout:              60 * time.Second,
+			Port:              8080,
+			ServiceURL:        "http://localhost:8080",
+			MaxRequestBytes:   33554432,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
 		},
 		Services: []remote.ServiceConfig{{ID: "tnsw", URL: "http://localhost:8080"}},
 		CORS: cors.Config{
@@ -359,7 +357,6 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"server.port",
 		"server.serviceURL",
 		"services",
-		"server.paymentMethodsConfigPath",
 		"catalog",
 		"server.maxRequestBytes",
 		"server.readHeaderTimeout",
@@ -554,6 +551,47 @@ integrations:
 	}
 	if cfg.Integrations.SLPAWebhookSecret != "from-file" {
 		t.Errorf("SLPAWebhookSecret = %q, want it resolved from the file", cfg.Integrations.SLPAWebhookSecret)
+	}
+}
+
+// The payment section decodes into core/payment's config: each method's
+// gateway config is left for its gateway to decode, and payee ids keep the
+// type YAML gives them.
+func TestLoad_Payment(t *testing.T) {
+	cfg, err := loadYAML(t, configYAML(t, `
+payment:
+  methods:
+    - id: govpay
+      is_active: true
+      render_info:
+        display_name: GovPay
+        display_order: 1
+      config:
+        webhook_client_id: GOVPAY_TO_NSW
+      payees:
+        npqs:
+          defaults: { subinst_id: "002" }
+          services:
+            certificate_fee: { service_id: "001" }
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(cfg.Payment.Methods) != 1 {
+		t.Fatalf("payment.methods has %d entries, want 1", len(cfg.Payment.Methods))
+	}
+	m := cfg.Payment.Methods[0]
+	if m.ID != "govpay" || !m.IsActive || m.RenderInfo.DisplayName != "GovPay" {
+		t.Errorf("payment.methods[0] = %+v, want the govpay method", m.GatewayInfo)
+	}
+	var gw struct {
+		WebhookClientID string `yaml:"webhook_client_id"`
+	}
+	if err := m.Config.Decode(&gw); err != nil || gw.WebhookClientID != "GOVPAY_TO_NSW" {
+		t.Errorf("payment.methods[0].config decodes to %+v (err %v), want webhook_client_id GOVPAY_TO_NSW", gw, err)
+	}
+	if got := m.Payees["npqs"].Services["certificate_fee"]["service_id"]; got != "001" {
+		t.Errorf("payees.npqs.services.certificate_fee.service_id = %#v, want the string \"001\"", got)
 	}
 }
 
@@ -788,16 +826,15 @@ func TestConfigValidate_RequiredSettings(t *testing.T) {
 		mutate func(*Config)
 		errMsg string
 	}{
-		"no mode":          {func(c *Config) { c.Mode = "" }, "mode is required"},
-		"unknown mode":     {func(c *Config) { c.Mode = "both" }, "invalid mode"},
-		"no server port":   {func(c *Config) { c.Server.Port = 0 }, "server.port must be between 1 and 65535"},
-		"no services":      {func(c *Config) { c.Services = nil }, "services is required"},
-		"no payments path": {func(c *Config) { c.Server.PaymentMethodsConfigPath = "" }, "server.paymentMethodsConfigPath is required"},
-		"no catalog":       {func(c *Config) { c.Catalog = catalog.Catalog{} }, "invalid catalog configuration"},
-		"no CORS methods":  {func(c *Config) { c.CORS.AllowedMethods = nil }, "cors.allowedMethods is required"},
-		"no CORS headers":  {func(c *Config) { c.CORS.AllowedHeaders = nil }, "cors.allowedHeaders is required"},
-		"no db port":       {func(c *Config) { c.Database.Postgres.Port = 0 }, "db.postgres.port"},
-		"no db sslMode":    {func(c *Config) { c.Database.Postgres.SSLMode = "" }, "db.postgres.sslMode is required"},
+		"no mode":         {func(c *Config) { c.Mode = "" }, "mode is required"},
+		"unknown mode":    {func(c *Config) { c.Mode = "both" }, "invalid mode"},
+		"no server port":  {func(c *Config) { c.Server.Port = 0 }, "server.port must be between 1 and 65535"},
+		"no services":     {func(c *Config) { c.Services = nil }, "services is required"},
+		"no catalog":      {func(c *Config) { c.Catalog = catalog.Catalog{} }, "invalid catalog configuration"},
+		"no CORS methods": {func(c *Config) { c.CORS.AllowedMethods = nil }, "cors.allowedMethods is required"},
+		"no CORS headers": {func(c *Config) { c.CORS.AllowedHeaders = nil }, "cors.allowedHeaders is required"},
+		"no db port":      {func(c *Config) { c.Database.Postgres.Port = 0 }, "db.postgres.port"},
+		"no db sslMode":   {func(c *Config) { c.Database.Postgres.SSLMode = "" }, "db.postgres.sslMode is required"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := validConfig()

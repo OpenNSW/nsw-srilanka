@@ -113,7 +113,7 @@ Tests skip unless `E2E=1`. Run serially — workers share fixed Temporal task qu
 
 `identity` is optional — current production gateways post unauthenticated webhooks. When a gateway is made protected, add an `identity` block (same shape as the agency `identity`) and a bearer token will be minted and included automatically.
 
-`privateKeyField` is optional too. Set it for a gateway that encrypts its calls to this GO's RSA public key: it names the gateway's config field in `payment_methods.json` that takes the private key. The harness mints a key pair per run, writes the private half to a temp file and points that field at it, and the mock encrypts its webhook to the public half using the GovPay+ scheme.
+`privateKeyField` is optional too. Set it for a gateway that encrypts its calls to this GO's RSA public key: it names the field of the gateway's `config` in `config.example.yaml`'s `payment` section that takes the private key. The harness mints a key pair per run, writes the private half to a temp file and points that field at it, and the mock encrypts its webhook to the public half using the GovPay+ scheme.
 
 ## Flow file schema
 

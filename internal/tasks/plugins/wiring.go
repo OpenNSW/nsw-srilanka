@@ -150,7 +150,7 @@ type CustomsSubmissions struct {
 // payments.PaymentService. NOTIFICATION uses NotificationPlugin which
 // dispatches SMS/email through notifications.Manager. ogaFiles issues the file
 // tokens EXTERNAL_REVIEW sends OGAs.
-func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.PaymentService, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, backendBaseURL string) error {
+func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService payment.Service, files FileFetcher, ogaFiles OGAFiles, customs CustomsSubmissions, backendBaseURL string) error {
 	if reg == nil {
 		return fmt.Errorf("plugins: registry is nil")
 	}

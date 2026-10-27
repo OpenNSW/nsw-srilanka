@@ -128,8 +128,8 @@ backend:
     #     secretKeyRef: { name: otel-auth-header, key: Authorization }
 
   # GovPay+ encrypts every call to this GO to its RSA public key, so the govpay
-  # gateway needs the private key. payment_methods.json points at it with
-  # "private_key": "file:/certs/govpay/go_private.pem"; this mounts it there
+  # gateway needs the private key. backend.config.payment points at it with
+  # private_key: "file:/certs/govpay/go_private.pem"; this mounts it there
   # from the govpay-go-private-key Secret (see the top of this file). Without the key the
   # backend starts but answers every GovPay+ call with 500; a key that is set
   # but unreadable stops the backend at startup.
@@ -169,11 +169,6 @@ backend:
       readTimeout: 15s
       writeTimeout: 30s
       idleTimeout: 60s
-      # Config file paths, relative to the image's /app working directory.
-      # (Only the *.example.json templates ship in the image — see the root
-      # Dockerfile. The live files below are gitignored, so supply them via a
-      # ConfigMap/volume mounted at /app/configs, or point these at the templates.)
-      paymentMethodsConfigPath: configs/payment_methods.json
 
     # The global catalog: logical names used across configuration (task authz
     # rules, storage.allowedInternalUploadTypes) -> this deployment's IdP token
@@ -190,6 +185,42 @@ backend:
         sltb: SLTB_TO_NSW
         slce: SLCE_TO_NSW
         govpay: GOVPAY_TO_NSW
+
+    # Payment methods: each one's gateway config, and the ids it collects
+    # every payee's (org_id/service_id) fees under. Replace the GovPay+ ids
+    # with the ones issued for this environment, quoted so they stay strings.
+    payment:
+      methods:
+        - id: govpay
+          is_active: true
+          render_info:
+            display_name: GovPay
+            description: Offline payment instructions
+            display_order: 1
+          config:
+            webhook_client_id: GOVPAY_TO_NSW
+            # Mounted from the govpay-go-private-key Secret (backend.volumes).
+            private_key: "file:/certs/govpay/go_private.pem"
+          payees:
+            fcau:
+              defaults: { subinst_id: "001" }
+              services:
+                app_fee: { service_id: "001" }
+            npqs:
+              defaults: { subinst_id: "002" }
+              services:
+                certificate_fee: { service_id: "001" }
+                treatment_fee: { service_id: "003" }
+            sltb:
+              defaults: { subinst_id: "003" }
+              services:
+                levy_fee: { service_id: "001" }
+                lab_fee: { service_id: "002" }
+            cda:
+              defaults: { subinst_id: "004" }
+              services:
+                app_fee: { service_id: "001" }
+                kcfn_fee: { service_id: "002" }
 
     # Outbound services; replace the local endpoints for this deployment.
     services:

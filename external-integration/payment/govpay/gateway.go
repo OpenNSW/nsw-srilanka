@@ -11,7 +11,7 @@ import (
 	corepayment "github.com/OpenNSW/core/payment"
 )
 
-// GovPayGateway implements corepayment.PaymentGateway for the GovPay+ aggregator.
+// GovPayGateway implements corepayment.Gateway for the GovPay+ aggregator.
 type GovPayGateway struct {
 	cfg Config
 	// decryptor holds this GO's RSA private key. GovPay+ encrypts every call
@@ -22,10 +22,10 @@ type GovPayGateway struct {
 }
 
 // NewGovPayGateway satisfies corepayment.Factory: it constructs a fully
-// configured GovPayGateway from its raw config.
-func NewGovPayGateway(cfg json.RawMessage) (corepayment.PaymentGateway, error) {
+// configured GovPayGateway from its method's config block in config.yaml.
+func NewGovPayGateway(decode func(v any) error) (corepayment.Gateway, error) {
 	var config Config
-	if err := json.Unmarshal(cfg, &config); err != nil {
+	if err := decode(&config); err != nil {
 		return nil, err
 	}
 

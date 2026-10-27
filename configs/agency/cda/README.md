@@ -4,14 +4,13 @@ Configuration to run this backend as the Coconut Development Authority, next to
 TNSW on the same machine. How agency mode works is in [docs/agency.md](../../../docs/agency.md).
 Values marked ASSUMED in `config.yaml` are placeholders to replace.
 
-| File                   | Purpose                                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.yaml`          | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn, outbound services, reference ID formats, catalog     |
-| `config.docker.yaml`   | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                     |
-| `cda.env`              | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                     |
-| `payment_methods.json` | Empty: an agency takes no payments, but the task stack loads the file                                                                                               |
-| `portal-config.js`     | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                         |
-| `branding.json`        | CDA branding for the `cda-portal` container                                                                                                                         |
+| File                 | Purpose                                                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.yaml`        | Server config for a native run: `mode: agency`, port 8083, own database, Temporal namespace, artifacts, authn, outbound services, reference ID formats, catalog |
+| `config.docker.yaml` | `config.yaml` for the `cda-init` and `cda-api` containers: Postgres, Temporal and the IdP by container hostname                                                 |
+| `cda.env`            | Environment for a native run: `CONFIG_PATH`, `APP_ENV` and the secrets `config.yaml` references                                                                 |
+| `portal-config.js`   | Runtime config of the `cda-portal` container: the trader-app in agency mode                                                                                     |
+| `branding.json`      | CDA branding for the `cda-portal` container                                                                                                                     |
 
 CDA keeps no files of its own. Its `storage` section is `type: proxy` to the `tnsw`
 service, so officers open and upload the documents in TNSW's storage, calling

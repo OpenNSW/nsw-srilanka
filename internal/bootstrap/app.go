@@ -131,8 +131,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// client ids. Validated with the config and injected from here.
 	globalCatalog := &cfg.Catalog
 
-	paymentRepo := payment.NewPaymentRepository(db)
-	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
+	paymentRepo := payment.NewRepository(db)
+	paymentRegistry, err := payment.NewRegistry(cfg.Payment, map[string]payment.Factory{
 		govpay.MethodID: govpay.NewGovPayGateway,
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		_ = database.Close(db)
 		return nil, err
 	}
-	paymentService := payment.NewPaymentService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
+	paymentService := payment.NewService(paymentRepo, paymentRegistry, nswpayment.NewRefGenerator(refIDs))
 	// Built before payment and storage are handed to the task stack. Workers
 	// can emit events as soon as those services exist, so the auditor has to
 	// be attached here rather than after the task manager starts.
@@ -994,7 +994,7 @@ func initTask(
 	db *gorm.DB,
 	temporalClient client.Client,
 	remoteManager *remote.Manager,
-	paymentService payment.PaymentService,
+	paymentService payment.Service,
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,

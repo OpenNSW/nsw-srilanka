@@ -62,11 +62,6 @@ server:
   readTimeout: 15s
   writeTimeout: 30s
   idleTimeout: 60s
-  # Config file paths, relative to the container's working directory (/app),
-  # whose configs/ is the repo's, bind-mounted read-only.
-  # The outbound services registry, reaching the agencies by container hostname.
-
-  paymentMethodsConfigPath: configs/payment_methods.json
 
 # The global catalog: the logical names used across configuration (task
 # authz rules, storage.allowedInternalUploadTypes), mapped to this
@@ -83,6 +78,48 @@ catalog:
     sltb: SLTB_TO_NSW
     slce: SLCE_TO_NSW
     govpay: GOVPAY_TO_NSW
+
+# Payment methods (core/payment): each one's gateway config, and the ids it
+# collects every payee's fees under. A fee names its payee by org_id and
+# service_id (the PAYMENT step); a method pays only the payees listed here
+# under payees.<org_id>.services.<service_id>, each entry merged over its
+# org's defaults. The GovPay+ ids differ per environment, so these are
+# placeholders. Quote them: unquoted, 001 would be read as the number 1.
+payment:
+  methods:
+    - id: govpay
+      is_active: true
+      render_info:
+        display_name: GovPay
+        description: Offline payment instructions
+        display_order: 1
+      config:
+        # The OAuth2 client GovPay+ calls back as (catalog.clients.govpay).
+        webhook_client_id: GOVPAY_TO_NSW
+        # This GO's GovPay+ RSA private key (PEM), from ./certs/govpay, which
+        # compose mounts at /certs/govpay. A "file:" or "env:" reference, never
+        # the key itself.
+        private_key: "file:/certs/govpay/go_private.pem"
+      payees:
+        fcau:
+          defaults: { subinst_id: "001" }
+          services:
+            app_fee: { service_id: "001" }
+        npqs:
+          defaults: { subinst_id: "002" }
+          services:
+            certificate_fee: { service_id: "001" }
+            treatment_fee: { service_id: "003" }
+        sltb:
+          defaults: { subinst_id: "003" }
+          services:
+            levy_fee: { service_id: "001" }
+            lab_fee: { service_id: "002" }
+        cda:
+          defaults: { subinst_id: "004" }
+          services:
+            app_fee: { service_id: "001" }
+            kcfn_fee: { service_id: "002" }
 
 # Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
 # {{file:/path}} placeholders, expanded with the rest of this config at load.

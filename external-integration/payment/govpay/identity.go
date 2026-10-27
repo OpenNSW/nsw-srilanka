@@ -12,7 +12,7 @@ import (
 )
 
 // identity is the GovPay+ sub-institution and service a payee is mapped to:
-// the govpay entry under "payees" in payment_methods.json, which core/payment
+// the govpay method's "payees" in config.yaml's payment section, which core/payment
 // resolves from a transaction's org_id and service_id.
 //
 // GovPay+ posts both ids on the presentment (validate) and update (webhook)

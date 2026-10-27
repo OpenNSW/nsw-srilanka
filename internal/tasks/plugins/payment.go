@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ import (
 // It initiates a checkout session with the payment service and transitions
 // the task record state to PENDING_PAYMENT.
 type PaymentPlugin struct {
-	paymentService payment.PaymentService
+	paymentService payment.Service
 }
 
 // referenceLifetime is how long a payment reference stays payable: a year, so the
@@ -29,7 +30,7 @@ type PaymentPlugin struct {
 const referenceLifetime = 365 * 24 * time.Hour
 
 // NewPaymentPlugin creates a new PaymentPlugin.
-func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
+func NewPaymentPlugin(paymentService payment.Service) *PaymentPlugin {
 	return &PaymentPlugin{
 		paymentService: paymentService,
 	}
@@ -38,7 +39,7 @@ func NewPaymentPlugin(paymentService payment.PaymentService) *PaymentPlugin {
 type paymentConfig struct {
 	// OrgID and ServiceID name the payee the fee is paid to. Each payment
 	// method maps a payee to its own account ids under "payees" in
-	// payment_methods.json, so a fee never carries a gateway's ids, and only
+	// config.yaml's payment section, so a fee never carries a gateway's ids, and only
 	// the methods that map the payee can collect it.
 	OrgID     string          `json:"org_id"`
 	ServiceID string          `json:"service_id"`
@@ -116,7 +117,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 	// nswpayment.RefGenerator, in the fee's format, and (for instruction-flow
 	// gateways) returns the instructions to display. A method that does not
 	// map the payee surfaces here as payment.ErrPayeeNotMapped, before anything
-	// is persisted, naming the payee to add to payment_methods.json.
+	// is persisted, naming the payee to add to config.yaml's payment section.
 	// The settlement completes exactly this step: the payment service hands the
 	// token back to the task manager when the webhook arrives.
 	callbackToken, err := coreplugins.CallbackToken(ctx.Record)
@@ -171,9 +172,7 @@ func (p *PaymentPlugin) Execute(ctx pluginContext, configRaw json.RawMessage) er
 // which nswpayment.RefGenerator reads.
 func buildPaymentMetadata(taskID, selectedMethod string, referenceMetadata map[string]string) map[string]string {
 	metadata := make(map[string]string, len(referenceMetadata)+2)
-	for key, value := range referenceMetadata {
-		metadata[key] = value
-	}
+	maps.Copy(metadata, referenceMetadata)
 	metadata["task_id"] = taskID
 	metadata["method_id"] = selectedMethod
 	return metadata
@@ -188,7 +187,7 @@ func selectPaymentMethod(selected string, methods []payment.GatewayInfo) (string
 		ids = append(ids, m.ID)
 	}
 	if len(ids) == 0 {
-		return "", errors.New("no payment method can pay this payee; map it under payees in payment_methods.json")
+		return "", errors.New("no payment method can pay this payee; map it under payment.methods[].payees in config.yaml")
 	}
 	if selected != "" {
 		if !slices.Contains(ids, selected) {

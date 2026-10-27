@@ -153,7 +153,6 @@ ifdef USE_CMD
 	@if exist .env.example if not exist .env copy /Y .env.example .env
 	@if exist idp\.env.example if not exist idp\.env copy /Y idp\.env.example idp\.env
 	@if exist portals\apps\trader-app\public\config.example.js if not exist portals\apps\trader-app\public\config.js copy /Y portals\apps\trader-app\public\config.example.js portals\apps\trader-app\public\config.js
-	@if exist configs\payment_methods.example.json if not exist configs\payment_methods.json copy /Y configs\payment_methods.example.json configs\payment_methods.json
 	@if exist configs\companies.example.json if not exist configs\companies.json copy /Y configs\companies.example.json configs\companies.json
 	@if exist configs\config.example.yaml if not exist configs\config.yaml copy /Y configs\config.example.yaml configs\config.yaml
 	@if exist configs\config.docker.example.yaml if not exist configs\config.docker.yaml copy /Y configs\config.docker.example.yaml configs\config.docker.yaml
@@ -166,7 +165,7 @@ else
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \
 		else echo "  Skipped: $$target (already exists)"; fi; \
 	done
-	@for f in configs/payment_methods.example.json configs/companies.example.json configs/config.example.yaml configs/config.docker.example.yaml; do \
+	@for f in configs/companies.example.json configs/config.example.yaml configs/config.docker.example.yaml; do \
 		target=$$(echo $$f | sed 's/\.example\././'); \
 		if [ ! -f "$$f" ]; then echo "  Skipped: $$target ($$f not found)"; \
 		elif [ ! -f "$$target" ]; then cp "$$f" "$$target" && echo "  Created: $$target"; \

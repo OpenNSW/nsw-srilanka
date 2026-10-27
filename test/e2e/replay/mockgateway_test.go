@@ -45,11 +45,11 @@ type mockGateway struct {
 	configs map[string]PaymentConfig
 	bearers map[string]string          // paymentID -> SERVICE bearer token (empty = unauthenticated)
 	keys    map[string]*rsa.PrivateKey // paymentID -> key pair the webhook is encrypted to (absent = plaintext)
-	payees  payment.GatewayRegistry    // resolves a payment's payee to the gateway's ids, from the app's payment_methods.json
+	payees  payment.Registry           // resolves a payment's payee to the gateway's ids, from the app's payment config
 	logf    func(string, ...any)
 }
 
-func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map[string]*rsa.PrivateKey, payees payment.GatewayRegistry) *mockGateway {
+func newMockGateway(t *testing.T, db *gorm.DB, configs []PaymentConfig, keys map[string]*rsa.PrivateKey, payees payment.Registry) *mockGateway {
 	t.Helper()
 	cfgMap := make(map[string]PaymentConfig, len(configs))
 	for _, c := range configs {
@@ -145,7 +145,7 @@ func (g *mockGateway) Pay(ctx context.Context, taskID, method, status string, ti
 // awaitReference polls the payment store until taskID's transaction has been
 // assigned a gateway reference number (set when the checkout session is
 // created), or timeout elapses.
-func (g *mockGateway) awaitReference(ctx context.Context, taskID string, timeout time.Duration) (*payment.PaymentTransaction, error) {
+func (g *mockGateway) awaitReference(ctx context.Context, taskID string, timeout time.Duration) (*payment.Transaction, error) {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(gatewayPollInterval)
 	defer ticker.Stop()
@@ -172,8 +172,8 @@ func (g *mockGateway) awaitReference(ctx context.Context, taskID string, timeout
 // latestPaymentFor returns taskID's newest payment transaction, or nil if there
 // is none yet. A looped payment step can leave more than one, and the newest is
 // the one the trader is paying now.
-func (g *mockGateway) latestPaymentFor(ctx context.Context, taskID string) (*payment.PaymentTransaction, error) {
-	var tx payment.PaymentTransaction
+func (g *mockGateway) latestPaymentFor(ctx context.Context, taskID string) (*payment.Transaction, error) {
+	var tx payment.Transaction
 	err := g.db.WithContext(ctx).
 		Where("gateway_metadata->>'task_id' = ?", taskID).
 		Order("created_at DESC").
@@ -190,12 +190,12 @@ func (g *mockGateway) latestPaymentFor(ctx context.Context, taskID string) (*pay
 
 // resolveIdentityFields looks up, for each wire field cfg.IdentityFields
 // declares, the expected value from the gateway's mapping for the payment's
-// payee — the ids payment_methods.json maps the transaction's org_id and
+// payee — the ids config.yaml's payment section maps the transaction's org_id and
 // service_id to, which the gateway checks the webhook against. Echoing these
 // back proves the mock is confirming the payment as the service it actually
 // belongs to, whatever identity scheme this gateway uses. A gateway with no
 // such scheme (cfg.IdentityFields empty) needs none of this.
-func resolveIdentityFields(cfg PaymentConfig, tx *payment.PaymentTransaction, payees payment.GatewayRegistry) (map[string]string, error) {
+func resolveIdentityFields(cfg PaymentConfig, tx *payment.Transaction, payees payment.Registry) (map[string]string, error) {
 	if len(cfg.IdentityFields) == 0 {
 		return nil, nil
 	}
