@@ -17,14 +17,19 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 )
 
-// chaCompanies answers GetCompanyByID with one CHA-enabled company.
+// chaCompanies answers GetCompanyByID with one CHA-enabled company, whose data holds a TIN and
+// an SLPA CMS key.
 type chaCompanies struct {
 	company.Service
 }
 
 func (chaCompanies) GetCompanyByID(_ context.Context, id string) (*company.Record, error) {
-	return &company.Record{ID: id, HasCHA: true}, nil
+	return &company.Record{ID: id, HasCHA: true,
+		Data: json.RawMessage(`{"tin_no": "134256789", "slpacmsuser_key": "secret-slpa-key"}`)}, nil
 }
+
+// formFields are the data fields the agency forms read, as tnsw/trade/1b-persist_cha lists them.
+var formFields = []string{"tin_no", "tel", "contact_email", "address"}
 
 func newCHAPersist(t *testing.T) (*CHAPersistPlugin, sqlmock.Sqlmock) {
 	t.Helper()
@@ -117,7 +122,7 @@ func TestCHASeedKeepsOnlyTheDetailsAnAgencyFormReads(t *testing.T) {
 		}`),
 	}
 
-	seed, err := chaSeed(record)
+	seed, err := chaSeed(record, formFields)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{
@@ -132,9 +137,33 @@ func TestCHASeedKeepsOnlyTheDetailsAnAgencyFormReads(t *testing.T) {
 	}, seed)
 }
 
+func TestCHASeedCopiesOnlyTheListedFields(t *testing.T) {
+	record := &company.Record{ID: "cha-1", Name: "CHA ONE", Data: json.RawMessage(
+		`{"tin_no": "134256789", "vat_no": "VAT-1", "agencies": {"cda": {}}, "slpacmsuser_key": "secret"}`)}
+
+	t.Run("none listed", func(t *testing.T) {
+		seed, err := chaSeed(record, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, map[string]any{"id": "cha-1", "name": "CHA ONE", "data": map[string]any{}}, seed)
+	})
+	t.Run("a field a flow added", func(t *testing.T) {
+		seed, err := chaSeed(record, []string{"tin_no", "vat_no"})
+		require.NoError(t, err)
+
+		assert.Equal(t, map[string]any{"tin_no": "134256789", "vat_no": "VAT-1"}, seed["data"])
+	})
+	t.Run("a field that isn't a string", func(t *testing.T) {
+		seed, err := chaSeed(record, []string{"agencies"})
+		require.NoError(t, err)
+
+		assert.Empty(t, seed["data"])
+	})
+}
+
 func TestCHASeedLeavesOutMissingAndBlankDetails(t *testing.T) {
 	seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: json.RawMessage(
-		`{"tin_no": "", "address": "   ", "contact_email": "\t\n", "tel": "0112345010"}`)})
+		`{"tin_no": "", "address": "   ", "contact_email": "\t\n", "tel": "0112345010"}`)}, formFields)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]any{"tel": "0112345010"}, seed["data"])
@@ -144,7 +173,7 @@ func TestCHASeedWithoutData(t *testing.T) {
 	cases := map[string]json.RawMessage{"no data": nil, "empty object": json.RawMessage(`{}`)}
 	for name, data := range cases {
 		t.Run(name, func(t *testing.T) {
-			seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
+			seed, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data}, formFields)
 			require.NoError(t, err)
 
 			assert.Equal(t, "cha-1", seed["id"])
@@ -157,7 +186,7 @@ func TestCHASeedRejectsUnreadableData(t *testing.T) {
 	for _, data := range []json.RawMessage{
 		json.RawMessage(`not json`), json.RawMessage(`[]`), json.RawMessage(`"x"`), json.RawMessage(`null`),
 	} {
-		_, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data})
+		_, err := chaSeed(&company.Record{ID: "cha-1", Name: "CHA ONE", Data: data}, formFields)
 
 		assert.Error(t, err, "data %q", data)
 	}
@@ -185,19 +214,52 @@ func TestCHAPersistFailsOnUnreadableDataBeforeWriting(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestCHAPersistEmitsTheChaDetails(t *testing.T) {
-	p, mock := newCHAPersist(t)
-	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE "consignments" SET "cha_company_id"`).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
+func TestCHAPersistEmitsTheConfiguredDetails(t *testing.T) {
+	cases := map[string]struct {
+		config json.RawMessage
+		data   map[string]any
+	}{
+		"fields listed":    {json.RawMessage(`{"cha_data_fields": ["tin_no", "tel"]}`), map[string]any{"tin_no": "134256789"}},
+		"no config":        {nil, map[string]any{}},
+		"empty config":     {json.RawMessage(`{}`), map[string]any{}},
+		"null config":      {json.RawMessage(`null`), map[string]any{}},
+		"empty field list": {json.RawMessage(`{"cha_data_fields": []}`), map[string]any{}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			p, mock := newCHAPersist(t)
+			mock.ExpectBegin()
+			mock.ExpectExec(`UPDATE "consignments" SET "cha_company_id"`).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectCommit()
 
-	ctx := pluginContext(map[string]any{"cha_company_id": "cha-1"})
-	require.NoError(t, p.Execute(ctx, nil))
+			ctx := pluginContext(map[string]any{"cha_company_id": "cha-1"})
+			require.NoError(t, p.Execute(ctx, tc.config))
 
-	cha, ok := ctx.Record.Data["cha"].(map[string]any)
-	require.True(t, ok, "the task should output the CHA's details")
-	assert.Equal(t, "cha-1", cha["id"])
+			cha, ok := ctx.Record.Data["cha"].(map[string]any)
+			require.True(t, ok, "the task should output the CHA's details")
+			assert.Equal(t, "cha-1", cha["id"])
+			assert.Equal(t, tc.data, cha["data"])
+		})
+	}
+}
+
+func TestCHAPersistRejectsAnInvalidConfigBeforeAnything(t *testing.T) {
+	for _, config := range []json.RawMessage{
+		json.RawMessage(`{"cha_data_fields": "tin_no"}`),
+		json.RawMessage(`{"cha_data_fields": [1]}`),
+		json.RawMessage(`{"cha_data_fields": ["tin_no", " "]}`),
+		json.RawMessage(`[]`),
+	} {
+		p, mock := newCHAPersist(t)
+
+		ctx := pluginContext(map[string]any{"cha_company_id": "cha-1"})
+		err := p.Execute(ctx, config)
+
+		require.ErrorContains(t, err, "cha_persist: invalid plugin config", "config %s", config)
+		assert.NotContains(t, ctx.Record.Data, "cha")
+		require.NoError(t, mock.ExpectationsWereMet())
+	}
 }
 
 func TestCHAPersistEmitsNothingWhenTheWriteFails(t *testing.T) {
