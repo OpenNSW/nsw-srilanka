@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { getTraderPreConsignments, createPreConsignment, getPreConsignment } from '@/features/consignment/service'
 import { PaginationControl } from '@/components/common/PaginationControl'
 import type { TraderPreConsignmentItem } from '@/features/consignment/types'
+import { workflowStatusI18nKey } from '@/features/consignment/workflowStatus'
 import { humanizeStatus } from '@/utils/formatStatus'
 
 const PAGE_LIMIT = 15
@@ -141,6 +142,7 @@ export function PreconsignmentScreen() {
           const isCompleted = item.state === 'COMPLETED'
           const isLocked = item.state === 'LOCKED'
           const isInProgress = item.state === 'IN_PROGRESS' || (hasInstance && !isCompleted)
+          const statusKey = workflowStatusI18nKey(item.state)
 
           return (
             <Card key={item.id} size="2" style={{ position: 'relative' }}>
@@ -159,7 +161,7 @@ export function PreconsignmentScreen() {
 
                 <Flex justify="between" align="center" mt="4">
                   <Badge color={isCompleted ? 'green' : isInProgress ? 'blue' : isLocked ? 'gray' : 'orange'}>
-                    {humanizeStatus(item.state)}
+                    {statusKey ? t(statusKey) : humanizeStatus(item.state)}
                   </Badge>
 
                   {!hasInstance ? (
