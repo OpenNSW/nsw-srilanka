@@ -195,7 +195,7 @@ In `PENDING_USER` the feedback (when present) renders above the form; in `COMPLE
 
 ### Read authorization
 
-`GET /api/v1/tasks/{id}` is scoped to the caller. Before rendering, the backend resolves one **claim** per role in `configs/catalog.json`, named `role:<logicalName>` — so `role:trader` and `role:cha` today. A claim is true only when the caller both holds that role in their token **and** their company owns the task's consignment in that same slot; holding the role is not enough.
+`GET /api/v1/tasks/{id}` is scoped to the caller. Before rendering, the backend resolves one **claim** per role in the catalog (`catalog.roles` in `config.yaml`), named `role:<logicalName>` — so `role:trader` and `role:cha` today. A claim is true only when the caller both holds that role in their token **and** their company owns the task's consignment in that same slot; holding the role is not enough.
 
 Two levers use those claims:
 
@@ -235,7 +235,7 @@ Two levers use those claims:
 In the same `PENDING_USER` state the CHA gets the form and its submit button, while the trader gets only a waiting notice. A section with no `requireClaim` is visible to whichever role the caller is acting as — which is how both roles share one completed-summary section.
 
 > [!WARNING]
-> Claim names are matched **exactly and case-sensitively**, and a `requireClaim` naming a claim the backend does not produce fails the whole request with a `500` rather than silently hiding the section. Only use names of the form `role:<key>` where `<key>` is a role in `configs/catalog.json`.
+> Claim names are matched **exactly and case-sensitively**, and a `requireClaim` naming a claim the backend does not produce fails the whole request with a `500` rather than silently hiding the section. Only use names of the form `role:<key>` where `<key>` is a role in the catalog (`catalog.roles` in `config.yaml`).
 
 > [!IMPORTANT]
 > This is presentation-layer scoping and the read gate — it does not authorize _writes_. Who may run a command is a separate, deny-by-default rule in the subtask template's `authz` extension (see [`internal/tasks/extensions/authz/README.md`](../internal/tasks/extensions/authz/README.md)). A section hidden here still needs its command denied there.
@@ -279,7 +279,7 @@ Each reference names who it was issued to and lists its **scopes**, what it allo
 - An upload (`POST /api/v1/storage`) returns a file reference issued to the uploader as its `key`, which is what a form's file field holds. A user's has `submit` only: it can't open the file (`403`), so it never expires, and once the form is submitted or saved as a draft, the task's view gives a reference that opens it. A machine client's, such as an agency forwarding its officer's upload, has `read` and `submit`, since the agency opens the file with it.
 - `GET /api/v1/tasks/{id}` replaces each one with a reference issued to the reader, with `read`, and `submit` too when the reader may act on the task's active step: its `authz` extension allows them some command in the task's current state (a step without one is refused to everyone). It is accepted from that reader only, for `storage.tokenTTLSeconds` (an hour by default). Anything else is refused with a `403`, a raw storage key included, and an expired reference with a `410`.
 - A submission, or a draft (`PUT /api/v1/tasks/{id}/steps/{stepId}/draft`), must send each declared field back as a reference issued to the submitter that allows `submit`, and the value it stands for is what gets stored. Someone else's reference, or one without `submit`, is refused with a `403`, an expired one with a `410`, and a value that is not a reference at all, such as a raw storage key, with a `400`.
-- An `EXTERNAL_REVIEW` step, whether it dispatches a review or replies on the OGA's parked step, sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`configs/catalog.json`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
+- An `EXTERNAL_REVIEW` step, whether it dispatches a review or replies on the OGA's parked step, sends the OGA a reference issued to the machine client its `service_id` maps to under `clients` in the catalog (`catalog.clients` in `config.yaml`), with `read` only: the OGA can open the file but not send it back. It never expires, since the OGA keeps it. A step that would send a file to a service with no such client fails instead of sending it.
 
 So declare every field a file upload writes: one missing from `files` reaches the reader as the stored value. A path that doesn't parse fails the task's reads and submissions with a `500` rather than leaving a file undeclared.
 

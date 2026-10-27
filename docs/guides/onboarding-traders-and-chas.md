@@ -33,7 +33,7 @@ flowchart LR
     token(["Access token<br/>ouHandle · roles · nsw:* scopes"])
 
     subgraph tnsw["TNSW backend"]
-        catalog["configs/catalog.json<br/>roles.trader → Trader<br/>roles.cha → CHA"]
+        catalog["config.yaml catalog<br/>roles.trader → Trader<br/>roles.cha → CHA"]
         company[("company_records<br/>id: acme-exports<br/>ou_handle: acme-exports<br/>has_cha: true | false<br/>data: br_no, tin_no, ...")]
     end
 
@@ -50,8 +50,8 @@ flowchart LR
   that handle, the user can sign in but owns nothing.
 - **What a user may do comes from the groups.** `Traders` grants the `Trader` role and
   `CHA` grants the `CHA` role (`idp/bootstrap/10-nsw-platform.yaml`). Both carry
-  the `traderNsw` scope set. `configs/catalog.json` maps the role names the backend expects
-  (`trader`, `cha`) to these IdP role names.
+  the `traderNsw` scope set. The `catalog` section of `config.yaml` maps the role names
+  the backend expects (`trader`, `cha`) to these IdP role names.
 - **Whether traders can pick a company as their CHA comes from `has_cha`.** The CHA picker
   in the trader portal lists companies with `has_cha = true`, and the `cha_persist` plugin
   refuses to assign a company without it.
@@ -303,7 +303,7 @@ ThunderID.
 | Symptom                                                   | Likely cause                                                                                                                          |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | User signs in, but no company on the profile              | No `company_records` row with this `ou_handle`. Check `otc company view` against the token's `ouHandle`                               |
-| `403` on consignments or tasks                            | User not in `Traders` / `CHA`, or `catalog.json` `roles` don't match the IdP role names                                               |
+| `403` on consignments or tasks                            | User not in `Traders` / `CHA`, or `catalog.roles` in `config.yaml` doesn't match the IdP role names                                   |
 | Token has no `nsw:*` scopes / `invalid_target` at sign-in | The portal isn't sending `resource=https://api.nsw-srilanka.local`; see [idp/README.md](../../idp/README.md#api-authorization-oauth2) |
 | Company missing from the CHA picker                       | `hasCha` is `false`                                                                                                                   |
 | `cha_persist: company "…" is not enabled as a CHA`        | Same: a trader picked a company whose `hasCha` was turned off since                                                                   |

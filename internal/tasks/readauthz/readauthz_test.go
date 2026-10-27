@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+
+	"gopkg.in/yaml.v3"
 )
 
 // noPolicy declares no read.roles, so no precedence applies.
@@ -379,10 +382,17 @@ func TestResolve_MalformedConfigIsNotADenial(t *testing.T) {
 // claim nothing produces — which uiprojector reports as a caller bug, failing
 // every read of those tasks. Fail here instead.
 func TestClaimKeysMatchCatalog(t *testing.T) {
-	c, err := catalog.Load(filepath.Join("..", "..", "..", "configs", "catalog.example.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "configs", "config.example.yaml"))
 	if err != nil {
-		t.Fatalf("load catalog: %v", err)
+		t.Fatalf("read config: %v", err)
 	}
+	var cfg struct {
+		Catalog catalog.Catalog `yaml:"catalog"`
+	}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	c := cfg.Catalog
 	cat := taskauthz.Catalog{Roles: c.Roles, Clients: c.Clients}
 
 	calls := 0

@@ -17,6 +17,7 @@ import (
 
 	integrations "github.com/OpenNSW/nsw-srilanka/external-integration"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	nswdatabase "github.com/OpenNSW/nsw-srilanka/internal/database"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
@@ -59,6 +60,10 @@ type Config struct {
 
 	// Services declares outbound endpoints and authentication in this file.
 	Services []remote.ServiceConfig `yaml:"services"`
+
+	// Catalog maps the logical names used across configuration onto this
+	// deployment's IdP token roles and OAuth2 client ids. Required.
+	Catalog catalog.Catalog `yaml:"catalog"`
 }
 
 // ServerConfig holds server configuration.
@@ -66,7 +71,6 @@ type ServerConfig struct {
 	Port                     int           `yaml:"port"`
 	ServiceURL               string        `yaml:"serviceURL"`
 	PaymentMethodsConfigPath string        `yaml:"paymentMethodsConfigPath"`
-	CatalogConfigPath        string        `yaml:"catalogConfigPath"`
 	LogLevel                 slog.Level    `yaml:"logLevel"`
 	MaxRequestBytes          int64         `yaml:"maxRequestBytes"`
 	ReadHeaderTimeout        time.Duration `yaml:"readHeaderTimeout"`
@@ -119,13 +123,8 @@ func (s ServerConfig) Validate() error {
 	if s.IdleTimeout <= 0 {
 		return fmt.Errorf("server.idleTimeout must be greater than zero")
 	}
-	for _, p := range []struct{ key, path string }{
-		{"server.paymentMethodsConfigPath", s.PaymentMethodsConfigPath},
-		{"server.catalogConfigPath", s.CatalogConfigPath},
-	} {
-		if strings.TrimSpace(p.path) == "" {
-			return fmt.Errorf("%s is required", p.key)
-		}
+	if strings.TrimSpace(s.PaymentMethodsConfigPath) == "" {
+		return fmt.Errorf("server.paymentMethodsConfigPath is required")
 	}
 	return nil
 }
@@ -198,6 +197,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Authn.Validate(); err != nil {
 		return fmt.Errorf("invalid authn configuration: %w", err)
+	}
+	if err := c.Catalog.Validate(); err != nil {
+		return fmt.Errorf("invalid catalog configuration: %w", err)
 	}
 	if err := c.validateTNSW(); err != nil {
 		return err

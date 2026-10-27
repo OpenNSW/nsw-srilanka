@@ -3,44 +3,25 @@
 // deployment's concrete identifiers — IdP token roles and OAuth2 client ids
 // today, further sections later.
 //
-// It is loaded once at bootstrap (configs/catalog.json, server.catalogConfigPath) and
-// handed to consumers as data; no consumer reads the file itself. Unknown
-// top-level keys are ignored, so the file may grow new sections ahead of the code
-// that reads them.
+// It is the catalog section of config.yaml, decoded with the rest of the config
+// and handed to consumers as data. Unknown keys are ignored, so the section may
+// grow new entries ahead of the code that reads them.
 package catalog
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 )
 
-// Catalog is the parsed catalog file.
+// Catalog is the catalog section of config.yaml.
 type Catalog struct {
 	// Roles maps a logical principal name ("trader") to the IdP token role
 	// carried in a user's access token ("Trader").
-	Roles map[string]string `json:"roles"`
+	Roles map[string]string `yaml:"roles"`
 	// Clients maps a logical principal name ("fcau") to the OAuth2 client id
 	// presented by an M2M caller ("FCAU_TO_NSW").
-	Clients map[string]string `json:"clients"`
-}
-
-// Load reads, parses, and validates the catalog file at path.
-func Load(path string) (*Catalog, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("catalog: read %s: %w", path, err)
-	}
-	var c Catalog
-	if err := json.Unmarshal(raw, &c); err != nil {
-		return nil, fmt.Errorf("catalog: parse %s: %w", path, err)
-	}
-	if err := c.Validate(); err != nil {
-		return nil, fmt.Errorf("catalog %s: %w", path, err)
-	}
-	return &c, nil
+	Clients map[string]string `yaml:"clients"`
 }
 
 // RequireRoles reports an error unless roles — the catalog's Roles map — defines
@@ -68,7 +49,7 @@ func RequireRoles(roles map[string]string, names ...string) error {
 
 // Validate reports whether the catalog is internally consistent: it must define
 // at least one entry, and every logical name must map to a non-empty identifier.
-// Messages are unprefixed so Load can qualify them with the file path.
+// Messages are unprefixed so the config can qualify them with the section.
 func (c *Catalog) Validate() error {
 	if c == nil {
 		return errors.New("nil catalog")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,8 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
+
+	"gopkg.in/yaml.v3"
 )
 
 type fakeOwnership struct {
@@ -234,10 +237,17 @@ func TestNewMiddleware_RejectsIncompleteCatalog(t *testing.T) {
 // succeeding while ownership silently resolved false for every candidate — a
 // blanket denial with no obvious cause. Fail here instead.
 func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
-	c, err := catalog.Load(filepath.Join("..", "..", "..", "configs", "catalog.example.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "configs", "config.example.yaml"))
 	if err != nil {
-		t.Fatalf("load catalog: %v", err)
+		t.Fatalf("read config: %v", err)
 	}
+	var cfg struct {
+		Catalog catalog.Catalog `yaml:"catalog"`
+	}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	c := cfg.Catalog
 	if _, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, c.Roles); err != nil {
 		t.Error(err)
 	}

@@ -128,12 +128,8 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 	// -------------------------------------------------------------------
 	// The global catalog resolves the logical names used across configuration
 	// (task-authz rule principals today) to this deployment's token roles and
-	// client ids. Loaded once here and injected; no consumer reads the file.
-	globalCatalog, err := catalog.Load(cfg.Server.CatalogConfigPath)
-	if err != nil {
-		_ = database.Close(db)
-		return nil, fmt.Errorf("failed to load catalog: %w", err)
-	}
+	// client ids. Validated with the config and injected from here.
+	globalCatalog := &cfg.Catalog
 
 	paymentRepo := payment.NewPaymentRepository(db)
 	paymentRegistry, err := payment.NewRegistry(cfg.Server.PaymentMethodsConfigPath, map[string]payment.Factory{
