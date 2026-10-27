@@ -114,6 +114,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 		corestorage.WithAllowedUploadTypes(cfg.AllowedUploadTypes...),
 		corestorage.WithInlineTypes(cfg.InlineTypes...),
 		corestorage.WithMaxUploadSize(cfg.MaxUploadBytes),
+		corestorage.WithUploadTypeExtensions(cfg.UploadTypeExtensions),
 	)
 
 	stack := &Stack{
