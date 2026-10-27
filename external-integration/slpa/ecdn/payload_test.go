@@ -136,8 +136,8 @@ func TestBuildXML_DerivesCusDecSerial(t *testing.T) {
 }
 
 // Once Customs has assessed the declaration, the form holds its number as
-// Customs writes it and no serial letter. The CMS gets the number with hyphens
-// and the letter from it, and the serial is built from the hyphenated number.
+// Customs writes it and no serial letter. The CMS refuses special characters,
+// so it gets the number as letters and digits, and the letter from it.
 func TestBuildXML_TakesTheNumberAsCustomsWritesIt(t *testing.T) {
 	form := fullForm()
 	form["cusdecNo"] = "CBEX1/2026/E/1050"
@@ -146,10 +146,21 @@ func TestBuildXML_TakesTheNumberAsCustomsWritesIt(t *testing.T) {
 	doc, err := BuildXML(form)
 	require.NoError(t, err)
 
-	assert.Contains(t, doc, "<CusDecNo>CBEX1-2026-E-1050</CusDecNo>")
+	assert.Contains(t, doc, "<CusDecNo>CBEX12026E1050</CusDecNo>")
 	assert.Contains(t, doc, "<CusDecSerLet>E</CusDecSerLet>")
-	assert.Contains(t, doc, "<CusDecSerial>BIBE1CBEX1-2026-E-10502026</CusDecSerial>")
-	assert.Contains(t, doc, "<ContainerNumber>CBEX1-2026-E-1050-2026-08-19-01</ContainerNumber>")
+	assert.Contains(t, doc, "<CusDecSerial>BIBE1CBEX12026E10502026</CusDecSerial>")
+	assert.Contains(t, doc, "<ContainerNumber>CBEX12026E1050-2026-08-19-01</ContainerNumber>")
+}
+
+func TestCmsCusdecNo(t *testing.T) {
+	for in, want := range map[string]string{
+		"CBEX1/2026/E/1050": "CBEX12026E1050",
+		"CBEX1-2026-E-1050": "CBEX12026E1050",
+		"CBEX1 2026 E 1050": "CBEX12026E1050",
+		"CBEX12026E1050":    "CBEX12026E1050",
+	} {
+		assert.Equal(t, want, cmsCusdecNo(in), in)
+	}
 }
 
 func TestCusdecSerLet(t *testing.T) {
@@ -159,9 +170,10 @@ func TestCusdecSerLet(t *testing.T) {
 		cusdecNo string
 		want     string
 	}{
-		{"entered by the trader", "X", "CBEX1-2026-E-1050", "X"},
-		{"from the number", nil, "CBEX1-2026-E-1050", "E"},
-		{"blank entry falls back", " ", "CBEX1-2026-E-1050", "E"},
+		{"entered by the trader", "X", "CBEX1/2026/E/1050", "X"},
+		{"from the number", nil, "CBEX1/2026/E/1050", "E"},
+		{"from a hyphenated number", nil, "CBEX1-2026-E-1050", "E"},
+		{"blank entry falls back", " ", "CBEX1/2026/E/1050", "E"},
 		{"number without parts", nil, "CBEX12026E1050", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {

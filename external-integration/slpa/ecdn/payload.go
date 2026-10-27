@@ -13,6 +13,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
 )
@@ -117,7 +118,8 @@ func BuildXML(form map[string]any) (string, error) {
 		return "", &buildError{"The cargo declaration form could not be read."}
 	}
 
-	cusdecNo := cmsCusdecNo(fields.String(form, "cusdecNo"))
+	customsNo := fields.String(form, "cusdecNo")
+	cusdecNo := cmsCusdecNo(customsNo)
 	cusdecDate := fields.String(form, "cusdecDate")
 	cusdecOffice := fields.String(form, "cusdecOffice")
 
@@ -145,7 +147,7 @@ func BuildXML(form map[string]any) (string, error) {
 			Volume:           fields.Number(form, "volumeCBM"),
 			Weight:           fields.Number(form, "weightKg"),
 			GoodsDescription: fields.String(form, "goodsDescription"),
-			CusDecSerLet:     cusdecSerLet(form, cusdecNo),
+			CusDecSerLet:     cusdecSerLet(form, customsNo),
 			Status:           fields.String(form, "status"),
 		},
 		Sub: Sub{
@@ -170,12 +172,13 @@ func BuildXML(form map[string]any) (string, error) {
 	return xml.Header + string(body), nil
 }
 
-// cmsCusdecNo writes a declaration number the way the CMS takes it. Customs
-// names a declaration office/year/serial/number ("CBEX1/2026/E/1050"), which is
-// how the form receives it once Customs has assessed the declaration; the CMS
-// takes the same parts joined by hyphens ("CBEX1-2026-E-1050").
+// cmsCusdecNo writes a declaration number the way the CMS takes it: letters
+// and digits only. Customs names a declaration office/year/serial/number
+// ("CBEX1/2026/E/1050"), which is how the form receives it once Customs has
+// assessed the declaration; the CMS refuses any other character, so it gets
+// the parts run together ("CBEX12026E1050").
 func cmsCusdecNo(cusdecNo string) string {
-	return strings.ReplaceAll(cusdecNo, "/", "-")
+	return strings.Join(cusdecParts(cusdecNo), "")
 }
 
 // cusdecSerLet is the serial letter the trader entered, or else the one in the
@@ -185,10 +188,18 @@ func cusdecSerLet(form map[string]any, cusdecNo string) string {
 	if serLet := fields.String(form, "cusdecSerLet"); serLet != "" {
 		return serLet
 	}
-	if parts := strings.Split(cusdecNo, "-"); len(parts) == 4 {
+	if parts := cusdecParts(cusdecNo); len(parts) == 4 {
 		return parts[2]
 	}
 	return ""
+}
+
+// cusdecParts splits a declaration number at every character that is not a
+// letter or a digit.
+func cusdecParts(cusdecNo string) []string {
+	return strings.FieldsFunc(cusdecNo, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
 }
 
 // cusdecSerial rebuilds the composite key SLPA's generator writes: the office
