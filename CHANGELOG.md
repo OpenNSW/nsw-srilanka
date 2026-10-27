@@ -6,10 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Added
-
-- **`contact_email` on the example companies.** Application forms prefill the trader's email from `data.contact_email`, so give every company record one. `make setup` doesn't overwrite an existing `configs/companies.json`, so copy the example's new key into it, then re-apply it with `otc company apply -f configs/companies.json`. `otc company apply` replaces `data` as a whole, so apply the complete record. ([#937](https://github.com/OpenNSW/nsw-srilanka/pull/937))
-
 ## [0.10.0] - 2026-10-26
 
 This release changes how files are stored and opened. Every deployment that stores files must set `storage.inlineTypes`, machine clients get their own upload route and scope, and each agency's storage settings gain two required keys. The upgrade has a set order: the IdP first, then TNSW, then each agency, one at a time. It also sends ePhyto certificates from LK to the importing country, with replacement certificates and a date of inspection; raises Customs dispatch notes for the containers on the latest declaration, ends the branch of a cancelled note and fills in the boat note from Customs' data; and keeps a payment reference payable for a year. The image version and the artifacts pin must change in the same deployment.
