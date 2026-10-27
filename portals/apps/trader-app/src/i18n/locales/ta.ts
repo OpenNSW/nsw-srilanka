@@ -8,7 +8,7 @@ const ta: Locale = {
       login: {
         tagline: 'உங்கள் அனுப்புப்பொருள் விவரங்களைத் தொடர்ந்து பார்க்க உள்நுழையவும்.',
         button: 'உள்நுழைக',
-        errorTitle: 'Authentication Failed',
+        errorTitle: 'அங்கீகாரம் தோல்வியடைந்தது',
       },
       unauthorized: {
         title: 'அணுகல் கட்டுப்படுத்தப்பட்டுள்ளது',
@@ -25,10 +25,10 @@ const ta: Locale = {
     },
     cases: {
       list: {
-        loading: 'Loading Cases...',
+        loading: 'வழக்குகள் ஏற்றப்படுகின்றன...',
         title: 'வழக்குகள்',
-        empty: 'No cases yet.',
-        error: 'Could not load cases.',
+        empty: 'இன்னும் வழக்குகள் இல்லை.',
+        error: 'வழக்குகளை ஏற்ற முடியவில்லை.',
         table: {
           id: 'வழக்கு',
           state: 'நிலை',
@@ -57,8 +57,8 @@ const ta: Locale = {
         create: 'புதிய சரக்கு',
         creating: 'உருவாக்குகிறது...',
         error: {
-          loadFailed: 'Could not load consignments.',
-          createFailed: 'Could not create the consignment. Please try again.',
+          loadFailed: 'அனுப்புப்பொருட்களை ஏற்ற முடியவில்லை.',
+          createFailed: 'அனுப்புப்பொருளை உருவாக்க முடியவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
         },
         searchPlaceholder: 'பெயர், எண் அல்லது HS குறியீட்டின் மூலம் தேடுக...',
         filter: {
@@ -71,8 +71,8 @@ const ta: Locale = {
           export: 'ஏற்றுமதி',
         },
         empty: {
-          none: 'No consignments yet.',
-          filtered: 'No consignments match your filters.',
+          none: 'இன்னும் அனுப்புப்பொருட்கள் இல்லை.',
+          filtered: 'உங்கள் வடிகட்டலுக்குப் பொருந்தும் அனுப்புப்பொருட்கள் எதுவும் இல்லை.',
         },
         table: {
           id: 'அனுப்புப்பொருள்',
@@ -83,9 +83,9 @@ const ta: Locale = {
       },
       detail: {
         loading: {
-          processing: 'Processing your submission...',
-          consignment: 'Loading consignment...',
-          settingUp: 'Setting up your consignment...',
+          processing: 'உங்கள் சமர்ப்பிப்பு செயலாக்கப்படுகிறது...',
+          consignment: 'அனுப்புப்பொருள் ஏற்றப்படுகிறது...',
+          settingUp: 'உங்கள் அனுப்புப்பொருள் அமைக்கப்படுகிறது...',
         },
         backToList: 'சரக்குகளுக்குத் திரும்பு',
         tryAgain: 'மீண்டும் முயற்சிக்கவும்',
@@ -102,29 +102,30 @@ const ta: Locale = {
             'இது அனுப்புப்பொருளில் {{label}} ஐத் தொடங்குகிறது. அதன் படிகள் கீழே உள்ள பட்டியலில் தோன்றும்.',
           cancel: 'ரத்துசெய்',
           start: 'தொடங்கு',
-          failed: 'Could not start {{label}}. Please try again.',
+          failed: '{{label}} ஐத் தொடங்க முடியவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
         },
         noWorkflow: {
           title: 'பணிப்பாய்வுப் படிகள் இல்லை',
           description: 'இந்த அனுப்புப்பொருளுக்கு பணிப்பாய்வுப் படிகள் எதுவும் கட்டமைக்கப்படவில்லை.',
         },
         error: {
-          idRequired: 'Consignment ID is required',
-          notFound: 'Consignment not found',
-          loadFailed: 'Failed to load consignment',
-          loadFailedDescription: 'There was a problem loading the consignment details. Please try again.',
-          notFoundDescription: "The consignment you're looking for doesn't exist or you don't have access to it.",
+          idRequired: 'அனுப்புப்பொருள் அடையாள இலக்கம் தேவை',
+          notFound: 'அனுப்புப்பொருள் காணப்படவில்லை',
+          loadFailed: 'அனுப்புப்பொருளை ஏற்றுவதில் தோல்வி',
+          loadFailedDescription:
+            'அனுப்புப்பொருள் விவரங்களை ஏற்றுவதில் சிக்கல் ஏற்பட்டது. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
+          notFoundDescription: 'நீங்கள் தேடும் அனுப்புப்பொருள் இல்லை அல்லது அதை அணுக உங்களுக்கு அனுமதி இல்லை.',
         },
       },
     },
     preconsignment: {
       title: 'சரிபார்க்கப்பட்ட ஆவணங்கள்',
       error: {
-        loadFailed: 'Failed to load pre-consignments list.',
-        noReadyTask: 'No ready task found in pre-consignment.',
-        startFailed: 'Failed to start registration process.',
-        noTask: 'No task found in pre-consignment.',
-        loadDetailFailed: 'An error occurred while loading the process details.',
+        loadFailed: 'முன்-அனுப்புப்பொருள் பட்டியலை ஏற்றுவதில் தோல்வி.',
+        noReadyTask: 'முன்-அனுப்புப்பொருளில் தயாரான பணி எதுவும் காணப்படவில்லை.',
+        startFailed: 'பதிவு செயல்முறையைத் தொடங்க முடியவில்லை.',
+        noTask: 'முன்-அனுப்புப்பொருளில் பணி எதுவும் காணப்படவில்லை.',
+        loadDetailFailed: 'செயல்முறை விவரங்களை ஏற்றுவதில் பிழை ஏற்பட்டது.',
       },
       action: {
         start: 'தொடங்கு',
@@ -134,7 +135,7 @@ const ta: Locale = {
       },
     },
     tasks: {
-      loading: 'Loading task...',
+      loading: 'பணி ஏற்றப்படுகிறது...',
       goBack: 'பின்செல்',
       refresh: 'புதுப்பி',
       taskId: 'பணி எண்',
@@ -180,11 +181,11 @@ const ta: Locale = {
         raiseSundryOrder: 'இதர ஆர்டரை உருவாக்கவும்',
       },
       redirect: {
-        redirectedTitle: 'Redirected to Payment Gateway',
-        redirectedDescription: 'Your session was redirected to the external payment gateway.',
-        returnToPayment: 'Return to payment session',
-        resetRedirection: 'Reset redirection state',
-        redirecting: 'Redirecting to payment gateway…',
+        redirectedTitle: 'கட்டண நுழைவாயிலுக்கு திருப்பி விடப்பட்டது',
+        redirectedDescription: 'உங்கள் அமர்வு வெளிப்புற கட்டண நுழைவாயிலுக்கு திருப்பி விடப்பட்டது.',
+        returnToPayment: 'கட்டண அமர்வுக்குத் திரும்புக',
+        resetRedirection: 'மறுதிசைவு நிலையை மீட்டமைக்கவும்',
+        redirecting: 'கட்டண நுழைவாயிலுக்கு திருப்பி விடுகிறது…',
       },
       unsaved: {
         title: 'சேமிக்காமல் வெளியேறவா?',
@@ -193,15 +194,15 @@ const ta: Locale = {
         leave: 'சேமிக்காமல் வெளியேறு',
       },
       validation: {
-        requiredFields: 'Please fill in all required fields.',
+        requiredFields: 'தேவையான அனைத்து புலங்களையும் நிரப்பவும்.',
       },
       error: {
-        missingId: 'Task ID is missing.',
-        fetchFailed: 'Failed to fetch task details.',
-        notFound: 'Task not found.',
-        submitFailed: 'Failed to submit task. Please try again.',
-        draftFailed: 'Failed to save the draft. Please try again.',
-        staleStep: 'This task has moved on since you opened it. It now shows its latest state.',
+        missingId: 'பணி அடையாள இலக்கம் விடுபட்டுள்ளது.',
+        fetchFailed: 'பணி விவரங்களைப் பெற முடியவில்லை.',
+        notFound: 'பணி காணப்படவில்லை.',
+        submitFailed: 'பணியைச் சமர்ப்பிக்க முடியவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
+        draftFailed: 'வரைவைச் சேமிக்க முடியவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
+        staleStep: 'நீங்கள் திறந்த பிறகு இந்தப் பணி முன்னேறியுள்ளது. இப்போது சமீபத்திய நிலை காட்டப்படுகிறது.',
       },
       claim: {
         unclaimed: 'கோரப்படவில்லை',
@@ -212,19 +213,18 @@ const ta: Locale = {
         release: 'விடுவிக்கவும்',
         takeOver: 'பொறுப்பேற்கவும்',
         takeOverTitle: 'இந்தப் பணியைப் பொறுப்பேற்கவா?',
-        takeOverConfirm: '{{name}} is working on this task. Take it over so that it shows you instead?',
-        takeOverConfirmUnnamed: 'Another user is working on this task. Take it over so that it shows you instead?',
+        takeOverConfirm: '{{name}} இந்தப் பணியில் பணியாற்றுகிறார். இதை உங்கள் பொறுப்பில் எடுத்துக்கொள்ளவா?',
+        takeOverConfirmUnnamed: 'மற்றொரு பயனர் இந்தப் பணியில் பணியாற்றுகிறார். இதை உங்கள் பொறுப்பில் எடுத்துக்கொள்ளவா?',
         cancel: 'இரத்துச்செய்',
         error: {
-          changed: 'The claim on this task just changed. It now shows who holds it.',
-          completed: 'This task is completed and can no longer be claimed.',
-          notHolder: 'This task is claimed by another user, so you cannot release it.',
-          unavailable: 'Claiming is not available for this task.',
-          failed: 'Could not update the claim. Please try again.',
+          changed: 'இந்தப் பணியின் உரிமை மாறியுள்ளது. இப்போது அதை யார் வைத்துள்ளனர் என்பது காட்டப்படுகிறது.',
+          completed: 'இந்தப் பணி முடிவடைந்தது, இனி இதைக் கோர முடியாது.',
+          notHolder: 'இந்தப் பணி மற்றொரு பயனரால் கோரப்பட்டுள்ளது, எனவே நீங்கள் இதை விடுவிக்க முடியாது.',
+          unavailable: 'இந்தப் பணிக்கு உரிமை கோருவது கிடைக்கவில்லை.',
+          failed: 'உரிமையை புதுப்பிக்க முடியவில்லை. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
         },
       },
     },
-
     form: {
       stepper: {
         back: 'பின்செல்',
@@ -269,7 +269,6 @@ const ta: Locale = {
         close: 'மூடுக',
       },
     },
-
     workflow: {
       tabs: {
         active: 'செயலில்',
@@ -301,12 +300,12 @@ const ta: Locale = {
     },
     audit: {
       title: 'செயல்பாடு',
-      entries: '· {{count}} entries',
+      entries: '· {{count}} உள்ளீடுகள்',
       time: {
-        justNow: 'just now',
-        minutesAgo: '{{mins}}m ago',
-        hoursAgo: '{{hours}}h ago',
-        daysAgo: '{{days}}d ago',
+        justNow: 'சற்று முன்',
+        minutesAgo: '{{mins}} நிமிடங்களுக்கு முன்',
+        hoursAgo: '{{hours}} மணிநேரத்திற்கு முன்',
+        daysAgo: '{{days}} நாட்களுக்கு முன்',
       },
     },
     footer: {
@@ -322,16 +321,16 @@ const ta: Locale = {
       copied: 'நகலெடுக்கப்பட்டது',
       copyNamed: '{{name}} ஐ நகலெடு',
       dateTimeAt: '{{date}} அன்று {{time}} மணிக்கு',
-      poweredBy: 'Powered by <0>OpenNSW</0> from the <1>Lanka Software Foundation</1>',
+      poweredBy: '<1>இலங்கை மென்பொருள் அறக்கட்டளையின்</1> <0>OpenNSW</0> ஆல் இயக்கப்படுகிறது',
       pagination: {
-        total: 'Total: {{count}}',
-        page: 'Page {{page}} of {{totalPages}}',
+        total: 'மொத்தம்: {{count}}',
+        page: 'பக்கம் {{totalPages}} இல் {{page}}',
         previous: 'முந்தையது',
         next: 'அடுத்தது',
       },
       error: {
-        title: 'Something went wrong',
-        unexpected: 'An unexpected error occurred',
+        title: 'ஏதோ தவறாகிவிட்டது',
+        unexpected: 'எதிர்பாராத பிழை ஏற்பட்டது',
         tryAgain: 'மீண்டும் முயற்சிக்கவும்',
       },
     },
