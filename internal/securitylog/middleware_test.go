@@ -242,6 +242,40 @@ func TestMiddlewareDoesNotReadBody(t *testing.T) {
 	if _, ok := line["requestBody"]; ok {
 		t.Fatalf("logged a body: %v", line["requestBody"])
 	}
+	if _, ok := line["requestBytes"]; ok {
+		t.Fatalf("requestBytes logged when the handler did not read: %v", line["requestBytes"])
+	}
+}
+
+func TestMiddlewareCountsUnknownLengthBody(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	payload := strings.Repeat("a", 64)
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(got) != payload {
+			t.Fatalf("handler body length = %d, want %d", len(got), len(payload))
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc", strings.NewReader(payload))
+	req.ContentLength = -1
+	req.Header.Set("Content-Type", "text/plain")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	line := decodeLine(t, buf.Bytes())
+	assertEqual(t, "requestBytes", line["requestBytes"], float64(len(payload)))
+	if _, ok := line["requestBody"]; ok {
+		t.Fatalf("requestBody logged: %v", line["requestBody"])
+	}
+	if strings.Contains(buf.String(), payload) {
+		t.Fatal("security log retained the payload")
+	}
 }
 
 func TestMiddlewareRedactsCallbackTokenInPath(t *testing.T) {

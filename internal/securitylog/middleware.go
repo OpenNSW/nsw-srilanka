@@ -40,6 +40,10 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			caller := &authn.RequestCaller{}
 			r = r.WithContext(authn.WithRequestCaller(r.Context(), caller))
 
+			// Count bytes as the handler reads. Declared Content-Length wins;
+			// chunked / unknown length uses the count. Nothing is buffered.
+			reqBody := wrapRequestBody(r)
+
 			resp := &responseLog{}
 			wrapped := httpsnoop.Wrap(w, resp.hooks())
 			start := time.Now()
@@ -77,8 +81,8 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				if origin := r.Header.Get("Origin"); origin != "" {
 					attrs = append(attrs, "origin", origin)
 				}
-				if r.ContentLength > 0 {
-					attrs = append(attrs, "requestBytes", r.ContentLength)
+				if n := requestBytes(r.ContentLength, reqBody); n > 0 {
+					attrs = append(attrs, "requestBytes", n)
 				}
 				if r.Pattern != "" {
 					attrs = append(attrs, "pattern", r.Pattern)
@@ -96,6 +100,42 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(wrapped, r)
 		})
 	}
+}
+
+// wrapRequestBody installs a counter on r.Body when present. It does not read.
+func wrapRequestBody(r *http.Request) *countingBody {
+	if r.Body == nil || r.Body == http.NoBody {
+		return nil
+	}
+	body := &countingBody{ReadCloser: r.Body}
+	r.Body = body
+	return body
+}
+
+// requestBytes prefers a declared Content-Length. Otherwise it is how much
+// the handler actually read (chunked / unknown length).
+func requestBytes(contentLength int64, body *countingBody) int64 {
+	if contentLength >= 0 {
+		return contentLength
+	}
+	if body == nil {
+		return 0
+	}
+	return body.n
+}
+
+// countingBody counts bytes the handler reads without retaining them.
+type countingBody struct {
+	io.ReadCloser
+	n int64
+}
+
+func (c *countingBody) Read(p []byte) (int, error) {
+	n, err := c.ReadCloser.Read(p)
+	if n > 0 {
+		c.n += int64(n)
+	}
+	return n, err
 }
 
 // loggedPath hides the callback token. The mux records it as the {token} path
