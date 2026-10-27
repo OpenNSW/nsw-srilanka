@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -176,8 +177,8 @@ func (c Config) validateUploadTypeExtensions() error {
 		return fmt.Errorf("storage.uploadTypeExtensions: %w", err)
 	}
 	uploadable := slices.Clone(c.AllowedUploadTypes)
-	for _, types := range c.AllowedInternalUploadTypes {
-		uploadable = append(uploadable, types...)
+	for _, client := range slices.Sorted(maps.Keys(c.AllowedInternalUploadTypes)) {
+		uploadable = append(uploadable, c.AllowedInternalUploadTypes[client]...)
 	}
 	for _, t := range uploadable {
 		if _, ok := c.UploadTypeExtensions[t]; !ok {
