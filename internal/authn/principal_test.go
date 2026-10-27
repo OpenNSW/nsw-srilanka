@@ -208,6 +208,61 @@ func TestPrincipalFromAuthContext_UserCarriesExtraClaims(t *testing.T) {
 	}
 }
 
+// captureProfileService records the Principal a UserProfileService is called
+// with.
+type captureProfileService struct{ got *Principal }
+
+func (c *captureProfileService) GetOrCreateUser(_ context.Context, p *Principal) (string, error) {
+	c.got = p
+	return "u1", nil
+}
+
+// UserProfileService is called with a Principal built from core's user
+// principal, which must carry the same extra claims the request's Principal
+// does, and keep the built-ins on their named fields only.
+func TestCoreProfileShim_CarriesExtraClaims(t *testing.T) {
+	svc := &captureProfileService{}
+	id, err := coreProfileShim{svc: svc}.GetOrCreateUser(context.Background(), &coreauthn.UserPrincipal{
+		Subject: "idp1",
+		Roles:   []string{"Officer"},
+		Scopes:  []string{"nsw:task:read"},
+		ExtraClaims: coreauthn.ExtraClaims{
+			"email":        "officer@example.com",
+			"phone_number": "+94771234567",
+			"ouId":         "OU-001",
+			"ouHandle":     "ou-001",
+			"department":   "Customs",
+			"grades":       []any{"A", "B"},
+		},
+	})
+	if err != nil || id != "u1" {
+		t.Fatalf("GetOrCreateUser = %q, %v", id, err)
+	}
+
+	p := svc.got
+	if p == nil {
+		t.Fatal("expected the service to be called with a principal")
+	}
+	if p.Kind != KindUser || p.IDPUserID != "idp1" || p.Email != "officer@example.com" ||
+		p.PhoneNumber != "+94771234567" || p.OUID != "OU-001" || p.OUHandle != "ou-001" {
+		t.Fatalf("named fields lost: %#v", p)
+	}
+	if got := p.ExtraClaims.String("department"); got != "Customs" {
+		t.Errorf("department = %q, want Customs", got)
+	}
+	if got := p.ExtraClaims.Strings("grades"); !slices.Equal(got, []string{"A", "B"}) {
+		t.Errorf("grades = %v, want [A B]", got)
+	}
+	for _, name := range builtinUserClaimNames {
+		if _, dup := p.ExtraClaims[name]; dup {
+			t.Errorf("built-in claim %q must not be repeated in ExtraClaims", name)
+		}
+	}
+	if len(p.ExtraClaims) != 2 {
+		t.Errorf("expected only the two extras, got %v", p.ExtraClaims)
+	}
+}
+
 func TestPrincipalFromAuthContext_ClientCarriesExtraClaims(t *testing.T) {
 	p := principalFromAuthContext(&coreauthn.AuthContext{
 		Client: &coreauthn.ClientContext{
