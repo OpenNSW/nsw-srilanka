@@ -135,6 +135,45 @@ func TestBuildXML_DerivesCusDecSerial(t *testing.T) {
 	assert.Contains(t, doc, "<CusDecSerial>BIBE1CBEX12026E10502026</CusDecSerial>")
 }
 
+// Once Customs has assessed the declaration, the form holds its number as
+// Customs writes it and no serial letter. The CMS gets the number with hyphens
+// and the letter from it, and the serial is built from the hyphenated number.
+func TestBuildXML_TakesTheNumberAsCustomsWritesIt(t *testing.T) {
+	form := fullForm()
+	form["cusdecNo"] = "CBEX1/2026/E/1050"
+	delete(form, "cusdecSerLet")
+
+	doc, err := BuildXML(form)
+	require.NoError(t, err)
+
+	assert.Contains(t, doc, "<CusDecNo>CBEX1-2026-E-1050</CusDecNo>")
+	assert.Contains(t, doc, "<CusDecSerLet>E</CusDecSerLet>")
+	assert.Contains(t, doc, "<CusDecSerial>BIBE1CBEX1-2026-E-10502026</CusDecSerial>")
+	assert.Contains(t, doc, "<ContainerNumber>CBEX1-2026-E-1050-2026-08-19-01</ContainerNumber>")
+}
+
+func TestCusdecSerLet(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		serLet   any
+		cusdecNo string
+		want     string
+	}{
+		{"entered by the trader", "X", "CBEX1-2026-E-1050", "X"},
+		{"from the number", nil, "CBEX1-2026-E-1050", "E"},
+		{"blank entry falls back", " ", "CBEX1-2026-E-1050", "E"},
+		{"number without parts", nil, "CBEX12026E1050", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			form := map[string]any{}
+			if c.serLet != nil {
+				form["cusdecSerLet"] = c.serLet
+			}
+			assert.Equal(t, c.want, cusdecSerLet(form, c.cusdecNo))
+		})
+	}
+}
+
 func TestBuildXML_ContainerNumber(t *testing.T) {
 	// SLPA's generator puts a per-declaration key in ContainerNumber and the
 	// physical container in ContainerMark.

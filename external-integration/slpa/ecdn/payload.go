@@ -117,7 +117,7 @@ func BuildXML(form map[string]any) (string, error) {
 		return "", &buildError{"The cargo declaration form could not be read."}
 	}
 
-	cusdecNo := fields.String(form, "cusdecNo")
+	cusdecNo := cmsCusdecNo(fields.String(form, "cusdecNo"))
 	cusdecDate := fields.String(form, "cusdecDate")
 	cusdecOffice := fields.String(form, "cusdecOffice")
 
@@ -145,7 +145,7 @@ func BuildXML(form map[string]any) (string, error) {
 			Volume:           fields.Number(form, "volumeCBM"),
 			Weight:           fields.Number(form, "weightKg"),
 			GoodsDescription: fields.String(form, "goodsDescription"),
-			CusDecSerLet:     fields.String(form, "cusdecSerLet"),
+			CusDecSerLet:     cusdecSerLet(form, cusdecNo),
 			Status:           fields.String(form, "status"),
 		},
 		Sub: Sub{
@@ -168,6 +168,27 @@ func BuildXML(form map[string]any) (string, error) {
 	// The CMS parses the payload as a document, so it carries its own prolog —
 	// and no DOCTYPE, which their parser refuses.
 	return xml.Header + string(body), nil
+}
+
+// cmsCusdecNo writes a declaration number the way the CMS takes it. Customs
+// names a declaration office/year/serial/number ("CBEX1/2026/E/1050"), which is
+// how the form receives it once Customs has assessed the declaration; the CMS
+// takes the same parts joined by hyphens ("CBEX1-2026-E-1050").
+func cmsCusdecNo(cusdecNo string) string {
+	return strings.ReplaceAll(cusdecNo, "/", "-")
+}
+
+// cusdecSerLet is the serial letter the trader entered, or else the one in the
+// declaration number, its third part. A number not in four parts yields none,
+// and the CMS names the missing field.
+func cusdecSerLet(form map[string]any, cusdecNo string) string {
+	if serLet := fields.String(form, "cusdecSerLet"); serLet != "" {
+		return serLet
+	}
+	if parts := strings.Split(cusdecNo, "-"); len(parts) == 4 {
+		return parts[2]
+	}
+	return ""
 }
 
 // cusdecSerial rebuilds the composite key SLPA's generator writes: the office
