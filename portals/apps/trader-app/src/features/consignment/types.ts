@@ -52,8 +52,9 @@ export type TradeFlow = 'IMPORT' | 'EXPORT'
 export type ConsignmentState = 'IN_PROGRESS' | 'FINISHED'
 
 // CANCELLED is a task an admin closed by force-parking its node; it cannot be submitted.
+// ON_HOLD is a task whose workflow parked on one of its steps for admin intervention.
 export type WorkflowNodeState =
-  'READY' | 'LOCKED' | 'IN_PROGRESS' | 'QUEUED_EXTERNALLY' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  'READY' | 'LOCKED' | 'IN_PROGRESS' | 'QUEUED_EXTERNALLY' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'ON_HOLD'
 
 export type StepType = 'SIMPLE_FORM' | 'WAIT_FOR_EVENT' | 'PAYMENT' | 'START' | 'END' | 'GATEWAY' | 'END_NODE'
 

@@ -42,7 +42,7 @@ export function ConsignmentTasks({
     const done = visible
       .filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED')
       .sort(newestFirst)
-    const waiting = visible.filter((s) => s.state === 'QUEUED_EXTERNALLY').sort(newestFirst)
+    const waiting = visible.filter((s) => s.state === 'QUEUED_EXTERNALLY' || s.state === 'ON_HOLD').sort(newestFirst)
     const placed = new Set([...done, ...waiting].map((s) => s.id))
     return { needsAction: visible.filter((s) => !placed.has(s.id)), waiting, done }
   }, [steps])

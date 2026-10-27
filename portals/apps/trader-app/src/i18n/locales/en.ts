@@ -300,6 +300,7 @@ const en = {
         failed: 'Failed',
         awaitingFeedback: 'Awaiting Feedback',
         cancelled: 'Cancelled',
+        onHold: 'On Hold',
       },
     },
 

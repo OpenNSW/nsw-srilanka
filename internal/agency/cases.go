@@ -203,7 +203,7 @@ func toSummary(c Case) CaseSummary {
 func toNode(t store.TaskRecord, meta taskconfig.TaskMeta) WorkflowNode {
 	state := "IN_PROGRESS"
 	switch t.State {
-	case "COMPLETED", "FAILED", "QUEUED_EXTERNALLY":
+	case "COMPLETED", "FAILED", "QUEUED_EXTERNALLY", store.StateCancelled, store.StateOnHold:
 		state = t.State
 	}
 	return WorkflowNode{
