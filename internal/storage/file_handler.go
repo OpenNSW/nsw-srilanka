@@ -253,7 +253,7 @@ func (h *FileHandler) writeServiceError(w http.ResponseWriter, r *http.Request, 
 		}
 		httputil.Error(w, r, http.StatusUnsupportedMediaType, message)
 	case errors.As(err, &mismatch):
-		httputil.Error(w, r, http.StatusBadRequest, fmt.Sprintf("the file name's extension (%s) does not match its type (%s)", mismatch.Extension, mismatch.MediaType))
+		httputil.Error(w, r, http.StatusBadRequest, fmt.Sprintf("the file name's extension (%q) does not match its type (%s)", mismatch.Extension, mismatch.MediaType))
 	case isUpstreamFailure(err):
 		writeProxyError(w, r, err, fallback)
 	default:

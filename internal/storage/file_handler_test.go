@@ -472,7 +472,7 @@ func TestFileHandler_UploadThroughProxy(t *testing.T) {
 // mode the owning service, whose refusal is relayed.
 func TestFileHandler_UploadExtension(t *testing.T) {
 	const mismatch = `{"filename":"setup.exe","mime_type":"application/pdf","size":10}`
-	const want = "the file name's extension (.exe) does not match its type (application/pdf)"
+	const want = `the file name's extension (".exe") does not match its type (application/pdf)`
 
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
@@ -485,10 +485,19 @@ func TestFileHandler_UploadExtension(t *testing.T) {
 	access, _ := testFileAccess(t)
 	h := NewFileHandler(stack.Service, access, WithUploads(stack.Uploads))
 
+	// errorOf returns the message of the error rec answered with.
+	errorOf := func(rec *httptest.ResponseRecorder) string {
+		var e struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &e)
+		return e.Error
+	}
+
 	rec := upload(h, user("alice"), mismatch)
 	assertStatus(t, rec, http.StatusBadRequest)
-	if !strings.Contains(rec.Body.String(), want) {
-		t.Errorf("body %s, want it to say %q", rec.Body.String(), want)
+	if got := errorOf(rec); got != want {
+		t.Errorf("error %q, want %q", got, want)
 	}
 
 	// A name without an extension is stored, and named, with its type's.
@@ -516,8 +525,8 @@ func TestFileHandler_UploadExtension(t *testing.T) {
 	proxy := newProxyStack(t, ownerToken)
 	rec = upload(NewFileHandler(proxy.Service, access, WithUploads(proxy.Uploads)), user("alice"), mismatch)
 	assertStatus(t, rec, http.StatusBadRequest)
-	if !strings.Contains(rec.Body.String(), want) {
-		t.Errorf("proxied body %s, want it to relay %q", rec.Body.String(), want)
+	if got := errorOf(rec); got != want {
+		t.Errorf("proxied error %q, want it to relay %q", got, want)
 	}
 }
 
