@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"math"
+	"reflect"
 	"slices"
 	"strconv"
 )
@@ -53,13 +54,34 @@ func checkNumbers(v any, n *roNode, at string, out *[]Violation) {
 		for i, child := range x {
 			checkNumbers(child, row, at+"/"+strconv.Itoa(i), out)
 		}
+	default:
+		checkNumericValue(v, at, out)
+	}
+}
+
+func checkNumericValue(v any, at string, out *[]Violation) {
+	switch x := v.(type) {
 	case float64:
-		if math.Abs(x) > maxNumber {
-			*out = append(*out, Violation{Path: at, Message: msgNumberTooLarge})
-		}
+		checkNumberLimit(x, at, out)
+	case float32:
+		checkNumberLimit(float64(x), at, out)
 	case json.Number:
 		if f, err := x.Float64(); err != nil || math.Abs(f) > maxNumber {
 			*out = append(*out, Violation{Path: at, Message: msgNumberTooLarge})
 		}
+	default:
+		rv := reflect.ValueOf(v)
+		switch rv.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			checkNumberLimit(float64(rv.Int()), at, out)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			checkNumberLimit(float64(rv.Uint()), at, out)
+		}
+	}
+}
+
+func checkNumberLimit(x float64, at string, out *[]Violation) {
+	if math.Abs(x) > maxNumber {
+		*out = append(*out, Violation{Path: at, Message: msgNumberTooLarge})
 	}
 }

@@ -2,6 +2,7 @@ package payloadschema
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -54,6 +55,65 @@ func TestExtension_Execute_NumberLimit(t *testing.T) {
 			}
 			err := ext.Execute(ctx, decodeRecord(t, stored), decode(t, tt.payload), naming(tt.form))
 
+			if tt.want == nil {
+				if err != nil {
+					t.Fatalf("Execute() = %v; want nil", err)
+				}
+				return
+			}
+			var invalid *InvalidPayloadError
+			if !errors.As(err, &invalid) {
+				t.Fatalf("Execute() = %v; want an *InvalidPayloadError", err)
+			}
+			if fmt.Sprint(invalid.Violations) != fmt.Sprint(tt.want) {
+				t.Errorf("violations = %v, want %v", invalid.Violations, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtension_Execute_NumberLimit_ProgrammaticTypes(t *testing.T) {
+	ext := NewExtension(fakeForms{"levy-form": levyForm}.form, namespace("reviewform"))
+	stored := `{"reviewform": {"total": 0}}`
+
+	tests := []struct {
+		name    string
+		payload map[string]any
+		want    []Violation
+	}{
+		{
+			name:    "int64 within limit",
+			payload: map[string]any{"levy_amount": int64(100), "total": 0},
+		},
+		{
+			name:    "int64 past limit",
+			payload: map[string]any{"levy_amount": int64(10_000_000_000_000), "total": 0},
+			want:    []Violation{{"/levy_amount", msgNumberTooLarge}},
+		},
+		{
+			name:    "int past limit",
+			payload: map[string]any{"levy_amount": int(10_000_000_000_000), "total": 0},
+			want:    []Violation{{"/levy_amount", msgNumberTooLarge}},
+		},
+		{
+			name:    "uint64 past limit",
+			payload: map[string]any{"levy_amount": uint64(10_000_000_000_000), "total": 0},
+			want:    []Violation{{"/levy_amount", msgNumberTooLarge}},
+		},
+		{
+			name:    "float32 past limit",
+			payload: map[string]any{"levy_amount": float32(1e15), "total": 0},
+			want:    []Violation{{"/levy_amount", msgNumberTooLarge}},
+		},
+		{
+			name:    "json.Number past limit",
+			payload: map[string]any{"levy_amount": json.Number("10000000000000"), "total": 0},
+			want:    []Violation{{"/levy_amount", msgNumberTooLarge}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ext.Execute(context.Background(), decodeRecord(t, stored), tt.payload, naming("levy-form"))
 			if tt.want == nil {
 				if err != nil {
 					t.Fatalf("Execute() = %v; want nil", err)
