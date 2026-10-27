@@ -330,7 +330,8 @@ In the Helm values below, the names, hosts and URLs are the examples; use yours.
 The agency's catalog lives in `backend.config.catalog`. The agency's outbound `tnsw`
 service, used by `notify_decision` and storage, lives in `backend.config.services`. Its
 OAuth2 secret is a `{{env:NAME}}` placeholder expanded while loading the YAML config. An
-agency takes no payments, so its config has no `payment` section.
+agency takes no payments, so drop the example's `payment` section and the GovPay+ private
+key volume that goes with it.
 
 Start from [`deployments/helm/values-example.yaml`](../../deployments/helm/values-example.yaml)
 for the parts not shown (images, routes or ingress, resources). What differs from TNSW, with
@@ -345,6 +346,10 @@ backend:
       valueFrom: { secretKeyRef: { name: dea-secrets, key: m2m-dea-to-nsw-secret } }
     STORAGE_TOKEN_KEYSET:
       valueFrom: { secretKeyRef: { name: dea-secrets, key: storage-token-keyset } }
+
+  # No GovPay+ private key: an agency takes no payments.
+  volumes: []
+  volumeMounts: []
 
   config:
     mode: agency
