@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -263,7 +264,7 @@ func (h *HTTPHandler) admitClaimant(w http.ResponseWriter, r *http.Request, op, 
 // readable reports whether in may read record. A denial is (false, nil); any other
 // failure is an error, not a denial.
 func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (bool, error) {
-	_, err := readauthz.Resolve(ctx, h.AuthzCatalog, in, record.RenderConfig, record.CaseID)
+	_, err := h.resolveRead(ctx, in, record)
 	switch {
 	case err == nil:
 		return true, nil
@@ -272,6 +273,19 @@ func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record s
 	default:
 		return false, err
 	}
+}
+
+// resolveRead is readauthz.Resolve for record, against its render config's read
+// policy.
+func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (map[string]bool, error) {
+	if h.RenderConfigOf == nil {
+		return nil, errors.New("tasks: no render config resolver configured")
+	}
+	renderConfig, err := h.RenderConfigOf(ctx, record)
+	if err != nil {
+		return nil, fmt.Errorf("tasks: %w", err)
+	}
+	return readauthz.Resolve(ctx, h.AuthzCatalog, in, renderConfig, record.CaseID)
 }
 
 // auditClaim records a claim, takeover or release of a task. tk is the takeover, or

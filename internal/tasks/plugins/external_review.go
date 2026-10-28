@@ -126,7 +126,7 @@ func (p *ExternalReviewPlugin) dispatchRequest(ctx pluginContext, cfg externalRe
 	}
 	// The task's declared file fields are rooted at its data, which holds the
 	// inputs; the OGA gets tokens for the ones it is sent.
-	data, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
+	data, err := p.files.tokenize(ctx.Context, *ctx.Record, root, data, cfg.ServiceID)
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}
@@ -149,7 +149,7 @@ func (p *ExternalReviewPlugin) reply(ctx pluginContext, cfg externalReviewConfig
 		}
 		root, data = replyPayloadInput, payload
 	}
-	sent, err := p.files.tokenize(ctx.Record.RenderConfig, root, data, cfg.ServiceID)
+	sent, err := p.files.tokenize(ctx.Context, *ctx.Record, root, data, cfg.ServiceID)
 	if err != nil {
 		return "", nil, fmt.Errorf("external_review: %w", err)
 	}

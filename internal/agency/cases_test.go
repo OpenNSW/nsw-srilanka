@@ -71,9 +71,9 @@ func TestCaseHandler(t *testing.T) {
 		workflows: map[string][]CaseWorkflow{"C1": {{"task-1", "code-a", 1}, {"task-2", "code-unregistered", 1}}},
 	}
 	tasks := fakeTasks{
-		"task-1": {{TaskID: "n1", TaskType: "APPLICATION", State: "PENDING_USER", RenderConfig: json.RawMessage(`{"title":"Review"}`)}},
+		"task-1": {{TaskID: "n1", TaskType: "APPLICATION", State: "PENDING_USER", TaskTemplateID: "tpl-a"}},
 		"task-2": {
-			{TaskID: "n2", TaskType: "APPLICATION", State: "COMPLETED", ActiveTaskTemplateID: "tpl"},
+			{TaskID: "n2", TaskType: "APPLICATION", State: "COMPLETED", TaskTemplateID: "tpl"},
 			{TaskID: "n3", TaskType: "SYSTEM", State: "COMPLETED"},
 		},
 	}
