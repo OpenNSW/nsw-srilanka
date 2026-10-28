@@ -131,8 +131,9 @@ references, the owning service's download route describes each file.
   without a `schema`, a schema that doesn't compile, a `readOnly` where the check doesn't
   follow it, or read-only values on a step without an `output_namespace`): `500`. The
   extension fails closed; it never lets a submission through unchecked.
-- **A file can't be looked up** (storage, or on an agency the owning service, fails):
-  `500`, for the same reason.
+- **A file lookup fails** (storage errors, or on an agency the owning service answers other
+  than "not found"): `500`, for the same reason. A file that isn't stored, including an
+  agency's `404`, is a `400` as above.
 
 ## Drafts
 
