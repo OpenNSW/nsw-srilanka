@@ -170,157 +170,6 @@ backend:
       writeTimeout: 30s
       idleTimeout: 60s
 
-    # The global catalog: logical names used across configuration (task authz
-    # rules, storage.allowedInternalUploadTypes) -> this deployment's IdP token
-    # roles and OAuth2 client ids.
-    catalog:
-      roles:
-        trader: Trader
-        cha: CHA
-      clients:
-        fcau: FCAU_TO_NSW
-        npqs: NPQS_TO_NSW
-        cda: CDA_TO_NSW
-        efc: EFC_TO_NSW
-        sltb: SLTB_TO_NSW
-        slce: SLCE_TO_NSW
-        govpay: GOVPAY_TO_NSW
-
-    # Payment methods: each one's gateway config, and the ids it collects
-    # every payee's (org_id/service_id) fees under. Replace the GovPay+ ids
-    # with the ones issued for this environment, quoted so they stay strings.
-    payment:
-      methods:
-        - id: govpay
-          is_active: true
-          render_info:
-            display_name: GovPay
-            description: Offline payment instructions
-            display_order: 1
-          config:
-            webhook_client_id: GOVPAY_TO_NSW
-            # Mounted from the govpay-go-private-key Secret (backend.volumes).
-            private_key: "file:/certs/govpay/go_private.pem"
-          payees:
-            fcau:
-              defaults: { subinst_id: "001" }
-              services:
-                app_fee: { service_id: "001" }
-            npqs:
-              defaults: { subinst_id: "002" }
-              services:
-                certificate_fee: { service_id: "001" }
-                treatment_fee: { service_id: "003" }
-            sltb:
-              defaults: { subinst_id: "003" }
-              services:
-                levy_fee: { service_id: "001" }
-                lab_fee: { service_id: "002" }
-            cda:
-              defaults: { subinst_id: "004" }
-              services:
-                app_fee: { service_id: "001" }
-                kcfn_fee: { service_id: "002" }
-
-    # Outbound services; replace the local endpoints for this deployment.
-    services:
-      - id: npqs
-        url: http://localhost:8081
-        timeout: 30s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: http://localhost:8090/oauth2/token
-            clientID: NSW_TO_NPQS
-            clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
-            scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
-            endpointParams:
-              resource: https://api.npqs.nsw-agency.local
-      - id: fcau
-        url: http://localhost:8082
-        timeout: 30s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: http://localhost:8090/oauth2/token
-            clientID: NSW_TO_FCAU
-            clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
-            scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
-            endpointParams:
-              resource: https://api.fcau.nsw-agency.local
-      - id: cda
-        url: http://localhost:8083
-        timeout: 30s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: http://localhost:8090/oauth2/token
-            clientID: NSW_TO_CDA
-            clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
-            scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
-            endpointParams:
-              resource: https://api.cda.nsw-agency.local
-      - id: slpa
-        url: https://slpa-cms.example.com
-        timeout: 60s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
-            clientID: NSW_TO_SLPA_CLIENT_ID
-            clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
-      - id: efc
-        url: http://localhost:8085
-        timeout: 30s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: http://localhost:8090/oauth2/token
-            clientID: NSW_TO_EFC
-            clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
-            scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
-            endpointParams:
-              resource: https://api.efc.nsw-agency.local
-      - id: customs-asycuda
-        url: https://customs-asycuda.example.com
-        timeout: 30s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: https://idp.example.com/oauth2/token
-            clientID: NSW_TO_ASYCUDA_CLIENT_ID
-            clientSecret: "{{env:M2M_NSW_TO_ASYCUDA_SECRET}}"
-            scopes: []
-            insecureSkipTLSVerify: false
-      - id: ippc-hub
-        url: https://uat-hub.ephytoexchange.org/hub
-        timeout: 60s
-        tls:
-          clientCertFile: /certs/ippc/nppo.crt
-          clientKeyFile: /certs/ippc/nppo.key
-      - id: sltb
-        url: http://localhost:8086
-        timeout: 30s
-        auth:
-          type: oauth2
-          oauth2:
-            tokenURL: http://localhost:8090/oauth2/token
-            clientID: NSW_TO_SLTB
-            clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
-            scopes:
-              - nsw:workflow:inject
-              - nsw:task:write
-            endpointParams:
-              resource: https://api.sltb.nsw-agency.local
-
     # The server's (and the otc CLI's) database connection: core/database's
     # Config (github.com/OpenNSW/core/database). The schema migrator has its own,
     # under migration.config below.
@@ -340,32 +189,19 @@ backend:
           maxOpenConns: 100
           maxConnLifetimeSeconds: 3600
 
-    # Workflow/form definitions and manifest.json, fetched at startup from
-    # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
-    # image.
-    artifactLoader:
-      type: github
-      github:
-        owner: OpenNSW
-        repo: one-trade-artifacts
-        ref: main              # prefer an immutable tag/SHA in production
-        basePath: tnsw
-        # Required for a private repo (lifts the rate limit on a public one).
-        # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
-        # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
-
-    # Manifest version new flows start on (0: the highest published; see
-    # configs/config.example.yaml).
-    artifacts:
-      manifestVersion: 0
-
-    # Trader/agency portals calling this API.
-    cors:
-      allowedOrigins: ["https://trader.example.com"]
-      allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
-      allowedHeaders: [Content-Type, Authorization]
-      allowCredentials: true
-      maxAge: 3600
+    temporal:
+      host: temporal
+      port: 7233
+      namespace: default
+      # For a Temporal server that requires TLS or client certificates, mount
+      # the temporal-client-tls Secret (backend.volumes above) and uncomment.
+      # The files are read once at startup, so restart the backend after the
+      # certificate is renewed. serverName defaults to host.
+      # tls:
+      #   caFile: /certs/temporal/ca.crt
+      #   certFile: /certs/temporal/tls.crt
+      #   keyFile: /certs/temporal/tls.key
+      #   serverName: temporal
 
     # Uploaded document blobs: local | s3 | proxy (see configs/config.example.yaml).
     storage:
@@ -467,49 +303,183 @@ backend:
       #   optional: [agency]
       insecureSkipTLSVerify: false
 
-    temporal:
-      host: temporal
-      port: 7233
-      namespace: default
-      # For a Temporal server that requires TLS or client certificates, mount
-      # the temporal-client-tls Secret (backend.volumes above) and uncomment.
-      # The files are read once at startup, so restart the backend after the
-      # certificate is renewed. serverName defaults to host.
-      # tls:
-      #   caFile: /certs/temporal/ca.crt
-      #   certFile: /certs/temporal/tls.crt
-      #   keyFile: /certs/temporal/tls.key
-      #   serverName: temporal
+    # The global catalog: logical names used across configuration (task authz
+    # rules, storage.allowedInternalUploadTypes) -> this deployment's IdP token
+    # roles and OAuth2 client ids.
+    catalog:
+      roles:
+        trader: Trader
+        cha: CHA
+      clients:
+        fcau: FCAU_TO_NSW
+        npqs: NPQS_TO_NSW
+        cda: CDA_TO_NSW
+        efc: EFC_TO_NSW
+        sltb: SLTB_TO_NSW
+        slce: SLCE_TO_NSW
+        govpay: GOVPAY_TO_NSW
 
-    # Email/SMS gateways, one settings block per channel.
-    notification:
-      providers:
-        email:
-          baseURL: "https://email.example.com"
-          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-        sms:
-          baseURL: "https://sms.example.com"
-          userName: "nsw"
-          password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-          sidCode: "NSW"
+    # Workflow/form definitions and manifest.json, fetched at startup from
+    # OpenNSW/one-trade-artifacts (tnsw/ base path) rather than baked into the
+    # image.
+    artifactLoader:
+      type: github
+      github:
+        owner: OpenNSW
+        repo: one-trade-artifacts
+        ref: main              # prefer an immutable tag/SHA in production
+        basePath: tnsw
+        # Required for a private repo (lifts the rate limit on a public one).
+        # Add ARTIFACT_GITHUB_TOKEN to backend.env from a Secret first.
+        # token: "{{env:ARTIFACT_GITHUB_TOKEN}}"
 
-    # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
-    # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
-    # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
-    # OTEL_AUTH_HEADER in backend.env when required.
-    # otel:
-    #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
-    #   serviceName: tnsw-api
-    #   headers:
-    #     Authorization: "{{env:OTEL_AUTH_HEADER}}"
+    # Manifest version new flows start on (0: the highest published; see
+    # configs/config.example.yaml).
+    artifacts:
+      manifestVersion: 0
 
-    integrations:
-      slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
+    # Trader/agency portals calling this API.
+    cors:
+      allowedOrigins: ["https://trader.example.com"]
+      allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+      allowedHeaders: [Content-Type, Authorization]
+      allowCredentials: true
+      maxAge: 3600
 
-    # Flows a trader or CHA may start on a consignment, besides the export
-    # flow; see configs/config.example.yaml.
-    consignment:
-      flows: []
+    # Outbound services; replace the local endpoints for this deployment.
+    services:
+      - id: npqs
+        url: http://localhost:8081
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_NPQS
+            clientSecret: "{{env:M2M_NSW_TO_NPQS_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.npqs.nsw-agency.local
+      - id: fcau
+        url: http://localhost:8082
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_FCAU
+            clientSecret: "{{env:M2M_NSW_TO_FCAU_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.fcau.nsw-agency.local
+      - id: cda
+        url: http://localhost:8083
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_CDA
+            clientSecret: "{{env:M2M_NSW_TO_CDA_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.cda.nsw-agency.local
+      - id: slpa
+        url: https://slpa-cms.example.com
+        timeout: 60s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://slpa-cms.example.com/api/nsw/v1/token
+            clientID: NSW_TO_SLPA_CLIENT_ID
+            clientSecret: "{{env:M2M_NSW_TO_SLPA_SECRET}}"
+      - id: efc
+        url: http://localhost:8085
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_EFC
+            clientSecret: "{{env:M2M_NSW_TO_EFC_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.efc.nsw-agency.local
+      - id: customs-asycuda
+        url: https://customs-asycuda.example.com
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://idp.example.com/oauth2/token
+            clientID: NSW_TO_ASYCUDA_CLIENT_ID
+            clientSecret: "{{env:M2M_NSW_TO_ASYCUDA_SECRET}}"
+            scopes: []
+            insecureSkipTLSVerify: false
+      - id: ippc-hub
+        url: https://uat-hub.ephytoexchange.org/hub
+        timeout: 60s
+        tls:
+          clientCertFile: /certs/ippc/nppo.crt
+          clientKeyFile: /certs/ippc/nppo.key
+      - id: sltb
+        url: http://localhost:8086
+        timeout: 30s
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: http://localhost:8090/oauth2/token
+            clientID: NSW_TO_SLTB
+            clientSecret: "{{env:M2M_NSW_TO_SLTB_SECRET}}"
+            scopes:
+              - nsw:workflow:inject
+              - nsw:task:write
+            endpointParams:
+              resource: https://api.sltb.nsw-agency.local
+
+    # Payment methods: each one's gateway config, and the ids it collects
+    # every payee's (org_id/service_id) fees under. Replace the GovPay+ ids
+    # with the ones issued for this environment, quoted so they stay strings.
+    payment:
+      methods:
+        - id: govpay
+          is_active: true
+          render_info:
+            display_name: GovPay
+            description: Offline payment instructions
+            display_order: 1
+          config:
+            webhook_client_id: GOVPAY_TO_NSW
+            # Mounted from the govpay-go-private-key Secret (backend.volumes).
+            private_key: "file:/certs/govpay/go_private.pem"
+          payees:
+            fcau:
+              defaults: { subinst_id: "001" }
+              services:
+                app_fee: { service_id: "001" }
+            npqs:
+              defaults: { subinst_id: "002" }
+              services:
+                certificate_fee: { service_id: "001" }
+                treatment_fee: { service_id: "003" }
+            sltb:
+              defaults: { subinst_id: "003" }
+              services:
+                levy_fee: { service_id: "001" }
+                lab_fee: { service_id: "002" }
+            cda:
+              defaults: { subinst_id: "004" }
+              services:
+                app_fee: { service_id: "001" }
+                kcfn_fee: { service_id: "002" }
 
     # Reference ID formats for payment references and REFID_GENERATOR steps;
     # see configs/config.example.yaml. A step fails if it names a format
@@ -574,6 +544,36 @@ backend:
                 - {type: literal, value: "-"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}
+
+    # Email/SMS gateways, one settings block per channel.
+    notification:
+      providers:
+        email:
+          baseURL: "https://email.example.com"
+          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+        sms:
+          baseURL: "https://sms.example.com"
+          userName: "nsw"
+          password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+          sidCode: "NSW"
+
+    integrations:
+      slpaWebhookSecret: "{{env:SLPA_WEBHOOK_SECRET}}"
+
+    # Flows a trader or CHA may start on a consignment, besides the export
+    # flow; see configs/config.example.yaml.
+    consignment:
+      flows: []
+
+    # Optional OTLP/HTTP export of metrics, logs and traces (e.g. OpenObserve in
+    # nsw-infra-staging). Empty endpoint (or omit the section) leaves export off.
+    # Endpoint is the base without /v1/{metrics,traces,logs}. Auth via
+    # OTEL_AUTH_HEADER in backend.env when required.
+    # otel:
+    #   endpoint: http://openobserve.nsw-infra-staging.svc.cluster.local:5080/api/default
+    #   serviceName: tnsw-api
+    #   headers:
+    #     Authorization: "{{env:OTEL_AUTH_HEADER}}"
 
   # Expose the backend API. Enable the one that matches your platform.
   #

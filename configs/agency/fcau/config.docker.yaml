@@ -9,6 +9,18 @@
 
 mode: agency
 
+server:
+  port: 8080
+  logLevel: debug
+  # The browser-facing URL: the host port compose publishes. TNSW's
+  # config.docker.yaml services entry "fcau" also calls 8082.
+  serviceURL: http://localhost:8082
+  maxRequestBytes: 33554432
+  readHeaderTimeout: 5s
+  readTimeout: 15s
+  writeTimeout: 30s
+  idleTimeout: 60s
+
 # Its own database on the shared Postgres, created by fcau-init.
 db:
   driver: postgres
@@ -24,55 +36,12 @@ db:
       maxOpenConns: 100
       maxConnLifetimeSeconds: 3600
 
-server:
-  port: 8080
-  logLevel: debug
-  # The browser-facing URL: the host port compose publishes. TNSW's
-  # config.docker.yaml services entry "fcau" also calls 8082.
-  serviceURL: http://localhost:8082
-  maxRequestBytes: 33554432
-  readHeaderTimeout: 5s
-  readTimeout: 15s
-  writeTimeout: 30s
-  idleTimeout: 60s
-
-# The catalog: the logical names the agency's workflow rules use, mapped to
-# this deployment's IdP token roles and OAuth2 client ids. Each role here
-# owns an injected workflow; tnsw names the client TNSW calls this agency as.
-catalog:
-  roles:
-    officer: FCAU Officer
-  clients:
-    tnsw: NSW_TO_FCAU
-
-# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
-# {{file:/path}} placeholders, expanded with the rest of this config at load.
-services:
-  - id: tnsw
-    url: http://api:8080
-    timeout: 30s
-    auth:
-      type: oauth2
-      oauth2:
-        tokenURL: http://thunderid:8090/oauth2/token
-        clientID: FCAU_TO_NSW
-        clientSecret: "{{env:M2M_FCAU_TO_NSW_SECRET}}"
-        scopes:
-          - nsw:task:write
-          - nsw:storage:read
-          - nsw:storage:write
-          - nsw:storage:internalwrite
-        endpointParams:
-          resource: https://api.nsw-srilanka.local
-
-# The FCAU portal (the trader-app in agency mode).
-cors:
-  allowedOrigins:
-    - http://localhost:5175
-  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
-  allowedHeaders: [Content-Type, Authorization]
-  allowCredentials: true
-  maxAge: 3600
+# Its own namespace, created by fcau-init, so TNSW and FCAU workers never pick up
+# each other's workflows.
+temporal:
+  host: temporal
+  port: 7233
+  namespace: fcau
 
 # FCAU keeps no files of its own: it serves TNSW's storage, calling TNSW as
 # FCAU_TO_NSW (services entry tnsw), so officers open the documents
@@ -118,24 +87,14 @@ authn:
   issuer: http://localhost:8090
   audience: https://api.fcau.nsw-agency.local
 
-# Placeholder providers.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
-
-# Its own namespace, created by fcau-init, so TNSW and FCAU workers never pick up
-# each other's workflows.
-temporal:
-  host: temporal
-  port: 7233
-  namespace: fcau
+# The catalog: the logical names the agency's workflow rules use, mapped to
+# this deployment's IdP token roles and OAuth2 client ids. Each role here
+# owns an injected workflow; tnsw names the client TNSW calls this agency as.
+catalog:
+  roles:
+    officer: FCAU Officer
+  clients:
+    tnsw: NSW_TO_FCAU
 
 # The fcau folder of a one-trade-artifacts clone, which compose bind-mounts
 # at /app/artifacts: ../one-trade-artifacts/fcau by default, or set
@@ -151,6 +110,47 @@ artifactLoader:
   #   ref: main
   #   basePath: fcau
 
+# The FCAU portal (the trader-app in agency mode).
+cors:
+  allowedOrigins:
+    - http://localhost:5175
+  allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowedHeaders: [Content-Type, Authorization]
+  allowCredentials: true
+  maxAge: 3600
+
+# Outbound HTTP services (core/remote). Secrets use {{env:NAME}} or
+# {{file:/path}} placeholders, expanded with the rest of this config at load.
+services:
+  - id: tnsw
+    url: http://api:8080
+    timeout: 30s
+    auth:
+      type: oauth2
+      oauth2:
+        tokenURL: http://thunderid:8090/oauth2/token
+        clientID: FCAU_TO_NSW
+        clientSecret: "{{env:M2M_FCAU_TO_NSW_SECRET}}"
+        scopes:
+          - nsw:task:write
+          - nsw:storage:read
+          - nsw:storage:write
+          - nsw:storage:internalwrite
+        endpointParams:
+          resource: https://api.nsw-srilanka.local
+
 # The fcau artifacts use no REFID_GENERATOR tasks.
 refid:
   issuers: []
+
+# Placeholder providers.
+notification:
+  providers:
+    email:
+      baseURL: https://email.svc.local
+      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+    sms:
+      baseURL: https://smsservice.lk
+      userName: replace-with-actual-username
+      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+      sidCode: sidCode

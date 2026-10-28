@@ -35,41 +35,45 @@ type Config struct {
 	// Mode is what this deployment runs as: TNSW or an agency. Required.
 	Mode Mode `yaml:"mode"`
 
-	Database     database.Config     `yaml:"db"`
-	Server       ServerConfig        `yaml:"server"`
-	CORS         cors.Config         `yaml:"cors"`
-	Storage      nswstorage.Config   `yaml:"storage"`
-	Authn        authn.Config        `yaml:"authn"`
-	Notification NotificationConfig  `yaml:"notification"`
-	Temporal     temporal.Config     `yaml:"temporal"`
-	Otel         telemetry.Config    `yaml:"otel"`
-	Integrations integrations.Config `yaml:"integrations"`
+	Server   ServerConfig      `yaml:"server"`
+	Database database.Config   `yaml:"db"`
+	Temporal temporal.Config   `yaml:"temporal"`
+	Storage  nswstorage.Config `yaml:"storage"`
+
+	Authn authn.Config `yaml:"authn"`
+
+	// Catalog maps the logical names used across configuration onto this
+	// deployment's IdP token roles and OAuth2 client ids. Required.
+	Catalog catalog.Catalog `yaml:"catalog"`
 
 	ArtifactLoader loaders.Config `yaml:"artifactLoader"`
 
 	// Artifacts picks the manifest version new flows start on. Optional.
 	Artifacts ArtifactsConfig `yaml:"artifacts"`
 
-	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
-	// one. Optional; an agency ignores it.
-	Consignment consignment.Config `yaml:"consignment"`
+	CORS cors.Config `yaml:"cors"`
+
+	// Services declares outbound endpoints and authentication in this file.
+	Services []remote.ServiceConfig `yaml:"services"`
+
+	// Payment lists the payment methods fees can be paid with, each with its
+	// gateway's config and the ids it maps every payee to. Optional: an agency
+	// takes no payments and lists none.
+	Payment payment.Config `yaml:"payment"`
 
 	// RefID holds the reference ID formats the REFID_GENERATOR task plugin
 	// generates from. Optional: with no issuers, generation is disabled and a
 	// template using the plugin fails at run time (see bootstrap.initRefIDs).
 	RefID refid.Config `yaml:"refid"`
 
-	// Services declares outbound endpoints and authentication in this file.
-	Services []remote.ServiceConfig `yaml:"services"`
+	Notification NotificationConfig  `yaml:"notification"`
+	Integrations integrations.Config `yaml:"integrations"`
 
-	// Catalog maps the logical names used across configuration onto this
-	// deployment's IdP token roles and OAuth2 client ids. Required.
-	Catalog catalog.Catalog `yaml:"catalog"`
+	// Consignment configures TNSW's consignments: the flows a trader or CHA may start on
+	// one. Optional; an agency ignores it.
+	Consignment consignment.Config `yaml:"consignment"`
 
-	// Payment lists the payment methods fees can be paid with, each with its
-	// gateway's config and the ids it maps every payee to. Optional: an agency
-	// takes no payments and lists none.
-	Payment payment.Config `yaml:"payment"`
+	Otel telemetry.Config `yaml:"otel"`
 }
 
 // ServerConfig holds server configuration.
