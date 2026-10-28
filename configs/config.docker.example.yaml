@@ -34,11 +34,6 @@
 # the agency's own roles instead of trader/CHA. See docs/agency.md.
 mode: tnsw
 
-# Reference ID formats, in the schema of github.com/OpenNSW/core/refid (see its
-# example_config.yaml for every segment option). Two kinds of steps use them.
-#
-# Payments: each checkout's reference, the one the payer pays against, comes
-
 server:
   port: 8080
   # debug | info | warn | error. Audit records (category=audit) are written
@@ -433,6 +428,10 @@ payment:
             app_fee: { service_id: "001" }
             kcfn_fee: { service_id: "002" }
 
+# Reference ID formats, in the schema of github.com/OpenNSW/core/refid (see its
+# example_config.yaml for every segment option). Two kinds of steps use them.
+#
+# Payments: each checkout's reference, the one the payer pays against, comes
 # from a format here. A PAYMENT fee names its own in plugin_properties.reference;
 # every other fee takes TNSW/payment_ref.
 #
