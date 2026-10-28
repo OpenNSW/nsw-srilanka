@@ -303,12 +303,5 @@ func (h *HTTPHandler) auditClaim(ctx context.Context, taskID, op string, tk *tak
 	if failure != "" {
 		metadata["error"] = failure
 	}
-	h.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventTask,
-		Action:     nswaudit.ActionUpdate,
-		TargetType: nswaudit.TargetTask,
-		TargetID:   taskID,
-		Failure:    failure != "",
-		Metadata:   metadata,
-	})
+	h.auditEvent(ctx, nswaudit.TaskEvent(nswaudit.ActionUpdate, taskID, failure != "", metadata))
 }
