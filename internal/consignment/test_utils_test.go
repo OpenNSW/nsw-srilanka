@@ -2,6 +2,7 @@ package consignment
 
 import (
 	"context"
+	"database/sql/driver"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -14,6 +15,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
@@ -130,4 +132,29 @@ func setupTestDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	}
 
 	return db, sqlMock
+}
+
+// consignmentSelect matches Service.withCase's select up to its WHERE: consignments
+// joined to their cases row and their trader and CHA company parties.
+const consignmentSelect = `SELECT consignments\.id, .* FROM "consignments" JOIN cases ON cases\.id = consignments\.id ` +
+	`LEFT JOIN case_parties trader_party ON .* LEFT JOIN case_parties cha_party ON .* WHERE `
+
+// fetchConsignmentQuery matches Service.fetchConsignmentRecord's query; its arguments
+// are fetchConsignmentArgs.
+const fetchConsignmentQuery = consignmentSelect + `consignments\.id = \$5 ORDER BY "consignments"\."id" LIMIT \$6`
+
+// fetchConsignmentArgs are the arguments of fetchConsignmentQuery for consignment id:
+// the party joins' roles and types, then the id and the limit.
+func fetchConsignmentArgs(id string) []driver.Value {
+	return []driver.Value{partyRoleTrader, caseparty.TypeCompany, partyRoleCHA, caseparty.TypeCompany, id, 1}
+}
+
+// expectCreateConsignment expects createConsignment's transaction: the consignment
+// insert, its trader party and its case's creator.
+func expectCreateConsignment(sqlMock sqlmock.Sqlmock) {
+	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec(`(?i)INSERT INTO "consignments"`).WillReturnResult(sqlmock.NewResult(1, 1))
+	sqlMock.ExpectExec(`(?i)INSERT INTO "case_parties" .* ON CONFLICT \("case_id","role"\) DO UPDATE`).WillReturnResult(sqlmock.NewResult(1, 1))
+	sqlMock.ExpectExec(`UPDATE cases SET created_by = \$1 WHERE id = \$2`).WillReturnResult(sqlmock.NewResult(0, 1))
+	sqlMock.ExpectCommit()
 }

@@ -101,7 +101,6 @@ export interface ConsignmentSummary {
   name?: string
   flow: TradeFlow
   traderId: string
-  chaId?: string
   // The roles the signed-in user acts in on this consignment.
   callerRoles: CallerRole[]
   state: ConsignmentState
@@ -117,7 +116,6 @@ export interface ConsignmentDetail {
   name?: string
   flow: TradeFlow
   traderId: string
-  chaId?: string
   state: ConsignmentState
   items: ConsignmentItem[]
   globalContext: GlobalContext

@@ -21,6 +21,7 @@ import (
 
 	"github.com/OpenNSW/core/pagination"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/cha"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
@@ -171,8 +172,10 @@ func (s *Service) CreateAndStartConsignment(ctx context.Context, traderID string
 	if err := s.flows.EnsureCase(ctx, consignment.ID); err != nil {
 		return nil, fmt.Errorf("failed to create case: %w", err)
 	}
-	if err := s.db.WithContext(ctx).Create(consignment).Error; err != nil {
-		return nil, fmt.Errorf("failed to create consignment: %w", err)
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return createConsignment(ctx, tx, consignment)
+	}); err != nil {
+		return nil, err
 	}
 
 	// The start runs after the commit, so the flow is recorded against a case that exists.
@@ -334,15 +337,51 @@ func (s *Service) flowDTO(ctx context.Context, f caseflow.Flow) FlowDTO {
 	}
 }
 
-// consignmentColumns selects a Consignment from withCase, Name and State included.
-const consignmentColumns = "consignments.*, cases.name, cases.state"
+// Roles the consignment's companies hold on its case (case_parties).
+const (
+	partyRoleTrader = "trader"
+	partyRoleCHA    = "cha"
+)
 
-// withCase joins consignments to their cases row, which holds Name and State. Rows are
-// read with Select(consignmentColumns); columns both tables have (id, timestamps) are
-// qualified in conditions.
+// consignmentColumns selects a Consignment from withCase: Name, State and the trader user
+// from its cases row, and the trader and CHA companies from its parties.
+const consignmentColumns = "consignments.id, consignments.flow, consignments.created_at, consignments.updated_at, " +
+	"cases.name, cases.state, cases.created_by AS trader_id, " +
+	"trader_party.party_id AS trader_company_id, cha_party.party_id AS cha_company_id"
+
+// withCase joins consignments to their cases row, which holds Name, State and the trader
+// user, and to the case's trader and CHA company parties. Rows are read with
+// Select(consignmentColumns); columns several tables have (id, timestamps) are qualified
+// in conditions.
 func (s *Service) withCase(ctx context.Context) *gorm.DB {
 	return s.db.WithContext(ctx).Model(&Consignment{}).
-		Joins("JOIN cases ON cases.id = consignments.id")
+		Joins("JOIN cases ON cases.id = consignments.id").
+		Joins("LEFT JOIN case_parties trader_party ON trader_party.case_id = consignments.id AND trader_party.role = ? AND trader_party.party_type = ?",
+			partyRoleTrader, caseparty.TypeCompany).
+		Joins("LEFT JOIN case_parties cha_party ON cha_party.case_id = consignments.id AND cha_party.role = ? AND cha_party.party_type = ?",
+			partyRoleCHA, caseparty.TypeCompany)
+}
+
+// createConsignment inserts c, records its trader company as the case's "trader" party
+// and its trader user as the case's creator, on tx so they commit together. The case row
+// must already exist.
+func createConsignment(ctx context.Context, tx *gorm.DB, c *Consignment) error {
+	if err := tx.WithContext(ctx).Create(c).Error; err != nil {
+		return fmt.Errorf("failed to create consignment: %w", err)
+	}
+	if err := caseparty.Assign(ctx, tx, caseparty.Party{
+		CaseID:     c.ID,
+		Role:       partyRoleTrader,
+		Type:       caseparty.TypeCompany,
+		ID:         c.TraderCompanyID,
+		AssignedBy: &c.TraderID,
+	}); err != nil {
+		return fmt.Errorf("failed to record the consignment's trader: %w", err)
+	}
+	if err := tx.WithContext(ctx).Exec(`UPDATE cases SET created_by = ? WHERE id = ?`, c.TraderID, c.ID).Error; err != nil {
+		return fmt.Errorf("failed to record the consignment's creator: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) fetchConsignmentRecord(ctx context.Context, consignmentID string) (*Consignment, error) {
@@ -370,13 +409,9 @@ func (s *Service) buildConsignmentResponse(ctx context.Context, consignment *Con
 // It does not enforce trader/CHA ownership — the route is gated by
 // nsw:consignment:read and an unguessable consignment UUID.
 func (s *Service) GetAgencySummary(ctx context.Context, consignmentID string) (*AgencyDTO, error) {
-	var consignment Consignment
-	result := s.db.WithContext(ctx).First(&consignment, "id = ?", consignmentID)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, ErrConsignmentNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
+	consignment, err := s.fetchConsignmentRecord(ctx, consignmentID)
+	if err != nil {
+		return nil, err
 	}
 
 	traderCompany, err := s.companyService.GetCompanyByID(ctx, consignment.TraderCompanyID)
@@ -390,27 +425,6 @@ func (s *Service) GetAgencySummary(ctx context.Context, consignmentID string) (*
 	}, nil
 }
 
-// GetOwnership returns the trader and CHA company ids of a consignment in a
-// single row read, without assembling the detail DTO or touching the workflow
-// engine. It projects only the two ownership columns so the read stays cheap
-// even when used purely as an authorization pre-check. chaCompanyID is empty
-// when no CHA company has been selected yet.
-func (s *Service) GetOwnership(ctx context.Context, consignmentID string) (traderCompanyID, chaCompanyID string, err error) {
-	var consignment Consignment
-	if result := s.db.WithContext(ctx).
-		Select("trader_company_id", "cha_company_id").
-		First(&consignment, "id = ?", consignmentID); result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return "", "", ErrConsignmentNotFound
-		}
-		return "", "", fmt.Errorf("failed to retrieve consignment with ID %s: %w", consignmentID, result.Error)
-	}
-	if consignment.CHACompanyID != nil {
-		chaCompanyID = *consignment.CHACompanyID
-	}
-	return consignment.TraderCompanyID, chaCompanyID, nil
-}
-
 // ListConsignments returns consignments scoped to a company: those it is the trader on
 // (TraderCompanyID), those it is the CHA on (CHACompanyID), or either when both are set. At
 // least one of the two must be set.
@@ -418,11 +432,11 @@ func (s *Service) ListConsignments(ctx context.Context, filter Filter) (*ListRes
 	var baseQuery *gorm.DB
 	switch {
 	case filter.TraderCompanyID != nil && filter.CHACompanyID != nil:
-		baseQuery = s.withCase(ctx).Where("(trader_company_id = ? OR cha_company_id = ?)", *filter.TraderCompanyID, *filter.CHACompanyID)
+		baseQuery = s.withCase(ctx).Where("(trader_party.party_id = ? OR cha_party.party_id = ?)", *filter.TraderCompanyID, *filter.CHACompanyID)
 	case filter.TraderCompanyID != nil:
-		baseQuery = s.withCase(ctx).Where("trader_company_id = ?", *filter.TraderCompanyID)
+		baseQuery = s.withCase(ctx).Where("trader_party.party_id = ?", *filter.TraderCompanyID)
 	case filter.CHACompanyID != nil:
-		baseQuery = s.withCase(ctx).Where("cha_company_id = ?", *filter.CHACompanyID)
+		baseQuery = s.withCase(ctx).Where("cha_party.party_id = ?", *filter.CHACompanyID)
 	default:
 		return nil, fmt.Errorf("at least one of TraderCompanyID or CHACompanyID must be set in filter")
 	}
@@ -482,10 +496,6 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 	for i := range consignments {
 		c := consignments[i]
 
-		chaID := ""
-		if c.CHAID != nil {
-			chaID = *c.CHAID
-		}
 		chaCompanyID := ""
 		if c.CHACompanyID != nil {
 			chaCompanyID = *c.CHACompanyID
@@ -504,7 +514,6 @@ func (s *Service) listConsignmentsWithBaseQuery(ctx context.Context, baseQuery *
 			TraderID:        c.TraderID,
 			TraderCompanyID: c.TraderCompanyID,
 			ChaCompanyID:    chaCompanyID,
-			ChaID:           chaID,
 			CallerRoles:     callerRolesOn(c.TraderCompanyID, chaCompanyID, filter),
 			CreatedAt:       c.CreatedAt.Format(time.RFC3339),
 			UpdatedAt:       c.UpdatedAt.Format(time.RFC3339),
@@ -540,10 +549,6 @@ func (s *Service) buildConsignmentDetailDTO(
 		return nil, err
 	}
 
-	chaID := ""
-	if consignment.CHAID != nil {
-		chaID = *consignment.CHAID
-	}
 	chaCompanyID := ""
 	if consignment.CHACompanyID != nil {
 		chaCompanyID = *consignment.CHACompanyID
@@ -562,7 +567,6 @@ func (s *Service) buildConsignmentDetailDTO(
 		TraderID:        consignment.TraderID,
 		TraderCompanyID: consignment.TraderCompanyID,
 		ChaCompanyID:    chaCompanyID,
-		ChaID:           chaID,
 		CreatedAt:       consignment.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       consignment.UpdatedAt.Format(time.RFC3339),
 		WorkflowNodes:   nodeResponseDTOs,

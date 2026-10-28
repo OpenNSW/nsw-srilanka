@@ -54,13 +54,16 @@ type Consignment struct {
 	Name  *string `gorm:"->;column:name" json:"name,omitempty"`
 	State State   `gorm:"->;column:state" json:"state"` // IN_PROGRESS → FINISHED
 
-	// Trader
+	// The trader and CHA are read from the case: TraderID from cases.created_by, the two
+	// companies from the case's "trader" and "cha" parties (case_parties, see
+	// internal/caseparty), through Service.withCase. The consignments columns of the same
+	// names are still written, so a deployment rolled back reads them correctly, until a
+	// later migration drops them.
 	TraderID        string `gorm:"type:varchar(100);column:trader_id;not null" json:"traderId"`                // Trader user who created the consignment
 	TraderCompanyID string `gorm:"type:varchar(100);column:trader_company_id;not null" json:"traderCompanyId"` // Company the trader belongs to
 
 	// CHA (nil for direct-start consignments where CHA selection happens inside the workflow)
 	CHACompanyID *string `gorm:"type:varchar(100);column:cha_company_id" json:"chaCompanyId,omitempty"` // CHA company selected by the trader
-	CHAID        *string `gorm:"type:varchar(100);column:cha_id" json:"chaId,omitempty"`                // CHA who claimed the consignment
 }
 
 func (c *Consignment) TableName() string {
@@ -96,7 +99,6 @@ type SummaryDTO struct {
 	TraderID        string `json:"traderId"`        // Trader user who created the consignment
 	TraderCompanyID string `json:"traderCompanyId"` // Company the trader belongs to
 	ChaCompanyID    string `json:"chaCompanyId"`    // CHA company selected at Stage 1
-	ChaID           string `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
 	// CallerRoles are the logical roles ("trader", "cha") the caller acts in on this
 	// consignment: a role the caller holds whose slot the caller's company fills.
 	CallerRoles []string `json:"callerRoles"`
@@ -122,7 +124,6 @@ type DetailDTO struct {
 	TraderID        string                    `json:"traderId"`        // Trader user who created the consignment
 	TraderCompanyID string                    `json:"traderCompanyId"` // Company the trader belongs to
 	ChaCompanyID    string                    `json:"chaCompanyId"`    // CHA company selected at Stage 1
-	ChaID           string                    `json:"chaId,omitempty"` // CHA assigned at Stage 2 (empty until claimed)
 	CreatedAt       string                    `json:"createdAt"`       // Timestamp of consignment creation
 	UpdatedAt       string                    `json:"updatedAt"`       // Timestamp of last consignment update
 	WorkflowNodes   []WorkflowNodeResponseDTO `json:"workflowNodes"`   // Associated workflow nodes with template details

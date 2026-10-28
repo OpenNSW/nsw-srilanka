@@ -4,27 +4,47 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
-	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/taskauthz"
-
-	"gopkg.in/yaml.v3"
 )
 
+// fakeOwnership stands in for *caseparty.Repository: holders maps a company id to the
+// roles it holds on every case.
 type fakeOwnership struct {
-	trader, cha string
-	err         error
-	calls       int
+	holders map[string][]string
+	err     error
+	calls   int
+	parties []caseparty.Ref
 }
 
-func (f *fakeOwnership) GetOwnership(context.Context, string) (string, string, error) {
+func (f *fakeOwnership) RolesOf(_ context.Context, _ string, parties ...caseparty.Ref) (map[string]bool, error) {
 	f.calls++
-	return f.trader, f.cha, f.err
+	f.parties = parties
+	if f.err != nil {
+		return nil, f.err
+	}
+	roles := map[string]bool{}
+	for _, p := range parties {
+		for _, role := range f.holders[p.ID] {
+			roles[role] = true
+		}
+	}
+	return roles, nil
+}
+
+// owns builds a fakeOwnership where trader holds "trader" and cha holds "cha".
+func owns(trader, cha string) *fakeOwnership {
+	holders := map[string][]string{}
+	if trader != "" {
+		holders[trader] = append(holders[trader], "trader")
+	}
+	if cha != "" {
+		holders[cha] = append(holders[cha], "cha")
+	}
+	return &fakeOwnership{holders: holders}
 }
 
 type fakeCompany struct {
@@ -38,15 +58,11 @@ func (f *fakeCompany) CompanyIDByOUHandle(context.Context, string) (string, erro
 	return f.id, f.err
 }
 
-// validCatalogRoles satisfies validateCatalogRoles; tests unrelated to that
-// check use it so NewMiddleware always succeeds.
-var validCatalogRoles = map[string]string{roleTrader: "Trader", roleCHA: "CHA"}
-
-// mustNewMiddleware builds a Middleware with validCatalogRoles, failing the
-// test immediately if construction errors.
-func mustNewMiddleware(t *testing.T, ownership CaseOwnership, company CompanyResolver) *Middleware {
+// mustNewMiddleware builds a Middleware, failing the test immediately if
+// construction errors.
+func mustNewMiddleware(t *testing.T, ownership CaseRoles, company CompanyResolver) *Middleware {
 	t.Helper()
-	mw, err := NewMiddleware(ownership, company, validCatalogRoles)
+	mw, err := NewMiddleware(ownership, company)
 	if err != nil {
 		t.Fatalf("NewMiddleware: %v", err)
 	}
@@ -92,7 +108,7 @@ func TestMiddleware_Unauthenticated(t *testing.T) {
 }
 
 func TestMiddleware_UserResolverIsLazy(t *testing.T) {
-	own := &fakeOwnership{trader: "adam-pvt-ltd", cha: "edward-pvt-ltd"}
+	own := owns("adam-pvt-ltd", "edward-pvt-ltd")
 	comp := &fakeCompany{id: "adam-pvt-ltd"}
 	in, ok := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))
 
@@ -126,10 +142,12 @@ func TestMiddleware_UserResolverCases(t *testing.T) {
 		wantOwned map[string]bool
 		wantErr   bool
 	}{
-		{"owns as cha", &fakeOwnership{trader: traderCo, cha: chaCo}, &fakeCompany{id: chaCo}, map[string]bool{"trader": false, "cha": true}, false},
-		{"no company profile", &fakeOwnership{trader: traderCo, cha: chaCo}, &fakeCompany{id: ""}, map[string]bool{}, false},
+		{"owns as cha", owns(traderCo, chaCo), &fakeCompany{id: chaCo}, map[string]bool{"cha": true}, false},
+		{"owns as both", owns(traderCo, traderCo), &fakeCompany{id: traderCo}, map[string]bool{"trader": true, "cha": true}, false},
+		{"owns nothing", owns(traderCo, chaCo), &fakeCompany{id: "other-co"}, map[string]bool{}, false},
+		{"no company profile", owns(traderCo, chaCo), &fakeCompany{id: ""}, map[string]bool{}, false},
 		{"ownership error", &fakeOwnership{err: context.DeadlineExceeded}, &fakeCompany{id: traderCo}, nil, true},
-		{"company error", &fakeOwnership{trader: traderCo}, &fakeCompany{err: context.DeadlineExceeded}, nil, true},
+		{"company error", owns(traderCo, ""), &fakeCompany{err: context.DeadlineExceeded}, nil, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -158,7 +176,7 @@ func TestMiddleware_UserResolverCases(t *testing.T) {
 
 func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	t.Run("empty ou handle skips all lookups", func(t *testing.T) {
-		own := &fakeOwnership{trader: "adam-pvt-ltd"}
+		own := owns("adam-pvt-ltd", "")
 		comp := &fakeCompany{id: "adam-pvt-ltd"}
 		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "c1")
@@ -171,7 +189,7 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	})
 
 	t.Run("empty case id skips all lookups", func(t *testing.T) {
-		own := &fakeOwnership{trader: "adam-pvt-ltd"}
+		own := owns("adam-pvt-ltd", "")
 		comp := &fakeCompany{id: "adam-pvt-ltd"}
 		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("adam-pvt-ltd", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "")
@@ -184,7 +202,7 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	})
 
 	t.Run("no company profile skips ownership lookup", func(t *testing.T) {
-		own := &fakeOwnership{trader: "adam-pvt-ltd"}
+		own := owns("adam-pvt-ltd", "")
 		comp := &fakeCompany{id: ""} // no profile
 		in, _ := attachedInput(mustNewMiddleware(t, own, comp), userCtx("ghost", "Trader"))
 		owned, err := in.OwnedRoles(context.Background(), "c1")
@@ -197,59 +215,27 @@ func TestMiddleware_UserResolverShortCircuits(t *testing.T) {
 	})
 }
 
-// NewMiddleware must reject a catalog missing a role ownedRolesFor depends on:
-// each of those names maps to a specific ownership column, so a missing key would
-// resolve false for every caller in that role — a silent blanket denial. Failing
-// at construction turns that into a startup error instead. (The name-matching
-// itself is catalog.RequireRoles' contract and is tested there.)
-func TestNewMiddleware_RejectsIncompleteCatalog(t *testing.T) {
-	tests := []struct {
-		name    string
-		roles   map[string]string
-		wantErr string // substring expected in the error; "" means construction succeeds
-	}{
-		{name: "both present", roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
-		{name: "extra roles ignored", roles: map[string]string{"trader": "Trader", "cha": "CHA", "fcau": "FCAU_TO_NSW"}},
-		{name: "missing cha", roles: map[string]string{"trader": "Trader"}, wantErr: "cha"},
-		{name: "missing trader", roles: map[string]string{"cha": "CHA"}, wantErr: "trader"},
-		{name: "missing both", roles: map[string]string{}, wantErr: "trader, cha"},
-		{name: "nil map", roles: nil, wantErr: "trader, cha"},
+// Both dependencies are required: a nil one would panic on the first request.
+func TestNewMiddleware_RequiresDependencies(t *testing.T) {
+	if _, err := NewMiddleware(nil, &fakeCompany{}); err == nil {
+		t.Error("NewMiddleware(nil roles) = nil error, want one")
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, tc.roles)
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("NewMiddleware(%v) = %v, want nil", tc.roles, err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("NewMiddleware(%v) = %v, want error containing %q", tc.roles, err, tc.wantErr)
-			}
-		})
+	if _, err := NewMiddleware(&fakeOwnership{}, nil); err == nil {
+		t.Error("NewMiddleware(nil company) = nil error, want one")
 	}
 }
 
-// TestOwnedRoleKeysMatchCatalog pins the logical names ownedRolesFor hardcodes to
-// the shipped catalog by constructing against it. The authz evaluators look up the
-// same names in the catalog's roles, so a rename there would leave the role match
-// succeeding while ownership silently resolved false for every candidate — a
-// blanket denial with no obvious cause. Fail here instead.
-func TestOwnedRoleKeysMatchCatalog(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "configs", "config.example.yaml"))
-	if err != nil {
-		t.Fatalf("read config: %v", err)
+// The resolver asks for the roles of the caller's company, the party a trader or CHA
+// owns a consignment as.
+func TestMiddleware_AsksForCallerCompany(t *testing.T) {
+	own := owns("adam-pvt-ltd", "")
+	in, _ := attachedInput(mustNewMiddleware(t, own, &fakeCompany{id: "adam-pvt-ltd"}), userCtx("adam-pvt-ltd", "Trader"))
+	if _, err := in.OwnedRoles(context.Background(), "c1"); err != nil {
+		t.Fatalf("resolve: %v", err)
 	}
-	var cfg struct {
-		Catalog catalog.Catalog `yaml:"catalog"`
-	}
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
-		t.Fatalf("decode config: %v", err)
-	}
-	c := cfg.Catalog
-	if _, err := NewMiddleware(&fakeOwnership{}, &fakeCompany{}, c.Roles); err != nil {
-		t.Error(err)
+	want := []caseparty.Ref{caseparty.Company("adam-pvt-ltd")}
+	if len(own.parties) != 1 || own.parties[0] != want[0] {
+		t.Errorf("parties = %v, want %v", own.parties, want)
 	}
 }
 

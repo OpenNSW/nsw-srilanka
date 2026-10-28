@@ -7,23 +7,25 @@ import (
 	"strings"
 
 	"github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"gorm.io/gorm"
 )
 
-// CHAPersistPlugin is a synchronous SYSTEM-task plugin that writes the CHA company selected
-// during trade_1_cha_selection back onto the consignment row (cha_company_id).
+// CHAPersistPlugin is a synchronous SYSTEM-task plugin that records the CHA company selected
+// during trade_1_cha_selection as the "cha" party of the consignment's case (case_parties).
 //
-// Direct-start consignments (e.g. trade-export) are created with a nil CHA company, and
+// Direct-start consignments (e.g. trade-export) are created with no CHA company, and
 // CHA selection happens inside the workflow as the traderinput.cha_company_id/trade.cha_company_id
-// workflow variable — never persisted to the consignments table. Without this write-back, the
-// existing CHA-role visibility filter (which queries consignments by cha_company_id) would
-// never match these consignments. This plugin runs immediately after CHA selection completes,
-// validates the chosen company is CHA-enabled, and updates the row.
+// workflow variable. Without this write-back, the CHA-role visibility filter and task
+// ownership (which read the case's "cha" party) would never match these consignments. This
+// plugin runs immediately after CHA selection completes, validates the chosen company is
+// CHA-enabled, and records it, replacing an earlier selection. It also still writes the
+// consignment's cha_company_id column, until a later migration drops it.
 //
 // Access to the consignment is company-wide — any user at the selected CHA company can act on
-// it — so only cha_company_id is recorded; no individual CHA user is assigned.
+// it — so only the CHA company is recorded; no individual CHA user is assigned.
 //
 // It also hands the chosen CHA's details on as the task's "cha" output (see chaSeed), so the
 // agency flows can prefill the declarant's details from them. Which of the company's data
@@ -100,9 +102,8 @@ func (p *CHAPersistPlugin) Execute(ctx plugins.PluginContext, config json.RawMes
 	return nil
 }
 
-// assignCHA records the CHA company on the consignment and, when name is not empty, names its
-// case, in one transaction. The name lives on the consignment's cases row; the CHA company on
-// the consignment.
+// assignCHA records the CHA company as the case's "cha" party and, when name is not empty,
+// names the case, in one transaction.
 func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaCompanyID, name string) error {
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&consignment.Consignment{}).
@@ -113,6 +114,14 @@ func (p *CHAPersistPlugin) assignCHA(ctx context.Context, consignmentID, chaComp
 		}
 		if result.RowsAffected == 0 {
 			return fmt.Errorf("cha_persist: consignment %q not found", consignmentID)
+		}
+		if err := caseparty.Assign(ctx, tx, caseparty.Party{
+			CaseID: consignmentID,
+			Role:   "cha",
+			Type:   caseparty.TypeCompany,
+			ID:     chaCompanyID,
+		}); err != nil {
+			return fmt.Errorf("cha_persist: %w", err)
 		}
 		if name == "" {
 			return nil

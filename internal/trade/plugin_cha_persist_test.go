@@ -55,12 +55,21 @@ func pluginContext(inputs map[string]any) plugins.PluginContext {
 	}
 }
 
+// expectCHAParty expects the plugin to record cha-1 as case C1's "cha" party, replacing
+// an earlier one.
+func expectCHAParty(mock sqlmock.Sqlmock) {
+	mock.ExpectExec(`INSERT INTO "case_parties" .* ON CONFLICT \("case_id","role"\) DO UPDATE`).
+		WithArgs("C1", "cha", "company", "cha-1", nil, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
 func TestCHAPersistNamesTheCase(t *testing.T) {
 	p, mock := newCHAPersist(t)
 	mock.ExpectBegin()
 	mock.ExpectExec(`UPDATE "consignments" SET "cha_company_id"=\$1.* WHERE id = \$3`).
 		WithArgs("cha-1", sqlmock.AnyArg(), "C1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectCHAParty(mock)
 	mock.ExpectExec(`UPDATE cases SET name`).WithArgs("Tea to Rotterdam", "C1").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -79,6 +88,7 @@ func TestCHAPersistWithoutName(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`UPDATE "consignments" SET "cha_company_id"`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectCHAParty(mock)
 	mock.ExpectCommit()
 
 	// A blank name leaves the case's name alone.
@@ -231,6 +241,7 @@ func TestCHAPersistEmitsTheConfiguredDetails(t *testing.T) {
 			mock.ExpectBegin()
 			mock.ExpectExec(`UPDATE "consignments" SET "cha_company_id"`).
 				WillReturnResult(sqlmock.NewResult(0, 1))
+			expectCHAParty(mock)
 			mock.ExpectCommit()
 
 			ctx := pluginContext(map[string]any{"cha_company_id": "cha-1"})

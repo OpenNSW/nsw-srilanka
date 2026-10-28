@@ -45,6 +45,7 @@ import (
 	nswaudit "github.com/OpenNSW/nsw-srilanka/internal/audit"
 	nswauthn "github.com/OpenNSW/nsw-srilanka/internal/authn"
 	"github.com/OpenNSW/nsw-srilanka/internal/caseflow"
+	"github.com/OpenNSW/nsw-srilanka/internal/caseparty"
 	"github.com/OpenNSW/nsw-srilanka/internal/catalog"
 	"github.com/OpenNSW/nsw-srilanka/internal/consignment"
 	"github.com/OpenNSW/nsw-srilanka/internal/database"
@@ -478,14 +479,15 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	taskHandler.TaskTemplateOf = tasks.TaskTemplates(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
-	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
-	// task through its consignment; in an agency an officer owns every injected
-	// workflow's tasks (see agency.go).
+	// extension and the read evaluator to consume. In TNSW a company owns a task in
+	// every role it holds on the task's case (case_parties: the consignment's trader
+	// and CHA); in an agency an officer owns every injected workflow's tasks (see
+	// agency.go).
 	var taskAuthzGate taskGate
 	if agencyMode {
 		taskAuthzGate, err = newAgencyTaskGate(db, globalCatalog.Roles)
 	} else {
-		taskAuthzGate, err = authzgate.NewMiddleware(caseOwnership{svc: consignmentService}, companyIDResolver{svc: companyService}, globalCatalog.Roles)
+		taskAuthzGate, err = authzgate.NewMiddleware(caseparty.NewRepository(db), companyIDResolver{svc: companyService})
 	}
 	if err != nil {
 		_ = stopParentRunner()
@@ -764,27 +766,6 @@ type taskStack struct {
 	Runner    workflow.TemporalManager
 	Store     *gormstore.TaskStore
 	Assembler *zoneview.ZoneViewAssembler
-}
-
-// caseOwnership adapts the consignment service to
-// authzgate.CaseOwnership. A consignment that does not exist is reported as
-// ("", "", nil) — the caller then owns neither side and is denied cleanly, the
-// same fail-closed convention companyIDResolver follows, rather than surfacing a
-// missing consignment as a 500.
-//
-// It wraps the same interface it produces: *consignment.Service already has the
-// right shape, so all this adds is the error translation.
-type caseOwnership struct{ svc authzgate.CaseOwnership }
-
-func (r caseOwnership) GetOwnership(ctx context.Context, caseID string) (string, string, error) {
-	traderCompanyID, chaCompanyID, err := r.svc.GetOwnership(ctx, caseID)
-	if err != nil {
-		if errors.Is(err, consignment.ErrConsignmentNotFound) {
-			return "", "", nil
-		}
-		return "", "", err
-	}
-	return traderCompanyID, chaCompanyID, nil
 }
 
 // taskCatalog narrows the global catalog to the slice task authorization needs.
