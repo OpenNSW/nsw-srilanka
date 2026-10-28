@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/OpenNSW/core/taskflow/store"
@@ -28,24 +29,38 @@ type CanAct func(ctx context.Context, record store.TaskRecord, in taskauthz.Inpu
 // the top-level key of task data its submissions are stored under.
 type NamespaceOf func(ctx context.Context, record store.TaskRecord) (string, error)
 
+// RenderConfigOf returns record's render config, resolved through its task
+// template in the manifest version it runs on (core's renderconfig.Load).
+type RenderConfigOf func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error)
+
 // FileBinding swaps the file fields a task's render config declares (see
 // filefields) between stored values, which stay on the server, and the file
 // references callers hold.
 type FileBinding struct {
-	refs        FileRefs
-	namespaceOf NamespaceOf
+	refs           FileRefs
+	namespaceOf    NamespaceOf
+	renderConfigOf RenderConfigOf
 }
 
 // NewFileBinding creates a FileBinding.
-func NewFileBinding(refs FileRefs, namespaceOf NamespaceOf) *FileBinding {
-	return &FileBinding{refs: refs, namespaceOf: namespaceOf}
+func NewFileBinding(refs FileRefs, namespaceOf NamespaceOf, renderConfigOf RenderConfigOf) *FileBinding {
+	return &FileBinding{refs: refs, namespaceOf: namespaceOf, renderConfigOf: renderConfigOf}
+}
+
+// fileFields returns the file fields record's render config declares.
+func (b *FileBinding) fileFields(ctx context.Context, record store.TaskRecord) ([]filefields.Path, error) {
+	renderConfig, err := b.renderConfigOf(ctx, record)
+	if err != nil {
+		return nil, fmt.Errorf("tasks: %w", err)
+	}
+	return filefields.Parse(renderConfig)
 }
 
 // ForReader returns a copy of record in which each declared file value is a
 // reference for p. p can open each one and, when canAct says p may act on
 // record's active step, submit it back. record itself is not changed.
-func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal, canAct bool) (store.TaskRecord, error) {
-	paths, err := filefields.Parse(record.RenderConfig)
+func (b *FileBinding) ForReader(ctx context.Context, record store.TaskRecord, p *authn.Principal, canAct bool) (store.TaskRecord, error) {
+	paths, err := b.fileFields(ctx, record)
 	if err != nil || len(paths) == 0 {
 		return record, err
 	}
@@ -69,7 +84,7 @@ func (b *FileBinding) ForReader(record store.TaskRecord, p *authn.Principal, can
 // fileaccess.ErrInvalid, fileaccess.ErrNotYours, fileaccess.ErrScope or
 // fileaccess.ErrExpired otherwise.
 func (b *FileBinding) FromCaller(ctx context.Context, record store.TaskRecord, payload map[string]any, p *authn.Principal) error {
-	paths, err := filefields.Parse(record.RenderConfig)
+	paths, err := b.fileFields(ctx, record)
 	if err != nil || len(paths) == 0 {
 		return err
 	}

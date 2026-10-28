@@ -27,6 +27,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/extensions"
 	"github.com/OpenNSW/core/taskflow/orchestrator"
 	"github.com/OpenNSW/core/taskflow/plugins"
+	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/renderer/zoneview"
 	"github.com/OpenNSW/core/taskflow/store"
 	gormstore "github.com/OpenNSW/core/taskflow/store/gorm"
@@ -240,6 +241,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			IssueForClient: func(clientID, value string) (string, error) {
 				return fileAccess.IssueForClient(clientID, value, fileaccess.ScopeRead)
 			},
+			RenderConfigOf: renderConfigOf(artifacts),
 		}
 	}
 	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
@@ -444,13 +446,14 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 		nswstorage.WithUploads(storageStack.Uploads), nswstorage.WithMachineUploads(storageStack.MachineUploads))
 	// The catalog is Layer 2 of task authorization on the read path: HandleGetTask
 	// decides access from the role-tied ownership of the task's consignment.
-	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts))
+	taskFiles := tasks.NewFileBinding(fileAccess, stepNamespace(artifacts), renderConfigOf(artifacts))
 	canAct := stepCanAct(artifacts, taskauthzext.NewExtension(taskCatalog(globalCatalog)))
 	taskHandler := tasks.NewHTTPHandler(tm, task.Store, task.Assembler, taskCatalog(globalCatalog), taskFiles, canAct, userDisplayNames{svc: userProfileService}, auditor, cfg.Server.MaxRequestBytes)
 	// An agency uses task claims: every officer owns every injected workflow, so a
 	// claim shows the others who is working a task. TNSW does not: a step is already
 	// limited to the trader or CHA company that owns the consignment.
 	taskHandler.ClaimsEnabled = agencyMode
+	taskHandler.RenderConfigOf = renderConfigOf(artifacts)
 	// Layer 1 of task authorization, shared by the read and write routes: attach
 	// the caller's identity and a lazy ownership resolver for the PRE_RESUME authz
 	// extension and the read evaluator to consume. In TNSW a trader/CHA company owns a
@@ -836,6 +839,14 @@ func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
 	return fileaccess.New(codec, cfg.TokenTTL())
 }
 
+// renderConfigOf resolves a task's render config through its task template, in the
+// manifest version the task runs on.
+func renderConfigOf(artifacts *artifact.Set) tasks.RenderConfigOf {
+	return func(ctx context.Context, record store.TaskRecord) (json.RawMessage, error) {
+		return renderconfig.Load(ctx, artifacts, record)
+	}
+}
+
 // stepNamespace looks up the output namespace of a task's active step template,
 // in the manifest version the task runs on.
 func stepNamespace(artifacts *artifact.Set) tasks.NamespaceOf {
@@ -1032,7 +1043,7 @@ func initTask(
 		return nil, nil, fmt.Errorf("failed to build ui assembler: %w", err)
 	}
 	taskRenderer := zoneview.NewTaskRenderer(uiAssembler)
-	zoneAssembler := zoneview.NewZoneViewAssembler(taskRenderer)
+	zoneAssembler := zoneview.NewZoneViewAssembler(taskRenderer, artifacts)
 
 	var tm *orchestrator.TaskManager
 

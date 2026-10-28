@@ -30,6 +30,29 @@ type Event struct {
 	Metadata   map[string]any
 }
 
+// ConsignmentEvent is a consignment audit event. Handlers pass the action,
+// target id, whether it failed, and metadata. The event type and target type
+// are fixed so each call site does not repeat them.
+func ConsignmentEvent(action Action, targetID string, failure bool, metadata map[string]any) Event {
+	return newEvent(EventConsignment, action, TargetConsignment, targetID, failure, metadata)
+}
+
+// TaskEvent is a task audit event. See ConsignmentEvent.
+func TaskEvent(action Action, targetID string, failure bool, metadata map[string]any) Event {
+	return newEvent(EventTask, action, TargetTask, targetID, failure, metadata)
+}
+
+func newEvent(eventType EventType, action Action, targetType TargetType, targetID string, failure bool, metadata map[string]any) Event {
+	return Event{
+		EventType:  eventType,
+		Action:     action,
+		TargetType: targetType,
+		TargetID:   targetID,
+		Failure:    failure,
+		Metadata:   metadata,
+	}
+}
+
 // Record is the enriched audit event delivered to every registered Sink.
 type Record struct {
 	Timestamp  time.Time

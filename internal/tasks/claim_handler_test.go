@@ -176,7 +176,7 @@ func TestHandleClaimTask_OffWhereTheDeploymentDoesNotUseClaims(t *testing.T) {
 // traderOnlyTask is the pending HS-code task with a read policy admitting traders only.
 func traderOnlyTask() *fakeTaskFetcher {
 	f := pendingHSCodeTask()
-	f.record.RenderConfig = []byte(`{"read":{"roles":["trader"]},"sections":{}}`)
+	f.renderConfig = `{"read":{"roles":["trader"]},"sections":{}}`
 	return f
 }
 

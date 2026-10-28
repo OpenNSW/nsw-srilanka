@@ -194,13 +194,12 @@ func TestExternalReview_ReplyTokenizesOnlyPayloadInput(t *testing.T) {
 	mgr, svc := newReviewService(t, http.StatusOK)
 	// tokenFor has no client for "agency": tokenizing the submission's invoice
 	// would fail the reply, though the reply does not send it.
-	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", tokenFor)
+	p := NewExternalReviewPlugin(mgr, "https://tnsw.example", withRenderConfig(tokenFor, reviewRenderConfig))
 	ctx := reviewContext(map[string]any{
 		"replyToken": "tok_x",
 		"payload":    map[string]any{"feedback": "attach the invoice"},
 		"submission": map[string]any{"invoice": "k-invoice"},
 	})
-	ctx.Record.RenderConfig = json.RawMessage(reviewRenderConfig)
 
 	err := p.Execute(ctx, json.RawMessage(`{"service_id": "agency", "reply_command": "needs_more_info"}`))
 

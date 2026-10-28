@@ -163,6 +163,9 @@ func Register(reg *flowplugins.Registry, mgr *remote.Manager, paymentService pay
 	if (ogaFiles.ClientFor == nil) != (ogaFiles.IssueForClient == nil) {
 		return fmt.Errorf("plugins: OGA file tokens need both a client lookup and an issuer, or neither")
 	}
+	if ogaFiles.IssueForClient != nil && ogaFiles.RenderConfigOf == nil {
+		return fmt.Errorf("plugins: OGA file tokens need a render config resolver")
+	}
 
 	entries := []struct {
 		taskType string

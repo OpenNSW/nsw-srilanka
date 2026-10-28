@@ -522,7 +522,7 @@ Follows standard [JSONForms](https://jsonforms.io/) schemas with a `schema` and 
 3. **Files are still read on use**:
    - Within a manifest version, files are fetched through the artifact loader when needed, so with `artifactLoader.type: local` an in-place edit shows up on the next request. That only holds for a local checkout: a release publishes each version as an immutable snapshot (see [Changing artifacts](#changing-artifacts)).
 4. **Render configs**:
-   - `render.json` is **snapshotted into `task_records_v2.render_config` when the task starts**, not read per request. Editing one therefore affects **newly created tasks only**.
+   - A task records its task template (`task_records_v2.task_template_id`). Every render, read check and file binding resolves `render.json` through that template in the task's manifest version, so like every other template it follows rules 2 and 3.
 
 ### Changing artifacts
 

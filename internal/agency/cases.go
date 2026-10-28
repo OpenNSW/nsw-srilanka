@@ -12,6 +12,7 @@ import (
 	"github.com/OpenNSW/core/artifact"
 	"github.com/OpenNSW/core/httputil"
 	"github.com/OpenNSW/core/pagination"
+	"github.com/OpenNSW/core/taskflow/renderconfig"
 	"github.com/OpenNSW/core/taskflow/store"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/agency/taskconfig"
@@ -145,7 +146,7 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 			if t.TaskType == "SYSTEM" {
 				continue
 			}
-			nodes = append(nodes, toNode(t, meta))
+			nodes = append(nodes, toNode(t, meta, h.title(r, t, meta)))
 		}
 	}
 	httputil.JSON(w, http.StatusOK, CaseDetail{CaseSummary: toSummary(*c), WorkflowNodes: nodes})
@@ -164,6 +165,20 @@ func (h *CaseHandler) meta(r *http.Request, wf CaseWorkflow) taskconfig.TaskMeta
 	}
 	slog.WarnContext(r.Context(), "agency: task config unavailable for case view", "taskCode", wf.TaskCode, "manifestVersion", wf.ManifestVersion, "error", err)
 	return taskconfig.TaskMeta{}
+}
+
+// title names t's node: its task_config title, else its render config's, else its task
+// template's id. A render config that does not resolve only costs its title, so it is logged.
+func (h *CaseHandler) title(r *http.Request, t store.TaskRecord, meta taskconfig.TaskMeta) string {
+	if meta.Title != "" {
+		return meta.Title
+	}
+	rc, err := renderconfig.Load(r.Context(), h.artifacts, t)
+	if err != nil {
+		slog.WarnContext(r.Context(), "agency: render config unavailable for case view", "taskId", t.TaskID, "error", err)
+		return t.TaskTemplateID
+	}
+	return taskDisplayName(t.TaskTemplateID, rc)
 }
 
 // requireCatalogRole writes the error response and returns false unless the caller is a
@@ -199,8 +214,8 @@ func toSummary(c Case) CaseSummary {
 // toNode maps a task record to the node states ActionListView groups by. Mirrors
 // consignment.Service.buildNodeDTOsFromTaskRecords, copied rather than exported so the
 // agency can diverge (e.g. officer-facing state labels) without touching TNSW code.
-// The task_config's meta names the node when it has a title.
-func toNode(t store.TaskRecord, meta taskconfig.TaskMeta) WorkflowNode {
+// name is the node's title (see CaseHandler.title).
+func toNode(t store.TaskRecord, meta taskconfig.TaskMeta, name string) WorkflowNode {
 	state := "IN_PROGRESS"
 	switch t.State {
 	case "COMPLETED", "FAILED", "QUEUED_EXTERNALLY":
@@ -211,7 +226,7 @@ func toNode(t store.TaskRecord, meta taskconfig.TaskMeta) WorkflowNode {
 		CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 		WorkflowNodeTemplate: WorkflowNodeTemplate{
-			Name:        taskDisplayName(meta.Title, t.ActiveTaskTemplateID, t.RenderConfig),
+			Name:        name,
 			Description: meta.Description,
 			Type:        t.TaskType,
 		},
@@ -220,12 +235,8 @@ func toNode(t store.TaskRecord, meta taskconfig.TaskMeta) WorkflowNode {
 	}
 }
 
-// taskDisplayName returns the task_config title, else the render config's title, else
-// the template id.
-func taskDisplayName(configTitle, templateID string, renderConfig json.RawMessage) string {
-	if configTitle != "" {
-		return configTitle
-	}
+// taskDisplayName returns the title at the root of renderConfig, else the template id.
+func taskDisplayName(templateID string, renderConfig json.RawMessage) string {
 	if len(renderConfig) > 0 {
 		var rc struct {
 			Title string `json:"title"`
