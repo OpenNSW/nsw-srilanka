@@ -6,9 +6,9 @@
 -- case_parties records who holds which logical role on a case: in TNSW the consignment's
 -- trader company and the CHA company it selected. role is a catalog logical role name, so
 -- a new role needs no new column. A case has at most one party per role; assigning a role
--- again replaces its holder. See internal/caseparty.
+-- again replaces its holder, and deleting the case deletes its parties. See internal/caseparty.
 CREATE TABLE IF NOT EXISTS case_parties (
-	case_id text NOT NULL REFERENCES cases (id),
+	case_id text NOT NULL REFERENCES cases (id) ON DELETE CASCADE,
 	role text NOT NULL,
 	party_type text NOT NULL CONSTRAINT case_parties_party_type_check CHECK (party_type IN ('company', 'user')),
 	party_id text NOT NULL,
