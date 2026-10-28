@@ -20,10 +20,13 @@ type Props = {
 }
 
 export function TraderZoneLayout({ task, onSubmitForm, formEpoch = 0, title }: Props) {
+  const { t } = useTranslation()
+  const alert: Alert | undefined =
+    task.alert ?? (task.state === 'ON_HOLD' ? { variant: 'warning', message: t('tasks.onHoldBanner') } : undefined)
   return (
     <div className={`${zoneWidthClass(task)} mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8`}>
       <Header task={task} title={title} />
-      {task.alert !== undefined && <AlertBanner alert={task.alert} />}
+      {alert !== undefined && <AlertBanner alert={alert} />}
       {task.view.map((component) => (
         <Zone
           key={`${component.id}:${task.task_id}:${task.state}:${formEpoch}`}
@@ -60,21 +63,21 @@ function alertStyles(variant: AlertVariant) {
     case 'success':
       return {
         container: 'bg-success-subtle',
-        icon: 'text-success',
+        icon: 'text-success-strong',
         title: 'text-success-strong',
         body: 'text-success-strong',
       }
     case 'warning':
       return {
         container: 'bg-warning-subtle',
-        icon: 'text-warning',
+        icon: 'text-warning-strong',
         title: 'text-warning-strong',
         body: 'text-warning-strong',
       }
     case 'error':
       return {
         container: 'bg-error-subtle',
-        icon: 'text-error',
+        icon: 'text-error-strong',
         title: 'text-error-strong',
         body: 'text-error-strong',
       }
@@ -82,7 +85,7 @@ function alertStyles(variant: AlertVariant) {
     default:
       return {
         container: 'bg-info-subtle',
-        icon: 'text-info',
+        icon: 'text-info-strong',
         title: 'text-info-strong',
         body: 'text-info-strong',
       }
@@ -120,7 +123,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
       <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-2 hover:bg-app-bg">
         <span className="flex items-center gap-2">
           <svg
-            className="w-4 h-4 text-foreground-subtle transition-transform group-open:rotate-90"
+            className="w-4 h-4 text-foreground-muted transition-transform group-open:rotate-90"
             viewBox="0 0 20 20"
             fill="currentColor"
           >
@@ -131,7 +134,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
             />
           </svg>
           <span className="text-sm font-semibold text-foreground-muted">{t('audit.title')}</span>
-          <span className="text-xs text-foreground-subtle">{t('audit.entries', { count: entries.length })}</span>
+          <span className="text-xs text-foreground-muted">{t('audit.entries', { count: entries.length })}</span>
         </span>
       </summary>
       <div className="relative border-t border-border/60 px-4 py-4">
@@ -161,12 +164,12 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
             <span className="font-semibold">{entry.actor}</span>{' '}
             <span className="text-foreground-muted">{entry.event}</span>
             {entry.from_state && entry.to_state && (
-              <span className="ml-2 text-xs text-foreground-subtle font-mono">
+              <span className="ml-2 text-xs text-foreground-muted font-mono">
                 {entry.from_state} → {entry.to_state}
               </span>
             )}
           </p>
-          <time className="text-xs text-foreground-subtle shrink-0" dateTime={entry.timestamp}>
+          <time className="text-xs text-foreground-muted shrink-0" dateTime={entry.timestamp}>
             {formatRelative(entry.timestamp, t)}
           </time>
         </div>
@@ -182,7 +185,7 @@ function auditDotColor(entry: AuditEntry): string {
   if (text.includes('reject') || text.includes('fail')) return 'bg-error'
   if (text.includes('feedback') || text.includes('clarif') || text.includes('request')) return 'bg-warning'
   if (text.includes('approv')) return 'bg-success'
-  return 'bg-foreground-subtle'
+  return 'bg-foreground-muted'
 }
 
 function formatRelative(iso: string, t: TFunction): string {

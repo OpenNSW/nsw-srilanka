@@ -1068,7 +1068,14 @@ func initTask(
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
-	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
+	logTaskPark := newAdminParkLogger("task workflow")
+	workflowRunner.RegisterAdminParkHandler(func(payload workflow.AdminParkPayload) error {
+		_ = logTaskPark(payload)
+		if tm == nil {
+			return fmt.Errorf("task manager is not initialized (misconfiguration)")
+		}
+		return tm.HoldTask(context.Background(), payload)
+	})
 
 	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
 	if err != nil {

@@ -489,8 +489,8 @@ paths:
         carry on as if the callback had arrived, and the task then ends
         normally and reports to its parent. `RETRY` runs the step again.
 
-        While the step is parked, the task still shows the step's own state,
-        and a submission for it is rejected.
+        While the step is parked, the task moves to `ON_HOLD` (hiding its
+        interactive controls) and any submission or draft for it is rejected.
 
         `{id}` is the task workflow's own ID (`EngineNodeDTO.task_workflow_id`
         on the TASK node that started it), and `{stepId}` is the step's
@@ -614,10 +614,11 @@ components:
 
     WorkflowNodeState:
       type: string
-      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED, CANCELLED]
+      enum: [IN_PROGRESS, QUEUED_EXTERNALLY, COMPLETED, FAILED, CANCELLED, ON_HOLD]
       description: >-
         `CANCELLED` is a task an admin closed by force-parking its node; it
-        cannot be submitted.
+        cannot be submitted. `ON_HOLD` is a task whose workflow parked on one
+        of its steps for admin intervention.
 
     WorkflowNodeTemplateResponseDTO:
       type: object

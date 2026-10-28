@@ -68,7 +68,7 @@ function IdentityField({ label, id }: { label: string; id: string }) {
   const { name, uuid } = splitIDName(id)
   return (
     <div title={id} className="min-w-0">
-      <span className="text-xs text-foreground-subtle">{label}</span>
+      <span className="text-xs text-foreground-muted">{label}</span>
       <div className="font-mono text-sm text-foreground break-all">{name}</div>
       {uuid && <div className="font-mono text-sm text-foreground-muted break-all">{uuid}</div>}
     </div>
@@ -267,11 +267,11 @@ function FlowList({
 }) {
   return (
     <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
-      <div className={`${FLOW_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Flow</div>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Status</div>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Started</div>
-        <div className="p-3 font-medium text-foreground-subtle text-sm">Workflow ID</div>
+      <div className={`${FLOW_ROW_GRID} min-w-[700px] border-b border-border text-left`}>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Flow</div>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Status</div>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Started</div>
+        <div className="p-3 font-medium text-foreground-muted text-sm">Workflow ID</div>
       </div>
       {flows.length === 0 ? (
         <Text size="2" color="gray" className="block p-3">
@@ -286,7 +286,7 @@ function FlowList({
               type="button"
               aria-pressed={selected}
               onClick={() => onSelect(flow.workflowId)}
-              className={`${FLOW_ROW_GRID} min-w-[700px] w-full text-left border-b border-app-border last:border-0 ${
+              className={`${FLOW_ROW_GRID} min-w-[700px] w-full text-left border-b border-border last:border-0 ${
                 selected ? 'bg-primary-subtle' : 'hover:bg-app-surface-muted'
               }`}
             >
@@ -491,12 +491,12 @@ function EngineStatusView({
       <p className="mb-4 text-xs font-mono text-foreground-muted">{status.workflow_id}</p>
 
       <div className="bg-app-surface rounded-lg shadow mb-6 overflow-x-auto">
-        <div className={`${NODE_ROW_GRID} min-w-[700px] border-b border-app-border text-left`}>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Node</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Type</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Status</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Updated</div>
-          <div className="p-3 font-medium text-foreground-subtle text-sm">Last error</div>
+        <div className={`${NODE_ROW_GRID} min-w-[700px] border-b border-border text-left`}>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Node</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Type</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Status</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Updated</div>
+          <div className="p-3 font-medium text-foreground-muted text-sm">Last error</div>
         </div>
         <div className="min-w-[700px]">
           {topLevelNodes.length === 0 ? (
@@ -640,10 +640,10 @@ function LineNumberedTextArea({
     // The border lives on this wrapper, not the <textarea> — a bare <textarea> carries its own
     // UA-default border independent of any wrapper border, which without an explicit border-0
     // shows through as a second, darker (often black) border nested just inside this one.
-    <div className="flex border border-app-border rounded overflow-hidden font-mono text-xs h-48 focus-within:border-primary">
+    <div className="flex border border-border rounded overflow-hidden font-mono text-xs h-48 focus-within:border-primary">
       <div
         ref={gutterRef}
-        className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-subtle select-none"
+        className="shrink-0 w-9 overflow-hidden bg-app-surface-muted text-right py-2 pr-2 text-foreground-muted select-none"
         aria-hidden
       >
         {Array.from({ length: lineCount }, (_, i) => (
@@ -753,7 +753,7 @@ function MappingList({ title, note, mapping }: { title: string; note: string; ma
           return (
             <div key={rawKey} className="whitespace-pre-wrap break-all py-0.5">
               {key}
-              {optional && <span className="text-foreground-subtle"> (optional)</span>} → {value}
+              {optional && <span className="text-foreground-muted"> (optional)</span>} → {value}
             </div>
           )
         })}
@@ -922,7 +922,7 @@ function ResolveAdminInterventionView({ target, onBack }: { target: AdminResolut
                     {edge.condition ? (
                       edge.condition
                     ) : (
-                      <span className="text-foreground-subtle">(default — no condition)</span>
+                      <span className="text-foreground-muted">(default — no condition)</span>
                     )}
                   </div>
                 ))}
@@ -1386,7 +1386,7 @@ function NodeRow({
   // padding on the row would push every one of them right by the same amount, throwing nested
   // rows out of sync with the header and with sibling rows at a different depth.
   return (
-    <div className="border-b border-app-border last:border-0">
+    <div className="border-b border-border last:border-0">
       <div className={`${NODE_ROW_GRID} py-2`}>
         <div className="pr-3 font-mono text-xs truncate" style={{ paddingLeft: 12 + depth * 20 }} title={node.id}>
           {node.id}
@@ -1465,7 +1465,7 @@ function NodeRow({
           )}
         </div>
         <div className="px-3 text-xs text-foreground-muted">{formatDateTime(node.updated_at)}</div>
-        <div className="px-3 text-xs text-red-600 min-w-0">
+        <div className="px-3 text-xs text-error-strong min-w-0">
           {node.last_error && <ErrorCell message={node.last_error} />}
         </div>
       </div>
@@ -1535,7 +1535,7 @@ function ChildWorkflowBranch({
             className="flex items-center gap-1.5 py-1.5 px-3 text-xs font-mono text-foreground-muted hover:text-foreground text-left"
           >
             <ChevronRightIcon className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden />
-            <span className="text-foreground-subtle">child workflow</span>
+            <span className="text-foreground-muted">child workflow</span>
             {workflowId}
           </button>
           {status && (
@@ -1604,11 +1604,11 @@ function TaskWorkflowPanel({
   return (
     <>
       <div
-        className="border-l-2 border-app-border flex items-center justify-between pr-3 py-1 pl-2"
+        className="border-l-2 border-border flex items-center justify-between pr-3 py-1 pl-2"
         style={{ marginLeft: 12 + depth * 20 }}
       >
         <span className="text-[11px] font-mono text-foreground-muted truncate" title={workflowId}>
-          <span className="text-foreground-subtle">task workflow </span>
+          <span className="text-foreground-muted">task workflow </span>
           {workflowId}
         </span>
         {status && (

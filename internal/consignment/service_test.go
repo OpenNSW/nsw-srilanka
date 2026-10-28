@@ -635,18 +635,20 @@ func TestConsignmentService_buildNodeDTOsFromTaskRecords_WithTasks(t *testing.T)
 		{TaskID: "t4", TaskType: "FORM", State: "QUEUED_EXTERNALLY", ActiveTaskTemplateID: "step-4", CreatedAt: now, UpdatedAt: now},
 		{TaskID: "t5", TaskType: "SYSTEM", State: "COMPLETED", ActiveTaskTemplateID: "sys", CreatedAt: now, UpdatedAt: now},
 		{TaskID: "t6", TaskType: "FORM", State: store.StateCancelled, ActiveTaskTemplateID: "step-6", CreatedAt: now, UpdatedAt: now},
+		{TaskID: "t7", TaskType: "FORM", State: store.StateOnHold, ActiveTaskTemplateID: "step-7", CreatedAt: now, UpdatedAt: now},
 	}
 	mockTaskStore.On("GetAllTasks", mock.Anything, consignmentID).Return(tasks)
 
 	dtos, err := svc.buildNodeDTOsFromTaskRecords(ctx, consignmentID)
 	assert.NoError(t, err)
-	assert.Len(t, dtos, 5) // SYSTEM task filtered out
+	assert.Len(t, dtos, 6) // SYSTEM task filtered out
 	assert.Equal(t, WorkflowNodeStateCompleted, dtos[0].State)
 	assert.Equal(t, WorkflowNodeStateFailed, dtos[1].State)
 	assert.Equal(t, WorkflowNodeStateInProgress, dtos[2].State)
 	assert.Equal(t, "My Step", dtos[2].WorkflowNodeTemplate.Name)
 	assert.Equal(t, WorkflowNodeStateQueuedExternally, dtos[3].State)
 	assert.Equal(t, WorkflowNodeStateCancelled, dtos[4].State)
+	assert.Equal(t, WorkflowNodeStateOnHold, dtos[5].State)
 }
 
 func TestConsignmentService_GetConsignmentByID_BuildDTOError(t *testing.T) {

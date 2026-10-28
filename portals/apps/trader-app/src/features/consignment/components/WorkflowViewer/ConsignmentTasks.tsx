@@ -42,7 +42,7 @@ export function ConsignmentTasks({
     const done = visible
       .filter((s) => s.state === 'COMPLETED' || s.state === 'FAILED' || s.state === 'CANCELLED')
       .sort(newestFirst)
-    const waiting = visible.filter((s) => s.state === 'QUEUED_EXTERNALLY').sort(newestFirst)
+    const waiting = visible.filter((s) => s.state === 'QUEUED_EXTERNALLY' || s.state === 'ON_HOLD').sort(newestFirst)
     const placed = new Set([...done, ...waiting].map((s) => s.id))
     return { needsAction: visible.filter((s) => !placed.has(s.id)), waiting, done }
   }, [steps])
@@ -73,7 +73,7 @@ export function ConsignmentTasks({
         {groups.needsAction.length > 0 && (
           <section>
             <SectionHeading
-              icon={<LightningBoltIcon aria-hidden className="text-info" />}
+              icon={<LightningBoltIcon aria-hidden className="text-info-strong" />}
               title={t('workflow.actionRequired')}
               count={groups.needsAction.length}
             />
@@ -87,7 +87,7 @@ export function ConsignmentTasks({
         {groups.waiting.length > 0 && (
           <section className={groups.needsAction.length > 0 ? 'mt-8 border-t border-border pt-6' : undefined}>
             <SectionHeading
-              icon={<ClockIcon aria-hidden className="text-warning" />}
+              icon={<ClockIcon aria-hidden className="text-warning-strong" />}
               title={t('workflow.waitingOnOthers')}
               count={groups.waiting.length}
             />

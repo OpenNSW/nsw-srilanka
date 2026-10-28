@@ -15,6 +15,7 @@ const STATUS_COLORS: Record<WorkflowNodeState, 'green' | 'blue' | 'orange' | 'gr
   LOCKED: 'gray',
   FAILED: 'red',
   CANCELLED: 'gray',
+  ON_HOLD: 'orange',
 }
 
 // One task of a consignment, as a card that opens it.

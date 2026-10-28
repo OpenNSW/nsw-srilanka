@@ -593,6 +593,8 @@ func (s *Service) buildNodeDTOsFromTaskRecords(ctx context.Context, consignmentI
 			nodeState = WorkflowNodeStateQueuedExternally
 		case store.StateCancelled:
 			nodeState = WorkflowNodeStateCancelled
+		case store.StateOnHold:
+			nodeState = WorkflowNodeStateOnHold
 		default:
 			// PENDING_USER and any other active orchestrator state: the trader
 			// still has to act (including after an officer send-back).

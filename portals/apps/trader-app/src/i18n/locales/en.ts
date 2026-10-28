@@ -147,6 +147,7 @@ const en = {
       draftSaved: 'Draft saved',
       savingDraft: 'Saving…',
       submitting: 'Submitting...',
+      onHoldBanner: 'This step is on hold while our team looks into a problem. No action is needed from you.',
       handles: {
         saveAsDraft: 'Save as Draft',
         continue: 'Continue',
@@ -299,6 +300,7 @@ const en = {
         failed: 'Failed',
         awaitingFeedback: 'Awaiting Feedback',
         cancelled: 'Cancelled',
+        onHold: 'On Hold',
       },
     },
 
