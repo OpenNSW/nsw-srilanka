@@ -83,3 +83,42 @@ func TestCDNSplitBuilder_AllowsMissingCusdecRef(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Equal(t, "", items[0]["payload"].(map[string]any)["cusdec_ref"])
 }
+
+// Every note gets the declaration's shipper, each its own copy, so a change to
+// one branch's payload can't reach another's.
+func TestCDNSplitBuilder_CarriesTheShipperToEveryNote(t *testing.T) {
+	shipper := map[string]any{
+		"id":          "134256789",
+		"name":        "ADAM PVT LTD",
+		"address":     "No. 45, Galle Road, Colombo 03, Sri Lanka",
+		"countryCode": "LK",
+	}
+	ctx := splitCtx(map[string]any{"container_count": float64(2), "shipper": shipper})
+	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+
+	items := ctx.Record.Data["split_items"].([]map[string]any)
+	require.Len(t, items, 2)
+	for _, item := range items {
+		assert.Equal(t, shipper, item["payload"].(map[string]any)["shipper"])
+	}
+	items[0]["payload"].(map[string]any)["shipper"].(map[string]any)["name"] = "changed"
+	assert.Equal(t, "ADAM PVT LTD", items[1]["payload"].(map[string]any)["shipper"].(map[string]any)["name"])
+}
+
+// Without a shipper, or with one that isn't an object or is empty, the notes
+// carry none and the trader fills it in.
+func TestCDNSplitBuilder_LeavesOutAMissingShipper(t *testing.T) {
+	for name, inputs := range map[string]map[string]any{
+		"missing":       {"container_count": float64(1)},
+		"empty":         {"container_count": float64(1), "shipper": map[string]any{}},
+		"not an object": {"container_count": float64(1), "shipper": "ADAM PVT LTD"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := splitCtx(inputs)
+			require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+
+			items := ctx.Record.Data["split_items"].([]map[string]any)
+			assert.NotContains(t, items[0]["payload"], "shipper")
+		})
+	}
+}
