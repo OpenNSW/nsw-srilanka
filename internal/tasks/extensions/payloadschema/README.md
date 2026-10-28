@@ -146,9 +146,9 @@ command is validated in full.
 
 - Fields the form doesn't declare
 - External reviewer callbacks, and schemas built at render time
-- `x-file`'s `maxSize`: it belongs to the upload, so it is to be checked when the file is
-  uploaded to storage, not on submit. Until then the browser checks it, and the server
-  holds every file to the upload limit only.
+- `x-file`'s `maxSize`: a file's size is the upload's concern, not the submission's. The
+  browser checks it, and storage holds every file to the upload limit
+  (`storage.maxUploadBytes`).
 - What a file holds: its type and extension are the ones it was uploaded with, and its
   content is not read.
 - On an agency, any `404` from the owning service's download route counts as a file not
