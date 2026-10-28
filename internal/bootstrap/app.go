@@ -832,8 +832,6 @@ func newFileAccess(cfg nswstorage.Config) (*fileaccess.Access, error) {
 	return fileaccess.New(codec, cfg.TokenTTL())
 }
 
-// stepNamespace looks up the output namespace of a task's active step template,
-// in the manifest version the task runs on.
 // renderConfigOf resolves a task's render config through its task template, in the
 // manifest version the task runs on.
 func renderConfigOf(artifacts *artifact.Set) tasks.RenderConfigOf {
@@ -842,6 +840,8 @@ func renderConfigOf(artifacts *artifact.Set) tasks.RenderConfigOf {
 	}
 }
 
+// stepNamespace looks up the output namespace of a task's active step template,
+// in the manifest version the task runs on.
 func stepNamespace(artifacts *artifact.Set) tasks.NamespaceOf {
 	return func(ctx context.Context, record store.TaskRecord) (string, error) {
 		reg, err := artifacts.Registry(ctx, record.ManifestVersion)
