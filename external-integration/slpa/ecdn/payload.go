@@ -172,13 +172,19 @@ func BuildXML(form map[string]any) (string, error) {
 	return xml.Header + string(body), nil
 }
 
-// cmsCusdecNo writes a declaration number the way the CMS takes it: letters
-// and digits only. Customs names a declaration office/year/serial/number
-// ("CBEX1/2026/E/1050"), which is how the form receives it once Customs has
-// assessed the declaration; the CMS refuses any other character, so it gets
-// the parts run together ("CBEX12026E1050").
+// cmsCusdecNo writes a declaration number the way the CMS takes it: the
+// serial letter and the number ("E1050"), letters and digits only. Customs
+// names a declaration office/year/serial/number ("CBEX1/2026/E/1050"), which
+// is how the form receives it once Customs has assessed the declaration; the
+// office and the year travel in CusDecOffice and CusDecDate instead, and the
+// serial joins all three ("CBEX1E10502026"). A number not in four parts is
+// sent as its letters and digits, since the CMS refuses any other character.
 func cmsCusdecNo(cusdecNo string) string {
-	return strings.Join(cusdecParts(cusdecNo), "")
+	parts := cusdecParts(cusdecNo)
+	if len(parts) == 4 {
+		return parts[2] + parts[3]
+	}
+	return strings.Join(parts, "")
 }
 
 // cusdecSerLet is the serial letter the trader entered, or else the one in the
