@@ -42,7 +42,7 @@ func decode(t *testing.T, payload string) map[string]any {
 }
 
 func TestCompile_Validate(t *testing.T) {
-	compiled, err := compile([]byte(testSchema))
+	compiled, err := compile([]byte(testSchema), nil)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestCompile_RejectsBadSchemas(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := compile([]byte(tt.schema)); err == nil {
+			if _, err := compile([]byte(tt.schema), nil); err == nil {
 				t.Fatal("compile() succeeded; want an error")
 			}
 		})
@@ -170,7 +170,7 @@ const dateLimitSchema = `{
 // The cases match what the trader app's Ajv (JSON Forms' createAjv, $data on)
 // accepts and refuses.
 func TestAjvDateLimit(t *testing.T) {
-	compiled, err := compile([]byte(dateLimitSchema))
+	compiled, err := compile([]byte(dateLimitSchema), nil)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}

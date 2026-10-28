@@ -13,12 +13,14 @@ func TestRegister(t *testing.T) {
 		nilReg      bool
 		formOf      FormOf
 		namespaceOf NamespaceOf
+		fileOf      FileOf
 		wantErr     bool
 	}{
-		{name: "nil registry", nilReg: true, formOf: forms.form, namespaceOf: namespace("form"), wantErr: true},
-		{name: "no form lookup", namespaceOf: namespace("form"), wantErr: true},
-		{name: "no namespace lookup", formOf: forms.form, wantErr: true},
-		{name: "valid", formOf: forms.form, namespaceOf: namespace("form")},
+		{name: "nil registry", nilReg: true, formOf: forms.form, namespaceOf: namespace("form"), fileOf: noFiles, wantErr: true},
+		{name: "no form lookup", namespaceOf: namespace("form"), fileOf: noFiles, wantErr: true},
+		{name: "no namespace lookup", formOf: forms.form, fileOf: noFiles, wantErr: true},
+		{name: "no file lookup", formOf: forms.form, namespaceOf: namespace("form"), wantErr: true},
+		{name: "valid", formOf: forms.form, namespaceOf: namespace("form"), fileOf: noFiles},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -26,7 +28,7 @@ func TestRegister(t *testing.T) {
 			if !tt.nilReg {
 				reg = extensions.NewRegistry()
 			}
-			if err := Register(reg, tt.formOf, tt.namespaceOf); (err != nil) != tt.wantErr {
+			if err := Register(reg, tt.formOf, tt.namespaceOf, tt.fileOf); (err != nil) != tt.wantErr {
 				t.Fatalf("Register() err = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -36,10 +38,10 @@ func TestRegister(t *testing.T) {
 func TestRegister_Duplicate(t *testing.T) {
 	forms := fakeForms{}
 	reg := extensions.NewRegistry()
-	if err := Register(reg, forms.form, namespace("form")); err != nil {
+	if err := Register(reg, forms.form, namespace("form"), noFiles); err != nil {
 		t.Fatalf("first Register: %v", err)
 	}
-	if err := Register(reg, forms.form, namespace("form")); err == nil {
+	if err := Register(reg, forms.form, namespace("form"), noFiles); err == nil {
 		t.Fatalf("second Register of %q: want error, got nil", ExtPayloadSchema)
 	}
 }

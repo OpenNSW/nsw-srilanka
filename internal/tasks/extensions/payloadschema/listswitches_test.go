@@ -204,7 +204,7 @@ func TestScopePath(t *testing.T) {
 // found by its control.
 func TestReadOnlyForm_SwitchesByEscapedKey(t *testing.T) {
 	const schema = `{"properties": {"a/b": {"type": "array", "items": {"readOnly": true}}}}`
-	compiled, err := compile([]byte(schema))
+	compiled, err := compile([]byte(schema), nil)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}

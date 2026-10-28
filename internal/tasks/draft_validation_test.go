@@ -18,6 +18,7 @@ import (
 	"github.com/OpenNSW/core/taskflow/store"
 	workflow "github.com/OpenNSW/core/workflow"
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/tasks/extensions/payloadschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -135,7 +136,9 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 		step, err := steptemplate.Load(ctx, reg, id)
 		return step.OutputNamespace, err
 	}
-	require.NoError(t, payloadschema.Register(extReg, formOf, namespaceOf))
+	// The form has no file fields, so no file is looked up.
+	fileOf := func(context.Context, string) (storage.File, error) { return storage.File{}, nil }
+	require.NoError(t, payloadschema.Register(extReg, formOf, namespaceOf, fileOf))
 
 	db := &memTaskStore{record: store.TaskRecord{
 		TaskID: testTaskID, TaskWorkflowID: "task-wf", ActiveStepID: "step-1", ActiveTaskTemplateID: "form-step", ManifestVersion: 1,

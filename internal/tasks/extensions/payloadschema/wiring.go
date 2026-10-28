@@ -11,16 +11,16 @@ import (
 const ExtPayloadSchema = "payload_schema"
 
 // Register installs the payload schema validation extension on reg.
-// formOf reads forms from the artifacts, and namespaceOf the output namespace
-// of a step template.
-func Register(reg *extensions.Registry, formOf FormOf, namespaceOf NamespaceOf) error {
+// formOf reads forms from the artifacts, namespaceOf the output namespace of a
+// step template, and fileOf the files storage holds.
+func Register(reg *extensions.Registry, formOf FormOf, namespaceOf NamespaceOf, fileOf FileOf) error {
 	if reg == nil {
 		return fmt.Errorf("payload schema: registry is nil")
 	}
-	if formOf == nil || namespaceOf == nil {
-		return fmt.Errorf("payload schema: form and namespace lookups are required")
+	if formOf == nil || namespaceOf == nil || fileOf == nil {
+		return fmt.Errorf("payload schema: form, namespace and file lookups are required")
 	}
-	if err := reg.Register(ExtPayloadSchema, NewExtension(formOf, namespaceOf)); err != nil {
+	if err := reg.Register(ExtPayloadSchema, NewExtension(formOf, namespaceOf, fileOf)); err != nil {
 		return fmt.Errorf("payload schema: register %s: %w", ExtPayloadSchema, err)
 	}
 	return nil
