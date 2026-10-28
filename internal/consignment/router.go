@@ -691,18 +691,11 @@ func (c *Router) handleForcePark(
 	}
 
 	auditFail := func(errMsg string) {
-		c.auditEvent(ctx, nswaudit.Event{
-			EventType:  nswaudit.EventConsignment,
-			Action:     nswaudit.ActionUpdate,
-			TargetType: nswaudit.TargetConsignment,
-			TargetID:   workflowID,
-			Failure:    true,
-			Metadata: map[string]any{
-				"view":   view,
-				"stepId": stepID,
-				"error":  errMsg,
-			},
-		})
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, true, map[string]any{
+			"view":   view,
+			"stepId": stepID,
+			"error":  errMsg,
+		}))
 	}
 
 	nodeID, err := forcePark(ctx, workflowID, stepID, req.Reason)
@@ -724,19 +717,12 @@ func (c *Router) handleForcePark(
 		return
 	}
 
-	c.auditEvent(ctx, nswaudit.Event{
-		EventType:  nswaudit.EventConsignment,
-		Action:     nswaudit.ActionUpdate,
-		TargetType: nswaudit.TargetConsignment,
-		TargetID:   workflowID,
-		Failure:    false,
-		Metadata: map[string]any{
-			"view":   view,
-			"stepId": stepID,
-			"nodeId": nodeID,
-			"reason": req.Reason,
-		},
-	})
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, false, map[string]any{
+		"view":   view,
+		"stepId": stepID,
+		"nodeId": nodeID,
+		"reason": req.Reason,
+	}))
 	w.WriteHeader(http.StatusNoContent)
 }
 
