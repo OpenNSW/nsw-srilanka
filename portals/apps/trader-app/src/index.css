@@ -27,75 +27,86 @@
 
 @theme {
   /* =========================================================================
-   * COLOR TOKENS — lean semantic set. Each role has 3 rungs:
-   *   -subtle  → tinted fill / soft border   (was the *-50/100 shades)
-   *   (base)   → solid icon / dot / accent    (was *-500/600)
-   *   -strong  → text / hover / emphasis      (was *-700/800)
-   * Neutrals use contextual names (background / surface / foreground / border).
+   * COLOR TOKENS — every one is a Radix Themes color, so Tailwind utilities
+   * and Radix components paint from the same scales. Radix defines the raw
+   * steps (--slate-N, --red-N, ...) on :root, where these resolve. Each role
+   * uses the steps Radix gives that job:
+   *   -subtle  → step 3, tinted fill
+   *   (base)   → step 9, solid fill / dot
+   *   -strong  → step 11, text and icons on white or on -subtle
+   * The one color that isn't a Radix step is each scheme's brand,
+   * --color-primary, from which Radix's accent scale is derived (see the
+   * "Radix accent" block below).
+   *
+   * Tailwind's own palette is switched off, so a bg-red-600 or text-gray-500
+   * generates nothing: a color has to be one of these.
    * ========================================================================= */
+  --color-*: initial;
+  --color-white: white;
+  --color-black: black;
 
   /* Typography — Inter, self-hosted so first paint never blocks on a
    * third-party font CDN (this app also has to run on restricted networks). */
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Brand (primary). These are the "Modern" scheme's values and the default
+  /* Brand (primary). --color-primary is the "Modern" scheme's, the default
    * whenever no `data-theme` override applies — see the color-scheme block
    * below for the other options and services/colorSchemeContextCore.ts for
    * how <Theme accentColor> is kept in sync with whichever one is active.
-   * -dark is for deep surfaces (gradients, hero overlays); the bright base
-   * pops against it, and bright-at-opacity gives visible hovers. */
-  --color-primary-subtle: #f0f0ff;
+   * The other rungs are the accent steps derived from it. -dark is for deep
+   * surfaces (gradients, hero overlays); the bright base pops against it,
+   * and bright-at-opacity gives visible hovers. */
+  --color-primary-subtle: var(--accent-3);
   --color-primary: #5b5bd6;
-  --color-primary-hover: #4a4ac7;
-  --color-primary-dark: #23214a;
+  --color-primary-hover: var(--accent-10);
+  --color-primary-dark: var(--accent-12);
 
   /* Status - success (green) */
-  --color-success-subtle: #f0fdf4;
-  --color-success: #16a34a;
-  --color-success-strong: #166534;
+  --color-success-subtle: var(--green-3);
+  --color-success: var(--green-9);
+  --color-success-strong: var(--green-11);
 
   /* Status - warning (amber) */
-  --color-warning-subtle: #fffbeb;
-  --color-warning: #d97706;
-  --color-warning-strong: #92400e;
+  --color-warning-subtle: var(--amber-3);
+  --color-warning: var(--amber-9);
+  --color-warning-strong: var(--amber-11);
 
   /* Status - error (red) */
-  --color-error-subtle: #fef2f2;
-  --color-error: #dc2626;
-  --color-error-strong: #991b1b;
+  --color-error-subtle: var(--red-3);
+  --color-error: var(--red-9);
+  --color-error-strong: var(--red-11);
 
   /* Status - info (blue) */
-  --color-info-subtle: #eff6ff;
-  --color-info: #2563eb;
-  --color-info-strong: #1e40af;
+  --color-info-subtle: var(--blue-3);
+  --color-info: var(--blue-9);
+  --color-info-strong: var(--blue-11);
 
-  /* Neutrals / surfaces. NOTE: renamed from --color-background/-surface to
-   * avoid a name collision with Radix Themes' own --color-background and
+  /* Neutrals: Radix's slate, the Theme's grayColor. NOTE: named app-* to
+   * avoid a collision with Radix Themes' own --color-background and
    * --color-surface variables (defined on .radix-themes), which were
-   * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted. */
-  /* A near-neutral grey, so the white cards stand out without a third tint. */
-  --color-app-bg: #f5f6f8;
-  --color-app-surface: #ffffff;
-  --color-app-surface-muted: #f1f5f9;
+   * shadowing these. Utilities: bg-app-bg / bg-app-surface / bg-app-surface-muted.
+   * The surface is white, Radix's solid panel color in light mode. */
+  --color-app-bg: var(--slate-2);
+  --color-app-surface: white;
+  --color-app-surface-muted: var(--slate-3);
 
-  /* Form fields. An editable field is white with a visible border (3.4:1 on
-   * white, over the 3:1 a control's edge needs); a read-only one is flat grey
-   * with no border, so the two can't be confused. Used by the Radix
-   * TextField/Select/TextArea override below, which is what every JSONForms
-   * field renders through. */
-  --color-field-border: #868c98;
-  --color-field-border-hover: #646a76;
-  --color-field-readonly-bg: #f1f2f4;
+  /* Form fields. An editable field is white with a visible border (slate-9,
+   * 3.3:1 on white, over the 3:1 a control's edge needs); a read-only one is
+   * flat grey with no border, so the two can't be confused. Used by the
+   * Radix TextField/Select/TextArea override below, which is what every
+   * JSONForms field renders through. */
+  --color-field-border: var(--slate-9);
+  --color-field-border-hover: var(--slate-10);
+  --color-field-readonly-bg: var(--slate-3);
 
-  /* Neutrals / text */
-  --color-foreground: #0f172a;
-  --color-foreground-muted: #475569;
-  /* #66707f: the lightest grey that still reads at 4.5:1 on the page background. */
-  --color-foreground-subtle: #66707f;
+  /* Neutrals / text: Radix's two text steps. Muted (slate-11) reads at 5.6:1
+   * on the page background. */
+  --color-foreground: var(--slate-12);
+  --color-foreground-muted: var(--slate-11);
 
   /* Neutrals / borders */
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
+  --color-border: var(--slate-6);
+  --color-border-strong: var(--slate-7);
 
   /* Shadows — slate-tinted rather than pure black, and softer/wider than the
    * default Tailwind ramp. Colored, diffuse shadows read as more "designed"
@@ -131,8 +142,8 @@
 /* =========================================================================
  * COLOR SCHEMES — alternates to the "Modern" default above, switched at
  * runtime via ColorSchemeProvider setting `data-theme` on <html>. Each
- * block only needs to redefine the brand rungs (all the semantic/neutral
- * tokens stay shared), so every component built on bg-primary/text-primary/
+ * block only sets the brand color (the other rungs, and all the
+ * semantic/neutral tokens, follow), so every component built on bg-primary/text-primary/
  * border-primary-subtle/etc. — cards, buttons, badges, gradients, and every
  * JSONForms field's focus ring — repaints automatically.
  * Radix's own components read them too: the accent block below derives
@@ -141,26 +152,17 @@
 
 /* Maritime Trade — navy & slate, a conventional customs/trade-portal look. */
 :root[data-theme='maritime'] {
-  --color-primary-subtle: #eaf0fb;
   --color-primary: #1e3a8a;
-  --color-primary-hover: #16306f;
-  --color-primary-dark: #0f2547;
 }
 
 /* Ceylon Regal — maroon & gold, echoing the national flag's lion panel. */
 :root[data-theme='regal'] {
-  --color-primary-subtle: #fbedea;
   --color-primary: #7a2430;
-  --color-primary-hover: #641d27;
-  --color-primary-dark: #3c1116;
 }
 
 /* Emerald Trade — deep teal-green. */
 :root[data-theme='emerald'] {
-  --color-primary-subtle: #e7f5f0;
   --color-primary: #0f6a52;
-  --color-primary-hover: #0c5843;
-  --color-primary-dark: #0a3f30;
 }
 
 /* =========================================================================
@@ -172,10 +174,16 @@
  * control in the brand color, in every scheme. Components given their own
  * color (color="red") keep that palette.
  *
+ * The hover and dark rungs are the brand darkened toward black, so a scheme
+ * sets only --color-primary.
+ *
  * `:root .radix-themes` outranks Radix's `[data-accent-color='…']` rule on
  * the Theme root without !important; every Theme root (the app's and each
- * dialog portal's) carries the class.
+ * dialog portal's) carries the class. The scale is also set on <html>
+ * (`html:root`, which outranks Radix's own `:root` rule for the status steps
+ * below), because the Tailwind color tokens resolve there.
  * ========================================================================= */
+html:root,
 :root .radix-themes {
   --accent-1: color-mix(in srgb, var(--color-primary) 1%, white);
   --accent-2: color-mix(in srgb, var(--color-primary) 3%, white);
@@ -186,10 +194,10 @@
   --accent-7: color-mix(in srgb, var(--color-primary) 30%, white);
   --accent-8: color-mix(in srgb, var(--color-primary) 45%, white);
   --accent-9: var(--color-primary);
-  --accent-10: var(--color-primary-hover);
+  --accent-10: color-mix(in srgb, var(--color-primary) 85%, black);
   /* Text on the accent's own soft tints: the hover rung, for 4.5:1 in every scheme. */
-  --accent-11: var(--color-primary-hover);
-  --accent-12: var(--color-primary-dark);
+  --accent-11: var(--accent-10);
+  --accent-12: color-mix(in srgb, var(--color-primary) 45%, black);
   --accent-a1: color-mix(in srgb, var(--color-primary) 1%, transparent);
   --accent-a2: color-mix(in srgb, var(--color-primary) 3%, transparent);
   --accent-a3: color-mix(in srgb, var(--color-primary) 7%, transparent);
@@ -199,9 +207,9 @@
   --accent-a7: color-mix(in srgb, var(--color-primary) 30%, transparent);
   --accent-a8: color-mix(in srgb, var(--color-primary) 45%, transparent);
   --accent-a9: var(--color-primary);
-  --accent-a10: var(--color-primary-hover);
-  --accent-a11: var(--color-primary-hover);
-  --accent-a12: var(--color-primary-dark);
+  --accent-a10: var(--accent-10);
+  --accent-a11: var(--accent-10);
+  --accent-a12: var(--accent-12);
   --accent-contrast: #ffffff;
   --accent-surface: color-mix(in srgb, var(--color-primary) 4%, white);
   --accent-indicator: var(--color-primary);
@@ -209,7 +217,8 @@
 
   /* Status text (soft badges, colored Text). Radix's step 11 for these hues
    * reads at 3.6-4.3:1 on a soft badge over the page background; each is
-   * darkened just enough for 4.5:1 there, keeping its hue. */
+   * darkened just enough for 4.5:1 there, keeping its hue. The -strong
+   * Tailwind tokens are these steps too. */
   --blue-11: #0b66b6;
   --blue-a11: #0b66b6;
   --orange-11: #b04300;
@@ -412,11 +421,11 @@ body {
 /* An empty read-only field keeps its placeholder muted, not full-strength
  * like a value. */
 :is(.rt-TextFieldInput, .rt-TextAreaInput):disabled::placeholder {
-  color: var(--color-foreground-subtle) !important;
-  -webkit-text-fill-color: var(--color-foreground-subtle);
+  color: var(--color-foreground-muted) !important;
+  -webkit-text-fill-color: var(--color-foreground-muted);
 }
 .rt-SelectTrigger.rt-variant-surface:disabled[data-placeholder] .rt-SelectTriggerInner {
-  color: var(--color-foreground-subtle);
+  color: var(--color-foreground-muted);
 }
 
 /* A form with nothing to change (a stepper's review step, a submitted form,
@@ -453,13 +462,13 @@ body {
  * provided", marked data-empty-answer): shown, muted and regular, so it
  * reads differently from an answer. */
 [data-form-review] :is(.rt-TextFieldInput, .rt-TextAreaInput)[data-empty-answer]::placeholder {
-  color: var(--color-foreground-subtle) !important;
-  -webkit-text-fill-color: var(--color-foreground-subtle);
+  color: var(--color-foreground-muted) !important;
+  -webkit-text-fill-color: var(--color-foreground-muted);
   font-weight: 400;
 }
 [data-form-review] .rt-SelectTrigger[data-placeholder][data-empty-answer] .rt-SelectTriggerInner {
   visibility: visible;
-  color: var(--color-foreground-subtle);
+  color: var(--color-foreground-muted);
   font-weight: 400;
 }
 [data-form-review] .rt-RadioGroupItem + .rt-Text {
