@@ -146,7 +146,7 @@ func (h *CaseHandler) HandleGetCase(w http.ResponseWriter, r *http.Request) {
 			if t.TaskType == "SYSTEM" {
 				continue
 			}
-			nodes = append(nodes, toNode(t, meta, h.renderConfig(r, t, meta)))
+			nodes = append(nodes, toNode(t, meta, h.title(r, t, meta)))
 		}
 	}
 	httputil.JSON(w, http.StatusOK, CaseDetail{CaseSummary: toSummary(*c), WorkflowNodes: nodes})
@@ -167,18 +167,18 @@ func (h *CaseHandler) meta(r *http.Request, wf CaseWorkflow) taskconfig.TaskMeta
 	return taskconfig.TaskMeta{}
 }
 
-// renderConfig returns t's render config when the view needs its title, that is when
-// meta has none. A config that does not resolve only costs the title, so it is logged.
-func (h *CaseHandler) renderConfig(r *http.Request, t store.TaskRecord, meta taskconfig.TaskMeta) json.RawMessage {
+// title names t's node: its task_config title, else its render config's, else its task
+// template's id. A render config that does not resolve only costs its title, so it is logged.
+func (h *CaseHandler) title(r *http.Request, t store.TaskRecord, meta taskconfig.TaskMeta) string {
 	if meta.Title != "" {
-		return nil
+		return meta.Title
 	}
 	rc, err := renderconfig.Load(r.Context(), h.artifacts, t)
 	if err != nil {
 		slog.WarnContext(r.Context(), "agency: render config unavailable for case view", "taskId", t.TaskID, "error", err)
-		return nil
+		return t.TaskTemplateID
 	}
-	return rc
+	return taskDisplayName(t.TaskTemplateID, rc)
 }
 
 // requireCatalogRole writes the error response and returns false unless the caller is a
@@ -214,8 +214,8 @@ func toSummary(c Case) CaseSummary {
 // toNode maps a task record to the node states ActionListView groups by. Mirrors
 // consignment.Service.buildNodeDTOsFromTaskRecords, copied rather than exported so the
 // agency can diverge (e.g. officer-facing state labels) without touching TNSW code.
-// The task_config's meta names the node when it has a title.
-func toNode(t store.TaskRecord, meta taskconfig.TaskMeta, renderConfig json.RawMessage) WorkflowNode {
+// name is the node's title (see CaseHandler.title).
+func toNode(t store.TaskRecord, meta taskconfig.TaskMeta, name string) WorkflowNode {
 	state := "IN_PROGRESS"
 	switch t.State {
 	case "COMPLETED", "FAILED", "QUEUED_EXTERNALLY":
@@ -226,7 +226,7 @@ func toNode(t store.TaskRecord, meta taskconfig.TaskMeta, renderConfig json.RawM
 		CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 		WorkflowNodeTemplate: WorkflowNodeTemplate{
-			Name:        taskDisplayName(meta.Title, t.TaskTemplateID, renderConfig),
+			Name:        name,
 			Description: meta.Description,
 			Type:        t.TaskType,
 		},
@@ -235,12 +235,8 @@ func toNode(t store.TaskRecord, meta taskconfig.TaskMeta, renderConfig json.RawM
 	}
 }
 
-// taskDisplayName returns the task_config title, else the render config's title, else
-// the template id.
-func taskDisplayName(configTitle, templateID string, renderConfig json.RawMessage) string {
-	if configTitle != "" {
-		return configTitle
-	}
+// taskDisplayName returns the title at the root of renderConfig, else the template id.
+func taskDisplayName(templateID string, renderConfig json.RawMessage) string {
 	if len(renderConfig) > 0 {
 		var rc struct {
 			Title string `json:"title"`
