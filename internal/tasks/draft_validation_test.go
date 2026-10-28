@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -136,8 +137,11 @@ func draftValidationFixture(t *testing.T) (*HTTPHandler, *memTaskStore, *resumed
 		step, err := steptemplate.Load(ctx, reg, id)
 		return step.OutputNamespace, err
 	}
-	// The form has no file fields, so no file is looked up.
-	fileOf := func(context.Context, string) (storage.File, error) { return storage.File{}, nil }
+	// The form has no file fields, so no file is looked up: one that is fails
+	// the submission.
+	fileOf := func(context.Context, string) (storage.File, error) {
+		return storage.File{}, errors.New("no file should be looked up")
+	}
 	require.NoError(t, payloadschema.Register(extReg, formOf, namespaceOf, fileOf))
 
 	db := &memTaskStore{record: store.TaskRecord{
