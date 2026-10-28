@@ -140,8 +140,6 @@ const en = {
       goBack: 'Go Back',
       refresh: 'Refresh',
       taskId: 'Task ID',
-      continueTo: 'Continue to {{name}}',
-      continueToNext: 'Continue to next task',
       backToConsignment: 'Back to consignment',
       backToCase: 'Back to case',
       draftSaved: 'Draft saved',
