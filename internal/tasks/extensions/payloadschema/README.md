@@ -84,6 +84,40 @@ on the data or a row's position (`if`/`then`/`else`, `oneOf`, `anyOf`, `not`,
 form with read-only values, a `readOnly` or `default` beside a draft-07 `$ref`, which the
 library drops, makes the form misconfigured.
 
+### File fields (`x-file`)
+
+A file field is one the trader app's file control renders: one file
+(`{"type": "string", "format": "file"}`) or a list of them (`{"type": "array", "items":
+{"type": "string", "format": "file"}}`). Its `x-file` rules are checked against the files
+storage holds, wherever the schema applies to the field, in list rows and conditional
+parts too:
+
+```json
+"supporting_documents": {
+  "type": "array",
+  "items": { "type": "string", "format": "file" },
+  "x-file": { "accept": ".pdf,image/*", "maxFiles": 5 }
+}
+```
+
+- **Each file is one storage holds.** A file whose upload was never made, or an empty
+  value, which names no file, fails with `file not found`. The trader app drops a field
+  that holds no file rather than sending `""`.
+- **`accept`** is matched as the file control matches it: `*` and `*/*` take any file,
+  `<type>/*` a type that starts with `<type>/`, `.<ext>` the file's extension in any
+  case, and any other entry the type exactly. The extension and type are the ones
+  storage holds the file under; storage matched the extension to the type on upload.
+- **`maxFiles`** is the most files a list may hold.
+
+Only the rules `x-file` writes are checked. A rule it leaves out, and a file field
+without `x-file`, is held to the deployment's upload limits only
+UI schema `options` apply in the browser only. A rule of the wrong type means what it
+means to the file control: an `accept` that isn't text takes no file, and a `maxFiles`
+given as text is the number JavaScript reads it as, or no limit.
+
+Storage is asked once per file. On an agency, which holds the owning service's
+references, the owning service's download route describes each file.
+
 ## Outcome
 
 - **Matches:** the step goes ahead.
@@ -96,6 +130,8 @@ library drops, makes the form misconfigured.
   without a `schema`, a schema that doesn't compile, a `readOnly` where the check doesn't
   follow it, or read-only values on a step without an `output_namespace`): `500`. The
   extension fails closed; it never lets a submission through unchecked.
+- **A file can't be looked up** (storage, or on an agency the owning service, fails):
+  `500`, for the same reason.
 
 ## Drafts
 
@@ -109,3 +145,10 @@ command is validated in full.
 
 - Fields the form doesn't declare
 - External reviewer callbacks, and schemas built at render time
+- `x-file`'s `maxSize`: the browser checks it, and the server holds every file to the
+  upload limit only. An agency can't see the size of a file the owning service holds.
+- What a file holds: its type and extension are the ones it was uploaded with, and its
+  content is not read.
+- On an agency, any `404` from the owning service's download route counts as a file not
+  found, so a wrong `storage.proxy` download path fails submissions with `400`, not
+  `500`.
