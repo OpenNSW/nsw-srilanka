@@ -52,7 +52,7 @@ func listUI(addable, removable bool) string {
 // A stored value of "" stands for no stored data at all.
 func readOnlyViolationsOf(t *testing.T, uiSchema, stored, submitted string) []Violation {
 	t.Helper()
-	compiled, err := compile([]byte(compareForm), nil)
+	compiled, err := compileForTest([]byte(compareForm))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestReadOnlyViolations_RowDefaults(t *testing.T) {
 		"no": {"type": "string", "readOnly": true},
 		"status": {"type": "string", "readOnly": true, "default": "OPEN"}
 	}}}}}`
-	compiled, err := compile([]byte(form), nil)
+	compiled, err := compileForTest([]byte(form))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestReadOnlyViolations_RowDefaultsInAnyOrder(t *testing.T) {
 		"s1": {"type": "string", "readOnly": true, "default": "D1"},
 		"s2": {"type": "string", "readOnly": true, "default": "D2"}
 	}}}}}`
-	compiled, err := compile([]byte(form), nil)
+	compiled, err := compileForTest([]byte(form))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestReadOnlyViolations_RowDefaultsInAnyOrder(t *testing.T) {
 }
 
 func TestReadOnlyViolations_NoReadOnlyValues(t *testing.T) {
-	compiled, err := compile([]byte(`{"properties": {"a": {"type": "string"}}}`), nil)
+	compiled, err := compileForTest([]byte(`{"properties": {"a": {"type": "string"}}}`))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}

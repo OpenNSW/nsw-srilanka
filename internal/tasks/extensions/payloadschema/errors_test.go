@@ -13,7 +13,7 @@ import (
 // violations.
 func violationsOf(t *testing.T, schema, payload string) []Violation {
 	t.Helper()
-	compiled, err := compile([]byte(schema), nil)
+	compiled, err := compileForTest([]byte(schema))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}

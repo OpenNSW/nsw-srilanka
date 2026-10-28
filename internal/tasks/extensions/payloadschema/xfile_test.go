@@ -11,6 +11,7 @@ import (
 
 	corestorage "github.com/OpenNSW/core/storage"
 	"github.com/OpenNSW/core/taskflow/store"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/storage"
 )
@@ -19,6 +20,12 @@ import (
 // test that looks a file up when it shouldn't fails with it.
 func noFiles(context.Context, string) (storage.File, error) {
 	return storage.File{}, errors.New("no file should be looked up")
+}
+
+// compileForTest compiles schema for a test of rules other than x-file's: a
+// file it looks up fails the lookup.
+func compileForTest(schema []byte) (*jsonschema.Schema, error) {
+	return compile(schema, newStoredFiles(context.Background(), noFiles))
 }
 
 const xlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

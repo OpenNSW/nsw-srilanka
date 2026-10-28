@@ -9,7 +9,7 @@ import (
 // readOnlyFormOf builds the readOnlyForm of schema with no UI schema.
 func readOnlyFormOf(t *testing.T, schema string) *readOnlyForm {
 	t.Helper()
-	compiled, err := compile([]byte(schema), nil)
+	compiled, err := compileForTest([]byte(schema))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestReadOnlyForm_RefusesReadOnlyItDoesNotFollow(t *testing.T) {
 	}
 	for name, schema := range tests {
 		t.Run(name, func(t *testing.T) {
-			compiled, err := compile([]byte(schema), nil)
+			compiled, err := compileForTest([]byte(schema))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
@@ -213,7 +213,7 @@ func TestReadOnlyForm_AcceptsReadOnlyOutsideRefusedParts(t *testing.T) {
 	}
 	for name, schema := range tests {
 		t.Run(name, func(t *testing.T) {
-			compiled, err := compile([]byte(schema), nil)
+			compiled, err := compileForTest([]byte(schema))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
@@ -242,7 +242,7 @@ func TestReadOnlyForm_SiblingsOfRefIn2020(t *testing.T) {
 
 func TestReadOnlyForm_RefusesAUISchemaThatIsNotJSON(t *testing.T) {
 	const schema = `{"properties": {"a": {"readOnly": true}}}`
-	compiled, err := compile([]byte(schema), nil)
+	compiled, err := compileForTest([]byte(schema))
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
