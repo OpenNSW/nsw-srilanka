@@ -100,9 +100,9 @@ parts too:
 }
 ```
 
-- **Each file is one storage holds.** A file whose upload was never made, or an empty
-  value, which names no file, fails with `file not found`. The trader app drops a field
-  that holds no file rather than sending `""`.
+- **Each file is one storage holds.** A file whose upload was never made fails with
+  `file not found`. An empty value names no file and fails with `empty value instead of a
+  file`; the trader app drops a field that holds no file rather than sending `""`.
 - **`accept`** is matched as the file control matches it: `*` and `*/*` take any file,
   `<type>/*` a type that starts with `<type>/`, `.<ext>` the file's extension in any
   case, and any other entry the type exactly. The extension and type are the ones

@@ -100,7 +100,7 @@ func TestExtension_Execute_XFile(t *testing.T) {
 		{name: "a file never uploaded", payload: `{"invoice": "never-uploaded"}`,
 			want: []Violation{{"/invoice", "file not found"}}},
 		{name: "an empty value names no file", payload: `{"invoice": "", "photos": [""]}`,
-			want: []Violation{{"/invoice", "file not found"}, {"/photos/0", "file not found"}}},
+			want: []Violation{{"/invoice", "empty value instead of a file"}, {"/photos/0", "empty value instead of a file"}}},
 		{name: "a field without x-file is not checked", payload: `{"unlimited": "never-uploaded"}`},
 		{name: "a file in a list's row", payload: `{"rows": [{"document": "invoice.pdf"}, {"document": "photo.png"}]}`,
 			want: []Violation{{"/rows/1/document", notAcceptedPDF}}},

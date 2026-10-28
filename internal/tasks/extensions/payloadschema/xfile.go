@@ -177,21 +177,20 @@ func (x *xFile) Validate(ctx *jsonschema.ValidatorContext, v any) {
 }
 
 // check returns how the file stored under value breaks the field's rules, or
-// nil. An empty value names no file, so it is not found: the file control
-// drops a field it holds no file for rather than sending one. Swapping file
-// references for stored values passes an empty value through, so this is
-// where it is refused.
+// nil. An empty value names no file, so it is refused, apart from a file that
+// isn't stored: the file control drops a field it holds no file for rather
+// than sending one. Swapping file references for stored values passes an
+// empty value through, so this is where it is refused.
 func (x *xFile) check(value string) *xFileKind {
-	notFound := &xFileKind{keyword: "stored", message: "file not found"}
 	if value == "" {
-		return notFound
+		return &xFileKind{keyword: "empty", message: "empty value instead of a file"}
 	}
 	file, ok := x.files.describe(value)
 	switch {
 	case !ok:
 		return nil
 	case file == nil:
-		return notFound
+		return &xFileKind{keyword: "stored", message: "file not found"}
 	case x.acceptsNone:
 		return &xFileKind{keyword: "accept", message: "file type not accepted (accept is not text)"}
 	case x.accept != nil && !accepts(*x.accept, *file):
