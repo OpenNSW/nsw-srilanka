@@ -64,6 +64,8 @@ type Stack struct {
 	// internal upload route. Nil in proxy mode, where nothing uploads to this
 	// deployment.
 	MachineUploads Uploader
+	// Files describes the files Service holds.
+	Files Files
 }
 
 // Option adjusts the stack New builds.
@@ -96,6 +98,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 			Service: svc,
 			Handler: NewProxyHandler(svc),
 			Uploads: limitTypes(svc, anyCaller(cfg.Proxy.AllowedUploadTypes)),
+			Files:   serviceFiles{svc: svc},
 		}, nil
 	}
 
@@ -122,6 +125,7 @@ func New(ctx context.Context, cfg Config, caller ServiceCaller, opts ...Option) 
 		Handler:        corestorage.NewHTTPHandler(svc),
 		Uploads:        svc,
 		MachineUploads: newMachineUploads(driver, cfg, o.internalUploadTypes),
+		Files:          serviceFiles{svc: svc},
 	}
 	if local, ok := driver.(*drivers.LocalFSDriver); ok {
 		stack.LocalContent = corestorage.NewLocalContentHandler(local)
