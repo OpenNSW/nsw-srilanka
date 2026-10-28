@@ -109,8 +109,9 @@ parts too:
   storage holds the file under; storage matched the extension to the type on upload.
 - **`maxFiles`** is the most files a list may hold.
 
-Only the rules `x-file` writes are checked. A rule it leaves out, and a file field
-without `x-file`, is held to the deployment's upload limits only
+Only the rules `x-file` writes are checked, other than `maxSize` (see below). A rule it
+leaves out, and a file field without `x-file`, is held to the deployment's upload limits only
+(`storage.allowedUploadTypes`, `storage.maxUploadBytes`); the file control's defaults and
 UI schema `options` apply in the browser only. A rule of the wrong type means what it
 means to the file control: an `accept` that isn't text takes no file, and a `maxFiles`
 given as text is the number JavaScript reads it as, or no limit.
@@ -145,8 +146,9 @@ command is validated in full.
 
 - Fields the form doesn't declare
 - External reviewer callbacks, and schemas built at render time
-- `x-file`'s `maxSize`: the browser checks it, and the server holds every file to the
-  upload limit only. An agency can't see the size of a file the owning service holds.
+- `x-file`'s `maxSize`: it belongs to the upload, so it is to be checked when the file is
+  uploaded to storage, not on submit. Until then the browser checks it, and the server
+  holds every file to the upload limit only.
 - What a file holds: its type and extension are the ones it was uploaded with, and its
   content is not read.
 - On an agency, any `404` from the owning service's download route counts as a file not
