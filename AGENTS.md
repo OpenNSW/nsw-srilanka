@@ -29,6 +29,10 @@ Use Go 1.27+, Docker with BuildKit and Compose v2, Node.js 22.18+, and pnpm 11.1
 
 Follow `.editorconfig`: tabs for Go and Makefiles; two spaces for TypeScript, JSON, and YAML. Use `gofmt`, goimports, and `.golangci.yml`. Frontend Prettier uses single quotes, no semicolons, and trailing commas. Use PascalCase React components and `useX` hook names. Follow existing package boundaries and ESLint import rules. Do not add license headers.
 
+## API Contracts
+
+The OpenAPI specs in `api/*.openapi.yaml` are the HTTP API's contract; nothing generates them, so they drift unless edited by hand. Change the spec in the same PR as any change to a path, parameter, request or response field, or status code. A field can appear in several schemas and specs (e.g. a summary and a detail DTO, or the consignment and admin APIs), so grep `api/` for its name and update every one. Note a removed or renamed field in the PR's Deployment Notes and mark it breaking with `!`.
+
 ## Testing Guidelines
 
 Place Go tests beside implementation as `*_test.go`, using `TestXxx`, standard `testing`, Testify, and SQL mocks where appropriate. Run `make test`; no numeric coverage threshold is configured. Cover changed behavior and edge cases. Run replay tests serially with `make deps` followed by `make test-e2e`; this stops the API container. Place frontend tests beside the code as `*.test.ts(x)`, using Vitest (importing from `vitest`, no globals) and Testing Library; run them with `pnpm test` from `portals/`.
