@@ -796,6 +796,39 @@ func TestLoad_NotificationProvidersOptional(t *testing.T) {
 	}
 }
 
+// The SMTP provider sends email in place of PingMailer, so a config may set
+// one of them but not both.
+func TestLoad_NotificationSMTP(t *testing.T) {
+	smtp := `
+notification:
+  providers:
+    smtp:
+      host: smtp.example.com
+      username: no-reply@example.com
+      password: smtp-password
+      sender: no-reply@example.com
+`
+	cfg, err := loadYAML(t, configYAML(t, smtp, "notification.providers.email"))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if got := cfg.Notification.Providers.SMTP; got == nil || got.Host != "smtp.example.com" || got.Password != "smtp-password" {
+		t.Fatalf("notification.providers.smtp = %+v, want it decoded", got)
+	}
+	built, err := cfg.Notification.Build()
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if len(built) != 2 {
+		t.Errorf("Build() built %d providers, want 2 (smtp and sms)", len(built))
+	}
+
+	_, err = loadYAML(t, configYAML(t, smtp))
+	if err == nil || !containsString(err.Error(), "email and smtp both send email") {
+		t.Fatalf("expected email and smtp together to fail, got: %v", err)
+	}
+}
+
 func TestLoad_StorageS3(t *testing.T) {
 	cfg, err := loadYAML(t, configYAML(t, `
 storage:

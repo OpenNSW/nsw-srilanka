@@ -165,16 +165,15 @@ refid:
 # Optional, and off for local development: uncomment to send email and SMS.
 # notification:
 #   providers:
-#     email:
-#       baseURL: https://email.svc.local
-#       auth:
-#         type: oauth2
-#         oauth2:
-#           tokenURL: https://idp.example.com/oauth2/token
-#           clientID: replace-with-pingmailer-client-id
-#           clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
-#       smtpHost: mail.example.com
-#       smtpPort: 587
+#     # Email straight to an SMTP server. To send through PingMailer's API
+#     # instead, set an email block in its place (the schema is in
+#     # github.com/OpenNSW/core/notification); email and smtp can't both be set.
+#     smtp:
+#       host: smtp.example.com
+#       # port: 587 # optional: 587 for starttls, 465 for tls, 25 for none
+#       # tlsMode: starttls # starttls (default), tls or none
+#       username: no-reply@example.com
+#       password: "{{env:NOTIFICATION_SMTP_PASSWORD}}"
 #       sender: no-reply@example.com
 #     sms:
 #       baseURL: https://smsservice.lk

@@ -149,7 +149,7 @@ kubectl create secret generic nsw-secrets \
   --from-literal=m2m-efc-secret=... \
   --from-literal=m2m-sltb-secret=... \
   --from-literal=m2m-asycuda-secret=... \
-  --from-literal=notification-email-client-secret=... \
+  --from-literal=notification-smtp-password=... \
   --from-literal=notification-sms-password=... \
   --from-literal=storage-token-keyset=...
 ```
