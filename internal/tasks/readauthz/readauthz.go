@@ -55,7 +55,7 @@ func ClaimKey(role string) string { return ClaimPrefix + role }
 
 // Policy is this application's slice of a task template: which roles may read the
 // task. Core decodes the same template as types.TaskTemplate, which ignores this
-// field, so the policy needs no library change.
+// field.
 type Policy struct {
 	Read *ReadPolicy `json:"read"`
 }
