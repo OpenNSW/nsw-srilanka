@@ -1,15 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, IconButton, Spinner, Text, Tooltip } from '@radix-ui/themes'
-import { ArrowLeftIcon, ArrowRightIcon, ReloadIcon } from '@radix-ui/react-icons'
+import { ArrowLeftIcon, ReloadIcon } from '@radix-ui/react-icons'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { claimTask, getZoneView, releaseTask, saveTaskStepDraft, submitTaskStep } from './service'
 import { ClaimBanner } from './ClaimBanner'
 import { HttpError } from '@/services/http'
 import { getConsignment } from '@/features/consignment/service.ts'
-import type { Consignment, WorkflowNode } from '@/features/consignment/types'
-import { isTraderVisibleNodeType } from '@/features/consignment/workflowNodes'
+import type { Consignment } from '@/features/consignment/types'
 import { TraderZoneLayout } from '@/features/zone/components/TraderZoneLayout'
 import type { ZoneView } from '@/features/zone/types'
 import { zoneWidthClass } from '@/features/zone/width'
@@ -20,19 +19,6 @@ import { ROUTES } from '@/constants'
 import { LoadError } from '@/components/common/LoadError.tsx'
 
 const POST_SUBMIT_REFETCH_DELAY_MS = 1500
-const NEXT_TASK_MAX_ATTEMPTS = 5
-const NEXT_TASK_RETRY_MS = 1000
-const ACTIONABLE_NODE_STATES = new Set(['READY', 'IN_PROGRESS'])
-
-function nextActionableTaskId(nodes: WorkflowNode[], currentTaskId: string): string | undefined {
-  const actionable = nodes.filter((node) => {
-    if (node.id === currentTaskId) return false
-    if (!isTraderVisibleNodeType(node.workflowNodeTemplate.type)) return false
-    return ACTIONABLE_NODE_STATES.has(node.state)
-  })
-  const successor = actionable.find((node) => node.depends_on?.includes(currentTaskId))
-  return (successor ?? actionable[0])?.id
-}
 
 type ClaimOp = 'claim' | 'release'
 
@@ -62,10 +48,6 @@ export function TaskDetailScreen() {
     }
     void navigate(-1)
   }
-  const goToNextTask = (nextId: string) => {
-    if (!consignmentId) return
-    void navigate(ROUTES.TASK_FORM(consignmentId, nextId))
-  }
   const { t } = useTranslation()
   const [zoneView, setZoneView] = useState<ZoneView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -81,12 +63,6 @@ export function TaskDetailScreen() {
   // returns to the same form (verify, save) would otherwise keep displaying the
   // values it mounted with, from before the submission was saved.
   const [formEpoch, setFormEpoch] = useState(0)
-  // The trader's next task once this one is done: undefined while it's still
-  // being looked up, null once the lookup found none.
-  const [nextTaskId, setNextTaskId] = useState<string | null | undefined>(undefined)
-  // Set once a step of this task is submitted here. The task that follows
-  // starts a moment after a submit, so only then is the lookup retried.
-  const [submittedHere, setSubmittedHere] = useState(false)
   // The consignment, for the breadcrumb and the task names.
   const [consignment, setConsignment] = useState<Consignment | null>(null)
   const [claimBusy, setClaimBusy] = useState(false)
@@ -95,8 +71,6 @@ export function TaskDetailScreen() {
   if (taskId !== prevTaskId) {
     setPrevTaskId(taskId)
     setHasSubmitted(false)
-    setSubmittedHere(false)
-    setNextTaskId(undefined)
     setClaimError(null)
   }
 
@@ -158,46 +132,22 @@ export function TaskDetailScreen() {
     }
   }, [taskId, t, retryCount])
 
-  // The zone view lags the URL until the new task loads.
-  const taskState = zoneView?.task_id === taskId ? zoneView?.state : undefined
-
-  // Loads the consignment, and once the task is done, finds the next task.
-  // The only writer of both: a change of consignment, task or state cancels
-  // the run, so a late response never overwrites a newer one.
+  // Loads the consignment. A change of consignment or task cancels the run,
+  // so a late response never overwrites a newer one.
   useEffect(() => {
     if (!consignmentId || !taskId) return
-    const findNext = taskState === 'COMPLETED'
-    const maxAttempts = findNext && submittedHere ? NEXT_TASK_MAX_ATTEMPTS : 1
-
     let cancelled = false
-    let attempt = 0
-    let timeout: ReturnType<typeof setTimeout> | undefined
-
-    const load = async () => {
-      attempt += 1
-      let id: string | undefined
-      try {
-        const loaded = await getConsignment(consignmentId)
-        if (cancelled) return
-        if (loaded) setConsignment(loaded)
-        if (!findNext) return
-        id = loaded ? nextActionableTaskId(loaded.workflowNodes ?? [], taskId) : undefined
-      } catch (err) {
-        if (cancelled) return
-        console.error('TaskDetailScreen: failed to load consignment:', err)
-        if (!findNext) return
-      }
-      if (id) setNextTaskId(id)
-      else if (attempt < maxAttempts) timeout = setTimeout(() => void load(), NEXT_TASK_RETRY_MS)
-      else setNextTaskId(null)
-    }
-
-    void load()
+    void getConsignment(consignmentId)
+      .then((loaded) => {
+        if (!cancelled && loaded) setConsignment(loaded)
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('TaskDetailScreen: failed to load consignment:', err)
+      })
     return () => {
       cancelled = true
-      if (timeout) clearTimeout(timeout)
     }
-  }, [consignmentId, taskId, taskState, submittedHere])
+  }, [consignmentId, taskId])
 
   if (loading) {
     return (
@@ -252,11 +202,10 @@ export function TaskDetailScreen() {
   const width = zoneWidthClass(zoneView)
   // Only the consignment in the URL: the screen stays mounted across task URLs.
   const current = consignment?.id === consignmentId ? consignment : null
-  const nodeName = (id: string | null | undefined) =>
-    current?.workflowNodes?.find((node) => node.id === id)?.workflowNodeTemplate.name
   // The task's configured name, or its type until the consignment has loaded.
-  const title = nodeName(taskId) || humanizeStatus(zoneView.task_type)
-  const nextTaskName = nodeName(nextTaskId)
+  const title =
+    current?.workflowNodes?.find((node) => node.id === taskId)?.workflowNodeTemplate.name ||
+    humanizeStatus(zoneView.task_type)
   const breadcrumb: BreadcrumbItem[] = [
     { label: t(isAgencyMode ? 'nav.cases' : 'nav.consignments'), to: ROUTES.CONSIGNMENTS },
   ]
@@ -341,7 +290,6 @@ export function TaskDetailScreen() {
                   // Latch the action off during the transition window so the step
                   // can't be double-submitted while the backend advances.
                   setHasSubmitted(true)
-                  setSubmittedHere(true)
                   window.scrollTo({ top: 0, behavior: 'smooth' })
 
                   await new Promise((resolve) => setTimeout(resolve, POST_SUBMIT_REFETCH_DELAY_MS))
@@ -378,22 +326,9 @@ export function TaskDetailScreen() {
       />
       {zoneView.state === 'COMPLETED' && (
         <div className={`${width} mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex justify-end`}>
-          {nextTaskId === undefined ? (
-            // Held until the lookup settles, so "Back" can't be clicked just
-            // before "Continue" would have appeared.
-            <Button size="3" loading disabled>
-              {t('tasks.continueToNext')}
-            </Button>
-          ) : nextTaskId ? (
-            <Button size="3" onClick={() => goToNextTask(nextTaskId)}>
-              {nextTaskName ? t('tasks.continueTo', { name: nextTaskName }) : t('tasks.continueToNext')}
-              <ArrowRightIcon />
-            </Button>
-          ) : (
-            <Button size="3" variant="soft" onClick={goToTasks}>
-              {t(isAgencyMode ? 'tasks.backToCase' : 'tasks.backToConsignment')}
-            </Button>
-          )}
+          <Button size="3" variant="soft" onClick={goToTasks}>
+            {t(isAgencyMode ? 'tasks.backToCase' : 'tasks.backToConsignment')}
+          </Button>
         </div>
       )}
     </div>

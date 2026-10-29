@@ -6,6 +6,107 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-29
+
+This release moves the catalog and the payment methods into `config.yaml`, and makes every task, flow and agency workflow resolve its templates through a manifest version, so work started before the upgrade must be finished or cancelled first. Five migrations run, storage needs a new required setting, and the image version and the artifacts pin must change in the same deployment. It also adds claiming tasks in the agency portals, Sinhala and Tamil in the Trader Portal, a notice when Customs cancels a declaration, and the chosen CHA's details in the agency flows.
+
+### Upgrade notes
+
+#### Finish or cancel open work first ([#871](https://github.com/OpenNSW/nsw-srilanka/pull/871), [#872](https://github.com/OpenNSW/nsw-srilanka/pull/872), [#873](https://github.com/OpenNSW/nsw-srilanka/pull/873), [#946](https://github.com/OpenNSW/nsw-srilanka/pull/946))
+
+- Let open consignments, cases and tasks finish before you upgrade, or cancel them. This is not backwards compatible, and on dev and staging it means all of them. Tasks, case flows and agency workflows created before the upgrade have no manifest version, and tasks have no recorded task template, so after the upgrade:
+  - a task's next step or activation fails with `NoManifestVersion`, and the task no longer renders;
+  - a case flow can't be retried, and the consignment view shows its template ID in place of the flow's name;
+  - a retried agency inject fails, and the case view falls back to each task's own render title.
+
+#### Change the image version and the artifacts pin together ([#938](https://github.com/OpenNSW/nsw-srilanka/pull/938), [#819](https://github.com/OpenNSW/nsw-srilanka/pull/819))
+
+- Move the image or chart version and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. The pinned trade flow requires the chosen CHA's details from the CHA step, which only this build outputs: on 0.10.0 every new consignment would park at Persist Selected CHA, before HS codes are picked. The pinned artifacts also hold the `customs-cusdec-cancelled` flow, which this build opens when Customs cancels a declaration.
+
+#### Migrations ([#649](https://github.com/OpenNSW/nsw-srilanka/pull/649), [#871](https://github.com/OpenNSW/nsw-srilanka/pull/871), [#872](https://github.com/OpenNSW/nsw-srilanka/pull/872), [#873](https://github.com/OpenNSW/nsw-srilanka/pull/873), [#946](https://github.com/OpenNSW/nsw-srilanka/pull/946))
+
+Five migrations run before the API starts; the Helm hook and Docker Compose run them. Use the 0.11.0 `tnsw-migrate` image.
+
+- `000028_task_records_claims` adds `claimed_by` and `claimed_at` to `task_records_v2`.
+- `000029_task_manifest_version` adds `task_records_v2.manifest_version`.
+- `000030_case_flow_manifest_version` adds `case_flows.manifest_version`.
+- `000031_agency_workflow_manifest_version` adds `agency_workflow.manifest_version`.
+- `000032_task_records_task_template_id` adds `task_records_v2.task_template_id` and drops `task_records_v2.render_config`, with no backfill. Rolling back rebuilds the table, and `render_config` comes back empty.
+
+Rolling back the first four drops the columns they add.
+
+#### Move the catalog into `config.yaml` ([#930](https://github.com/OpenNSW/nsw-srilanka/pull/930))
+
+- Add a top-level `catalog` section to `config.yaml` (Helm: `backend.config.catalog`), for TNSW and for every agency, holding the `roles` and `clients` of your `catalog.json`. Startup fails without it. Copy the shape from [`configs/config.example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.11.0/configs/config.example.yaml) or [`values-example.yaml`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.11.0/deployments/helm/values-example.yaml).
+- Remove `server.catalogConfigPath`, which is no longer read, and drop `catalog.json` from the ConfigMap or volume mounted at `/app/configs`.
+
+#### Move the payment methods into `config.yaml` ([#936](https://github.com/OpenNSW/nsw-srilanka/pull/936))
+
+- **TNSW:** move the contents of `payment_methods.json` into a top-level `payment:` section of `config.yaml` (Helm: `backend.config.payment`), keeping the same `methods` list. Remove `server.paymentMethodsConfigPath`, which is no longer read, and drop the file mount. The GovPay+ private key mount at `/certs/govpay` is unchanged.
+- Quote the GovPay+ ids, as in `subinst_id: "004"`. Unquoted, YAML reads `004` as the number 4, and the gateway refuses the mapping at startup.
+- **Agencies:** remove `paymentMethodsConfigPath` and the `payment_methods.json` ConfigMap or mount. They need no `payment` section.
+- The pinned artifacts use the same seven fees as 0.10.0, so the `payees` you already have are enough.
+
+#### Set `storage.uploadTypeExtensions` ([#931](https://github.com/OpenNSW/nsw-srilanka/pull/931))
+
+- A deployment with its own storage (`storage.type` of `local` or `s3`, which is TNSW) must set `storage.uploadTypeExtensions` (Helm: `backend.config.storage.uploadTypeExtensions`), or it fails to start. It lists the file name extensions each type may have, and needs an entry for every type in `allowedUploadTypes` and `allowedInternalUploadTypes`. Copy it from the example config or `values-example.yaml`.
+- Agencies in proxy mode need nothing. A client that uploads a file whose name ends in an extension its type doesn't have now gets a 400. The Trader Portal and the agency portals take the type from the name, so they don't send such a pair.
+
+#### Add `contact_email` to the company records ([#937](https://github.com/OpenNSW/nsw-srilanka/pull/937))
+
+- The application forms in the pinned artifacts fill in the trader's email from `company.data.contact_email`, and leave the field empty until a company has one ([one-trade-artifacts#277](https://github.com/OpenNSW/one-trade-artifacts/pull/277)). Add the key to each company in your `configs/companies.json`, then re-apply it with `otc company apply -f configs/companies.json`. `data` is replaced as a whole, so apply the complete record. `make setup` doesn't overwrite an existing `configs/companies.json`.
+- The same forms fill in the exporter's name, address and TIN from the company's `name`, `data.address` and `data.tin_no`, and the CusDec's declarant code from the chosen CHA's TIN.
+
+#### Login page and footer (optional) ([#909](https://github.com/OpenNSW/nsw-srilanka/pull/909))
+
+- To get the new login layout, split the login copy in `frontend.branding`: put the lead sentence in `tagline` and the rest in `description`. Remove `copyrightNotice` to drop the centered footer notice. Without a `tagline`, the layout is unchanged.
+- The color scheme picker in the footer is now off by default. To keep it, set `frontend.config.SHOW_COLOR_SCHEME_SWITCHER: "true"`.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`83033e3`](https://github.com/OpenNSW/one-trade-artifacts/commit/83033e312f70dbe45f1d7c93c8b7ff8c90c773b6) (28 October 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
+  - [one-trade-artifacts#279](https://github.com/OpenNSW/one-trade-artifacts/pull/279): the chosen CHA seeded into the agency flows ([#938](https://github.com/OpenNSW/nsw-srilanka/pull/938));
+  - [one-trade-artifacts#211](https://github.com/OpenNSW/one-trade-artifacts/pull/211): the `customs-cusdec-cancelled` flow ([#819](https://github.com/OpenNSW/nsw-srilanka/pull/819)). Without it, a cancellation can't open its notice and is answered with a 500, and SLC Edge retries it until its retries run out.
+- It also removes the NPQS certificate's hand signature step ([one-trade-artifacts#272](https://github.com/OpenNSW/one-trade-artifacts/pull/272)): the officer no longer prints, signs and uploads the certificate on the ePhyto path.
+
+#### Local Docker Compose ([#930](https://github.com/OpenNSW/nsw-srilanka/pull/930), [#936](https://github.com/OpenNSW/nsw-srilanka/pull/936), [#931](https://github.com/OpenNSW/nsw-srilanka/pull/931), [#871](https://github.com/OpenNSW/nsw-srilanka/pull/871))
+
+- `make setup` doesn't overwrite an existing `configs/config.yaml` or `configs/config.docker.yaml`, so copy the `catalog` and `payment` sections and `storage.uploadTypeExtensions` into them from the examples. Then delete `configs/catalog.json` and `configs/payment_methods.json`, which are no longer read.
+- Clear your local consignments, cases and tasks, as above: recreating the database volume does it.
+
+### Added
+
+- **Claiming tasks in the agency portals.** An officer can claim a task so others see who is working on it, release it, or take over another officer's claim, for example when the holder is away. A claim is a hint, not a lock: submitting a step never checks it. Claims are on in agency mode and off in TNSW, where the claim routes answer 404. Claim and release use `nsw:task:write`, which officers already hold, so the IdP and the portal config don't change. Agency portals need the 0.11.0 `tnsw-web` image for the claim buttons and banner. ([#649](https://github.com/OpenNSW/nsw-srilanka/pull/649))
+- **Manifest versions.** The artifact manifests are loaded as a set, so a source can publish `manifest_v1.json`, `manifest_v2.json` and so on. A flow, case flow or agency inject starts on the version that is current then and records it on its row, and each task, step, render and notification in it resolves its templates through that version. A source with only `manifest.json` loads as version 1, so a deployment without versioned manifests sees no change. The optional `artifacts.manifestVersion` pins the version new flows start on, for a rollback; the default 0 takes the highest published. ([#660](https://github.com/OpenNSW/nsw-srilanka/pull/660), [#871](https://github.com/OpenNSW/nsw-srilanka/pull/871), [#872](https://github.com/OpenNSW/nsw-srilanka/pull/872), [#873](https://github.com/OpenNSW/nsw-srilanka/pull/873))
+- **Sinhala and Tamil in the Trader Portal.** The language switcher offers both, and the portal's own text and the task action buttons are translated. The text of forms and workflows comes from the artifacts. ([#928](https://github.com/OpenNSW/nsw-srilanka/pull/928))
+- **A notice when Customs cancels a declaration.** When SLC Edge sends `CUSDEC_CANCELLED`, TNSW opens a notice on the consignment telling the trader the declaration is cancelled and can no longer be proceeded with, which the trader acknowledges. Nothing else is cancelled. A redelivery opens nothing twice. ([#819](https://github.com/OpenNSW/nsw-srilanka/pull/819))
+- **The chosen CHA's details in the agency flows.** The CHA the trader picks reaches every agency flow as `_iter.input.cha`. The first use is the CusDec's declarant code. ([#938](https://github.com/OpenNSW/nsw-srilanka/pull/938))
+- **Extra token claims.** `authn.extraUserClaims` and `authn.extraClientClaims` list further claims that reach handlers on the principal, for access rules that differ per deployment. Both are optional. Add the claim to the access token's attributes in the IdP as well, because the config only reads it. Prefer `optional`: a `required` claim rejects with a 401 every token that lacks it. Startup fails if a listed name is blank or reserved. ([#709](https://github.com/OpenNSW/nsw-srilanka/pull/709))
+- **Force-park for admins.** An admin can force-park a waiting `TASK` node, which closes its task, or a step inside a task workflow, which leaves the task open, and then resolve it with `RETRY`, `COMPLETE` or `ABORT`. It needs `nsw:consignment:adminwrite`, which the admin resolve routes already use. When a step parks for admin intervention, its task row is held (`ON_HOLD`) and the trader and agency portals show a banner. ([#920](https://github.com/OpenNSW/nsw-srilanka/pull/920), [#921](https://github.com/OpenNSW/nsw-srilanka/pull/921))
+
+### Changed
+
+- A task's render config is resolved from the artifacts, in the task's manifest version, and is no longer copied onto its row. ([#946](https://github.com/OpenNSW/nsw-srilanka/pull/946))
+- The file name of an upload must end in an extension its type has, or the upload gets a 400; a name with none is given the type's first. The stored file keeps the extension, and a download is named by it. ([#931](https://github.com/OpenNSW/nsw-srilanka/pull/931))
+- The login page leads with the tagline, and the footer is a single "Powered by" line that shows the version only when the build sets one. See the upgrade notes. ([#909](https://github.com/OpenNSW/nsw-srilanka/pull/909))
+
+### Fixed
+
+- Exported spans carry the correlation id the API returns as `X-Trace-ID`, so a search for it finds the span as well as the log lines. A caller's `traceparent` is linked, not adopted. A leftover top-level `metrics` section in `config.yaml` is ignored and leaves export off: rename it to `otel`. ([#866](https://github.com/OpenNSW/nsw-srilanka/pull/866))
+- The Trader Portal takes every color from Radix Themes. ([#950](https://github.com/OpenNSW/nsw-srilanka/pull/950))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines written at `info`, with no separate store and no delivery guarantee. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+
 ## [0.10.0] - 2026-10-26
 
 This release changes how files are stored and opened. Every deployment that stores files must set `storage.inlineTypes`, machine clients get their own upload route and scope, and each agency's storage settings gain two required keys. The upgrade has a set order: the IdP first, then TNSW, then each agency, one at a time. It also sends ePhyto certificates from LK to the importing country, with replacement certificates and a date of inspection; raises Customs dispatch notes for the containers on the latest declaration, ends the branch of a cancelled note and fills in the boat note from Customs' data; and keeps a payment reference payable for a year. The image version and the artifacts pin must change in the same deployment.
@@ -873,7 +974,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.7.0...v0.8.0

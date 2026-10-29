@@ -263,6 +263,5 @@ because callers and artifacts speak trade. Internally it is the case id.
 
 ## Known simplifications
 
-- **No "next task" button for officers.** On completion `TaskDetailScreen` looks up
-  the next task via `/api/v1/consignments/{id}`, which 404s for a case, so the button
-  never appears. The detail header also shows an empty trade-flow badge.
+- **Empty trade-flow badge.** The detail header shows an empty trade-flow badge for a
+  case.
