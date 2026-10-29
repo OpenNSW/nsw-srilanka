@@ -223,6 +223,66 @@ func TestBuildCertXML_EmitsTheTransportMovement(t *testing.T) {
 	}
 }
 
+// A commodity may list several package count+type rows. Each row becomes its
+// own PackageInput, using the IPPC type code from the dropdown.
+func TestBuildInput_MapsPackagesList(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "packages_count")
+	delete(com, "packages_description")
+	com["package_arrangement"] = "package"
+	com["packages"] = []any{
+		map[string]any{"count": float64(50), "type": map[string]any{"value": "CT", "label": "CT"}},
+		map[string]any{"count": float64(20), "type": map[string]any{"value": "1D", "label": "Drum, plywood"}},
+	}
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if len(tl.Packages) != 2 {
+		t.Fatalf("packages = %+v, want 2 rows", tl.Packages)
+	}
+	if tl.Packages[0].Quantity != "50" || tl.Packages[0].TypeCode != "CT" {
+		t.Errorf("first package = %+v, want quantity 50 type CT", tl.Packages[0])
+	}
+	if tl.Packages[1].Quantity != "20" || tl.Packages[1].TypeCode != "1D" {
+		t.Errorf("second package = %+v, want quantity 20 type 1D", tl.Packages[1])
+	}
+	if tl.PackageDescription != "" {
+		t.Errorf("PackageDescription = %q, want empty when packages[] is set", tl.PackageDescription)
+	}
+}
+
+func TestBuildInput_MapsPackagesFreeTextArrangement(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "packages_count")
+	delete(com, "packages_description")
+	com["package_arrangement"] = "free_text"
+	com["packages_free_text"] = "mixed cartons and crates"
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if tl.PackageDescription != "mixed cartons and crates" {
+		t.Errorf("PackageDescription = %q", tl.PackageDescription)
+	}
+	if len(tl.Packages) != 0 {
+		t.Errorf("Packages = %+v, want none for free_text", tl.Packages)
+	}
+}
+
+func TestBuildInput_MapsPackagesBulkArrangement(t *testing.T) {
+	uf := sampleUserform()
+	com := uf["commodities"].([]any)[0].(map[string]any)
+	delete(com, "packages_count")
+	com["package_arrangement"] = "bulk"
+
+	in := BuildInput(map[string]any{"userform": uf, "certificate_id": "PC-1"})
+	tl := in.Certificate.Consignment.Items[0].TradeLines[0]
+	if tl.PackageDescription != "In bulk" {
+		t.Errorf("PackageDescription = %q, want In bulk", tl.PackageDescription)
+	}
+}
+
 // The apply form's dropdowns store { value, label }. The certificate carries
 // the code, as it did when they stored the bare code.
 func TestBuildInput_ReadsTheCodeOfADropdownAnswer(t *testing.T) {

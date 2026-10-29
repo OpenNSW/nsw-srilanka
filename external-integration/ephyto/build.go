@@ -436,15 +436,37 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 		tl.CommonNames = []string{commonName}
 	}
 
-	// Packaging: a structured package OR the free-text fallback (OPTND), never
-	// both — the mapping requires exactly one.
+	// Packaging: free-text (OPTND), bulk, packages[] (count+type rows), or the
+	// older scalar packages_count / packages_description. Exactly one shape.
+	arrangement := asString(com["package_arrangement"])
 	freeText := asString(com["packages_free_text"])
-	if asBool(com["packages_free_text_enabled"]) && freeText != "" {
+	if (arrangement == "free_text" || asBool(com["packages_free_text_enabled"])) && freeText != "" {
 		tl.PackageDescription = freeText
+	} else if arrangement == "bulk" || asBool(com["packages_in_bulk"]) {
+		tl.PackageDescription = "In bulk"
+	} else if rows := asSlice(com["packages"]); len(rows) > 0 {
+		pkgs := make([]spscert.PackageInput, 0, len(rows))
+		for _, row := range rows {
+			m := asMap(row)
+			count := numStr(m["count"])
+			if count == "" {
+				continue
+			}
+			typeCode := answerCode(m["type"])
+			if typeCode == "" {
+				typeCode = "PK"
+			}
+			pkgs = append(pkgs, spscert.PackageInput{
+				LevelCode: "1",
+				TypeCode:  typeCode,
+				Quantity:  count,
+			})
+		}
+		tl.Packages = pkgs
 	} else if count := numStr(com["packages_count"]); count != "" {
 		tl.Packages = []spscert.PackageInput{{
 			LevelCode: "1",
-			TypeCode:  "PK", // generic package; the form has no IPPC package code
+			TypeCode:  "PK", // legacy scalar path had no IPPC package code
 			Quantity:  count,
 		}}
 	} else if pd := answerCode(com["packages_description"]); pd != "" {
