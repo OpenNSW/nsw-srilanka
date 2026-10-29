@@ -1077,7 +1077,7 @@ func initTask(
 		return tm.HoldTask(context.Background(), payload)
 	})
 
-	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
+	emailProvider, err := cfg.Notification.Providers.Email.Build()
 	if err != nil {
 		return nil, nil, fmt.Errorf("email provider: %w", err)
 	}

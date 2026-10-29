@@ -24,6 +24,46 @@ notification:
       sidCode: "..."
 ```
 
+### Email through PingMailer
+
+Email can go through [PingMailer](https://github.com/OpenGovMail/pingmailer)
+instead (`type: pingmailer`). PingMailer relays each message to SMTP with the
+access token the call carries, so the provider gets one from an OAuth2 client
+allowed to send as `sender`, and refreshes it as it expires. It needs a
+PingMailer that accepts `subject`, `text_body` and `html_body` on `/notify`:
+the email is sent as rendered here, with no template applied on PingMailer's
+side.
+
+```yaml
+notification:
+  providers:
+    email:
+      type: pingmailer
+      pingmailer:
+        baseURL: https://pingmailer.example.com
+        auth:
+          type: oauth2
+          oauth2:
+            tokenURL: https://idp.example.com/oauth2/token
+            clientID: replace-with-pingmailer-client-id
+            clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+            endpointParams:
+              resource: https://mail.example.com
+        smtpHost: mail.example.com
+        smtpPort: 587
+        sender: no-reply@example.com # the From address and the SMTP identity
+        senderName: Trade National Single Window # optional From display name
+```
+
+- `baseURL` must be HTTPS, except to `localhost`. For a plain-HTTP
+  in-cluster URL, set `allowInsecureHTTP: true`: the access token then travels
+  in clear text, and the server logs a warning at startup.
+- `auth` takes the same block as `services`; `insecureSkipTLSVerify` is refused
+  unless `APP_ENV` is `development`.
+- PingMailer answers `202` once it has queued the email and talks to SMTP
+  afterwards, so a send that fails at SMTP still counts as sent here. Delivery
+  failures show only in PingMailer's logs.
+
 Keep secrets out of the file: any value may be a `"{{env:NAME}}"` (environment
 variable) or `"{{file:/run/secrets/name}}"` (file contents) placeholder,
 resolved at startup.
