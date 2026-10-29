@@ -1,4 +1,4 @@
-.PHONY: help setup install clean dev-trader build build-trader lint format type-check preview-trader ensure-frontend-config
+.PHONY: help setup install clean dev-trader build build-trader lint format type-check test preview-trader ensure-frontend-config
 
 # trader-app's browser-facing runtime config (served from public/ by vite).
 CONFIG_JS         := apps/trader-app/public/config.js
@@ -24,6 +24,7 @@ help:
 	@echo "  make lint           - Run ESLint on all workspaces"
 	@echo "  make format         - Auto-fix lint and formatting issues"
 	@echo "  make type-check     - Run TypeScript type checking"
+	@echo "  make test           - Run unit tests (Vitest)"
 	@echo ""
 
 # Setup pnpm using the existing install first, then corepack as a fallback.
@@ -84,6 +85,10 @@ format:
 type-check:
 	@echo "📝 Running TypeScript type checking..."
 	@pnpm run type-check
+
+test:
+	@echo "🧪 Running unit tests..."
+	@pnpm run test
 
 # Preview production builds
 preview-trader: ensure-frontend-config

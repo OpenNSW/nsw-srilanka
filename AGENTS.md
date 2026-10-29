@@ -23,7 +23,7 @@ Use Go 1.27+, Docker with BuildKit and Compose v2, Node.js 22.18+, and pnpm 11.1
 - `make deps`: start backing services for native development with `go run ./cmd/server`.
 - `make check`: tidy modules, format, lint, and run race-enabled Go tests.
 - `make mdlint`: lint Markdown.
-- From `portals/`, run `pnpm install`, `pnpm dev-trader`, and `pnpm build`; validate with `pnpm lint`, `pnpm type-check`, and `pnpm format:check`.
+- From `portals/`, run `pnpm install`, `pnpm dev-trader`, and `pnpm build`; validate with `pnpm lint`, `pnpm type-check`, `pnpm test`, and `pnpm format:check`.
 
 ## Coding Style & Naming Conventions
 
@@ -31,7 +31,7 @@ Follow `.editorconfig`: tabs for Go and Makefiles; two spaces for TypeScript, JS
 
 ## Testing Guidelines
 
-Place Go tests beside implementation as `*_test.go`, using `TestXxx`, standard `testing`, Testify, and SQL mocks where appropriate. Run `make test`; no numeric coverage threshold is configured. Cover changed behavior and edge cases. Run replay tests serially with `make deps` followed by `make test-e2e`; this stops the API container. The frontend currently has no test runner.
+Place Go tests beside implementation as `*_test.go`, using `TestXxx`, standard `testing`, Testify, and SQL mocks where appropriate. Run `make test`; no numeric coverage threshold is configured. Cover changed behavior and edge cases. Run replay tests serially with `make deps` followed by `make test-e2e`; this stops the API container. Place frontend tests beside the code as `*.test.ts(x)`, using Vitest (importing from `vitest`, no globals) and Testing Library; run them with `pnpm test` from `portals/`.
 
 ## Commit & Pull Request Guidelines
 
