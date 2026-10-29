@@ -36,6 +36,8 @@ x-config-env: &config-env
   M2M_NSW_TO_ASYCUDA_SECRET: ${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   SLPA_WEBHOOK_SECRET: ${SLPA_WEBHOOK_SECRET:-local-dev-slpa-webhook-secret}
+  # Referenced by notification.providers.smtp when it is uncommented.
+  NOTIFICATION_SMTP_PASSWORD: ${NOTIFICATION_SMTP_PASSWORD:-}
   STORAGE_LOCAL_PUT_SECRET: ${STORAGE_LOCAL_PUT_SECRET:-local-dev-put-secret}
   STORAGE_TOKEN_KEYSET: ${STORAGE_TOKEN_KEYSET:-dev:dG5zdy1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   # For a private artifacts repo: reference it as {{env:ARTIFACT_GITHUB_TOKEN}}
