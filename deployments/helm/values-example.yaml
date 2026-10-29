@@ -543,7 +543,8 @@ backend:
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}
 
-    # Email/SMS gateways, one settings block per channel.
+    # Email/SMS gateways, one settings block per channel. Optional: a channel
+    # left out sends nothing.
     notification:
       providers:
         email:

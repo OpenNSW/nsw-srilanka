@@ -40,8 +40,8 @@ type NotificationExtension struct {
 	loader templateLoader
 }
 
-// NewNotificationExtension builds the extension. s and loader must be non-nil;
-// Register enforces this.
+// NewNotificationExtension builds the extension. loader must be non-nil;
+// Register enforces this. A nil s sends nothing.
 func NewNotificationExtension(s sender, loader templateLoader) *NotificationExtension {
 	return &NotificationExtension{sender: s, loader: loader}
 }
@@ -92,6 +92,12 @@ func (e *NotificationExtension) Execute(ctx context.Context, record *store.TaskR
 
 	if err := req.Validate(); err != nil {
 		return fmt.Errorf("notification: invalid request: %w", err)
+	}
+
+	if e.sender == nil {
+		slog.Info("notification extension: skipped (notifications disabled)",
+			"taskId", record.TaskID, "channel", req.Channel)
+		return nil
 	}
 
 	slog.Info("notification extension: dispatching",

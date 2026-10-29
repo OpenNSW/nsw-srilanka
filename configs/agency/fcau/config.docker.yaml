@@ -142,22 +142,22 @@ services:
 refid:
   issuers: []
 
-# Placeholder providers.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      auth:
-        type: oauth2
-        oauth2:
-          tokenURL: https://idp.example.com/oauth2/token
-          clientID: replace-with-pingmailer-client-id
-          clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
-      smtpHost: mail.example.com
-      smtpPort: 587
-      sender: no-reply@example.com
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
+# Optional, and off for local development: uncomment to send email and SMS.
+# notification:
+#   providers:
+#     email:
+#       baseURL: https://email.svc.local
+#       auth:
+#         type: oauth2
+#         oauth2:
+#           tokenURL: https://idp.example.com/oauth2/token
+#           clientID: replace-with-pingmailer-client-id
+#           clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+#       smtpHost: mail.example.com
+#       smtpPort: 587
+#       sender: no-reply@example.com
+#     sms:
+#       baseURL: https://smsservice.lk
+#       userName: replace-with-actual-username
+#       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+#       sidCode: sidCode

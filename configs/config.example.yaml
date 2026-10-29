@@ -558,25 +558,26 @@ refid:
                 padding: 5
 
 # One settings block per channel, in the schema of
-# github.com/OpenNSW/core/notification. At least one is required.
-notification:
-  providers:
-    email:
-      baseURL: https://email.svc.local
-      auth:
-        type: oauth2
-        oauth2:
-          tokenURL: https://idp.example.com/oauth2/token
-          clientID: replace-with-pingmailer-client-id
-          clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
-      smtpHost: mail.example.com
-      smtpPort: 587
-      sender: no-reply@example.com
-    sms:
-      baseURL: https://smsservice.lk
-      userName: replace-with-actual-username
-      password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
-      sidCode: sidCode
+# github.com/OpenNSW/core/notification. Optional, and off for local
+# development: left out, the server sends no email or SMS.
+# notification:
+#   providers:
+#     email:
+#       baseURL: https://email.svc.local
+#       auth:
+#         type: oauth2
+#         oauth2:
+#           tokenURL: https://idp.example.com/oauth2/token
+#           clientID: replace-with-pingmailer-client-id
+#           clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+#       smtpHost: mail.example.com
+#       smtpPort: 587
+#       sender: no-reply@example.com
+#     sms:
+#       baseURL: https://smsservice.lk
+#       userName: replace-with-actual-username
+#       password: "{{env:NOTIFICATION_SMS_PASSWORD}}"
+#       sidCode: sidCode
 
 integrations:
   # Shared with SLPA out of band. Their Cargo Management System signs each

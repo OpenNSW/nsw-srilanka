@@ -11,6 +11,11 @@ send** (an `extensions` block on a step).
 Set them under `notification.providers` in the server's `config.yaml` (see
 `configs/config.example.yaml`). Restart the server after changing it.
 
+Both providers are optional. The dev configs leave the section commented out,
+so a local stack needs no gateway credentials: the extension still runs and
+logs each notification as skipped. A channel whose block is left out has no
+provider, and a notification on it is logged as failed.
+
 ```yaml
 notification:
   providers:

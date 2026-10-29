@@ -13,14 +13,12 @@ const (
 )
 
 // Register installs the nsw-srilanka task extensions on reg. The notification
-// extension dispatches SMS/email as a side-effect of a step completing. s and
-// loader must be non-nil; loader resolves template_id documents.
+// extension dispatches SMS/email as a side-effect of a step completing. A nil s
+// turns notifications off: the extension still runs but sends nothing. loader
+// must be non-nil; it resolves template_id documents.
 func Register(reg *extensions.Registry, s sender, loader templateLoader) error {
 	if reg == nil {
 		return fmt.Errorf("extensions: registry is nil")
-	}
-	if s == nil {
-		return fmt.Errorf("extensions: sender is nil")
 	}
 	if loader == nil {
 		return fmt.Errorf("extensions: template loader is nil")

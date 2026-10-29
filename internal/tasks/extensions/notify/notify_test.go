@@ -188,3 +188,17 @@ func TestNotificationExtension_Execute(t *testing.T) {
 		})
 	}
 }
+
+// With notifications disabled (a nil sender) a valid request is skipped, while
+// a broken one still fails the step.
+func TestNotificationExtension_ExecuteDisabled(t *testing.T) {
+	ext := NewNotificationExtension(nil, fakeLoader{})
+	payload := map[string]any{"notifyRecipient": "+94771234567"}
+
+	if err := ext.Execute(context.Background(), recordWith(nil), payload, json.RawMessage(`{"channel":"sms","body":"x"}`)); err != nil {
+		t.Errorf("Execute() error = %v, want nil", err)
+	}
+	if err := ext.Execute(context.Background(), recordWith(nil), payload, json.RawMessage(`{"channel":"sms"}`)); err == nil {
+		t.Error("Execute() error = nil, want an invalid request error")
+	}
+}

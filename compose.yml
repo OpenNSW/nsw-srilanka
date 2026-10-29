@@ -36,8 +36,6 @@ x-config-env: &config-env
   M2M_NSW_TO_ASYCUDA_SECRET: ${M2M_NSW_TO_ASYCUDA_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   SLPA_WEBHOOK_SECRET: ${SLPA_WEBHOOK_SECRET:-local-dev-slpa-webhook-secret}
-  NOTIFICATION_EMAIL_CLIENT_SECRET: ${NOTIFICATION_EMAIL_CLIENT_SECRET:-replace-with-actual-client-secret}
-  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
   STORAGE_LOCAL_PUT_SECRET: ${STORAGE_LOCAL_PUT_SECRET:-local-dev-put-secret}
   STORAGE_TOKEN_KEYSET: ${STORAGE_TOKEN_KEYSET:-dev:dG5zdy1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
   # For a private artifacts repo: reference it as {{env:ARTIFACT_GITHUB_TOKEN}}
@@ -51,8 +49,6 @@ x-cda-config-env: &cda-config-env
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   # Each deployment seals its own file tokens, so not TNSW's keyset.
   STORAGE_TOKEN_KEYSET: ${CDA_STORAGE_TOKEN_KEYSET:-dev:Y2RhLWxvY2FsLWRldi1maWxlLXRva2VuLWtleS0wMDE=}
-  NOTIFICATION_EMAIL_CLIENT_SECRET: ${NOTIFICATION_EMAIL_CLIENT_SECRET:-replace-with-actual-client-secret}
-  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
 # The same for EFC's efc-init and efc-api, on
 # configs/agency/efc/config.docker.yaml.
@@ -61,8 +57,6 @@ x-efc-config-env: &efc-config-env
   M2M_EFC_TO_NSW_SECRET: ${M2M_EFC_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   STORAGE_TOKEN_KEYSET: ${EFC_STORAGE_TOKEN_KEYSET:-dev:ZWZjLWxvY2FsLWRldi1maWxlLXRva2VuLWtleS0wMDE=}
-  NOTIFICATION_EMAIL_CLIENT_SECRET: ${NOTIFICATION_EMAIL_CLIENT_SECRET:-replace-with-actual-client-secret}
-  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
 # The same for NPQS' npqs-init and npqs-api, on
 # configs/agency/npqs/config.docker.yaml.
@@ -71,8 +65,6 @@ x-npqs-config-env: &npqs-config-env
   M2M_NPQS_TO_NSW_SECRET: ${M2M_NPQS_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   STORAGE_TOKEN_KEYSET: ${NPQS_STORAGE_TOKEN_KEYSET:-dev:bnBxcy1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
-  NOTIFICATION_EMAIL_CLIENT_SECRET: ${NOTIFICATION_EMAIL_CLIENT_SECRET:-replace-with-actual-client-secret}
-  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
 # The same for SLTB's sltb-init and sltb-api, on
 # configs/agency/sltb/config.docker.yaml.
@@ -81,8 +73,6 @@ x-sltb-config-env: &sltb-config-env
   M2M_SLTB_TO_NSW_SECRET: ${M2M_SLTB_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   STORAGE_TOKEN_KEYSET: ${SLTB_STORAGE_TOKEN_KEYSET:-dev:c2x0Yi1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
-  NOTIFICATION_EMAIL_CLIENT_SECRET: ${NOTIFICATION_EMAIL_CLIENT_SECRET:-replace-with-actual-client-secret}
-  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
 # The same for FCAU's fcau-init and fcau-api, on
 # configs/agency/fcau/config.docker.yaml.
@@ -91,8 +81,6 @@ x-fcau-config-env: &fcau-config-env
   M2M_FCAU_TO_NSW_SECRET: ${M2M_FCAU_TO_NSW_SECRET:-1234}
   DB_PASSWORD: ${DB_PASSWORD:-changeme}
   STORAGE_TOKEN_KEYSET: ${FCAU_STORAGE_TOKEN_KEYSET:-dev:ZmNhdS1sb2NhbC1kZXYtZmlsZS10b2tlbi1rZXktMDE=}
-  NOTIFICATION_EMAIL_CLIENT_SECRET: ${NOTIFICATION_EMAIL_CLIENT_SECRET:-replace-with-actual-client-secret}
-  NOTIFICATION_SMS_PASSWORD: ${NOTIFICATION_SMS_PASSWORD:-replace-with-actual-password}
 
 services:
   # -------------------------------------------------------------------

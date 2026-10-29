@@ -161,7 +161,7 @@ refid:
 // defaults, each has to set every required setting itself. Their placeholders
 // resolve from the env vars .env.example sets.
 func TestLoadFile_ExamplesLoad(t *testing.T) {
-	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_CLIENT_SECRET", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET"} {
+	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "STORAGE_LOCAL_PUT_SECRET"} {
 		t.Setenv(k, "example-"+k)
 	}
 	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {
@@ -181,8 +181,10 @@ func TestLoadFile_ExamplesLoad(t *testing.T) {
 			if cfg.Database.Postgres.Password != "example-DB_PASSWORD" {
 				t.Errorf("db.postgres.password = %q, want it resolved from DB_PASSWORD", cfg.Database.Postgres.Password)
 			}
-			if got := cfg.Notification.Providers.SMS.Password; got != "example-NOTIFICATION_SMS_PASSWORD" {
-				t.Errorf("notification.providers.sms.password = %q, want it resolved from NOTIFICATION_SMS_PASSWORD", got)
+			// Notifications are off in the dev templates, so no one needs
+			// gateway credentials to run the stack.
+			if p := cfg.Notification.Providers; p.Email != nil || p.SMS != nil {
+				t.Errorf("configs/%s sets notification.providers, want it commented out", name)
 			}
 			if err := cfg.Validate(); err != nil {
 				t.Errorf("configs/%s does not validate: %v", name, err)

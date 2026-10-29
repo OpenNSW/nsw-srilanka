@@ -19,7 +19,6 @@ import (
 	"github.com/OpenNSW/core/authz"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/notification"
-	"github.com/OpenNSW/core/notification/providers"
 	"github.com/OpenNSW/core/payment"
 	"github.com/OpenNSW/core/refid"
 	"github.com/OpenNSW/core/remote"
@@ -884,6 +883,30 @@ func taskManagerOptions() []orchestrator.Option {
 	return []orchestrator.Option{orchestrator.WithRequiredPreResumeExtensions(taskauthzext.ExtAuthz)}
 }
 
+// registerNotify installs the notification extension, sending through the
+// providers the notification section sets. With none set the extension still
+// runs, so steps that declare it complete, but it sends nothing.
+func registerNotify(reg *extensions.Registry, cfg config.NotificationConfig, loader registryTemplateProvider) error {
+	notifProviders, err := cfg.Build()
+	if err != nil {
+		return fmt.Errorf("notification providers: %w", err)
+	}
+	if len(notifProviders) == 0 {
+		slog.Warn("notifications disabled: notification.providers sets no provider")
+		err = notify.Register(reg, nil, loader)
+	} else {
+		var notifManager *notification.Manager
+		if notifManager, err = notification.NewManager(notifProviders...); err != nil {
+			return fmt.Errorf("notification manager: %w", err)
+		}
+		err = notify.Register(reg, notifManager, loader)
+	}
+	if err != nil {
+		return fmt.Errorf("register notification extension: %w", err)
+	}
+	return nil
+}
+
 // stepCanAct decides whether a caller may act on a task's active step, by the
 // authz rules on its step template, in the manifest version the task runs on.
 // A task with no active step template has nothing to act on.
@@ -1070,22 +1093,9 @@ func initTask(
 		return tm.HoldTask(context.Background(), payload)
 	})
 
-	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
-	if err != nil {
-		return nil, nil, fmt.Errorf("email provider: %w", err)
-	}
-	smsProvider, err := providers.NewSMSProvider(cfg.Notification.Providers.SMS)
-	if err != nil {
-		return nil, nil, fmt.Errorf("sms provider: %w", err)
-	}
-	notifManager, err := notification.NewManager(emailProvider, smsProvider)
-	if err != nil {
-		return nil, nil, fmt.Errorf("notification manager: %w", err)
-	}
-
 	extensionsRegistry := extensions.NewRegistry()
-	if err := notify.Register(extensionsRegistry, notifManager, registryTemplateProvider{artifacts: artifacts}); err != nil {
-		return nil, nil, fmt.Errorf("register notification extension: %w", err)
+	if err := registerNotify(extensionsRegistry, cfg.Notification, registryTemplateProvider{artifacts: artifacts}); err != nil {
+		return nil, nil, err
 	}
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
