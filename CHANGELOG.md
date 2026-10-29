@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.11.0] - 2026-10-28
+## [0.11.0] - 2026-10-29
 
 This release moves the catalog and the payment methods into `config.yaml`, and makes every task, flow and agency workflow resolve its templates through a manifest version, so work started before the upgrade must be finished or cancelled first. Five migrations run, storage needs a new required setting, and the image version and the artifacts pin must change in the same deployment. It also adds claiming tasks in the agency portals, Sinhala and Tamil in the Trader Portal, a notice when Customs cancels a declaration, and the chosen CHA's details in the agency flows.
 
