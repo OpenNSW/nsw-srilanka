@@ -199,7 +199,7 @@ In `PENDING_USER` the feedback (when present) renders above the form; in `COMPLE
 
 Two levers use those claims:
 
-- **`read.roles`**, at the top level of the task's **task template** (`task_template.json`, not `render.json`), lists the logical roles allowed to read the task at all. A caller eligible for none of them gets a `404` — deliberately indistinguishable from a task that does not exist. Omit the block (or leave the list empty) to admit any role that owns the consignment.
+- **`read.roles`**, at the top level of the task's **task template** (`task_template.json`), lists the logical roles allowed to read the task at all. A caller eligible for none of them gets a `404` — deliberately indistinguishable from a task that does not exist. Omit the block (or leave the list empty) to admit any role that owns the consignment.
 - **`visibleWhen.requireClaim`** (per section) gates one section on one claim, which is how a single task state shows different content to different roles.
 
 > [!IMPORTANT]
