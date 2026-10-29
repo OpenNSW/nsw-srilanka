@@ -118,8 +118,9 @@ Only the rules `x-file` writes are checked, other than `maxSize` (see below). A 
 leaves out, and a file field without `x-file`, is held to the deployment's upload limits only
 (`storage.allowedUploadTypes`, `storage.maxUploadBytes`); the file control's defaults and
 UI schema `options` apply in the browser only. A rule of the wrong type means what it
-means to the file control: an `accept` that isn't text takes no file, and a `maxFiles`
-given as text is the number JavaScript reads it as, or no limit.
+means to the file control: an `accept` set to something other than text takes no file
+(`null` counts as not set), and a `maxFiles` given as text is the number JavaScript reads
+it as, or no limit.
 
 ## Outcome
 
