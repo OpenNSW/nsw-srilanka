@@ -19,8 +19,8 @@ import (
 // trader app's Ajv instance (JSON Forms' createAjv, with ajv-formats in its
 // default "full" mode) reads it. It compiles afresh on every call, as the
 // other artifact templates are parsed on every use, so an edited form applies
-// at once. files looks up the files the form's x-file rules check.
-func compile(schema []byte, files *storedFiles) (*jsonschema.Schema, error) {
+// at once.
+func compile(schema []byte) (*jsonschema.Schema, error) {
 	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
 	if err != nil {
 		return nil, fmt.Errorf("payload schema: parse schema: %w", err)
@@ -39,7 +39,6 @@ func compile(schema []byte, files *storedFiles) (*jsonschema.Schema, error) {
 	// Ajv applies ajv-formats' limits whatever draft a form declares; this
 	// library applies a vocabulary of its own from 2019-09 only when told to.
 	c.RegisterVocabulary(ajvDateLimit)
-	c.RegisterVocabulary(files.vocabulary())
 	c.AssertVocabs()
 
 	const location = "form.json"

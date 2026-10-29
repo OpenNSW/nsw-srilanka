@@ -53,7 +53,7 @@ func TestExtension_Execute(t *testing.T) {
 		"review-form":     reviewForm,
 		"schemaless-form": `{"id": "schemaless-form", "uiSchema": {}}`,
 		"bad-schema-form": `{"id": "bad-schema-form", "schema": {"type": 5}}`,
-	}.form, namespace("reviewform"), noFiles)
+	}.form, namespace("reviewform"))
 
 	tests := []struct {
 		name    string
@@ -107,7 +107,7 @@ func TestExtension_Execute(t *testing.T) {
 }
 
 func TestExtension_Execute_MatchesErrInvalidPayloadWhenWrapped(t *testing.T) {
-	ext := NewExtension(fakeForms{"review-form": reviewForm}.form, namespace("reviewform"), noFiles)
+	ext := NewExtension(fakeForms{"review-form": reviewForm}.form, namespace("reviewform"))
 	err := ext.Execute(context.Background(), &store.TaskRecord{ActiveTaskTemplateID: "review-step"}, decode(t, `{}`), naming("review-form"))
 	// The orchestrator wraps extension errors with %w before returning them.
 	wrapped := fmt.Errorf("PRE_RESUME extension %q failed: %w", "payload_schema", err)
@@ -167,7 +167,7 @@ func decodeRecord(t *testing.T, stored string) *store.TaskRecord {
 }
 
 func TestExtension_Execute_ReadOnly(t *testing.T) {
-	ext := NewExtension(fakeForms{"certificate-form": certificateForm}.form, namespace("reviewform"), noFiles)
+	ext := NewExtension(fakeForms{"certificate-form": certificateForm}.form, namespace("reviewform"))
 	const asStored = `"reference": "R-1", "amount": 10, "results": [{"code": "C-1", "include": true}, {"code": "C-2"}]`
 
 	tests := []struct {
@@ -232,7 +232,7 @@ func TestExtension_Execute_ReadOnlyMisconfigured(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ext := NewExtension(forms.form, tt.namespaceOf, noFiles)
+			ext := NewExtension(forms.form, tt.namespaceOf)
 			for _, ctx := range []context.Context{context.Background(), WithDraft(context.Background())} {
 				err := ext.Execute(ctx, decodeRecord(t, storedCertificate), decode(t, `{"decision": "issue"}`), naming(tt.form))
 				if err == nil || errors.Is(err, ErrInvalidPayload) {
@@ -246,7 +246,7 @@ func TestExtension_Execute_ReadOnlyMisconfigured(t *testing.T) {
 // A form without read-only values doesn't need the step's stored values, so a
 // step without an output namespace is fine.
 func TestExtension_Execute_NoReadOnlyNeedsNoNamespace(t *testing.T) {
-	ext := NewExtension(fakeForms{"review-form": reviewForm}.form, namespace(""), noFiles)
+	ext := NewExtension(fakeForms{"review-form": reviewForm}.form, namespace(""))
 	if err := ext.Execute(context.Background(), &store.TaskRecord{}, decode(t, `{"outcome": "approve"}`), naming("review-form")); err != nil {
 		t.Fatalf("Execute() = %v; want nil", err)
 	}
@@ -260,7 +260,7 @@ func TestExtension_Execute_RefDefaultWithoutReadOnly(t *testing.T) {
 		"definitions": {"outcome": {"type": "string", "enum": ["approve", "reject"]}},
 		"properties": {"outcome": {"$ref": "#/definitions/outcome", "default": "approve"}}
 	}}`
-	ext := NewExtension(fakeForms{"ref-form": refForm}.form, namespace("reviewform"), noFiles)
+	ext := NewExtension(fakeForms{"ref-form": refForm}.form, namespace("reviewform"))
 	if err := ext.Execute(context.Background(), &store.TaskRecord{}, decode(t, `{"outcome": "reject"}`), naming("ref-form")); err != nil {
 		t.Fatalf("Execute() = %v; want nil", err)
 	}

@@ -244,7 +244,7 @@ func Build(ctx context.Context, cfg *config.Config) (*App, error) { //nolint:goc
 			RenderConfigOf: renderConfigOf(artifacts),
 		}
 	}
-	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, storageStack.Files, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
+	task, stopTask, err := initTask(db, temporalClient, remoteManager, paymentService, refIDs, companyService, storageStack.Service, ogaFiles, artifacts, globalCatalog, cfg, onTaskCompleted)
 	if err != nil {
 		temporalClient.Close()
 		_ = database.Close(db)
@@ -1016,7 +1016,6 @@ func initTask(
 	refIDs refid.Registry,
 	companyService company.Service,
 	storageService nswstorage.Service,
-	storedFiles nswstorage.Files,
 	ogaFiles taskplugins.OGAFiles,
 	artifacts *artifact.Set,
 	globalCatalog *catalog.Catalog,
@@ -1098,7 +1097,7 @@ func initTask(
 	if err := taskauthzext.Register(extensionsRegistry, taskCatalog(globalCatalog)); err != nil {
 		return nil, nil, fmt.Errorf("register authz extension: %w", err)
 	}
-	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{artifacts: artifacts}.GetTemplate, contextStepNamespace(artifacts), storedFiles.Describe); err != nil {
+	if err := payloadschema.Register(extensionsRegistry, registryTemplateProvider{artifacts: artifacts}.GetTemplate, contextStepNamespace(artifacts)); err != nil {
 		return nil, nil, fmt.Errorf("register payload schema extension: %w", err)
 	}
 	tm = orchestrator.NewTaskManager(taskStore, artifacts, pluginsRegistry, extensionsRegistry, workflowRunner, onTaskCompleted, taskRenderer, taskManagerOptions()...)

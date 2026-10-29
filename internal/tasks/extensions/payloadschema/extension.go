@@ -23,14 +23,12 @@ type NamespaceOf func(ctx context.Context, stepTemplateID string) (string, error
 // Extension is the PRE_RESUME task extension that validates a submission
 // against the form the step names in the extension's properties: its JSON
 // Schema, and the values it shows read-only, which must come back as the step
-// stored them. Its file fields' x-file rules are checked against the files
-// storage holds. It runs on every step that lists it and fails closed: a
-// step whose form can't be found or compiled, or whose files can't be looked
-// up, rejects every submission rather than letting one through unchecked.
+// stored them. It runs on every step that lists it and fails closed: a
+// step whose form can't be found or compiled rejects every submission rather
+// than letting one through unchecked.
 type Extension struct {
 	formOf      FormOf
 	namespaceOf NamespaceOf
-	fileOf      FileOf
 }
 
 // properties is the extension's configuration on a step template:
@@ -41,10 +39,10 @@ type properties struct {
 	Form string `json:"form"`
 }
 
-// NewExtension builds the extension over the lookups it reads forms, step
-// output namespaces and stored files through.
-func NewExtension(formOf FormOf, namespaceOf NamespaceOf, fileOf FileOf) *Extension {
-	return &Extension{formOf: formOf, namespaceOf: namespaceOf, fileOf: fileOf}
+// NewExtension builds the extension over the lookups it reads forms and step
+// output namespaces through.
+func NewExtension(formOf FormOf, namespaceOf NamespaceOf) *Extension {
+	return &Extension{formOf: formOf, namespaceOf: namespaceOf}
 }
 
 // Execute runs in the PRE_RESUME phase, before the task resumes; a non-nil
@@ -60,8 +58,7 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 	if err != nil {
 		return err
 	}
-	files := newStoredFiles(ctx, e.fileOf)
-	compiled, err := compile(f.Schema, files)
+	compiled, err := compile(f.Schema)
 	if err != nil {
 		return fmt.Errorf("payload schema: form %q: %w", formID, err)
 	}
@@ -82,9 +79,6 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 				return fmt.Errorf("payload schema: validate submission for step template %q: %w", record.ActiveTaskTemplateID, err)
 			}
 			found = append(found, violations(invalid)...)
-		}
-		if files.err != nil {
-			return fmt.Errorf("payload schema: look up a submitted file for step template %q: %w", record.ActiveTaskTemplateID, files.err)
 		}
 	}
 	if readOnly.root != nil {
