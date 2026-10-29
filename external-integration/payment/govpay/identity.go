@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"net/http"
+
 	corepayment "github.com/OpenNSW/core/payment"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 
 // identity is the GovPay+ sub-institution and service a payee is mapped to:
@@ -123,10 +126,22 @@ func (g *GovPayGateway) VerifyWebhook(ctx context.Context, _ []byte, _ map[strin
 		// The routes are authenticated, so a call arriving with no machine
 		// principal is either unauthenticated or a user token — neither is
 		// GovPay+.
+		securitylog.Event(ctx, nil, "webhook auth failed",
+			"status", http.StatusUnauthorized,
+			"reason", "webhook_auth_failed",
+			"partner", "govpay",
+		)
 		return corepayment.NewWebhookVerificationError("govpay: callback carries no authenticated client")
 	}
 
 	if p.ClientID != g.cfg.WebhookClientID {
+		securitylog.Event(ctx, nil, "webhook auth failed",
+			"status", http.StatusUnauthorized,
+			"reason", "webhook_auth_failed",
+			"partner", "govpay",
+			"callerKind", string(p.Kind),
+			"callerID", p.ClientID,
+		)
 		return corepayment.NewWebhookVerificationError(
 			fmt.Sprintf("govpay: callback authenticated as client %q, expected %q",
 				p.ClientID, g.cfg.WebhookClientID))
