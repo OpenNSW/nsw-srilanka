@@ -15,7 +15,7 @@ Workflow and form artifacts live separately in `OpenNSW/one-trade-artifacts` und
 
 ## Build, Test, and Development Commands
 
-Use Go 1.27+, Docker with BuildKit and Compose v2, Node.js 22.18+, and pnpm 11.1.2.
+Use Go 1.27+, Docker with BuildKit and Compose v2, Node.js 24.15+, and pnpm 11.1.2.
 
 - `make setup`: install tools, configure hooks, and seed local configuration; install golangci-lint v2 first.
 - `make dev`: start the full stack with hot reload.

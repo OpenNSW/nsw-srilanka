@@ -6,7 +6,7 @@
 # architecture-independent and one native build serves every target. This stage
 # therefore runs once however many platforms are requested — only the nginx stage
 # below is per-platform. Requires BuildKit.
-FROM --platform=$BUILDPLATFORM node:22-alpine3.24 AS builder
+FROM --platform=$BUILDPLATFORM node:24-alpine3.24 AS builder
 
 WORKDIR /workspace
 
