@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+
 	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/notification/providers"
 )
@@ -18,10 +20,13 @@ type NotificationConfig struct {
 
 // NotificationProviders holds the config of each notification provider the
 // server runs. Each is optional; a channel whose block is left out sends
-// nothing.
+// nothing. Email and SMTP both send email, so at most one of them is set.
 type NotificationProviders struct {
+	// Email sends through PingMailer's API.
 	Email *providers.EmailConfig `yaml:"email"`
-	SMS   *providers.SMSConfig   `yaml:"sms"`
+	// SMTP sends straight to an SMTP server.
+	SMTP *providers.SMTPConfig `yaml:"smtp"`
+	SMS  *providers.SMSConfig  `yaml:"sms"`
 }
 
 // Validate reports a provider whose config is missing or invalid, by building
@@ -34,9 +39,19 @@ func (c NotificationConfig) Validate() error {
 // Build returns a provider for each block set, ready to hand to
 // notification.NewManager. It returns none when no block is set.
 func (c NotificationConfig) Build() ([]notification.Provider, error) {
+	if c.Providers.Email != nil && c.Providers.SMTP != nil {
+		return nil, errors.New("email and smtp both send email: set one of them")
+	}
 	var built []notification.Provider
 	if c.Providers.Email != nil {
 		p, err := providers.NewEmailProvider(*c.Providers.Email)
+		if err != nil {
+			return nil, err
+		}
+		built = append(built, p)
+	}
+	if c.Providers.SMTP != nil {
+		p, err := providers.NewSMTPProvider(*c.Providers.SMTP)
 		if err != nil {
 			return nil, err
 		}
