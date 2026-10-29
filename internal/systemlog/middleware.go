@@ -1,5 +1,5 @@
-// Package securitylog records every inbound HTTP request as a slog line with
-// category=security, except GET /health. The line names who called (caller
+// Package systemlog records every inbound HTTP request as a slog line with
+// category=system, except GET /health. The line names who called (caller
 // kind and id), the route, status, and duration. Request and response
 // payloads are not logged: forms are JSON Schema–driven (jsonforms), so field-
 // level redaction cannot list every PII key. RemoteAddr is omitted: behind
@@ -7,7 +7,10 @@
 //
 // Authorization headers are not logged. The callback token in
 // /api/v1/callbacks/{token} is replaced in the path.
-package securitylog
+//
+// 401 and 403 responses also emit a sparse category=security line (see
+// package securitylog) for alerting; every other status is system-only.
+package systemlog
 
 import (
 	"context"
@@ -20,7 +23,11 @@ import (
 	"github.com/felixge/httpsnoop"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
+
+// Category is the slog attribute value on every request line.
+const Category = "system"
 
 // callbacksPathPrefix is the path prefix of POST /api/v1/callbacks/{token}.
 // Redaction uses the prefix rather than PathValue("token"): otelhttp copies
@@ -28,7 +35,7 @@ import (
 // request Middleware holds.
 const callbacksPathPrefix = "/api/v1/callbacks/"
 
-// Middleware logs one security line after next returns, including when next
+// Middleware logs one system line after next returns, including when next
 // panics. logger nil uses slog.Default. The logger must already be the process
 // handler so the line picks up the request trace id. GET /health is served and
 // not logged.
@@ -39,7 +46,8 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	logger = logger.With(slog.String("category", "security"))
+	base := logger
+	logger = logger.With(slog.String("category", Category))
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,9 +91,10 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 					}
 				}
 
+				path := loggedPath(r.URL.Path)
 				attrs := []any{
 					"method", r.Method,
-					"path", loggedPath(r.URL.Path),
+					"path", path,
 					"callerKind", kind,
 					"callerID", id,
 					"status", status,
@@ -108,6 +117,21 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 					attrs = append(attrs, "responseBytes", resp.n)
 				}
 				logger.InfoContext(r.Context(), "http request", attrs...)
+
+				if status == http.StatusUnauthorized || status == http.StatusForbidden {
+					reason := "forbidden"
+					if status == http.StatusUnauthorized {
+						reason = "unauthenticated"
+					}
+					securitylog.Event(r.Context(), base, "http denied",
+						"method", r.Method,
+						"path", path,
+						"callerKind", kind,
+						"callerID", id,
+						"status", status,
+						"reason", reason,
+					)
+				}
 
 				if panicked != nil {
 					panic(panicked)

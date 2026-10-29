@@ -56,7 +56,7 @@ import (
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/company"
 	"github.com/OpenNSW/nsw-srilanka/internal/profile/user"
 	"github.com/OpenNSW/nsw-srilanka/internal/scopes"
-	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
+	"github.com/OpenNSW/nsw-srilanka/internal/systemlog"
 	"github.com/OpenNSW/nsw-srilanka/internal/staticdata"
 	nswstorage "github.com/OpenNSW/nsw-srilanka/internal/storage"
 	"github.com/OpenNSW/nsw-srilanka/internal/storage/fileaccess"
@@ -602,17 +602,17 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 	// -------------------------------------------------------------------
 	// Stage 8: Server Instantiation & Close Hook
 	// -------------------------------------------------------------------
-	// Security log reads slog.Default (process stream, and OTLP when export
+	// System log reads slog.Default (process stream, and OTLP when export
 	// is on from the early configureLogging). It sits inside trace so the
 	// line carries the trace id, and outside CORS so a preflight is logged
 	// too. CaptureRoute next to the mux records Pattern for Middleware:
 	// otelhttp copies the request before ServeMux sets it. Authentication
 	// attaches the principal on a child request; the log reads it back from
-	// authn.RequestCaller.
+	// authn.RequestCaller. 401/403 also emit a sparse category=security line.
 	for _, name := range unwiredAudit {
 		slog.Warn(name + " audit is not wired: service has no WithAuditor")
 	}
-	handler := trace.TraceMiddleware(securitylog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", securitylog.CaptureRoute(mux)))))
+	handler := trace.TraceMiddleware(systemlog.Middleware(slog.Default())(cors.CORS(&cfg.CORS)(tel.Handler("tnsw-api", systemlog.CaptureRoute(mux)))))
 	server := newHTTPServer(cfg.Server, handler)
 
 	closeFn := func() error {
