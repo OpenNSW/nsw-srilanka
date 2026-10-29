@@ -391,9 +391,6 @@ components:
         chaCompanyId:
           type: string
           description: CHA company selected at Stage 1.
-        chaId:
-          type: string
-          description: CHA assigned at Stage 2 (empty until claimed).
         createdAt:
           type: string
           format: date-time
@@ -494,8 +491,6 @@ components:
         traderCompanyId:
           type: string
         chaCompanyId:
-          type: string
-        chaId:
           type: string
         createdAt:
           type: string

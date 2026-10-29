@@ -682,8 +682,6 @@ components:
           type: string
         chaCompanyId:
           type: string
-        chaId:
-          type: string
         createdAt:
           type: string
           format: date-time
