@@ -435,43 +435,7 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 	if commonName != "" {
 		tl.CommonNames = []string{commonName}
 	}
-
-	// Packaging: free-text (OPTND), bulk, packages[] (count+type rows), or the
-	// older scalar packages_count / packages_description. Exactly one shape.
-	arrangement := asString(com["package_arrangement"])
-	freeText := asString(com["packages_free_text"])
-	if (arrangement == "free_text" || asBool(com["packages_free_text_enabled"])) && freeText != "" {
-		tl.PackageDescription = freeText
-	} else if arrangement == "bulk" || asBool(com["packages_in_bulk"]) {
-		tl.PackageDescription = "In bulk"
-	} else if rows := asSlice(com["packages"]); len(rows) > 0 {
-		pkgs := make([]spscert.PackageInput, 0, len(rows))
-		for _, row := range rows {
-			m := asMap(row)
-			count := numStr(m["count"])
-			if count == "" {
-				continue
-			}
-			typeCode := answerCode(m["type"])
-			if typeCode == "" {
-				typeCode = "PK"
-			}
-			pkgs = append(pkgs, spscert.PackageInput{
-				LevelCode: "1",
-				TypeCode:  typeCode,
-				Quantity:  count,
-			})
-		}
-		tl.Packages = pkgs
-	} else if count := numStr(com["packages_count"]); count != "" {
-		tl.Packages = []spscert.PackageInput{{
-			LevelCode: "1",
-			TypeCode:  "PK", // legacy scalar path had no IPPC package code
-			Quantity:  count,
-		}}
-	} else if pd := answerCode(com["packages_description"]); pd != "" {
-		tl.PackageDescription = pd
-	}
+	setTradeLinePackages(&tl, com)
 
 	if v := numStr(com["quantity_net_weight"]); v != "" {
 		tl.NetWeight = &spscert.MeasureInput{Value: v, Unit: weightUnit(answerCode(com["quantity_net_weight_unit"]))}
@@ -493,6 +457,43 @@ func buildTradeLine(com map[string]any, seq int, treatment string, reExport *sps
 		tl.ReExport = &perLine
 	}
 	return tl
+}
+
+// setTradeLinePackages fills packaging on tl from the commodity's package
+// arrangement: free-text (OPTND), bulk, or packages[] (count+type rows).
+func setTradeLinePackages(tl *spscert.TradeLineInput, com map[string]any) {
+	arrangement := asString(com["package_arrangement"])
+	freeText := asString(com["packages_free_text"])
+	if (arrangement == "free_text" || asBool(com["packages_free_text_enabled"])) && freeText != "" {
+		tl.PackageDescription = freeText
+		return
+	}
+	if arrangement == "bulk" || asBool(com["packages_in_bulk"]) {
+		tl.PackageDescription = "In bulk"
+		return
+	}
+	rows := asSlice(com["packages"])
+	if len(rows) == 0 {
+		return
+	}
+	pkgs := make([]spscert.PackageInput, 0, len(rows))
+	for _, row := range rows {
+		m := asMap(row)
+		count := numStr(m["count"])
+		if count == "" {
+			continue
+		}
+		typeCode := answerCode(m["type"])
+		if typeCode == "" {
+			typeCode = "PK"
+		}
+		pkgs = append(pkgs, spscert.PackageInput{
+			LevelCode: "1",
+			TypeCode:  typeCode,
+			Quantity:  count,
+		})
+	}
+	tl.Packages = pkgs
 }
 
 // --- re-export ---------------------------------------------------------------
