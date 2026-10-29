@@ -109,6 +109,10 @@ conditional parts too. Nothing is looked up in storage:
   carries the extension too. An entry that names a type (`image/*`, `application/pdf`)
   matches nothing, as the value doesn't carry the type.
 - **`maxFiles`** is the most files a list may hold.
+- **Read-only values aren't checked.** A value the read-only check holds (one whose
+  schemas, or those of a value holding it, mark it `readOnly`) must come back as the step
+  stored it. Its files came in through another form, under that form's rules, so this
+  form's `x-file` doesn't judge them.
 
 Only the rules `x-file` writes are checked, other than `maxSize` (see below). A rule it
 leaves out, and a file field without `x-file`, is held to the deployment's upload limits only

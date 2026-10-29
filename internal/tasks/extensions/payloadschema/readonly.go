@@ -3,6 +3,7 @@ package payloadschema
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -77,6 +78,33 @@ func (n *roNode) readOnly() bool {
 		}
 	}
 	return false
+}
+
+// readOnlyAt reports whether the value at location, a path into data, is
+// server-owned: whether it, or a value holding it, is read-only.
+func (f *readOnlyForm) readOnlyAt(data any, location []string) bool {
+	n, v := f.root, data
+	for _, token := range location {
+		if n == nil {
+			return false
+		}
+		if n.readOnly() {
+			return true
+		}
+		switch c := v.(type) {
+		case map[string]any:
+			n, v = n.property(token), c[token]
+		case []any:
+			i, err := strconv.Atoi(token)
+			if err != nil || i < 0 || i >= len(c) {
+				return false
+			}
+			n, v = n.row(), c[i]
+		default:
+			return false
+		}
+	}
+	return n != nil && n.readOnly()
 }
 
 // defaultValue returns the value's schema default, the first one declared.

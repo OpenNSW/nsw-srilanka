@@ -87,6 +87,46 @@ func TestExtension_Execute_XFile(t *testing.T) {
 	}
 }
 
+// readOnlyFilesForm shows files the user can't change: a read-only field, a
+// field in a read-only object, and one read-only through the definition it
+// refers to; beside an editable field under the same rule.
+const readOnlyFilesForm = `{"schema": {
+	"type": "object",
+	"definitions": {"serverOwned": {"readOnly": true}},
+	"properties": {
+		"reports": {"type": "array", "items": {"type": "string", "format": "file"}, "readOnly": true, "x-file": {"accept": ".pdf", "maxFiles": 1}},
+		"application": {"type": "object", "readOnly": true, "properties": {
+			"permit": {"type": "string", "format": "file", "x-file": {"accept": ".pdf"}}
+		}},
+		"certificate": {"type": "string", "format": "file", "allOf": [{"$ref": "#/definitions/serverOwned"}], "x-file": {"accept": ".pdf"}},
+		"letter": {"type": "string", "format": "file", "x-file": {"accept": ".pdf"}}
+	}
+}}`
+
+// Values the read-only check holds are not judged by x-file, which still
+// applies to the values the user sets.
+func TestExtension_Execute_XFileSkipsReadOnly(t *testing.T) {
+	const stored = `{"reports": ["report.png", "report.jpg"], "application": {"permit": "permit.jpg"}, "certificate": "certificate.png"}`
+	record := &store.TaskRecord{Data: map[string]any{"form": decode(t, stored)}}
+	ext := NewExtension(fakeForms{"files-form": readOnlyFilesForm}.form, namespace("form"))
+
+	payload := decode(t, stored)
+	payload["letter"] = "letter.pdf"
+	if err := ext.Execute(context.Background(), record, payload, naming("files-form")); err != nil {
+		t.Fatalf("Execute() = %v; want nil", err)
+	}
+
+	payload["letter"] = "letter.png"
+	err := ext.Execute(context.Background(), record, payload, naming("files-form"))
+	var invalid *InvalidPayloadError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("Execute() = %v; want an *InvalidPayloadError", err)
+	}
+	if want := []Violation{{"/letter", `file type not accepted (accept: ".pdf")`}}; !sameViolations(invalid.Violations, want) {
+		t.Errorf("violations = %v, want %v", invalid.Violations, want)
+	}
+}
+
 // Rules of the wrong type mean what they mean to the file control, and x-file
 // on a field that isn't a file field is not read.
 func TestExtension_Execute_XFileRulesOfTheWrongType(t *testing.T) {

@@ -167,6 +167,26 @@ func accepts(accept, value string) bool {
 	return false
 }
 
+// dropReadOnlyFiles removes from err, in place, the x-file failures of values
+// readOnly reports server-owned, and reports whether any failure is left. The
+// read-only check holds those values to what the step stored, and their files
+// came in through another form, under its rules, so this form's x-file has
+// nothing to judge there.
+func dropReadOnlyFiles(err *jsonschema.ValidationError, readOnly func(location []string) bool) bool {
+	if len(err.Causes) == 0 {
+		_, isFile := err.ErrorKind.(*xFileKind)
+		return !isFile || !readOnly(err.InstanceLocation)
+	}
+	kept := err.Causes[:0]
+	for _, cause := range err.Causes {
+		if dropReadOnlyFiles(cause, readOnly) {
+			kept = append(kept, cause)
+		}
+	}
+	err.Causes = kept
+	return len(kept) > 0
+}
+
 // xFileKind is a file field that breaks one of its x-file rules.
 type xFileKind struct {
 	keyword, message string
