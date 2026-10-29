@@ -14,6 +14,7 @@ type WebhookService interface {
 	ProcessIntegrationResult(ctx context.Context, req CusdecIntegrationResultRequest) error
 	ProcessEvent(ctx context.Context, req CusdecEventRequest) error
 	ProcessAmendment(ctx context.Context, req CusdecAmendedRequest) error
+	ProcessCancellation(ctx context.Context, req CusdecCancelledRequest) error
 }
 
 // TaskCompleter defines the task completion interface needed from the workflow
@@ -35,7 +36,7 @@ type webhookService struct {
 // NewWebhookService creates a new WebhookService. tasks is core's task store:
 // a callback resumes the task the declaration's workflow parked, found by the
 // case and workflow the declaration recorded when it was dispatched. flows opens
-// the amendment flow (§6.5.4) on that case.
+// the amendment flow (§6.5.4) and the cancellation notice (§6.5.5) on that case.
 func NewWebhookService(repo DeclarationRepository, tasks parkedtask.Tasks, taskManager TaskCompleter, flows CaseFlows) WebhookService {
 	return &webhookService{
 		repo:        repo,

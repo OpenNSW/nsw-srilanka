@@ -13,6 +13,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/OpenNSW/nsw-srilanka/external-integration/slpa/fields"
 )
@@ -117,7 +118,8 @@ func BuildXML(form map[string]any) (string, error) {
 		return "", &buildError{"The cargo declaration form could not be read."}
 	}
 
-	cusdecNo := fields.String(form, "cusdecNo")
+	customsNo := fields.String(form, "cusdecNo")
+	cusdecNo := cmsCusdecNo(customsNo)
 	cusdecDate := fields.String(form, "cusdecDate")
 	cusdecOffice := fields.String(form, "cusdecOffice")
 
@@ -145,7 +147,7 @@ func BuildXML(form map[string]any) (string, error) {
 			Volume:           fields.Number(form, "volumeCBM"),
 			Weight:           fields.Number(form, "weightKg"),
 			GoodsDescription: fields.String(form, "goodsDescription"),
-			CusDecSerLet:     fields.String(form, "cusdecSerLet"),
+			CusDecSerLet:     cusdecSerLet(form, customsNo),
 			Status:           fields.String(form, "status"),
 		},
 		Sub: Sub{
@@ -168,6 +170,42 @@ func BuildXML(form map[string]any) (string, error) {
 	// The CMS parses the payload as a document, so it carries its own prolog —
 	// and no DOCTYPE, which their parser refuses.
 	return xml.Header + string(body), nil
+}
+
+// cmsCusdecNo writes a declaration number the way the CMS takes it: the
+// serial letter and the number ("E1050"), letters and digits only. Customs
+// names a declaration office/year/serial/number ("CBEX1/2026/E/1050"), which
+// is how the form receives it once Customs has assessed the declaration; the
+// office and the year travel in CusDecOffice and CusDecDate instead, and the
+// serial joins all three ("CBEX1E10502026"). A number not in four parts is
+// sent as its letters and digits, since the CMS refuses any other character.
+func cmsCusdecNo(cusdecNo string) string {
+	parts := cusdecParts(cusdecNo)
+	if len(parts) == 4 {
+		return parts[2] + parts[3]
+	}
+	return strings.Join(parts, "")
+}
+
+// cusdecSerLet is the serial letter the trader entered, or else the one in the
+// declaration number, its third part. A number not in four parts yields none,
+// and the CMS names the missing field.
+func cusdecSerLet(form map[string]any, cusdecNo string) string {
+	if serLet := fields.String(form, "cusdecSerLet"); serLet != "" {
+		return serLet
+	}
+	if parts := cusdecParts(cusdecNo); len(parts) == 4 {
+		return parts[2]
+	}
+	return ""
+}
+
+// cusdecParts splits a declaration number at every character that is not a
+// letter or a digit.
+func cusdecParts(cusdecNo string) []string {
+	return strings.FieldsFunc(cusdecNo, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
 }
 
 // cusdecSerial rebuilds the composite key SLPA's generator writes: the office

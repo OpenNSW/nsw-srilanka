@@ -78,7 +78,10 @@ func (e *Extension) Execute(ctx context.Context, record *store.TaskRecord, paylo
 			if !errors.As(err, &invalid) {
 				return fmt.Errorf("payload schema: validate submission for step template %q: %w", record.ActiveTaskTemplateID, err)
 			}
-			found = append(found, violations(invalid)...)
+			readOnlyAt := func(location []string) bool { return readOnly.readOnlyAt(data, location) }
+			if dropReadOnlyFiles(invalid, readOnlyAt) {
+				found = append(found, violations(invalid)...)
+			}
 		}
 	}
 	if readOnly.root != nil {

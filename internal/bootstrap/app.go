@@ -371,6 +371,13 @@ func Build(ctx context.Context, cfg *config.Config) (app *App, err error) { //no
 			_ = database.Close(db)
 			return nil, fmt.Errorf("failed to register task workflow manager with consignment service: %w", err)
 		}
+		if err := consignmentService.RegisterTaskCanceller(tm); err != nil {
+			_ = stopParentRunner()
+			_ = stopTask()
+			temporalClient.Close()
+			_ = database.Close(db)
+			return nil, fmt.Errorf("failed to register task canceller with consignment service: %w", err)
+		}
 	}
 
 	// -------------------------------------------------------------------
@@ -1073,7 +1080,14 @@ func initTask(
 	}
 
 	workflowRunner := workflow.NewTemporalManager(temporalClient, cfg.Temporal.Namespace, "MICRO_WORKFLOW_QUEUE", microActivationHandler, microCompletionHandler)
-	workflowRunner.RegisterAdminParkHandler(newAdminParkLogger("task workflow"))
+	logTaskPark := newAdminParkLogger("task workflow")
+	workflowRunner.RegisterAdminParkHandler(func(payload workflow.AdminParkPayload) error {
+		_ = logTaskPark(payload)
+		if tm == nil {
+			return fmt.Errorf("task manager is not initialized (misconfiguration)")
+		}
+		return tm.HoldTask(context.Background(), payload)
+	})
 
 	emailProvider, err := providers.NewEmailProvider(cfg.Notification.Providers.Email)
 	if err != nil {

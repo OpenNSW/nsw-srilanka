@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/OpenNSW/core/shared/deepcopy"
 	flowplugins "github.com/OpenNSW/core/taskflow/plugins"
 )
 
@@ -19,7 +20,8 @@ const maxContainersPerDeclaration = 200
 
 // CDNSplitBuilderFunc expands a declaration's container count into the
 // []map[string]any that a SPLIT_TASK node consumes: one branch per container,
-// each carrying the declaration reference and its own container sequence.
+// each carrying the declaration reference, its own container sequence and the
+// note's prefill.
 //
 // One CDN covers exactly one container — Annex B's container block is a single
 // object — so the number of dispatch notes a consignment needs is the
@@ -39,22 +41,32 @@ func CDNSplitBuilderFunc(ctx flowplugins.PluginContext, _ json.RawMessage) error
 	// lands; the dispatch step reports its absence to the trader.
 	cusdecRef, _ := ctx.Inputs["cusdec_ref"].(string)
 
+	// What each note's form opens with, such as the shipper and the consignee
+	// the declaration names; the artifacts choose its fields. A child workflow
+	// sees only its own item, so each one carries it. It is optional; without it
+	// the trader fills those fields in.
+	prefill, _ := ctx.Inputs["prefill"].(map[string]any)
+
 	items := make([]map[string]any, 0, count)
 	for i := 1; i <= count; i++ {
+		payload := map[string]any{
+			"cusdec_ref":         cusdecRef,
+			"container_sequence": i,
+			"container_count":    count,
+			// The trader fills one form per container, so each has to say
+			// which container it is for; without it the notes are
+			// indistinguishable on the dashboard.
+			"container_label": fmt.Sprintf("Container %d of %d", i, count),
+		}
+		if len(prefill) > 0 {
+			payload["prefill"] = deepcopy.Map(prefill)
+		}
 		items = append(items, map[string]any{
 			// SAME_TEMPLATE mode takes the template from the SPLIT_TASK node and
 			// suffixes this branch_id with the item index, so "cdn" becomes
 			// "cdn-0", "cdn-1", ….
 			"branch_id": "cdn",
-			"payload": map[string]any{
-				"cusdec_ref":         cusdecRef,
-				"container_sequence": i,
-				"container_count":    count,
-				// The trader fills one form per container, so each has to say
-				// which container it is for; without it the notes are
-				// indistinguishable on the dashboard.
-				"container_label": fmt.Sprintf("Container %d of %d", i, count),
-			},
+			"payload":   payload,
 		})
 	}
 

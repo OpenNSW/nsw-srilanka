@@ -22,6 +22,12 @@
 // for a user, after the configured lifetime; otherwise, once the key that
 // sealed them is retired.
 //
+// A token ends with its resource's extension, after the sealed part
+// ("<sealed>.pdf"), so a file's token can be told by its name as its storage
+// key can: an agency holds TNSW's tokens, never its keys. The extension is
+// outside the seal, so Resolve accepts a token only with exactly its
+// resource's extension, or with none when the resource has none.
+//
 // filetoken seals and opens the tokens. This package only binds them to
 // callers.
 package fileaccess
@@ -29,7 +35,10 @@ package fileaccess
 import (
 	"errors"
 	"fmt"
+	"path"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
@@ -130,7 +139,7 @@ func (a *Access) issue(holder string, user bool, resource string, scopes []Scope
 	if err != nil {
 		return "", fmt.Errorf("fileaccess: %w", err)
 	}
-	return token, nil
+	return token + extension(resource), nil
 }
 
 // Resolve returns the resource ref stands for, so that p can do what need
@@ -140,10 +149,18 @@ func (a *Access) issue(holder string, user bool, resource string, scopes []Scope
 // than taken for a value that is not a token. The checks run in
 // that order: a token issued to someone else is ErrNotYours whatever it
 // allows, and even once expired, so the caller is not told to fetch a fresh
-// one it could never get.
+// one it could never get. A token without its resource's extension, or with
+// another, is ErrInvalid.
 func (a *Access) Resolve(p *authn.Principal, ref string, need Scope) (string, error) {
-	claims, err := a.codec.Open(ref)
-	if err != nil && !errors.Is(err, filetoken.ErrExpired) {
+	sealed, ext := ref, ""
+	// A compact JWE has five parts (RFC 7516, section 7.1), so a sixth is the
+	// extension.
+	if strings.Count(ref, ".") == 5 {
+		i := strings.LastIndex(ref, ".")
+		sealed, ext = ref[:i], ref[i:]
+	}
+	claims, err := a.codec.Open(sealed)
+	if (err != nil && !errors.Is(err, filetoken.ErrExpired)) || ext != extension(claims.Resource) {
 		return "", ErrInvalid
 	}
 	if holder := holderOf(p); holder == "" || claims.Holder != holder {
@@ -156,6 +173,19 @@ func (a *Access) Resolve(p *authn.Principal, ref string, need Scope) (string, er
 		return "", ErrExpired
 	}
 	return claims.Resource, nil
+}
+
+// fileExtension is an extension a token carries: letters and digits after a
+// dot, as storage keeps them in a key.
+var fileExtension = regexp.MustCompile(`^\.[A-Za-z0-9]+$`)
+
+// extension returns resource's extension, with its dot, or "" when it has
+// none.
+func extension(resource string) string {
+	if ext := path.Ext(resource); fileExtension.MatchString(ext) {
+		return ext
+	}
+	return ""
 }
 
 // holderOf names p as a token holder, or returns "" when p has no identity a

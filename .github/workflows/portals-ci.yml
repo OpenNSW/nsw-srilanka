@@ -86,7 +86,11 @@ jobs:
       - name: Check Formatting (Prettier)
         run: pnpm run format:check
 
-      # 4. Build (Final Verification)
+      # 4. Unit Tests (Vitest)
+      - name: Run unit tests
+        run: pnpm run test
+
+      # 5. Build (Final Verification)
       # Only runs if Type Check passed.
       - name: Build all workspaces
         run: pnpm run build

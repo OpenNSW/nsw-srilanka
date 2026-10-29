@@ -83,3 +83,65 @@ func TestCDNSplitBuilder_AllowsMissingCusdecRef(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Equal(t, "", items[0]["payload"].(map[string]any)["cusdec_ref"])
 }
+
+// Every note gets the prefill, each its own copy down to the nested objects, so
+// a change to one branch's payload can't reach another's. The fields every
+// note already carries are unchanged.
+func TestCDNSplitBuilder_CarriesThePrefillToEveryNote(t *testing.T) {
+	prefill := map[string]any{
+		"shipper": map[string]any{
+			"id":          "134256789",
+			"name":        "ADAM PVT LTD",
+			"address":     "No. 45, Galle Road, Colombo 03, Sri Lanka",
+			"countryCode": "LK",
+		},
+		"consignee": map[string]any{
+			"name":        "COCO WORLD SDN BHD",
+			"address":     "125, PUTRAJAYA, KUALA LUMPUR",
+			"countryCode": "MY",
+		},
+	}
+	ctx := splitCtx(map[string]any{
+		"container_count": float64(2),
+		"cusdec_ref":      "CBEX1/2026/E/1047",
+		"prefill":         prefill,
+	})
+	require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+
+	items := ctx.Record.Data["split_items"].([]map[string]any)
+	require.Len(t, items, 2)
+	for i, item := range items {
+		payload := item["payload"].(map[string]any)
+		assert.Equal(t, prefill, payload["prefill"])
+		assert.Equal(t, "CBEX1/2026/E/1047", payload["cusdec_ref"])
+		assert.Equal(t, i+1, payload["container_sequence"])
+		assert.Equal(t, 2, payload["container_count"])
+		assert.Equal(t, fmt.Sprintf("Container %d of 2", i+1), payload["container_label"])
+	}
+
+	shipper := func(i int) map[string]any {
+		return items[i]["payload"].(map[string]any)["prefill"].(map[string]any)["shipper"].(map[string]any)
+	}
+	shipper(0)["name"] = "changed"
+	assert.Equal(t, "ADAM PVT LTD", shipper(1)["name"])
+	assert.Equal(t, "ADAM PVT LTD", prefill["shipper"].(map[string]any)["name"])
+}
+
+// Without a prefill, or with one that is nil, empty or not an object, the notes
+// carry none and the trader fills those fields in.
+func TestCDNSplitBuilder_LeavesOutAMissingPrefill(t *testing.T) {
+	for name, inputs := range map[string]map[string]any{
+		"missing":       {"container_count": float64(1)},
+		"nil":           {"container_count": float64(1), "prefill": nil},
+		"empty":         {"container_count": float64(1), "prefill": map[string]any{}},
+		"not an object": {"container_count": float64(1), "prefill": "ADAM PVT LTD"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := splitCtx(inputs)
+			require.NoError(t, CDNSplitBuilderFunc(ctx, nil))
+
+			items := ctx.Record.Data["split_items"].([]map[string]any)
+			assert.NotContains(t, items[0]["payload"], "prefill")
+		})
+	}
+}

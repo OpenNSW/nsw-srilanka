@@ -620,6 +620,112 @@ func (c *Router) handleResolveAdminIntervention(
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ForceParkRequest is the request body for HandleForceParkTaskNode.
+type ForceParkRequest struct {
+	Reason string `json:"reason"`
+}
+
+// HandleForceParkTaskNode handles POST /api/v1/admin/workflows/{id}/steps/{stepId}/force-park.
+// {id} is the workflow instance containing the node, one of a consignment's flows or a
+// child-branch workflow, and {stepId} is the node's step_id from that workflow's engine status. The
+// node must be a TASK waiting on its task; the task is closed and the node moved to AWAITING_ADMIN
+// (see Service.ForceParkTaskNode), after which the resolve route applies.
+//
+// Requires scopes.ConsignmentAdminWrite, like resolve: it takes a task away from the trader or
+// officer working on it.
+func (c *Router) HandleForceParkTaskNode(w http.ResponseWriter, r *http.Request) {
+	c.handleForcePark(w, r, "admin-force-park", c.cs.ForceParkTaskNode)
+}
+
+// HandleForceParkTaskWorkflowStep handles POST /api/v1/admin/task/{id}/steps/{stepId}/force-park.
+// {id} is a task workflow's own workflow ID (a TASK node's task_workflow_id) and {stepId} is one of
+// its steps. The step is moved to AWAITING_ADMIN and the task stays open (see
+// Service.ForceParkTaskWorkflowStep); the task workflow's resolve route applies after. Gated on the
+// same scope as HandleForceParkTaskNode.
+func (c *Router) HandleForceParkTaskWorkflowStep(w http.ResponseWriter, r *http.Request) {
+	c.handleForcePark(w, r, "task-workflow-admin-force-park", c.cs.ForceParkTaskWorkflowStep)
+}
+
+// handleForcePark is the request handling the two force-park routes share; they differ only in
+// which Service method parks the step and the audit "view" label. As in handleResolveAdminIntervention,
+// the audit TargetID is the workflow ID.
+func (c *Router) handleForcePark(
+	w http.ResponseWriter, r *http.Request,
+	view string,
+	forcePark func(ctx context.Context, workflowID, stepID, reason string) (nodeID string, err error),
+) {
+	ctx := r.Context()
+	if _, ok := authn.FromContext(ctx); !ok {
+		httputil.Error(w, r, http.StatusUnauthorized, errUnauthorized)
+		return
+	}
+	workflowID := r.PathValue("id")
+	stepID := r.PathValue("stepId")
+	if workflowID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errConsignmentIDRequired)
+		return
+	}
+	if stepID == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errStepIDRequired)
+		return
+	}
+
+	var req ForceParkRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		msg := errInvalidRequestBody
+		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			msg += ": unknown field " + field
+		}
+		httputil.Error(w, r, http.StatusBadRequest, msg)
+		return
+	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+		httputil.Error(w, r, http.StatusBadRequest, errInvalidRequestBody)
+		return
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		httputil.Error(w, r, http.StatusBadRequest, errReasonRequired)
+		return
+	}
+
+	auditFail := func(errMsg string) {
+		c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, true, map[string]any{
+			"view":   view,
+			"stepId": stepID,
+			"error":  errMsg,
+		}))
+	}
+
+	nodeID, err := forcePark(ctx, workflowID, stepID, req.Reason)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEngineWorkflowNotFound):
+			auditFail(errWorkflowNotFound)
+			httputil.Error(w, r, http.StatusNotFound, errWorkflowNotFound)
+		case errors.Is(err, ErrNodeNotWaiting):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusConflict, ErrNodeNotWaiting.Error())
+		case errors.Is(err, ErrForceParkUnsupportedNodeType):
+			auditFail(err.Error())
+			httputil.Error(w, r, http.StatusBadRequest, err.Error())
+		default:
+			auditFail(err.Error())
+			httputil.InternalServerError(w, r, "failed to force-park node; please retry", err)
+		}
+		return
+	}
+
+	c.auditEvent(ctx, nswaudit.ConsignmentEvent(nswaudit.ActionUpdate, workflowID, false, map[string]any{
+		"view":   view,
+		"stepId": stepID,
+		"nodeId": nodeID,
+		"reason": req.Reason,
+	}))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (c *Router) auditEvent(ctx context.Context, e nswaudit.Event) {
 	if c.audit != nil {
 		c.audit.Audit(ctx, e)

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -279,6 +280,39 @@ func TestTokenWithoutScopes(t *testing.T) {
 		}
 	}
 	assertRefused(t, a, user("bob"), token, fileaccess.ErrNotYours)
+}
+
+// A token ends with its resource's extension, which Resolve requires exactly:
+// it is outside the seal, so one added, removed or changed is refused.
+func TestTokenCarriesExtension(t *testing.T) {
+	a, _ := newAccess(t, 1)
+	pdf := issue(t, a, user("alice"), "traders/invoice.pdf")
+	none := issue(t, a, user("alice"), "traders/invoice")
+	if !strings.HasSuffix(pdf, ".pdf") || strings.Count(pdf, ".") != 5 {
+		t.Fatalf("token %q doesn't end with its file's extension", pdf)
+	}
+	if strings.Count(none, ".") != 4 {
+		t.Fatalf("token %q carries an extension its file hasn't", none)
+	}
+	assertResolves(t, a, user("alice"), pdf, "traders/invoice.pdf")
+	assertResolves(t, a, user("alice"), none, "traders/invoice")
+
+	sealed := strings.TrimSuffix(pdf, ".pdf")
+	for _, ref := range []string{sealed, sealed + ".xlsx", sealed + ".PDF", none + ".pdf"} {
+		assertRefused(t, a, user("alice"), ref, fileaccess.ErrInvalid)
+	}
+
+	// A token over another deployment's token ends as that one does, so an
+	// agency's token for a file TNSW holds carries the file's extension too.
+	other, _ := newAccess(t, 2)
+	agencys := issue(t, other, client("CDA_TO_NSW"), pdf)
+	if !strings.HasSuffix(agencys, ".pdf") {
+		t.Fatalf("token %q over %q doesn't end with .pdf", agencys, pdf)
+	}
+	got, err := other.Resolve(client("CDA_TO_NSW"), agencys, fileaccess.ScopeRead)
+	if err != nil || got != pdf {
+		t.Fatalf("Resolve = %q, %v; want %q", got, err, pdf)
+	}
 }
 
 // A user's upload token can only be submitted, and never expires; a machine

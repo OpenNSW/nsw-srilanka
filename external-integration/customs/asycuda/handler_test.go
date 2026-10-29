@@ -36,6 +36,11 @@ func (m *mockCusdecService) ProcessAmendment(ctx context.Context, req cusdec.Cus
 	return args.Error(0)
 }
 
+func (m *mockCusdecService) ProcessCancellation(ctx context.Context, req cusdec.CusdecCancelledRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
 // mockCDNService is a mock implementation of cdn.CDNWebhookService.
 type mockCDNService struct {
 	mock.Mock
@@ -722,6 +727,42 @@ func TestSLCEHandler_CDNCancelledResponses(t *testing.T) {
 			rec := httptest.NewRecorder()
 
 			NewHandler(new(mockCusdecService), cdnSvc).HandleWebhook(rec,
+				httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tc.body)))
+
+			assert.Equal(t, tc.want, rec.Code)
+		})
+	}
+}
+
+// cancelledPayload is the §6.5.5 example.
+const cancelledPayload = `{
+	"eventType": "CUSDEC_CANCELLED",
+	"processedAt": "2026-04-26T11:15:22Z",
+	"payload": {"cusdecRef": {"office": "CBEX1", "year": "2026", "serial": "E", "number": 1047}}
+}`
+
+// A §6.5.5 Declaration Cancelled notification reaches the CusDec service with
+// its reference, and is answered by what the service made of it.
+func TestSLCEHandler_CusdecCancelledResponses(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body string
+		err  error
+		want int
+	}{
+		"applied":                        {body: cancelledPayload, want: http.StatusOK},
+		"no reference":                   {body: strings.Replace(cancelledPayload, `"cusdecRef"`, `"other"`, 1), want: http.StatusBadRequest},
+		"reference not registered yet":   {body: cancelledPayload, err: cusdec.ErrCusdecNotFoundByRef, want: http.StatusServiceUnavailable},
+		"declaration without a case":     {body: cancelledPayload, err: cusdec.ErrCaseNotRecorded, want: http.StatusNotFound},
+		"the notice could not be opened": {body: cancelledPayload, err: errors.New("boom"), want: http.StatusInternalServerError},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cusdecSvc := new(mockCusdecService)
+			cusdecSvc.On("ProcessCancellation", mock.Anything, mock.MatchedBy(func(req cusdec.CusdecCancelledRequest) bool {
+				return req.Payload.CusdecRef.Number == 1047
+			})).Return(tc.err)
+			rec := httptest.NewRecorder()
+
+			NewHandler(cusdecSvc, new(mockCDNService)).HandleWebhook(rec,
 				httptest.NewRequest(http.MethodPost, "/webhooks/slce", bytes.NewBufferString(tc.body)))
 
 			assert.Equal(t, tc.want, rec.Code)

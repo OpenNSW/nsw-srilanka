@@ -39,6 +39,8 @@ func compile(schema []byte) (*jsonschema.Schema, error) {
 	// Ajv applies ajv-formats' limits whatever draft a form declares; this
 	// library applies a vocabulary of its own from 2019-09 only when told to.
 	c.RegisterVocabulary(ajvDateLimit)
+	// The trader app's file control reads x-file; neither library does.
+	c.RegisterVocabulary(xFileRules)
 	c.AssertVocabs()
 
 	const location = "form.json"

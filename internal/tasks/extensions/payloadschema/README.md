@@ -84,6 +84,44 @@ on the data or a row's position (`if`/`then`/`else`, `oneOf`, `anyOf`, `not`,
 form with read-only values, a `readOnly` or `default` beside a draft-07 `$ref`, which the
 library drops, makes the form misconfigured.
 
+### File fields (`x-file`)
+
+A file field is one the trader app's file control renders: one file
+(`{"type": "string", "format": "file"}`) or a list of them (`{"type": "array", "items":
+{"type": "string", "format": "file"}}`). Its `x-file` rules are checked against the stored
+values the submission carries, wherever the schema applies to the field, in list rows and
+conditional parts too. Nothing is looked up in storage:
+
+```json
+"supporting_documents": {
+  "type": "array",
+  "items": { "type": "string", "format": "file" },
+  "x-file": { "accept": ".pdf,.png", "maxFiles": 5 }
+}
+```
+
+- **An empty value names no file** and fails with `empty value instead of a file`; the
+  trader app drops a field that holds no file rather than sending `""`.
+- **`accept`** is matched as the file control matches a file's name, against the stored
+  value: `*` and `*/*` take any file, and `.<ext>` a value that ends with it, in any case.
+  The value ends with the file's extension, which storage matched to its type on upload:
+  on TNSW it is the storage key, and on an agency the owning service's reference, which
+  carries the extension too. An entry that names a type (`image/*`, `application/pdf`)
+  matches nothing, as the value doesn't carry the type.
+- **`maxFiles`** is the most files a list may hold.
+- **Read-only values aren't checked.** A value the read-only check holds (one whose
+  schemas, or those of a value holding it, mark it `readOnly`) must come back as the step
+  stored it. Its files came in through another form, under that form's rules, so this
+  form's `x-file` doesn't judge them.
+
+Only the rules `x-file` writes are checked, other than `maxSize` (see below). A rule it
+leaves out, and a file field without `x-file`, is held to the deployment's upload limits only
+(`storage.allowedUploadTypes`, `storage.maxUploadBytes`); the file control's defaults and
+UI schema `options` apply in the browser only. A rule of the wrong type means what it
+means to the file control: an `accept` set to something other than text takes no file
+(`null` counts as not set), and a `maxFiles` given as text is the number JavaScript reads
+it as, or no limit.
+
 ## Outcome
 
 - **Matches:** the step goes ahead.
@@ -109,3 +147,8 @@ command is validated in full.
 
 - Fields the form doesn't declare
 - External reviewer callbacks, and schemas built at render time
+- `x-file`'s `maxSize`: a file's size is the upload's concern, not the submission's. The
+  browser checks it, and storage holds every file to the upload limit
+  (`storage.maxUploadBytes`).
+- What a file holds, and whether its upload was made: a file is checked by its stored
+  value alone, whose extension is the one it was uploaded with.

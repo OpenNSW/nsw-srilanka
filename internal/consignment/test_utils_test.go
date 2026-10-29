@@ -68,6 +68,12 @@ func (m *MockWM) ResolveAdminIntervention(ctx context.Context, workflowID, runID
 	return args.Error(0)
 }
 
+// ForceParkActivation makes MockWM also satisfy workflow.ActivationParker, for the force-park tests.
+func (m *MockWM) ForceParkActivation(ctx context.Context, workflowID, runID, activationID, reason string) error {
+	args := m.Called(ctx, workflowID, runID, activationID, reason)
+	return args.Error(0)
+}
+
 // MockUserService implements user.Service for testing.
 type MockUserService struct {
 	mock.Mock

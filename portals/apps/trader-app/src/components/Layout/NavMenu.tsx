@@ -82,7 +82,7 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
           isItemActive(target) ? 'bg-primary-subtle text-primary' : 'text-foreground hover:bg-app-surface-muted'
         }`}
       >
-        <span className={isItemActive(target) ? '' : 'text-foreground-subtle'}>{target.icon}</span>
+        <span className={isItemActive(target) ? '' : 'text-foreground-muted'}>{target.icon}</span>
         <span>{target.name}</span>
       </Link>
     )
@@ -92,9 +92,9 @@ export function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         <button className="flex items-center gap-2 pl-2.5 pr-2 h-10 rounded-xl bg-app-surface-muted/70 hover:bg-app-surface-muted text-sm font-semibold text-foreground transition-colors cursor-pointer focus:outline-none">
-          <HamburgerMenuIcon className="w-4 h-4 text-foreground-subtle" />
+          <HamburgerMenuIcon className="w-4 h-4 text-foreground-muted" />
           <span>{currentLabel}</span>
-          <ChevronDownIcon className="w-3.5 h-3.5 text-foreground-subtle" />
+          <ChevronDownIcon className="w-3.5 h-3.5 text-foreground-muted" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="min-w-56">

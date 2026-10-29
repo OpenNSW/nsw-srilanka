@@ -57,6 +57,27 @@ export async function resolveAdminIntervention(
   })
 }
 
+// Moves a RUNNING TASK node into AWAITING_ADMIN, so it can then be resolved like any parked node.
+// stepId is the node's step_id. workflowKind picks the route family, as for resolveAdminIntervention:
+// - 'workflow' (a flow or a child branch): the node's whole task is closed, so the trader or
+//   officer cannot submit it.
+// - 'task' (a task workflow): only that step parks, and the task stays open.
+// Requires nsw:consignment:adminwrite.
+export async function forceParkNode(
+  workflowId: string,
+  stepId: string,
+  reason: string,
+  workflowKind: AdminWorkflowKind,
+): Promise<void> {
+  const route = workflowKind === 'task' ? 'task' : 'workflows'
+  await http.request({
+    url: `${API_BASE_URL}/api/v1/admin/${route}/${encodeURIComponent(workflowId)}/steps/${encodeURIComponent(stepId)}/force-park`,
+    method: 'POST',
+    data: { reason },
+    attachToken: true,
+  })
+}
+
 // Ops/admin view of the full consignment detail plus its flows, no trader/CHA ownership check —
 // not the trader/CHA-facing getConsignment() in features/consignment/service.ts, which 404s/403s
 // for admins inspecting a consignment outside their own company.

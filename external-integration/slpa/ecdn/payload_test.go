@@ -135,6 +135,61 @@ func TestBuildXML_DerivesCusDecSerial(t *testing.T) {
 	assert.Contains(t, doc, "<CusDecSerial>BIBE1CBEX12026E10502026</CusDecSerial>")
 }
 
+// Once Customs has assessed the declaration, the form holds its number as
+// Customs writes it, its office from the declaration, and no serial letter.
+// The CMS gets the serial letter and the number as CusDecNo, the letter from
+// it, and the serial as office, number and the year of the date typed.
+func TestBuildXML_TakesTheNumberAsCustomsWritesIt(t *testing.T) {
+	form := fullForm()
+	form["cusdecNo"] = "CBEX1/2026/E/67948"
+	form["cusdecOffice"] = "CBEX1"
+	delete(form, "cusdecSerLet")
+
+	doc, err := BuildXML(form)
+	require.NoError(t, err)
+
+	assert.Contains(t, doc, "<CusDecNo>E67948</CusDecNo>")
+	assert.Contains(t, doc, "<CusDecOffice>CBEX1</CusDecOffice>")
+	assert.Contains(t, doc, "<CusDecSerLet>E</CusDecSerLet>")
+	assert.Contains(t, doc, "<CusDecSerial>CBEX1E679482026</CusDecSerial>")
+	assert.Contains(t, doc, "<ContainerNumber>E67948-2026-08-19-01</ContainerNumber>")
+}
+
+func TestCmsCusdecNo(t *testing.T) {
+	for in, want := range map[string]string{
+		"CBEX1/2026/E/67948": "E67948",
+		"CBEX1-2026-E-67948": "E67948",
+		"CBEX1 2026 E 67948": "E67948",
+		"E67948":             "E67948",
+		"CBEX12026E1050":     "CBEX12026E1050",
+	} {
+		assert.Equal(t, want, cmsCusdecNo(in), in)
+	}
+}
+
+func TestCusdecSerLet(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		serLet   any
+		cusdecNo string
+		want     string
+	}{
+		{"entered by the trader", "X", "CBEX1/2026/E/1050", "X"},
+		{"from the number", nil, "CBEX1/2026/E/1050", "E"},
+		{"from a hyphenated number", nil, "CBEX1-2026-E-1050", "E"},
+		{"blank entry falls back", " ", "CBEX1/2026/E/1050", "E"},
+		{"number without parts", nil, "CBEX12026E1050", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			form := map[string]any{}
+			if c.serLet != nil {
+				form["cusdecSerLet"] = c.serLet
+			}
+			assert.Equal(t, c.want, cusdecSerLet(form, c.cusdecNo))
+		})
+	}
+}
+
 func TestBuildXML_ContainerNumber(t *testing.T) {
 	// SLPA's generator puts a per-declaration key in ContainerNumber and the
 	// physical container in ContainerMark.
