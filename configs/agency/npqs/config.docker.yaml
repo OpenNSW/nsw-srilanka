@@ -209,7 +209,15 @@ notification:
   providers:
     email:
       baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+      auth:
+        type: oauth2
+        oauth2:
+          tokenURL: https://idp.example.com/oauth2/token
+          clientID: replace-with-pingmailer-client-id
+          clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+      smtpHost: mail.example.com
+      smtpPort: 587
+      sender: no-reply@example.com
     sms:
       baseURL: https://smsservice.lk
       userName: replace-with-actual-username

@@ -14,7 +14,7 @@ import (
 	"github.com/OpenNSW/core/artifact/loaders/local"
 	"github.com/OpenNSW/core/cors"
 	"github.com/OpenNSW/core/database"
-	"github.com/OpenNSW/core/notifications/providers"
+	"github.com/OpenNSW/core/notification/providers"
 	"github.com/OpenNSW/core/remote"
 	remoteauth "github.com/OpenNSW/core/remote/auth"
 	"github.com/OpenNSW/core/storage"
@@ -91,7 +91,15 @@ notification:
   providers:
     email:
       baseURL: https://email.example.com
-      token: email-token
+      auth:
+        type: oauth2
+        oauth2:
+          tokenURL: https://idp.example.com/oauth2/token
+          clientID: pingmailer
+          clientSecret: email-client-secret
+      smtpHost: mail.example.com
+      smtpPort: 587
+      sender: no-reply@example.com
     sms:
       baseURL: https://sms.example.com
       userName: nsw
@@ -223,7 +231,20 @@ func validConfig() *Config {
 		},
 		Notification: NotificationConfig{
 			Providers: NotificationProviders{
-				Email: providers.EmailConfig{BaseURL: "https://email.example.com", Token: "email-token"},
+				Email: providers.EmailConfig{
+					BaseURL: "https://email.example.com",
+					Auth: remoteauth.Config{
+						Type: remoteauth.TypeOAuth2,
+						OAuth2: &remoteauth.OAuth2Config{
+							TokenURL:     "https://idp.example.com/oauth2/token",
+							ClientID:     "pingmailer",
+							ClientSecret: "email-client-secret",
+						},
+					},
+					SMTPHost: "mail.example.com",
+					SMTPPort: 587,
+					Sender:   "no-reply@example.com",
+				},
 				SMS: providers.SMSConfig{
 					BaseURL:  "https://sms.example.com",
 					UserName: "nsw",
@@ -390,7 +411,10 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"notification.providers",
 		"notification.providers.email",
 		"notification.providers.email.baseURL",
-		"notification.providers.email.token",
+		"notification.providers.email.auth",
+		"notification.providers.email.smtpHost",
+		"notification.providers.email.smtpPort",
+		"notification.providers.email.sender",
 		"notification.providers.sms",
 		"notification.providers.sms.baseURL",
 		"notification.providers.sms.userName",
@@ -692,7 +716,7 @@ func TestLoad_NotificationProviders(t *testing.T) {
 notification:
   providers:
     email:
-      token: another-token
+      sender: alerts@example.org
     sms:
       baseURL: https://sms.example.org
       sidCode: sid
@@ -700,8 +724,8 @@ notification:
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if got := cfg.Notification.Providers.Email.Token; got != "another-token" {
-		t.Errorf("email token = %q, want another-token", got)
+	if got := cfg.Notification.Providers.Email.Sender; got != "alerts@example.org" {
+		t.Errorf("email sender = %q, want alerts@example.org", got)
 	}
 	if got := cfg.Notification.Providers.SMS.BaseURL; got != "https://sms.example.org" {
 		t.Errorf("sms baseURL = %q, want https://sms.example.org", got)
@@ -715,14 +739,16 @@ notification:
 // as the text it resolved to. Load clears a placeholder's string tag once it
 // resolves, so the value is re-typed unless its field is a string.
 func TestLoad_NotificationSecretsStayStrings(t *testing.T) {
-	t.Setenv("TEST_EMAIL_TOKEN", "true")
+	t.Setenv("TEST_EMAIL_CLIENT_SECRET", "true")
 	t.Setenv("TEST_SMS_PASSWORD", "12345678")
 	t.Setenv("TEST_SMS_SID_CODE", "0123")
 	cfg, err := loadYAML(t, configYAML(t, `
 notification:
   providers:
     email:
-      token: "{{env:TEST_EMAIL_TOKEN}}"
+      auth:
+        oauth2:
+          clientSecret: "{{env:TEST_EMAIL_CLIENT_SECRET}}"
     sms:
       password: "{{env:TEST_SMS_PASSWORD}}"
       sidCode: "{{env:TEST_SMS_SID_CODE}}"
@@ -732,9 +758,9 @@ notification:
 	}
 	p := cfg.Notification.Providers
 	for name, got := range map[string][2]string{
-		"email.token":  {p.Email.Token, "true"},
-		"sms.password": {p.SMS.Password, "12345678"},
-		"sms.sidCode":  {p.SMS.SIDCode, "0123"},
+		"email.auth.oauth2.clientSecret": {p.Email.Auth.OAuth2.ClientSecret, "true"},
+		"sms.password":                   {p.SMS.Password, "12345678"},
+		"sms.sidCode":                    {p.SMS.SIDCode, "0123"},
 	} {
 		if got[0] != got[1] {
 			t.Errorf("%s = %q, want %q", name, got[0], got[1])

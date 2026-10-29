@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	notification "github.com/OpenNSW/core/notifications"
+	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/taskflow/store"
 )
 

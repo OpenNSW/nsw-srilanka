@@ -14,7 +14,7 @@
 #   kubectl create secret generic nsw-secrets \
 #     --from-literal=db-password=... \
 #     --from-literal=slpa-webhook-secret=... \
-#     --from-literal=notification-email-token=... \
+#     --from-literal=notification-email-client-secret=... \
 #     --from-literal=notification-sms-password=... \
 #     --from-literal=m2m-npqs-secret=... \
 #     --from-literal=m2m-fcau-secret=... \
@@ -81,9 +81,9 @@ backend:
     SLPA_WEBHOOK_SECRET:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: slpa-webhook-secret }
-    NOTIFICATION_EMAIL_TOKEN:
+    NOTIFICATION_EMAIL_CLIENT_SECRET:
       valueFrom:
-        secretKeyRef: { name: nsw-secrets, key: notification-email-token }
+        secretKeyRef: { name: nsw-secrets, key: notification-email-client-secret }
     NOTIFICATION_SMS_PASSWORD:
       valueFrom:
         secretKeyRef: { name: nsw-secrets, key: notification-sms-password }
@@ -548,7 +548,15 @@ backend:
       providers:
         email:
           baseURL: "https://email.example.com"
-          token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+          auth:
+            type: oauth2
+            oauth2:
+              tokenURL: "https://idp.example.com/oauth2/token"
+              clientID: "replace-with-pingmailer-client-id"
+              clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+          smtpHost: "mail.example.com"
+          smtpPort: 587
+          sender: "no-reply@example.com"
         sms:
           baseURL: "https://sms.example.com"
           userName: "nsw"

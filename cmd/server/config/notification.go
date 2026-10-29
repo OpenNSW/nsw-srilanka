@@ -1,6 +1,6 @@
 package config
 
-import "github.com/OpenNSW/core/notifications/providers"
+import "github.com/OpenNSW/core/notification/providers"
 
 // NotificationConfig holds the notification section of config.yaml: one block
 // per provider, each in that provider's own typed config. The fields are typed,

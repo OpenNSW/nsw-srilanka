@@ -12,7 +12,7 @@ import (
 	"strings"
 	texttemplate "text/template"
 
-	notification "github.com/OpenNSW/core/notifications"
+	"github.com/OpenNSW/core/notification"
 	"github.com/OpenNSW/core/taskflow/store"
 )
 

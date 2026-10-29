@@ -15,8 +15,16 @@ Set them under `notification.providers` in the server's `config.yaml` (see
 notification:
   providers:
     email:
-      baseURL: https://email.svc.local
-      token: "{{env:NOTIFICATION_EMAIL_TOKEN}}"
+      baseURL: https://email.svc.local # PingMailer
+      auth:
+        type: oauth2
+        oauth2:
+          tokenURL: https://idp.example.com/oauth2/token
+          clientID: "..."
+          clientSecret: "{{env:NOTIFICATION_EMAIL_CLIENT_SECRET}}"
+      smtpHost: mail.example.com
+      smtpPort: 587
+      sender: no-reply@example.com
     sms:
       baseURL: https://smsservice.lk
       userName: "..."
