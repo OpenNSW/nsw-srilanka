@@ -196,10 +196,10 @@ const (
 
 // hsCodeTaskRenderConfig mirrors the shipped trade/2-hscode_selection render config:
 // the same PENDING_USER state offers the CHA an interactive workspace and the
-// trader a read-only notice, each gated on that role's ownership claim.
+// trader a read-only notice, each gated on that role's ownership claim. Its task
+// template reads hsCodeTaskReadRoles.
 const hsCodeTaskRenderConfig = `{
   "id": "trade-hscode-selection-flow:render",
-  "read": { "roles": ["cha", "trader"] },
   "sections": {
     "status_message": {
       "templateId": "waiting",
@@ -216,12 +216,17 @@ const hsCodeTaskRenderConfig = `{
   "states": { "PENDING_USER": { "actions": [{ "command": "submit" }] } }
 }`
 
+// hsCodeTaskReadRoles is the shipped trade/2-hscode_selection task template's read.roles.
+const hsCodeTaskReadRoles = `["cha", "trader"]`
+
 type fakeTaskFetcher struct {
 	record store.TaskRecord
 	found  bool
 	calls  int
 	// renderConfig is the render config of record's task template, testTaskTemplateID.
 	renderConfig string
+	// readRoles is that task template's read.roles, as a JSON array, or "" for none.
+	readRoles string
 }
 
 // testTaskTemplateID is the task template of the test tasks, in manifest version 1.
@@ -229,15 +234,20 @@ const testTaskTemplateID = "test-task"
 
 // renderConfigOf resolves record's render config through manifest version 1 of an
 // artifact set holding the task template testTaskTemplateID, which renders as
-// f.renderConfig. It also returns the set, for the zone view assembler.
+// f.renderConfig and is read by f.readRoles. It also returns the set, for the zone
+// view assembler and the task template resolver.
 func (f *fakeTaskFetcher) renderConfigOf(t *testing.T) (RenderConfigOf, *artifact.Set) {
 	t.Helper()
+	read := ""
+	if f.readRoles != "" {
+		read = `,"read":{"roles":` + f.readRoles + `}`
+	}
 	set, err := artifact.LoadSet(context.Background(), testutil.MemLoader{
 		"manifest_v1.json": []byte(`{"artifacts":[
 			{"id":"` + testTaskTemplateID + `","kind":"task_template","path":"task_template.json"},
 			{"id":"` + testTaskTemplateID + `:render","kind":"generic_template","path":"render.json"}
 		]}`),
-		"task_template.json": []byte(`{"id":"` + testTaskTemplateID + `","type":"APPLICATION","workflow_id":"test-task-flow","render_config_id":"` + testTaskTemplateID + `:render"}`),
+		"task_template.json": []byte(`{"id":"` + testTaskTemplateID + `","type":"APPLICATION","workflow_id":"test-task-flow","render_config_id":"` + testTaskTemplateID + `:render"` + read + `}`),
 		"render.json":        []byte(f.renderConfig),
 	})
 	require.NoError(t, err)
@@ -272,7 +282,7 @@ func getTaskHandler(t *testing.T, fetcher *fakeTaskFetcher, templates *stubTempl
 		Assembler:      zoneview.NewZoneViewAssembler(zoneview.NewTaskRenderer(asm), set),
 		AuthzCatalog:   taskauthz.Catalog{Roles: map[string]string{"trader": "Trader", "cha": "CHA"}},
 		Files:          NewFileBinding(newFakeFileRefs(), nil, renderConfigOf),
-		RenderConfigOf: renderConfigOf,
+		TaskTemplateOf: TaskTemplates(set),
 	}
 }
 
@@ -289,6 +299,7 @@ func pendingHSCodeTask() *fakeTaskFetcher {
 			ManifestVersion: 1,
 		},
 		renderConfig: hsCodeTaskRenderConfig,
+		readRoles:    hsCodeTaskReadRoles,
 	}
 }
 
@@ -504,7 +515,7 @@ func TestHandleGetTask_DeniedNilAuditDoesNotPanic(t *testing.T) {
 // The read.roles allowlist narrows access even for a genuine owner.
 func TestHandleGetTask_OwnedRoleNotAdmittedByReadPolicy(t *testing.T) {
 	fetcher := pendingHSCodeTask()
-	fetcher.renderConfig = `{"read":{"roles":["cha"]},"sections":{}}`
+	fetcher.readRoles = `["cha"]`
 	in := ownerInput("Trader", "trader")
 
 	recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
@@ -635,7 +646,7 @@ func TestHandleGetTask_DualRoleUserGetsOneViewNotBoth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fetcher := pendingHSCodeTask()
-			fetcher.renderConfig = strings.Replace(hsCodeTaskRenderConfig, `["cha", "trader"]`, tt.readRoles, 1)
+			fetcher.readRoles = tt.readRoles
 			in := bothRoles()
 
 			recorder := getTask(t, getTaskHandler(t, fetcher, &stubTemplates{}), &in)
@@ -660,8 +671,8 @@ func TestHandleGetTask_DualRoleUserGetsOneViewNotBoth(t *testing.T) {
 // It must surface as a 500, not quietly hide the section.
 func TestHandleGetTask_UnknownClaimInConfigIsAnError(t *testing.T) {
 	fetcher := pendingHSCodeTask()
+	fetcher.readRoles = `["trader"]`
 	fetcher.renderConfig = `{
-	  "read": { "roles": ["trader"] },
 	  "sections": {
 	    "workspace": {
 	      "templateId": "form",
@@ -728,7 +739,8 @@ func TestHandleGetTask_GivesFileReferences(t *testing.T) {
 			refs := newFakeFileRefs()
 			fetcher := pendingFileTask()
 			h := getTaskHandler(t, fetcher, &stubTemplates{})
-			h.Files = NewFileBinding(refs, nil, h.RenderConfigOf)
+			renderConfigOf, _ := fetcher.renderConfigOf(t)
+			h.Files = NewFileBinding(refs, nil, renderConfigOf)
 			var asked taskauthz.Input
 			if tt.canAct != nil {
 				h.CanAct = func(ctx context.Context, record store.TaskRecord, in taskauthz.Input) (bool, error) {

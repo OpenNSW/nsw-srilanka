@@ -203,11 +203,11 @@ the agency's artifacts therefore declare for every task:
 
 - the step's `authz` extension says which roles may run each command, e.g.
   `"PENDING_USER": { "submit": ["officer"] }`;
-- the render config's `read.roles` says which roles may open the task, e.g.
+- the task template's `read.roles` says which roles may open the task, e.g.
   `["officer"]`.
 
 A step without an `authz` block is refused on writes, so every step must declare one.
-A render config without a `read` block is readable by every catalog role, so a task
+A task template without a `read` block is readable by every catalog role, so a task
 that should be open to one role only must say so. For the syntax see [`WORKFLOW_GUIDE.md`](WORKFLOW_GUIDE.md)
 (read authorization) and the
 [authz extension](../internal/tasks/extensions/authz/README.md).

@@ -275,17 +275,17 @@ func (h *HTTPHandler) readable(ctx context.Context, in taskauthz.Input, record s
 	}
 }
 
-// resolveRead is readauthz.Resolve for record, against its render config's read
+// resolveRead is readauthz.Resolve for record, against its task template's read
 // policy.
 func (h *HTTPHandler) resolveRead(ctx context.Context, in taskauthz.Input, record store.TaskRecord) (map[string]bool, error) {
-	if h.RenderConfigOf == nil {
-		return nil, errors.New("tasks: no render config resolver configured")
+	if h.TaskTemplateOf == nil {
+		return nil, errors.New("tasks: no task template resolver configured")
 	}
-	renderConfig, err := h.RenderConfigOf(ctx, record)
+	taskTemplate, err := h.TaskTemplateOf(ctx, record)
 	if err != nil {
 		return nil, fmt.Errorf("tasks: %w", err)
 	}
-	return readauthz.Resolve(ctx, h.AuthzCatalog, in, renderConfig, record.CaseID)
+	return readauthz.Resolve(ctx, h.AuthzCatalog, in, taskTemplate, record.CaseID)
 }
 
 // auditClaim records a claim, takeover or release of a task. tk is the takeover, or

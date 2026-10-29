@@ -73,9 +73,9 @@ type HTTPHandler struct {
 	// CanAct decides whether a reader's file references can be submitted.
 	// Without it, they can only be opened.
 	CanAct CanAct
-	// RenderConfigOf resolves a task's render config, whose read policy
-	// decides who may read the task.
-	RenderConfigOf RenderConfigOf
+	// TaskTemplateOf resolves a task's task template, whose read policy decides
+	// who may read the task.
+	TaskTemplateOf TaskTemplateOf
 }
 
 func NewHTTPHandler(
@@ -104,8 +104,8 @@ func NewHTTPHandler(
 }
 
 // HandleGetTask returns the ZoneView payload for a single task, scoped to the
-// caller: they must own the task's consignment in a role the task's render
-// config admits, and the claims resolved for them decide which sections of the
+// caller: they must own the task's consignment in a role the task's template
+// admits, and the claims resolved for them decide which sections of the
 // view they see. Where claims are on, the response also says who holds the task's
 // claim.
 //

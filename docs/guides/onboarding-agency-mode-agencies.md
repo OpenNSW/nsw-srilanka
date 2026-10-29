@@ -159,7 +159,7 @@ In the agency's folder (for example `dea-v2/`), for each kind of review:
   set from the request. The decision's `command` must be one TNSW's step allows (Step 6).
 
 - On every officer step, the roles that may act: the step's `authz` extension (for example
-  `"PENDING_USER": { "submit": ["officer"] }`) and the render config's `read.roles` (for
+  `"PENDING_USER": { "submit": ["officer"] }`) and the task template's `read.roles` (for
   example `["officer"]`). A task without them is open to every role in the agency's
   catalog. See [docs/agency.md, Roles per task](../agency.md#roles-per-task).
 

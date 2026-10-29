@@ -15,7 +15,7 @@ import (
 )
 
 // noPolicy declares no read.roles, so no precedence applies.
-const noPolicy = `{"id":"x:render","sections":{}}`
+const noPolicy = `{"id":"x","workflow_id":"x-flow","render_config_id":"x:render"}`
 
 var testCatalog = taskauthz.Catalog{
 	Roles:   map[string]string{"trader": "Trader", "cha": "CHA"},
@@ -303,7 +303,7 @@ func TestResolve_ReadRolesGatesAccess(t *testing.T) {
 			owned:     map[string]bool{"trader": true},
 		},
 		{
-			name:      "absent render config admits any eligible role",
+			name:      "absent task template admits any eligible role",
 			config:    "",
 			heldRoles: []string{"Trader"},
 			owned:     map[string]bool{"trader": true},
@@ -361,7 +361,7 @@ func TestResolve_PopulatesEveryCatalogRole(t *testing.T) {
 	}
 }
 
-// A malformed render config is a real failure, not a denial: a 500 says "fix the
+// A malformed task template is a real failure, not a denial: a 500 says "fix the
 // config", a 404 would quietly hide the task instead.
 func TestResolve_MalformedConfigIsNotADenial(t *testing.T) {
 	calls := 0
@@ -369,10 +369,10 @@ func TestResolve_MalformedConfigIsNotADenial(t *testing.T) {
 
 	_, err := Resolve(context.Background(), testCatalog, in, json.RawMessage(`{"read":`), "consignment-1")
 	if err == nil {
-		t.Fatal("want an error for a malformed render config, got none")
+		t.Fatal("want an error for a malformed task template, got none")
 	}
 	if errors.Is(err, ErrDenied) {
-		t.Error("a malformed config must not be reported as a denial")
+		t.Error("a malformed task template must not be reported as a denial")
 	}
 }
 

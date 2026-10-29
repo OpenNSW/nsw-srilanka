@@ -199,7 +199,7 @@ In `PENDING_USER` the feedback (when present) renders above the form; in `COMPLE
 
 Two levers use those claims:
 
-- **`read.roles`** (top level) lists the logical roles allowed to read the task at all. A caller eligible for none of them gets a `404` — deliberately indistinguishable from a task that does not exist. Omit the block (or leave the list empty) to admit any role that owns the consignment.
+- **`read.roles`**, at the top level of the task's **task template** (`task_template.json`, not `render.json`), lists the logical roles allowed to read the task at all. A caller eligible for none of them gets a `404` — deliberately indistinguishable from a task that does not exist. Omit the block (or leave the list empty) to admit any role that owns the consignment.
 - **`visibleWhen.requireClaim`** (per section) gates one section on one claim, which is how a single task state shows different content to different roles.
 
 > [!IMPORTANT]
@@ -207,13 +207,26 @@ Two levers use those claims:
 >
 > Put the role that _acts_ on the task first: `["cha", "trader"]` for a step the CHA performs, `["trader", "cha"]` for one the trader performs. Reordering the list changes which screen a dual-role user gets.
 >
-> A config that declares **no** `read.roles` has expressed no precedence, so every eligible role's claim is reported. That is safe only because such a config has no per-role sections to disagree — **if you use `requireClaim` anywhere, declare `read.roles`.**
+> A task template that declares **no** `read.roles` has expressed no precedence, so every eligible role's claim is reported. That is safe only when its render config has no per-role sections to disagree — **if the render config uses `requireClaim` anywhere, declare `read.roles` on the task template.**
+
+The task template names who may read the task, and in what order:
+
+```json
+{
+  "id": "trade-hscode-selection-flow",
+  "type": "APPLICATION",
+  "workflow_id": "trade-hscode-selection-flow",
+  "render_config_id": "trade-hscode-selection-flow:render",
+  "read": { "roles": ["cha", "trader"] }
+}
+```
+
+Its render config gates each section on a claim:
 
 ```json
 {
   "id": "trade-hscode-selection-flow:render",
   "type": "APPLICATION",
-  "read": { "roles": ["cha", "trader"] },
   "sections": {
     "status_message": {
       "templateId": "trade-hscode-selection--waiting-markdown",
