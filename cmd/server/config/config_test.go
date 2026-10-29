@@ -231,7 +231,7 @@ func validConfig() *Config {
 		},
 		Notification: NotificationConfig{
 			Providers: NotificationProviders{
-				Email: providers.EmailConfig{
+				Email: &providers.EmailConfig{
 					BaseURL: "https://email.example.com",
 					Auth: remoteauth.Config{
 						Type: remoteauth.TypeOAuth2,
@@ -245,7 +245,7 @@ func validConfig() *Config {
 					SMTPPort: 587,
 					Sender:   "no-reply@example.com",
 				},
-				SMS: providers.SMSConfig{
+				SMS: &providers.SMSConfig{
 					BaseURL:  "https://sms.example.com",
 					UserName: "nsw",
 					Password: "sms-password",
@@ -408,14 +408,11 @@ func TestLoad_MissingRequiredSettingFails(t *testing.T) {
 		"temporal.host",
 		"temporal.port",
 		"temporal.namespace",
-		"notification.providers",
-		"notification.providers.email",
 		"notification.providers.email.baseURL",
 		"notification.providers.email.auth",
 		"notification.providers.email.smtpHost",
 		"notification.providers.email.smtpPort",
 		"notification.providers.email.sender",
-		"notification.providers.sms",
 		"notification.providers.sms.baseURL",
 		"notification.providers.sms.userName",
 		"notification.providers.sms.password",
@@ -771,10 +768,31 @@ notification:
 	}
 }
 
-func TestLoad_NotificationProvidersMissing(t *testing.T) {
-	_, err := loadYAML(t, configYAML(t, "", "notification"))
-	if err == nil || !containsString(err.Error(), "notification") {
-		t.Fatalf("expected a notification configuration error, got: %v", err)
+// Notifications are optional: without the section, or with a channel left out,
+// the server starts and builds a provider only for each channel set.
+func TestLoad_NotificationProvidersOptional(t *testing.T) {
+	for _, tc := range []struct {
+		drop string
+		want int
+	}{
+		{"notification", 0},
+		{"notification.providers", 0},
+		{"notification.providers.email", 1},
+		{"notification.providers.sms", 1},
+	} {
+		t.Run(tc.drop, func(t *testing.T) {
+			cfg, err := loadYAML(t, configYAML(t, "", tc.drop))
+			if err != nil {
+				t.Fatalf("Load() error: %v", err)
+			}
+			built, err := cfg.Notification.Build()
+			if err != nil {
+				t.Fatalf("Build() error: %v", err)
+			}
+			if len(built) != tc.want {
+				t.Errorf("Build() built %d providers, want %d", len(built), tc.want)
+			}
+		})
 	}
 }
 

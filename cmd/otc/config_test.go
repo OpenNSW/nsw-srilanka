@@ -126,7 +126,7 @@ integrations:
 // The server's committed templates load as otc's config too, with the env vars
 // .env.example sets for their placeholders.
 func TestLoad_ServerTemplates(t *testing.T) {
-	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "NOTIFICATION_EMAIL_CLIENT_SECRET", "NOTIFICATION_SMS_PASSWORD", "STORAGE_LOCAL_PUT_SECRET", "STORAGE_TOKEN_KEYSET"} {
+	for _, k := range []string{"DB_PASSWORD", "SLPA_WEBHOOK_SECRET", "STORAGE_LOCAL_PUT_SECRET", "STORAGE_TOKEN_KEYSET"} {
 		t.Setenv(k, "example-"+k)
 	}
 	for _, agency := range []string{"NPQS", "FCAU", "CDA", "SLPA", "EFC", "SLTB", "ASYCUDA"} {
