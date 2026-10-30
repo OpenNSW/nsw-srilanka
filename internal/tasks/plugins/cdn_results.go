@@ -51,14 +51,7 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 	containers := make([]map[string]any, 0, len(branches))
 
 	for _, branch := range branches {
-		// A branch whose note Customs cancelled finished without an
-		// acknowledgment, and its note must not be quoted downstream.
-		if status, _ := branch["ack_status"].(string); status == cdnAckStatusCancelled {
-			continue
-		}
-		// Nor is a branch the trader cancelled from the CDN form (Cancel this
-		// CDN), before sending it: it never raised a note.
-		if form, _ := branch["userform"].(map[string]any); form["cancel_cdn"] == true {
+		if cancelledBranch(branch) {
 			continue
 		}
 
@@ -123,6 +116,19 @@ func CDNResultsCollectorFunc(ctx flowplugins.PluginContext, _ json.RawMessage) e
 // branchResults reads the SPLIT_TASK results array from the task inputs. Each
 // entry is one branch's workflow variables; a branch that halted carries an
 // "error" key instead, and is counted rather than skipped silently.
+// cancelledBranch reports whether a branch ended without a note that stands,
+// which is then neither collected nor quoted downstream: Customs cancelled its
+// note (§7.7) instead of acknowledging it, or the trader cancelled it, while it
+// waited to be acknowledged (also ack_status CANCELLED) or from the CDN form
+// before sending it (Cancel this CDN), when no note was raised.
+func cancelledBranch(branch map[string]any) bool {
+	if status, _ := branch["ack_status"].(string); status == cdnAckStatusCancelled {
+		return true
+	}
+	form, _ := branch["userform"].(map[string]any)
+	return form["cancel_cdn"] == true
+}
+
 func branchResults(inputs map[string]any) ([]map[string]any, error) {
 	raw, ok := inputs["cdn_results"]
 	if !ok {
