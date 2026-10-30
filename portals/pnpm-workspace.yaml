@@ -15,3 +15,6 @@ allowBuilds:
   '@swc/core': true
   core-js: false
   esbuild: true
+
+# Fail the install when Node.js or pnpm don't satisfy package.json `engines`.
+engineStrict: true
