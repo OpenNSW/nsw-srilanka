@@ -139,7 +139,7 @@ services:
 
 # Reference ID formats for the cda REFID_GENERATOR tasks, in the schema of
 # github.com/OpenNSW/core/refid. The counters live in cda_db (refid_sequences)
-# and restart at 0001 each year, on the UTC calendar.
+# and restart at 0001 each year, on the Sri Lanka calendar (Asia/Colombo).
 refid:
   issuers:
     - issuer: CDA
@@ -148,6 +148,7 @@ refid:
         # when the officer review opens. certType is the trader's cert_type: P
         # (physical), S (salmonella) or PS (both). Produces: PQC/PS/0042/26/T
         - idType: pqc_application_ref
+          timezone: Asia/Colombo
           segments:
             - type: literal
               value: "PQC/"
@@ -163,13 +164,14 @@ refid:
             - type: literal
               value: "/"
             - type: date
-              layout: "06"
+              format: "yy"
             - type: literal
               value: "/T"
 
         # The certificates' shared serial, drawn once per issuance so that when
         # both are issued they carry the same number and year. Produces: 1205/26
         - idType: pqc_certificate_serial
+          timezone: Asia/Colombo
           segments:
             - type: sequence
               sequence:
@@ -178,7 +180,7 @@ refid:
             - type: literal
               value: "/"
             - type: date
-              layout: "06"
+              format: "yy"
 
         # Physical Quality Certificate number, from the serial. Produces:
         # PQC/P/1205/26

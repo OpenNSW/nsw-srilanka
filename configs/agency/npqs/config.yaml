@@ -140,9 +140,10 @@ refid:
   issuers:
     - issuer: NPQS
       formats:
-        # Application reference: office-specific sequence, reset by UTC year.
+        # Application reference: office-specific sequence, reset by year (Colombo time).
         # Produces: TNSW/NPQS/SEA-CMB/PC/2026/000001
         - idType: phyto_request_ref
+          timezone: Asia/Colombo
           segments:
             - type: literal
               value: "TNSW/NPQS/"
@@ -152,7 +153,7 @@ refid:
             - type: literal
               value: "/PC/"
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "/"
             - type: sequence
@@ -160,13 +161,14 @@ refid:
                 scopeKey: "{issuer}:{idType}:{officeLocation}:{yyyy}"
                 padding: 6
 
-        # Lab sample reference, reset by UTC year. Produces: PQS/2026/0001
+        # Lab sample reference, reset by year (Colombo time). Produces: PQS/2026/0001
         - idType: lab_sample_ref
+          timezone: Asia/Colombo
           segments:
             - type: literal
               value: "PQS/"
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "/"
             - type: sequence

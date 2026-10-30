@@ -508,8 +508,9 @@ backend:
             # A blend sheet's number, drawn when the trader submits: the year,
             # then a sequence that restarts every year. Produces: 2026/00001
             - idType: blend_sheet_no
+              timezone: Asia/Colombo
               segments:
-                - {type: date, layout: "2006"}
+                - {type: date, format: "yyyy"}
                 - {type: literal, value: "/"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyy}", padding: 5}
@@ -529,14 +530,15 @@ backend:
                   random: {scopeKey: "{issuer}:{idType}", charset: numeric, length: 10}
         - issuer: NPQS
           formats:
-            # Shared UTC monthly sequence for NPQS certificate and treatment fees.
+            # Shared monthly sequence (Colombo time) for NPQS certificate and treatment fees.
             # Produces: NPQS-2026-09-00001
             - idType: npqs_payment_ref
+              timezone: Asia/Colombo
               segments:
                 - {type: literal, value: "NPQS-"}
-                - {type: date, layout: "2006"}
+                - {type: date, format: "yyyy"}
                 - {type: literal, value: "-"}
-                - {type: date, layout: "01"}
+                - {type: date, format: "MM"}
                 - {type: literal, value: "-"}
                 - type: sequence
                   sequence: {scopeKey: "{issuer}:{idType}:{yyyyMM}", padding: 5}

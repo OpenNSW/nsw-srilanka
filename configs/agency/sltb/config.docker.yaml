@@ -147,13 +147,14 @@ refid:
         # sample_ref — the number of a registered sample: the year, the month,
         # then a sequence counted per year. Produces: 2026/09/0001
         - idType: sample_ref
+          timezone: Asia/Colombo
           segments:
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "/"
             - type: date
-              layout: "01"
+              format: "MM"
             - type: literal
               value: "/"
             - type: sequence

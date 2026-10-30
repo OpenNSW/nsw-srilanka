@@ -55,16 +55,12 @@ func TestInitRefIDs_MalformedConfigFails(t *testing.T) {
 // The refid sections of the committed configs compile, and generate the IDs
 // the artifacts that use them expect.
 func TestCommittedRefIDFormats(t *testing.T) {
-	yy := time.Now().UTC().Format("06")
-	cda := []committedConfig{
-		{file: "configs/agency/cda/config.yaml"},
-		{file: "configs/agency/cda/config.docker.yaml"},
-	}
-	tnsw := []committedConfig{
-		{file: "configs/config.example.yaml"},
-		{file: "configs/config.docker.example.yaml"},
-		{file: "deployments/helm/values-example.yaml", keys: []string{"backend", "config"}},
-	}
+	// A fixed mid-year instant, so the expected year doesn't depend on when, or
+	// in which zone, the test runs.
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	clock := refid.WithClock(func() time.Time { return now })
+	yy := now.Format("06")
+	cda, tnsw := cdaConfigs, tnswConfigs
 	for _, tc := range []struct {
 		name    string
 		configs []committedConfig
@@ -116,7 +112,7 @@ func TestCommittedRefIDFormats(t *testing.T) {
 	} {
 		for _, c := range tc.configs {
 			t.Run(tc.name+" in "+c.file, func(t *testing.T) {
-				got, err := c.registry(t).Generate(context.Background(), tc.issuer, tc.idType, tc.params)
+				got, err := c.registry(t, clock).Generate(context.Background(), tc.issuer, tc.idType, tc.params)
 				if tc.wantErr != nil {
 					if !errors.Is(err, tc.wantErr) {
 						t.Fatalf("Generate(%q, %q, %v): got (%q, %v), want %v", tc.issuer, tc.idType, tc.params, got, err, tc.wantErr)
@@ -140,16 +136,81 @@ func TestCommittedRefIDFormats(t *testing.T) {
 	}
 }
 
+// The committed files that hold a refid section, by the deployment they belong to.
+var (
+	cdaConfigs = []committedConfig{
+		{file: "configs/agency/cda/config.yaml"},
+		{file: "configs/agency/cda/config.docker.yaml"},
+	}
+	npqsConfigs = []committedConfig{
+		{file: "configs/agency/npqs/config.yaml"},
+		{file: "configs/agency/npqs/config.docker.yaml"},
+	}
+	sltbConfigs = []committedConfig{
+		{file: "configs/agency/sltb/config.yaml"},
+		{file: "configs/agency/sltb/config.docker.yaml"},
+	}
+	tnswConfigs = []committedConfig{
+		{file: "configs/config.example.yaml"},
+		{file: "configs/config.docker.example.yaml"},
+		{file: "deployments/helm/values-example.yaml", keys: []string{"backend", "config"}},
+	}
+)
+
+// Every date-using format in the committed configs reads the clock in Sri Lanka
+// time. 20:00 UTC on 31 December is 01:30 on 1 January in Colombo, so each ID
+// already carries the new year (and month, where it has one); a format left on
+// UTC would still show 2026 and 12.
+func TestCommittedRefIDFormats_UseColomboTime(t *testing.T) {
+	at := time.Date(2026, 12, 31, 20, 0, 0, 0, time.UTC)
+	clock := refid.WithClock(func() time.Time { return at })
+
+	for _, tc := range []struct {
+		name    string
+		configs []committedConfig
+		issuer  string
+		idType  string
+		params  map[string]string
+		want    string
+	}{
+		{name: "SLTB blend sheet number", configs: tnswConfigs, issuer: "SLTB", idType: "blend_sheet_no", want: "2027/00001"},
+		{name: "NPQS payment ref", configs: tnswConfigs, issuer: "NPQS", idType: "npqs_payment_ref", want: "NPQS-2027-01-00001"},
+		{
+			name: "CDA application ref", configs: cdaConfigs, issuer: "CDA", idType: "pqc_application_ref",
+			params: map[string]string{"certType": "PS"}, want: "PQC/PS/0001/27/T",
+		},
+		{name: "CDA certificate serial", configs: cdaConfigs, issuer: "CDA", idType: "pqc_certificate_serial", want: "0001/27"},
+		{
+			name: "NPQS application ref", configs: npqsConfigs, issuer: "NPQS", idType: "phyto_request_ref",
+			params: map[string]string{"officeLocation": "NPQS-KAT"}, want: "TNSW/NPQS/NPQS-KAT/PC/2027/000001",
+		},
+		{name: "NPQS lab sample ref", configs: npqsConfigs, issuer: "NPQS", idType: "lab_sample_ref", want: "PQS/2027/0001"},
+		{name: "SLTB sample ref", configs: sltbConfigs, issuer: "SLTB", idType: "sample_ref", want: "2027/01/0001"},
+	} {
+		for _, c := range tc.configs {
+			t.Run(tc.name+" in "+c.file, func(t *testing.T) {
+				got, err := c.registry(t, clock).Generate(context.Background(), tc.issuer, tc.idType, tc.params)
+				if err != nil {
+					t.Fatalf("Generate(%q, %q, %v): %v", tc.issuer, tc.idType, tc.params, err)
+				}
+				if got != tc.want {
+					t.Errorf("Generate(%q, %q, %v) = %q, want %q", tc.issuer, tc.idType, tc.params, got, tc.want)
+				}
+			})
+		}
+	}
+}
+
 // committedConfig is a committed file holding a refid section, under keys.
 type committedConfig struct {
 	file string
 	keys []string
 }
 
-// registry compiles the refid section, backed by an in-memory store. Only
-// that section is decoded, so the file's placeholders elsewhere need no env
-// vars.
-func (c committedConfig) registry(t *testing.T) refid.Registry {
+// registry compiles the refid section, backed by an in-memory store, with opts
+// applied on top. Only that section is decoded, so the file's placeholders
+// elsewhere need no env vars.
+func (c committedConfig) registry(t *testing.T, opts ...refid.RegistryOption) refid.Registry {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", c.file))
 	if err != nil {
@@ -170,7 +231,8 @@ func (c committedConfig) registry(t *testing.T) refid.Registry {
 	if err := node.Decode(&cfg); err != nil {
 		t.Fatalf("decode %s refid: %v", c.file, err)
 	}
-	reg, err := refid.NewRegistry(cfg, refid.WithSequenceStore(memSequences{}), refid.WithRandomStore(memRandoms{}))
+	opts = append([]refid.RegistryOption{refid.WithSequenceStore(memSequences{}), refid.WithRandomStore(memRandoms{})}, opts...)
+	reg, err := refid.NewRegistry(cfg, opts...)
 	if err != nil {
 		t.Fatalf("%s: invalid refid config: %v", c.file, err)
 	}

@@ -499,9 +499,10 @@ refid:
         # when the trader submits the application: the year, then a sequence
         # that restarts every year. Produces: 2026/00001
         - idType: blend_sheet_no
+          timezone: Asia/Colombo
           segments:
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "/"
             - type: sequence
@@ -536,18 +537,19 @@ refid:
     - issuer: NPQS
       formats:
         # NPQS payment reference shared by certificate and treatment fees.
-        # The UTC month and monthly sequence scope are shared across both fees. Produces:
+        # The month (in Colombo time) and monthly sequence scope are shared across both fees. Produces:
         # NPQS-2026-09-00001
         - idType: npqs_payment_ref
+          timezone: Asia/Colombo
           segments:
             - type: literal
               value: "NPQS-"
             - type: date
-              layout: "2006"
+              format: "yyyy"
             - type: literal
               value: "-"
             - type: date
-              layout: "01"
+              format: "MM"
             - type: literal
               value: "-"
             - type: sequence
