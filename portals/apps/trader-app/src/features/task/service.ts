@@ -3,10 +3,11 @@ import { API_BASE_URL } from '@/constants'
 import type { ZoneView } from '@/features/zone/types'
 import type { TaskCommandRequest, TaskCommandResponse } from './types'
 
-export async function getZoneView(taskId: string): Promise<ZoneView> {
+export async function getZoneView(taskId: string, signal?: AbortSignal): Promise<ZoneView> {
   const { data } = await http.request<ZoneView>({
     url: `${API_BASE_URL}/api/v1/tasks/${taskId}`,
     attachToken: true,
+    signal,
   })
   return data
 }
@@ -16,12 +17,14 @@ export async function submitTaskStep(
   stepId: string,
   command: string,
   payload: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}`,
     method: 'POST',
     data: { command, payload },
     attachToken: true,
+    signal,
   })
 }
 
@@ -31,12 +34,14 @@ export async function saveTaskStepDraft(
   taskId: string,
   stepId: string,
   payload: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}/draft`,
     method: 'PUT',
     data: { payload },
     attachToken: true,
+    signal,
   })
 }
 
@@ -44,25 +49,27 @@ export async function saveTaskStepDraft(
 // holds it: POST /claim (204). A 409 means the task is completed or the claim changed
 // during a takeover; a 404, that the deployment does not use claims or the user cannot
 // read the task. Refetch the task either way.
-export async function claimTask(taskId: string): Promise<void> {
+export async function claimTask(taskId: string, signal?: AbortSignal): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/claim`,
     method: 'POST',
     attachToken: true,
+    signal,
   })
 }
 
 // releaseTask releases the signed-in user's claim: POST /release (204). A 403 means
 // another user holds it.
-export async function releaseTask(taskId: string): Promise<void> {
+export async function releaseTask(taskId: string, signal?: AbortSignal): Promise<void> {
   await http.request({
     url: `${API_BASE_URL}/api/v1/tasks/${encodeURIComponent(taskId)}/release`,
     method: 'POST',
     attachToken: true,
+    signal,
   })
 }
 
-export async function sendTaskCommand(request: TaskCommandRequest): Promise<TaskCommandResponse> {
+export async function sendTaskCommand(request: TaskCommandRequest, signal?: AbortSignal): Promise<TaskCommandResponse> {
   const action: string = request.command === 'SAVE_AS_DRAFT' ? 'SAVE_AS_DRAFT' : 'SUBMIT_FORM'
 
   const { data } = await http.request<TaskCommandResponse>({
@@ -76,6 +83,7 @@ export async function sendTaskCommand(request: TaskCommandRequest): Promise<Task
       },
     },
     attachToken: true,
+    signal,
   })
   return data
 }
