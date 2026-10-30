@@ -6,6 +6,88 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-30
+
+This release reads each task's `read.roles` from its task template, so the image version and the artifacts pin must change in the same deployment: the pinned artifacts and this build depend on each other in three places. One migration runs and records each consignment's trader and CHA in a new `case_parties` table. File tokens change, so agency work that holds files must be finished or cleared first, and audit records now go to OTLP only and no longer to the pod log. It also fills each Customs dispatch note form in from the CusDec, checks file fields' rules on submit, and fixes the ePhyto commodity name and packaging.
+
+### Upgrade notes
+
+#### Change the image version and the artifacts pin together ([#979](https://github.com/OpenNSW/nsw-srilanka/pull/979), [#976](https://github.com/OpenNSW/nsw-srilanka/pull/976), [#942](https://github.com/OpenNSW/nsw-srilanka/pull/942))
+
+- Move the image or chart version and `artifactLoader.github.ref` in one deployment, for TNSW and for each agency. Each of these breaks if only one of them moves:
+  - Task read rules ([#979](https://github.com/OpenNSW/nsw-srilanka/pull/979)): a task's `read.roles` now sits on its task template, and the build reads it there. With the old build or the old artifacts no template declares `read.roles`, so TNSW applies no precedence: a user who is both a trader and a CHA on a consignment sees both views of a task at once.
+  - ePhyto packaging ([#976](https://github.com/OpenNSW/nsw-srilanka/pull/976)): the build reads the packages of an NPQS commodity from the form's `packages` list, which only the pinned artifacts hold. The old form stores `packages_count`, which the build no longer reads. With either one alone, the package rows are left out of the certificate.
+  - SLPA ECDN ([#942](https://github.com/OpenNSW/nsw-srilanka/pull/942)): the pinned ECDN form holds the CusDec number as Customs writes it (`CBEX1/2026/E/67948`). Only this build reduces it to the serial letter and number (`E67948`) that the SLPA CMS takes.
+- The Customs dispatch note fill-in ([#957](https://github.com/OpenNSW/nsw-srilanka/pull/957)) works in either order: without one half, the forms open empty as before.
+
+#### Upgrade TNSW before the agencies, and finish or clear agency work that holds files ([#949](https://github.com/OpenNSW/nsw-srilanka/pull/949))
+
+- TNSW file tokens now end with the file's extension (`<token>.pdf`), and a token without it is refused. Tokens issued before the upgrade stop working. An agency stores TNSW's tokens, not file keys, so a file already held in agency task data stops opening. Let agency work that holds files finish before you upgrade, or cancel it, or reset that task data.
+- Upgrade TNSW first. An agency checks a file field's `accept` rules against the extension on TNSW's tokens, which tokens from a 0.11.0 TNSW don't have.
+- TNSW's own task data holds stored values, not tokens, so it is unaffected. A trader or officer with a page open across the upgrade holds old tokens and has to reload it.
+
+#### Migration ([#958](https://github.com/OpenNSW/nsw-srilanka/pull/958))
+
+One migration runs before the API starts; the Helm hook and Docker Compose run it. Use the 0.12.0 `tnsw-migrate` image.
+
+- `000033_create_case_parties` creates `case_parties`, adds `cases.created_by`, and fills both from `consignments`: a `trader` party for every consignment, a `cha` party where a CHA company was chosen, and `created_by` from the trader's user. The trader and CHA columns of `consignments` stay and are still written. Rolling back drops `case_parties` and `cases.created_by`.
+- The consignment list and detail, and task authorization, now read `case_parties`. During a rolling deploy, old pods write only the `consignments` columns: a consignment an old pod creates has no `trader` party, and a CHA chosen on one has no `cha` party, so the new pods miss them. Stop the old pods before the new ones serve traffic, or run the two backfill inserts in [`migrations/000033_create_case_parties.sql`](https://github.com/OpenNSW/nsw-srilanka/blob/v0.12.0/migrations/000033_create_case_parties.sql) again after the deploy; each is an `INSERT ... ON CONFLICT DO NOTHING`.
+
+#### Audit records go to OTLP only ([#925](https://github.com/OpenNSW/nsw-srilanka/pull/925))
+
+- Audit records (`category=audit`) no longer reach the pod log. They are exported over OTLP only. Wherever you need the audit trail, set `otel.endpoint` and keep `server.logLevel` at `info` or `debug`. With export off, audit records are not kept, and startup logs a warning.
+- Security log lines no longer carry `requestBody`, `responseBody`, `query` or `remoteAddr`. Change any OpenObserve query or other log search that used them. `category=audit` holds who did what.
+
+#### Add `tel` and the CDA registration number to the company records ([one-trade-artifacts#293](https://github.com/OpenNSW/one-trade-artifacts/pull/293), [one-trade-artifacts#283](https://github.com/OpenNSW/one-trade-artifacts/pull/283))
+
+- The pinned CDA applications fill in the trader's details from the company record: the contact number from `company.data.tel`, and the exporter's name, address and CDA registration number from `company.name`, `company.data.address` and `company.data.agencies.cda.registration_number`. The king coconut form also uses `company.data.contact_email`, which 0.11.0 asked for. A company without a value leaves the field empty for the trader to fill in. Add the keys to each company in your `configs/companies.json`, then re-apply it with `otc company apply -f configs/companies.json`; `data` is replaced as a whole, so apply the complete record.
+
+#### Workflow artifacts
+
+- Pin `artifactLoader.github.ref` to one-trade-artifacts [`cdeecbd`](https://github.com/OpenNSW/one-trade-artifacts/commit/cdeecbd58f10e3640298bceccf6622ffd70dee6d) (30 October 2026), for TNSW and for each agency. It holds the artifact changes this release depends on:
+  - [one-trade-artifacts#292](https://github.com/OpenNSW/one-trade-artifacts/pull/292): `read` on the task templates ([#979](https://github.com/OpenNSW/nsw-srilanka/pull/979));
+  - [one-trade-artifacts#287](https://github.com/OpenNSW/one-trade-artifacts/pull/287): several package types on one NPQS commodity, as `packages` ([#976](https://github.com/OpenNSW/nsw-srilanka/pull/976));
+  - [one-trade-artifacts#280](https://github.com/OpenNSW/one-trade-artifacts/pull/280): the SLPA ECDN waits for the assessed CusDec and holds its number as Customs writes it ([#942](https://github.com/OpenNSW/nsw-srilanka/pull/942));
+  - [one-trade-artifacts#285](https://github.com/OpenNSW/one-trade-artifacts/pull/285): the dispatch note forms are filled in with the CusDec's shipper and consignee ([#957](https://github.com/OpenNSW/nsw-srilanka/pull/957));
+  - [one-trade-artifacts#286](https://github.com/OpenNSW/one-trade-artifacts/pull/286): every file field states the file types it accepts, which this build now checks ([#949](https://github.com/OpenNSW/nsw-srilanka/pull/949)).
+- It also lets NPQS issue the ePhyto certificate to non-ePhyto countries too ([one-trade-artifacts#284](https://github.com/OpenNSW/one-trade-artifacts/pull/284)), makes SLTB wait for the assessed CusDec before the officer's second step ([one-trade-artifacts#270](https://github.com/OpenNSW/one-trade-artifacts/pull/270)), starts the SLPA ECDN flow for every HS code ([one-trade-artifacts#297](https://github.com/OpenNSW/one-trade-artifacts/pull/297)), and requires the commodity description on the NPQS apply form ([one-trade-artifacts#273](https://github.com/OpenNSW/one-trade-artifacts/pull/273)).
+- Finish or clear NPQS consignments whose application was reviewed before the upgrade, or re-review their applications. `ephyto_required` is replaced by `ephyto_country`, and `ephyto_reference_number` by `certificate_number`. A consignment reviewed before has no `ephyto_country`, so after issuance it parks at the gateway that chooses the path ([one-trade-artifacts#284](https://github.com/OpenNSW/one-trade-artifacts/pull/284)).
+- Flows already started keep the definition they started with, so a consignment started before the upgrade doesn't wait for the assessed CusDec at SLTB ([one-trade-artifacts#270](https://github.com/OpenNSW/one-trade-artifacts/pull/270)).
+
+### Added
+
+- **Dispatch note forms open filled in.** Each Create CDN form opens with the CusDec's exporter as the shipper and the consignee's name, address and country. `CDN_SPLIT_BUILDER` takes an optional `prefill` object from the artifacts and gives every container's item a copy, so the artifacts decide which fields are filled in. ([#957](https://github.com/OpenNSW/nsw-srilanka/pull/957))
+- **File fields' rules are checked on submit.** The `x-file` rules of a file field (`accept`, `maxFiles`) were enforced only by the Trader Portal's file control, so an API call could attach any allowed file to any file field, in any number. A submission that breaks them gets a 400 that names the path and the rule, never the value. Drafts and read-only values aren't checked, and only steps that list `payload_schema` are. ([#949](https://github.com/OpenNSW/nsw-srilanka/pull/949))
+
+### Changed
+
+- The SLPA ECDN takes the CusDec number as Customs writes it. A number typed by hand in four parts (`CBEX1-2026-E-1050`) is sent as its serial letter and number (`E1050`), and any other as letters and digits only. There is nothing to configure. ([#942](https://github.com/OpenNSW/nsw-srilanka/pull/942))
+- A completed task no longer offers "Continue to next task", in the Trader Portal and the agency portals. Users return through the breadcrumb or with "Back to consignment" or "Back to case", which a completed task always shows. ([#955](https://github.com/OpenNSW/nsw-srilanka/pull/955))
+- The example configs, the agency configs and `values-example.yaml` list their sections in a new order, most important first. No key changed, and a `config.yaml` or Helm values file in the old order still loads. ([#954](https://github.com/OpenNSW/nsw-srilanka/pull/954))
+
+### Fixed
+
+- The ePhyto mapping reads the NPQS commodity name from its dropdown answer. It was always empty, so a commodity with no description sent an empty trade line description, and the Hub refused the submission with "each tradeLine.description is mandatory". ([#927](https://github.com/OpenNSW/nsw-srilanka/pull/927))
+- The ePhyto certificate carries one package element for each row of a commodity's `packages` (count and IPPC type), in the trader's order. Free-text and bulk arrangements are still sent as the package description. ([#976](https://github.com/OpenNSW/nsw-srilanka/pull/976))
+- Audit events for task workflows, and for the admin actions on a flow (engine status, resolve and force-park), name the consignment as their target and no longer a workflow ID. When the consignment can't be resolved the target is empty, and the metadata keeps the `workflowId` and a `targetResolutionError`. With auditing on, resolve and force-park make one extra best-effort workflow status query. ([#964](https://github.com/OpenNSW/nsw-srilanka/pull/964), [#965](https://github.com/OpenNSW/nsw-srilanka/pull/965))
+- The Trader Portal's page background now extends behind the top bar. ([#961](https://github.com/OpenNSW/nsw-srilanka/pull/961))
+
+### Security
+
+- Security log lines no longer record request or response bodies, query strings or remote addresses. A form's fields can't be redacted one by one, so none are logged. ([#925](https://github.com/OpenNSW/nsw-srilanka/pull/925))
+
+### Known issues
+
+- Workflow definitions are not versioned with the release. Pinning `artifactLoader.github.ref` is what ties them to a deployment. They are fetched from GitHub each time they are used, so GitHub is a run-time dependency.
+- Audit records are log lines exported over OTLP at `info`, with no separate store and no delivery guarantee, and without `otel.endpoint` they are discarded. Requests to consignments and tasks are audited. Payments, the storage module's own events and SLC Edge callbacks are not, and startup logs a warning that payment and storage audit are not wired.
+- The API can authenticate to Temporal only with a client certificate, not with an API key.
+- `/health` does not check Temporal.
+- The Helm chart has no persistent volume, so local-disk storage is lost when the pod restarts. Use S3.
+- The repository has no tooling to provision a managed IdP; it is set up by hand from `idp/bootstrap/`.
+- The Trader Portal's own text is in English, Sinhala and Tamil. The text of forms and workflows comes from the artifacts, which are in English only.
+- A user with neither the trader nor the CHA catalog role, such as an NSW admin, gets a 403 on the consignment list, which the Trader Portal shows as "Could not load consignments." with a Try Again button. Admins open a consignment directly, at `/admin/consignments/<consignment ID>`.
+- A temporary development aid can copy every SLC Edge callback to another deployment. It is off unless `services` lists an entry with the id `slce-debug-forward`, and it logs a warning at startup when it is on. Never define one in production: the aid will be removed before production use. ([#870](https://github.com/OpenNSW/nsw-srilanka/pull/870))
+
 ## [0.11.0] - 2026-10-29
 
 This release moves the catalog and the payment methods into `config.yaml`, and makes every task, flow and agency workflow resolve its templates through a manifest version, so work started before the upgrade must be finished or cancelled first. Five migrations run, storage needs a new required setting, and the image version and the artifacts pin must change in the same deployment. It also adds claiming tasks in the agency portals, Sinhala and Tamil in the Trader Portal, a notice when Customs cancels a declaration, and the chosen CHA's details in the agency flows.
@@ -974,7 +1056,8 @@ TNSW depends on the services below, and the Helm chart deploys none of them. Thi
 - The Trader Portal is available in English only.
 - With the NSW Admin role selected, the Trader Portal's Consignments list does not load: the API accepts only the trader and CHA roles there. Admins open a consignment's engine status directly, at `/admin/consignments/<consignment ID>`.
 
-[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/OpenNSW/nsw-srilanka/compare/v0.8.0...v0.9.0
