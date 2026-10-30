@@ -58,7 +58,9 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			caller := &authn.RequestCaller{}
 			route := &matchedRoute{}
+			ann := &securitylog.Annotation{}
 			ctx := authn.WithRequestCaller(r.Context(), caller)
+			ctx = securitylog.WithAnnotation(ctx, ann)
 			ctx = withMatchedRoute(ctx, route)
 			r = r.WithContext(ctx)
 
@@ -118,19 +120,33 @@ func Middleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				}
 				logger.InfoContext(r.Context(), "http request", attrs...)
 
-				if status == http.StatusUnauthorized || status == http.StatusForbidden {
+				// One security line per denial: 401/403, or a handler that
+				// Annotate'd (e.g. invalid callback token at 400). Handlers
+				// only fill the slot; they never call Event themselves.
+				if status == http.StatusUnauthorized || status == http.StatusForbidden || ann.Annotated() {
+					msg := "http denied"
 					reason := "forbidden"
 					if status == http.StatusUnauthorized {
 						reason = "unauthenticated"
 					}
-					securitylog.Event(r.Context(), base, "http denied",
+					if ann.Msg != "" {
+						msg = ann.Msg
+					}
+					if ann.Reason != "" {
+						reason = ann.Reason
+					}
+					secAttrs := []any{
 						"method", r.Method,
 						"path", path,
 						"callerKind", kind,
 						"callerID", id,
 						"status", status,
 						"reason", reason,
-					)
+					}
+					if ann.Partner != "" {
+						secAttrs = append(secAttrs, "partner", ann.Partner)
+					}
+					securitylog.Event(r.Context(), base, msg, secAttrs...)
 				}
 
 				if panicked != nil {

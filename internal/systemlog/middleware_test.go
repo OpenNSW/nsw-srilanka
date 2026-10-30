@@ -14,6 +14,7 @@ import (
 	"github.com/OpenNSW/core/trace/logging"
 
 	"github.com/OpenNSW/nsw-srilanka/internal/authn"
+	"github.com/OpenNSW/nsw-srilanka/internal/securitylog"
 )
 
 func TestMiddlewareLogsCallerWithoutPayload(t *testing.T) {
@@ -161,6 +162,48 @@ func TestMiddlewareEmitsSecurityOnForbidden(t *testing.T) {
 	assertEqual(t, "security.reason", securityLine["reason"], "forbidden")
 	assertEqual(t, "security.callerID", securityLine["callerID"], "user-9")
 	assertEqual(t, "security.status", securityLine["status"], float64(http.StatusForbidden))
+}
+
+func TestMiddlewareEmitsOneSecurityLineWhenAnnotated(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		securitylog.Annotate(r.Context(), "webhook auth failed",
+			"reason", "webhook_auth_failed",
+			"partner", "slpa",
+		)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/webhooks/slpa", nil))
+
+	systemLine, securityLine := decodeSystemAndSecurity(t, buf.Bytes())
+	assertEqual(t, "system.status", systemLine["status"], float64(http.StatusUnauthorized))
+	assertEqual(t, "security.msg", securityLine["msg"], "webhook auth failed")
+	assertEqual(t, "security.reason", securityLine["reason"], "webhook_auth_failed")
+	assertEqual(t, "security.partner", securityLine["partner"], "slpa")
+	assertEqual(t, "security.status", securityLine["status"], float64(http.StatusUnauthorized))
+	assertEqual(t, "security.path", securityLine["path"], "/webhooks/slpa")
+}
+
+func TestMiddlewareEmitsSecurityWhenAnnotatedWithoutDenialStatus(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	h := Middleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		securitylog.Annotate(r.Context(), "invalid callback token",
+			"reason", "invalid_callback_token",
+		)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/callbacks/bad", nil))
+
+	systemLine, securityLine := decodeSystemAndSecurity(t, buf.Bytes())
+	assertEqual(t, "system.status", systemLine["status"], float64(http.StatusBadRequest))
+	assertEqual(t, "security.msg", securityLine["msg"], "invalid callback token")
+	assertEqual(t, "security.reason", securityLine["reason"], "invalid_callback_token")
+	assertEqual(t, "security.path", securityLine["path"], "/api/v1/callbacks/{token}")
+	assertKeysAbsent(t, securityLine, "partner")
 }
 
 func TestMiddlewareIgnoresInterimStatus(t *testing.T) {
